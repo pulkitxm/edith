@@ -30,7 +30,10 @@ import Foundation
     private var leases: [LeaseKey: Lease] = [:]
     private var presentations: [UUID: Date] = [:]
     private let observe: (UUID, Bool) -> Void
+    private let paneAdmission: (MachineTerminalRequest, UUID) -> Bool
     private let workspace: (WorkspaceStore) throws -> Void
+    private var paneSequences: [UUID: UInt64] = [:]
+    private var retiredPanePresentations: Set<UUID> = []
     private var stopped = false
     private struct Job {
         var presentationID: UUID?
@@ -47,6 +50,7 @@ import Foundation
         session: @escaping Session, state: @escaping () -> MachineUIState,
         mutation: @escaping (MachineUIMutation) async throws -> Void,
         workspace: @escaping (WorkspaceStore) throws -> Void,
+        paneAdmission: @escaping (MachineTerminalRequest, UUID) -> Bool = { _, _ in false },
         observe: @escaping (UUID, Bool) -> Void = { _, _ in },
         files: @escaping (MachineFileRequest) async throws -> MachineFileState = { _ in
             throw MachineUIError.unavailable
@@ -80,6 +84,7 @@ import Foundation
         self.state = state
         self.mutation = mutation
         self.workspace = workspace
+        self.paneAdmission = paneAdmission
         self.observe = observe
         self.files = files
         self.openWindow = openWindow
@@ -191,6 +196,9 @@ import Foundation
         for key in leases.keys.filter({ $0.presentation == id }) {
             guard let lease = leases.removeValue(forKey: key) else { continue }
             change(lease, active: false)
+        }
+        if paneSequences.removeValue(forKey: id) != nil {
+            retiredPanePresentations.insert(id)
         }
         presentations.removeValue(forKey: id)
         presentationRelease(id)
@@ -344,6 +352,24 @@ import Foundation
             try await mutation(value)
             try Task.checkCancellation()
             return try encode(state())
+        case "machines.ui.workspace.pane":
+            let value = try JSONDecoder().decode(MachineWorkspacePaneRequest.self, from: payload)
+            guard presentations[value.presentationID] != nil,
+                !retiredPanePresentations.contains(value.presentationID),
+                (retiredPanePresentations.count < 1_024),
+                value.sequence > (paneSequences[value.presentationID] ?? 0),
+                value.terminal.presentationID == value.presentationID,
+                value.terminal.machineID
+                    == value.baseline.root.pane(value.paneID)?
+                    .tabs.first(where: { $0.id == value.tabID })?.target.machineID,
+                paneAdmission(value.terminal, value.tabID)
+            else { throw MachineUIError.invalidRequest }
+            paneSequences[value.presentationID] = value.sequence
+            var updated = state().workspaces
+            try value.apply(to: &updated)
+            try Task.checkCancellation()
+            try workspace(updated)
+            return try encode(updated)
         case "machines.ui.workspace":
             let value = try JSONDecoder().decode(WorkspaceStore.self, from: payload)
             guard value.layouts.count <= 128,

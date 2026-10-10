@@ -17,6 +17,7 @@ struct MachineTerminalRequest: Codable, Sendable {
     var operation: Operation
     var machineID: UUID
     var tabID: UUID = UUID()
+    var workspaceTabID: UUID?
     var handle: UUID?
     var presentationID: UUID?
     var tabIDs: [UUID] = []

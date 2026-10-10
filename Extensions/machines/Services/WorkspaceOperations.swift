@@ -300,3 +300,88 @@ extension LayoutNode {
         }
     }
 }
+
+struct MachineWorkspacePaneRequest: Codable, Sendable {
+    enum Action: String, Codable, Sendable { case split, resize, equalize }
+    let presentationID: UUID
+    let terminal: MachineTerminalRequest
+    let sequence: UInt64
+    let baseline: WorkspaceLayout
+    let paneID: UUID
+    let tabID: UUID
+    let action: Action
+    let side: InsertSide?
+    let distance: Double?
+    let extent: Double?
+
+    func apply(to store: inout WorkspaceStore) throws {
+        guard sequence > 0, store.current == baseline, baseline.focused == paneID,
+            let pane = baseline.root.pane(paneID), pane.selected == tabID,
+            let tab = pane.tabs.first(where: { $0.id == tabID }), tab.target.screen == .terminal,
+            baseline.paneCount <= 64
+        else { throw MachineUIError.invalidRequest }
+        switch action {
+        case .split:
+            guard let side, distance == nil, extent == nil, baseline.paneCount < 64 else {
+                throw MachineUIError.invalidRequest
+            }
+            try WorkspaceOperationExecution.perform(
+                .split(workspaceID: baseline.id, paneID: paneID, side: side, target: tab.target),
+                in: &store)
+        case .equalize:
+            guard side == nil, distance == nil, extent == nil else {
+                throw MachineUIError.invalidRequest
+            }
+            try WorkspaceOperationExecution.perform(.equalize(workspaceID: baseline.id), in: &store)
+        case .resize:
+            guard let side, let distance, let extent, distance.isFinite, extent.isFinite,
+                distance > 0, distance <= 4_096, extent > 0, extent <= 32_768
+            else { throw MachineUIError.invalidRequest }
+            var layout = baseline
+            guard layout.root.resizePane(paneID, side: side, distance: distance, extent: extent)
+            else { throw MachineUIError.invalidRequest }
+            store.upsert(layout)
+        }
+    }
+}
+
+extension LayoutNode {
+    private func splitPath(to paneID: UUID) -> [(SplitNode, Int)]? {
+        switch self {
+        case let .pane(pane): return pane.id == paneID ? [] : nil
+        case let .split(split):
+            for (index, child) in split.children.enumerated() {
+                if let path = child.splitPath(to: paneID) { return [(split, index)] + path }
+            }
+            return nil
+        }
+    }
+
+    mutating func resizePane(_ paneID: UUID, side: InsertSide, distance: Double, extent: Double)
+        -> Bool
+    {
+        guard let path = splitPath(to: paneID) else { return false }
+        var childExtent = extent
+        for (split, index) in path.reversed() where split.axis == side.axis {
+            guard split.ratios.count == split.children.count,
+                split.ratios.indices.contains(index), split.ratios[index].isFinite,
+                split.ratios[index] > 0
+            else { return false }
+            let available = childExtent / split.ratios[index]
+            let neighbor = side.isBefore ? index - 1 : index + 1
+            if split.ratios.indices.contains(neighbor) {
+                let change = distance / available
+                guard change.isFinite, split.ratios[neighbor] - change >= 0.08,
+                    split.ratios[index] + change <= 0.92
+                else { return false }
+                updateSplit(split.id) {
+                    $0.ratios[index] += change
+                    $0.ratios[neighbor] -= change
+                }
+                return true
+            }
+            childExtent = available + Double(split.children.count - 1) * 6
+        }
+        return false
+    }
+}

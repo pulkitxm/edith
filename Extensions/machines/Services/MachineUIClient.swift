@@ -250,6 +250,26 @@ import Foundation
             value: MachineUIMutation(operation: .add, machine: machine, secrets: secrets))
     }
 
+    private var paneSequence: UInt64 = 0
+
+    func workspacePane(
+        baseline: WorkspaceLayout, paneID: UUID, tabID: UUID, terminal: MachineTerminalRequest,
+        action: MachineWorkspacePaneRequest.Action, side: InsertSide? = nil,
+        distance: Double? = nil, extent: Double? = nil
+    ) async throws -> WorkspaceStore {
+        guard paneSequence < UInt64.max, terminalUI.isAvailable else {
+            throw MachineUIError.unavailable
+        }
+        paneSequence += 1
+        var terminal = terminal; terminal.presentationID = client.presentationID
+        return try await request(
+            "machines.ui.workspace.pane",
+            value: MachineWorkspacePaneRequest(
+                presentationID: client.presentationID, terminal: terminal, sequence: paneSequence,
+                baseline: baseline, paneID: paneID, tabID: tabID, action: action, side: side,
+                distance: distance, extent: extent))
+    }
+
     func workspace(_ value: WorkspaceStore) async throws -> WorkspaceStore {
         try await request("machines.ui.workspace", value: value)
     }
@@ -395,6 +415,15 @@ struct MachineTerminalUIEvent: Codable {
         case .windowClosed: return false
         }
     }
+
+    func admitsPaneAction(_ holder: TerminalSessionHolder, eventSequence: UInt64? = nil) -> Bool {
+        guard holders[holder.id]?.holder === holder, focused,
+            eventSequence.map({ $0 == latest?.sequence }) ?? true
+        else { return false }
+        return focusedHolders.first === holder
+    }
+
+    var eventSequence: UInt64? { latest?.sequence }
 
     func invalidate() {
         guard !invalidated else { return }

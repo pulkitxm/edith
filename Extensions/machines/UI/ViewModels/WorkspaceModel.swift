@@ -3,6 +3,7 @@ import EdithExtensionSupport
 import EdithExtensionUI
 import Observation
 import SwiftUI
+import GhosttyTerminal
 
 @MainActor
 @Observable
@@ -19,6 +20,8 @@ final class WorkspaceModel {
     private var mutationGeneration = 0
     private var remoteSaveTask: Task<Void, Never>?
     private var pendingRemoteSaves = 0
+    private var paneTask: Task<Void, Never>?
+    private var paneStopped = false
 
     init(machines: MachinesModel, file: URL = MachinePaths.workspacesFile) {
         self.file = file
@@ -38,6 +41,8 @@ final class WorkspaceModel {
     }
 
     func shutdown() async {
+        stopPaneActions()
+        await paneTask?.value; paneTask = nil
         remoteSaveTask?.cancel()
         await remoteSaveTask?.value
         remoteSaveTask = nil
@@ -170,6 +175,65 @@ final class WorkspaceModel {
                 pane.tabs.append(tab)
                 pane.selected = tab.id
             }
+        }
+    }
+
+    func performNativePaneAction(
+        _ action: GhosttyPaneAction, paneID: UUID, tabID: UUID, size: CGSize,
+        cellExtent: Double, terminal: MachineTerminalRequest, isCurrent: @escaping () -> Bool
+    ) {
+        guard let uiClient, !paneStopped, isCurrent() else { return }
+        let operation: MachineWorkspacePaneRequest.Action
+        var side: InsertSide?
+        var distance: Double?
+        var extent: Double?
+        switch action {
+        case let .split(direction):
+            operation = .split; side = Self.side(direction)
+        case let .resize(direction, amount):
+            operation = .resize; side = Self.side(direction)
+            distance = Double(amount) * cellExtent
+            extent = Double(side?.axis == .horizontal ? size.width : size.height)
+        case .equalize: operation = .equalize
+        default:
+            operationError = "This terminal action is unavailable in the Machines workspace."
+            return
+        }
+        let predecessor = paneTask
+        paneTask = Task { [weak self] in
+            await predecessor?.value
+            guard let self, !paneStopped, !Task.isCancelled, isCurrent() else { return }
+            do {
+                let baseline = layout
+                let updated = try await uiClient.workspacePane(
+                    baseline: baseline, paneID: paneID, tabID: tabID, terminal: terminal,
+                    action: operation,
+                    side: side, distance: distance, extent: extent)
+                guard !Task.isCancelled, !paneStopped, isCurrent(), layout == baseline else {
+                    return
+                }
+                store = updated
+                if let current = updated.current { layout = current }
+                mutationGeneration += 1
+                operationError = nil
+            } catch {
+                if !Task.isCancelled, !paneStopped, isCurrent() {
+                    operationError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func stopPaneActions() { paneStopped = true; paneTask?.cancel() }
+
+    func awaitPaneActions() async { await paneTask?.value }
+
+    private static func side(_ direction: GhosttyPaneAction.Direction) -> InsertSide {
+        switch direction {
+        case .up: .top
+        case .down: .bottom
+        case .left: .left
+        case .right: .right
         }
     }
 
@@ -449,7 +513,7 @@ struct WorkspaceNodeView: View {
     var body: some View {
         switch node {
         case let .pane(pane):
-            WorkspacePaneView(pane: pane, model: model, machines: machines, dark: dark)
+            WorkspacePaneView(pane: pane, size: size, model: model, machines: machines, dark: dark)
                 .frame(width: size.width, height: size.height)
         case let .split(split):
             splitBody(split)

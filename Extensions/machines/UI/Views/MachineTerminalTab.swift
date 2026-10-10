@@ -22,6 +22,8 @@ struct MachineTerminalTab: View {
     var wantsFocus = true
     var allowsShellLaunch = true
     var onFocus: (() -> Void)?
+    var hostPaneAction:
+        ((GhosttyPaneAction, Double, MachineTerminalRequest, @escaping () -> Bool) -> Void)?
     var hostTabAction: ((MachineTerminalUIEvent.Action) -> Bool)?
     @State private var ownHolder = TerminalSessionHolder()
     @State private var selectedWindowsShell = WindowsTerminalShell.automatic
@@ -37,6 +39,9 @@ struct MachineTerminalTab: View {
         showsStatusBar: Bool = true,
         onFocus: (() -> Void)? = nil,
         hostTabAction: ((MachineTerminalUIEvent.Action) -> Bool)? = nil,
+        hostPaneAction: (
+            (GhosttyPaneAction, Double, MachineTerminalRequest, @escaping () -> Bool) -> Void
+        )? = nil,
         holder: TerminalSessionHolder? = nil,
         allowsShellLaunch: Bool = true
     ) {
@@ -49,6 +54,7 @@ struct MachineTerminalTab: View {
         self.showsStatusBar = showsStatusBar
         self.onFocus = onFocus
         self.hostTabAction = hostTabAction
+        self.hostPaneAction = hostPaneAction
     }
 
     private var holder: TerminalSessionHolder { injectedHolder ?? ownHolder }
@@ -71,7 +77,7 @@ struct MachineTerminalTab: View {
                     holder: holder, palette: .edith(dark: dark), active: active,
                     wantsFocus: wantsFocus,
                     onDropFiles: uploadDrop,
-                    onFocus: onFocus
+                    onFocus: onFocus, hostPaneAction: hostPaneAction
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay { TerminalDropTransferStatus(holder: holder) }
@@ -81,11 +87,13 @@ struct MachineTerminalTab: View {
         }
         .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
         .onAppear {
-            holder.hostTabAction = hostTabAction; holder.presented = active
+            holder.hostPaneAction = hostPaneAction; holder.hostTabAction = hostTabAction;
+            holder.presented = active
             startIfPossible()
         }
         .onChange(of: active) { _, active in
-            holder.presented = active; holder.hostTabAction = hostTabAction
+            holder.presented = active; holder.hostPaneAction = hostPaneAction
+            holder.hostTabAction = hostTabAction
             if active { startIfPossible() }
         }
         .onChange(of: session.state.isConnected) { _, connected in
@@ -95,7 +103,7 @@ struct MachineTerminalTab: View {
             await detectWindowsShells()
         }
         .onDisappear {
-            holder.presented = false; holder.hostTabAction = nil
+            holder.presented = false; holder.hostTabAction = nil; holder.hostPaneAction = nil
             if injectedHolder == nil { holder.stop() }
         }
     }
@@ -195,7 +203,8 @@ struct MachineTerminalTab: View {
                 active: active, launchEnabled: shellLaunchEnabled, started: holder.started,
                 isLocal: session.isLocal, connected: session.state.isConnected)
         else { return }
-        holder.hostTabAction = hostTabAction; holder.presented = active
+        holder.hostPaneAction = hostPaneAction; holder.hostTabAction = hostTabAction;
+        holder.presented = active
         holder.start(session: session, context: context, windowsShell: selectedWindowsShell)
     }
 
