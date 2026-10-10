@@ -129,11 +129,17 @@ struct StudioUIImageRender: Codable, Sendable {
             }
             return try encoder.encode(
                 work.start { _ in
-                    let failure = try await BlockingWork.perform {
-                        StudioImageEditorWork.export(document, to: target)
+                    let cancellation = WorkCancellation()
+                    try await withTaskCancellationHandler {
+                        try await BlockingWork.perform {
+                            try ImageEditRenderer.export(
+                                document: document, to: target,
+                                cancelled: { cancellation.isCancelled })
+                        }
+                    } onCancel: {
+                        cancellation.cancel()
                     }
                     try Task.checkCancellation()
-                    if let failure { throw StudioError.failed(failure) }
                     model.add([target])
                     model.recordSaved(
                         toolID: "image.edit", title: "Image editor", outputs: [target])

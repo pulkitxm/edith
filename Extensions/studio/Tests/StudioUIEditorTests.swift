@@ -72,6 +72,44 @@ import Testing
         await #expect(throws: ExtensionEngineError.self) { try await facade.facts(source) }
     }
 
+    @Test func cancelledNativeImageExportPreservesExistingOutputAndLeavesNoTemporaryFile()
+        async throws
+    {
+        let root = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        _ = try await VideoEditorServiceTests.movie(in: root)
+        let source = root.appendingPathComponent("synthetic.png")
+        let target = root.appendingPathComponent("preserved.png")
+        let original = Data("Synthetic existing output".utf8)
+        try original.write(to: target)
+        let cancellation = WorkCancellation()
+        cancellation.cancel()
+        #expect(throws: StudioError.cancelled) {
+            try ImageEditRenderer.export(
+                document: ImageEditDocument(source: source), to: target,
+                cancelled: { cancellation.isCancelled })
+        }
+        #expect(try Data(contentsOf: target) == original)
+        #expect(
+            try FileManager.default.contentsOfDirectory(atPath: root.path)
+                .allSatisfy { !$0.hasPrefix(".studio-image-") })
+        let work = StudioUILongOperations()
+        let state = try work.start { _ in
+            try await BlockingWork.perform {
+                try ImageEditRenderer.export(
+                    document: ImageEditDocument(source: source), to: target,
+                    cancelled: { cancellation.isCancelled })
+            }
+            return Data("{}".utf8)
+        }
+        await work.stopAndWait()
+        #expect(try Data(contentsOf: target) == original)
+        let payload = try JSONSerialization.data(withJSONObject: ["token": state.token.uuidString])
+        #expect(throws: ExtensionPeerError.self) {
+            try work.invoke("studio.ui.work.read", payload: payload)
+        }
+    }
+
     @Test func mediaTransferRejectsForeignHandlesOverwritesAndDisabledReads() throws {
         let resources = StudioUIResources()
         defer { resources.shutdown() }
