@@ -38,8 +38,28 @@ struct NotchPanelSlot: Codable, Equatable, Sendable, Identifiable {
     let kind: Kind
     let tile: SurfaceTile
     let rectangle: NotchPanelRectangle
+    static func supportsSharedCard(_ widget: SurfaceWidget) -> Bool {
+        switch widget {
+        case .codeStats, .databases, .machines, .github, .desk, .media, .ability: true
+        default: false
+        }
+    }
+
+    static func anchorProvider(
+        tile: SurfaceTile, kind: Kind, activeVersions: [String: String]
+    ) -> String? {
+        if kind == .card, supportsSharedCard(tile.widget) {
+            return tile.widget.providerIDs.sorted().first { activeVersions[$0] != nil }
+        }
+        guard tile.widget.providerIDs.count == 1, let provider = tile.widget.providerIDs.first,
+            activeVersions[provider] != nil
+        else { return nil }
+        return provider
+    }
+
     var section: String? {
-        switch (kind, providerID, tile.widget) {
+        if kind == .card, Self.supportsSharedCard(tile.widget) { return "surface.card" }
+        return switch (kind, providerID, tile.widget) {
         case (.card, "music", .music): "music"
         case (.card, "calendar", .calendar): "calendar"
         case (.card, "usage", .usage): "usage"
