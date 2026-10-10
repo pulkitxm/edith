@@ -51,6 +51,25 @@ import Testing
         #expect(kill(pid, 0) == -1)
     }
 
+    @Test func restoredWorkerMayExitCleanlyBeforeDeliveringItsStopResponse() async throws {
+        let worker = try fixture("stop-without-response")
+        try await worker.start()
+        let pid = try #require(worker.processIdentifier)
+        try await worker.stop()
+        #expect(worker.processIdentifier == nil)
+        #expect(kill(pid, 0) == -1)
+    }
+
+    @Test(arguments: ["prepare-without-response", "stop-failure"])
+    func incompleteOrFailedRestorationIsNotReportedAsSuccessful(mode: String) async throws {
+        let worker = try fixture(mode)
+        try await worker.start()
+        let pid = try #require(worker.processIdentifier)
+        await #expect(throws: HostWorkerError.exited) { try await worker.stop() }
+        #expect(worker.processIdentifier == nil)
+        #expect(kill(pid, 0) == -1)
+    }
+
     private func fixture(_ mode: String) throws -> HostPrivilegedProcess {
         let script = try #require(
             Bundle.module.url(

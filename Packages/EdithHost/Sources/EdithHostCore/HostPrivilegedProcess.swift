@@ -63,7 +63,13 @@ struct HostPrivilegedResponse: Codable {
     func stop() async throws {
         guard process.isRunning else { return }
         _ = try await request(.init("prepareDisable"))
-        _ = try await request(.init("stop"))
+        do {
+            _ = try await request(.init("stop"))
+        } catch HostWorkerError.exited {
+            guard !process.isRunning, process.terminationReason == .exit,
+                process.terminationStatus == 0
+            else { throw HostWorkerError.exited }
+        }
         try? input.fileHandleForWriting.close()
         let deadline = ContinuousClock.now + .seconds(3)
         while process.isRunning {
