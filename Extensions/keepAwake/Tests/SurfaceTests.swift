@@ -20,7 +20,9 @@ struct KeepAwakeExtensionSurfaceTests {
         defaults.set(true, forKey: KeepAwakeKeys.enabled)
         var released = 0
         let store = KeepAwakeStore(
-            defaults: defaults, createAssertion: { 7 }, assertionIsActive: { _ in true },
+            defaults: defaults, notificationCenter: NotificationCenter(),
+            workspaceNotifications: NotificationCenter(), reconciliationInterval: nil,
+            createAssertion: { 7 }, assertionIsActive: { _ in true },
             releaseAssertion: { _ in released += 1 })
         defer { store.shutdown() }
         let request = SurfaceSnapshotRequest(target: .home, tile: .init(.actions))
