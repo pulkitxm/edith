@@ -22,11 +22,16 @@ struct UsageUILimits: Codable, Sendable {
     private var documents: [UUID: (data: Data, expires: Date)] = [:]
     private var stopped = false
     private let exports: UsageExportDelivery
+    private let navigate: @MainActor (UsageNavigationRequest) async throws -> Void
 
     init(
         controller: UsageWorkerController, directory: URL = Repo.dataDir,
-        defaults: UserDefaults = SharedDefaults.store, exports: UsageExportDelivery? = nil
+        defaults: UserDefaults = SharedDefaults.store, exports: UsageExportDelivery? = nil,
+        navigate: @escaping @MainActor (UsageNavigationRequest) async throws -> Void = { _ in
+            throw ExtensionPeerError.unavailable
+        }
     ) {
+        self.navigate = navigate
         self.controller = controller; self.directory = directory; self.defaults = defaults
         self.exports = exports ?? UsageExportDelivery()
     }
@@ -86,12 +91,41 @@ struct UsageUILimits: Codable, Sendable {
             documents[id] = nil
             return Data("{}".utf8)
         case "usage.ui.open":
-            try empty(object)
-            ExtensionPresentation.showWindow()
+            let request = try JSONDecoder().decode(UsageNavigationRequest.self, from: payload)
+            try request.validate()
+            guard Set(object.keys) == ["presentationID", "location"] else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            try await navigate(request)
+            try Task.checkCancellation()
+            guard !stopped else { throw ExtensionPeerError.unavailable }
             return Data("{}".utf8)
+        case "usage.ui.compact.limits":
+            let request = try SurfaceSnapshotRequest.decode(payload, providerID: "usage")
+            guard request.tile.widget == .limits else { throw ExtensionPeerError.invalidRequest }
+            let snapshot: LimitsTopicSnapshot
+            if let current = controller.latestLimits {
+                snapshot = current
+            } else {
+                let latest = await LimitsHistory.loadLatestProviders(
+                    url: directory.appendingPathComponent("limits-history.jsonl"))
+                snapshot = LimitsTopicSnapshot(
+                    refreshedAt: latest.values.map(\.date).max() ?? .distantPast,
+                    providers: LimitProvider.allCases.compactMap { provider in
+                        latest[provider].map {
+                            .init(
+                                provider: provider, session: $0.session, week: $0.week,
+                                fable: $0.fable, grok: $0.grok)
+                        }
+                    }, failure: nil)
+            }
+            try Task.checkCancellation()
+            guard !stopped else { throw ExtensionPeerError.unavailable }
+            return try encoder.encode(
+                UsageCompactLimitsSnapshot.project(snapshot, tile: request.tile))
         case "usage.ui.card":
             let tile = try JSONDecoder().decode(SurfaceTile.self, from: payload)
-            guard tile.widget == .usage, (1...365).contains(tile.days),
+            guard [.usage, .activity].contains(tile.widget), (1...365).contains(tile.days),
                 (1...100).contains(tile.itemLimit),
                 (tile.sourceIDs?.count ?? 0) <= 100,
                 tile.sourceIDs?.allSatisfy({

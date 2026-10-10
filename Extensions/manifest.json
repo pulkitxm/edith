@@ -1698,7 +1698,11 @@
         "Extensions/usage/CLI/UsageReport.swift",
         "Extensions/usage/CLI/UsageStatusLineCLICommands.swift",
         "Extensions/usage/Services/UsageRefreshObservation.swift",
-        "Extensions/usage/Services/UsageExportDelivery.swift"
+        "Extensions/usage/Services/UsageExportDelivery.swift",
+        "Extensions/usage/Models/UsageCompactLimitsSnapshot.swift",
+        "Extensions/usage/Services/UsageHostNavigation.swift",
+        "Extensions/usage/Views/UsageUIPresentation.swift",
+        "Extensions/usage/Views/UsageHomeLimitsCard.swift"
       ]
     },
     "resources": {

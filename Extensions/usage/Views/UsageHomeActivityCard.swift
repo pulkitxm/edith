@@ -4,10 +4,15 @@ import SwiftUI
 
 struct UsageHomeActivityCard: View {
     let tile: SurfaceTile
+    @Environment(\.usageUIClient) private var client
     @State private var model: DashboardModel
+    private let presenter: UsagePresenterState
 
-    @MainActor init(tile: SurfaceTile, model: DashboardModel? = nil) {
+    @MainActor init(
+        tile: SurfaceTile, model: DashboardModel? = nil, presenter: UsagePresenterState? = nil
+    ) {
         self.tile = tile
+        self.presenter = presenter ?? UsagePresenterState.shared
         _model = State(initialValue: model ?? DashboardModel.shared)
     }
     @Environment(\.colorScheme) private var scheme
@@ -18,14 +23,21 @@ struct UsageHomeActivityCard: View {
                 ActivityHeatmap(
                     days: model.homeUsage.calendarDays, scale: model.homeUsage.heatScale,
                     model: model, dark: scheme == .dark,
-                    blur: UsagePresenterState.shared.active && UsagePresenterState.shared.money,
-                    blurTokens: UsagePresenterState.shared.active
-                        && UsagePresenterState.shared.usage)
+                    blur: presenter.active && presenter.money,
+                    blurTokens: presenter.active
+                        && presenter.usage)
             } else {
                 PageLoading(
                     state: model.contentLoad.state, title: "No usage activity yet",
                     message: model.contentLoad.errorMessage ?? "Refresh Usage to collect activity.",
-                    layout: .analytics, retry: { _ = try? UsageWorkerOperations.requestRefresh() }
+                    layout: .analytics,
+                    retry: {
+                        if let client {
+                            client.perform("usage.refresh")
+                        } else {
+                            _ = try? UsageWorkerOperations.requestRefresh()
+                        }
+                    }
                 ) {
                     EmptyView()
                 }

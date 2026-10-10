@@ -4,9 +4,10 @@ import EdithExtensionUI
 import SwiftUI
 
 struct DashboardView: View {
-    @State private var refresh = DashboardRefreshBridge()
+    @Environment(\.usageUIClient) private var client
+    @State private var refresh: DashboardRefreshBridge
     @State private var model: DashboardModel
-    private var presenterState = UsagePresenterState.shared
+    private let presenterState: UsagePresenterState
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
     @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
@@ -54,8 +55,22 @@ struct DashboardView: View {
         return formatter
     }()
 
-    @MainActor init(model: DashboardModel? = nil) {
+    @MainActor init(
+        model: DashboardModel? = nil, client: UsageUIClient? = nil,
+        presenter: UsagePresenterState? = nil
+    ) {
         _model = State(initialValue: model ?? DashboardModel.shared)
+        presenterState = presenter ?? UsagePresenterState.shared
+        _refresh = State(
+            initialValue: DashboardRefreshBridge(
+                uiClient: client,
+                requestUsageRefresh: {
+                    if let client {
+                        client.perform("usage.refresh")
+                    } else {
+                        _ = try? UsageWorkerOperations.requestRefresh()
+                    }
+                }))
     }
 
     var body: some View {
@@ -70,12 +85,12 @@ struct DashboardView: View {
             }
         } content: {
             if showLog { logView }
-            if let notice = UsageUIClient.current?.notice
+            if let notice = client?.notice
                 ?? UsageWorkerOperations.controller?.notice
             {
                 PageNotice(notice, tone: .information)
             }
-            if let failure = UsageUIClient.current?.failure {
+            if let failure = client?.failure {
                 PageNotice(
                     failure, tone: .error,
                     actions: { Button("Retry", action: refresh.requestRefresh) })
@@ -176,7 +191,7 @@ struct DashboardView: View {
                     deck: UsageExportDeck(
                         snapshot: shareSnapshot,
                         delivery: { data, filename, save in
-                            guard let client = UsageUIClient.current else {
+                            guard let client = client else {
                                 throw ExtensionPeerError.unavailable
                             }
                             return try await client.deliverExport(

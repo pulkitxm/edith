@@ -33,6 +33,7 @@ enum ProjColumns {
 }
 
 struct ProjectDrilldownView: View {
+    @Environment(\.usageUIClient) private var client
     @Bindable var model: DashboardModel
     @State private var actions = UsageProjectActionModel()
     let dark: Bool
@@ -137,6 +138,7 @@ struct ProjectDrilldownView: View {
                 }
             }
         }
+        .onAppear { actions.client = client }
         .onDisappear { actions.cancel() }
     }
 

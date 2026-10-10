@@ -24,10 +24,8 @@ final class ExtensionRuntime: NSObject {
     private var cliHooks: UsageCLIHookOwner?
     private var cliStreams: ExtensionCLIStreams?
     private var uiCommands: UsageUICommands?
-    private var uiClient: UsageUIClient?
-    private var uiOnly = false
-    private var uiLocation: String?
-    private var uiTile: SurfaceTile?
+    private var navigation: UsageHostNavigation?
+    private let uiPresentations = UsageUIPresentations()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -93,11 +91,13 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareDisableWithCompletion:)
     func prepareDisable(completion: @escaping (NSError?) -> Void) {
+        uiPresentations.stop()
         UsageWorkerOperations.statusLineCommands = nil
         cliStreams?.stop()
         commands.shutdown()
         statusLineConnectionTask?.cancel()
         Task {
+            await uiPresentations.stopAndWait()
             await commands.shutdownAndWait()
             await cliStreams?.stopAndWait()
             await statusLineConnectionTask?.value
@@ -111,10 +111,13 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        uiPresentations.stop()
         cliStreams?.stop()
         commands.shutdown()
         let uiCommands = uiCommands; self.uiCommands = nil
         uiCommands?.shutdown()
+        let navigation = navigation; self.navigation = nil
+        navigation?.invalidate()
         controller?.beginShutdown()
         alertsTask?.cancel()
         backupRestoreTask?.cancel()
@@ -141,9 +144,11 @@ final class ExtensionRuntime: NSObject {
         recovering = false
         surface = nil; usageStore = nil
         Task {
+            await uiPresentations.stopAndWait()
             await backup?.shutdown()
             await backupRestoreTask?.value
             await commands.shutdownAndWait()
+            await navigation?.stopAndWait()
             await uiCommands?.shutdownAndWait()
             await cliStreams?.stopAndWait()
             await connectionTask?.value
@@ -162,11 +167,16 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
-    private func stopUI() {
-        uiClient?.stop(); uiClient = nil; UsageUIClient.current = nil
-        DashboardModel.shared.shutdown()
-        UsagePresenterState.shared.shutdown()
-        uiOnly = false; uiLocation = nil; uiTile = nil
+    @objc(prepareUIToClose:completion:)
+    func prepareUIToClose(_ presentationID: NSString, completion: @escaping (NSString?) -> Void) {
+        guard let id = UUID(uuidString: presentationID as String),
+            let scene = uiPresentations.scenes[id]
+        else {
+            completion("Usage presentation is unavailable."); return
+        }
+        Task {
+            await scene.shutdownAndWait(); completion(nil)
+        }
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
@@ -180,24 +190,32 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
-            guard let configuration = ExtensionUIConfiguration(context: input) else {
+            guard controller == nil, !recovering,
+                let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "usage",
+                let text = input["presentationID"] as? String, let id = UUID(uuidString: text),
+                let route = UsageUISceneRoute(context: input),
+                !configuration.uiOnly || route.location == .settings
+            else { return ["ok": false] as NSDictionary }
+            if let existing = uiPresentations.scenes[id] {
+                return ["ok": existing.matches(input)] as NSDictionary
+            }
+            let scene = UsageUIPresentation(
+                id: id, route: route,
+                client: configuration.engineClient.map { UsageUIClient(client: $0) },
+                readOnly: configuration.uiOnly)
+            if !uiPresentations.configure(scene) {
+                scene.shutdown(); return ["ok": false] as NSDictionary
+            }
+        case "releaseUI":
+            guard let text = input["presentationID"] as? String, let id = UUID(uuidString: text)
+            else {
                 return ["ok": false] as NSDictionary
             }
-            stopUI()
-            uiOnly = configuration.uiOnly
-            uiLocation = input["location"] as? String
-            if let data = input["tile"] as? Data, data.count <= 65_536 {
-                uiTile = try? JSONDecoder().decode(SurfaceTile.self, from: data)
-            }
-            if let client = configuration.engineClient {
-                let model = UsageUIClient(client: client)
-                uiClient = model; UsageUIClient.current = model
-                model.start()
-            }
-            return ["ok": true] as NSDictionary
-        case "stopUI": stopUI(); return ["ok": true] as NSDictionary
+            uiPresentations.release(id)
+        case "stopUI": uiPresentations.stop()
         case "start":
-            guard Bundle.main.bundleURL.pathExtension != "appex", uiLocation == nil else {
+            guard Bundle.main.bundleURL.pathExtension != "appex", uiPresentations.isEmpty else {
                 return ["ok": false] as NSDictionary
             }
             guard let suite = input["defaultsSuite"] as? String,
@@ -231,7 +249,14 @@ final class ExtensionRuntime: NSObject {
             }
             self.controller = controller
             UsageWorkerOperations.controller = controller
-            uiCommands = UsageUICommands(controller: controller)
+            let navigation = UsageHostNavigation(bridge: input["hostNavigation"] as? NSObject)
+            self.navigation = navigation
+            uiCommands = UsageUICommands(
+                controller: controller,
+                navigate: { [weak navigation] request in
+                    guard let navigation else { throw ExtensionPeerError.unavailable }
+                    try await navigation.navigate(request)
+                })
             let cache = SurfaceUsageStore(url: Repo.usageJSON)
             surface = UsageSurface(store: cache, controller: controller)
             UsageWorkerOperations.statusLineCommands = statusLine
@@ -267,29 +292,10 @@ final class ExtensionRuntime: NSObject {
                 }
             }
         case "view":
-            guard uiClient != nil || uiOnly else { return ["ok": false] as NSDictionary }
-            if uiLocation == "settings" {
-                return NSHostingController(
-                    rootView: ExtensionPageHost {
-                        UsageEmbeddedScene(client: self.uiClient, readOnly: self.uiOnly) {
-                            Form { UsageSettingsRows() }.formStyle(.grouped)
-                                .disabled(self.uiOnly || self.uiClient?.prepared != true)
-                        }
-                    })
-            }
-            if let tile = uiTile {
-                guard [.activity, .usage, .limits].contains(tile.widget) else {
-                    return ["ok": false] as NSDictionary
-                }
-                return NSHostingController(
-                    rootView: ExtensionPageHost {
-                        UsageEmbeddedScene(client: self.uiClient) { UsageHomeScene(tile: tile) }
-                    })
-            }
-            return NSHostingController(
-                rootView: ExtensionPageHost {
-                    UsageEmbeddedScene(client: self.uiClient) { DashboardView() }
-                })
+            guard let text = input["presentationID"] as? String, let id = UUID(uuidString: text),
+                let scene = uiPresentations.scenes[id], scene.matches(input)
+            else { return ["ok": false] as NSDictionary }
+            return scene.controller() ?? (["ok": false] as NSDictionary)
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": usageStore?.syncStatusItem(); usageStore?.refreshMenuBarItem()
         case "stop": prepareToStop(completion: {})
@@ -297,16 +303,6 @@ final class ExtensionRuntime: NSObject {
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
-    }
-}
-
-private struct UsageEmbeddedScene<Content: View>: View {
-    let client: UsageUIClient?
-    var readOnly = false
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        content().environment(\.automaticViewActionsEnabled, !readOnly && client?.stopped == false)
     }
 }
 

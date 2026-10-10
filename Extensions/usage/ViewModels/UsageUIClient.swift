@@ -277,8 +277,17 @@ import Observation
         }
     }
 
+    private var drain: Task<Void, Never>?
+
+    func stopAndWait() async { stop(); await drain?.value }
+
     func stop() {
         guard !stopped else { return }
+        let owned = Array(tasks.values)
+        let reads = Array(requests.values)
+        let poll = polling
+        let prep = preparation
+        let changes = preferencesTask
         stopped = true
         prepared = false
         preparation?.cancel(); preparation = nil
@@ -293,5 +302,12 @@ import Observation
         if let observer { NotificationCenter.default.removeObserver(observer) }
         observer = nil
         invalidateClient()
+        drain = Task {
+            for task in owned { await task.value }
+            for task in reads { _ = try? await task.value }
+            await poll?.value
+            _ = try? await prep?.value
+            await changes?.value
+        }
     }
 }

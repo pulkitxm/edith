@@ -4,6 +4,7 @@ import EdithExtensionUI
 import SwiftUI
 
 struct RateLimitsDialsView: View {
+    @Environment(\.usageUIClient) private var client
     let dark: Bool
     var fill = false
     var minHeight: CGFloat? = nil
@@ -39,7 +40,15 @@ struct RateLimitsDialsView: View {
     private func reload() {
         reloadJob?.cancel()
         reloadJob = Task {
-            await reloadLoad.perform(operation: { await LimitsHistory.loadLatestProviders() }) {
+            await reloadLoad.perform(operation: {
+                if let client {
+                    return
+                        (try? await client.value(
+                            "usage.ui.limits.latest", as: UsageUILimitsSummary.self))?.providers
+                        ?? [:]
+                }
+                return await LimitsHistory.loadLatestProviders()
+            }) {
                 latest in
                 latestProviders = latest
                 let found = LimitProvider.allCases.filter { latest[$0] != nil }
@@ -140,7 +149,7 @@ struct RateLimitsDialsView: View {
             {
                 guard !Task.isCancelled else { return }
                 latestLimits =
-                    UsageUIClient.current?.latestLimits
+                    client?.latestLimits
                     ?? UsageWorkerOperations.controller?.latestLimits
                 reload()
             }
@@ -316,6 +325,7 @@ struct RateLimitsDialsView: View {
 }
 
 struct LimitsRefreshButton: View {
+    @Environment(\.usageUIClient) private var client
     @Environment(\.windowVisible) private var windowVisible
     let dark: Bool
     var onRefreshed: () -> Void
@@ -325,7 +335,11 @@ struct LimitsRefreshButton: View {
     var body: some View {
         Button {
             refreshing = true
-            try? UsageWorkerOperations.requestLimitsRefresh()
+            if let client {
+                client.perform("usage.limits.refresh")
+            } else {
+                try? UsageWorkerOperations.requestLimitsRefresh()
+            }
             timeoutTask?.cancel()
             timeoutTask = Task {
                 do { try await Task.sleep(nanoseconds: 10_000_000_000) } catch { return }
@@ -370,6 +384,7 @@ struct LimitsRefreshButton: View {
 }
 
 struct LimitsCardView: View {
+    @Environment(\.usageUIClient) private var client
     let theme: Color
     let dark: Bool
     @AppStorage(AppStorageKeys.Limits.warnPercent, store: SharedDefaults.store) private var warn =
@@ -474,7 +489,16 @@ struct LimitsCardView: View {
         reloadJob?.cancel()
         reloadJob = Task {
             await reloadLoad.perform(operation: {
-                await LimitsHistory.loadSnapshot(preferredProvider: preferred)
+                if let client {
+                    guard let value = try? await client.limits(provider: preferred) else {
+                        return LimitsHistory.Snapshot(
+                            providers: [], provider: preferred, latest: [:], points: [])
+                    }
+                    return LimitsHistory.Snapshot(
+                        providers: LimitProvider.allCases.filter { value.providers[$0] != nil },
+                        provider: value.provider, latest: value.providers, points: value.points)
+                }
+                return await LimitsHistory.loadSnapshot(preferredProvider: preferred)
             }) { snapshot in
                 providers = snapshot.providers
                 loadedProvider = snapshot.provider

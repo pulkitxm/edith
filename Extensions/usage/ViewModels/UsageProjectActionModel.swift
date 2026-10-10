@@ -6,6 +6,7 @@ import Observation
 final class UsageProjectActionModel {
     private(set) var failureMessage: String?
     private var operation: Task<Void, Never>?
+    var client: UsageUIClient?
 
     func cancel() { operation?.cancel(); operation = nil }
 
@@ -57,7 +58,7 @@ final class UsageProjectActionModel {
     }
 
     private func remote(_ command: String, key: String, value: String) -> Bool {
-        guard let client = UsageUIClient.current else { return false }
+        guard let client = client ?? UsageUIClient.current else { return false }
         operation?.cancel()
         operation = Task { [weak self] in
             do {

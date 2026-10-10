@@ -4,7 +4,9 @@ import EdithExtensionUI
 import SwiftUI
 
 struct UsageHomeUsageCard: View {
+    @Environment(\.usageUIClient) private var client
     let tile: SurfaceTile
+    private let scene: UsageUIPresentation?
     @State private var snapshot: SurfaceUsageSnapshot?
     @State private var load = ContentLoad()
     @State private var retry = 0
@@ -12,8 +14,10 @@ struct UsageHomeUsageCard: View {
     @Environment(\.surfaceFillHeight) private var fillHeight
     @Environment(\.automaticViewActionsEnabled) private var active
 
-    init(tile: SurfaceTile, snapshot: SurfaceUsageSnapshot? = nil) {
-        self.tile = tile
+    init(
+        tile: SurfaceTile, snapshot: SurfaceUsageSnapshot? = nil, scene: UsageUIPresentation? = nil
+    ) {
+        self.tile = tile; self.scene = scene
         _snapshot = State(initialValue: snapshot)
     }
 
@@ -34,7 +38,7 @@ struct UsageHomeUsageCard: View {
                         }
                         .help("Refresh usage").accessibilityLabel("Refresh usage")
                         Button {
-                            UsageUIClient.current?.perform("usage.ui.open")
+                            if let scene { Task { try? await scene.open() } }
                         } label: {
                             Image(systemName: "arrow.up.right")
                         }
@@ -44,7 +48,10 @@ struct UsageHomeUsageCard: View {
             }
             if let value = snapshot {
                 data(value).presenterCover(
-                    UsagePresenterState.shared.active && UsagePresenterState.shared.money)
+                    (scene?.presenter ?? UsagePresenterState.shared).active
+                        && ((scene?.presenter ?? UsagePresenterState.shared).money
+                            || (scene?.presenter ?? UsagePresenterState.shared).usage)
+                )
             } else if load.isRunning {
                 LoadingIndicator()
             } else if load.errorMessage == nil {
@@ -65,12 +72,12 @@ struct UsageHomeUsageCard: View {
         .task(
             id: "\(active):\(tile.days):\(tile.sourceIDs?.sorted() ?? []):\(retry)"
         ) {
-            guard UsageUIClient.current?.stopped == false, active || retry > 0 else { return }
+            guard client?.stopped == false, active || retry > 0 else { return }
             repeat {
                 let request = load.begin()
                 defer { if Task.isCancelled { load.cancel(request) } }
                 do {
-                    guard let client = UsageUIClient.current else {
+                    guard let client = client else {
                         throw ExtensionPeerError.unavailable
                     }
                     let next = try await JSONDecoder().decode(

@@ -8,18 +8,21 @@ public final class DashboardRefreshBridge {
     public private(set) var log = ""
 
     @ObservationIgnored private nonisolated(unsafe) var tokens: [NSObjectProtocol] = []
+    private let uiClient: UsageUIClient?
     private let logURL: URL
     private let requestUsageRefresh: @MainActor () -> Void
     @ObservationIgnored private nonisolated(unsafe) var tailTimer: Timer?
     @ObservationIgnored private nonisolated(unsafe) var reloadTask: Task<Void, Never>?
     @ObservationIgnored private var logVisible = false
 
-    public init(
+    init(
         logURL: URL = Repo.dataDir.appendingPathComponent("refresh.log"),
+        uiClient: UsageUIClient? = nil,
         requestUsageRefresh: @escaping @MainActor () -> Void = {
             _ = try? UsageWorkerOperations.requestRefresh()
         }
     ) {
+        self.uiClient = uiClient
         self.logURL = logURL
         self.requestUsageRefresh = requestUsageRefresh
         tokens.append(
@@ -91,7 +94,7 @@ public final class DashboardRefreshBridge {
         reloadTask?.cancel()
         let url = logURL
         reloadTask = Task { [weak self] in
-            if let client = UsageUIClient.current {
+            if let client = self?.uiClient ?? UsageUIClient.current {
                 guard let text = try? await client.value("usage.ui.log", as: String.self),
                     !Task.isCancelled
                 else { return }
