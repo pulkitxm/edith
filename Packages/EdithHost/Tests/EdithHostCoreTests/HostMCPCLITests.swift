@@ -51,7 +51,9 @@ import Testing
         var input: [Int32] = [-1, -1], output: [Int32] = [-1, -1]
         #expect(pipe(&input) == 0 && pipe(&output) == 0)
         defer { for descriptor in input + output { Darwin.close(descriptor) } }
+        let inputFlags = fcntl(input[0], F_GETFL), outputFlags = fcntl(output[1], F_GETFL)
         let io = try HostMCPStdio(input: input[0], output: output[1])
+        #expect(fcntl(input[0], F_GETFL) == inputFlags && fcntl(output[1], F_GETFL) == outputFlags)
         let data = Data("{\"jsonrpc\":\"2.0\"}\n{\"next\":true}\n".utf8)
         #expect(
             data.withUnsafeBytes { Darwin.write(input[1], $0.baseAddress!, $0.count) } == data.count

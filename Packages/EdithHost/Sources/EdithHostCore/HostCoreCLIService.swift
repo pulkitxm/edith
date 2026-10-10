@@ -79,26 +79,30 @@ public struct HostCoreCLIEnvelope: Codable, Sendable {
         try envelope.validate()
         try Task.checkCancellation()
         let reply: ExtensionCLIReply
-        if envelope.arguments.first == "config" {
-            try await prepareConfiguration(Array(envelope.arguments.dropFirst()))
-            try Task.checkCancellation()
-            reply = try configuration.execute(
-                Array(envelope.arguments.dropFirst()), input: envelope.input)
-        } else {
-            guard
-                [
-                    "app", "permissions", "camera", "guide", "schema", "version", "status",
-                    "install", "uninstall", "completions", "extensions",
-                ].contains(envelope.arguments.first ?? ""),
-                envelope.input.isEmpty
-            else {
-                throw HostCLIError.usage("Unknown core command.")
+        do {
+            if envelope.arguments.first == "config" {
+                try await prepareConfiguration(Array(envelope.arguments.dropFirst()))
+                try Task.checkCancellation()
+                reply = try configuration.execute(
+                    Array(envelope.arguments.dropFirst()), input: envelope.input)
+            } else {
+                guard
+                    [
+                        "app", "permissions", "camera", "guide", "schema", "version", "status",
+                        "install", "uninstall", "completions", "extensions",
+                    ].contains(envelope.arguments.first ?? ""),
+                    envelope.input.isEmpty
+                else {
+                    throw HostCLIError.usage("Unknown core command.")
+                }
+                reply = try await HostCoreCLIContext.$workingDirectory.withValue(
+                    envelope.workingDirectory
+                ) {
+                    try await action(envelope.arguments)
+                }
             }
-            reply = try await HostCoreCLIContext.$workingDirectory.withValue(
-                envelope.workingDirectory
-            ) {
-                try await action(envelope.arguments)
-            }
+        } catch let error as HostCLIError {
+            reply = HostCLIErrorReply.make(error)
         }
         try Task.checkCancellation()
         guard !stopped else {

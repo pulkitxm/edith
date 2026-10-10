@@ -11,7 +11,9 @@ import Testing
         #expect(pipe(&fds) == 0)
         let readFD = fds[0], writeFD = fds[1]
         defer { Darwin.close(readFD); Darwin.close(writeFD) }
+        let originalFlags = fcntl(writeFD, F_GETFL)
         let output = try HostCLIByteOutput(descriptor: writeFD)
+        #expect(fcntl(writeFD, F_GETFL) == originalFlags)
         let bytes = Data([0, 255, 10, 13, 0, 120])
         try await output.send(bytes)
         var buffer = [UInt8](repeating: 0, count: 64)

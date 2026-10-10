@@ -16,7 +16,10 @@ def run_case(cancel):
     process = None
     try:
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
+        os.write(slave, b"baseline")
+        assert os.read(master, 8) == b"baseline"
         original = termios.tcgetattr(slave)
+        original_flags = fcntl.fcntl(slave, fcntl.F_GETFL)
         payload = bytes([0, 255, 3, 4, 13, 10, 120, 0])
         args = [sys.argv[1], "calendar", "stream-terminal"]
         if not cancel:
@@ -59,6 +62,7 @@ def run_case(cancel):
             assert bytes(output) == payload + b"z"
         code = process.wait(timeout=6)
         assert code == (130 if cancel else 0), (code, bytes(errors))
+        assert fcntl.fcntl(slave, fcntl.F_GETFL) == original_flags, (original_flags, fcntl.fcntl(slave, fcntl.F_GETFL), cancel)
         assert termios.tcgetattr(slave) == original, (termios.tcgetattr(slave), original)
         assert b"error:" not in errors if not cancel else b"error:" in errors or process.returncode == 130
         return {"cancel": cancel, "exitCode": code, "exactBytes": True, "resize": True, "termiosRestored": True}

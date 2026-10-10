@@ -16,11 +16,6 @@ public final class HostCLIByteOutput: @unchecked Sendable {
             if copy >= 0 { Darwin.close(copy) }
             throw HostCLIError.rejected("Could not open command output.")
         }
-        let flags = fcntl(copy, F_GETFL)
-        guard flags >= 0, fcntl(copy, F_SETFL, flags | O_NONBLOCK) == 0 else {
-            Darwin.close(copy); Darwin.close(wake[0]); Darwin.close(wake[1])
-            throw HostCLIError.rejected("Could not configure command output.")
-        }
         for fd in [copy, wake[0], wake[1]] { _ = fcntl(fd, F_SETFD, FD_CLOEXEC) }
         _ = fcntl(wake[1], F_SETFL, O_NONBLOCK)
         _ = signal(SIGPIPE, SIG_IGN)
@@ -77,7 +72,7 @@ public final class HostCLIByteOutput: @unchecked Sendable {
                     }
                     let count = Darwin.write(
                         output, bytes.baseAddress!.advanced(by: offset),
-                        min(4096, bytes.count - offset))
+                        min(Int(PIPE_BUF), bytes.count - offset))
                     if count < 0, errno == EINTR || errno == EAGAIN { continue }
                     guard count > 0 else {
                         throw HostCLIError.rejected("Could not write command output.")

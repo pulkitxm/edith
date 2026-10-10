@@ -612,8 +612,18 @@ try {
   await command(["config", "set", "mainWindowZoom", "invalid"], 2);
   const cancelledMCP = await mcpClient();
   await cancelledMCP.cancel();
+  const invalidCoreValue = await command(
+    ["config", "set", "appearance", "invalid"],
+    2,
+  );
+  assert.equal(
+    invalidCoreValue.stderr,
+    "error: appearance allows: system, light, dark\n",
+  );
   const mcp = await mcpClient();
-  let tools = (await mcp.call("tools/list")).result.tools;
+  const initialTools = await mcp.call("tools/list");
+  assert(initialTools.result, JSON.stringify(initialTools));
+  let tools = initialTools.result.tools;
   assert(tools.some((item) => item.name === "edith_config_get"));
   assert(!tools.some((item) => item.name.startsWith("edith_calendar_")));
   const configTool = await mcp.call("tools/call", {

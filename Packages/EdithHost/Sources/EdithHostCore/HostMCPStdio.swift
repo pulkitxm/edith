@@ -26,15 +26,6 @@ public final class HostMCPStdio: @unchecked Sendable {
         for descriptor in [inputCopy, outputCopy, wake[0], wake[1]] {
             _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
         }
-        let inputFlags = fcntl(inputCopy, F_GETFL), outputFlags = fcntl(outputCopy, F_GETFL)
-        guard inputFlags >= 0, outputFlags >= 0,
-            fcntl(inputCopy, F_SETFL, inputFlags | O_NONBLOCK) == 0,
-            fcntl(outputCopy, F_SETFL, outputFlags | O_NONBLOCK) == 0
-        else {
-            Darwin.close(inputCopy); Darwin.close(outputCopy)
-            Darwin.close(wake[0]); Darwin.close(wake[1])
-            throw HostCLIError.rejected("Could not configure bounded MCP stdio.")
-        }
         _ = fcntl(wake[1], F_SETFL, O_NONBLOCK)
         _ = signal(SIGPIPE, SIG_IGN)
         self.input = inputCopy; self.output = outputCopy; wakeRead = wake[0]; wakeWrite = wake[1]
@@ -154,7 +145,7 @@ public final class HostMCPStdio: @unchecked Sendable {
                     }
                     let count = Darwin.write(
                         output, bytes.baseAddress!.advanced(by: offset),
-                        min(4096, bytes.count - offset))
+                        min(Int(PIPE_BUF), bytes.count - offset))
                     if count < 0, errno == EINTR || errno == EAGAIN { continue }
                     guard count > 0 else {
                         throw HostCLIError.rejected("Could not write MCP output.")

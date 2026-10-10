@@ -112,12 +112,7 @@ public struct HostCommandCLI: Sendable {
                 arguments, input: input, liveInput: liveInput, streamWrite: streamWrite);
             try Task.checkCancellation(); return reply
         } catch {
-            let failure = error as? HostCLIError
-            var code = failure?.exitCode ?? (error is CancellationError ? 130 : 1)
-            if case .unavailable = failure { code = 4 }
-            return try! ExtensionCLIReply(
-                stdout: "", stderr: "error: \(String(error.localizedDescription.prefix(4096)))\n",
-                exitCode: code)
+            return HostCLIErrorReply.make(error)
         }
     }
 
