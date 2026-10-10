@@ -215,7 +215,7 @@ public final class HostMarketplace {
                     } else {
                         try await sessions.applyUpdate(package)
                     }
-                    if sessions.states[id] != .active || sessions.versions[id] == package.version {
+                    if !sessions.enabledIDs.contains(id) || sessions.versions[id] == package.version {
                         try store.select(package)
                     }
                 } catch {
