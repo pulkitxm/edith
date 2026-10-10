@@ -124,11 +124,7 @@ public enum CompanionSecrets {
 
     public static func set(_ secret: String, kind: CompanionSecretKind) {
         let data = Data(secret.utf8)
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: kind.rawValue,
-        ]
+        let query = CompanionKeychainIdentity.query(service: service, account: kind.rawValue)
         guard !secret.isEmpty else {
             SecItemDelete(query as CFDictionary)
             return
@@ -144,14 +140,10 @@ public enum CompanionSecrets {
     }
 
     public static func get(_ kind: CompanionSecretKind) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: kind.rawValue,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecUseAuthenticationContext as String: nonInteractiveContext(),
-        ]
+        var query = CompanionKeychainIdentity.query(service: service, account: kind.rawValue)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        query[kSecUseAuthenticationContext as String] = nonInteractiveContext()
         var item: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
             let data = item as? Data

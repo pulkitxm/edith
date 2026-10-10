@@ -36,9 +36,14 @@ struct FixtureJevKeyStore: JevKeyStore, @unchecked Sendable {
 
 struct KeychainJevKeyStore: JevKeyStore {
     static let account = "typesafe-api-key"
-    static let service =
-        (ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"]
-            ?? "com.pulkit.edith.tests." + UUID().uuidString) + ".extensions.jev"
+    static let service = service(
+        applicationIdentifier: ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"]
+            ?? "com.pulkit.edith.tests." + UUID().uuidString)
+
+    static func service(applicationIdentifier: String) -> String {
+        applicationIdentifier == "com.pulkit.edith"
+            ? "com.pulkit.edith.jev" : applicationIdentifier + ".extensions.jev"
+    }
     let service: String
 
     init(service: String = Self.service) { self.service = service }

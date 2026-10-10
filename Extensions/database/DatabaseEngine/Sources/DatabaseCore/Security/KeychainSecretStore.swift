@@ -15,9 +15,16 @@ struct DatabaseKeychainAPI: @unchecked Sendable {
 }
 
 public actor DatabaseKeychainSecretStore: DatabaseSecretStore {
-    public static let defaultService =
-        (ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"]
-            ?? "com.pulkit.edith.tests." + UUID().uuidString) + ".extensions.database"
+    public static let defaultService = service(
+        applicationIdentifier: ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"]
+            ?? "com.pulkit.edith.tests." + UUID().uuidString)
+
+    public static func service(
+        applicationIdentifier: String, isolatedSuffix: String = "extensions.database"
+    ) -> String {
+        applicationIdentifier == "com.pulkit.edith"
+            ? "com.pulkit.edith.database" : applicationIdentifier + "." + isolatedSuffix
+    }
     public static let defaultLabel = "Edith Database"
 
     public nonisolated let service: String

@@ -30,7 +30,12 @@ public final class MusicNativePlayer: @unchecked Sendable {
         ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             ?? Bundle.main.bundleIdentifier ?? "com.pulkit.edith.development"
     }
-    public static var keychainService: String { applicationIdentity + ".extension.music" }
+    public static var keychainService: String {
+        MusicCredentialIdentity.service(
+            applicationIdentifier: ProcessInfo.processInfo.environment[
+                "EDITH_APPLICATION_IDENTIFIER"],
+            isolatedIdentity: applicationIdentity)
+    }
     public static var libraryURL: URL? {
         Bundle(for: MusicResourceIdentity.self).privateFrameworksURL?.appendingPathComponent(
             "libedith_music_player.dylib")
