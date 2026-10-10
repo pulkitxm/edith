@@ -1,0 +1,126 @@
+import EdithExtensionSupport
+import Foundation
+import Testing
+@testable import HerdrUI
+
+@MainActor @Suite(.serialized) struct HerdrCLIExecutionTests {
+    @Test func originalListCommandRendersOwnedInventoryAndPreservesFailureStreams() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let previous = HerdrCLIEnvironment.collect
+        HerdrCLIEnvironment.collect = { _ in
+            [
+                .init(
+                    id: "local", name: "Synthetic", isLocal: true,
+                    herdrPresent: true, reachable: true,
+                    agents: [
+                        .make(
+                            machineID: "local", machineName: "Synthetic",
+                            machineIsLocal: true, sshTarget: nil, session: "mock", pane: "p1",
+                            kind: "Synthetic",
+                            status: .working, title: "Example", workspace: "mock", cwd: "/tmp/mock")
+                    ])
+            ]
+        }
+        defer { HerdrCLIEnvironment.collect = previous }
+        let worker = makeWorker()
+        let reply = try await HerdrCLIExecution.run(
+            .init(arguments: ["ls", "--json"]), worker: worker)
+        #expect(reply.exitCode == 0 && reply.stderr.isEmpty)
+        let value = try #require(
+            try JSONSerialization.jsonObject(with: Data(reply.stdout.utf8)) as? [String: Any])
+        #expect((value["agents"] as? [[String: Any]])?.first?["pane"] as? String == "p1")
+        let missing = try await HerdrCLIExecution.run(
+            .init(arguments: ["command", "missing"]), worker: worker)
+        #expect(
+            missing.exitCode == 3 && missing.stdout.isEmpty
+                && missing.stderr.contains("no herdr pane"))
+        let invalid = try await HerdrCLIExecution.run(
+            .init(arguments: ["send", "p1", "hello", "--in", "invalid"]), worker: worker)
+        #expect(invalid.exitCode == 2 && invalid.stdout.isEmpty && invalid.stderr.contains("--in"))
+        await worker.shutdown()
+    }
+
+    @Test func originalLayoutsOperateOnOwnStoreAndDisabledOwnerCannotExecute() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let worker = makeWorker()
+        let reply = try await HerdrCLIExecution.run(
+            .init(arguments: ["layout", "ls", "--json"]), worker: worker)
+        #expect(reply.exitCode == 0 && reply.stderr.isEmpty)
+        #expect(reply.stdout.contains("arrangements") && reply.stdout.contains("board"))
+        let failure = try await HerdrCLIExecution.run(
+            .init(arguments: ["close-tab", "missing", "--json"]), worker: worker)
+        #expect(failure.exitCode != 0 && failure.stdout.isEmpty)
+        await worker.shutdown()
+        await #expect(throws: ExtensionPeerError.self) {
+            try await HerdrCLIExecution.run(.init(arguments: ["layout", "ls"]), worker: worker)
+        }
+    }
+
+    @Test func originalScheduledMessageCommandsPersistAndCancelOwningHooks() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let agent = HerdrAgent.make(
+            machineID: "local", machineName: "Synthetic", machineIsLocal: true,
+            sshTarget: nil, session: "mock", pane: "p1", kind: "claude", status: .working,
+            title: "Example", workspace: "mock", cwd: root.path, stateSequence: 4)
+        let previous = HerdrCLIEnvironment.collect
+        HerdrCLIEnvironment.collect = { _ in
+            [
+                .init(
+                    id: "local", name: "Synthetic", isLocal: true, herdrPresent: true,
+                    reachable: true, agents: [agent])
+            ]
+        }
+        defer { HerdrCLIEnvironment.collect = previous }
+        let hooks = AgentHookService(
+            url: root.appendingPathComponent("hooks.json"),
+            armProbe: { agent in
+                .agent(
+                    .init(
+                        kind: agent.kind, status: agent.status, sequence: agent.stateSequence,
+                        identity: .init(terminalID: "fixture-terminal", processGroupID: 123)))
+            })
+        let suite = "herdr.cli.fixture." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let worker = HerdrWorker(
+            store: HerdrStore(defaults: defaults, machinesProvider: { [] }), defaults: defaults,
+            hooks: hooks, automaticActions: false)
+        let armed = try await HerdrCLIExecution.run(
+            .init(arguments: ["send", "p1", "resume the fixture", "--when-finished", "--json"]),
+            worker: worker)
+        #expect(armed.exitCode == 0 && armed.stderr.isEmpty)
+        let hook = try #require(await hooks.list().hooks.first)
+        #expect(hook.message == "resume the fixture" && hook.schedule == .whenFinished)
+        let persisted = try AgentPayload.decode(
+            HerdrHooksSnapshot.self,
+            from: Data(contentsOf: root.appendingPathComponent("hooks.json")))
+        #expect(persisted.hooks.first?.id == hook.id)
+        let listed = try await HerdrCLIExecution.run(
+            .init(arguments: ["hooks", "ls", "--json"]), worker: worker)
+        #expect(listed.exitCode == 0 && listed.stdout.contains(hook.id.uuidString))
+        let conflict = try await HerdrCLIExecution.run(
+            .init(arguments: ["send", "p1", "resume", "--when-finished", "--in", "15m"]),
+            worker: worker)
+        #expect(conflict.exitCode == 2 && conflict.stderr.contains("pick one"))
+        let cancelled = try await HerdrCLIExecution.run(
+            .init(arguments: ["hooks", "rm", hook.id.uuidString, "--json"]), worker: worker)
+        #expect(cancelled.exitCode == 0 && cancelled.stderr.isEmpty)
+        #expect(await hooks.list().hooks.isEmpty)
+        #expect(
+            try AgentPayload.decode(
+                HerdrHooksSnapshot.self,
+                from: Data(contentsOf: root.appendingPathComponent("hooks.json"))
+            ).hooks.isEmpty)
+        await worker.shutdown()
+    }
+
+    private func makeWorker() -> HerdrWorker {
+        let defaults = UserDefaults(suiteName: "herdr.cli.fixture." + UUID().uuidString)!
+        return HerdrWorker(
+            store: HerdrStore(defaults: defaults, machinesProvider: { [] }), defaults: defaults,
+            automaticActions: false)
+    }
+}

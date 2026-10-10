@@ -10,6 +10,7 @@ let package = Package(
             name: "HerdrUI",
             dependencies: [
                 .product(name: "EdithExtensionDocuments", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
                 .product(name: "GhosttyTerminal", package: "Native"),
             ], path: ".", exclude: ["Tests", "Runtime.swift"], resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),

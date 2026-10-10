@@ -2652,7 +2652,7 @@
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
-    "supportProduct": "EdithExtensionDocuments",
+    "supportProduct": "EdithExtensionCommands",
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
     "nativeResources": [
@@ -2833,7 +2833,15 @@
         "Extensions/herdr/Activity/HerdrAttentionSettings.swift",
         "Extensions/herdr/Activity/HerdrNotification.swift",
         "Extensions/herdr/Activity/HerdrNotificationAttention.swift",
-        "Extensions/herdr/Activity/HerdrNotificationService.swift"
+        "Extensions/herdr/Activity/HerdrNotificationService.swift",
+        "Extensions/herdr/CLI/CLIEnvironment.swift",
+        "Extensions/herdr/CLI/HerdrCLIExecution.swift",
+        "Extensions/herdr/CLI/HerdrCommands.swift",
+        "Extensions/herdr/CLI/HerdrLaunchCommands.swift",
+        "Extensions/herdr/CLI/HerdrLayoutCommands.swift",
+        "Extensions/herdr/CLI/HerdrMessageCommands.swift",
+        "Extensions/herdr/CLI/HerdrSpaceCommands.swift",
+        "Extensions/herdr/CLI/CLIDestructivePlan.swift"
       ]
     },
     "resources": {
