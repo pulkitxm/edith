@@ -81,25 +81,25 @@ and platform details.
 
 ## Command line
 
-Installing Edith installs `ed`, a first-class CLI that reaches everything the UI
-does. `edith` is the same binary under its full name.
+The bundled `ed` launcher connects to the running Edith app. It manages downloaded
+extensions and sends JSON operations to an enabled extension worker.
 
+```sh
+ed extensions ls
+ed extensions install keepAwake
+ed extensions enable keepAwake
+ed extensions info keepAwake
+ed extensions disable keepAwake
+ed extensions remove keepAwake
+ed invoke <id> <operation> --json '{"value":"synthetic"}'
 ```
-ed extensions enable keepAwake      enable independent sleep prevention
-ed config set preventSleep true     every setting the UI exposes, applied live
-ed lid-awake on --for 30m           keep running with the lid shut for 30 minutes
-ed usage limits --json              the same numbers the rings show
-ed usage export --card activity     export a branded usage card as a PNG
-ed machines ls                      the computers Edith can reach over SSH
-ed tuf docker ps                    run anything on one of them
-```
 
-Every read command takes `--json`, stdout is exactly one document, logs go to
-stderr, and exit codes are reliable, so an agent can drive Edith headlessly.
+Command results are JSON. Errors are JSON on stderr with nonzero exit codes.
+Help and version work without a running app. Commands do not open Edith or start
+workers implicitly. Each downloaded extension defines its own operations.
 
-Full reference: **[docs/cli](docs/cli/README.md)**, one page per command group,
-also published to the [wiki](https://github.com/pulkitxm/edith/wiki). `ed guide`
-prints the same material as a built-in manual.
+Full reference: **[docs/cli](docs/cli/README.md)**, also published to the
+[wiki](https://github.com/pulkitxm/edith/wiki).
 
 Lid Awake needs one-time approval for Edith's background helper. Read the
 [Lid Awake guide](docs/lid-awake.md) before using it in a closed bag or on battery.
