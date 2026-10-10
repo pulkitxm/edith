@@ -3,7 +3,7 @@ import Foundation
 public struct ExtensionCLIRequest: Codable, Equatable, Sendable {
     public let arguments: [String]
     public init(arguments: [String]) throws {
-        guard !arguments.isEmpty, arguments.count <= 128,
+        guard arguments.count <= 128,
             arguments.allSatisfy({ $0.utf8.count <= 4_096 && !$0.utf8.contains(0) }),
             arguments.reduce(0, { $0 + $1.utf8.count }) <= 16_384
         else { throw ExtensionPeerError.invalidRequest }

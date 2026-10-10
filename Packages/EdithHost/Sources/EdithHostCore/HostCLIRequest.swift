@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Foundation
 
 public enum HostCLIError: Error, LocalizedError, Sendable {
@@ -27,7 +28,7 @@ public enum HostCLIError: Error, LocalizedError, Sendable {
 
 public struct HostCLIRequest: Sendable, Equatable {
     public enum Action: String, Sendable {
-        case ls, info, install, update, enable, disable, remove, invoke
+        case ls, info, install, update, enable, disable, remove, invoke, terminal
     }
     public let action: Action
     public let id: String?
@@ -94,7 +95,12 @@ public struct HostCLIRequest: Sendable, Equatable {
                 })
             else { throw HostCLIError.usage("Invalid extension identifier.") }
         }
-        if action == .invoke {
+        if action == .terminal {
+            guard id == "calendar", operation == "calendar.cli", !raw,
+                let request = try? JSONDecoder().decode(ExtensionCLIRequest.self, from: payload),
+                (try? request.validate()) != nil
+            else { throw HostCLIError.usage("Invalid extension terminal command.") }
+        } else if action == .invoke {
             guard let operation, !operation.isEmpty, operation.utf8.count <= 128,
                 operation.utf8.allSatisfy({
                     (48...57).contains($0) || (65...90).contains($0)
@@ -109,12 +115,13 @@ public struct HostCLIRequest: Sendable, Equatable {
 }
 
 public enum HostCLICommand: Equatable {
-    case help, version, request(HostCLIRequest)
+    case help, version, request(HostCLIRequest), terminal(HostCLIRequest)
 
     public static let usageText = """
         usage: ed extensions ls [--json]
                ed extensions info|install|update|enable|disable|remove <id> [--json]
                ed invoke <id> <operation> [--json <json|->] [--timeout <seconds>] [--raw]
+               ed calendar [ls|open|join|directions] [arguments]
                ed --help | --version
 
         Results are JSON. Use --json - to read an invoke payload from stdin.
@@ -136,11 +143,21 @@ public enum HostCLICommand: Equatable {
             return .help
         }
         if arguments == ["--version"] || arguments == ["version"] { return .version }
+        if arguments.first == "calendar" {
+            let request: ExtensionCLIRequest
+            do { request = try ExtensionCLIRequest(arguments: Array(arguments.dropFirst())) } catch
+            { throw HostCLIError.usage("The terminal arguments exceed their limits.") }
+            return .terminal(
+                try HostCLIRequest(
+                    action: .terminal, id: "calendar", operation: "calendar.cli",
+                    payload: JSONEncoder().encode(request)))
+        }
         if arguments.first == "extensions" {
             var args = Array(arguments.dropFirst())
             if args.last == "--json" { args.removeLast() }
             guard let word = args.first, let action = HostCLIRequest.Action(rawValue: word),
-                action != .invoke, args.count == (action == .ls ? 1 : 2)
+                action != .invoke, action != .terminal,
+                args.count == (action == .ls ? 1 : 2)
             else { throw HostCLIError.usage("Unknown extensions command. Run ed --help.") }
             return .request(try HostCLIRequest(action: action, id: args.count == 2 ? args[1] : nil))
         }

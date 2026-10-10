@@ -1,6 +1,14 @@
 import ArgumentParser
 import Foundation
 
+public func execute(_ body: () async throws -> Void) async throws {
+    do { try await body() } catch let failure as CLIFailure {
+        CLIOut.report(failure); throw ExitCode(failure.kind.rawValue)
+    } catch let exit as ExitCode { throw exit } catch is CancellationError {
+        throw CancellationError()
+    } catch { CLIOut.note("error: " + error.localizedDescription); throw ExitCode(1) }
+}
+
 public struct CLIFailure: Error, CustomStringConvertible, Equatable {
     public enum Kind: Int32, Equatable, Sendable {
         case failure = 1

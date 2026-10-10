@@ -194,7 +194,7 @@ let package = Package(
             path: "homebrew/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "CalendarExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
             path: "calendar", exclude: ["Tests", "Runtime.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(

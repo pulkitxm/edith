@@ -1,6 +1,7 @@
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
+import EdithExtensionCommands
 import Foundation
 import SwiftUI
 
@@ -13,6 +14,20 @@ final class ExtensionRuntime: NSObject {
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
+            if command == "calendar.cli" {
+                guard let store = self?.store else { throw ExtensionPeerError.unavailable }
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                let reply = try await CalendarCLIExecution.run(request) { query in
+                    store.refreshAuthStatus()
+                    guard store.authStatus == .fullAccess else {
+                        throw CLIFailure.unavailable(
+                            "macOS has not granted Edith calendar access",
+                            hint: "run `ed permissions request calendar`")
+                    }
+                    return await store.events(query)
+                }
+                return try JSONEncoder().encode(reply)
+            }
             guard let surface = self?.surface else { throw ExtensionPeerError.unavailable }
             return try await surface.execute(command, payload: payload)
         }

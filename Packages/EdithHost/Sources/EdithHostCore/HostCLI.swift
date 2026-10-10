@@ -1,8 +1,18 @@
 import Darwin
+import EdithExtensionSupport
 import Foundation
 
 public enum HostCLI {
     public static func run(_ arguments: [String]) -> Int32 {
+        run(arguments, invoke: invokeRunningHost) { data, error in
+            (error ? FileHandle.standardError : FileHandle.standardOutput).write(data)
+        }
+    }
+
+    static func run(
+        _ arguments: [String], invoke: (HostCLIRequest) throws -> Data,
+        write: (Data, Bool) -> Void
+    ) -> Int32 {
         do {
             switch try HostCLICommand.parse(arguments, readInput: readInput) {
             case .help: print(HostCLICommand.usageText)
@@ -15,29 +25,43 @@ public enum HostCLI {
                         decoding: try JSONSerialization.data(withJSONObject: ["version": version]),
                         as: UTF8.self))
             case .request(let request):
-                guard let identifier = Bundle.main.bundleIdentifier else {
-                    throw HostCLIError.unavailable
-                }
-                let support = try FileManager.default.url(
-                    for: .applicationSupportDirectory,
-                    in: .userDomainMask, appropriateFor: nil, create: false)
-                let identity = try HostIdentity(identifier: identifier, supportDirectory: support)
-                let data = try HostCLITransport.invoke(request, identity: identity)
-                FileHandle.standardOutput.write(try output(data, raw: request.raw))
-                FileHandle.standardOutput.write(Data([10]))
+                let data = try invoke(request)
+                write(try output(data, raw: request.raw), false)
+                write(Data([10]), false)
+            case .terminal(let request):
+                let reply = try JSONDecoder().decode(ExtensionCLIReply.self, from: invoke(request))
+                try reply.validate()
+                write(Data(reply.stdout.utf8), false)
+                write(Data(reply.stderr.utf8), true)
+                return reply.exitCode
             }
             return 0
         } catch {
             let failure = error as? HostCLIError ?? .rejected(error.localizedDescription)
+            if arguments.first == "calendar" {
+                let code: Int32
+                if case .unavailable = failure { code = 4 } else { code = failure.exitCode }
+                write(Data("error: \(failure.localizedDescription)\n".utf8), true)
+                return code
+            }
             let data = try? JSONSerialization.data(
                 withJSONObject: [
                     "error": failure.localizedDescription,
                     "exitCode": failure.exitCode,
                 ], options: .sortedKeys)
-            FileHandle.standardError.write(data ?? Data("The command failed.".utf8))
-            FileHandle.standardError.write(Data([10]))
+            write(data ?? Data("The command failed.".utf8), true)
+            write(Data([10]), true)
             return failure.exitCode
         }
+    }
+
+    private static func invokeRunningHost(_ request: HostCLIRequest) throws -> Data {
+        guard let identifier = Bundle.main.bundleIdentifier else { throw HostCLIError.unavailable }
+        let support = try FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: false)
+        let identity = try HostIdentity(identifier: identifier, supportDirectory: support)
+        return try HostCLITransport.invoke(request, identity: identity)
     }
 
     public static func output(_ data: Data, raw: Bool) throws -> Data {

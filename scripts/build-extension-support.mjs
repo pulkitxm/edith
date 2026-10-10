@@ -65,9 +65,14 @@ export function supportProducts(product) {
 }
 
 export function supportSourceInputs(product) {
-  return supportProducts(product).map(
+  const inputs = supportProducts(product).map(
     (name) => `Packages/ExtensionSupport/Sources/${name}`,
   );
+  if (product === "EdithExtensionCommands")
+    inputs.push(
+      "Packages/ExtensionSupport/Licenses/swift-argument-parser-license.txt",
+    );
+  return inputs;
 }
 
 export function buildExtensionSupport(root, product, scope) {

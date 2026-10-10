@@ -55,7 +55,7 @@ import Testing
 
     @Test func validatesDecodedArgumentsAndOutputLimitsBeforeExecution() throws {
         for arguments in [
-            [], ["bad\0"], [String(repeating: "x", count: 4_097)],
+            ["bad\0"], [String(repeating: "x", count: 4_097)],
             Array(repeating: "x", count: 129),
         ] {
             let bytes = try JSONSerialization.data(withJSONObject: ["arguments": arguments])

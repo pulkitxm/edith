@@ -93,6 +93,9 @@ test("terminal parser code belongs only to explicitly selected command products"
   expect(supportSourceInputs("EdithExtensionUI")).not.toContain(
     "Packages/ExtensionSupport/Sources/EdithExtensionCommands",
   );
+  expect(supportSourceInputs("EdithExtensionCommands")).toContain(
+    "Packages/ExtensionSupport/Licenses/swift-argument-parser-license.txt",
+  );
   const first = supportModules("calendar_app");
   const second = supportModules("database_app");
   expect(first.ArgumentParser).not.toBe(second.ArgumentParser);
