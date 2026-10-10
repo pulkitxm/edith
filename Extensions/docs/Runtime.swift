@@ -10,6 +10,7 @@ final class ExtensionRuntime: NSObject {
     private var uiBrowser: DocsBrowser?
     private var engineClient: ExtensionEngineClient?
     private let commands = ExtensionCommandRegistry()
+    private var cliStreams: ExtensionCLIStreams?
     private var stopped = false
     private var activeCalls = 0
 
@@ -20,6 +21,14 @@ final class ExtensionRuntime: NSObject {
             }
             self.activeCalls += 1
             defer { self.activeCalls -= 1 }
+            if command.hasPrefix("docs.cli.") {
+                if self.cliStreams == nil {
+                    self.cliStreams = try ExtensionCLIStreams(owner: "docs")
+                }
+                guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
+                return try await DocsCLIExecution.stream(
+                    streams, operation: command, payload: payload, browser: browser)
+            }
             if command == "docs.cli" {
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
                 return try JSONEncoder().encode(
@@ -35,10 +44,15 @@ final class ExtensionRuntime: NSObject {
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         stopped = true
+        let streams = cliStreams; cliStreams = nil; streams?.stop()
         commands.shutdown()
+        let browser = browser
         browser?.shutdown()
         Task {
+            await browser?.drain()
             while activeCalls > 0 { await Task.yield() }
+            await streams?.stopAndWait()
+            await commands.shutdownAndWait()
             completion()
         }
     }

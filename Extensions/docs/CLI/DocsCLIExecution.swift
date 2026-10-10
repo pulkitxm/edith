@@ -4,7 +4,7 @@ import EdithExtensionSupport
 import Foundation
 
 @MainActor enum DocsCLIEnvironment {
-    static var library: DocsLibrary?
+    @TaskLocal static var library: DocsLibrary?
 }
 
 @MainActor enum DocsCLIExecution {
@@ -14,10 +14,18 @@ import Foundation
         try request.validate()
         await browser.load()
         try Task.checkCancellation()
-        let previous = DocsCLIEnvironment.library
-        DocsCLIEnvironment.library = browser.library
-        defer { DocsCLIEnvironment.library = previous }
-        return try await ExtensionCLIExecution.run(
-            DocsCommandGroup.self, arguments: request.arguments)
+        return try await DocsCLIEnvironment.$library.withValue(browser.library) {
+            try await ExtensionCLIExecution.run(DocsCommandGroup.self, request: request)
+        }
+    }
+    static func stream(
+        _ streams: ExtensionCLIStreams, operation: String, payload: Data, browser: DocsBrowser
+    ) async throws -> Data {
+        await browser.load()
+        try Task.checkCancellation()
+        return try DocsCLIEnvironment.$library.withValue(browser.library) {
+            try streams.invoke(
+                DocsCommandGroup.self, operation: operation, prefix: "docs.cli", payload: payload)
+        }
     }
 }

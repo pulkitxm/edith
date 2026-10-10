@@ -40,6 +40,7 @@ final class DocsBrowser {
     private var loadTask: Task<Void, Never>?
     private var askTask: Task<DocsPresentationAnswer, Never>?
     private var stopped = false
+    private var cancelledWork: [UUID: Task<Void, Never>] = [:]
     private let defaults: UserDefaults
     private let remote: DocsUIBridge?
 
@@ -122,7 +123,7 @@ final class DocsBrowser {
         filter = String(text.prefix(256))
         filterGeneration &+= 1
         let generation = filterGeneration
-        filterTask?.cancel()
+        retire(filterTask)
         filterTask = nil
         let groups = library?.groups ?? []
         guard !text.trimmingCharacters(in: .whitespaces).isEmpty else {
@@ -203,7 +204,7 @@ final class DocsBrowser {
 
     func ask(_ request: String, decider: JevDeciding?) async {
         guard let library, !stopped, request.utf8.count <= 4096 else { return }
-        askTask?.cancel()
+        retire(askTask)
         askSerial += 1
         let serial = askSerial
         asking = true
@@ -263,7 +264,7 @@ final class DocsBrowser {
     func clearQuestion() -> Bool {
         guard !question.isEmpty || answer != nil else { return false }
         askSerial += 1
-        askTask?.cancel()
+        retire(askTask)
         askTask = nil
         question = ""
         answer = nil
@@ -276,9 +277,9 @@ final class DocsBrowser {
         stopped = true
         askSerial += 1
         filterGeneration &+= 1
-        askTask?.cancel()
-        filterTask?.cancel()
-        loadTask?.cancel()
+        retire(askTask)
+        retire(filterTask)
+        retire(loadTask)
         askTask = nil
         filterTask = nil
         loadTask = nil
@@ -287,6 +288,21 @@ final class DocsBrowser {
         answer = nil
         sidebarGroups = []
         library = nil
+    }
+
+    private func retire<Value: Sendable>(_ task: Task<Value, Never>?) {
+        guard let task else { return }
+        task.cancel()
+        let id = UUID()
+        cancelledWork[id] = Task { [weak self] in
+            _ = await task.value
+            self?.cancelledWork[id] = nil
+        }
+    }
+
+    func drain() async {
+        shutdown()
+        for task in Array(cancelledWork.values) { await task.value }
     }
 
     private func show(_ target: DocsLocation, reveal: Bool = true) {

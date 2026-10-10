@@ -1,5 +1,6 @@
 import AppKit
 import EdithDocsWorker
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
@@ -93,6 +94,42 @@ struct DocsBrowserTests {
         #expect(snapshot.rows.count == 100)
         #expect(Set(snapshot.rows.map(\.id)).count == 100)
         #expect(try snapshot.encoded().count <= 524_288)
+    }
+
+    @Test func terminalStreamsRetainTheOwnedLibraryAndRejectForeignOwners() async throws {
+        let browser = DocsBrowser(library: Self.library)
+        let streams = try ExtensionCLIStreams(owner: "docs")
+        let start = ExtensionCLIStreamStart(
+            owner: "docs", session: UUID(),
+            request: try .init(
+                arguments: ["ls", "--json"], workingDirectory: "/tmp", interactive: false))
+        let payload = try await DocsCLIExecution.stream(
+            streams, operation: "docs.cli.start",
+            payload: JSONEncoder().encode(start), browser: browser)
+        let handle = try JSONDecoder().decode(ExtensionCLIStreamHandle.self, from: payload)
+        var sequence: UInt64 = 0
+        var output = Data()
+        for _ in 0..<200 {
+            let frame = try streams.read(.init(handle: handle, sequence: sequence))
+            for chunk in frame.chunks {
+                #expect(chunk.channel == .stdout); output.append(chunk.data)
+            }
+            sequence = frame.nextSequence
+            if frame.state != .running {
+                #expect(frame.state == .completed && frame.exitCode == 0); break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(String(decoding: output, as: UTF8.self).contains("herdr/ls.md"))
+        #expect(DocsCLIEnvironment.library == nil)
+        let foreign = ExtensionCLIStreamStart(
+            owner: "other", session: UUID(), request: start.request)
+        await #expect(throws: ExtensionPeerError.self) {
+            _ = try await DocsCLIExecution.stream(
+                streams, operation: "docs.cli.start",
+                payload: JSONEncoder().encode(foreign), browser: browser)
+        }
+        await streams.stopAndWait(); await browser.drain()
     }
 
     @Test func documentViewRetainsCompleteBrowserAndOutlineUI() throws {
