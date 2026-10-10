@@ -123,6 +123,7 @@ import WebKit
         let store = view.configuration.websiteDataStore
         fixture.engine.detach()
         fixture.remote.apply(try fixture.engine.state())
+        #expect(fixture.remote.lease == nil && !fixture.remote.hasLiveLease)
         #expect(fixture.store.tabs.isEmpty)
         #expect(fixture.store.profile == nil && fixture.store.showsSetup)
         #expect(view.navigationDelegate == nil && view.uiDelegate == nil)

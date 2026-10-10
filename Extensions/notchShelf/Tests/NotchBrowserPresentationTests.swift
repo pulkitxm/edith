@@ -66,6 +66,36 @@ import WebKit
         await fixture.remote.stopAndWait()
     }
 
+    @Test func lateLeaseCleanupCannotRevokeAnActualReplacementImport() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        var pending: CheckedContinuation<Void, Never>?
+        let remote = NotchBrowserRemoteClient(
+            state: try fixture.engine.state(), request: { fixture.request($0) },
+            invoke: { request in
+                if request.operation == .leaseEnd {
+                    await withCheckedContinuation { pending = $0 }
+                }
+                return try await fixture.engine.execute(request)
+            })
+        let first = try await remote.importProfile("Default").0.lease
+        fixture.engine.detach()
+        remote.apply(try fixture.engine.state())
+        #expect(remote.lease == nil && !remote.hasLiveLease)
+        for _ in 0..<100 where pending == nil { await Task.yield() }
+        let blocked = try #require(pending)
+        let replacement = try await remote.importProfile("Default").0.lease
+        #expect(first.id != replacement.id)
+        blocked.resume(); pending = nil
+        try await remote.renewLease()
+        #expect(remote.lease?.id == replacement.id)
+        let stopping = Task { await remote.stopAndWait() }
+        for _ in 0..<100 where pending == nil { await Task.yield() }
+        try #require(pending).resume(); pending = nil
+        await stopping.value
+        #expect(remote.lease == nil)
+    }
+
     private final class Clock { var now = Date() }
 
     @MainActor private struct Fixture {
