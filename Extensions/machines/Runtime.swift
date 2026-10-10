@@ -24,11 +24,19 @@ final class ExtensionRuntime: NSObject {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard self?.running == true else { throw ExtensionPeerError.unavailable }
             guard let self else { throw ExtensionPeerError.unavailable }
+            if command == "machines.config.cli" {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                return try JSONEncoder().encode(
+                    try await ExtensionCLIExecution.run(ConfigCommand.self, request: request))
+            }
             if command == "machines.cli.catalog" {
                 guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
                 return try MachineCLICatalog.encoded()
             }
-            if command == "machines.cli.complete" { return try MachineCLICatalog.complete(payload) }
+            if command == "machines.cli.complete" {
+                return try await MachineCLICatalog.complete(
+                    payload, session: { MachinesModel.shared.session(for: $0) })
+            }
             if command.hasPrefix("machines.ui.") {
                 guard let uiEngine = self.uiEngine else { throw ExtensionPeerError.unavailable }
                 return try await uiEngine.execute(command, payload: payload)

@@ -46,7 +46,9 @@ extension MachineCLITests {
 
         @Test func machineFirstSyntaxPreservesNestedCommandsAndPassthroughFlags() {
             #expect(
-                MachineCLIArguments.rewrite(["box", "docker", "logs", "web", "--follow"]) == [
+                MachineCLIArguments.rewrite([
+                    "machines", "box", "docker", "logs", "web", "--follow",
+                ]) == [
                     "docker", "logs", "box", "web", "--follow",
                 ])
             #expect(
@@ -65,7 +67,11 @@ extension MachineCLITests {
                 #expect(added.stderr.isEmpty)
                 #expect(added.exitCode == 0)
                 #expect(MachineRegistry.snippets().first?.command == "uptime")
-                let listed = try await run([machine.name, "snippets", "ls", "--json"])
+                #expect(
+                    MachineCLIArguments.rewrite([machine.name, "ls"]) == [
+                        "exec", machine.name, "--", "ls",
+                    ])
+                let listed = try await run(["machines", machine.name, "snippets", "ls", "--json"])
                 #expect(listed.exitCode == 0)
                 let objects = try #require(
                     JSONSerialization.jsonObject(with: Data(listed.stdout.utf8)) as? [[String: Any]]

@@ -1,3 +1,4 @@
+import EdithExtensionCommands
 import ArgumentParser
 import Foundation
 
@@ -8,6 +9,7 @@ enum MachineCLICatalog {
         let summary: String
         let destructive: Bool
         let timeout = 30
+        let readsInput: Bool
         let streamOperation = "machines.cli.stream"
         let streamDeadline = 21_600
     }
@@ -16,11 +18,66 @@ enum MachineCLICatalog {
         let version = 1
         let owner = "machines"
         let commands: [Command]
-        let settings: [String] = []
+        let settings: [Setting]
+        let parserHelp: [ParserDocument]
+        let configOperation = "machines.config.cli"
         let acceptsInput = true
         let completionOperation = "machines.cli.complete"
         let machineAliases: [String]
         let aliasOperation = "machines.cli"
+    }
+
+    private struct Setting: Encodable {
+        let key: String
+        let type: String
+        let group: String
+        let summary: String
+        let scope: String
+        let allowed: [String]
+        let minimum: Int?
+        let maximum: Int?
+        let fallback: ParserDocument
+        let readOnly: Bool
+        init(_ value: SettingDefinition) throws {
+            key = value.key; type = value.type.rawValue; group = value.group;
+            summary = value.summary
+            scope = value.scope.rawValue; allowed = value.allowed;
+            minimum = value.integerRange?.lowerBound
+            maximum = value.integerRange?.upperBound; readOnly = value.readOnly
+            fallback = try JSONDecoder().decode(
+                ParserDocument.self, from: Data(JSONSerializer.string(value.fallback).utf8))
+        }
+    }
+
+    private enum ParserDocument: Codable {
+        case null, bool(Bool), number(Double), string(String), array([Self]), object([String: Self])
+        init(from decoder: Decoder) throws {
+            let value = try decoder.singleValueContainer()
+            if value.decodeNil() {
+                self = .null
+            } else if let result = try? value.decode(Bool.self) {
+                self = .bool(result)
+            } else if let result = try? value.decode(Double.self) {
+                self = .number(result)
+            } else if let result = try? value.decode(String.self) {
+                self = .string(result)
+            } else if let result = try? value.decode([Self].self) {
+                self = .array(result)
+            } else {
+                self = .object(try value.decode([String: Self].self))
+            }
+        }
+        func encode(to encoder: Encoder) throws {
+            var value = encoder.singleValueContainer()
+            switch self {
+            case .null: try value.encodeNil()
+            case .bool(let result): try value.encode(result)
+            case .number(let result): try value.encode(result)
+            case .string(let result): try value.encode(result)
+            case .array(let result): try value.encode(result)
+            case .object(let result): try value.encode(result)
+            }
+        }
     }
 
     private static let mutationNames: Set<String> = [
@@ -42,7 +99,9 @@ enum MachineCLICatalog {
                     Command(
                         route: route,
                         summary: configuration.abstract.isEmpty ? name : configuration.abstract,
-                        destructive: route.contains(where: mutationNames.contains)))
+                        destructive: route.contains(where: mutationNames.contains),
+                        readsInput: ["exec", "run", "add", "edit", "put", "upload", "write"]
+                            .contains(name)))
                 for child in configuration.subcommands { append(child, prefix: route) }
             }
         }
@@ -50,7 +109,13 @@ enum MachineCLICatalog {
         let aliases = Array(
             Set(MachineDirectory.names(from: MachineDirectory.load()).filter(validAlias))
         ).sorted().prefix(128)
-        return try JSONEncoder().encode(Catalog(commands: commands, machineAliases: Array(aliases)))
+        return try JSONEncoder().encode(
+            Catalog(
+                commands: commands, settings: try ConfigCatalog.settings.map(Setting.init),
+                parserHelp: [
+                    try JSONDecoder().decode(
+                        ParserDocument.self, from: Data(MachinesCommand._dumpHelp().utf8))
+                ], machineAliases: Array(aliases)))
     }
 
     private static func validAlias(_ value: String) -> Bool {
@@ -80,33 +145,27 @@ enum MachineCLICatalog {
         let wantsFiles: Bool
     }
 
-    static func complete(_ data: Data) throws -> Data {
+    @MainActor static func complete(_ data: Data, session: (UUID) -> MachineSession) async throws
+        -> Data
+    {
         let request = try JSONDecoder().decode(CompletionRequest.self, from: data)
         guard request.words.count <= 128, (0...request.words.count).contains(request.index),
             request.words.allSatisfy({ $0.utf8.count <= 4_096 && !$0.utf8.contains(0) })
         else { throw MachineUIError.invalidRequest }
-        let prefix = request.index < request.words.count ? request.words[request.index] : ""
-        var words = Array(request.words.prefix(request.index))
-        if words.first == "ed" { words.removeFirst() }
-        if words.first == "machines" { words.removeFirst() }
-        let names = MachineDirectory.names(from: MachineDirectory.load())
-        var node = MachineCLIArguments(MachinesCommand.self)
-        var candidates: [String] = []
-        for word in words {
-            if let child = node.child(word) {
-                node = child
-            } else if !names.contains(word) {
-                candidates = []; break
-            }
+        let machines = MachineDirectory.load()
+        let plan = CompletionEngine.plan(
+            .init(words: request.words, index: request.index),
+            machines: MachineDirectory.names(from: machines))
+        let candidates: [String]
+        if let query = plan.remoteMachine, let remote = plan.remoteRequest,
+            let machine = try? MachineDirectory.resolve(query, in: machines)
+        {
+            candidates = await RemoteCompletion.candidates(
+                machine: machine, request: remote, session: session(machine.id))
+        } else {
+            candidates = plan.candidates
         }
-        candidates += node.children.flatMap { [$0.name] + $0.aliases }
-        if !words.contains(where: names.contains) { candidates += names }
-        let wantsFiles =
-            ["upload", "download", "mount"].contains(node.name)
-            || ["--to", "--at"].contains(words.last ?? "")
         return try JSONEncoder().encode(
-            CompletionReply(
-                candidates: Array(Set(candidates.filter { $0.hasPrefix(prefix) })).sorted(),
-                wantsFiles: wantsFiles))
+            CompletionReply(candidates: candidates, wantsFiles: plan.wantsFiles))
     }
 }

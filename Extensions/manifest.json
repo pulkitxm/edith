@@ -2001,6 +2001,12 @@
     "roles": {
       "app": [
         "Extensions/machines/CLI/CLIProgress.swift",
+        "Extensions/machines/CLI/CommandTree.swift",
+        "Extensions/machines/CLI/CompletionEngine.swift",
+        "Extensions/machines/CLI/ConfigCatalog.swift",
+        "Extensions/machines/CLI/ConfigCommands.swift",
+        "Extensions/machines/CLI/ConfigStore.swift",
+        "Extensions/machines/CLI/ConfigurationExecutor.swift",
         "Extensions/machines/CLI/MachineCLICatalog.swift",
         "Extensions/machines/CLI/MachineCLIService.swift",
         "Extensions/machines/CLI/MachineCommands.swift",
@@ -2016,6 +2022,7 @@
         "Extensions/machines/CLI/MachineReports.swift",
         "Extensions/machines/CLI/MachineThermalCommands.swift",
         "Extensions/machines/CLI/MachinesCLIExecution.swift",
+        "Extensions/machines/CLI/RemoteCompletion.swift",
         "Extensions/machines/CLI/RemoteRunner.swift",
         "Extensions/machines/CLI/WorkspaceCommands.swift",
         "Extensions/machines/Models/DockerModels.swift",
@@ -2169,7 +2176,10 @@
     },
     "sameExecutableWorker": true,
     "supportProducts": {
-      "app": "EdithExtensionCommands"
+      "app": [
+        "EdithExtensionDocuments",
+        "EdithExtensionCommands"
+      ]
     }
   },
   {

@@ -81,7 +81,15 @@ struct MachineCLIArguments {
     }
 
     static func rewrite(_ arguments: [String]) -> [String] {
-        let arguments = arguments.first == "machines" ? Array(arguments.dropFirst()) : arguments
+        let grouped = arguments.first == "machines"
+        let arguments = grouped ? Array(arguments.dropFirst()) : arguments
+        if !grouped, let first = arguments.first,
+            MachineDirectory.isKnown(first, in: MachineDirectory.load())
+        {
+            let tail = Array(arguments.dropFirst())
+            return tail.contains(where: { !$0.hasPrefix("-") })
+                ? ["exec", first, "--"] + tail : ["show", first] + tail
+        }
         guard let machine = arguments.first, !machine.hasPrefix("-"),
             !machineSubcommands.contains(machine), machine != "help"
         else { return arguments }
