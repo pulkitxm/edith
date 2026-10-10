@@ -32,6 +32,7 @@ struct ClipboardPage: View {
                                 })
                         )
                         .toggleStyle(.switch)
+                        .disabled(presentation.map { !$0.preferencesLoad.hasContent } ?? false)
                         Button("Open clipboard", action: openPalette)
                             .buttonStyle(.edith(.secondary))
                     }
@@ -43,10 +44,22 @@ struct ClipboardPage: View {
                 )
                 .font(.edithText(.caption)).foregroundStyle(.secondary).padding()
             }
+            if let presentation, !presentation.preferencesLoad.hasContent {
+                if let error = presentation.preferencesLoad.errorMessage {
+                    PageNotice(
+                        error, tone: .error,
+                        actions: {
+                            Button("Retry") { Task { await presentation.refresh() } }
+                        })
+                } else if presentation.available {
+                    LoadingIndicator().padding()
+                }
+            }
             Form { ClipboardRows(client: client, history: history, presentation: presentation) }
                 .formStyle(.grouped)
+                .disabled(presentation.map { !$0.preferencesLoad.hasContent } ?? false)
         }
-        .disabled(presentation?.available == false)
+        .disabled(presentation?.available == false || presentation?.stopped == true)
         .onAppear {
             if presentation == nil {
                 enabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.enabled)

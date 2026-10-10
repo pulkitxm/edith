@@ -33,6 +33,7 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        presentation?.stop(); presentation = nil
         commands.shutdown()
         HotKeyRegistrar.shutdown()
         IPC.stopObserving(settingsObserver); settingsObserver = nil
@@ -119,7 +120,11 @@ final class ExtensionRuntime: NSObject {
                         openPalette: { presentation.action("clipboard.ui.palette") },
                         presentation: presentation)
                 })
-        case "pick": worker?.panel.show()
+        case "pick":
+            guard ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil else {
+                return ["ok": false] as NSDictionary
+            }
+            worker?.panel.show()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":
             registerHotKey(); IPC.post(IPC.Name.settingsChanged)

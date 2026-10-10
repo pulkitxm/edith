@@ -88,6 +88,27 @@ import Testing
         await service.stop()
     }
 
+    @Test func closingClearsHistoryAndCoalescesPreferenceEdits() async throws {
+        var saved: [ClipboardPreferences] = []
+        let presentation = ClipboardPresentation(send: { operation, payload in
+            guard operation == "clipboard.ui.preferences.set" else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            saved.append(try ClipboardMessage.decode(ClipboardPreferences.self, from: payload))
+            return Data("{}".utf8)
+        })
+        for count in 1...20 { presentation.preferences.maxItems = count; presentation.save() }
+        for _ in 0..<100 where saved.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(saved.map(\.maxItems) == [20])
+        presentation.preferences.maxItems = 21
+        presentation.save()
+        presentation.stop()
+        try await Task.sleep(for: .milliseconds(180))
+        #expect(saved.map(\.maxItems) == [20])
+        #expect(presentation.history.entries.isEmpty)
+        #expect(presentation.history.copiedID == nil)
+    }
+
     @Test func engineRecordActionsAndCLIUseInjectedCopySinkAndRejectSystemActions() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let suite = "clipboard-record-test-" + UUID().uuidString

@@ -45,7 +45,10 @@ final class ClipboardHistoryModel {
         reload()
     }
 
-    func stop() {
+    func stop(discardContent: Bool = false) {
+        if discardContent {
+            entries.removeAll(); history = ClipboardHistoryProjection(); error = nil; copiedID = nil
+        }
         started = false
         generation += 1
         refreshTask?.cancel()
