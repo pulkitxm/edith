@@ -60,6 +60,23 @@ import Testing
         #expect(defaults.bool(forKey: "preventSleep"))
         try await runtime.prepareDisableAll()
         try runtime.stopAll()
+        let selectedDirectory = fixture.store.directory(for: package)
+        let ui = try ExtensionBundleRuntime(
+            readOnlyPackage: package, directory: selectedDirectory, role: .helper,
+            hostABI: package.hostABI, verify: ExtensionCodeSignature.verifyDevelopment)
+        #expect(throws: MarketplaceError.invalidBundle) {
+            try ui.start(id: package.id, context: ["defaultsSuite": suite])
+        }
+        let description = try ui.response(id: package.id, operation: "describe")
+        #expect(description["id"] as? String == package.id)
+        #expect(try ui.snapshot(id: package.id)?.active == false)
+        #expect(throws: MarketplaceError.invalidBundle) {
+            try ui.response(id: package.id, operation: "start", context: ["defaultsSuite": suite])
+        }
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: selectedDirectory.appendingPathComponent(".leases").path))
+        #expect(!defaults.bool(forKey: "keepAwakeEnabled"))
         defaults.set(true, forKey: "keepAwakeEnabled")
         defaults.set(false, forKey: "preventSleep")
         try runtime.start(id: package.id, context: ["defaultsSuite": suite])

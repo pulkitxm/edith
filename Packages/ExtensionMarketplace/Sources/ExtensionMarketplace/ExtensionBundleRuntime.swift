@@ -24,12 +24,12 @@ public final class ExtensionBundleRuntime {
         let bundle: Bundle
         let handle: UnsafeMutableRawPointer
         let object: NSObject
-        let lease: PackageFileLock
+        let lease: PackageFileLock?
         var active = false
 
         init(
             package: ExtensionPackage, bundle: Bundle, handle: UnsafeMutableRawPointer,
-            object: NSObject, lease: PackageFileLock
+            object: NSObject, lease: PackageFileLock?
         ) {
             self.package = package
             self.bundle = bundle
@@ -45,8 +45,9 @@ public final class ExtensionBundleRuntime {
     public let architecture: String
     private let packageVersion: String?
     private let verify: (URL) throws -> Void
+    private let readOnlyPackage: (package: ExtensionPackage, directory: URL)?
     private var loaded: [String: Loaded] = [:]
-    private var retainedImages: [(Bundle, UnsafeMutableRawPointer, PackageFileLock)] = []
+    private var retainedImages: [(Bundle, UnsafeMutableRawPointer, PackageFileLock?)] = []
     private var failedLoads = Set<String>()
 
     public init(
@@ -59,9 +60,29 @@ public final class ExtensionBundleRuntime {
         self.architecture = architecture
         self.packageVersion = packageVersion
         self.verify = verify
+        readOnlyPackage = nil
+    }
+
+    public init(
+        readOnlyPackage package: ExtensionPackage, directory: URL, role: Role,
+        hostABI: String, verify: @escaping (URL) throws -> Void
+    ) throws {
+        guard [.app, .helper, .agent].contains(role), package.hostABI == hostABI,
+            package.architecture == "arm64",
+            package.minimumSystemVersion
+                <= ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+        else { throw MarketplaceError.invalidBundle }
+        store = ExtensionPackageStore(root: directory)
+        self.role = role
+        self.hostABI = hostABI
+        architecture = package.architecture
+        packageVersion = package.version
+        self.verify = verify
+        readOnlyPackage = (package, directory.resolvingSymlinksInPath())
     }
 
     public func start(id: String, context: NSDictionary) throws {
+        guard readOnlyPackage == nil else { throw MarketplaceError.invalidBundle }
         let instance = try load(id: id)
         guard !instance.active else { return }
         if context["recoveryOnly"] as? Bool == true,
@@ -152,7 +173,11 @@ public final class ExtensionBundleRuntime {
     public func response(id: String, operation: String, context: NSDictionary = [:]) throws
         -> NSDictionary
     {
-        try execute(load(id: id), operation: operation, context: context)
+        guard readOnlyPackage == nil || ["describe", "configureUI", "stopUI"].contains(operation)
+        else {
+            throw MarketplaceError.invalidBundle
+        }
+        return try execute(load(id: id), operation: operation, context: context)
     }
 
     public func supportsCommands(id: String) -> Bool {
@@ -219,8 +244,9 @@ public final class ExtensionBundleRuntime {
 
     public func snapshot(id: String) throws -> Snapshot? {
         guard let instance = loaded[id] else { return nil }
-        let installed = try store.installedPackage(
-            id: id, hostABI: hostABI, architecture: architecture)
+        let installed =
+            try readOnlyPackage?.package
+            ?? store.installedPackage(id: id, hostABI: hostABI, architecture: architecture)
         return Snapshot(
             id: id, version: instance.package.version, active: instance.active,
             restartRequired: installed != instance.package)
@@ -235,17 +261,31 @@ public final class ExtensionBundleRuntime {
     }
 
     private func load(id: String) throws -> Loaded {
-        guard try !store.pendingRemovals().contains(id) else { throw MarketplaceError.packageBusy }
+        if readOnlyPackage == nil {
+            guard try !store.pendingRemovals().contains(id) else {
+                throw MarketplaceError.packageBusy
+            }
+        }
         if let instance = loaded[id] { return instance }
         guard !failedLoads.contains(id) else { throw MarketplaceError.invalidBundle }
-        guard
-            let package = try store.installedPackage(
-                id: id, hostABI: hostABI, architecture: architecture, version: packageVersion)
-        else {
-            throw MarketplaceError.packageNotInstalled
+        let package: ExtensionPackage
+        let directory: URL
+        let lease: PackageFileLock?
+        if let selected = readOnlyPackage {
+            guard selected.package.id == id else { throw MarketplaceError.invalidBundle }
+            package = selected.package
+            directory = selected.directory
+            lease = nil
+        } else {
+            guard
+                let installed = try store.installedPackage(
+                    id: id, hostABI: hostABI, architecture: architecture, version: packageVersion)
+            else { throw MarketplaceError.packageNotInstalled }
+            package = installed
+            directory = store.directory(for: package)
+            lease = try store.lease(package)
         }
-        let lease = try store.lease(package)
-        let url = store.directory(for: package).appendingPathComponent(id).appendingPathComponent(
+        let url = directory.appendingPathComponent(id).appendingPathComponent(
             "\(role.rawValue).bundle")
         try verify(url)
         guard let bundle = Bundle(url: url), let executable = bundle.executableURL else {
@@ -274,7 +314,7 @@ public final class ExtensionBundleRuntime {
         guard object.responds(to: NSSelectorFromString("execute:")) else {
             throw MarketplaceError.invalidBundle
         }
-        let privileged = store.directory(for: package).appendingPathComponent(id)
+        let privileged = directory.appendingPathComponent(id)
             .appendingPathComponent("privileged.bundle")
         guard
             !FileManager.default.fileExists(atPath: privileged.path)
