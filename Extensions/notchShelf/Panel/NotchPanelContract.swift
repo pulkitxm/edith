@@ -40,7 +40,8 @@ struct NotchPanelSlot: Codable, Equatable, Sendable, Identifiable {
     let rectangle: NotchPanelRectangle
     static func supportsSharedCard(_ widget: SurfaceWidget) -> Bool {
         switch widget {
-        case .codeStats, .databases, .machines, .github, .desk, .media, .ability: true
+        case .agents, .focus, .codeStats, .databases, .machines, .github, .desk, .media, .ability:
+            true
         default: false
         }
     }

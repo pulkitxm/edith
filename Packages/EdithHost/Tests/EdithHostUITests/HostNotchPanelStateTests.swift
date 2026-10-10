@@ -12,7 +12,8 @@ struct HostNotchPanelStateTests {
     {
         let fixture = HostNotchStateFixture()
         for widget: SurfaceWidget in [
-            .codeStats, .databases, .machines, .github, .desk, .media, .ability("latex"),
+            .agents, .focus, .codeStats, .databases, .machines, .github, .desk, .media,
+            .ability("latex"),
         ] {
             let tile = SurfaceTile(widget)
             let providers = widget.providerIDs.sorted()

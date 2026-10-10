@@ -180,12 +180,13 @@ struct HostNotchCompactCardTests {
 
     @Test func dedicatedOriginalBodiesAreNotReplacedBySharedCards() {
         for widget: SurfaceWidget in [
-            .music, .calendar, .usage, .activity, .limits, .focus, .agents, .actions, .clocks,
+            .music, .calendar, .usage, .activity, .limits, .actions, .clocks,
         ] {
             #expect(!HostNotchCompactCardModel.supports(widget))
         }
         for widget: SurfaceWidget in [
-            .codeStats, .databases, .machines, .github, .desk, .media, .ability("latex"),
+            .agents, .focus, .codeStats, .databases, .machines, .github, .desk, .media,
+            .ability("latex"),
         ] {
             #expect(HostNotchCompactCardModel.supports(widget))
         }
