@@ -72,6 +72,34 @@ public final class HostWorkerNavigationClient: NSObject {
         } catch { completion("Navigation was rejected."); return nil }
     }
 
+    @objc(openWindow:completion:)
+    public func openWindow(_ input: NSDictionary, completion: @escaping (NSString?) -> Void)
+        -> NSString?
+    {
+        let keys = ["kind", "machineID", "path", "presentationID"]
+        guard input.allKeys.allSatisfy({ ($0 as? String).map(keys.contains) == true }),
+            keys.allSatisfy({ input[$0] == nil || input[$0] is String }),
+            let kind = (input["kind"] as? String).flatMap(
+                HostMachinesWindowTarget.Kind.init(rawValue:)),
+            let machine = (input["machineID"] as? String).flatMap(UUID.init(uuidString:)),
+            let presentation = (input["presentationID"] as? String).flatMap(UUID.init(uuidString:))
+        else { completion("The owning window request was rejected."); return nil }
+        let target = HostMachinesWindowTarget(
+            kind: kind, machineID: machine, path: input["path"] as? String)
+        let request = HostWorkerNavigationRequest(
+            configuration: configuration,
+            presentationID: presentation, machinesWindow: target)
+        do {
+            try begin(request, timeout: .seconds(5)) { result in
+                switch result {
+                case .success: completion(nil)
+                case .failure: completion("The owning window could not open this view.")
+                }
+            }
+            return request.token.uuidString as NSString
+        } catch { completion("The owning window request was rejected."); return nil }
+    }
+
     @objc(cancelNavigation:)
     public func cancelNavigation(_ token: NSString) {
         guard let id = UUID(uuidString: token as String) else { return }

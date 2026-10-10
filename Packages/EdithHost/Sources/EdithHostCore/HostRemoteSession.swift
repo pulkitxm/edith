@@ -345,6 +345,8 @@ public final class HostRemoteSceneHandle {
     public var identity: AppExtensionIdentity { session.identity }
     public var isPresented: Bool { presented && !closed }
     public var processIdentity: HostRemoteProcessIdentity? { session.peer }
+    public var configuration: HostRemoteConfiguration { session.configuration }
+    public var engineIdentity: HostRemoteKernelIdentity? { session.engineIdentity }
     #if EDITH_CLI_FIXTURE
     public var fixtureRejectedProcesses: [HostRemoteProcessIdentity] {
         session.fixtureRejectedPeers
@@ -404,6 +406,38 @@ public final class HostRemoteSceneHandle {
         desired = try context(compact: compact, visible: visible, width: width)
         guard presented, let desired else { return }
         try await send("update", presentation: desired)
+    }
+
+    public func terminalUI(_ event: HostTerminalUIEvent) async throws -> Bool {
+        let data = try await terminalRequest(operation: .update, event: event)
+        struct Reply: Decodable { let ok: Bool }
+        guard !data.isEmpty, data.count <= 1024 else { throw HostWorkerError.invalidResponse }
+        return try JSONDecoder().decode(Reply.self, from: data).ok
+    }
+
+    public func terminalUIStatus() async throws -> HostTerminalUIStatus {
+        let data = try await terminalRequest(operation: .status)
+        return try HostTerminalUIStatus.decode(data, presentationID: presentationID)
+    }
+
+    private func terminalRequest(
+        operation: HostTerminalUIRequest.Operation, event: HostTerminalUIEvent? = nil
+    ) async throws -> Data {
+        guard !closed, !preparedToClose, presented, let channel, session.isAvailable,
+            !configuration.uiOnly, engineIdentity?.isRunning == true,
+            channel.peer == processIdentity
+        else { throw HostWorkerError.rejected }
+        let input = HostTerminalUIRequest(
+            session: configuration.session, request: self.request, operation: operation,
+            event: event)
+        let reply = try await channel.request(
+            HostRemoteCommand(operation: operation.rawValue, payload: input.encoded()),
+            timeout: .seconds(2))
+        try Task.checkCancellation()
+        guard !closed, !preparedToClose, self.channel === channel, session.isAvailable,
+            engineIdentity?.isRunning == true, channel.peer == processIdentity
+        else { throw HostWorkerError.rejected }
+        return reply.payload
     }
 
     public func close() async throws {

@@ -20,6 +20,7 @@ struct HostExtensionContent: View {
     let presenter: (any HostExtensionContentPresenting)?
     let openMarketplace: () -> Void
     var surface: SurfaceSnapshotRequest? = nil
+    var initialHeight: Double? = nil
     @State private var controller: NSViewController?
     @State private var presentationID = UUID()
     @State private var error: String?
@@ -77,6 +78,7 @@ struct HostExtensionContent: View {
                 PageLoading(state: .loading, title: "Opening " + title) { EmptyView() }
             }
         }
+        .frame(height: (contentHeight ?? initialHeight).map { CGFloat($0) })
         .pageTask(
             id: Request(
                 version: marketplace.installed[extensionID]?.version, active: active,
@@ -124,7 +126,7 @@ struct HostExtensionContent: View {
     }
 }
 
-private struct HostEmbeddedController: NSViewControllerRepresentable {
+struct HostEmbeddedController: NSViewControllerRepresentable {
     let controller: NSViewController
     let compact: Bool
     let visible: Bool

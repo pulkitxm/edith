@@ -1,6 +1,7 @@
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
+import EdithHostCore
 import SwiftUI
 
 enum HostSectionOpenMode {
@@ -35,6 +36,7 @@ final class HostSectionWindows: NSObject, NSWindowDelegate, NSMenuItemValidation
     private struct Entry {
         let window: NSWindow
         let page: HostNavigationPage
+        let didClose: (() -> Void)?
     }
     private var entries: [Entry] = []
     private let content: (HostNavigationPage) -> AnyView
@@ -91,6 +93,37 @@ final class HostSectionWindows: NSObject, NSWindowDelegate, NSMenuItemValidation
             present(existing.window)
             return existing.window
         }
+        let hosting = NSHostingController(rootView: content(page))
+        hosting.sizingOptions = []
+        return create(page: page, controller: hosting, mode: mode, didClose: nil)
+    }
+
+    func openOwned(
+        id: UUID, kind: HostMachinesWindowTarget.Kind, controller: NSViewController,
+        didClose: @escaping () -> Void
+    ) -> NSWindow {
+        let title: String
+        let symbol: String
+        switch kind {
+        case .machine: title = "Machine"; symbol = "server.rack"
+        case .files: title = "Files"; symbol = "folder"
+        case .docker: title = "Docker"; symbol = "shippingbox"
+        case .terminal: title = "Terminal"; symbol = "terminal"
+        }
+        let page = HostNavigationPage(
+            id: "machines.window." + id.uuidString, title: title, symbol: symbol,
+            extensionID: "machines")
+        return create(page: page, controller: controller, mode: .alwaysNew, didClose: didClose)
+    }
+
+    func closeOwned(id: UUID) {
+        entries.first(where: { $0.page.id == "machines.window." + id.uuidString })?.window.close()
+    }
+
+    private func create(
+        page: HostNavigationPage, controller: NSViewController, mode: HostSectionOpenMode,
+        didClose: (() -> Void)?
+    ) -> NSWindow {
         let visible = visibleFrame()
         let size = HostWindowFramePolicy.fitted(Self.baseContentSize, visible: visible.size)
         let window = makeWindow(NSRect(origin: .zero, size: size))
@@ -101,14 +134,12 @@ final class HostSectionWindows: NSObject, NSWindowDelegate, NSMenuItemValidation
             Self.baseMinimumSize, visible: visible.size)
         window.tabbingMode = .automatic
         window.tabbingIdentifier = "EdithSection"
-        window.identifier = NSUserInterfaceItemIdentifier("EdithSection." + id)
-        let hosting = NSHostingController(rootView: content(page))
-        hosting.sizingOptions = []
-        window.contentViewController = hosting
+        window.identifier = NSUserInterfaceItemIdentifier("EdithSection." + page.id)
+        window.contentViewController = controller
         window.setContentSize(size)
         window.delegate = self
         let host = mode == .reuseMostRecent ? entries.first?.window : nil
-        entries.insert(Entry(window: window, page: page), at: 0)
+        entries.insert(Entry(window: window, page: page, didClose: didClose), at: 0)
         if let host, host.isVisible {
             host.addTabbedWindow(window, ordered: .above)
         } else if saveFrames {
@@ -144,13 +175,15 @@ final class HostSectionWindows: NSObject, NSWindowDelegate, NSMenuItemValidation
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
         clearHints()
+        let closed = entries.filter { $0.window === window }
         entries.removeAll { $0.window === window }
+        for entry in closed { entry.didClose?() }
     }
     func closeAll() {
         clearHints()
-        let windows = entries.map(\.window)
+        let closed = entries
         entries.removeAll()
-        for window in windows { window.close() }
+        for entry in closed { entry.window.close(); entry.didClose?() }
     }
     static func tabbedWindows(_ window: NSWindow?) -> [NSWindow] {
         guard let group = window?.tabGroup, group.windows.count > 1 else { return [] }

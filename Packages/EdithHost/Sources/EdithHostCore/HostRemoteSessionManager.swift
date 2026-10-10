@@ -198,12 +198,46 @@ public final class HostRemoteSessionManager {
         else { throw HostWorkerError.rejected }
         if let presentationID = request.presentationID {
             guard let handle = presentations[presentationID], handle.isPresented,
-                handle.request.extensionID == id, handle.request.location == request.location,
+                handle.request.extensionID == id,
+                request.machinesWindow != nil || handle.request.location == request.location,
                 pendingCleanup[presentationID] == nil, handle.processIdentity?.isRunning == true
             else { throw HostWorkerError.rejected }
-        } else if request.location != nil {
+            let selected = try selectedConfiguration(for: handle.request)
+            guard !selected.uiOnly, selected.package == handle.configuration.package,
+                let pid = marketplace.sessions.processIdentifiers[id],
+                handle.engineIdentity == (try HostRemoteKernelIdentity.read(pid))
+            else { throw HostWorkerError.rejected }
+        } else if request.location != nil || request.machinesWindow != nil {
             throw HostWorkerError.rejected
         }
+    }
+
+    public func terminalUI(presentationID: UUID, event: HostTerminalUIEvent) async throws -> Bool {
+        let handle = try terminalHandle(presentationID)
+        let result = try await handle.terminalUI(event)
+        guard try terminalHandle(presentationID) === handle else { throw HostWorkerError.rejected }
+        return result
+    }
+
+    public func terminalUIStatus(presentationID: UUID) async throws -> HostTerminalUIStatus {
+        let handle = try terminalHandle(presentationID)
+        let result = try await handle.terminalUIStatus()
+        guard try terminalHandle(presentationID) === handle else { throw HostWorkerError.rejected }
+        return result
+    }
+
+    private func terminalHandle(_ id: UUID) throws -> HostRemoteSceneHandle {
+        guard let handle = presentations[id], handle.request.extensionID == "terminal",
+            handle.isPresented, pendingCleanup[id] == nil,
+            handle.processIdentity?.isRunning == true,
+            let pid = marketplace.sessions.processIdentifiers["terminal"],
+            handle.engineIdentity == (try HostRemoteKernelIdentity.read(pid))
+        else { throw HostWorkerError.rejected }
+        let current = try selectedConfiguration(for: handle.request)
+        guard !current.uiOnly, current.package == handle.configuration.package else {
+            throw HostWorkerError.rejected
+        }
+        return handle
     }
 
     public func presentationCounts(excluding excluded: Set<UUID> = []) -> [String: Int] {

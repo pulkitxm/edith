@@ -1,5 +1,6 @@
 import AppKit
 import EdithHostCore
+import EdithExtensionUI
 @preconcurrency import ExtensionFoundation
 @preconcurrency import ExtensionKit
 import Observation
@@ -35,8 +36,18 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
         let remote = EXHostViewController()
         remote.configuration = EXHostViewController.Configuration(
             appExtension: handle.identity, sceneID: handle.sceneIdentifier)
+        let terminalUI =
+            request.extensionID == "terminal"
+            ? HostTerminalInputClient(
+                update: { [manager] event in
+                    try await manager.terminalUI(
+                        presentationID: request.presentationID, event: event)
+                },
+                status: { [manager] in
+                    try await manager.terminalUIStatus(presentationID: request.presentationID)
+                }) : nil
         let controller = HostRemoteViewController(
-            request: request, remote: remote,
+            request: request, remote: remote, terminalUI: terminalUI,
             connect: { connection, state, receive in
                 try await handle.connect(
                     through: connection, compact: state.compact, visible: state.visible,
@@ -51,10 +62,36 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
     }
 
     func window(for presentationID: UUID) -> NSWindow? {
-        guard let controller = controllers[presentationID], controller.isViewLoaded else {
+        guard closing[presentationID] == nil, let controller = controllers[presentationID],
+            controller.isViewLoaded, !controller.detached
+        else {
             return nil
         }
         return controller.view.window
+    }
+
+    func consumeTerminalZoom(
+        _ command: WindowKeyCommand, window: NSWindow?, fallback: @escaping @MainActor () -> Void
+    ) -> Bool {
+        guard let window else { return false }
+        for controller in controllers.values
+        where controller.isViewLoaded && controller.view.window === window
+            && closing[controller.request.presentationID] == nil
+        {
+            if controller.consumeTerminalZoom(command, fallback: fallback) { return true }
+        }
+        return false
+    }
+
+    func consumeTerminalTabKey(
+        characters: String?, modifiers: NSEvent.ModifierFlags, window: NSWindow?
+    ) -> Bool {
+        guard let window else { return false }
+        return controllers.values.contains { controller in
+            controller.isViewLoaded && controller.view.window === window
+                && closing[controller.request.presentationID] == nil
+                && controller.consumeTerminalTabKey(characters: characters, modifiers: modifiers)
+        }
     }
 
     func endPresentation(id: UUID) {
@@ -62,6 +99,7 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
         closing[id] = Task { [weak self] in
             guard let self else { return }
             do {
+                await controllers[id]?.prepareInputToClose()
                 try await manager.prepareToClose(id: id)
                 controllers.removeValue(forKey: id)?.detach()
                 try await manager.endPresentation(id: id)
@@ -73,6 +111,12 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
             cleanupFailed = !failedClosures.isEmpty
         }
     }
+    func endPresentationAndWait(id: UUID) async throws {
+        endPresentation(id: id)
+        await closing[id]?.value
+        guard !failedClosures.contains(id) else { throw HostWorkerError.rejected }
+    }
+
     func retryCleanup() {
         for id in failedClosures { endPresentation(id: id) }
     }
@@ -98,6 +142,8 @@ struct HostRemoteViewState: Equatable {
 final class HostRemoteViewController: NSViewController, EXHostViewControllerDelegate {
     let request: HostExtensionContentRequest
     private var remote: EXHostViewController
+    private let terminalUI: HostTerminalInputClient?
+    private var terminalInput: HostTerminalInput?
     private let connect:
         @MainActor (
             NSXPCConnection, HostRemoteViewState, @escaping @MainActor (HostRemoteEvent) -> Void
@@ -117,6 +163,7 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
 
     init(
         request: HostExtensionContentRequest, remote: EXHostViewController,
+        terminalUI: HostTerminalInputClient? = nil,
         connect:
             @escaping @MainActor (
                 NSXPCConnection, HostRemoteViewState, @escaping @MainActor (HostRemoteEvent) -> Void
@@ -125,6 +172,7 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
     ) {
         self.request = request
         self.remote = remote
+        self.terminalUI = terminalUI
         self.connect = connect
         self.update = update
         super.init(nibName: nil, bundle: nil)
@@ -135,8 +183,17 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
     override func loadView() {
         let view = HostRemoteContainerView()
         view.contentHeight = contentHeight
+        view.moved = { [weak self] in self?.terminalInput?.stateChanged() }
         self.view = view
         mountRemote()
+        if let terminalUI, request.extensionID == "terminal" {
+            terminalInput = HostTerminalInput(
+                presentationID: request.presentationID, client: terminalUI,
+                window: { [weak self] in self?.view.window },
+                visible: { [weak self] in self?.state.visible == true },
+                available: { [weak self] in self?.connected == true && self?.detached == false },
+                ownsResponder: { [weak self] in self?.containsResponder(in: $0) == true })
+        }
     }
     private func mountRemote() {
         addChild(remote)
@@ -156,6 +213,7 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
         let next = HostRemoteViewState(compact: compact, visible: visible, width: width)
         guard next != state else { return }
         state = next
+        terminalInput?.stateChanged()
         guard connected else { return }
         pending = next
         drainUpdates()
@@ -176,6 +234,7 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
                 try await connect(connection, state) { [weak self] event in self?.receive(event) }
                 guard !Task.isCancelled, revision == token, !detached else { return }
                 connected = true
+                terminalInput?.stateChanged()
                 pending = state
                 drainUpdates()
             } catch {
@@ -202,7 +261,7 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
     func receive(_ event: HostRemoteEvent) {
         guard !detached, event.presentationID == request.presentationID, event.kind == "height",
             let height = event.height, height.isFinite, (0...16_384).contains(height),
-            !["main", "settings", "music.detail"].contains(request.location)
+            !["main", "settings", "music.detail", "machines.window"].contains(request.location)
         else { return }
         contentHeight = height
         if isViewLoaded, let view = view as? HostRemoteContainerView {
@@ -214,6 +273,7 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
     func hostViewControllerWillDeactivate(_ viewController: EXHostViewController, error: Error?) {
         guard viewController === remote, !detached else { return }
         activation?.cancel(); updates?.cancel()
+        terminalInput?.stop()
         connected = false
         showFailure()
     }
@@ -236,9 +296,48 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
         statusView = notice
         changed?()
     }
+    func consumeTerminalZoom(
+        _ command: WindowKeyCommand, fallback: @escaping @MainActor () -> Void
+    ) -> Bool {
+        terminalInput?.consumeZoom(command, fallback: fallback) == true
+    }
+
+    func consumeTerminalTabKey(characters: String?, modifiers: NSEvent.ModifierFlags) -> Bool {
+        terminalInput?.consumeTabKey(characters: characters, modifiers: modifiers) == true
+    }
+
+    func waitUntilConnected(window: NSWindow) async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while !connected {
+            try Task.checkCancellation()
+            guard !detached, failure == nil, isViewLoaded, view.window === window,
+                ContinuousClock.now < deadline
+            else { throw HostWorkerError.rejected }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        guard !detached, view.window === window else { throw HostWorkerError.rejected }
+    }
+
+    func prepareInputToClose() async { await terminalInput?.stopAndWait() }
+
+    private func containsResponder(in window: NSWindow) -> Bool {
+        guard isViewLoaded, view.window === window else { return false }
+        var responder = window.firstResponder
+        for _ in 0..<64 {
+            guard let current = responder else { return false }
+            if current === view || current === remote.view { return true }
+            if let current = current as? NSView, current.isDescendant(of: remote.view) {
+                return true
+            }
+            responder = current.nextResponder
+        }
+        return false
+    }
+
     func detach() {
         guard !detached else { return }
         detached = true
+        terminalInput?.stop()
         revision = UUID()
         activation?.cancel(); activation = nil
         updates?.cancel(); updates = nil
@@ -255,6 +354,11 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
 }
 
 private final class HostRemoteContainerView: NSView {
+    var moved: (() -> Void)?
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        moved?()
+    }
     var contentHeight: Double?
     override var intrinsicContentSize: NSSize {
         NSSize(width: NSView.noIntrinsicMetric, height: contentHeight ?? NSView.noIntrinsicMetric)
