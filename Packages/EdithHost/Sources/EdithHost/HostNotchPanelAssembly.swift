@@ -11,6 +11,7 @@ final class HostNotchPanelAssembly {
     private let create: Create
     private let present: @MainActor (HostNotchPanel) -> Void
     private let measure: @MainActor (UUID, Double) -> Void
+    private let reportFailure: @MainActor (UUID, String) -> Void
     private var records: [UUID: Record] = [:]
     private var creating: [UUID: Task<Void, Never>] = [:]
     private var retiring: [UUID: HostNotchSceneLease] = [:]
@@ -22,11 +23,13 @@ final class HostNotchPanelAssembly {
     init(
         create: @escaping Create,
         present: @escaping @MainActor (HostNotchPanel) -> Void = { $0.orderFrontRegardless() },
-        measure: @escaping @MainActor (UUID, Double) -> Void = { _, _ in }
+        measure: @escaping @MainActor (UUID, Double) -> Void = { _, _ in },
+        reportFailure: @escaping @MainActor (UUID, String) -> Void = { _, _ in }
     ) {
         self.create = create
         self.present = present
         self.measure = measure
+        self.reportFailure = reportFailure
         panel = HostNotchPanel()
         panel.contentViewController = container
     }
@@ -119,6 +122,7 @@ final class HostNotchPanelAssembly {
             }
         }
         if let failure { throw failure }
+        panel.close()
     }
 
     private func upsert(id: UUID, request: HostExtensionContentRequest, slot: HostNotchNativeSlot?)
@@ -152,7 +156,12 @@ final class HostNotchPanelAssembly {
                 position(lease, record: record)
             } catch {
                 guard !Task.isCancelled, !stopped, records[id] === record else { return }
-                failures[id] = "The extension card could not open."
+                let message =
+                    error is HostRemoteAvailabilityError
+                    ? "Approve this extension in macOS extension settings to open its card."
+                    : "The extension card could not open."
+                failures[id] = message
+                if let slot = record.slot { reportFailure(slot.id, message) }
             }
         }
         record.task = task

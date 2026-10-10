@@ -44,6 +44,21 @@ struct HostNotchPanelCoordinatorTests {
         #expect(fixture.leases.allSatisfy { $0.closed })
     }
 
+    @Test func nativeApprovalFailureIsPublishedIntoOriginalChrome() async throws {
+        let fixture = NotchCoordinatorFixture()
+        fixture.failMusicApproval = true
+        let coordinator = fixture.coordinator()
+        try await coordinator.start(version: "1.0.0", screens: fixture.screens)
+        await settle { fixture.transport.measures.count == 1 }
+        let failure = try #require(fixture.transport.measures.first)
+        #expect(failure.error?.contains("Approve this extension") == true)
+        #expect(failure.slotID == fixture.transport.current?.states.first?.slots.first?.id)
+        #expect(failure.presentationID == fixture.screens.first?.presentationID)
+        #expect(coordinator.attachedSceneCount == 1)
+        #expect(fixture.leases.allSatisfy { $0.request.extensionID == "notchShelf" })
+        try await coordinator.stop()
+    }
+
     @Test func unchangedLongPollTimeoutDoesNotRecreateOriginalScenes() async throws {
         let fixture = NotchCoordinatorFixture()
         let coordinator = fixture.coordinator()
@@ -167,6 +182,7 @@ private final class NotchCoordinatorFixture {
     var environment: HostNotchPanelEnvironment
     var leases: [HostNotchSceneLease] = []
     var presented = 0
+    var failMusicApproval = false
     var now = ContinuousClock.now
     init() {
         _ = TestWindowHost.application
@@ -181,6 +197,9 @@ private final class NotchCoordinatorFixture {
         HostNotchPanelCoordinator(
             invoke: transport.invoke, environment: { [self] in environment },
             create: { [self] request in
+                if failMusicApproval, request.extensionID == "music" {
+                    throw HostRemoteAvailabilityError.approvalRequired
+                }
                 let controller = NSViewController()
                 controller.view = NSView()
                 let lease = HostNotchSceneLease(

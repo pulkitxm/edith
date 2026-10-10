@@ -209,7 +209,18 @@ final class HostNotchPanelCoordinator {
             } else {
                 assembly = HostNotchPanelAssembly(
                     create: create, present: present,
-                    measure: { [weak self] slotID, height in self?.measure(slotID, height: height) }
+                    measure: { [weak self] slotID, height in self?.measure(slotID, height: height)
+                    },
+                    reportFailure: { [weak self] slotID, message in
+                        guard let self,
+                            let slot = batch?.states.flatMap(\.slots).first(where: {
+                                $0.id == slotID
+                            })
+                        else { return }
+                        measure(
+                            slotID, height: min(1200, max(1, slot.rectangle.height)), error: message
+                        )
+                    }
                 )
                 assemblies[state.displayID] = assembly
             }
@@ -245,14 +256,14 @@ final class HostNotchPanelCoordinator {
         }
     }
 
-    private func measure(_ slotID: UUID, height: Double) {
+    private func measure(_ slotID: UUID, height: Double, error: String? = nil) {
         guard !retired, let identity, let batch, height.isFinite, (1...1200).contains(height),
             let state = batch.states.first(where: { $0.slots.contains { $0.id == slotID } }),
             environment().activeVersions["notchShelf"] == attachRequest?.version
         else { return }
         measurements[slotID] = .init(
             identity: identity, displayID: state.displayID, presentationID: state.presentationID,
-            slotID: slotID, revision: batch.revision, height: height, error: nil)
+            slotID: slotID, revision: batch.revision, height: height, error: error)
         writePending()
     }
 

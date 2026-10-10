@@ -15,6 +15,8 @@ struct HostNotchPanelAssemblyTests {
         var presentations = 0
         let assembly = HostNotchPanelAssembly(
             create: owner.create, present: { _ in presentations += 1 })
+        let closeObserver = NotchPanelCloseObserver()
+        assembly.panel.delegate = closeObserver
         let state = fixture.state()
         try assembly.accept(state, admission: fixture.admission())
         await settle { assembly.attachedCount == 2 }
@@ -44,6 +46,8 @@ struct HostNotchPanelAssemblyTests {
         #expect(presentations == 1)
         try await assembly.stop()
         #expect(assembly.container.children.isEmpty)
+        #expect(closeObserver.closed)
+        #expect(!assembly.panel.isVisible)
         #expect(assembly.attachedCount == 0)
         #expect(assembly.pendingCleanupCount == 0)
         #expect(owner.leases.allSatisfy { $0.closed })
@@ -182,6 +186,12 @@ struct HostNotchPanelAssemblyTests {
         }
         #expect(condition())
     }
+}
+
+@MainActor
+private final class NotchPanelCloseObserver: NSObject, NSWindowDelegate {
+    private(set) var closed = false
+    func windowWillClose(_ notification: Notification) { closed = true }
 }
 
 @MainActor
