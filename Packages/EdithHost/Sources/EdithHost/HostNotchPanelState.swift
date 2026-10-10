@@ -118,6 +118,7 @@ struct HostNotchPanelState: Codable, Equatable, Sendable {
             (1...min(1200, admission.display.frame.width - 48)).contains(shapeWidth),
             (1...min(1024, admission.display.frame.height - 48)).contains(shapeHeight),
             slots.count <= Self.maximumSlots, Set(slots.map(\.id)).count == slots.count,
+            !slots.contains(where: { $0.id == presentationID }),
             !acceptsKeyFocus || (phase == .expanded && activeTab == "browser"),
             visible || slots.isEmpty
         else { throw HostNotchPanelError.invalidState }
