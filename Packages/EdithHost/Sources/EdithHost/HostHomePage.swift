@@ -38,7 +38,7 @@ struct HostHomePage: View {
                     }
                 },
                 inspect: {
-                    marketplace.surfaces.preferences.set($0, forKey: "surfaceEditorWidget");
+                    marketplace.surfaces.preferences.set($0, forKey: HostSurfaceEditorKeys.widget);
                     customize()
                 },
                 reorder: { id, anchor in

@@ -4,6 +4,11 @@ import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
 
+enum HostSurfaceEditorKeys {
+    static let target = "surfaceEditorTarget"
+    static let widget = "surfaceEditorWidget"
+}
+
 struct HostSurfaceEditor: View {
     @Bindable var marketplace: HostMarketplace
     private var store: SurfaceLayoutStore { marketplace.surfaceLayouts }
@@ -46,9 +51,10 @@ struct HostSurfaceEditor: View {
     init(marketplace: HostMarketplace) {
         self.marketplace = marketplace
         _targetRaw = AppStorage(
-            wrappedValue: "home", "surfaceEditorTarget", store: marketplace.surfaces.preferences)
+            wrappedValue: "home", HostSurfaceEditorKeys.target,
+            store: marketplace.surfaces.preferences)
         _selectedRaw = AppStorage(
-            wrappedValue: "", "surfaceEditorWidget", store: marketplace.surfaces.preferences)
+            wrappedValue: "", HostSurfaceEditorKeys.widget, store: marketplace.surfaces.preferences)
     }
 
     var body: some View {
