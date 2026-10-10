@@ -1,111 +1,96 @@
 # Lightweight host rebuild measurements
 
-The final all39 package report is pending. The latest controlled host measurement below is an intermediate build, not the shipping app. The PR is not ready to merge.
+Measured from clean `bc66feff460780b624cafc26bfed02a2b29ed9ca`. All 39 current shipping fingerprints remain unchanged at reviewed `aa24af4fb9a521e25a98d925e8f1053ab40d9ff0`. This report covers **all 39 static size artifacts**. Closed lifecycle verification has **37 passes and two pending retries**, whose last observed results failed (Herdr and Quinjet). All 39 native owners passed 232 selected pure/injected methods at the measured source. These tests do not prove managed UI, real providers or hardware. Portable scripts passed 831 tests with 13 skipped at the reviewed shipping-equivalent source. The hosted original UI journey, production HTTPS release checks and notarization remain separate. Local artifacts use ad-hoc development signing.
 
-| Controlled measurement | Installed bytes | Comparison ZIP bytes |
-| --- | ---: | ---: |
-| Bundled baseline at `91d0e13de56aaf297ad4630d2c36ef124da5bf0c` | 131,607,239 | 59,298,754 |
-| Intermediate empty host at `55af74b29bf663ccb545c28e30041784381af178` | 8,178,936 | Not measured |
-| Final shipping host | Pending | Pending |
-| All39 final extension release assets | Pending | Pending |
-
-The intermediate host contains zero extension payload. It is 93.79% smaller in logical installed bytes than the controlled bundled baseline. Both builds use arm64 Release configuration and development signatures. MB means 1,000,000 bytes. These measurements do not include user data, cache, retained extension versions, filesystem allocation, or a shipping DMG.
-
-| Intermediate host component | Logical bytes |
-| --- | ---: |
-| Host executable | 6,296,576 |
-| Sparkle updater and helpers | 1,441,041 |
-| Application icon | 209,225 |
-| Compressed marketplace artwork | 220,928 |
-| Metadata, resources and signatures | 11,166 |
-| Total | 8,178,936 |
-
-This intermediate host exceeded the earlier 8 MB build guard. The accepted empty-host budget is now10 MB, with the full original controls preserved. Compiler and editor experiments saved at most74,336 bytes and did not meet the guard; those changes were not adopted. Restoring original controls and integrating command routing can change the final size further. Removing extension implementations does not remove the app's shared navigation, settings, marketplace, customization editors, updater or worker transport.
-
-The final extension report must count each actual ZIP, JSON release record, checksum and catalog asset. Expanded package sizes must include the complete signed carrier and every copy of the shared host executable. Installing all packages may use more disk space than the original bundled app. No aggregate saving is claimed before all39 current packages are built and verified. Historical packages below do not qualify as final artifacts.
-
-Background lifecycle tests validate install, update, restoration, disable and removal without opening the app. These tests do not establish managed native view behavior. The separate disposable hosted native UI probe is still outstanding. Music inert fixtures decline feature commands, and Studio inert fixtures validate static metadata only; neither is media feature coverage.
-
-## Historical foundation snapshot
-
-Measured on 2026-10-09. This superseded snapshot covers23 historical packages and a smaller host foundation. It does not describe the current source, final shipping app or all39 packages.
-
-The host contains its executable, marketplace runtime, Sparkle updater including its helpers, application icon, extension metadata, and signatures. It contains zero extension payloads. Feature navigation integration, required platform carriers, the remaining feature migrations, and shipping release packaging still need completion and measurement.
+Measured on 2026-10-10. Source mode: `final`. All 39 indexed features have measured self-contained worker packages. Package coverage describes the measured artifacts. It does not establish merge readiness, lifecycle test results, visual review, production signing, or release publication.
 
 | Measured build | Installed MB | Comparison ZIP MB |
 | --- | ---: | ---: |
-| Bundled baseline at91d0e13 | 131.61 | 59.30 |
-| Historical host foundation with updater and shared UI | 4.84 | 2.13 |
-| Host plus all 23 migrated extensions | 66.52 | 27.45 |
+| Recorded bundled-app baseline | 131.61 | 59.30 |
+| Measured host without extension packages | 8.85 | 4.60 |
+| Host plus all 39 measured extension packages | 960.78 | 473.54 |
 
-MB means 1,000,000 bytes. The historical host foundation was 96.32% smaller in logical file bytes than the bundled baseline. That percentage will be recalculated after the remaining shipping components are integrated. Comparison ZIPs use deflate level 9 over regular files and exclude symlinks. They are a controlled comparison, not shipping installer sizes.
+MB means 1,000,000 bytes. The measured host is 93.28% smaller on disk than the recorded bundled-app baseline. Comparison ZIPs use deflate level 9 over regular files and exclude symlinks. They are controlled comparison archives, not shipping installer sizes. The combined total counts the host and one installed package version per measured feature. OS-managed deployment copies, filesystem allocation rounding, receipts, caches, user data, and retained versions are excluded.
 
-| Independent release package | ZIP bytes | Installed bytes | Release metadata bytes |
+Baseline build: source commit: `91d0e13de56aaf297ad4630d2c36ef124da5bf0c`; configuration: `Release`; architecture: `arm64`; signing: `ad-hoc`; Xcode: `27.0 (27A266a)`; SDK: `27.0`; Ghostty source commit: `88f57ee66eeaad4da77b414b245f7b6693348985`; Ghostty archive: `verified cache from clean pinned source build`.
+
+Host build: source commit: `bc66feff460780b624cafc26bfed02a2b29ed9ca`; uncommitted source changes: `False`; configuration: `Release`; optimization: `Osize`; link-time optimization: `full`; architecture: `arm64`; signing: `ad-hoc`; Xcode: `Xcode 27.0 (27A266a)`; SDK: `27.0`.
+
+| Empty host component | Installed bytes |
+| --- | ---: |
+| Host and CLI | 6,963,056 |
+| Sparkle app updater | 1,441,041 |
+| Icons, index and launcher resource | 434,809 |
+| Bundle metadata and signatures | 6,482 |
+| Total empty host | 8,845,388 |
+
+The host contains the marketplace, window and surface layout controls, worker lifecycle and command gateway. Sparkle updates the application independently of extension updates. Downloaded feature code and resources belong to the packages below. Component sizes count each regular file once and exclude symbolic links.
+
+| Example selection | Downloaded extensions | App plus installed packages MB | Extension download MB |
+| --- | --- | ---: | ---: |
+| Daily tools | calendar, clipboard, systemStats, usage | 90.21 | 41.09 |
+| Development tools | terminal, database, docs, codeStats | 137.21 | 60.44 |
+| Media tools | virtualCamera, studio, audioMixer, music, timeLapse | 170.50 | 78.50 |
+
+These selections are size examples, not bundles or defaults. Each feature is downloaded separately. Installing every feature can cost more than the bundled app because independent packages duplicate shared runtime code and native libraries. The empty app and selected-package totals show the savings for people who install only the features they use.
+
+| Local extension artifact | ZIP bytes | Installed package bytes | Package metadata bytes |
 | --- | ---: | ---: | ---: |
-| Updates | 974,045 | 2,259,839 | 528 |
-| BlitzTree | 771,051 | 1,834,498 | 513 |
-| Calendar | 788,501 | 1,852,639 | 510 |
-| Cleaner | 807,875 | 1,901,596 | 507 |
-| Clipboard | 1,039,661 | 2,367,477 | 514 |
-| Color Picker | 713,734 | 1,716,107 | 519 |
-| Documents | 2,077,920 | 5,811,483 | 499 |
-| Emoji Picker | 855,905 | 2,112,833 | 501 |
-| Focus Dim | 695,699 | 1,683,394 | 510 |
-| Packages | 770,684 | 1,817,647 | 510 |
-| Jev | 787,802 | 1,870,352 | 495 |
-| Keep Awake | 319,450 | 774,389 | 512 |
-| Keystroke Highlight | 719,533 | 1,736,144 | 540 |
-| LaTeX | 1,166,967 | 2,886,037 | 502 |
-| Mic Mute | 701,491 | 1,699,759 | 507 |
-| Music | 5,951,538 | 14,515,248 | 503 |
-| Notch Shelf | 1,148,658 | 2,587,768 | 517 |
-| Plugins | 1,178,101 | 3,088,055 | 508 |
-| Presenter | 733,586 | 1,750,437 | 513 |
-| System | 745,068 | 1,782,985 | 504 |
-| CPU & Memory in menu bar | 696,862 | 1,683,531 | 519 |
-| Screen Recorder | 913,163 | 2,129,394 | 513 |
-| Window Sweaters | 766,122 | 1,822,130 | 528 |
-| All 23 migrated packages | 25,323,416 | 61,683,742 | 11,772 |
+| Updates | 9,997,576 | 19,718,197 | 536 |
+| Attention | 11,989,411 | 24,624,632 | 522 |
+| Audio Mixer | 9,666,170 | 19,044,501 | 524 |
+| Bifrost | 9,958,852 | 19,651,202 | 515 |
+| BlitzTree | 9,300,527 | 18,177,428 | 521 |
+| Calendar | 9,807,714 | 19,313,039 | 518 |
+| Cleaner | 9,759,202 | 19,228,648 | 515 |
+| Clipboard | 10,014,580 | 19,723,599 | 522 |
+| Code Stats | 10,418,943 | 20,562,564 | 522 |
+| Color Picker | 9,693,344 | 19,094,865 | 527 |
+| Memory | 10,879,296 | 21,601,268 | 522 |
+| Database | 21,217,242 | 47,626,656 | 519 |
+| Documents | 10,630,217 | 21,738,361 | 507 |
+| Downloads | 9,901,614 | 19,546,084 | 521 |
+| Emoji Picker | 9,821,917 | 19,472,162 | 509 |
+| Focus Dim | 9,264,420 | 18,110,570 | 518 |
+| Sessions | 20,974,619 | 44,625,524 | 510 |
+| Packages | 9,743,101 | 19,194,881 | 518 |
+| Jev | 9,725,931 | 19,163,780 | 503 |
+| Keep Awake | 9,247,745 | 18,075,840 | 521 |
+| Keystroke Highlight | 9,287,625 | 18,146,326 | 548 |
+| LaTeX | 10,162,505 | 20,298,033 | 510 |
+| Lid Awake | 9,751,328 | 19,250,939 | 518 |
+| Machines | 21,181,604 | 45,131,441 | 519 |
+| Mic Mute | 9,267,665 | 18,110,404 | 515 |
+| Music | 15,341,428 | 32,720,684 | 510 |
+| Notch Shelf | 10,541,761 | 20,811,180 | 525 |
+| Plugins | 10,153,179 | 20,446,572 | 516 |
+| Presenter | 9,704,460 | 19,112,109 | 521 |
+| Review | 19,407,479 | 41,555,272 | 516 |
+| Site Audit | 10,159,962 | 20,046,411 | 519 |
+| Studio | 16,673,935 | 33,489,430 | 513 |
+| System | 9,706,685 | 19,128,383 | 512 |
+| CPU & Memory in menu bar | 9,728,647 | 19,163,297 | 527 |
+| Terminal | 18,170,091 | 38,432,377 | 519 |
+| Screen Recorder | 9,467,896 | 18,521,252 | 521 |
+| Usage | 11,539,721 | 23,168,170 | 510 |
+| Virtual Camera | 27,350,658 | 57,880,253 | 534 |
+| Window Sweaters | 9,329,651 | 18,232,284 | 536 |
+| All 39 measured packages | 468,938,701 | 951,938,618 | 20,259 |
 
-The 23 ZIPs plus their metadata occupy 25,335,188 bytes as release assets. A shared signed catalog, checksums, retained older releases, and packages that have not been migrated are outside this subtotal. These are locally built development artifacts; these particular releases have not been published.
+The 39 local ZIPs plus their JSON metadata occupy 468,958,960 bytes. This subtotal does not include a shared signed catalog, detached checksums, older releases, or unmeasured packages. Measuring local artifacts neither publishes them nor proves that corresponding remote release assets exist. Publication status is not verified by this report.
 
-Each enabled extension runs in a worker launched from the same Edith executable. Disabling waits for that process to exit, including a forced shutdown when it does not respond. The host also tracks commands launched into their own process groups and stops those groups on disable, crash, or unresponsive shutdown. The lifecycle test confirms that no worker process remains. Removing an extension stops it before deleting its downloaded packages. User preferences remain separate from downloaded code.
+The generator verifies each package's ZIP size, SHA-256, expanded bytes and CRC. The generator also matched each package's current source fingerprint. The recorded host executable checksum identifies the exact measured binary. Final reports bind sealed carrier metadata and signature-independent executable code to that frozen host and preserve each current package source fingerprint. Re-signed copies retain their actual signed checksums and expanded byte counts; these copies are already included in package totals. The size calculation does not verify code signatures, the host dependency boundary, zero feature payload, lifecycle behavior, card adapters, platform installation, or cloud release behavior. Record those results separately from the measurement.
 
-Compatible installed extensions survive app updates without downloading them again. Enabled preferences persist, and workers restart when the updated app starts. Extension updates install immutable, verified packages and restart only the affected worker. A failed update attempts to restore the previous working version. Automatic checks run on app startup at most once every eight hours, only when extensions are installed and automatic extension updates are enabled. Users can also check and update manually. Incompatible installed packages are shown as needing a compatible update.
+Worker lifecycle verification covers the owning Edith worker, admitted same-host native tasks, and registered command or descendant process groups. Process-group teardown uses live kernel birth identities. Arbitrarily detached, unregistered feature processes are outside this ownership contract. Camera uses an independently installed OBS Virtual Camera provider, which Edith does not install, remove, or deactivate. Disabling Camera stops its capture and frame delivery. The optional meeting-microphone driver has separate retirement rules and can require a macOS restart. Approval or restart-required retirement must remain visible and keep ownership recoverable. A worker reaching zero processes does not prove that an OS-managed provider or loaded driver has retired.
 
-The historical lifecycle results are superseded by the corrected headless harness. Native-window and managed-view success must not be inferred from this snapshot. Current final-source lifecycle, visual verification and cloud release testing remain outstanding.
+Home and Notch customization from merged [PR #1010](https://github.com/pulkitxm/edith/pull/1010) uses host-owned layouts and a versioned worker boundary. Size measurements do not validate live card data, actions, cancellation, privacy behavior, or visual editor layouts. Editor sample previews are labeled explicitly; live preview queries already running providers. Run and review synthetic lifecycle and visual fixtures separately for the final integrated feature set.
 
-Home and Notch customization from merged [PR #1010](https://github.com/pulkitxm/edith/pull/1010) is part of this rebuild. The visual editor, shared canvas and shelf controls, host-owned preferences, profiles, undo/redo, tab order, source filters, and read-only worker context are implemented. Native synthetic UI tests verify both editors at compact and regular widths, increased zoom, and light and dark appearance. Calendar supplies real filtered meeting data and validates Join actions in its worker. The native Notch renderer and world-clock controls are implemented. Live-card adapters for remaining extensions still need completion.
-
-A card is active only when its provider is installed, compatible, and running. Downloaded or remembered-enabled extensions do not count as running. Runtime layouts omit inactive cards without changing the saved configuration. Disabled, removed, or temporarily incompatible extensions retain their positions, filters, and profiles for later restoration. The availability planner returns no provider queries for hidden surfaces and hidden cards. A widget cannot implicitly start an extension. The shared request client cancels affected requests on disable, removal, or version changes and rejects late replies. Presenter changes clear displayed private card data and pause requests immediately. Editor sample previews are labeled explicitly and do not start workers or fetch data; live preview only queries already running providers.
-
-| Customized content | Planned data and action owner |
-| --- | --- |
-| World clocks | Lightweight host |
-| Usage activity, agent usage, rate limits | Usage extension |
-| Live agents and permission approvals | Sessions extension |
-| Now playing | Music extension |
-| Meetings | Calendar extension |
-| Code stats | Code Stats extension |
-| Focus timer | Attention extension |
-| Databases | Database extension |
-| Machines | Machines extension |
-| GitHub activity | Review extension |
-| Quick actions | Running Keep Awake, Lid Awake, Presenter, System, and Mic Mute extensions |
-| Desk tools | Running Clipboard, Color Picker, Emoji Picker, and Bifrost extensions |
-| Media tools | Running Screen Recorder, Downloads, Virtual Camera, Music, and Studio extensions |
-| Individual extension card | Its own extension worker, covering every indexed extension |
-| Notch shell, files, browser, camera preview | Downloadable Notch extension |
-| Notch Clipboard and Audio tabs | Their own running extension workers |
-
-The Notch browser and camera preview are functions of the Notch package. They do not require Review or Virtual Camera. The Notch renderer runs only while its extension is enabled. External data and actions will cross the worker command boundary as versioned, bounded data; feature models and services stay outside the base app. The existing native runtime tests now also verify that each tested worker reads the same saved Home configuration after replacement and app restart, and that disabling or removing it leaves the layout intact.
-
-Exact byte counts, package checksums, and the host executable checksum are in [the measurement data](extension-host-rebuild-size-report.json). Regenerate both reports after a fresh host build and extension builds:
+Exact byte counts, package checksums, and the host executable checksum are in [the measurement data](extension-host-rebuild-size-report.json). See [the measurement procedure](extension-host-rebuild-measurements.md) for build provenance, publication limits and platform retirement checks. After building the final integrated host and every indexed package, regenerate both reports:
 
 ```sh
 make ci-marketplace-host
 make ci-extension-workers EXTENSION=--retain-packages
-python3 -B scripts/extension-host-size-report.py --baseline local/baseline/current-main-size.json --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
+python3 -B scripts/extension-host-size-report.py --source-mode final --expected-source-commit "$(git rev-parse HEAD)" --packages "$FINAL_PACKAGE_DIRECTORY" --baseline local/baseline/current-main-size.json --app "$FINAL_HOST_APP" --host-build "$FINAL_HOST_BUILD_METADATA" --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
 ```
 
-The baseline JSON records source commit `91d0e13de56aaf297ad4630d2c36ef124da5bf0c` and the controlled bundled app measurements. The generator verifies each migrated package's ZIP size, SHA-256, expanded bytes, CRC, and current source fingerprint before producing the comparison. Installed sizes exclude filesystem allocation rounding, receipts, caches, user data, and retained versions.
+The baseline source commit is `91d0e13de56aaf297ad4630d2c36ef124da5bf0c`. Use the runner's exact frozen host app, its matching build metadata and its canonical package directory for `FINAL_HOST_APP`, `FINAL_HOST_BUILD_METADATA` and `FINAL_PACKAGE_DIRECTORY`. An independently re-signed shipping clone is a different provenance input. Final reports require an explicit expected source commit, a matching clean checkout and matching clean host build metadata. Host metadata must match the actual executable checksum. Use `--source-mode interim` for partial or historical measurements; missing build provenance remains explicitly unrecorded. The baseline retains its own recorded source commit and configuration. The empty-host limit remains enforced by the build and shipping verifier, independently of this report.
