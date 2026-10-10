@@ -1,4 +1,5 @@
 import Darwin
+import EdithExtensionSupport
 @preconcurrency import ExtensionFoundation
 import ExtensionMarketplace
 import Foundation
@@ -7,10 +8,12 @@ import Foundation
 public final class HostRemoteSession {
     public let identity: AppExtensionIdentity
     public let configuration: HostRemoteConfiguration
+    public let engineIdentity: HostRemoteKernelIdentity?
     public private(set) var peer: HostRemoteProcessIdentity?
     public var didStop: (@MainActor () -> Void)?
     private static var retained: [UUID: HostRemoteSession] = [:]
     private let executable: URL
+    private let executeEngine: HostRemoteEngineReceiver.Execute
     private var lease: PackageFileLock?
     private var process: AppExtensionProcess?
     private var bootstrap: NSXPCConnection?
@@ -25,20 +28,30 @@ public final class HostRemoteSession {
 
     private init(
         identity: AppExtensionIdentity, configuration: HostRemoteConfiguration,
-        executable: URL, lease: PackageFileLock
+        executable: URL, lease: PackageFileLock, engineIdentity: HostRemoteKernelIdentity?,
+        executeEngine: @escaping HostRemoteEngineReceiver.Execute
     ) {
         self.identity = identity
         self.configuration = configuration
         self.executable = executable
         self.lease = lease
+        self.engineIdentity = engineIdentity
+        self.executeEngine = executeEngine
     }
 
     public static func start(
         identity: AppExtensionIdentity, configuration: HostRemoteConfiguration,
         store: ExtensionPackageStore,
-        receive: @escaping @MainActor (HostRemoteEvent) -> Void = { _ in }
+        receive: @escaping @MainActor (HostRemoteEvent) -> Void = { _ in },
+        engineIdentity: HostRemoteKernelIdentity? = nil,
+        executeEngine:
+            @escaping @MainActor @Sendable (ExtensionEngineRequest) async throws -> Data = {
+                _ in throw HostWorkerError.rejected
+            }
     ) async throws -> HostRemoteSession {
-        guard retained.count < 64, retained[configuration.session] == nil,
+        guard configuration.uiOnly == (engineIdentity == nil),
+            engineIdentity?.isRunning ?? true,
+            retained.count < 64, retained[configuration.session] == nil,
             configuration.package.hostABI == HostContract.compatibility,
             configuration.package.architecture == "arm64",
             configuration.package.minimumSystemVersion
@@ -72,7 +85,8 @@ public final class HostRemoteSession {
         else { throw HostWorkerError.rejected }
         let session = HostRemoteSession(
             identity: identity, configuration: configuration,
-            executable: carrier.worker.appendingPathComponent("Contents/MacOS/Edith"), lease: lease)
+            executable: carrier.worker.appendingPathComponent("Contents/MacOS/Edith"), lease: lease,
+            engineIdentity: engineIdentity, executeEngine: executeEngine)
         retained[configuration.session] = session
         do {
             let process = try await AppExtensionProcess(
@@ -206,10 +220,24 @@ public final class HostRemoteSession {
             throw HostWorkerError.rejected
         }
         let channel = try await HostRemoteChannel.connect(
-            through: bootstrap, executable: executable,
+            through: bootstrap, executable: executable, expectedPeer: peer,
             receive: { event in
                 guard event.presentationID == handle.presentationID else { return }
                 receive(event)
+            },
+            executeEngine: { [weak self, weak handle] request in
+                guard let self, let handle, !handle.closed, !self.stopping, !self.stopped,
+                    !self.configuration.uiOnly, self.handles[handle.presentationID] === handle,
+                    request.presentationID == handle.presentationID,
+                    self.engineIdentity?.isRunning == true
+                else { throw HostWorkerError.rejected }
+                let result = try await self.executeEngine(request)
+                try Task.checkCancellation()
+                guard !handle.closed, !self.stopping, !self.stopped,
+                    self.handles[handle.presentationID] === handle,
+                    self.engineIdentity?.isRunning == true
+                else { throw HostWorkerError.rejected }
+                return result
             })
         guard channel.peer == peer, peer?.isRunning == true,
             handles[handle.presentationID] === handle
@@ -227,7 +255,7 @@ public final class HostRemoteSceneHandle {
     private let session: HostRemoteSession
     private var channel: HostRemoteChannel?
     private var bootstrap: NSXPCConnection?
-    private var closed = false
+    fileprivate var closed = false
     private var presented = false
     private var desired: HostRemotePresentation?
 

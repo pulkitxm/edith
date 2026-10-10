@@ -49,6 +49,31 @@ struct HostRemoteEngineTests {
         #expect(state.completed == 1)
     }
 
+    @Test func foundationClientUsesTheAuthenticatedReverseChannelAndRejectsAnotherPresentation()
+        async throws
+    {
+        let identity = try HostRemoteProcessIdentity.read(getpid())
+        let server = try endpoint(identity)
+        defer { server.invalidate() }
+        let id = UUID()
+        let state = RequestState()
+        let channel = try await HostRemoteChannel.connect(
+            to: listenerEndpoint(server), executable: identity.executable, expectedPeer: identity,
+            executeEngine: { request in
+                guard request.presentationID == id else { throw HostWorkerError.rejected }
+                state.completed += 1
+                return request.payload
+            })
+        defer { channel.invalidate() }
+        let bridge = HostRemoteEngineBridge(endpoint: server, presentationID: id)
+        let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: id))
+        let result = try await client.invoke("sample.read", payload: Data("{\"value\":42}".utf8))
+        #expect(result == Data("{\"value\":42}".utf8))
+        let forged = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
+        await #expect(throws: (any Error).self) { try await forged.invoke("sample.read") }
+        #expect(state.completed == 1)
+    }
+
     @Test func reverseTimeoutCancellationAndDisconnectCancelOwnedHostWork() async throws {
         let identity = try HostRemoteProcessIdentity.read(getpid())
         let server = try endpoint(identity)

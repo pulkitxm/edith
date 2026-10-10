@@ -103,8 +103,45 @@ import Testing
         }
         let settings = HostExtensionContentRequest(
             extensionID: "sample", location: "settings", section: "extension")
-        #expect(try manager.selectedConfiguration(for: settings).uiOnly)
+        #expect(throws: HostWorkerError.rejected) {
+            try manager.selectedConfiguration(for: settings)
+        }
         #expect(await marketplace.sessions.shutdown())
+    }
+
+    @Test func remoteEngineOwnershipRejectsDisabledPendingAndReplacedWorkers() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let package = fixture.package("1.0.0")
+        try fixture.store.commit([package])
+        let marketplace = try fixture.marketplace(workerMode: { _ in "normal" })
+        let manager = HostRemoteSessionManager(marketplace: marketplace)
+        let settings = HostExtensionContentRequest(
+            extensionID: "sample", location: "settings", section: "extension")
+        #expect(throws: HostWorkerError.rejected) {
+            try HostRemoteEngineOwner(
+                marketplace: marketplace,
+                configuration: manager.selectedConfiguration(for: settings))
+        }
+        #expect(marketplace.sessions.processIdentifiers.isEmpty)
+        try await marketplace.sessions.enable(package)
+        let request = HostExtensionContentRequest(extensionID: "sample", location: "main")
+        let owner = try HostRemoteEngineOwner(
+            marketplace: marketplace,
+            configuration: manager.selectedConfiguration(for: request))
+        try owner.validate()
+        marketplace.sessions.requestDisable(ids: ["sample"])
+        #expect(throws: HostWorkerError.rejected) { try owner.validate() }
+        try await marketplace.sessions.disable(id: "sample")
+        try await marketplace.sessions.enable(package)
+        #expect(throws: HostWorkerError.rejected) { try owner.validate() }
+        let replacement = try HostRemoteEngineOwner(
+            marketplace: marketplace,
+            configuration: manager.selectedConfiguration(for: request))
+        try replacement.validate()
+        #expect(replacement.process != owner.process)
+        #expect(await marketplace.sessions.shutdown())
+        #expect(await fixture.network.count == 0)
     }
 
     @Test func bootWithInstalledButDisabledExtensionsUsesNoNetworkOrWorkers() async throws {

@@ -39,6 +39,7 @@ public final class HostRemoteChannel {
 
     public static func connect(
         through bootstrap: NSXPCConnection, executable: URL,
+        expectedPeer: HostRemoteProcessIdentity? = nil,
         receive: @escaping @MainActor (HostRemoteEvent) -> Void = { _ in },
         executeEngine:
             @escaping @MainActor @Sendable (ExtensionEngineRequest) async throws -> Data = {
@@ -53,6 +54,7 @@ public final class HostRemoteChannel {
 
     public static func connect(
         to endpoint: NSXPCListenerEndpoint, executable: URL,
+        expectedPeer: HostRemoteProcessIdentity? = nil,
         receive: @escaping @MainActor (HostRemoteEvent) -> Void = { _ in },
         executeEngine:
             @escaping @MainActor @Sendable (ExtensionEngineRequest) async throws -> Data = {
@@ -66,6 +68,9 @@ public final class HostRemoteChannel {
             _ = try await channel.request(HostRemoteCommand(operation: "authenticate"))
             let peer = try HostRemoteProcessIdentity.verify(
                 channel.connection, executable: executable)
+            guard expectedPeer == nil || expectedPeer == peer else {
+                throw HostWorkerError.rejected
+            }
             channel.peer = peer
             channel.events.authenticate(peer)
             return channel

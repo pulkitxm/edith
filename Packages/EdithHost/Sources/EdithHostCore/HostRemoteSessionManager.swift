@@ -60,9 +60,15 @@ public final class HostRemoteSessionManager {
         try Task.checkCancellation()
         let configuration = try selectedConfiguration(for: request)
         let id = request.extensionID
+        let engine =
+            configuration.uiOnly
+            ? nil
+            : try HostRemoteEngineOwner(
+                marketplace: marketplace, configuration: configuration)
         let session: HostRemoteSession
         if let current = sessions[id], current.configuration.package == configuration.package,
-            current.configuration.uiOnly == configuration.uiOnly, current.peer?.isRunning == true
+            current.configuration.uiOnly == configuration.uiOnly, current.peer?.isRunning == true,
+            current.engineIdentity == engine?.process
         {
             session = current
         } else if let task = starting[id] {
@@ -81,8 +87,11 @@ public final class HostRemoteSessionManager {
                 let session = try await HostRemoteSession.start(
                     identity: identity, configuration: configuration,
                     store: marketplace.packageStore,
-                    receive: { [weak self] event in
-                        self?.receive(id, event)
+                    receive: { [weak self] event in self?.receive(id, event) },
+                    engineIdentity: engine?.process,
+                    executeEngine: { request in
+                        guard let engine else { throw HostWorkerError.rejected }
+                        return try await engine.invoke(request)
                     })
                 if Task.isCancelled { try? await session.stop(); throw CancellationError() }
                 session.didStop = { [weak self, weak session] in
@@ -103,7 +112,9 @@ public final class HostRemoteSessionManager {
         try Task.checkCancellation()
         let current = try selectedConfiguration(for: request)
         guard current.package == session.configuration.package,
-            current.uiOnly == session.configuration.uiOnly
+            current.uiOnly == session.configuration.uiOnly,
+            session.engineIdentity == engine?.process,
+            engine?.process.isRunning ?? true
         else { try await session.stop(); throw HostWorkerError.rejected }
         let handle = try await session.reserve(request)
         presentations[request.presentationID] = handle
@@ -167,6 +178,8 @@ public final class HostRemoteSessionManager {
         guard marketplace.entries.contains(where: { $0.id == request.extensionID }),
             let package = marketplace.installed[request.extensionID],
             !marketplace.pendingRemovalIDs.contains(request.extensionID),
+            !marketplace.sessions.pendingDisableIDs.contains(request.extensionID),
+            marketplace.sessions.states[request.extensionID] != .stopping,
             package.hostABI == HostContract.compatibility, package.architecture == "arm64",
             package.minimumSystemVersion
                 <= ProcessInfo.processInfo.operatingSystemVersion.majorVersion
