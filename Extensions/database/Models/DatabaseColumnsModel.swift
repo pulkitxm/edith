@@ -187,6 +187,22 @@ final class DatabaseColumnsModel {
         return stored
     }
 
+    static func validateStoredLayouts(_ data: Data) throws {
+        guard data.count <= 4 * 1024 * 1024 else {
+            throw DatabaseBrokerCommandClientError.invalidRequest
+        }
+        let stored = try JSONDecoder().decode(DatabaseColumnsStoredLayouts.self, from: data)
+        guard stored.version == DatabaseColumnsStoredLayouts.currentVersion,
+            stored.layouts.count <= 4096,
+            stored.layouts.allSatisfy({ layout in
+                layout.columns.count <= 2048
+                    && layout.columns.allSatisfy { column in
+                        column.width.map { $0.isFinite && (90...520).contains($0) } ?? true
+                    }
+            })
+        else { throw DatabaseBrokerCommandClientError.invalidRequest }
+    }
+
     private static func mergedColumns(
         fields: [DatabaseFieldDescriptor],
         stored: [DatabaseColumnsStoredColumn]

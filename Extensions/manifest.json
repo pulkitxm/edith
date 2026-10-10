@@ -2695,6 +2695,7 @@
     "roles": {
       "app": [
         "Extensions/database/AccessibilityAnnouncement.swift",
+        "Extensions/database/DatabaseUICommands.swift",
         "Extensions/database/DatabaseWorkerClient.swift",
         "Extensions/database/Models/DatabaseColumnsModel.swift",
         "Extensions/database/Models/DatabaseConnectionCreationModel.swift",

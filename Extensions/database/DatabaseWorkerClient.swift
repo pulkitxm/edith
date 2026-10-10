@@ -27,6 +27,13 @@ struct DatabaseWorkerClient: DatabaseBrokerCommandSending {
         await current?.shutdown()
     }
 
+    static func credentialStore() throws -> any DatabaseSecretStore {
+        guard let service = lock.withLock({ Self.engine == nil ? nil : Self.service }) else {
+            throw DatabaseEngineError.stopped
+        }
+        return try DatabaseKeychainSecretStore(service: service)
+    }
+
     static func restart() async throws {
         let current = lock.withLock { engine }
         guard let current else { throw DatabaseEngineError.stopped }

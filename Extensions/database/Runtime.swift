@@ -8,11 +8,15 @@ import SwiftUI
 final class ExtensionRuntime: NSObject {
     private var session: DatabasePageSession?
     private var surface: DatabaseSurface?
+    private var uiCommands: DatabaseUICommands?
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, self.session != nil else { throw ExtensionPeerError.unavailable }
+            if let result = try await self.uiCommands?.invoke(command, payload: payload) {
+                return result
+            }
             if command == "database.execute" {
                 let request = try JSONDecoder().decode(
                     DatabaseBrokerCommandRequest.self, from: payload)
@@ -31,6 +35,7 @@ final class ExtensionRuntime: NSObject {
         session?.shutdown()
         surface?.shutdown()
         surface = nil
+        uiCommands = nil
         session = nil
         Task {
             await DatabaseWorkerClient.shutdown()
@@ -60,6 +65,16 @@ final class ExtensionRuntime: NSObject {
                     "EDITH_APPLICATION_IDENTIFIER"] ?? "edith.extension.fixture")
                     + ".database.secrets")
             DatabasePrivacy.start()
+            uiCommands = DatabaseUICommands(
+                sender: DatabaseWorkerClient(),
+                readColumns: { SharedDefaults.store.data(forKey: "database.columns.layouts.v1") },
+                writeColumns: {
+                    SharedDefaults.store.set($0, forKey: "database.columns.layouts.v1")
+                },
+                privateContent: { DatabasePrivacy.hidden },
+                credentials: { try DatabaseWorkerClient.credentialStore() },
+                prepare: { try await DatabaseMachineForwardRouter.prepare($0) },
+                repair: { try await DatabaseWorkerClient.restart() })
             let session = DatabasePageSession()
             self.session = session
             surface = DatabaseSurface(session: session)
