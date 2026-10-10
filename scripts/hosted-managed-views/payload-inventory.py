@@ -48,7 +48,7 @@ def payload_inventory(root, *, identity=executable_identity, verify=None):
             if filetype not in (2, 6):
                 raise ValueError('Unsupported role code type')
             code[relative] = {**identity(path, filetype=filetype), 'mode': record['mode'], 'filetype': filetype}
-        elif data[:4] in (b'\xfe\xed\xfa\xcf', b'\xca\xfe\xba\xbe', b'\xbe\xba\xfe\xca', b'\xce\xfa\xed\xfe'):
+        elif data[:4] in (b'\xfe\xed\xfa\xcf', b'\xca\xfe\xba\xbe', b'\xbe\xba\xfe\xca', b'\xce\xfa\xed\xfe', b'\xfe\xed\xfa\xce', b'\xca\xfe\xba\xbf', b'\xbf\xba\xfe\xca'):
             raise ValueError('Unsupported role code architecture')
         else:
             resources[relative] = record

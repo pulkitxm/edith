@@ -50,7 +50,7 @@ class PayloadInventoryTests(unittest.TestCase):
                 module.payload_inventory(root, identity=lambda _: self.fail('read code'), verify=fail)
 
     def test_fat_or_unknown_native_code_is_never_treated_as_resource(self):
-        for data in [b'\xca\xfe\xba\xbe', struct.pack('<4I', 0xfeedfacf, 0x0100000c, 0, 8), b'\xcf\xfa\xed\xfe']:
+        for data in [b'\xca\xfe\xba\xbe', b'\xca\xfe\xba\xbf', b'\xbf\xba\xfe\xca', b'\xfe\xed\xfa\xce', struct.pack('<4I', 0xfeedfacf, 0x0100000c, 0, 8), b'\xcf\xfa\xed\xfe']:
             with self.subTest(data=data), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory).resolve()
                 (root / 'code').write_bytes(data)

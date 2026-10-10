@@ -18,7 +18,7 @@ def parse(data, signed, *, filetype=2):
         raise ValueError('Truncated Mach-O header')
     header = struct.unpack_from('<8I', data)
     if header[0] != 0xfeedfacf or header[1] != 0x0100000c or header[2] != 0 or header[3] != filetype:
-        raise ValueError('Only thin arm64 executables are supported')
+        raise ValueError('Only thin arm64 code images are supported')
     count, size = header[4:6]
     if not 1 <= count <= 4096 or size > len(data) - 32:
         raise ValueError('Invalid load command bounds')
