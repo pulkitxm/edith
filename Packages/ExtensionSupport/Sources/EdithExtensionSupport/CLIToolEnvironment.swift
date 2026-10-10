@@ -74,7 +74,12 @@ public enum CLIToolEnvironment {
     private static func commonDirectories(
         processEnvironment: [String: String], fileManager: FileManager
     ) -> [String] {
-        let home = fileManager.homeDirectoryForCurrentUser
+        let home: URL
+        if let path = processEnvironment["HOME"], path.hasPrefix("/"), !path.utf8.contains(0) {
+            home = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+        } else {
+            home = fileManager.homeDirectoryForCurrentUser
+        }
         var directories = [
             ExtensionData.root.appendingPathComponent("bin").path,
             home.appendingPathComponent(".local/bin").path,
@@ -91,11 +96,6 @@ public enum CLIToolEnvironment {
                 contentsOf: versions.sorted {
                     nodeVersionOrder($0.lastPathComponent, $1.lastPathComponent)
                 }.map { $0.appendingPathComponent("bin").path }, at: 3)
-        }
-        if let configuredHome = processEnvironment["HOME"], !configuredHome.isEmpty {
-            directories.insert(
-                URL(fileURLWithPath: configuredHome).appendingPathComponent(".local/bin").path,
-                at: 1)
         }
         return directories
     }

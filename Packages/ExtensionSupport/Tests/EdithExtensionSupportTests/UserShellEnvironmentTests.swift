@@ -27,7 +27,8 @@ import Testing
     @Test func toolEnvironmentPrefersTheShellPathAndImportsUserVariables() throws {
         let environment = CLIToolEnvironment.sanitized(
             processEnvironment: [
-                "PATH": "/usr/bin:/bin", "EDITH_DATA_ROOT": "/private/tmp/edith-data",
+                "PATH": "/usr/bin:/bin", "HOME": "/synthetic/home",
+                "EDITH_DATA_ROOT": "/private/tmp/edith-data",
                 "TMPDIR": "/private/tmp/process",
             ],
             shellEnvironment: [
@@ -52,7 +53,9 @@ import Testing
 
     @Test func explicitProcessValuesWinOverShellExports() {
         let environment = CLIToolEnvironment.sanitized(
-            processEnvironment: ["PATH": "/usr/bin", "TOOL_HOME": "/private/tmp/isolated"],
+            processEnvironment: [
+                "PATH": "/usr/bin", "HOME": "/synthetic/home", "TOOL_HOME": "/private/tmp/isolated",
+            ],
             shellEnvironment: ["PATH": "/usr/bin", "TOOL_HOME": "/Users/example/.tool"])
 
         #expect(environment["TOOL_HOME"] == "/private/tmp/isolated")
@@ -154,6 +157,55 @@ import Testing
         #expect(
             versions.sorted(by: CLIToolEnvironment.nodeVersionOrder)
                 == ["v22.3.0", "v18.10.0", "v18.9.1", "v9.11.2"])
+    }
+
+    @Test func explicitHomeOwnsEveryToolAndNodeDiscoveryPath() throws {
+        let files = SyntheticToolFileManager()
+        let home = "/synthetic/owned-home"
+        let environment = CLIToolEnvironment.sanitized(
+            processEnvironment: ["HOME": home, "PATH": "/usr/bin"], shellEnvironment: nil,
+            fileManager: files)
+        let path = try #require(environment["PATH"]).split(separator: ":").map(String.init)
+        #expect(files.homeReads == 0)
+        #expect(files.directoriesRead == [home + "/.nvm/versions/node"])
+        #expect(path.contains(home + "/.local/bin"))
+        #expect(path.contains(home + "/.cargo/bin"))
+        #expect(path.contains(home + "/.nvm/current/bin"))
+        #expect(path.contains(home + "/.nvm/versions/node/v22.3.0/bin"))
+        #expect(!path.contains { $0.hasPrefix("/synthetic/system-home") })
+        #expect(environment["HOME"] == home)
+    }
+
+    @Test(arguments: [nil, "", "relative-home", "/invalid\u{0}home"] as [String?])
+    func missingOrInvalidHomeUsesOnlyTheInjectedSystemHome(home: String?) throws {
+        let files = SyntheticToolFileManager()
+        var process = ["PATH": "/usr/bin"]
+        process["HOME"] = home
+        let environment = CLIToolEnvironment.sanitized(
+            processEnvironment: process, shellEnvironment: nil, fileManager: files)
+        let path = try #require(environment["PATH"]).split(separator: ":").map(String.init)
+        #expect(files.homeReads == 1)
+        #expect(files.directoriesRead == ["/synthetic/system-home/.nvm/versions/node"])
+        #expect(path.contains("/synthetic/system-home/.local/bin"))
+        #expect(!path.contains { $0.contains("relative-home") || $0.utf8.contains(0) })
+    }
+}
+
+private final class SyntheticToolFileManager: FileManager, @unchecked Sendable {
+    private(set) var homeReads = 0
+    private(set) var directoriesRead: [String] = []
+
+    override var homeDirectoryForCurrentUser: URL {
+        homeReads += 1
+        return URL(fileURLWithPath: "/synthetic/system-home")
+    }
+
+    override func contentsOfDirectory(
+        at url: URL, includingPropertiesForKeys keys: [URLResourceKey]?,
+        options mask: FileManager.DirectoryEnumerationOptions = []
+    ) throws -> [URL] {
+        directoriesRead.append(url.path)
+        return ["v18.9.1", "v22.3.0"].map { url.appendingPathComponent($0) }
     }
 }
 
