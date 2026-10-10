@@ -89,6 +89,17 @@ import EdithStudio
         #expect(
             (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool == true
         )
+        _ = runtime.execute(["operation": "stopUI"])
+        let snapshot: (NSData?, NSString?) = await withCheckedContinuation { continuation in
+            runtime.invoke(
+                [
+                    "token": UUID().uuidString, "command": "studio.tools.list",
+                    "payload": Data("{}".utf8),
+                ],
+                completion: { continuation.resume(returning: ($0, $1)) })
+        }
+        #expect(snapshot.0 != nil)
+        #expect(snapshot.1 == nil)
         let blocked: (NSData?, NSString?) = await withCheckedContinuation { continuation in
             runtime.invoke(
                 ["token": UUID().uuidString, "command": "studio.cli", "payload": Data()],

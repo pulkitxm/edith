@@ -59,7 +59,7 @@ final class ExtensionRuntime: NSObject {
                         }, perform: { _ in throw ExtensionPeerError.unavailable })
                 }
                 guard
-                    ["studio.tools.list", "studio.tools.schema", "studio.ui.settings.snapshot"]
+                    ["studio.tools.list", "studio.tools.schema"]
                         .contains(command)
                 else { throw ExtensionPeerError.unavailable }
             }
@@ -130,6 +130,11 @@ final class ExtensionRuntime: NSObject {
                             model, files: files, projects: projects, tile: tile)
                     },
                     perform: { action in try StudioSurface.perform(action, model: model) })
+            }
+            if let fixture = self.fixture {
+                return try await StudioCommands.execute(
+                    command, payload: payload, model: model,
+                    workflowDirectory: fixture.admission.dataDirectory)
             }
             return try await StudioCommands.execute(command, payload: payload, model: model)
         }
@@ -214,9 +219,10 @@ final class ExtensionRuntime: NSObject {
             uiScenes[client.presentationID] = StudioUIScene(client: client, route: route)
         case "stopUI":
             if input["presentationID"] == nil {
+                let hadUI = !uiScenes.isEmpty
                 for scene in uiScenes.values { scene.stop() }
                 uiScenes.removeAll()
-                TextEditingCommands.shutdown()
+                if hadUI { TextEditingCommands.shutdown() }
                 return ["ok": true] as NSDictionary
             }
             guard let value = input["presentationID"] as? String,

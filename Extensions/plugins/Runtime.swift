@@ -102,10 +102,11 @@ final class ExtensionRuntime: NSObject {
             uiModel = SkillsModel(remote: PluginsUIBridge(client: client))
             TextEditingCommands.install()
         case "stopUI":
+            let hadUI = engineClient != nil || uiModel != nil
             engineClient?.invalidate(); engineClient = nil
             let model = uiModel; uiModel = nil
             Task { await model?.shutdown() }
-            TextEditingCommands.shutdown()
+            if hadUI { TextEditingCommands.shutdown() }
         case "start":
             guard let suite = input["defaultsSuite"] as? String
             else { return ["ok": false] as NSDictionary }

@@ -27,7 +27,12 @@ struct StudioFixtureTools: Sendable {
             let directory = fdopendir(descriptor)
         else { Darwin.close(descriptor); throw WorkerFixtureError.invalid }
         defer { closedir(directory) }
-        while let entry = readdir(directory) {
+        while true {
+            errno = 0
+            guard let entry = readdir(directory) else {
+                guard errno == 0 else { throw WorkerFixtureError.invalid }
+                break
+            }
             let name = withUnsafePointer(to: entry.pointee.d_name) {
                 $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXNAMLEN) + 1) {
                     String(cString: $0)

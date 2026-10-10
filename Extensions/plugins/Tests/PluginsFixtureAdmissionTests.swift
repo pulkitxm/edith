@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Foundation
 import Testing
 import WorkerFixtureSupport
@@ -58,6 +59,10 @@ import WorkerFixtureTestSupport
         let tools = try PluginsFixtureTools(admission: input.admission)
         #expect(tools.toolbin.path.hasPrefix(input.admission.home.path + "/"))
         #expect(try FileManager.default.contentsOfDirectory(atPath: tools.toolbin.path).isEmpty)
+        #expect(!tools.agentMarkerExists("/external-fixture-path", exists: { _ in
+            Issue.record("Fixture discovery escaped the owned home"); return true
+        }))
+        #expect(tools.agentMarkerExists(tools.toolbin.path))
         #expect(tools.executable(named: "npx") == nil)
         #expect(tools.executable(named: "node") == nil)
         #expect(tools.executable(named: "ffmpeg") == nil)
@@ -81,6 +86,20 @@ import WorkerFixtureTestSupport
         #expect(
             (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool == true
         )
+        _ = runtime.execute(["operation": "stopUI"])
+        let snapshotPayload = try SurfaceSnapshotRequest(
+            target: .home, tile: SurfaceTile(.ability("plugins"))
+        ).encoded(providerID: "plugins")
+        let snapshot: (NSData?, NSString?) = await withCheckedContinuation { continuation in
+            runtime.invoke(
+                [
+                    "token": UUID().uuidString, "command": "surface.snapshot",
+                    "payload": snapshotPayload,
+                ],
+                completion: { continuation.resume(returning: ($0, $1)) })
+        }
+        #expect(snapshot.0 != nil)
+        #expect(snapshot.1 == nil)
         let blocked: (NSData?, NSString?) = await withCheckedContinuation { continuation in
             runtime.invoke(
                 ["token": UUID().uuidString, "command": "plugins.cli", "payload": Data()],

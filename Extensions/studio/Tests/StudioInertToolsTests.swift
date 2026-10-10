@@ -10,12 +10,16 @@ import Testing
         override func set(_ value: Any?, forKey key: String) {}
     }
 
-    @MainActor @Test func explicitInertDependenciesOwnStartupRefreshInstallAndShutdown() async throws {
+    @MainActor @Test func explicitInertDependenciesOwnStartupRefreshInstallAndShutdown()
+        async throws
+    {
         let defaults = try #require(MemoryDefaults(suiteName: UUID().uuidString))
         let root = URL(fileURLWithPath: "/synthetic-studio-fixture")
-        let model = StudioModel(defaults: defaults, loadsState: false, startsLibrary: false,
+        let model = StudioModel(
+            defaults: defaults, loadsState: false, startsLibrary: false,
             detectEnvironment: {
-                StudioEnvironment(temporaryRoot: root, appleIntelligenceAvailable: false,
+                StudioEnvironment(
+                    temporaryRoot: root, appleIntelligenceAvailable: false,
                     translationAvailable: false)
             }, installEngine: { _, _ in "Fixture installation unavailable" })
         model.start()
@@ -44,4 +48,71 @@ import Testing
         #expect(model.installing == nil)
         #expect(model.environment.qpdf == nil)
     }
+
+    private final class DetectionGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private let semaphore = DispatchSemaphore(value: 0)
+        private var began = false
+
+        var started: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return began
+        }
+
+        func wait() {
+            lock.lock()
+            began = true
+            lock.unlock()
+            semaphore.wait()
+        }
+
+        func release() { semaphore.signal() }
+    }
+
+    @MainActor @Test func shutdownDrainsLateDetectionAndInstallationWithoutPublishingResults()
+        async throws
+    {
+        let defaults = try #require(MemoryDefaults(suiteName: UUID().uuidString))
+        let detection = DetectionGate()
+        let installation = DetectionGate()
+        defer { detection.release(); installation.release() }
+        let lateRoot = URL(fileURLWithPath: "/synthetic-late-fixture")
+        let model = StudioModel(
+            defaults: defaults, loadsState: false, startsLibrary: false,
+            detectEnvironment: {
+                detection.wait()
+                return StudioEnvironment(
+                    temporaryRoot: lateRoot, appleIntelligenceAvailable: false,
+                    translationAvailable: false)
+            },
+            installEngine: { _, _ in
+                await Task.detached { installation.wait() }.value
+                return "Late fixture installation result"
+            })
+        let originalRoot = model.environment.temporaryRoot
+        model.start()
+        model.install(.ffmpeg)
+        for _ in 0..<10_000 {
+            if detection.started && installation.started { break }
+            await Task.yield()
+        }
+        #expect(detection.started)
+        #expect(installation.started)
+        let stopping = Task { await model.stopAndWait() }
+        for _ in 0..<10_000 {
+            if model.isStopped { break }
+            await Task.yield()
+        }
+        #expect(model.isStopped)
+        detection.release()
+        installation.release()
+        await stopping.value
+        #expect(model.environment.temporaryRoot == originalRoot)
+        #expect(model.environment.temporaryRoot != lateRoot)
+        #expect(model.message != "Late fixture installation result")
+        #expect(model.notice == nil)
+        #expect(model.installing == nil)
+    }
+
 }
