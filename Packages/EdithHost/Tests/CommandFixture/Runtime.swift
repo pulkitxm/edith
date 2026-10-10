@@ -12,6 +12,12 @@ final class CommandFixtureRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { command, payload in
             switch command {
+            case "fixture.identity":
+                return try JSONSerialization.data(withJSONObject: [
+                    "bundlePath": Bundle(for: CommandFixtureRuntime.self).bundleURL.path,
+                    "pid": getpid(), "id": "keepAwake", "version": "1.0.0",
+                    "hostABI": "edith-host-2", "role": "helper",
+                ])
             case "echo": return payload
             case "blockUI": return Self.blockUI()
             case "wait":
@@ -53,7 +59,7 @@ final class CommandFixtureRuntime: NSObject {
         switch input["operation"] as? String {
         case "describe":
             return [
-                "id": "keepAwake", "version": "1.0.0", "hostABI": "edith-host-1", "role": "helper",
+                "id": "keepAwake", "version": "1.0.0", "hostABI": "edith-host-2", "role": "helper",
             ] as NSDictionary
         case "start":
             guard let path = input["dataDirectory"] as? String,

@@ -1,3 +1,4 @@
+import CryptoKit
 import Darwin
 import EdithHostCore
 import EdithExtensionSupport
@@ -11,23 +12,20 @@ struct HostCommandHarness {
         let arguments = Array(CommandLine.arguments.dropFirst())
         guard arguments.count == 3 else { throw HostWorkerError.rejected }
         let root = URL(fileURLWithPath: arguments[0])
-        let app = root.appendingPathComponent("Fixture.app")
-        try FileManager.default.copyItem(at: URL(fileURLWithPath: arguments[1]), to: app)
-        let identifier = "com.pulkit.edith.tests.command-\(UUID().uuidString)"
-        let info = app.appendingPathComponent("Contents/Info.plist")
-        var plist =
-            try PropertyListSerialization.propertyList(from: Data(contentsOf: info), format: nil)
-            as! [String: Any]
-        plist["CFBundleIdentifier"] = identifier
-        plist["CFBundleName"] = "Command Fixture"
-        try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0).write(
-            to: info)
-        let signer = Process()
-        signer.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
-        signer.arguments = ["--force", "--sign", "-", app.path]
-        try signer.run()
-        signer.waitUntilExit()
-        guard signer.terminationStatus == 0 else { throw MarketplaceError.invalidSignature }
+        let app = URL(fileURLWithPath: arguments[1]).standardizedFileURL
+        guard app == root.appendingPathComponent("Fixture.app").standardizedFileURL,
+            let bundle = Bundle(url: app), let identifier = bundle.bundleIdentifier,
+            identifier.hasPrefix("com.pulkit.edith.tests.command-"),
+            HostContract.compatibility == "edith-host-2"
+        else {
+            throw NSError(
+                domain: "ExtensionFixture", code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Host identity mismatch: app=\(app), expected=\(root.appendingPathComponent("Fixture.app").standardizedFileURL), identifier=\(Bundle(url: app)?.bundleIdentifier ?? "missing"), ABI=\(HostContract.compatibility)"
+                ])
+        }
+        try ExtensionCodeSignature.verifyDevelopment(app)
         let executable = app.appendingPathComponent("Contents/MacOS/Edith")
         let identity = try HostIdentity(identifier: identifier, supportDirectory: root)
         let store = ExtensionPackageStore(root: identity.root.appendingPathComponent("Extensions"))
@@ -37,10 +35,12 @@ struct HostCommandHarness {
                 string: "https://github.com/pulkitxm/edith/releases/download/fixture/keepAwake.zip")!,
             sha256: String(repeating: "0", count: 64), downloadBytes: 1, installedBytes: 1)
         let directory = store.directory(for: package).appendingPathComponent(package.id)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try FileManager.default.copyItem(
-            at: URL(fileURLWithPath: arguments[2]),
-            to: directory.appendingPathComponent("helper.bundle"))
+        try FileManager.default.createDirectory(
+            at: directory.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: URL(fileURLWithPath: arguments[2]), to: directory)
+        let carrier = try verifyCarrier(
+            directory: directory, store: store, package: package,
+            identifier: identifier, executable: executable)
         try store.commit([package])
         let suite = identity.extensionDefaultsSuite(package.id)
         guard let defaults = UserDefaults(suiteName: suite) else { throw HostWorkerError.rejected }
@@ -63,7 +63,9 @@ struct HostCommandHarness {
             do {
                 try await worker.start()
                 stage = "child command"
-                guard let pid = worker.processIdentifier else { throw HostWorkerError.rejected }
+                guard let pid = worker.processIdentifier,
+                    try executablePath(pid) == canonicalPath(executable)
+                else { throw HostWorkerError.rejected }
                 try await wait {
                     FileManager.default.fileExists(
                         atPath: data.appendingPathComponent("child.pid").path)
@@ -107,6 +109,19 @@ struct HostCommandHarness {
                     namespace: identifier, owner: package.id,
                     directory: identity.root.appendingPathComponent("ExtensionState/Commands"))
                 stage = "peer commands"
+                let description =
+                    try JSONSerialization.jsonObject(
+                        with: await endpoint.invoke("fixture.identity")) as? [String: Any]
+                guard description?["pid"] as? Int32 == pid,
+                    description?["id"] as? String == package.id,
+                    description?["version"] as? String == package.version,
+                    description?["hostABI"] as? String == HostContract.compatibility,
+                    description?["role"] as? String == "helper",
+                    let loadedPath = description?["bundlePath"] as? String,
+                    try canonicalPath(URL(fileURLWithPath: loadedPath))
+                        == canonicalPath(store.roleBundle(for: package, role: .helper)),
+                    carrier.hostExecutablePath == (try canonicalPath(executable))
+                else { throw HostWorkerError.invalidResponse }
                 try await verifyCommands(endpoint, data: data)
                 let pending = Task { try await endpoint.invoke("wait", timeout: 30) }
                 try await wait {
@@ -157,7 +172,7 @@ struct HostCommandHarness {
                     throw HostWorkerError.invalidResponse
                 }
                 print(
-                    "{\"mode\":\"\(mode)\",\"sameAppExecutable\":true,\"binaryInput\":true,\"argumentsAndEnvironment\":true,\"peerCommands\":true,\"commandCancellation\":true,\"boundedShutdown\":true,\"isolatedSupportTypes\":true,\"remainingProcesses\":0}"
+                    "{\"mode\":\"\(mode)\",\"sameAppExecutable\":true,\"nestedHelperRole\":true,\"carrierMetadata\":true,\"signatureVerified\":true,\"frozenExecutableProvenance\":true,\"binaryInput\":true,\"argumentsAndEnvironment\":true,\"peerCommands\":true,\"commandCancellation\":true,\"boundedShutdown\":true,\"isolatedSupportTypes\":true,\"remainingProcesses\":0}"
                 )
             } catch {
                 try? await worker.stop()
@@ -172,6 +187,61 @@ struct HostCommandHarness {
 
             }
         }
+    }
+
+    private static func verifyCarrier(
+        directory: URL, store: ExtensionPackageStore,
+        package: ExtensionPackage, identifier: String, executable: URL
+    ) throws -> ExtensionUICarrier {
+        let carrier = try ExtensionUICarrier(
+            payload: directory, package: package, expectedHostIdentifier: identifier)
+        try carrier.verifyDevelopment()
+        let role = store.roleBundle(for: package, role: .helper)
+        let expectedRole = directory.appendingPathComponent(
+            "ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/keepAwake/helper.bundle"
+        )
+        guard role == expectedRole,
+            !FileManager.default.fileExists(
+                atPath: directory.appendingPathComponent("helper.bundle").path),
+            let bundle = Bundle(url: role),
+            bundle.bundleIdentifier == "com.pulkit.edith.extensions.keepAwake.helper",
+            bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+                == package.version,
+            bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String
+                == HostContract.compatibility,
+            carrier.hostExecutablePath == (try canonicalPath(executable)),
+            carrier.executableProvenance
+                == SHA256.hash(data: try Data(contentsOf: executable)).map({
+                    String(format: "%02x", $0)
+                }).joined()
+        else {
+            throw NSError(
+                domain: "ExtensionFixture", code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Nested role mismatch: role=\(role), expected=\(expectedRole), identifier=\(Bundle(url: role)?.bundleIdentifier ?? "missing"), ABI=\(Bundle(url: role)?.object(forInfoDictionaryKey: "EdithHostABI") ?? "missing"), hostPath=\(carrier.hostExecutablePath), expectedHost=\(executable.resolvingSymlinksInPath().path), provenance=\(carrier.executableProvenance)"
+                ])
+        }
+        try ExtensionCodeSignature.verifyDevelopment(role)
+        return carrier
+    }
+
+    private static func canonicalPath(_ url: URL) throws -> String {
+        guard let path = realpath(url.path, nil) else { throw HostWorkerError.rejected }
+        defer { free(path) }
+        return String(cString: path)
+    }
+
+    private static func executablePath(_ pid: Int32) throws -> String {
+        var bytes = [CChar](repeating: 0, count: 4_096)
+        guard proc_pidpath(pid, &bytes, UInt32(bytes.count)) > 0 else {
+            throw HostWorkerError.rejected
+        }
+        return try canonicalPath(
+            URL(
+                fileURLWithPath: String(
+                    decoding: bytes.prefix(while: { $0 != 0 }).map { UInt8(bitPattern: $0) },
+                    as: UTF8.self)))
     }
 
     @MainActor private static func verifyCommands(_ endpoint: ExtensionPeerEndpoint, data: URL)
