@@ -1,5 +1,4 @@
 import AppKit
-import CoreServices
 import CryptoKit
 import Darwin
 import Foundation
@@ -11,8 +10,11 @@ final class OriginalShellJourneyTests: XCTestCase {
     private var root = URL(fileURLWithPath: "/")
     private var snapshots: [[String: Any]] = []
     private var startup: [String: Any] = [:]
+    private var outcomeSequence = 0
+    private var lastState: [String: Any] = [:]
+    private var windowImages: [String: Data] = [:]
 
-    func testOriginalCalendarInstallCustomizeReplaceUpdateDisableAndRemove() throws {
+    func testOriginalCalendarInstallCustomizeReplaceUpdateDisableAndRemove() async throws {
         continueAfterFailure = false
         let environment = ProcessInfo.processInfo.environment
         root = URL(fileURLWithPath: try XCTUnwrap(environment["EDITH_GUI_FIXTURE_DIRECTORY"]))
@@ -36,7 +38,7 @@ final class OriginalShellJourneyTests: XCTestCase {
         ]) { _, next in next }
         try saveOutcome()
         XCTAssertTrue(windowPresent)
-        try waitState("empty-idle") { state in
+        try await waitState("empty-idle") { state in
             (state["downloaded"] as? [String]) == [] && (state["workers"] as? [String: Int]) == [:]
         }
         XCTAssertFalse(application.buttons["journey.navigation.machines"].exists)
@@ -58,7 +60,7 @@ final class OriginalShellJourneyTests: XCTestCase {
             XCTAssertEqual(checkbox.value as? String, "0")
         }
         try click(application.buttons["Install 1 extensions"], in: application)
-        try waitState("recommended-calendar-installed") {
+        try await waitState("recommended-calendar-installed") {
             ($0["versions"] as? [String: String])?["calendar"] == "1.0.0"
                 && ($0["active"] as? [String]) == ["calendar"]
         }
@@ -67,7 +69,7 @@ final class OriginalShellJourneyTests: XCTestCase {
         try approveCalendarIfNeeded(application, identifier: fixture.identifier)
         XCTAssertTrue(
             application.staticTexts["Synthetic Calendar review"].waitForExistence(timeout: 45))
-        try waitState("calendar-native-view") {
+        try await waitState("calendar-native-view") {
             ($0["presentationCounts"] as? [String: Int])?["calendar", default: 0] ?? 0 > 0
                 && ($0["ownedProcesses"] as? [[String: Any]])?.contains {
                     $0["role"] as? String == "managedUI" && $0["running"] as? Bool == true
@@ -76,60 +78,58 @@ final class OriginalShellJourneyTests: XCTestCase {
         try click(application.buttons["Details"].firstMatch, in: application)
         XCTAssertTrue(
             application.staticTexts["Synthetic agenda notes"].waitForExistence(timeout: 15))
-        try capture("calendar-native-use")
+        try await capture("calendar-native-use")
         try click(application.buttons["journey.navigation.home"], in: application)
         try click(application.buttons["Widget editor"], in: application)
-        let before = try state()
+        let before = try await state()
         try click(application.buttons["Add Meetings"], in: application)
-        try waitState("home-customized") {
+        try await waitState("home-customized") {
             Self.tiles($0, target: "home").count > Self.tiles(before, target: "home").count
         }
         try click(application.buttons["Notch"], in: application)
-        let beforeNotch = try state()
+        let beforeNotch = try await state()
         try click(application.buttons["Add Meetings"], in: application)
-        try waitState("notch-customized") {
+        try await waitState("notch-customized") {
             Self.tiles($0, target: "notch").count > Self.tiles(beforeNotch, target: "notch").count
         }
-        let customized = try state()
+        let customized = try await state()
         let home = try canonical(customized["home"])
         let notch = try canonical(customized["notch"])
         try click(application.buttons["journey.navigation.extensions"], in: application)
         try findCalendar(application)
         try captureWindow(application, fixture: fixture, name: "marketplace-installed-calendar.png")
         try click(application.buttons["Disable"], in: application)
-        try waitState("disabled-drained") {
+        try await waitState("disabled-drained") {
             ($0["workers"] as? [String: Int]) == [:]
                 && ($0["presentationCounts"] as? [String: Int]) == [:]
                 && !Self.running($0, role: "engine")
                 && !Self.running($0, role: "managedUI")
         }
-        try assertLayouts(home: home, notch: notch)
+        try await assertLayouts(home: home, notch: notch)
         XCTAssertFalse(application.buttons["journey.navigation.calendar"].exists)
         try click(application.buttons["Enable"], in: application)
-        try waitState("reenabled-original-version") {
+        try await waitState("reenabled-original-version") {
             ($0["versions"] as? [String: String])?["calendar"] == "1.0.0"
         }
         application.terminate()
         XCTAssertTrue(wait(15) { !self.latestRunningProcesses() })
-        try replaceApplication(fixture)
-        try Data(contentsOf: root.appendingPathComponent("updated-catalog.json"))
-            .write(to: root.appendingPathComponent("active-catalog.json"), options: .atomic)
+        try await replaceApplication(fixture)
         try registerApplication(fixture)
         application.launch()
         XCTAssertTrue(application.windows.firstMatch.waitForExistence(timeout: 30))
-        try waitState("replacement-restored-installed-state") {
+        try await waitState("replacement-restored-installed-state") {
             $0["applicationVersion"] as? String == "2.0.0"
                 && ($0["versions"] as? [String: String])?["calendar"] == "1.0.0"
         }
-        try assertLayouts(home: home, notch: notch)
+        try await assertLayouts(home: home, notch: notch)
         try click(application.buttons["journey.navigation.extensions"], in: application)
         try findCalendar(application)
         try click(application.buttons["Check for Updates"], in: application)
         try click(application.buttons["Update"], in: application)
-        try waitState("updated-calendar-version") {
+        try await waitState("updated-calendar-version") {
             ($0["versions"] as? [String: String])?["calendar"] == "1.1.0"
         }
-        try assertLayouts(home: home, notch: notch)
+        try await assertLayouts(home: home, notch: notch)
         try click(application.buttons["Open"], in: application)
         try approveCalendarIfNeeded(application, identifier: fixture.identifier)
         XCTAssertTrue(
@@ -137,15 +137,15 @@ final class OriginalShellJourneyTests: XCTestCase {
         try click(application.buttons["journey.navigation.extensions"], in: application)
         try findCalendar(application)
         try click(application.buttons["Disable"], in: application)
-        try waitState("updated-disabled-drained") {
+        try await waitState("updated-disabled-drained") {
             ($0["workers"] as? [String: Int]) == [:]
                 && ($0["presentationCounts"] as? [String: Int]) == [:]
                 && !Self.running($0, role: "engine")
                 && !Self.running($0, role: "managedUI")
         }
         try click(application.buttons["Remove"], in: application)
-        try waitState("removed-packages") { ($0["downloaded"] as? [String]) == [] }
-        try assertLayouts(home: home, notch: notch)
+        try await waitState("removed-packages") { ($0["downloaded"] as? [String]) == [] }
+        try await assertLayouts(home: home, notch: notch)
         try verifyProtected(fixture)
         try click(application.buttons["journey.navigation.settings"], in: application)
         try click(application.buttons["journey.section.settings.storage"], in: application)
@@ -154,10 +154,19 @@ final class OriginalShellJourneyTests: XCTestCase {
             application.staticTexts[
                 "Actual files on this Mac, with download sizes shown separately."
             ].exists)
-        try capture("storage-after-removal")
+        try await capture("storage-after-removal")
         try captureWindow(application, fixture: fixture, name: "storage-distribution.png")
         application.terminate()
         try verifyProtected(fixture)
+        XCTAssertEqual(snapshots.count, 13)
+        XCTAssertEqual(windowImages.count, 2)
+        for name in ["marketplace-installed-calendar.png", "storage-distribution.png"] {
+            let bytes = try XCTUnwrap(windowImages[name])
+            let attachment = XCTAttachment(data: bytes, uniformTypeIdentifier: "public.png")
+            attachment.name = "edith-journey-" + name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
     }
 
     private func captureWindow(
@@ -176,11 +185,8 @@ final class OriginalShellJourneyTests: XCTestCase {
         let bytes = window.screenshot().pngRepresentation
         XCTAssertGreaterThan(bytes.count, 0)
         XCTAssertLessThanOrEqual(bytes.count, 8_388_608)
-        let destination = root.appendingPathComponent(name)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
-        try bytes.write(to: destination, options: .withoutOverwriting)
-        try FileManager.default.setAttributes(
-            [.posixPermissions: 0o600], ofItemAtPath: destination.path)
+        XCTAssertNil(windowImages[name])
+        windowImages[name] = bytes
     }
 
     private func findCalendar(_ application: XCUIApplication) throws {
@@ -250,39 +256,87 @@ final class OriginalShellJourneyTests: XCTestCase {
         XCTAssertTrue(element.isHittable)
     }
 
-    private func state() throws -> [String: Any] {
-        let data = try Data(contentsOf: root.appendingPathComponent("state.json"))
-        XCTAssertLessThanOrEqual(data.count, 131_072)
-        let state = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        XCTAssertEqual(state["protectedDataUnchanged"] as? Bool, true)
-        XCTAssertEqual(state["declinedPermissionRequests"] as? Int, 0)
+    private func state() async throws -> [String: Any] {
+        let environment = ProcessInfo.processInfo.environment
+        let fixture = try JSONDecoder().decode(
+            JourneyFixture.self, from: Data(contentsOf: root.appendingPathComponent("journey.json"))
+        )
+        let endpoint = try XCTUnwrap(environment["EDITH_JOURNEY_OPERATOR_ENDPOINT"])
+        let token = try XCTUnwrap(environment["EDITH_JOURNEY_OPERATOR_TOKEN"])
+        guard let replacement = URL(string: endpoint), replacement.scheme == "http",
+            replacement.host == "127.0.0.1", let port = replacement.port,
+            (1...65535).contains(port), replacement.path == "/replace",
+            replacement.query == nil, replacement.fragment == nil,
+            replacement.user == nil, replacement.password == nil,
+            token.utf8.count == 64, token.allSatisfy({ $0.isHexDigit && !$0.isUppercase }),
+            let url = URL(string: "http://127.0.0.1:\(port)/state")
+        else { throw JourneyContractError.invalidEnvironment }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 3
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = nil
+        configuration.urlCredentialStorage = nil
+        configuration.urlCache = nil
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let (data, response) = try await session.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 131_072,
+            let result = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            result["schema"] as? Int == 1, result["operation"] as? String == "state",
+            result["hostIdentifier"] as? String == fixture.identifier,
+            result["sourceCommit"] as? String == fixture.sourceCommit,
+            let state = result["state"] as? [String: Any],
+            state["hostIdentifier"] as? String == fixture.identifier,
+            state["sourceCommit"] as? String == fixture.sourceCommit,
+            state["protectedDataUnchanged"] as? Bool == true,
+            state["declinedPermissionRequests"] as? Int == 0
+        else { throw JourneyContractError.invalidMetadata }
+        lastState = state
         return state
     }
 
-    private func waitState(_ stage: String, predicate: @escaping ([String: Any]) -> Bool) throws {
-        XCTAssertTrue(wait(45) { (try? self.state()).map(predicate) == true }, stage)
-        try capture(stage)
+    private func waitState(_ stage: String, predicate: @escaping ([String: Any]) -> Bool)
+        async throws
+    {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(45))
+        while ContinuousClock.now < deadline {
+            if let value = try? await state(), predicate(value) {
+                try await capture(stage)
+                return
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTFail(stage)
+        throw JourneyContractError.invalidMetadata
     }
 
-    private func capture(_ stage: String) throws {
-        snapshots.append(["stage": stage, "state": try state()])
+    private func capture(_ stage: String) async throws {
+        snapshots.append(["stage": stage, "state": try await state()])
         try saveOutcome()
     }
 
     private func saveOutcome() throws {
-        try JSONSerialization.data(
-            withJSONObject: ["schema": 1, "startup": startup, "snapshots": snapshots],
-            options: .sortedKeys
-        )
-        .write(to: root.appendingPathComponent("journey-outcome.json"), options: .atomic)
+        outcomeSequence += 1
+        XCTAssertLessThanOrEqual(outcomeSequence, 64)
+        let bytes = try JSONSerialization.data(
+            withJSONObject: [
+                "schema": 1, "sequence": outcomeSequence, "startup": startup,
+                "snapshots": snapshots,
+            ], options: .sortedKeys)
+        XCTAssertLessThanOrEqual(bytes.count, 2_097_152)
+        let attachment = XCTAttachment(data: bytes, uniformTypeIdentifier: "public.json")
+        attachment.name = String(format: "edith-journey-outcome-%04d.json", outcomeSequence)
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     private func canonical(_ value: Any?) throws -> Data {
         try JSONSerialization.data(withJSONObject: XCTUnwrap(value), options: .sortedKeys)
     }
 
-    private func assertLayouts(home: Data, notch: Data) throws {
-        let current = try state()
+    private func assertLayouts(home: Data, notch: Data) async throws {
+        let current = try await state()
         XCTAssertEqual(try canonical(current["home"]), home)
         XCTAssertEqual(try canonical(current["notch"]), notch)
     }
@@ -317,7 +371,10 @@ final class OriginalShellJourneyTests: XCTestCase {
         ]) { _, next in next }
         try saveOutcome()
         XCTAssertEqual(accountHome, actualHome)
-        XCTAssertEqual(environment["HOME"], actualHome)
+        let runnerHome = try XCTUnwrap(environment["HOME"])
+        try fixture.validateRunnerHome(
+            runnerHome, accountHome: actualHome,
+            canonicalHome: URL(fileURLWithPath: runnerHome).resolvingSymlinksInPath().path)
         XCTAssertNotEqual(environment["CFFIXED_USER_HOME"], fixture.home)
         let app = URL(fileURLWithPath: fixture.application)
         let executable = URL(fileURLWithPath: fixture.executable)
@@ -359,10 +416,21 @@ final class OriginalShellJourneyTests: XCTestCase {
         ]) { _, next in next }
         try saveOutcome()
         XCTAssertEqual(signature, errSecSuccess)
-        let status = LSRegisterURL(app as CFURL, true)
-        startup["registrationStatus"] = status
+        let registration = try registrationReceipt()
+        XCTAssertEqual(registration["hostIdentifier"] as? String, fixture.identifier)
+        XCTAssertEqual(registration["sourceCommit"] as? String, fixture.sourceCommit)
+        XCTAssertEqual(
+            registration["applicationVersion"] as? String,
+            info["CFBundleShortVersionString"] as? String)
+        XCTAssertEqual(
+            registration["executableSHA256"] as? String,
+            SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())
+        XCTAssertEqual(registration["registrationStatus"] as? Int, 0)
+        XCTAssertEqual(registration["registeredCount"] as? Int, 1)
+        XCTAssertEqual(registration["uniqueRegisteredPathMatched"] as? Bool, true)
+        startup["registrationStatus"] = registration["registrationStatus"]
+        startup["registrationOwner"] = "hosted-producer"
         try saveOutcome()
-        XCTAssertEqual(status, noErr)
         let registered = NSWorkspace.shared.urlsForApplications(
             withBundleIdentifier: fixture.identifier)
         let matched = registered.map { $0.resolvingSymlinksInPath().path } == [fixture.application]
@@ -374,23 +442,88 @@ final class OriginalShellJourneyTests: XCTestCase {
         XCTAssertTrue(matched)
     }
 
-    private func replaceApplication(_ fixture: JourneyFixture) throws {
-        let original = URL(fileURLWithPath: fixture.application)
-        let replacement = root.appendingPathComponent("replacement/Host.payload")
-        XCTAssertEqual(original.path, root.appendingPathComponent("Host.app").path)
-        XCTAssertFalse(
-            FileManager.default.fileExists(
-                atPath: root.appendingPathComponent("previous/Host.payload").path))
-        try FileManager.default.createDirectory(
-            at: root.appendingPathComponent("previous"), withIntermediateDirectories: false)
-        try FileManager.default.moveItem(
-            at: original, to: root.appendingPathComponent("previous/Host.payload"))
-        try FileManager.default.copyItem(at: replacement, to: original)
+    private func registrationReceipt() throws -> [String: Any] {
+        let path = root.appendingPathComponent("registration.json").path
+        let descriptor = open(path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+        guard descriptor >= 0 else { throw JourneyContractError.invalidPaths }
+        defer { close(descriptor) }
+        var before = stat()
+        guard fstat(descriptor, &before) == 0,
+            before.st_mode & S_IFMT == S_IFREG, before.st_uid == getuid(),
+            before.st_mode & 0o777 == 0o600, before.st_nlink == 1,
+            before.st_size > 0, before.st_size <= 1024,
+            URL(fileURLWithPath: path).resolvingSymlinksInPath().path == path
+        else { throw JourneyContractError.invalidPaths }
+        var buffer = [UInt8](repeating: 0, count: 1025)
+        let count = Darwin.read(descriptor, &buffer, buffer.count)
+        var after = stat()
+        var current = stat()
+        guard count == before.st_size, fstat(descriptor, &after) == 0,
+            lstat(path, &current) == 0,
+            before.st_dev == after.st_dev, before.st_ino == after.st_ino,
+            before.st_size == after.st_size, before.st_mode == after.st_mode,
+            before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec,
+            before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec,
+            before.st_ctimespec.tv_sec == after.st_ctimespec.tv_sec,
+            before.st_ctimespec.tv_nsec == after.st_ctimespec.tv_nsec,
+            after.st_dev == current.st_dev, after.st_ino == current.st_ino
+        else { throw JourneyContractError.invalidPaths }
+        let value = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(buffer.prefix(count))) as? [String: Any])
+        XCTAssertEqual(
+            Set(value.keys),
+            Set([
+                "schema", "hostIdentifier", "sourceCommit", "applicationVersion",
+                "executableSHA256", "registrationStatus", "registeredCount",
+                "uniqueRegisteredPathMatched",
+            ]))
+        XCTAssertEqual(value["schema"] as? Int, 1)
+        return value
+    }
+
+    private func replaceApplication(_ fixture: JourneyFixture) async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let endpoint = try XCTUnwrap(environment["EDITH_JOURNEY_OPERATOR_ENDPOINT"])
+        let token = try XCTUnwrap(environment["EDITH_JOURNEY_OPERATOR_TOKEN"])
+        guard let url = URL(string: endpoint), url.scheme == "http",
+            url.host == "127.0.0.1", let port = url.port, (1...65535).contains(port),
+            url.path == "/replace", url.query == nil, url.fragment == nil,
+            url.user == nil, url.password == nil, token.utf8.count == 64,
+            token.allSatisfy({ $0.isHexDigit && !$0.isUppercase })
+        else { throw JourneyContractError.invalidEnvironment }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 15
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(
+            withJSONObject: [
+                "operation": "replaceApplication", "hostIdentifier": fixture.identifier,
+                "sourceCommit": fixture.sourceCommit, "previousVersion": "1.0.0",
+                "nextVersion": "2.0.0",
+            ], options: .sortedKeys)
+        XCTAssertLessThanOrEqual(request.httpBody?.count ?? 0, 1024)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = nil
+        configuration.urlCredentialStorage = nil
+        configuration.urlCache = nil
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let (bytes, response) = try await session.data(for: request)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertLessThanOrEqual(bytes.count, 1024)
+        let result = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        XCTAssertEqual(result["schema"] as? Int, 1)
+        XCTAssertEqual(result["operation"] as? String, "replaceApplication")
+        XCTAssertEqual(result["hostIdentifier"] as? String, fixture.identifier)
+        XCTAssertEqual(result["sourceCommit"] as? String, fixture.sourceCommit)
+        XCTAssertEqual(result["applicationVersion"] as? String, "2.0.0")
+        XCTAssertEqual(result["executableSHA256"] as? String, fixture.executableSHA256["2.0.0"])
+        XCTAssertEqual(result["priorOwnedGenerationsExited"] as? Bool, true)
     }
 
     private func latestRunningProcesses() -> Bool {
-        guard let value = try? state() else { return false }
-        let owned = value["ownedProcesses"] as? [[String: Any]] ?? []
+        let owned = lastState["ownedProcesses"] as? [[String: Any]] ?? []
         return owned.contains { item in
             guard let pid = item["pid"] as? Int32, let generation = item["generation"] as? String,
                 ["engine", "managedUI"].contains(item["role"] as? String ?? "")

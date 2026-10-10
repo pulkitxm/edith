@@ -10,9 +10,20 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import {
+  exportJourneyAttachments,
+  retainJourneyAttachmentProof,
+} from "./attachments.mjs";
 import { journeyImageNames, validateJourneyImage } from "./evidence.mjs";
 import { validateDisabledJourneyProcesses } from "./outcomes.mjs";
+import { runOwnedJourneyCommand } from "./owned-command.mjs";
 import { admitHostedJourney, prepareJourney } from "./prepare-journey.mjs";
+import { registerJourneyApplication } from "./registration.mjs";
+import {
+  createJourneyReplacement,
+  createJourneyStateReader,
+  startJourneyReplacementOperator,
+} from "./replacement.mjs";
 import {
   configureUITestRun,
   journeyRunnerEnvironment,
@@ -39,6 +50,7 @@ let outcome = {
   actualJourneyValidated: false,
 };
 let failure;
+let replacementOperator;
 try {
   const receipt = JSON.parse(
     await readFile(join(output, "build-receipt.json"), "utf8"),
@@ -71,6 +83,8 @@ try {
     EDITH_GUI_FIXTURE_DIRECTORY: directory,
     EDITH_JOURNEY_ACCOUNT_HOME: homedir(),
     HOME: join(directory, "synthetic-data"),
+    CFFIXED_USER_HOME: join(directory, "synthetic-data"),
+    SSH_AUTH_SOCK: "",
     XDG_CONFIG_HOME: join(directory, "synthetic-data/.config"),
     XDG_CACHE_HOME: join(directory, "synthetic-data/.cache"),
     XDG_DATA_HOME: join(directory, "synthetic-data/.local/share"),
@@ -93,7 +107,66 @@ try {
     ],
     { stdio: "inherit" },
   );
-  const runnerVariables = journeyRunnerEnvironment(variables);
+  const fixture = JSON.parse(
+    await readFile(join(directory, "journey.json"), "utf8"),
+  );
+  assert.equal(fixture.identifier, identifier);
+  assert.equal(fixture.sourceCommit, receipt.sourceCommit);
+  const registrationExecutable = join(output, "JourneyRegistration");
+  execFileSync(
+    "xcrun",
+    [
+      "swiftc",
+      "-parse-as-library",
+      "-target",
+      "arm64-apple-macos14.0",
+      "Tests/HostedOriginalShell/Sources/JourneyContract/JourneyContract.swift",
+      "Tests/HostedOriginalShell/FixtureSources/JourneyRegistration.swift",
+      "-o",
+      registrationExecutable,
+    ],
+    { stdio: "inherit", timeout: 180_000 },
+  );
+  const registerApplication = (version) =>
+    registerJourneyApplication({
+      directory,
+      fixture,
+      environment: variables,
+      accountHome: homedir(),
+      version,
+      registrationExecutable,
+    });
+  await registerApplication("1.0.0");
+  const replacement = await createJourneyReplacement({
+    directory,
+    environment: variables,
+    accountHome: homedir(),
+    fixture,
+    registerApplication,
+    audit: async () =>
+      JSON.parse(
+        execFileSync(auditExecutable, [directory], {
+          env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin", ...variables },
+          encoding: "utf8",
+          timeout: 10_000,
+          maxBuffer: 131_072,
+        }),
+      ),
+  });
+  const readState = await createJourneyStateReader({
+    directory,
+    environment: variables,
+    accountHome: homedir(),
+    fixture,
+  });
+  replacementOperator = await startJourneyReplacementOperator(replacement, {
+    readState,
+  });
+  const runnerVariables = journeyRunnerEnvironment({
+    ...variables,
+    EDITH_JOURNEY_OPERATOR_ENDPOINT: replacementOperator.endpoint,
+    EDITH_JOURNEY_OPERATOR_TOKEN: replacementOperator.token,
+  });
   const project = await writeUIProject(output, runnerVariables);
   const args = [
     "-project",
@@ -120,23 +193,46 @@ try {
   assert.equal(plans.length, 1);
   const plan = join(products, plans[0]);
   configureUITestRun(plan, runnerVariables);
-  execFileSync(
-    "xcodebuild",
-    [
-      "test-without-building",
-      "-xctestrun",
-      plan,
-      "-destination",
-      "platform=macOS,arch=arm64",
-      "-jobs",
-      "1",
-      "-parallel-testing-enabled",
-      "NO",
-      "-resultBundlePath",
-      join(output, "HostedShellJourney.xcresult"),
-    ],
-    { stdio: "inherit", timeout: 900_000 },
-  );
+  let testFailure;
+  try {
+    await runOwnedJourneyCommand(
+      "xcodebuild",
+      [
+        "test-without-building",
+        "-xctestrun",
+        plan,
+        "-destination",
+        "platform=macOS,arch=arm64",
+        "-jobs",
+        "1",
+        "-parallel-testing-enabled",
+        "NO",
+        "-resultBundlePath",
+        join(output, "HostedShellJourney.xcresult"),
+      ],
+      { stdio: "inherit" },
+    );
+  } catch (error) {
+    testFailure = error;
+  }
+  let attachments;
+  try {
+    attachments = await exportJourneyAttachments({
+      resultBundle: join(output, "HostedShellJourney.xcresult"),
+      outputDirectory: join(output, "journey-attachments"),
+    });
+    outcome.attachmentExportDiagnostic = attachments.diagnostic;
+    await retainJourneyAttachmentProof(attachments, output);
+  } catch (error) {
+    outcome.attachmentExportDiagnostic = error.diagnostic;
+    outcome.attachmentExportFailed = true;
+    outcome.attachmentExportFailure = {
+      phase: error.phase ?? "attachment-read",
+      category: error.category ?? "invalid-export",
+    };
+    if (!testFailure) throw error;
+  }
+  if (testFailure) throw testFailure;
   const currentProcesses = JSON.parse(
     execFileSync(auditExecutable, [directory], {
       env: { ...process.env, ...variables },
@@ -149,9 +245,8 @@ try {
     currentProcesses.every((item) => !item.running),
     "Known owned process generations remained after actual UI shutdown",
   );
-  const data = await readFile(join(directory, "journey-outcome.json"));
-  assert(data.length <= 2_097_152);
-  const proof = JSON.parse(data.toString());
+  assert(attachments);
+  const proof = attachments.proof;
   assert.equal(proof.schema, 1);
   assert.deepEqual(
     proof.snapshots.map((item) => item.stage),
@@ -210,22 +305,27 @@ try {
     disabledProcessObservations: validateDisabledJourneyProcesses(proof),
     proof,
   };
+  assert.deepEqual(
+    attachments.images.map(({ name }) => name).sort(),
+    [...journeyImageNames].sort(),
+  );
   const images = [];
-  for (const name of journeyImageNames) {
-    const bytes = await readFile(join(directory, name));
-    images.push(validateJourneyImage(name, bytes, outcome));
-  }
-  for (const name of journeyImageNames)
-    await writeFile(join(output, name), await readFile(join(directory, name)), {
+  for (const image of attachments.images) {
+    const bytes = await attachments.readOwned(image.file, image.maximumBytes);
+    images.push(validateJourneyImage(image.name, bytes, outcome));
+    await writeFile(join(output, image.name), bytes, {
       mode: 0o600,
+      flag: "wx",
     });
+  }
   outcome.images = images;
 } catch (error) {
   failure = error;
-  outcome = { ...outcome, reason: String(error.message).slice(0, 4096) };
+  outcome = { ...outcome, reason: "hosted-journey-failed" };
 } finally {
+  if (replacementOperator) await replacementOperator.close();
   await mkdir(output, { recursive: true });
-  for (const name of ["state.json", "journey-outcome.json", "journey.json"])
+  for (const name of ["state.json", "journey.json", "producer.json"])
     try {
       const bytes = await readFile(join(directory, name));
       assert(

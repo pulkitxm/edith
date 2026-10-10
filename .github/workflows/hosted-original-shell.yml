@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   calendar-journey:
-    if: github.repository == 'pulkitxm/edith' && github.event_name == 'workflow_dispatch' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-original-shell-journey' || github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' || github.ref == 'refs/heads/feat/hosted-journey-registration' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.expected_sha == github.sha && !inputs.release && inputs.rebuild == ''
+    if: github.repository == 'pulkitxm/edith' && github.event_name == 'workflow_dispatch' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-original-shell-journey' || github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' || github.ref == 'refs/heads/feat/hosted-journey-registration' || github.ref == 'refs/heads/feat/hosted-journey-attachments' || github.ref == 'refs/heads/feat/hosted-journey-state' || github.ref == 'refs/heads/fix/hosted-journey-environment' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.expected_sha == github.sha && !inputs.release && inputs.rebuild == ''
     runs-on: macos-26
     timeout-minutes: 45
     env:
@@ -91,6 +91,7 @@ jobs:
             local/hosted-original-shell/build-receipt.json
             local/hosted-original-shell/result.json
             local/hosted-original-shell/state.json
+            local/hosted-original-shell/producer.json
             local/hosted-original-shell/journey-outcome.json
       - name: Retain completed synthetic window evidence
         if: success()

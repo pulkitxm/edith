@@ -66,7 +66,7 @@ test("both actual disabled XCTest predicates await managed UI as well as engine 
   );
   for (const stage of ["disabled-drained", "updated-disabled-drained"]) {
     const predicate = source
-      .split(`try waitState("${stage}") {`)[1]
+      .split(`try await waitState("${stage}") {`)[1]
       .split("\n        }")[0];
     expect(predicate).toContain('!Self.running($0, role: "engine")');
     expect(predicate).toContain('!Self.running($0, role: "managedUI")');

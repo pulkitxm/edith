@@ -20,6 +20,17 @@ import SwiftUI
     private static weak var remoteManager: HostRemoteSessionManager?
 
     static func make() throws -> HostMarketplace {
+        do {
+            let marketplace = try makeValidated()
+            try recordProducer(phase: "make")
+            return marketplace
+        } catch {
+            try? recordProducer(phase: "make", error: error)
+            throw error
+        }
+    }
+
+    private static func makeValidated() throws -> HostMarketplace {
         let environment = ProcessInfo.processInfo.environment
         let account = try accountHome()
         guard let identifier = Bundle.main.bundleIdentifier,
@@ -140,7 +151,13 @@ import SwiftUI
         telemetry = Task { [weak marketplace] in
             while !Task.isCancelled {
                 guard let marketplace else { return }
-                do { try writeState(marketplace, fixture: value) } catch { return }
+                do {
+                    try writeState(marketplace, fixture: value)
+                    try recordProducer(phase: "telemetry")
+                } catch {
+                    try? recordProducer(phase: "telemetry", error: error)
+                    return
+                }
                 do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
             }
         }
@@ -223,6 +240,8 @@ import SwiftUI
         let notch = try JSONSerialization.jsonObject(
             with: JSONEncoder().encode(marketplace.surfaceLayouts.notch))
         let state: [String: Any] = [
+            "schema": 1,
+            "producerExecutableSHA256": try digest(URL(fileURLWithPath: fixture.executable)),
             "hostIdentifier": fixture.identifier, "sourceCommit": fixture.sourceCommit,
             "applicationVersion": Bundle.main.object(
                 forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
@@ -247,6 +266,37 @@ import SwiftUI
         try data.write(
             to: URL(fileURLWithPath: fixture.directory).appendingPathComponent("state.json"),
             options: .atomic)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600], ofItemAtPath: fixture.directory + "/state.json")
+    }
+
+    private static func recordProducer(phase: String, error: (any Error)? = nil) throws {
+        guard let identifier = Bundle.main.bundleIdentifier else { return }
+        let prefix = "com.pulkit.edith.tests.remote-"
+        let suffix = String(identifier.dropFirst(prefix.count))
+        guard identifier.hasPrefix(prefix),
+            UUID(uuidString: suffix)?.uuidString.lowercased() == suffix
+        else { return }
+        let directory = URL(
+            fileURLWithPath: try accountHome() + "/Applications/Edith Remote Fixture Journey "
+                + suffix)
+        guard ProcessInfo.processInfo.environment["EDITH_GUI_FIXTURE_DIRECTORY"] == directory.path
+        else { return }
+        try requireOwned(directory, directory: true, mode: 0o700)
+        let value = try JSONDecoder().decode(
+            JourneyFixture.self,
+            from: read(directory.appendingPathComponent("journey.json"), limit: 16_384))
+        guard value.identifier == identifier, value.directory == directory.path else { return }
+        try value.validate(
+            accountHome: try accountHome(), environment: ProcessInfo.processInfo.environment)
+        let bytes = try JSONEncoder().encode(
+            JourneyProducerReceipt(
+                fixture: value, phase: phase, error: error,
+                environment: ProcessInfo.processInfo.environment))
+        guard bytes.count <= 1024 else { throw JourneyContractError.invalidMetadata }
+        let path = directory.appendingPathComponent("producer.json")
+        try bytes.write(to: path, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path.path)
     }
 
     nonisolated private static func read(_ url: URL, limit: Int) throws -> Data {

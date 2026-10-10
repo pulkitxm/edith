@@ -53,7 +53,8 @@ private func fixture(identifier: String = identifier, directory: String = direct
 @Test func applicationEnvironmentCannotUseAmbientHomeDefaultsOrSSH() throws {
     let fixture = fixture()
     let environment = [
-        "HOME": fixture.home, "XDG_CONFIG_HOME": fixture.home + "/.config",
+        "HOME": fixture.home, "CFFIXED_USER_HOME": fixture.home, "SSH_AUTH_SOCK": "",
+        "XDG_CONFIG_HOME": fixture.home + "/.config",
         "XDG_CACHE_HOME": fixture.home + "/.cache", "XDG_DATA_HOME": fixture.home + "/.local/share",
         "EDITH_APPLICATION_IDENTIFIER": identifier,
         "EDITH_SHARED_DEFAULTS_SUITE": fixture.defaultsSuite,
@@ -148,7 +149,8 @@ private func fixture(identifier: String = identifier, directory: String = direct
     try value.validateApplicationEnvironment(application)
     #expect(application["HOME"] == value.home)
     #expect(application["XDG_CONFIG_HOME"] == value.home + "/.config")
-    #expect(application["SSH_AUTH_SOCK"] == nil)
+    #expect(application["SSH_AUTH_SOCK"] == "")
+    #expect(application["CFFIXED_USER_HOME"] == value.home)
     #expect(application["PRIVATE_TOKEN"] == nil)
     for key in [
         "EDITH_JOURNEY_ACCOUNT_HOME", "EDITH_APPLICATION_IDENTIFIER",
@@ -186,5 +188,104 @@ private func fixture(identifier: String = identifier, directory: String = direct
                 identifier: id, executableName: name, packageType: type, version: version,
                 executableDigest: digest)
         }
+    }
+}
+
+@Test func replacementOperatorCredentialsNeverEnterTheApplicationEnvironment() throws {
+    let fixture = fixture()
+    let environment = runner.merging([
+        "EDITH_JOURNEY_ACCOUNT_HOME": "/Users/fixture",
+        "EDITH_APPLICATION_IDENTIFIER": identifier,
+        "EDITH_SHARED_DEFAULTS_SUITE": identifier,
+        "EDITH_EXTENSION_FIXTURE_HOME": fixture.home,
+        "EDITH_GUI_FIXTURE_DIRECTORY": fixture.directory,
+        "EDITH_JOURNEY_OPERATOR_ENDPOINT": "http://127.0.0.1:23456/replace",
+        "EDITH_JOURNEY_OPERATOR_TOKEN": String(repeating: "a", count: 64),
+    ]) { _, next in next }
+    let application = try fixture.applicationEnvironment(from: environment)
+    #expect(application["EDITH_JOURNEY_OPERATOR_ENDPOINT"] == nil)
+    #expect(application["EDITH_JOURNEY_OPERATOR_TOKEN"] == nil)
+    try fixture.validateApplicationEnvironment(application)
+}
+
+@Test func runnerHomeAdmitsOnlyAccountOrExactCanonicalTestRunnerContainer() throws {
+    let value = fixture()
+    let account = "/Users/fixture"
+    let container =
+        account + "/Library/Containers/com.pulkit.edith.tests.hosted-shell-ui.xctrunner/Data"
+    for home in [account, container] {
+        try value.validateRunnerHome(home, accountHome: account, canonicalHome: home)
+    }
+    #expect(value.homeCategory(container, accountHome: account) == "test-runner")
+    for home in [
+        value.home, container + "/child", container + "-other",
+        account + "/Library/Containers/other.xctrunner/Data", "/Users/other",
+        account + "/Library/Containers/com.pulkit.edith.tests.hosted-shell-ui.xctrunner/Other",
+    ] {
+        #expect(throws: JourneyContractError.invalidEnvironment) {
+            try value.validateRunnerHome(home, accountHome: account, canonicalHome: home)
+        }
+    }
+    #expect(throws: JourneyContractError.invalidEnvironment) {
+        try value.validateRunnerHome(container, accountHome: account, canonicalHome: account)
+    }
+    #expect(throws: JourneyContractError.invalidEnvironment) {
+        try value.validateRunnerHome(nil, accountHome: account, canonicalHome: account)
+    }
+}
+
+@Test func producerFailureReceiptsRetainSourceAndClosedCategoriesWithoutErrorText() throws {
+    struct PrivateFailure: Error { let path = "/synthetic/private/path" }
+    let value = fixture()
+    for phase in ["make", "telemetry"] {
+        let ready = try JourneyProducerReceipt(fixture: value, phase: phase)
+        #expect(ready.category == "ready")
+        for (error, category) in [
+            (JourneyContractError.invalidPaths, "paths-rejected"),
+            (.invalidMetadata, "metadata-rejected"), (.invalidEnvironment, "environment-rejected"),
+            (.protectedDataChanged, "protected-data-changed"),
+        ] {
+            let receipt = try JourneyProducerReceipt(fixture: value, phase: phase, error: error)
+            #expect(receipt.category == category)
+            #expect(receipt.hostIdentifier == identifier)
+            #expect(receipt.sourceCommit == value.sourceCommit)
+        }
+        let receipt = try JourneyProducerReceipt(
+            fixture: value, phase: phase, error: PrivateFailure())
+        let bytes = try JSONEncoder().encode(receipt)
+        #expect(bytes.count <= 1024)
+        #expect(receipt.category == "dependency-failure")
+        #expect(!String(decoding: bytes, as: UTF8.self).contains("private/path"))
+    }
+    #expect(throws: JourneyContractError.invalidMetadata) {
+        try JourneyProducerReceipt(fixture: value, phase: "arbitrary")
+    }
+}
+
+@Test func producerEnvironmentFailureReportsOnlyBooleanMatches() throws {
+    let value = fixture()
+    let environment = runner.merging([
+        "EDITH_JOURNEY_ACCOUNT_HOME": "/Users/fixture",
+        "EDITH_APPLICATION_IDENTIFIER": identifier,
+        "EDITH_SHARED_DEFAULTS_SUITE": identifier,
+        "EDITH_EXTENSION_FIXTURE_HOME": value.home,
+        "EDITH_GUI_FIXTURE_DIRECTORY": directory,
+    ]) { _, next in next }
+    let application = try value.applicationEnvironment(from: environment)
+    let ready = try JourneyProducerReceipt(fixture: value, phase: "make", environment: application)
+    #expect(ready.environmentMatches == nil)
+    for key in application.keys where !runner.keys.contains(key) {
+        var changed = application
+        changed[key] = "private-synthetic-token-or-path"
+        let receipt = try JourneyProducerReceipt(
+            fixture: value, phase: "make", error: JourneyContractError.invalidEnvironment,
+            environment: changed)
+        let matches = try #require(receipt.environmentMatches)
+        #expect(matches.count == 10)
+        #expect(matches.values.filter { !$0 }.count == 1)
+        let bytes = try JSONEncoder().encode(receipt)
+        #expect(bytes.count <= 1024)
+        #expect(!String(decoding: bytes, as: UTF8.self).contains("private-synthetic"))
+        #expect(!String(decoding: bytes, as: UTF8.self).contains("/Users/"))
     }
 }
