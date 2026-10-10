@@ -116,9 +116,11 @@ import Foundation
                     else { throw ExtensionPeerError.invalidRequest }
                     bytes = jpeg; suffix = "jpg"
                 }
+                let stamp = DateFormatter.localizedString(
+                    from: Date(), dateStyle: .short, timeStyle: .medium
+                ).replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: ".")
                 return try StudioLibraryStore.saveToInbox(
-                    bytes,
-                    name: "\(type == "pdf" ? "Scan" : "Photo") \(UUID().uuidString).\(suffix)")
+                    bytes, name: "\(type == "pdf" ? "Scan" : "Photo") \(stamp).\(suffix)")
             }
             return try encoder.encode([url])
         default: throw ExtensionPeerError.invalidRequest

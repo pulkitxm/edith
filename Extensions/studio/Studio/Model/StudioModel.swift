@@ -6,7 +6,7 @@ import EdithStudio
 import Foundation
 import Observation
 
-enum StudioTab: String, CaseIterable, Identifiable {
+enum StudioTab: String, Codable, CaseIterable, Identifiable {
     case files
     case tools
     case projects
@@ -115,6 +115,8 @@ final class StudioModel {
     var notice: String?
     var videoProjects: [VideoProject.Listing] = []
     var commandEditor: VideoEditorOpenBridge.Presentation?
+    var embeddedPresentation: StudioUIPresentation?
+    private var presentationToken: UUID?
     var exportState: StudioUIVideoExport?
     var remoteCommandRequest: VideoEditorService.OpenRequest?
     private(set) var remoteCommandEditor: VideoEditorModel?
@@ -478,7 +480,7 @@ final class StudioModel {
 
     func refreshFacts(for url: URL) {
         facts[url] = nil
-        StudioThumbnails.shared.forget(url)
+        if facade == nil { StudioThumbnails.shared.forget(url) }
     }
 
     func open(_ tool: StudioTool, with urls: [URL]) {
@@ -725,6 +727,13 @@ final class StudioModel {
         installLog = state.installLog
         if let failure = state.message { message = failure }
         selection.formIntersection(StudioLibraryQuery.urls(files))
+        if let presentation = state.presentation, presentation.token != presentationToken {
+            do {
+                let requested = try presentation.route
+                presentationToken = presentation.token; tab = presentation.tab
+                selection = Set(presentation.selection); route = requested
+            } catch { message = error.localizedDescription }
+        }
         if let pending = state.pendingOpen, pending.requestID != commandAttachID, let facade {
             commandAttachID = pending.requestID
             commandAttachTask?.cancel()
@@ -759,6 +768,10 @@ final class StudioModel {
                 }
             }
         }
+    }
+
+    func requestEmbeddedPresentation() {
+        embeddedPresentation = StudioUIPresentation(route: route, tab: tab, selection: selection)
     }
 
     func setDestination(mode: String, folder: String) {

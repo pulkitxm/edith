@@ -1,4 +1,5 @@
 import AVFoundation
+import EdithExtensionSupport
 import Foundation
 
 struct VideoPreviewMetadata {
@@ -17,7 +18,7 @@ struct VideoPreviewMetadata {
         canvas = value.canvas
         frameDuration = CMTime(value: value.frameValue, timescale: value.frameScale)
         guard canvas.width.isFinite, canvas.height.isFinite, canvas.width > 0, canvas.height > 0,
-            value.frameScale > 0, value.frameValue > 0, value.segments.count <= 100_000
+            value.frameScale > 0, value.frameValue > 0, value.segments.count <= 10_000
         else {
             throw StudioUIOperationFailure(message: "The video preview metadata is invalid.")
         }
@@ -96,11 +97,20 @@ struct StudioUIVideoProject: Codable, Sendable {
 
     var value: VideoProject {
         get throws {
-            guard let root = try JSONSerialization.jsonObject(with: document) as? [String: Any]
+            guard document.count <= 32 * 1024 * 1024,
+                let root = try JSONSerialization.jsonObject(with: document) as? [String: Any]
             else {
                 throw StudioUIOperationFailure(message: "The video project is invalid.")
             }
-            return VideoProject(root: root, fileURL: fileURL)
+            let project = VideoProject(root: root, fileURL: fileURL)
+            try VideoEditorService.validateStructure(project)
+            if let fileURL {
+                guard fileURL.isFileURL, fileURL.host == nil || fileURL.host == "localhost" else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                _ = try StudioCommands.localPath(fileURL.path)
+            }
+            return project
         }
     }
 }
