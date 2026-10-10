@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { journeyImageNames } from "./evidence.mjs";
 
 export const journeyTestIdentifier =
