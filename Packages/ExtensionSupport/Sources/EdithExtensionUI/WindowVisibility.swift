@@ -14,13 +14,16 @@ extension EnvironmentValues {
 
 private struct WindowVisibilityModifier: ViewModifier {
     @State private var visible = true
+    @Environment(\.extensionPresentationState) private var remotePresentation
 
     func body(content: Content) -> some View {
         content
-            .environment(\.windowVisible, visible)
+            .environment(\.windowVisible, remotePresentation?.visible ?? visible)
             .background {
-                WindowVisibilityReader(visible: $visible)
-                    .frame(width: 0, height: 0)
+                if remotePresentation == nil {
+                    WindowVisibilityReader(visible: $visible)
+                        .frame(width: 0, height: 0)
+                }
             }
     }
 }
