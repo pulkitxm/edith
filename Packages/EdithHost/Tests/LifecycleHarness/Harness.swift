@@ -19,6 +19,7 @@ struct HostLifecycleHarness {
         let headlessCLI = arguments.count == 6
         let validateSurface = arguments[4] == "1"
         let extensionID = arguments[3]
+        try WorkerLifecycleFixture.requireSupported(extensionID)
         let requestedFixture = URL(fileURLWithPath: arguments[0])
         let fixture =
             extensionID == "calendar"
@@ -29,21 +30,6 @@ struct HostLifecycleHarness {
         }
         let sourceApp = URL(fileURLWithPath: arguments[1])
         let releases = URL(fileURLWithPath: arguments[2])
-        let app = fixture.appendingPathComponent(
-            extensionID == "calendar" ? "Host.app" : "Fixture.app")
-        try FileManager.default.copyItem(at: sourceApp, to: app)
-        if extensionID == "usage" {
-            let launcher = app.appendingPathComponent("Contents/Resources/ed-launcher")
-            try FileManager.default.createDirectory(
-                at: launcher.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try FileManager.default.copyItem(
-                at: URL(fileURLWithPath: "Resources/ed-launcher"), to: launcher)
-            try FileManager.default.setAttributes(
-                [.posixPermissions: 0o755], ofItemAtPath: launcher.path)
-            try FileManager.default.createSymbolicLink(
-                atPath: app.appendingPathComponent("Contents/MacOS/ed").path,
-                withDestinationPath: "../Resources/ed-launcher")
-        }
         let requestedIdentifier = ProcessInfo.processInfo.environment[
             "EDITH_EXTENSION_TEST_HOST_IDENTIFIER"]
         if let requestedIdentifier {
@@ -59,6 +45,25 @@ struct HostLifecycleHarness {
         let identifier =
             requestedIdentifier
             ?? "com.pulkit.edith.tests.\(extensionID == "calendar" ? "remote" : "worker")-\(UUID().uuidString)"
+        let workerFixture =
+            extensionID == "calendar"
+            ? nil
+            : try WorkerLifecycleFixture(root: fixture, hostIdentifier: identifier)
+        let app = fixture.appendingPathComponent(
+            extensionID == "calendar" ? "Host.app" : "Fixture.app")
+        try FileManager.default.copyItem(at: sourceApp, to: app)
+        if extensionID == "usage" {
+            let launcher = app.appendingPathComponent("Contents/Resources/ed-launcher")
+            try FileManager.default.createDirectory(
+                at: launcher.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.copyItem(
+                at: URL(fileURLWithPath: "Resources/ed-launcher"), to: launcher)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: launcher.path)
+            try FileManager.default.createSymbolicLink(
+                atPath: app.appendingPathComponent("Contents/MacOS/ed").path,
+                withDestinationPath: "../Resources/ed-launcher")
+        }
         let info = app.appendingPathComponent("Contents/Info.plist")
         var plist =
             try PropertyListSerialization.propertyList(from: Data(contentsOf: info), format: nil)
@@ -84,8 +89,20 @@ struct HostLifecycleHarness {
         if let calendarFixture {
             setenv("EDITH_EXTENSION_FIXTURE_HOME", calendarFixture.home.path, 1)
         }
+        if let workerFixture {
+            setenv("EDITH_EXTENSION_FIXTURE_HOME", try workerFixture.home(for: extensionID).path, 1)
+        }
+        var issuedFixtures: [String: WorkerLifecycleFixture.Selection] = [:]
+        func removeWorkerFixtures() throws {
+            for selection in issuedFixtures.values { try workerFixture?.remove(selection) }
+            issuedFixtures.removeAll()
+        }
+        defer { try? removeWorkerFixtures() }
         let store = ExtensionPackageStore(root: identity.root.appendingPathComponent("Extensions"))
-        if extensionID == "machines" { try MachinesFixture.seed(identity: identity, home: fixture) }
+        if extensionID == "machines" {
+            try MachinesFixture.seed(
+                identity: identity, home: try workerFixture?.home(for: extensionID) ?? fixture)
+        }
         let suite = identity.defaultsSuite
         UserDefaults(suiteName: identity.extensionDefaultsSuite(extensionID))?.set(
             false, forKey: "windowSweatersActive")
@@ -132,7 +149,48 @@ struct HostLifecycleHarness {
         var logHandles: [FileHandle] = []
         func makeSessions(executable: URL) -> HostExtensionSessions {
             HostExtensionSessions(defaults: UserDefaults(suiteName: suite)!) { package in
+                try WorkerLifecycleFixture.requireSupported(package.id)
                 try calendarFixture?.prepare(package: package, store: store)
+                if let workerFixture {
+                    guard
+                        try store.installedPackage(
+                            id: package.id, hostABI: package.hostABI,
+                            architecture: package.architecture, version: package.version)
+                            == package,
+                        package.architecture == "arm64"
+                    else { throw WorkerLifecycleFixtureError.package }
+                    let helper = store.roleBundle(for: package, role: .helper)
+                    let role =
+                        FileManager.default.fileExists(atPath: helper.path)
+                        ? helper
+                        : store.roleBundle(for: package, role: .app)
+                    try ExtensionCodeSignature.verifyDevelopment(role)
+                    try ExtensionCodeSignature.verifyDevelopment(app)
+                    guard let bundle = Bundle(url: role),
+                        bundle.bundleIdentifier == "com.pulkit.edith.extensions." + package.id
+                            + "." + role.deletingPathExtension().lastPathComponent,
+                        bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+                            == package.version,
+                        bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String
+                            == package.hostABI,
+                        Bundle(url: app)?.bundleIdentifier == identity.identifier,
+                        executable == app.appendingPathComponent("Contents/MacOS/Edith")
+                    else { throw WorkerLifecycleFixtureError.package }
+                    let selection = WorkerLifecycleFixture.Selection(
+                        extensionID: package.id,
+                        dataDirectory: identity.extensionDirectory(package.id),
+                        roleDirectory: role, version: package.version, hostABI: package.hostABI)
+                    try FileManager.default.createDirectory(
+                        at: selection.dataDirectory, withIntermediateDirectories: true,
+                        attributes: [.posixPermissions: 0o700])
+                    try workerFixture.issue(
+                        selection, hostApp: app,
+                        defaultsSuite: identity.extensionDefaultsSuite(package.id))
+                    issuedFixtures[package.id] = selection
+                    setenv(
+                        "EDITH_EXTENSION_FIXTURE_HOME",
+                        try workerFixture.home(for: package.id).path, 1)
+                }
                 let log = fixture.appendingPathComponent("worker-" + UUID().uuidString + ".log")
                 FileManager.default.createFile(atPath: log.path, contents: nil)
                 let handle = try! FileHandle(forWritingTo: log)
@@ -157,6 +215,9 @@ struct HostLifecycleHarness {
             do {
                 try await MachinesFixture.verify(endpoint, identity: identity)
                 try await sessions.disable(id: "usage")
+                if let selection = issuedFixtures.removeValue(forKey: "usage") {
+                    try workerFixture?.remove(selection)
+                }
                 guard kill(usagePID, 0) == -1, try store.requestRemoval(id: "usage") else {
                     throw HostWorkerError.invalidResponse
                 }
@@ -178,6 +239,7 @@ struct HostLifecycleHarness {
         do {
             let first = try record(releases, id: extensionID, version: "1.0.0")
             let second = try record(releases, id: extensionID, version: "1.1.0")
+            try removeWorkerFixtures()
             try await install(first, releases: releases, store: store)
             guard sessions.processIdentifiers.isEmpty else { throw HostWorkerError.rejected }
             stage = "enable"
@@ -250,6 +312,7 @@ struct HostLifecycleHarness {
                     endpoint, command: "presenter.start", input: [:], field: "active",
                     expected: true)
             }
+            try removeWorkerFixtures()
             try await install(second, releases: releases, store: store)
             guard sessions.versions[first.id] == first.version, kill(oldPID, 0) == 0 else {
                 throw HostWorkerError.rejected
@@ -323,6 +386,7 @@ struct HostLifecycleHarness {
                     expected: true)
             }
             await sessions.shutdown()
+            try removeWorkerFixtures()
             if extensionID == "herdr" { try AgentActivityFixture.verifyHooks(active: false) }
             if extensionID == "usage" { try verifyUsageStoppedHook() }
             guard kill(newPID, 0) == -1, sessions.enabledIDs.contains(first.id) else {
@@ -350,7 +414,7 @@ struct HostLifecycleHarness {
             }
             try FileManager.default.removeItem(at: app)
             let replacementApp: URL
-            if calendarFixture != nil {
+            if calendarFixture != nil || workerFixture != nil {
                 try FileManager.default.moveItem(at: replacement, to: app)
                 replacementApp = app
             } else {
@@ -447,6 +511,7 @@ struct HostLifecycleHarness {
             stage = "disable"
             if extensionID == "usage" { try await verifyUsageDisableFailure(sessions: sessions) }
             try await sessions.disable(id: first.id)
+            try removeWorkerFixtures()
             if extensionID == "herdr" { try AgentActivityFixture.verifyHooks(active: false) }
             if extensionID == "usage" { try verifyUsageStoppedHook() }
             guard surfaces.context.activeIDs.isEmpty,
@@ -501,6 +566,7 @@ struct HostLifecycleHarness {
             if extensionID == "usage" { try await verifyUsageHook(endpoint, restored: true) }
             if extensionID == "calendar" { try await verifyCalendar(endpoint) }
             try await sessions.disable(id: extensionID)
+            try removeWorkerFixtures()
             if extensionID == "usage" { try verifyUsageStoppedHook() }
             guard sessions.processIdentifiers.isEmpty, sessions.pendingDisableIDs.isEmpty,
                 sessions.enabledIDs.isEmpty, surfaces.context.activeIDs.isEmpty
@@ -528,6 +594,7 @@ struct HostLifecycleHarness {
                     "jev.key.set", payload: Data("{\"key\":null}".utf8), timeout: 2)
             }
             await sessions.shutdown()
+            try removeWorkerFixtures()
             for handle in logHandles { try? handle.close() }
             let logs = workerLogs.compactMap { try? String(contentsOf: $0, encoding: .utf8) }
                 .joined(separator: "\n")
