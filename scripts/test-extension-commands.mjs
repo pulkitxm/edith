@@ -94,8 +94,12 @@ try {
     join(app, "Contents/Info.plist"),
     identifier,
   ]);
-  execFileSync("codesign", ["--force", "--sign", "-", app], { stdio: "inherit" });
-  execFileSync("codesign", ["--verify", "--deep", "--strict", app], { stdio: "pipe" });
+  execFileSync("codesign", ["--force", "--sign", "-", app], {
+    stdio: "inherit",
+  });
+  execFileSync("codesign", ["--verify", "--deep", "--strict", app], {
+    stdio: "pipe",
+  });
   await buildExtensionUICarrier({
     hostApp: app,
     payloadDirectory: payload,
