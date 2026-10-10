@@ -105,6 +105,8 @@ test("test plan construction uses original journey sources and rejects ambient S
       EDITH_SHARED_DEFAULTS_SUITE: identifier,
       EDITH_EXTENSION_FIXTURE_HOME:
         "/Users/fixture/Applications/Edith Remote Fixture Journey 00000000-0000-4000-8000-000000000001/synthetic-data",
+      EDITH_JOURNEY_OPERATOR_ENDPOINT: "http://127.0.0.1:23456/replace",
+      EDITH_JOURNEY_OPERATOR_TOKEN: "a".repeat(64),
     };
     const project = await writeUIProject(directory, runner);
     const scheme = await readFile(
@@ -229,11 +231,13 @@ test("runner metadata excludes ambient home and credentials while synthetic app 
     EDITH_APPLICATION_IDENTIFIER: identifier,
     EDITH_SHARED_DEFAULTS_SUITE: identifier,
     EDITH_EXTENSION_FIXTURE_HOME: `${directory}/synthetic-data`,
+    EDITH_JOURNEY_OPERATOR_ENDPOINT: "http://127.0.0.1:23456/replace",
+    EDITH_JOURNEY_OPERATOR_TOKEN: "a".repeat(64),
     HOME: `${directory}/synthetic-data`,
     CFFIXED_USER_HOME: `${directory}/synthetic-data`,
     SSH_AUTH_SOCK: "/ambient/socket",
   });
-  expect(Object.keys(runner)).toHaveLength(9);
+  expect(Object.keys(runner)).toHaveLength(11);
   expect(runner.HOME).toBeUndefined();
   expect(runner.CFFIXED_USER_HOME).toBeUndefined();
   expect(runner.SSH_AUTH_SOCK).toBeUndefined();
@@ -283,4 +287,39 @@ test("runner metadata excludes ambient home and credentials while synthetic app 
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
+});
+
+test("replacement credentials are runner-only and arbitrary endpoints are rejected", async () => {
+  const { journeyRunnerEnvironment } = await import(
+    "./hosted-original-shell/ui-project.mjs"
+  );
+  const base = {
+    ...environment,
+    EDITH_GUI_FIXTURE_DIRECTORY: directory,
+    EDITH_JOURNEY_ACCOUNT_HOME: "/Users/fixture",
+    EDITH_APPLICATION_IDENTIFIER: identifier,
+    EDITH_SHARED_DEFAULTS_SUITE: identifier,
+    EDITH_EXTENSION_FIXTURE_HOME: `${directory}/synthetic-data`,
+    EDITH_JOURNEY_OPERATOR_ENDPOINT: "http://127.0.0.1:23456/replace",
+    EDITH_JOURNEY_OPERATOR_TOKEN: "a".repeat(64),
+  };
+  for (const endpoint of [
+    "https://example.com/replace",
+    "http://localhost:23456/replace",
+    "http://127.0.0.1:23456/shell",
+    "http://user@127.0.0.1:23456/replace",
+    "http://127.0.0.1:23456/replace?path=other",
+  ])
+    expect(() =>
+      journeyRunnerEnvironment({
+        ...base,
+        EDITH_JOURNEY_OPERATOR_ENDPOINT: endpoint,
+      }),
+    ).toThrow();
+  expect(() =>
+    journeyRunnerEnvironment({
+      ...base,
+      EDITH_JOURNEY_OPERATOR_TOKEN: "a".repeat(32),
+    }),
+  ).toThrow();
 });
