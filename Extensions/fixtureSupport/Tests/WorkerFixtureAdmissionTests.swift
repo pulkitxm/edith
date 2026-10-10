@@ -41,9 +41,28 @@ import Testing
                 roleIdentifier: nil, version: nil, hostABI: nil) == nil)
     }
 
+    @Test(arguments: ["EDITH_APPLICATION_IDENTIFIER", "EDITH_SHARED_DEFAULTS_SUITE"])
+    func environmentFixtureIntentCannotFallThroughToProduction(_ key: String) throws {
+        let identifier = "com.pulkit.edith.tests.worker-" + UUID().uuidString
+        let value =
+            key == "EDITH_SHARED_DEFAULTS_SUITE" ? identifier + ".extensions.micMute" : identifier
+        #expect(throws: (any Error).self) {
+            try WorkerFixtureAdmission.admit(
+                extensionID: "micMute",
+                context: [
+                    "hostIdentifier": "com.pulkit.edith",
+                    "defaultsSuite": "com.pulkit.edith.extensions.micMute",
+                ],
+                environment: [key: value], hostIdentifier: "com.pulkit.edith",
+                hostBundle: URL(fileURLWithPath: "/Applications/Edith.app"),
+                roleDirectory: URL(fileURLWithPath: "/Applications/helper.bundle"),
+                roleIdentifier: nil, version: nil, hostABI: nil)
+        }
+    }
+
     @Test(arguments: [
         "owner", "namespace", "suite", "data", "version", "extra", "schema", "missing", "large",
-        "homeMode", "markerMode", "symlink",
+        "homeMode", "rootMode", "markerMode", "symlink",
     ])
     func rejectsUnboundFixture(_ change: String) throws {
         var fixture = try Fixture(owner: "micMute")
@@ -61,6 +80,12 @@ import Testing
         case "homeMode":
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o755], ofItemAtPath: fixture.home.path)
+        case "rootMode":
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o740], ofItemAtPath: fixture.root.path)
+            #expect(
+                (try FileManager.default.attributesOfItem(atPath: fixture.home.path)[
+                    .posixPermissions] as? NSNumber)?.intValue == 0o700)
         case "markerMode":
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o644], ofItemAtPath: fixture.markerURL.path)
@@ -99,7 +124,7 @@ import Testing
                     + owner + "/"
                     + (["music", "plugins", "studio"].contains(owner) ? "app" : "helper")
                     + ".bundle")
-            for directory in [home, data, role, root.appendingPathComponent("Fixture.app")] {
+            for directory in [root, home, data, role, root.appendingPathComponent("Fixture.app")] {
                 try FileManager.default.createDirectory(
                     at: directory, withIntermediateDirectories: true,
                     attributes: [.posixPermissions: 0o700])

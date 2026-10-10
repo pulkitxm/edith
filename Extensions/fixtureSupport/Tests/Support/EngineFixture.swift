@@ -25,7 +25,7 @@ public struct EngineFixture {
                 + "/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/"
                 + owner + "/" + (["music", "plugins", "studio"].contains(owner) ? "app" : "helper")
                 + ".bundle")
-        for directory in [home, data, role, root.appendingPathComponent("Fixture.app")] {
+        for directory in [root, home, data, role, root.appendingPathComponent("Fixture.app")] {
             try FileManager.default.createDirectory(
                 at: directory, withIntermediateDirectories: true,
                 attributes: [.posixPermissions: 0o700])
