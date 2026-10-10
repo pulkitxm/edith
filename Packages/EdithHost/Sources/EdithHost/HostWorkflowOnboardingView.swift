@@ -135,6 +135,9 @@ struct HostWorkflowOnboardingView: View {
                 Spacer()
                 Button("Install \(model.selected.count) extensions") { model.installSelection() }
                     .buttonStyle(.edith(.primary)).disabled(!model.canInstall)
+                    .accessibilityIdentifier("workflow.install-selection")
+                    .accessibilityLabel(
+                        Text(verbatim: "Install \(model.selected.count) extensions"))
             }
         }
     }
