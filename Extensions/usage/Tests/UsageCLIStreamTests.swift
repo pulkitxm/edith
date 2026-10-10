@@ -199,12 +199,12 @@ import Testing
     }
 
     @Test func cancellingAndStoppingStreamsCancelOnlyTheirOwnedRefresh() async throws {
-        var cancelled = false
+        let cancelled = UsageCLIStreamCancellation()
         let controller = UsageWorkerController(
             dataDirectory: Repo.dataDir,
             collect: { _, _ in
                 do { try await Task.sleep(for: .seconds(60)) } catch {
-                    cancelled = true
+                    await cancelled.record()
                     throw error
                 }
                 return Data()
@@ -219,7 +219,8 @@ import Testing
         let (_, frame) = try await drain(handle, streams: streams)
         #expect(frame.state == .cancelled && frame.exitCode == nil)
         await streams.stopAndWait()
-        #expect(cancelled && !controller.refreshing)
+        #expect(await cancelled.value)
+        #expect(!controller.refreshing)
         #expect(throws: (any Error).self) {
             try streams.read(ExtensionCLIStreamRead(handle: handle, sequence: frame.nextSequence))
         }
@@ -240,4 +241,10 @@ import Testing
         await background.shutdown()
         await controller.shutdown()
     }
+}
+
+private actor UsageCLIStreamCancellation {
+    private(set) var value = false
+
+    func record() { value = true }
 }
