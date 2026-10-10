@@ -38,7 +38,7 @@ public enum ClaudeStatusLine {
     public static let setupHint =
         "Connect Claude Code’s status line in Usage settings to collect its limits"
 
-    static let recordInvocation = "extension command usage usage.statusline.record"
+    static let recordInvocation = "invoke usage usage.statusline.hook --json - --raw"
     static let thenFlag = " --then "
 
     public static func settingsURL(
@@ -73,7 +73,10 @@ public enum ClaudeStatusLine {
     ) -> Limits? {
         guard let limits = limits(from: data) else { return nil }
         var store = LimitsHistory(url: history)
-        store.append(provider: .claude, session: limits.session, week: limits.week, now: now)
+        let latest = LimitsHistory.latest(provider: .claude, url: history)
+        store.append(
+            provider: .claude, session: limits.session, week: limits.week,
+            fable: current(latest?.fable, now: now), now: now)
         return limits
     }
 
@@ -93,13 +96,22 @@ public enum ClaudeStatusLine {
         let latest = LimitsHistory.latest(provider: .claude, url: history)
         return LimitsProviderSnapshot(
             provider: .claude, session: current(latest?.session, now: now),
-            week: current(latest?.week, now: now))
+            week: current(latest?.week, now: now), fable: current(latest?.fable, now: now))
     }
 
     public static func command(executable: String, wrapping previous: String?) -> String {
         let recorder = "\(shellQuoted(executable)) \(recordInvocation)"
         guard let previous else { return recorder }
-        return recorder + thenFlag + shellQuoted(previous)
+        let script = """
+            input="$(/usr/bin/mktemp "${TMPDIR:-/tmp}/edith-statusline.XXXXXX")" || exit 1
+            trap '/bin/rm -f "$input"' EXIT
+            /usr/bin/head -c 524289 >"$input"
+            [ "$(/usr/bin/wc -c <"$input")" -le 524288 ] || exit 1
+            \(recorder) <"$input" >/dev/null 2>/dev/null
+            /bin/sh -c "$2" <"$input"
+            """
+        return "/bin/sh -c \(shellQuoted(script)) edith-statusline" + thenFlag
+            + shellQuoted(previous)
     }
 
     public static func isRecorder(_ command: String) -> Bool {
@@ -108,7 +120,7 @@ public enum ClaudeStatusLine {
 
     public static func wrappedCommand(in command: String) -> String? {
         guard isRecorder(command),
-            let marker = command.range(of: recordInvocation + thenFlag)
+            let marker = command.range(of: " edith-statusline" + thenFlag)
         else { return nil }
         return shellUnquoted(String(command[marker.upperBound...]))
     }
@@ -125,13 +137,22 @@ public enum ClaudeStatusLine {
     }
 
     @discardableResult
-    public static func install(executable: String, settings url: URL = settingsURL()) throws
+    public static func install(
+        executable: String, settings url: URL = settingsURL(),
+        ownedCommand: String? = nil,
+        preserveOwnership: (String) throws -> Void = { _ in }
+    ) throws
         -> Change
     {
         var document = try readSettings(url) ?? [:]
         let existing = statusCommand(in: document)
-        let previous = existing.flatMap { isRecorder($0) ? wrappedCommand(in: $0) : $0 }
+        let previous = existing.flatMap { existing in
+            let wrapped = wrappedCommand(in: existing)
+            let canonical = command(executable: executable, wrapping: wrapped)
+            return existing == ownedCommand || existing == canonical ? wrapped : existing
+        }
         let command = command(executable: executable, wrapping: previous)
+        try preserveOwnership(command)
         guard existing != command else { return .unchanged }
         var statusLine = document["statusLine"] as? [String: Any] ?? [:]
         statusLine["type"] = "command"
@@ -148,7 +169,8 @@ public enum ClaudeStatusLine {
     }
 
     static func launcher(beside executable: URL, fileManager: FileManager = .default) -> String? {
-        let launcher = executable.standardizedFileURL
+        let launcher = executable.deletingLastPathComponent().appendingPathComponent("ed")
+            .standardizedFileURL
         return fileManager.isExecutableFile(atPath: launcher.path) ? launcher.path : nil
     }
 
@@ -177,9 +199,17 @@ public enum ClaudeStatusLine {
     public static func setConnected(
         _ connected: Bool, settings url: URL = settingsURL()
     ) async throws -> Change {
-        guard connected else { return try disconnect(settings: url) }
-        guard let executable = defaultExecutable() else { throw Failure.missingExecutable }
-        return try connect(executable: executable, settings: url)
+        guard let service = await UsageWorkerOperations.statusLineCommands else {
+            throw ExtensionPeerError.unavailable
+        }
+        let response = try await service.execute(
+            connected ? "usage.statusline.install" : "usage.statusline.remove",
+            payload: Data("{}".utf8))
+        let change = try JSONDecoder().decode(UsageStatusLineChangeResponse.self, from: response)
+        guard let result = Change(rawValue: change.change) else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        return result
     }
 
     public static func isConnected(settings url: URL = settingsURL()) async -> Bool {
@@ -226,6 +256,10 @@ public enum ClaudeStatusLine {
 
     private static func statusCommand(in document: [String: Any]) -> String? {
         (document["statusLine"] as? [String: Any])?["command"] as? String
+    }
+
+    static func configuredCommand(settings: URL) throws -> String? {
+        try readSettings(settings).flatMap(statusCommand)
     }
 
     private static func readSettings(_ url: URL) throws -> [String: Any]? {

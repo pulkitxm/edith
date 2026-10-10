@@ -85,7 +85,7 @@ public enum LimitsCollector {
         ) { provider in
             switch provider {
             case .claude:
-                return (ClaudeStatusLine.snapshot(), nil)
+                return await fetchClaude()
             case .codex:
                 return (await fetchCodex(), nil)
             case .cursor:
@@ -139,6 +139,48 @@ public enum LimitsCollector {
         }
         announce(UsageEvents.limitsUpdated)
         return snapshot
+    }
+
+    static func fetchClaude(
+        now: Date = Date(),
+        fetch: () async throws -> LimitsProviderSnapshot = {
+            try await ClaudeLimitsReader.fetch()
+        },
+        fallback: () -> LimitsProviderSnapshot = { ClaudeStatusLine.snapshot() },
+        persist: (LimitsProviderSnapshot) throws -> Void = { snapshot in
+            try persistHistory(
+                provider: .claude, session: snapshot.session, week: snapshot.week,
+                fable: snapshot.fable)
+        }
+    ) async -> (LimitsProviderSnapshot, Date?) {
+        do {
+            try Task.checkCancellation()
+            let snapshot = try await fetch()
+            try Task.checkCancellation()
+            try persist(snapshot)
+            return (snapshot, nil)
+        } catch {
+            guard !Task.isCancelled else {
+                return (
+                    LimitsProviderSnapshot(
+                        provider: .claude, session: nil, week: nil, error: "Cancelled"), nil
+                )
+            }
+            let saved = fallback()
+            let message = error.localizedDescription
+            let deadline: Date?
+            if case ClaudeLimitsReader.Failure.rateLimited(let after) = error {
+                deadline = now.addingTimeInterval(max(after ?? 1800, 60))
+            } else {
+                deadline = nil
+            }
+            return (
+                LimitsProviderSnapshot(
+                    provider: .claude, session: saved.session,
+                    week: saved.session == nil ? nil : saved.week,
+                    fable: saved.session == nil ? nil : saved.fable, error: message), deadline
+            )
+        }
     }
 
     private static func fetchCursor() async -> (LimitsProviderSnapshot, Date?) {

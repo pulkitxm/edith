@@ -10,6 +10,8 @@ final class ExtensionRuntime: NSObject {
     private var usageStore: UsageStore?
     private var surface: UsageSurface?
     private var statusLine: UsageStatusLineCommands?
+    private var statusLineConnectionTask: Task<Void, Never>?
+    private var recovering = false
     private var reports: UsageReportCommands?
     private var machinesProjection: UsageMachinesProjection?
     private var alerts: UsageLimitAlerts?
@@ -37,6 +39,21 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(prepareDisableWithCompletion:)
+    func prepareDisable(completion: @escaping (NSError?) -> Void) {
+        UsageWorkerOperations.statusLineCommands = nil
+        commands.shutdown()
+        statusLineConnectionTask?.cancel()
+        Task {
+            await commands.shutdownAndWait()
+            await statusLineConnectionTask?.value
+            do {
+                try await statusLine?.shutdown()
+                completion(nil)
+            } catch { completion(error as NSError) }
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         commands.shutdown()
@@ -48,14 +65,22 @@ final class ExtensionRuntime: NSObject {
         DashboardModel.shared.shutdown()
         UsagePresenterState.shared.shutdown()
         UsageWorkerOperations.controller = nil
+        UsageWorkerOperations.statusLineCommands = nil
         UsageWorkerOperations.machinesProjection = nil
         let controller = controller; self.controller = nil
         let alerts = alerts; self.alerts = nil
         let task = alertsTask; alertsTask = nil
         let reports = reports; self.reports = nil
         let projection = machinesProjection; machinesProjection = nil
-        surface = nil; statusLine = nil; usageStore = nil
+        let statusLine = self.statusLine; self.statusLine = nil
+        let connectionTask = statusLineConnectionTask; statusLineConnectionTask = nil
+        connectionTask?.cancel()
+        recovering = false
+        surface = nil; usageStore = nil
         Task {
+            await commands.shutdownAndWait()
+            await connectionTask?.value
+            try? await statusLine?.shutdown()
             await controller?.shutdown()
             await task?.value
             await alerts?.shutdown()
@@ -83,8 +108,14 @@ final class ExtensionRuntime: NSObject {
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
-            guard controller == nil else { return ["ok": true] as NSDictionary }
+            guard controller == nil, !recovering else { return ["ok": true] as NSDictionary }
             let fixture = UsageExecutionEnvironment.fixtureHome != nil
+            let statusLine = UsageStatusLineCommands()
+            self.statusLine = statusLine
+            if input["recoveryOnly"] as? Bool == true {
+                recovering = true
+                return ["ok": true] as NSDictionary
+            }
             let controller = UsageWorkerController { policy, event in
                 let local = try await UsageNativeCollector.collect(
                     home: UsageExecutionEnvironment.home, dataDirectory: Repo.dataDir,
@@ -97,7 +128,7 @@ final class ExtensionRuntime: NSObject {
             UsageWorkerOperations.controller = controller
             let cache = SurfaceUsageStore(url: Repo.usageJSON)
             surface = UsageSurface(store: cache, controller: controller)
-            statusLine = UsageStatusLineCommands()
+            UsageWorkerOperations.statusLineCommands = statusLine
             let projection = UsageMachinesProjection()
             machinesProjection = projection
             UsageWorkerOperations.machinesProjection = projection
@@ -105,6 +136,7 @@ final class ExtensionRuntime: NSObject {
                 controller: controller, store: cache,
                 forgetMachine: { try await projection.forget(machineID: $0) })
             usageStore = UsageStore(showMenuBar: !fixture)
+            statusLineConnectionTask = Task { try? await statusLine.resumeOwnedHook() }
             if !fixture {
                 let alerts = UsageLimitAlerts(); self.alerts = alerts
                 _ = LimitNotifier.shared

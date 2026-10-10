@@ -137,6 +137,7 @@ try {
     assert.equal(result.studioDataValidated, id === "studio");
     assert.equal(result.audioMixerDataValidated, id === "audioMixer");
     assert.equal(result.usageDataValidated, id === "usage");
+    assert.equal(result.usageHookLifecycleValidated, id === "usage");
     assert.equal(result.cameraDataValidated, id === "virtualCamera");
     assert.equal(result.databaseDataValidated, id === "database");
     assert.equal(result.agentActivityValidated, id === "herdr");

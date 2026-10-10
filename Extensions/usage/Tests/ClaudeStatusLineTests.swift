@@ -67,6 +67,22 @@ import Testing
         #expect(latest.week?.resetsAt == Date(timeIntervalSince1970: 4_102_531_200))
     }
 
+    @Test func statusLinePreservesTheWebsiteFableWindowUntilItsReset() throws {
+        let root = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let history = root.appendingPathComponent("limits-history.jsonl")
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let fable = LimitWindow(percent: 7, resetsAt: now.addingTimeInterval(3600))
+        var store = LimitsHistory(url: history)
+        store.append(provider: .claude, session: nil, week: nil, fable: fable, now: now)
+        let input = statusInput(
+            session: 23, sessionReset: 4_102_444_800, week: 41, weekReset: 4_102_531_200)
+        ClaudeStatusLine.record(input, now: now.addingTimeInterval(10), history: history)
+        #expect(LimitsHistory.latest(provider: .claude, url: history)?.fable == fable)
+        ClaudeStatusLine.record(input, now: now.addingTimeInterval(3601), history: history)
+        #expect(LimitsHistory.latest(provider: .claude, url: history)?.fable == nil)
+    }
+
     @Test func installAddsTheRecorderAndKeepsOtherSettings() throws {
         let root = try sandbox()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -85,7 +101,7 @@ import Testing
         #expect(statusLine["type"] as? String == "command")
         #expect(
             statusLine["command"] as? String
-                == "'\(executable)' extension command usage usage.statusline.record")
+                == "'\(executable)' invoke usage usage.statusline.hook --json - --raw")
         #expect(ClaudeStatusLine.isInstalled(settings: settings))
     }
 
@@ -208,15 +224,17 @@ import Testing
         #expect(snapshot.week?.percent == 15)
     }
 
-    @Test func applicationExecutableIsUsedDirectly() throws {
+    @Test func applicationLauncherIsUsedWithoutOpeningWindows() throws {
         let root = try sandbox()
         defer { try? FileManager.default.removeItem(at: root) }
         let executable = root.appendingPathComponent("Edith")
-        try Data("#!/bin/sh\n".utf8).write(to: executable)
+        let launcher = root.appendingPathComponent("ed")
+        try Data("#!/bin/sh\n".utf8).write(to: launcher)
         try FileManager.default.setAttributes(
-            [.posixPermissions: 0o755], ofItemAtPath: executable.path)
-        #expect(ClaudeStatusLine.launcher(beside: executable) == executable.path)
-        #expect(ClaudeStatusLine.launcher(beside: root.appendingPathComponent("missing")) == nil)
+            [.posixPermissions: 0o755], ofItemAtPath: launcher.path)
+        #expect(ClaudeStatusLine.launcher(beside: executable) == launcher.path)
+        try FileManager.default.removeItem(at: launcher)
+        #expect(ClaudeStatusLine.launcher(beside: executable) == nil)
     }
 
     @Test func oversizedStatusLineInputRecordsNothing() throws {
