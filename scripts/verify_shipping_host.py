@@ -11,6 +11,11 @@ def run(*arguments):
     return result.stdout + result.stderr
 
 
+def inspect_cli(executable, version):
+    assert run(str(executable), '--version').strip() == version, 'Invalid plain-text CLI version'
+    assert json.loads(run(str(executable), 'version', '--json'))['version'] == version, 'Invalid JSON CLI version'
+
+
 def extension_point_descriptor(identifier):
     return {
         'EXVersion': 1,
@@ -128,5 +133,5 @@ def inspect_host(bundle, release=False, launcher_required=True):
             assert isinstance(plist.get(key), str) and plist[key].strip(), f'Missing worker usage description: {key}'
     catalog = json.loads((bundle / 'Contents/Resources/index.json').read_text())
     assert len(catalog) >= 35
-    assert json.loads(run(str(executable), '--version'))['version'] == plist['CFBundleShortVersionString']
+    inspect_cli(executable, plist['CFBundleShortVersionString'])
     return {'installedBytes': bytes_installed, 'extensionPayloadBytes': 0, 'indexedExtensions': len(catalog), 'signature': 'verified', 'machOBinaries': len(binaries)}

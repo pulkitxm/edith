@@ -106,9 +106,9 @@ test.skipIf(!fixture || process.platform !== "darwin")(
             "extensions",
             "ls",
           );
-          expect(stopped.exitCode).toBe(3);
+          expect(stopped.exitCode).toBe(4);
           expect(stopped.stdout.toString()).toBe("");
-          expect(JSON.parse(stopped.stderr.toString()).exitCode).toBe(3);
+          expect(stopped.stderr.toString()).toStartWith("error: ");
         }
         writeFileSync(
           join(app, "Contents/Library/feature.bundle"),

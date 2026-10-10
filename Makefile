@@ -312,6 +312,7 @@ ci-marketplace-host: ci-host host
 	$(MAKE) ci-host-cli
 	python3 -B scripts/test-extension-size-report.py
 	python3 -B scripts/test-extension-host-size-report.py
+	python3 -B scripts/test-host-build-metadata.py
 	bun scripts/extension-host-abi.mjs --write
 	bun test scripts/build-extension-support.test.js scripts/extension-owned-sources.test.js scripts/extension-host-abi.test.js scripts/extension-release-plan.test.js scripts/extension-publish.test.js scripts/extension-release-ready.test.js
 	$(MAKE) ci-marketplace-runtime

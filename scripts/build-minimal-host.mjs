@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   copyFile,
   cp,
@@ -14,6 +15,13 @@ import { basename, join, resolve } from "node:path";
 import { extensionUIExtensionPoint } from "./build-extension-ui-carrier.mjs";
 
 const root = process.cwd();
+const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
+  encoding: "utf8",
+}).trim();
+const sourceTreeDirty =
+  execFileSync("git", ["status", "--porcelain", "--untracked-files=no"], {
+    encoding: "utf8",
+  }).trim().length > 0;
 const packageDirectory = resolve(root, "Packages/EdithHost");
 const destination = resolve(root, "local/minimal-host/Edith.app");
 const developer =
@@ -260,6 +268,37 @@ async function installedBytes(directory) {
   return total;
 }
 const bytes = await installedBytes(destination);
+assert.equal(
+  execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+  sourceCommit,
+  "Source commit changed while building the host",
+);
+await writeFile(
+  join(destination, "..", "build-metadata.json"),
+  `${JSON.stringify(
+    {
+      sourceCommit,
+      sourceTreeDirty,
+      configuration: "Release",
+      optimization: "Osize",
+      architecture: "arm64",
+      signature: "ad-hoc",
+      xcode: execFileSync("xcodebuild", ["-version"], {
+        env: environment,
+        encoding: "utf8",
+      }).trim(),
+      sdk: execFileSync("xcrun", ["--sdk", "macosx", "--show-sdk-version"], {
+        env: environment,
+        encoding: "utf8",
+      }).trim(),
+      hostExecutableSHA256: createHash("sha256")
+        .update(await readFile(executable))
+        .digest("hex"),
+    },
+    null,
+    2,
+  )}\n`,
+);
 assert(
   bytes < 8_000_000,
   `The minimal host exceeds its 8 MB size limit: ${bytes}`,

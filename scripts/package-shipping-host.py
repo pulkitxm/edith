@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 
 from verify_shipping_host import extension_point_descriptor, inspect_host, run
+from host_build_metadata import load_metadata, write_metadata
 
 parser = argparse.ArgumentParser()
 parser.add_argument('source', type=Path)
@@ -24,6 +25,7 @@ if source == destination or source in destination.parents or destination in sour
 if destination == Path('/Applications/Edith.app'):
     parser.error('use build.sh --release --install for production installation')
 inspect_host(source, launcher_required=False)
+source_metadata = load_metadata(source)
 version = plistlib.loads(Path('Resources/Info.plist').read_bytes())
 identifier = 'com.pulkit.edith' if args.release else f'com.pulkit.edith.dev.{args.slot}'
 name = 'Edith' if args.release else f'Edith ({args.slot})'
@@ -99,4 +101,5 @@ with tempfile.TemporaryDirectory(prefix='edith-host-package-', dir=destination.p
         shutil.rmtree(destination)
     run('ditto', str(bundle), str(destination))
 inspect_host(destination, release=args.release)
+write_metadata(destination, source_metadata, 'ad-hoc' if args.identity == '-' else 'Developer ID' if runtime else 'development certificate')
 print(f'Packaged empty host: {name}, {plist["CFBundleShortVersionString"]}, no extension payloads')

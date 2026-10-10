@@ -106,6 +106,11 @@ class HostSizeReportTests(unittest.TestCase):
         self.assertIn("Baseline build: source commit: `baseline-fixture`; configuration: `Release`", rendered)
         self.assertIn("Host build: source commit: `host-fixture`; configuration: `Release`; optimization: `-Osize`", rendered)
         self.assertIn("signing: `ad-hoc`", rendered)
+        for dirty in [False, True]:
+            host_build["sourceTreeDirty"] = dirty
+            measured = report.build_report(self.baseline, self.app, self.packages, definitions, index, host_build=host_build)
+            self.assertEqual(measured["measurement"]["hostBuild"]["sourceTreeDirty"], dirty)
+            self.assertIn(f"uncommitted source changes: `{dirty}`", report.render_markdown(measured, index))
         host_build["hostExecutableSHA256"] = "stale"
         with self.assertRaisesRegex(ValueError, "executable checksum"):
             report.build_report(self.baseline, self.app, self.packages, definitions, index, host_build=host_build)
