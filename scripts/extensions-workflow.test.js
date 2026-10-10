@@ -1,11 +1,28 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { planExtensionBuilds } from "./extension-release-plan.mjs";
 
 const workflow = Bun.YAML.parse(
   readFileSync(".github/workflows/extensions.yml", "utf8"),
 );
 const { plan, build, publish } = workflow.jobs;
 const text = (value) => JSON.stringify(value).replaceAll("\\n", "\n");
+
+test("downloaded Docs source and reference changes run independent package checks", () => {
+  for (const event of [workflow.on.pull_request, workflow.on.push]) {
+    expect(event.paths).toContain("Packages/EdithDocsWorker/**");
+    expect(event.paths).toContain("docs/cli/**");
+    expect(event.paths).toContain("scripts/generate-cli-docs-bundle.mjs");
+  }
+  const definitions = JSON.parse(
+    readFileSync("Extensions/manifest.json", "utf8"),
+  );
+  expect(
+    planExtensionBuilds(definitions, [
+      "Packages/EdithDocsWorker/Sources/EdithDocsWorker/Resources/cli-docs.json",
+    ]).map(({ id }) => id),
+  ).toEqual(["docs"]);
+});
 
 test("OBS Camera release freezes the microphone host without provisioning profiles", () => {
   const preparation = build.steps.findIndex(

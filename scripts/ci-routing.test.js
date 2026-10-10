@@ -57,6 +57,10 @@ test("every change area covers its repository inputs", () => {
   const cases = {
     swift: [
       "Packages/Edith/Sources/Edith/App.swift",
+      "Packages/EdithDocsWorker/Sources/EdithDocsWorker/DocsLibrary.swift",
+      "Packages/EdithDocsWorker/Sources/EdithDocsWorker/Resources/cli-docs.json",
+      "Packages/EdithDocsWorker/Tests/EdithDocsWorkerTests/DocsTests.swift",
+      "Packages/EdithDocsWorker/Package.swift",
       "Resources/Info.plist",
       "edth.xcodeproj/project.pbxproj",
       "scripts/test-swift-test-isolation.py",
