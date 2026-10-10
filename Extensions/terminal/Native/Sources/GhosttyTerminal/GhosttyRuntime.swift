@@ -158,9 +158,17 @@ public final class GhosttyRuntime {
 
     func configuration(for theme: GhosttyTheme?) -> ghostty_config_t? {
         guard let cfg = ghostty_config_new() else { return nil }
-        ghostty_config_load_default_files(cfg)
+        let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
+            .map { URL(fileURLWithPath: $0, isDirectory: true) }
+        if let fixture {
+            fixture.appendingPathComponent("ghostty.conf").path.withCString {
+                ghostty_config_load_file(cfg, $0)
+            }
+        } else {
+            ghostty_config_load_default_files(cfg)
+        }
         let configuration = Self.selectionConfiguration + (theme?.configuration ?? "")
-        let directory = FileManager.default.temporaryDirectory
+        let directory = (fixture ?? FileManager.default.temporaryDirectory)
             .appendingPathComponent("edith-ghostty", isDirectory: true)
         try? FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true)
