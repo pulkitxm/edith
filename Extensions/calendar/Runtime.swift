@@ -21,11 +21,15 @@ final class ExtensionRuntime: NSObject {
 
     override init() { super.init() }
 
-    init(store: CalendarStore, presentation: CalendarPresentationState, uiEngine: CalendarUIEngine)
-    {
+    init(
+        store: CalendarStore, presentation: CalendarPresentationState, uiEngine: CalendarUIEngine,
+        fixture: CalendarFixtureBackend? = nil
+    ) {
         self.store = store
         self.presentation = presentation
         self.uiEngine = uiEngine
+        self.fixture = fixture
+        surface = fixture?.surface
         super.init()
     }
 
@@ -235,7 +239,8 @@ struct CalendarFixtureAdmission {
         else { throw ExtensionPeerError.invalidRequest }
         let home = URL(fileURLWithPath: homePath, isDirectory: true)
         let directory = home.deletingLastPathComponent()
-        guard home.lastPathComponent == "synthetic-data", directory.path != "/",
+        guard homePath == home.path, home.lastPathComponent == "synthetic-data",
+            directory.path != "/",
             directory.path != FileManager.default.homeDirectoryForCurrentUser.path,
             hostBundle == directory.appendingPathComponent("Host.app", isDirectory: true)
         else { throw ExtensionPeerError.invalidRequest }
@@ -266,7 +271,7 @@ struct CalendarFixtureAdmission {
             let values = try JSONSerialization.jsonObject(with: Data(contentsOf: marker))
                 as? [String: Any],
             Set(values.keys) == ["schema", "hostIdentifier", "dataDirectory", "packageDirectory"],
-            let schema = values["schema"] as? NSNumber, schema.intValue == 1,
+            let schema = values["schema"] as? NSNumber, schema.doubleValue == 1,
             CFGetTypeID(schema) != CFBooleanGetTypeID(),
             values["hostIdentifier"] as? String == identifier,
             values["dataDirectory"] as? String == data.path,
@@ -347,7 +352,7 @@ final class CalendarFixtureBackend {
             .init(
                 id: "synthetic-calendar-meeting", title: "Synthetic Calendar review",
                 calendar: "Synthetic Work", calendarID: "synthetic-work",
-                start: now.addingTimeInterval(300), end: now.addingTimeInterval(1800),
+                start: now, end: now.addingTimeInterval(1800),
                 isAllDay: false, location: "Synthetic Hall", latitude: 37.3318,
                 longitude: -122.0312,
                 meetingURL: "https://meet.google.com/synthetic-calendar-review",
