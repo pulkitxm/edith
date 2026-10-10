@@ -9,6 +9,7 @@ final class ExtensionRuntime: NSObject {
     private let ambientPolicy = ExtensionAmbientPolicy(jobs: [
         CompanionMonitor.jobID: .init(ambient: 60, live: 20)
     ])
+    private let settingsChanged: @MainActor () -> Void
     private var worker: CompanionWorker?
     private var uiWorkspace: CompanionWorkspaceSession?
     private var uiEngine: CompanionUIEngine?
@@ -16,6 +17,12 @@ final class ExtensionRuntime: NSObject {
     private var surface: CompanionSurface?
     private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
+
+    init(settingsChanged: @escaping @MainActor () -> Void = { IPC.post(IPC.Name.settingsChanged) })
+    {
+        self.settingsChanged = settingsChanged
+        super.init()
+    }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -136,7 +143,7 @@ final class ExtensionRuntime: NSObject {
             do { try ambientPolicy.apply(context: input) } catch {
                 return ["ok": false] as NSDictionary
             }
-            IPC.post(IPC.Name.settingsChanged)
+            if input["ambientPolicyOnly"] as? Bool != true { settingsChanged() }
         case "stop":
             ambientPolicy.stop()
             _ = CompanionCLIExecution.stopChats()

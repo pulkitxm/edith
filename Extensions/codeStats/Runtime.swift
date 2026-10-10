@@ -7,6 +7,7 @@ import SwiftUI
 
 @MainActor @objc(EdithCodeStatsExtensionRuntime)
 final class ExtensionRuntime: NSObject {
+    private let settingsWake: (@MainActor () -> Void)?
     private var workflow: CodeStatsWorkflow?
     private var uiModel: CodeStatsModel?
     private var engineClient: ExtensionEngineClient?
@@ -22,6 +23,11 @@ final class ExtensionRuntime: NSObject {
     private var defaultsObserver: NSObjectProtocol?
     private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
+
+    init(settingsWake: (@MainActor () -> Void)? = nil) {
+        self.settingsWake = settingsWake
+        super.init()
+    }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -154,11 +160,12 @@ final class ExtensionRuntime: NSObject {
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":
-            let previous = ambientPolicy.pauseAmbientOnBattery
             do { try ambientPolicy.apply(context: input) } catch {
                 return ["ok": false] as NSDictionary
             }
-            if previous == ambientPolicy.pauseAmbientOnBattery { wakeSchedule() }
+            if input["ambientPolicyOnly"] as? Bool != true {
+                if let settingsWake { settingsWake() } else { wakeSchedule() }
+            }
         case "stop": prepareToStop(completion: {})
         case "status": return ["ok": true, "running": workflow != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary

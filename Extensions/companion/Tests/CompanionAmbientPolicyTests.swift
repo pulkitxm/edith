@@ -64,6 +64,47 @@ import Testing
         #expect(monitor.isRunning == false)
     }
 
+    @Test func policyOnlySynchronizationDoesNotWakeSettingsWork() {
+        var wakes = 0
+        let runtime = ExtensionRuntime(settingsChanged: { wakes += 1 })
+        for paused in [false, true, true, false] {
+            let input =
+                context(CompanionMonitor.jobID, paused: paused).mutableCopy()
+                as! NSMutableDictionary
+            input["operation"] = "synchronize"
+            input["ambientPolicyOnly"] = true
+            #expect((runtime.execute(input) as? NSDictionary)?["ok"] as? Bool == true)
+        }
+        #expect(wakes == 0)
+        for paused in [false, true, true, false] {
+            let input =
+                context(CompanionMonitor.jobID, paused: paused).mutableCopy()
+                as! NSMutableDictionary
+            input["operation"] = "synchronize"
+            #expect((runtime.execute(input) as? NSDictionary)?["ok"] as? Bool == true)
+        }
+        #expect(wakes == 4)
+        #expect(
+            (runtime.execute(["operation": "synchronize"]) as? NSDictionary)?["ok"] as? Bool
+                == false)
+        #expect(wakes == 4)
+    }
+
+    @Test func unusedCaptureShutdownDoesNotAllocateAudioResources() {
+        enum UnexpectedAllocation: Error { case audio }
+        var allocations = 0
+        let model = CompanionCaptureModel(
+            recordingFactory: {
+                allocations += 1
+                throw UnexpectedAllocation.audio
+            }, observeOutbox: false)
+        model.setCaptureActive(false)
+        model.shutdown()
+        model.shutdown()
+        #expect(allocations == 0)
+        #expect(model.phase == .idle)
+    }
+
     private func policy(
         _ job: String, ambient: Double, live: Double? = nil,
         battery: @escaping @MainActor () -> Bool

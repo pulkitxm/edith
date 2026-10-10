@@ -48,6 +48,32 @@ import Testing
         policy.stop(); await lifecycle.shutdown()
     }
 
+    @Test func policyOnlySynchronizationDoesNotWakeSettingsWork() {
+        var wakes = 0
+        let runtime = ExtensionRuntime(settingsWake: { wakes += 1 })
+        for paused in [false, true, true, false] {
+            let input =
+                context(CodeStatsScheduleLifecycle.jobID, paused: paused).mutableCopy()
+                as! NSMutableDictionary
+            input["operation"] = "synchronize"
+            input["ambientPolicyOnly"] = true
+            #expect((runtime.execute(input) as? NSDictionary)?["ok"] as? Bool == true)
+        }
+        #expect(wakes == 0)
+        for paused in [false, true, true, false] {
+            let input =
+                context(CodeStatsScheduleLifecycle.jobID, paused: paused).mutableCopy()
+                as! NSMutableDictionary
+            input["operation"] = "synchronize"
+            #expect((runtime.execute(input) as? NSDictionary)?["ok"] as? Bool == true)
+        }
+        #expect(wakes == 4)
+        #expect(
+            (runtime.execute(["operation": "synchronize"]) as? NSDictionary)?["ok"] as? Bool
+                == false)
+        #expect(wakes == 4)
+    }
+
     private func policy(
         _ job: String, ambient: Double, live: Double? = nil,
         battery: @escaping @MainActor () -> Bool
