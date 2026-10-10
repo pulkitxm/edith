@@ -820,6 +820,7 @@
         "Extensions/music/Views/DownloadSheetView.swift",
         "Extensions/music/Views/HomeMusicCard.swift",
         "Extensions/music/Views/MusicAccounts.swift",
+        "Extensions/music/Views/MusicAuxiliaryScenes.swift",
         "Extensions/music/Views/MusicPageView.swift",
         "Extensions/music/Views/MusicProviderView.swift",
         "Extensions/music/Views/MusicRootView.swift",

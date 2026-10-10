@@ -1356,7 +1356,7 @@ struct MusicPage: View {
 
 struct SeekBar: View {
     @State private var remote = MusicRemote.shared
-    @ObservedObject private var visibility = WindowVisibility.shared
+    @Environment(\.windowVisible) private var visible
     let theme: Color
     var height: CGFloat = 5
     @State private var dragFraction: Double?
@@ -1366,7 +1366,7 @@ struct SeekBar: View {
             let knob = max(11, height + 7)
             ZStack(alignment: .leading) {
                 Capsule().fill(.primary.opacity(0.1))
-                if remote.isPlaying, visibility.visible, dragFraction == nil {
+                if remote.isPlaying, visible, dragFraction == nil {
                     TimelineView(.periodic(from: MusicTick.epoch, by: 0.5)) { _ in
                         fill(geo.size.width, knob)
                     }
@@ -2305,7 +2305,7 @@ struct MusicFooter: View {
     }
     @State private var playerOptionsPresented = false
     @State private var remote = MusicRemote.shared
-    @ObservedObject private var visibility = WindowVisibility.shared
+    @Environment(\.windowVisible) private var visible
     @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
         var mainWindowSection =
         "music"
@@ -2472,7 +2472,7 @@ struct MusicFooter: View {
                             .frame(width: UIScale.pt(78), alignment: .leading)
                     }
                     PlaybackWave(
-                        playing: remote.isPlaying && visibility.visible, color: theme.opacity(0.9),
+                        playing: remote.isPlaying && visible, color: theme.opacity(0.9),
                         maxHeight: UIScale.pt(13))
                 }
             }
@@ -2537,7 +2537,7 @@ struct MusicFooter: View {
     private func timeTicker<Content: View>(@ViewBuilder _ content: @escaping () -> Content)
         -> some View
     {
-        if remote.isPlaying, visibility.visible {
+        if remote.isPlaying, visible {
             TimelineView(.periodic(from: MusicTick.epoch, by: 1)) { _ in content() }
         } else {
             content()
@@ -2670,7 +2670,7 @@ struct MusicSidebarPill: View {
     let expand: () -> Void
     @State private var remote = MusicRemote.shared
     @State private var accounts = MusicAccounts.shared
-    @ObservedObject private var visibility = WindowVisibility.shared
+    @Environment(\.windowVisible) private var visible
 
     private var progress: Double {
         accounts.progress
@@ -2691,7 +2691,7 @@ struct MusicSidebarPill: View {
                     Spacer(minLength: 0)
                     if accounts.playerTitle != nil {
                         PlaybackWave(
-                            playing: accounts.isPlaying && visibility.visible,
+                            playing: accounts.isPlaying && visible,
                             color: theme.opacity(0.9), maxHeight: UIScale.pt(9))
                     }
                 }
