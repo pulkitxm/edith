@@ -21,6 +21,7 @@ public final class UsageWorkerController {
     private var progress: UsageRefreshProgress?
     private var refreshRecorder: UsageRefreshRecorder?
     var refreshObservation: UsageRefreshObservation? { refreshRecorder?.snapshot }
+    var refreshRecording: UsageRefreshRecorder? { refreshRecorder }
     private var backgroundTask: Task<Void, Never>?
     private let fetchLimits: FetchLimits
     private let collect: Collect
@@ -112,6 +113,7 @@ public final class UsageWorkerController {
                 if !Task.isCancelled, let self, !self.stopped, self.usageID == id {
                     self.failure = error.localizedDescription
                     progress.record(.failure(error.localizedDescription))
+                    recorder.record(.failure(error.localizedDescription))
                 }
             }
             guard let self, self.usageID == id else { return }

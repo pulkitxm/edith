@@ -271,6 +271,70 @@ import Testing
         await waiting.shutdown()
     }
 
+    @Test func completedCLIKeepsItsNativeObservationWhenANewRefreshStartsImmediately()
+        async throws
+    {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let home = root.appendingPathComponent("home")
+        let project = home.appendingPathComponent("projects/fixture")
+        try FileManager.default.createDirectory(
+            at: project.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        try Data("[remote \"origin\"]\n url = https://github.com/example/fixture.git\n".utf8)
+            .write(to: project.appendingPathComponent(".git/config"))
+        let journal = home.appendingPathComponent(".claude/projects/fixture/session.jsonl")
+        try FileManager.default.createDirectory(
+            at: journal.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let row = try JSONSerialization.data(withJSONObject: [
+            "timestamp": "2026-10-09T01:00:00Z", "sessionId": "fixture-session",
+            "requestId": "fixture-request", "costUSD": 1, "cwd": project.path,
+            "message": [
+                "id": "fixture-message", "model": "claude-sonnet-4-5",
+                "usage": ["input_tokens": 10, "output_tokens": 5], "content": "Fixture prompt",
+            ],
+        ])
+        try (row + Data("\n".utf8)).write(to: journal)
+        let gate = UsageCLINativeRefreshGate()
+        defer { gate.resume() }
+        let controller = UsageWorkerController(dataDirectory: root.appendingPathComponent("data")) {
+            _, event in
+            await gate.startedCollection()
+            if await gate.collectionStarts > 1 { await gate.pause() }
+            try Task.checkCancellation()
+            return try await UsageNativeCollector.collect(
+                home: home, dataDirectory: root.appendingPathComponent("collector"),
+                environment: ["EDITH_USAGE_OFFLINE": "1", "TZ": "UTC"], onEvent: event)
+        }
+        var restarted = false
+        var nextID: String?
+        let observer = UsageEvents.observe(UsageEvents.refreshFinished) {
+            guard !restarted else { return }
+            restarted = true
+            nextID = try? controller.requestRefresh(policy: .skip)
+        }
+        do {
+            let reply = try await run(
+                ["refresh", "--no-machines", "--json"], controller: controller)
+            try #require(reply.exitCode == 0)
+            let result = try #require(
+                try JSONSerialization.jsonObject(with: Data(reply.stdout.utf8)) as? [String: Any])
+            #expect(result["completed"] as? Bool == true)
+            #expect(result["followed"] as? Bool == false)
+            #expect((result["summary"] as? [String: String])?["journals"] == "1")
+            #expect((result["phases"] as? [[String: Any]])?.isEmpty == false)
+            #expect(restarted && nextID != nil && controller.refreshing)
+            #expect(controller.refreshObservation?.events.isEmpty == true)
+            UsageEvents.stopObserving(observer)
+            await controller.cancelRefresh(matching: nextID)
+            await controller.shutdown()
+        } catch {
+            UsageEvents.stopObserving(observer)
+            gate.resume()
+            await controller.shutdown()
+            throw error
+        }
+    }
+
     @Test(arguments: UsageCLIRefreshScenario.allCases)
     func concurrentOriginalCLIFollowObservesNativeRefreshWithoutOwningItsCancellation(
         scenario: UsageCLIRefreshScenario

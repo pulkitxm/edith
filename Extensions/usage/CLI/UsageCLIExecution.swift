@@ -66,10 +66,13 @@ import Foundation
             let identifier = try controller.requestRefresh(policy: policy)
             if !attached { ownedRun = identifier }
         }
+        guard let recording = controller.refreshRecording else {
+            throw CLIFailure.unavailable("no usage refresh is running")
+        }
         var seen = 0
         let observer = Task { @MainActor in
             while !Task.isCancelled {
-                let events = controller.refreshObservation?.events ?? []
+                let events = recording.snapshot.events
                 for event in events.dropFirst(seen) { printer.show(event) }
                 seen = events.count
                 do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
@@ -83,9 +86,14 @@ import Foundation
             throw CancellationError()
         }
         try Task.checkCancellation()
-        if let failure = controller.failure { throw CLIFailure.unavailable(failure) }
-        let result = controller.refreshObservation
-        let events = result?.events ?? []
+        let result = recording.snapshot
+        let events = result.events
+        if let failure = events.compactMap({ event -> String? in
+            guard case .failure(let message) = event else { return nil }
+            return message
+        }).last {
+            throw CLIFailure.unavailable(failure)
+        }
         for event in events.dropFirst(seen) { printer.show(event) }
         let summaries = events.compactMap { event -> (String, JSONValue)? in
             if case .summary(let label, let value) = event { return (label, .string(value)) }
@@ -93,7 +101,7 @@ import Foundation
         }
         return .object([
             "completed": .bool(true), "followed": .bool(follow || attached),
-            "seconds": .double(result?.seconds ?? 0),
+            "seconds": .double(result.seconds),
             "summary": .object(Dictionary(summaries, uniquingKeysWith: { _, latest in latest })),
             "phases": .array(
                 events.compactMap { event in
