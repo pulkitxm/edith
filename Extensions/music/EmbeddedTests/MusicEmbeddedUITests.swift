@@ -46,6 +46,13 @@ import Testing
         for _ in 0..<20 where actions.isEmpty { await Task.yield() }
         #expect(actions.first?.kind == .seek)
         #expect(actions.first?.value == 0.5)
+        remote.stop()
+        #expect(remote.duration == 0)
+        #expect(remote.elapsed == 0)
+        #expect(remote.volume == 0.7)
+        #expect(!remote.looping)
+        #expect(remote.restorePending == 0)
+        #expect(EmbeddedTrackMeta.root.path == "/")
     }
 
     @Test func stopRejectsLateResponsesAndCancelsLocalTasks() async throws {
@@ -157,6 +164,10 @@ import Testing
         remote.stop()
         pending?.resume(returning: try JSONEncoder().encode(0.9))
         for _ in 0..<20 { await Task.yield() }
+        #expect(levels.level == EmbeddedPlaybackLevel.neutral)
+        remote.configure { _, _ in try JSONEncoder().encode(2.0) }
+        for _ in 0..<20 where remote.libraryError == nil { await Task.yield() }
+        #expect(remote.libraryError != nil)
         #expect(levels.level == EmbeddedPlaybackLevel.neutral)
     }
 

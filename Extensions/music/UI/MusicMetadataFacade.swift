@@ -35,7 +35,10 @@ struct EmbeddedMusicFolder: Identifiable, Equatable, Sendable {
     private static var images: [String: NSImage] = [:]
     private static var durations: [String: String] = [:]
     private static var counts: [String: Int] = [:]
-    static func clear() { images.removeAll(); durations.removeAll(); counts.removeAll() }
+    static func clear() {
+        images.removeAll(); durations.removeAll(); counts.removeAll()
+        root = URL(fileURLWithPath: "/")
+    }
     static func url(for path: String) -> URL { root.appendingPathComponent(path) }
     static func artworkCached(for track: EmbeddedTrack) -> NSImage? { images[track.relativePath] }
     static func cachedDurationLabel(for track: EmbeddedTrack) -> String? {

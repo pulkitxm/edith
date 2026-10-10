@@ -81,6 +81,11 @@ import Observation
         clients.removeAll(); invoke = nil
         tracks = []; folders = []; folderTracks = []; searchTracks = []; searchFolders = []
         favourites = []; favouritePaths = []; currentFile = nil; isPlaying = false
+        elapsedBase = 0; sampledAt = Date(); duration = 0; volume = 0.7
+        looping = false; shuffling = false; restorePending = 0; showingFavourites = false
+        folderPath = ""; query = ""; readQuery = nil; libraryError = nil
+        EmbeddedMusicTools.shared.installed = []; EmbeddedMusicTools.shared.installing = nil
+        EmbeddedMusicTools.shared.error = nil
         entriesLoaded = false; searchLoaded = false; favouritesLoaded = false
         folderCache.removeAll(); EmbeddedTrackMeta.clear()
         EmbeddedMusicAccounts.shared.reset()
