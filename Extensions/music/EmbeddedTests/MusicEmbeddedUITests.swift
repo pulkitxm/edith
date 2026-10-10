@@ -148,45 +148,119 @@ import Testing
         remote.configure { _, _ in encoded }
         remote.rescan()
         for _ in 0..<20 where !remote.entriesLoaded { await Task.yield() }
-        defer { remote.stop(); UIScale.apply(1) }
+        let current = try #require(remote.current)
+        EmbeddedMusicDetailPresenter.shared.show(current)
+        #expect(EmbeddedMusicDetailPresenter.shared.track == current)
+        let fixtureDirectory = URL(
+            fileURLWithPath: "/tmp/extension-final-batch-20261010/music-render-fixtures")
+        try FileManager.default.createDirectory(
+            at: fixtureDirectory, withIntermediateDirectories: true)
+        let defaults = SharedDefaults.store
+        let priorZoom = defaults.object(forKey: WindowZoom.defaultsKey)
+        defer {
+            remote.stop(); defaults.set(priorZoom, forKey: WindowZoom.defaultsKey); UIScale.apply(1)
+        }
         for width in [540.0, 960.0] {
             for scheme in [ColorScheme.light, .dark] {
                 for zoom in [1.0, 1.5] {
+                    defaults.set(zoom, forKey: WindowZoom.defaultsKey)
                     UIScale.apply(zoom)
-                    for route in EmbeddedMusicSceneRoute.allCases {
-                        let state = ExtensionPresentationState(
-                            compact: width < 720, visible: false, availableWidth: width,
-                            intrinsic: route != .page)
-                        let controller = try #require(
-                            state.withContext {
-                                EmbeddedMusicAuxiliaryScenes.controller([
-                                    "location": route.rawValue, "section": "music",
-                                ])
-                            })
+                    let home = NSHostingController(
+                        rootView: ExtensionPageHost {
+                            EmbeddedMusicSceneLoad {
+                                EmbeddedMusicHomeScene(tile: SurfaceTile(.music))
+                            }
+                        })
+                    let downloads = NSHostingController(
+                        rootView: ExtensionPageHost { EmbeddedDownloadSheet() })
+                    let controllers: [(String, NSViewController)] =
+                        try EmbeddedMusicSceneRoute.allCases.map { route in
+                            let state = ExtensionPresentationState(
+                                compact: width < 720, visible: false,
+                                availableWidth: width,
+                                intrinsic: [.footer, .sidebar].contains(route))
+                            return (
+                                route.rawValue,
+                                try #require(
+                                    state.withContext {
+                                        EmbeddedMusicAuxiliaryScenes.controller([
+                                            "location": route.rawValue, "section": "music",
+                                        ])
+                                    })
+                            )
+                        } + [("home", home), ("downloads", downloads)]
+                    for (location, controller) in controllers {
                         controller.view.frame = CGRect(
-                            x: 0, y: 0, width: width, height: route == .page ? 800 : 200)
+                            x: 0, y: 0, width: width,
+                            height: ["main", "downloads", "music.detail", "settings"].contains(
+                                location) ? 800 : 300)
                         controller.view.appearance = NSAppearance(
                             named: scheme == .dark ? .darkAqua : .aqua)
-                        let window = NSWindow(
-                            contentRect: controller.view.frame, styleMask: [.borderless],
-                            backing: .buffered, defer: false)
-                        window.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))
-                        window.contentViewController = controller
-                        window.orderBack(nil)
+                        let container = MusicRenderFixtureView(frame: controller.view.frame)
+                        container.color =
+                            scheme == .dark
+                            ? NSColor(calibratedWhite: 0.12, alpha: 1) : NSColor.white
+                        container.addSubview(controller.view)
+                        controller.view.autoresizingMask = [.width, .height]
+                        try await Task.sleep(for: .milliseconds(100))
                         controller.view.layoutSubtreeIfNeeded()
-                        let bitmap = try #require(
-                            controller.view.bitmapImageRepForCachingDisplay(
-                                in: controller.view.bounds))
-                        controller.view.cacheDisplay(in: controller.view.bounds, to: bitmap)
+                        #expect(UIScale.current == zoom)
+                        #expect(EmbeddedMusicDetailPresenter.shared.track == current)
+                        let bitmap: NSBitmapImageRep
+                        if location == "music.footer" {
+                            let renderer = ImageRenderer(
+                                content:
+                                    EmbeddedMusicFooterScene()
+                                    .environment(\.colorScheme, scheme)
+                                    .frame(width: width, height: 96 * zoom)
+                                    .background(scheme == .dark ? Color(white: 0.12) : .white))
+                            renderer.scale = 2
+                            let image = try #require(renderer.nsImage)
+                            let imageData = try #require(image.tiffRepresentation)
+                            bitmap = try #require(NSBitmapImageRep(data: imageData))
+                        } else {
+                            bitmap = try #require(
+                                container.bitmapImageRepForCachingDisplay(in: container.bounds))
+                            container.cacheDisplay(in: container.bounds, to: bitmap)
+                        }
                         let png = try #require(bitmap.representation(using: .png, properties: [:]))
                         #expect(png.count > 100)
-                        #expect(window.frame.maxX < 0)
-                        window.orderOut(nil); window.contentViewController = nil
+                        var colors = Set<String>()
+                        for x in stride(
+                            from: 0, to: bitmap.pixelsWide, by: max(1, bitmap.pixelsWide / 20))
+                        {
+                            for y in stride(
+                                from: 0, to: bitmap.pixelsHigh, by: max(1, bitmap.pixelsHigh / 20))
+                            {
+                                if let color = bitmap.colorAt(x: x, y: y) {
+                                    colors.insert(color.description)
+                                }
+                            }
+                        }
+                        #expect(
+                            colors.count > 3,
+                            "The \(location) controller must render visible content.")
+                        let suffix = "\(Int(width))-\(scheme == .dark ? "dark" : "light")-\(zoom)"
+                        try png.write(
+                            to: fixtureDirectory.appendingPathComponent(
+                                location + "-" + suffix + ".png"))
+                        #expect(controller.view.window == nil)
+                        controller.view.removeFromSuperview()
                         #expect(controller.view.fittingSize.width.isFinite)
                         #expect(controller.view.fittingSize.height.isFinite)
                     }
                 }
             }
         }
+        remote.stop()
+        #expect(EmbeddedMusicDetailPresenter.shared.track == nil)
+    }
+}
+
+private final class MusicRenderFixtureView: NSView {
+    var color = NSColor.white
+    override func draw(_ dirtyRect: NSRect) {
+        color.setFill()
+        bounds.fill()
     }
 }

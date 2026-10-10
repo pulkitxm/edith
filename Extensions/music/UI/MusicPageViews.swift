@@ -1121,9 +1121,6 @@ private struct EmbeddedMusicTrackTile: View {
 struct EmbeddedMusicDetailOverlay: View {
     @State private var presenter = EmbeddedMusicDetailPresenter.shared
     @State private var remote = EmbeddedMusicRemote.shared
-    @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
-        var mainWindowSection =
-        "music"
     @AppStorage(
         AppStorageKeys.General.theme,
         store: SharedDefaults.store) private var themeName =
@@ -1158,7 +1155,7 @@ struct EmbeddedMusicDetailOverlay: View {
                         },
                         onOpenFolder: {
                             remote.navigate(to: $0)
-                            mainWindowSection = "music"
+                            remote.send(.openMusic, path: $0)
                         },
                         onClose: { presenter.dismiss() }
                     )
@@ -1237,16 +1234,18 @@ private struct EmbeddedMusicDetailSheet: View {
                 max(0, availableSize.height - UIScale.pt(48)))
         )
         .background(sheetBackground)
-        .pageTask(id: track.id) {
+        .onChange(of: track.id, initial: true) {
             name = track.url.deletingPathExtension().lastPathComponent
             namedTrack = track.id
+            presenter.armRename(false)
+        }
+        .pageTask(id: track.id) {
             if let data = try? await remote.request(
                 "music.ui.source", action: .init(kind: .startTrack, path: track.relativePath))
             {
                 sourceURL = try? JSONDecoder().decode(URL.self, from: data)
             }
             if beginRename { nameFocused = true }
-            presenter.armRename(false)
         }
     }
 
@@ -1519,9 +1518,6 @@ struct EmbeddedMusicFooter: View {
     @State private var playerOptionsPresented = false
     @State private var remote = EmbeddedMusicRemote.shared
     @Environment(\.windowVisible) private var visible
-    @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
-        var mainWindowSection =
-        "music"
     @AppStorage(
         AppStorageKeys.General.theme,
         store: SharedDefaults.store) private var themeName =
@@ -1814,7 +1810,7 @@ struct EmbeddedMusicFooter: View {
                 .foregroundStyle(.secondary)
             Spacer()
             Button {
-                mainWindowSection = "music"
+                remote.send(.openMusic)
             } label: {
                 Text("Browse music")
                     .font(.system(size: UIScale.pt(11), weight: .medium))

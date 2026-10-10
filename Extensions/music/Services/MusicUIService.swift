@@ -7,6 +7,7 @@ import WebKit
 @MainActor final class MusicUIService {
     private let worker: MusicWorker
     private var downloads: MusicDownloadsService?
+    private var libraryPanel: NSOpenPanel?
 
     private var events: [MusicUIEvent] = []
     private var sequence = 0
@@ -258,7 +259,16 @@ import WebKit
             panel.canChooseDirectories = true; panel.canChooseFiles = false
             panel.allowsMultipleSelection = false; panel.prompt = "Choose"
             panel.message = "Choose your music folder"
-            guard panel.runModal() == .OK, let url = panel.url else { return }
+            libraryPanel = panel
+            defer { libraryPanel = nil }
+            let response = await withTaskCancellationHandler {
+                await panel.begin()
+            } onCancel: {
+                Task { @MainActor in panel.cancel(nil) }
+            }
+            try Task.checkCancellation()
+            guard !stopped else { throw ExtensionPeerError.unavailable }
+            guard response == .OK, let url = panel.url else { return }
             _ = try MusicFolderSelectionOperationExecution.select(url.path)
         case .openLibrary: _ = try MusicLibraryOperationExecution.openLibrary()
         case .reveal:
@@ -266,7 +276,8 @@ import WebKit
         case .revealFolder:
             MusicLibraryOperationExecution.reveal(try MusicLibrary.folder(at: action.path).url)
         case .openDownloads: try await MusicHostNavigation.open(section: "downloads")
-        case .openMusic: try await MusicHostNavigation.open()
+        case .openMusic:
+            try await MusicHostNavigation.open(path: action.path.isEmpty ? nil : action.path)
         case .openSource:
             let track = try MusicLibrary.track(at: action.path)
             guard
@@ -359,6 +370,7 @@ import WebKit
     func stop() {
         guard !stopped else { return }
         stopped = true
+        libraryPanel?.cancel(nil); libraryPanel = nil
         downloads?.stop(); downloads = nil; resumeAudio = false; closeVideo()
         worker.accounts.spotify.receiveUIEvent = nil
         events.removeAll()

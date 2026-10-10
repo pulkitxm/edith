@@ -151,6 +151,15 @@ extension MusicExtensionTests {
                     payload: JSONEncoder().encode(MusicUIAction(kind: .fadeLength, value: 15)))
             }
             #expect(defaults.double(forKey: MusicFade.secondsKey) == 3)
+            let priorNavigation = MusicHostNavigation.navigate
+            var navigation: [MusicHostNavigationRequest] = []
+            MusicHostNavigation.navigate = { navigation.append($0) }
+            defer { MusicHostNavigation.navigate = priorNavigation }
+            _ = try await service.execute(
+                "music.ui.action",
+                payload: JSONEncoder().encode(
+                    MusicUIAction(kind: .openMusic, path: "Mock Collection")))
+            #expect(navigation == [.init(section: "music", path: "Mock Collection")])
             service.stop()
             await #expect(throws: (any Error).self) {
                 try await service.execute(

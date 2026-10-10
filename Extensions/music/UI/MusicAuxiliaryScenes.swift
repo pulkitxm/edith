@@ -83,8 +83,5 @@ struct EmbeddedMusicSidebarScene: View {
 }
 
 struct EmbeddedMusicSettingsScene: View {
-    @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
-        var section = "home"
-
     var body: some View { EmbeddedMusicSettings { EmbeddedMusicRemote.shared.send(.openMusic) } }
 }

@@ -78,6 +78,7 @@ import Observation
         entriesLoaded = false; searchLoaded = false; favouritesLoaded = false
         folderCache.removeAll(); EmbeddedTrackMeta.clear()
         EmbeddedMusicAccounts.shared.reset()
+        EmbeddedMusicDetailPresenter.shared.dismiss()
         EmbeddedYoutubeDownloader.shared.stop()
     }
 
@@ -247,7 +248,9 @@ import Observation
     func open(_ folder: EmbeddedMusicFolder) { navigate(to: folder.relativePath) }
     func navigate(to path: String) { folderPath = path; showingFavourites = false; rescan() }
     func reveal(_ track: EmbeddedTrack) {
-        navigate(to: (track.relativePath as NSString).deletingLastPathComponent)
+        let path = (track.relativePath as NSString).deletingLastPathComponent
+        navigate(to: path)
+        send(.openMusic, path: path)
     }
     func openFavourites() { showingFavourites = true; rescan() }
     func toggleFavourite(_ track: EmbeddedTrack) { send(.favourite, path: track.relativePath) }

@@ -42,9 +42,7 @@ struct EmbeddedMusicStreamingControls: View {
                 Button {
                     accounts.spotify.library.showQueue()
                     accounts.spotify.library.navigate(to: .queue)
-                    SharedDefaults.store.set(
-                        "music",
-                        forKey: AppStorageKeys.General.mainWindowSection)
+                    EmbeddedMusicRemote.shared.send(.openMusic)
                 } label: {
                     Image(systemName: "list.bullet")
                 }
