@@ -139,6 +139,58 @@ import Testing
         }
     }
 
+    @Test func originalTimelineFiltersPaginatesPausesAndCopiesActualEvents() throws {
+        let sample = try fixture().events[0]
+        let timeline = HostBackgroundTimelineModel()
+        let values = (0..<130).map { index in
+            HostBackgroundEvent(
+                id: UUID(), date: sample.date.addingTimeInterval(Double(index)),
+                level: index.isMultiple(of: 2) ? "info" : "error", category: sample.category,
+                name: sample.name, message: "Synthetic record \(index)", duration: nil,
+                taskID: sample.taskID)
+        }
+        timeline.receive(values)
+        #expect(timeline.visibleEvents.count == 50)
+        timeline.loadMore()
+        #expect(timeline.visibleEvents.count == 100)
+        #expect(timeline.hasMore)
+        timeline.failuresOnly = true
+        #expect(timeline.matches.count == 65 && timeline.visibleEvents.count == 50)
+        timeline.search = " record 129 "
+        #expect(timeline.matches.count == 1)
+        #expect(timeline.text.contains("[error] jobs.sessions.discovery"))
+        #expect(timeline.text.contains(sample.taskID!.uuidString))
+        timeline.paused = true
+        timeline.receive([])
+        #expect(timeline.matches.count == 1)
+        timeline.paused = false
+        timeline.receive([])
+        #expect(timeline.visibleEvents.isEmpty)
+    }
+
+    @Test func ownerProjectionValidationRejectsConflictsAndMalformedCadence() throws {
+        let sample = try fixture()
+        try HostBackgroundSource.validate(jobs: sample.jobs, events: sample.events)
+        #expect(throws: (any Error).self) {
+            try HostBackgroundSource.validate(
+                jobs: sample.jobs + sample.jobs, events: sample.events)
+        }
+        #expect(throws: (any Error).self) {
+            try HostBackgroundSource.validate(
+                jobs: sample.jobs, events: sample.events + sample.events)
+        }
+        let job = try #require(sample.jobs.first)
+        let invalid = HostBackgroundJob(
+            descriptor: .init(
+                id: job.id, title: "Synthetic",
+                trigger: "timer", topic: nil, cadence: .init(ambient: -.infinity, live: nil),
+                power: "any", abilityID: nil), phase: "idle", subscribers: 0, lastRun: nil,
+            lastDuration: nil, lastError: nil, runCount: 0)
+        #expect(throws: (any Error).self) {
+            try HostBackgroundSource.validate(jobs: [invalid], events: [])
+        }
+    }
+
     private func fixture(id: String = "sessions.discovery", phase: String = "failed") throws
         -> HostBackgroundProjection
     {

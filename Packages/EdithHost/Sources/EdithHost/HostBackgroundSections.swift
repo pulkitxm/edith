@@ -1,3 +1,4 @@
+import AppKit
 import EdithExtensionUI
 import SwiftUI
 
@@ -24,6 +25,12 @@ struct HostBackgroundJobsSection: View {
                     LabeledContent("Job", value: job.id)
                     LabeledContent("Trigger", value: job.descriptor.trigger.capitalized)
                     LabeledContent("Cadence", value: job.cadence)
+                    LabeledContent(
+                        "Power",
+                        value: job.descriptor.power == "pauseOnBattery"
+                            ? "Paused on battery"
+                            : job.descriptor.power == "pauseOnLock"
+                                ? "Paused while locked" : "Always")
                     LabeledContent("Live subscribers", value: String(job.subscribers))
                     if let lastRun = job.lastRun {
                         LabeledContent("Last run", value: lastRun.formatted())
@@ -64,15 +71,43 @@ struct HostBackgroundJobsSection: View {
 
 struct HostBackgroundEventTimeline: View {
     @Bindable var model: HostBackgroundModel
+    @State private var timeline: HostBackgroundTimelineModel
+    @Environment(\.dismiss) private var dismiss
+
+    init(model: HostBackgroundModel) {
+        self.model = model
+        let timeline = HostBackgroundTimelineModel()
+        timeline.receive(model.events)
+        _timeline = State(initialValue: timeline)
+    }
 
     var body: some View {
         Form {
             Section("Event timeline") {
-                if model.events.isEmpty {
-                    Text(model.unavailable ?? "No background events have been recorded.")
-                        .settingsCaption()
+                TextField("Search events", text: $timeline.search)
+                Toggle("Failures only", isOn: $timeline.failuresOnly)
+                HStack {
+                    Button(timeline.paused ? "Resume" : "Pause") {
+                        timeline.paused.toggle()
+                        timeline.receive(model.events)
+                    }
+                    Button("Copy events") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(timeline.text, forType: .string)
+                    }.disabled(timeline.matches.isEmpty)
+                    Spacer()
+                    Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
                 }
-                ForEach(model.events) { event in
+                if timeline.matches.isEmpty {
+                    Text(
+                        model.failure ?? model.unavailable
+                            ?? (timeline.events.isEmpty
+                                ? "No background events have been recorded."
+                                : "No matching events.")
+                    )
+                    .settingsCaption()
+                }
+                ForEach(timeline.visibleEvents) { event in
                     VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                         HStack {
                             Text(event.name)
@@ -96,8 +131,12 @@ struct HostBackgroundEventTimeline: View {
                         }
                     }
                 }
+                if timeline.hasMore {
+                    Button("Load more events") { timeline.loadMore() }
+                }
             }
         }
         .edithForm()
+        .onChange(of: model.events) { _, events in timeline.receive(events) }
     }
 }

@@ -5,6 +5,14 @@ import SwiftUI
 struct HostBackgroundPage: View {
     @Bindable var services: HostCoreServices
     @State private var showingEvents = false
+    @State private var model: HostBackgroundModel
+
+    init(services: HostCoreServices, model: HostBackgroundModel? = nil) {
+        self.services = services
+        _model = State(
+            initialValue: model
+                ?? HostBackgroundModel(environment: HostBackgroundSource.live(services)))
+    }
 
     var body: some View {
         Form {
@@ -45,6 +53,13 @@ struct HostBackgroundPage: View {
                     Text(failure).settingsCaption().foregroundStyle(.orange)
                 }
             }
+            Section("Behaviour") {
+                Text("Pause ambient jobs on battery is unavailable in this background service.")
+                    .settingsCaption()
+                Text("The scheduler must support this policy before it can be changed.")
+                    .settingsCaption()
+            }
+            HostBackgroundJobsSection(model: model)
             Section("Background tasks") {
                 if services.snapshot?.tasks.isEmpty != false {
                     Text("Long-running actions appear here with their progress and result.")
@@ -74,13 +89,10 @@ struct HostBackgroundPage: View {
         }
         .edithForm()
         .edithSheet(isPresented: $showingEvents) {
-            Form {
-                ForEach((services.snapshot?.tasks ?? []).reversed()) { task in
-                    LabeledContent(
-                        task.startedAt.formatted(), value: "\(task.title): \(task.phase.rawValue)")
-                }
-            }.edithForm()
+            HostBackgroundEventTimeline(model: model)
         }
-        .pageTask { await services.refresh() }
+        .pageTask(id: services.snapshot?.collectedAt, cancel: model.cancel) {
+            await model.refresh()
+        }
     }
 }

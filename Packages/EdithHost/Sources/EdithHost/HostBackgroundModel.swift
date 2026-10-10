@@ -139,3 +139,36 @@ struct HostBackgroundEnvironment {
         load.cancel()
     }
 }
+
+@MainActor @Observable final class HostBackgroundTimelineModel {
+    private(set) var events: [HostBackgroundEvent] = []
+    private(set) var visibleCount = 50
+    var search = "" { didSet { visibleCount = 50 } }
+    var failuresOnly = false { didSet { visibleCount = 50 } }
+    var paused = false
+
+    var matches: [HostBackgroundEvent] {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        return events.filter { event in
+            (!failuresOnly || event.level != "info")
+                && (query.isEmpty
+                    || [event.category, event.name, event.message, event.taskID?.uuidString ?? ""]
+                        .contains { $0.localizedCaseInsensitiveContains(query) })
+        }
+    }
+    var visibleEvents: ArraySlice<HostBackgroundEvent> { matches.prefix(visibleCount) }
+    var hasMore: Bool { visibleCount < matches.count }
+    var text: String {
+        matches.reversed().map { event in
+            let task = event.taskID.map { " [task \($0.uuidString)]" } ?? ""
+            return
+                "\(event.date.ISO8601Format()) [\(event.level)] \(event.category).\(event.name)\(task): \(event.message)"
+        }.joined(separator: "\n")
+    }
+
+    func receive(_ value: [HostBackgroundEvent]) {
+        guard !paused else { return }
+        events = Array(value.sorted { $0.date > $1.date }.prefix(500))
+    }
+    func loadMore() { visibleCount = min(matches.count, visibleCount + 50) }
+}
