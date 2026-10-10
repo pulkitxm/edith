@@ -1,5 +1,15 @@
 name: Hosted managed native probe
 "on":
+  workflow_call:
+    inputs:
+      expected_sha:
+        required: true
+        type: string
+    secrets:
+      MACOS_CERT_P12:
+        required: true
+      MACOS_CERT_PASSWORD:
+        required: true
   workflow_dispatch:
     inputs:
       expected_sha:

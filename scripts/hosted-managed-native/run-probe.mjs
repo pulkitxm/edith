@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { validateManagedNativeProof } from "../extension-worker-proof.mjs";
 import { prepareManagedShippingData } from "../managed-shipping-fixture-data.mjs";
 import { prepareHostRemoteFixture } from "../prepare-host-remote-fixture.mjs";
-import { writeUIProject } from "./ui-project.mjs";
+import { configureUITestRun, writeUIProject } from "./ui-project.mjs";
 
 assert.equal(process.env.GITHUB_ACTIONS, "true");
 assert.equal(process.env.RUNNER_OS, "macOS");
@@ -80,11 +86,25 @@ try {
     stdio: "inherit",
     timeout: 180_000,
   });
+  const products = join(derived, "Build/Products");
+  const plans = (await readdir(products)).filter((entry) =>
+    entry.endsWith(".xctestrun"),
+  );
+  assert.equal(plans.length, 1, "Ambiguous built UI test plan");
+  const plan = join(products, plans[0]);
+  configureUITestRun(plan, variables);
   execFileSync(
     "xcodebuild",
     [
       "test-without-building",
-      ...args,
+      "-xctestrun",
+      plan,
+      "-destination",
+      "platform=macOS,arch=arm64",
+      "-jobs",
+      "1",
+      "-parallel-testing-enabled",
+      "NO",
       "-resultBundlePath",
       join(output, "ManagedNativeProbe.xcresult"),
     ],

@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
@@ -141,4 +143,50 @@ export async function writeUIProject(directory, environment) {
     `<?xml version="1.0" encoding="UTF-8"?><Scheme LastUpgradeVersion="2600" version="1.3"><BuildAction parallelizeBuildables="NO" buildImplicitDependencies="YES"><BuildActionEntries><BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="YES">${reference}</BuildActionEntry></BuildActionEntries></BuildAction><TestAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv="NO"><Testables><TestableReference skipped="NO">${reference}</TestableReference></Testables><EnvironmentVariables>${variables}</EnvironmentVariables></TestAction></Scheme>`,
   );
   return project;
+}
+
+export function configureUITestRun(path, environment) {
+  const allowed = new Set([
+    "GITHUB_ACTIONS",
+    "RUNNER_OS",
+    "RUNNER_ENVIRONMENT",
+    "EDITH_HOSTED_MANAGED_PROBE",
+    "EDITH_HOSTED_FIXTURE_DIRECTORY",
+    "EDITH_PROBE_ROOT",
+    "EDITH_PROBE_BUN",
+  ]);
+  for (const [key, value] of Object.entries(environment)) {
+    assert(allowed.has(key), "Unexpected UI test environment key");
+    assert(
+      typeof value === "string" &&
+        value.length <= 4096 &&
+        !/[\0\r\n]/.test(value),
+    );
+  }
+  execFileSync(
+    "python3",
+    [
+      "-c",
+      `import json,plistlib,sys
+path=sys.argv[1]
+environment=json.loads(sys.argv[2])
+with open(path,'rb') as handle:
+    value=plistlib.load(handle)
+assert value['__xctestrun_metadata__']['FormatVersion']==1
+assert set(value)=={'ManagedNativeProbe','__xctestrun_metadata__'}
+target=value['ManagedNativeProbe']
+assert target['IsUITestBundle'] is True
+assert target['UseUITargetAppProvidedByTests'] is True
+target.setdefault('EnvironmentVariables',{}).update(environment)
+target['TestTimeoutsEnabled']=True
+target['DefaultTestExecutionTimeAllowance']=240
+target['MaximumTestExecutionTimeAllowance']=240
+with open(path,'wb') as handle:
+    plistlib.dump(value,handle)
+`,
+      path,
+      JSON.stringify(environment),
+    ],
+    { stdio: "inherit" },
+  );
 }

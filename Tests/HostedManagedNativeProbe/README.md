@@ -31,6 +31,9 @@ This first probe stages a signed Calendar archive; it does not claim network
 download, managed update/removal, all-provider coverage, or unchanged production
 executable proof. Those require subsequent independent integration checks.
 
-The new manual workflow must be registered on the repository default branch
-before GitHub accepts a dispatch. Feature code remains on the child branch;
+Direct dispatch requires registering the new manual workflow on the repository
+default branch. Alternatively, an existing registered manual caller can invoke
+this reusable workflow from the same reviewed feature ref, passing only the two
+declared signing secrets and exact commit. The callee still refuses nonmanual
+events and foreign refs or dispatchers. Feature code remains on the child branch;
 workflow registration does not authorize merging the marketplace parent.

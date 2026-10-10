@@ -20,8 +20,9 @@ final class ManagedNativeUITests: XCTestCase {
         }
         application.launch()
         defer { if application.state != .notRunning { application.terminate() } }
+        let title = "Managed Calendar Approval \(fixture.identifier)"
         let window = application.windows.matching(
-            NSPredicate(format: "title == %@", "Managed Calendar Approval \(fixture.identifier)"))
+            NSPredicate(format: "label == %@ OR identifier == %@", title, title))
         XCTAssertTrue(window.firstMatch.waitForExistence(timeout: 30))
         XCTAssertEqual(window.count, 1)
         let ready = try readJSON(root.appendingPathComponent("approval-ready.json"))
@@ -36,7 +37,9 @@ final class ManagedNativeUITests: XCTestCase {
         }
         XCTAssertTrue(available, "Public approval browser did not expose toggle controls")
         let control = try exactControl(scope: scope, label: label)
-        XCTAssertEqual(control.value as? String, "0", "Fresh UUID carrier was already enabled")
+        guard control.value as? String == "0" else {
+            throw ProbeContractError.unsupportedControl
+        }
         control.click()
         XCTAssertTrue(
             wait(60) {
