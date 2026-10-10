@@ -9,7 +9,8 @@ const text = (value) => JSON.stringify(value).replaceAll("\\n", "\n");
 
 test("Camera release preparation receives explicit profiles after signing and before packaging", () => {
   const preparation = build.steps.findIndex(
-    (step) => step.name === "Prepare the frozen Camera host and provisioning profiles",
+    (step) =>
+      step.name === "Prepare the frozen Camera host and provisioning profiles",
   );
   const signing = build.steps.findIndex(
     (step) => step.name === "Import the release signing certificate",
@@ -21,8 +22,12 @@ test("Camera release preparation receives explicit profiles after signing and be
   expect(preparation).toBeLessThan(packaging);
   const step = build.steps[preparation];
   expect(step.if).toBe("matrix.id == 'virtualCamera'");
-  expect(step.env.CAMERA_CARRIER_PROVISIONING_PROFILE).toContain("secrets.CAMERA_CARRIER_PROVISIONING_PROFILE");
-  expect(step.env.CAMERA_EXTENSION_PROVISIONING_PROFILE).toContain("secrets.CAMERA_EXTENSION_PROVISIONING_PROFILE");
+  expect(step.env.CAMERA_CARRIER_PROVISIONING_PROFILE).toContain(
+    "secrets.CAMERA_CARRIER_PROVISIONING_PROFILE",
+  );
+  expect(step.env.CAMERA_EXTENSION_PROVISIONING_PROFILE).toContain(
+    "secrets.CAMERA_EXTENSION_PROVISIONING_PROFILE",
+  );
   expect(step.env.DEVELOPMENT).toContain("inputs.publish != true");
   expect(step.run).toBe("python3 scripts/prepare-camera-extension-release.py");
   expect(build.steps.at(-1).if).toBe("always()");

@@ -1,0 +1,12 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Sparkle public signature verification key"
+condition = "AND"
+paths = ['''^scripts/build-minimal-host\.mjs$''']
+regexTarget = "secret"
+regexes = ['''^qz/e9EfPlNiHqJC9JA9RazcXGgnH2wxwpS\+uw\+x9qBM=$''']

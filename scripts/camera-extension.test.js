@@ -226,8 +226,12 @@ with tempfile.TemporaryDirectory() as folder:
     print(json.dumps(dict(text=open(os.path.join(project, 'project.pbxproj')).read(),
         app=plistlib.load(open(os.path.join(folder, 'App.entitlements'), 'rb')),
         camera=plistlib.load(open(os.path.join(folder, 'Camera.entitlements'), 'rb')))))`);
-  expect(result.text).toContain("PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.cameraCarrier;");
-  expect(result.text).toContain("PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.camera;");
+  expect(result.text).toContain(
+    "PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.cameraCarrier;",
+  );
+  expect(result.text).toContain(
+    "PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.camera;",
+  );
   expect(result.app["com.apple.developer.system-extension.install"]).toBe(true);
   expect(result.app["com.apple.security.application-groups"]).toEqual([
     "TEAM123456.com.pulkit.edith.camera",

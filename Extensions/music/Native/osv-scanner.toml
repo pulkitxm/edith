@@ -1,0 +1,14 @@
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0194"
+ignoreUntil = 2026-11-17
+reason = "Unreachable in librespot-core 0.8.0: its sole quick-xml consumer uses a plain Reader for ProductInfo text and never iterates tag attributes, the affected operation. Reassess when upgrading librespot."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0195"
+ignoreUntil = 2026-11-17
+reason = "Unreachable in librespot-core 0.8.0: its sole quick-xml consumer uses a plain Reader, never NsReader or NamespaceResolver. Reassess when upgrading librespot."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2023-0071"
+ignoreUntil = 2026-11-17
+reason = "Unreachable in librespot-core 0.8.0: RSA is used only to verify the Spotify server signature with RsaPublicKey. No RSA private key, signing, or decryption operation is used, so private-key timing recovery does not apply. Reassess when upgrading librespot."
