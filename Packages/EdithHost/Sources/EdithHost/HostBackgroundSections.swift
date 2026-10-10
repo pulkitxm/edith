@@ -2,6 +2,43 @@ import AppKit
 import EdithExtensionUI
 import SwiftUI
 
+struct HostBackgroundPolicySection: View {
+    @Bindable var model: HostBackgroundPolicyModel
+
+    var body: some View {
+        Section("Behaviour") {
+            if let value = model.value {
+                Toggle(
+                    "Pause ambient jobs on battery",
+                    isOn: Binding(
+                        get: { model.value ?? value },
+                        set: { requested in Task { await model.set(requested) } })
+                )
+                .disabled(model.saving || model.load.isRunning)
+            } else {
+                LabeledContent("Pause ambient jobs on battery", value: "Unavailable")
+            }
+            if model.load.isRunning || model.saving { LoadingIndicator() }
+            Text(
+                "Applies to core ambient work. Work already running continues. Jobs with fixed battery restrictions still pause on battery."
+            ).settingsCaption()
+            LabeledContent("Global policy", value: "Unavailable")
+            Text(
+                "Extensions must support and acknowledge this policy before it can apply globally."
+            )
+            .settingsCaption()
+            if let failure = model.failure {
+                Text(failure).settingsCaption().foregroundStyle(.orange)
+            }
+            Button(model.failure == nil ? "Reload policy" : "Retry") {
+                Task { await model.refresh() }
+            }
+            .disabled(model.owner == nil || model.load.isRunning || model.saving)
+        }
+        .pageTask(id: model.owner, cancel: model.cancel) { await model.refresh() }
+    }
+}
+
 struct HostBackgroundJobsSection: View {
     @Bindable var model: HostBackgroundModel
 

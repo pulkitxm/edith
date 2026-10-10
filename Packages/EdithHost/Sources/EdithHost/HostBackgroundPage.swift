@@ -7,16 +7,21 @@ struct HostBackgroundPage: View {
     private let presenter: (any HostExtensionContentPresenting)?
     @State private var showingEvents = false
     @State private var model: HostBackgroundModel
+    @State private var policy: HostBackgroundPolicyModel
 
     init(
         services: HostCoreServices, model: HostBackgroundModel? = nil,
-        presenter: (any HostExtensionContentPresenting)? = nil
+        presenter: (any HostExtensionContentPresenting)? = nil,
+        policy: HostBackgroundPolicyModel? = nil
     ) {
         self.services = services
         self.presenter = presenter
         _model = State(
             initialValue: model
                 ?? HostBackgroundModel(environment: HostBackgroundSource.live(services)))
+        _policy = State(
+            initialValue: policy
+                ?? HostBackgroundPolicyModel(environment: HostBackgroundSource.policy(services)))
     }
 
     var body: some View {
@@ -58,12 +63,7 @@ struct HostBackgroundPage: View {
                     Text(failure).settingsCaption().foregroundStyle(.orange)
                 }
             }
-            Section("Behaviour") {
-                Text("Pause ambient jobs on battery is unavailable in this background service.")
-                    .settingsCaption()
-                Text("The scheduler must support this policy before it can be changed.")
-                    .settingsCaption()
-            }
+            HostBackgroundPolicySection(model: policy)
             if let presenter {
                 HostBackgroundNotificationSection(
                     marketplace: services.marketplace, presenter: presenter)

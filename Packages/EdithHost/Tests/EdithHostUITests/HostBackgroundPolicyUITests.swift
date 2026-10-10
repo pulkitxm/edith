@@ -161,6 +161,60 @@ import Testing
         #expect(model.value == false && model.failure != nil && !model.saving)
     }
 
+    @Test func cancelledWriteCannotAcceptReturnedScalar() async throws {
+        let fixture = Fixture()
+        let model = fixture.model()
+        let read = Task { await model.refresh() }
+        await fixture.started(1)
+        fixture.finish(0, try scalar(false))
+        await read.value
+        let write = Task { await model.set(true) }
+        await fixture.started(2)
+        write.cancel()
+        fixture.finish(1, try scalar(true))
+        await write.value
+        #expect(model.value == false && !model.saving && model.failure == nil)
+    }
+
+    @Test func originalPolicySectionRendersNeverVisibleAtCompactRegularZoomAndBothSchemes()
+        async throws
+    {
+        let fixture = Fixture()
+        let model = fixture.model()
+        let previous = UIScale.current
+        defer { UIScale.apply(previous) }
+        for value in [false, true] {
+            let read = Task { await model.refresh() }
+            await fixture.started(fixture.calls.count + 1)
+            fixture.finish(fixture.calls.count - 1, try scalar(value))
+            await read.value
+            let reads = fixture.calls.count
+            for width in [520.0, 1100.0] {
+                for zoom in [1.0, 1.4] {
+                    for scheme in [ColorScheme.light, .dark] {
+                        UIScale.apply(zoom)
+                        let view = NSHostingView(
+                            rootView: Form { HostBackgroundPolicySection(model: model) }.edithForm()
+                                .environment(\.compactLayout, width == 520)
+                                .environment(\.colorScheme, scheme)
+                                .environment(\.windowVisible, false)
+                                .environment(\.automaticViewActionsEnabled, false)
+                                .transaction { $0.animation = nil })
+                        view.frame = NSRect(x: 0, y: 0, width: width, height: 900)
+                        view.layoutSubtreeIfNeeded()
+                        #expect(view.window == nil && view.fittingSize.height > 0)
+                        let bitmap = try #require(
+                            view.bitmapImageRepForCachingDisplay(in: view.bounds))
+                        view.cacheDisplay(in: view.bounds, to: bitmap)
+                        #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
+                        #expect(model.value == value && fixture.calls.count == reads)
+                        #expect(fixture.requested.isEmpty)
+                    }
+                }
+            }
+        }
+    }
+
     private func scalar(_ value: Bool, pid: Int32 = 41) throws -> HostCoreBackgroundPolicy {
         try JSONDecoder().decode(
             HostCoreBackgroundPolicy.self,
