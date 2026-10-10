@@ -16,6 +16,7 @@ import {
   validateCatalogPointer,
   verifyCatalogPointerData,
 } from "./extension-catalog-pointer.mjs";
+import { extensionReleaseTag } from "./extension-release-plan.mjs";
 import {
   downloadReleaseAsset,
   releaseAssetMatchesFile,
@@ -128,6 +129,67 @@ export async function validateExtensionChecksum(file, record) {
     throw new Error("Extension checksum does not match the archive");
 }
 
+export function validateExtensionReleaseIdentity({
+  repository,
+  entry,
+  record,
+}) {
+  if (
+    record.id !== entry.id ||
+    entry.tag !==
+      extensionReleaseTag({
+        id: entry.id,
+        version: entry.version,
+        fingerprint: entry.fingerprint,
+      }) ||
+    record.downloadURL !==
+      `https://github.com/${repository}/releases/download/${encodeURIComponent(entry.tag)}/${entry.id}.zip`
+  )
+    throw new Error(
+      "Extension release identity does not match the source plan",
+    );
+}
+
+export async function validatedExtensionBuild({
+  repository,
+  directory,
+  entry,
+}) {
+  const record = JSON.parse(
+    await readFile(resolve(directory, `${entry.id}.json`), "utf8"),
+  );
+  validateExtensionReleaseIdentity({ repository, entry, record });
+  const digest = await releaseFileDigest(resolve(directory, `${entry.id}.zip`));
+  if (
+    record.sourceFingerprint !== entry.fingerprint ||
+    record.version !== entry.version ||
+    record.downloadBytes !== digest.size ||
+    record.sha256 !== digest.sha256
+  )
+    throw new Error("Build output does not match the release plan");
+  await validateExtensionChecksum(
+    resolve(directory, `${entry.id}.zip.sha256`),
+    record,
+  );
+  return record;
+}
+
+export async function preflightExtensionBuilds({
+  repository,
+  directory,
+  include,
+  preflightAsset = preflightReleaseAsset,
+}) {
+  for (const entry of include)
+    await validatedExtensionBuild({ repository, directory, entry });
+  for (const entry of include)
+    for (const suffix of ["zip", "json", "zip.sha256"])
+      preflightAsset({
+        repository,
+        file: resolve(directory, `${entry.id}.${suffix}`),
+      });
+}
+
 export async function publishExtensionAssets({
   repository,
   item,
@@ -171,6 +233,7 @@ export async function restorePublishedExtension({
 }) {
   const { data } = await downloadAsset({ repository, asset: publishedRecord });
   const published = JSON.parse(data.toString("utf8"));
+  validateExtensionReleaseIdentity({ repository, entry, record: published });
   if (
     published.id !== record.id ||
     published.hostABI !== record.hostABI ||
@@ -424,44 +487,16 @@ export async function publishExtensions({
     await finalizeDraftCatalog({ verifyState, publish: publishDraft });
     return { published: [], revision: old.revision };
   }
-  for (const entry of include) {
-    const record = JSON.parse(
-      await readFile(resolve(directory, `${entry.id}.json`), "utf8"),
-    );
-    const digest = await releaseFileDigest(
-      resolve(directory, `${entry.id}.zip`),
-    );
-    if (
-      record.sourceFingerprint !== entry.fingerprint ||
-      record.version !== entry.version ||
-      record.downloadBytes !== digest.size ||
-      record.sha256 !== digest.sha256
-    )
-      throw new Error("Build output does not match the release plan");
-    await validateExtensionChecksum(
-      resolve(directory, `${entry.id}.zip.sha256`),
-      record,
-    );
-    for (const suffix of ["zip", "json", "zip.sha256"]) {
-      preflightReleaseAsset({
-        repository,
-        file: resolve(directory, `${entry.id}.${suffix}`),
-      });
-    }
-  }
+  await preflightExtensionBuilds({ repository, directory, include });
   const records = [];
   for (const entry of include) {
     const recordPath = resolve(directory, `${entry.id}.json`);
-    let record = JSON.parse(await readFile(recordPath, "utf8"));
+    let record = await validatedExtensionBuild({
+      repository,
+      directory,
+      entry,
+    });
     const zip = resolve(directory, `${entry.id}.zip`);
-    const digest = await releaseFileDigest(zip);
-    if (
-      record.sourceFingerprint !== entry.fingerprint ||
-      record.version !== entry.version ||
-      record.downloadBytes !== digest.size ||
-      record.sha256 !== digest.sha256
-    )
-      throw new Error("Build output does not match the release plan");
     let item = release(repository, entry.tag);
     if (!item) {
       mutate(
