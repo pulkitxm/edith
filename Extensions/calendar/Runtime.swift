@@ -7,13 +7,41 @@ import SwiftUI
 
 @MainActor
 final class ExtensionRuntime: NSObject {
+    private var stopping = false
     private var store: CalendarStore?
     private var presentation: CalendarPresentationState?
     private var surface: CalendarSurface?
+    private var uiEngine: CalendarUIEngine?
+    private var navigation: CalendarHostNavigation?
     private let commands = ExtensionCommandRegistry()
+    private var uiPresentations: [UUID: CalendarUIPresentation] = [:]
+
+    override init() { super.init() }
+
+    init(store: CalendarStore, presentation: CalendarPresentationState, uiEngine: CalendarUIEngine)
+    {
+        self.store = store
+        self.presentation = presentation
+        self.uiEngine = uiEngine
+        super.init()
+    }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
+        guard !stopping else {
+            completion(nil, "The Calendar extension is stopping.")
+            return
+        }
         commands.invoke(request, completion: completion) { [weak self] command, payload in
+            if command == "calendar.cli.catalog" {
+                guard self?.store != nil, payload == Data("{}".utf8) else {
+                    throw ExtensionPeerError.unavailable
+                }
+                return try CalendarCLICatalog.encoded(payload)
+            }
+            if command.hasPrefix("calendar.ui.") {
+                guard let engine = self?.uiEngine else { throw ExtensionPeerError.unavailable }
+                return try await engine.execute(command, payload: payload)
+            }
             if command == "calendar.cli" {
                 guard let store = self?.store else { throw ExtensionPeerError.unavailable }
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
@@ -26,10 +54,29 @@ final class ExtensionRuntime: NSObject {
                     }
                     return await store.events(query)
                 }
-                return try JSONEncoder().encode(reply)
+                return try CalendarCLIExecution.encoded(reply)
             }
             guard let surface = self?.surface else { throw ExtensionPeerError.unavailable }
             return try await surface.execute(command, payload: payload)
+        }
+    }
+
+    @objc(prepareToStopWithCompletion:)
+    func prepareToStop(completion: @escaping () -> Void) {
+        stopping = true
+        commands.shutdown()
+        uiEngine?.shutdown()
+        store?.shutdown()
+        navigation?.invalidate()
+        CalendarPermission.shutdown()
+        Task {
+            await commands.shutdownAndWait()
+            await uiEngine?.stopAndWait()
+            await store?.stopAndWait()
+            await navigation?.stopAndWait()
+            await CalendarPermission.stopAndWait()
+            presentation?.shutdown()
+            completion()
         }
     }
 
@@ -44,35 +91,55 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard let suite = input["defaultsSuite"] as? String,
+            guard !stopping, Bundle.main.bundleURL.pathExtension != "appex",
+                uiPresentations.isEmpty,
+                let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             if store == nil { store = CalendarStore(startImmediately: false) }
             if presentation == nil { presentation = CalendarPresentationState() }
             if let store, let presentation, surface == nil {
+                let navigation = CalendarHostNavigation(
+                    bridge: input["hostNavigation"] as? NSObject)
+                self.navigation = navigation
                 surface = CalendarSurface(store: store, presentation: presentation)
-            }
-        case "view":
-            guard let store, let presentation else { return ["ok": false] as NSDictionary }
-            if input["location"] as? String == "home" {
-                guard input["section"] as? String == "calendar",
-                    let data = input["tile"] as? Data, data.count <= 65_536,
-                    let tile = try? JSONDecoder().decode(SurfaceTile.self, from: data),
-                    tile.widget == .calendar
-                else { return ["ok": false] as NSDictionary }
-                return NSHostingController(
-                    rootView: ExtensionPageHost {
-                        CalendarHomeScene(tile: tile, store: store, presentation: presentation)
+                uiEngine = CalendarUIEngine(
+                    store: store, presentation: presentation,
+                    navigate: { [weak navigation] request in
+                        guard let navigation else { throw ExtensionPeerError.unavailable }
+                        try await navigation.navigate(request)
                     })
+                store.start()
             }
-            return NSHostingController(
-                rootView: ExtensionPageHost {
-                    CalendarPage(store: store, presentation: presentation)
-                })
+        case "configureUI":
+            uiPresentations = uiPresentations.filter { $0.value.isRetained }
+            guard store == nil, let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "calendar", let client = configuration.engineClient,
+                let scene = CalendarUIPresentation(client: client, context: input),
+                uiPresentations.count < 8 || uiPresentations[client.presentationID] != nil
+            else { return ["ok": false] as NSDictionary }
+            uiPresentations[client.presentationID]?.shutdown()
+            uiPresentations[client.presentationID] = scene
+        case "view":
+            guard let value = input["presentationID"] as? String,
+                let id = UUID(uuidString: value), let scene = uiPresentations[id],
+                scene.matches(input)
+            else { return ["ok": false] as NSDictionary }
+            return scene.controller() ?? (["ok": false] as NSDictionary)
+        case "stopUI":
+            for scene in uiPresentations.values { scene.shutdown() }
+            uiPresentations.removeAll()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": store?.refreshAuthStatus()
         case "stop":
+            stopping = true
+            for scene in uiPresentations.values { scene.shutdown() }
+            uiPresentations.removeAll()
             commands.shutdown()
+            navigation?.invalidate()
+            navigation = nil
+            uiEngine?.shutdown()
+            uiEngine = nil
             surface = nil
             store?.shutdown()
             store = nil

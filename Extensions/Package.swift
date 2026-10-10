@@ -195,7 +195,7 @@ let package = Package(
         .target(
             name: "CalendarExtension",
             dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
-            path: "calendar", exclude: ["Tests", "Runtime.swift"],
+            path: "calendar", exclude: ["Tests"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "CalendarExtensionTests", dependencies: ["CalendarExtension"],

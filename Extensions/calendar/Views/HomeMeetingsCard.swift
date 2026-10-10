@@ -7,28 +7,37 @@ import SwiftUI
 struct HomeMeetingsCard: View {
     @Environment(\.surfacePresentation) private var presentation
     let dark: Bool
-    let store: CalendarStore
-    let calendarPresentation: CalendarPresentationState
-    var authorized: () -> Bool = { CalendarPermission.isGranted }
-    var grantAccess: () -> Void = { CalendarPermission.performRequest() }
-    var open: () -> Void = { ExtensionPresentation.showWindow() }
+    let store: CalendarUIFacade
+    var authorized: (() -> Bool)?
+    var grantAccess: (() -> Void)?
+    let open: () -> Void
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
 
     private var theme: Color { themeColor(themeName) }
-    private var blurCalendar: Bool { calendarPresentation.blurEvents }
+    private var blurCalendar: Bool { store.blurEvents }
 
     private var todayEvents: [CalendarEventPayload] {
-        store.events.filter {
-            Calendar.current.isDateInToday($0.start)
-                && (presentation?.tile.sourceIDs?.contains($0.calendarID) ?? true)
-        }
+        CalendarWidgetEvents.selected(
+            store.events, tile: presentation?.tile ?? SurfaceTile(.calendar), target: .home)
+
     }
 
     var body: some View {
         PageCard(title: "Today's meetings", note: note) {
             VStack(alignment: .leading, spacing: UIScale.pt(0)) {
-                if !authorized() {
+                if !store.loaded {
+                    LoadingContainer(
+                        state: store.error == nil ? .loading : .error,
+                        title: "Calendar unavailable",
+                        message: store.error ?? "Reading your schedule.",
+                        retry: store.refresh
+                    ) {
+                        EmptyView()
+                    } placeholder: {
+                        SkeletonBlock(height: UIScale.pt(70))
+                    }
+                } else if !(authorized?() ?? store.authorized) {
                     accessPrompt
                 } else if todayEvents.isEmpty {
                     Text("No meetings today. Clear runway.")
@@ -45,21 +54,21 @@ struct HomeMeetingsCard: View {
                     }
                 }
                 openCalendar
+                if store.loaded, let error = store.error {
+                    HStack {
+                        Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Retry", action: store.refresh).buttonStyle(.edith(.toolbar))
+                    }
+                    .padding(.top, UIScale.pt(10))
+                }
             }
         }
-        .pageTask {
-            store.start(); store.refreshAuthStatus()
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(
-                for: CalendarPermission.changed)
-        ) { _ in
-            store.refreshAuthStatus()
-        }
+        .pageTask(cancel: store.suspend) { await store.observe() }
     }
 
     private var note: String {
-        guard authorized() else { return "" }
+        guard authorized?() ?? store.authorized else { return "" }
         let count = todayEvents.count
         return count == 0 ? "" : "\(count) event\(count == 1 ? "" : "s")"
     }
@@ -79,11 +88,11 @@ struct HomeMeetingsCard: View {
                 .foregroundStyle(DashSkin.ink(dark))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .presenterBlur(blurCalendar)
-            if let url = MeetingLink.url(for: event), presentation?.tile.showActions != false,
+            if MeetingLink.url(for: event) != nil, presentation?.tile.showActions != false,
                 presentation?.tile.shows("join") != false
             {
                 Button {
-                    NSWorkspace.shared.open(url)
+                    store.perform(.join, eventID: event.id)
                 } label: {
                     Image(systemName: "video.fill")
                         .font(.system(size: UIScale.pt(11)))
@@ -112,7 +121,7 @@ struct HomeMeetingsCard: View {
                 .foregroundStyle(DashSkin.inkSoft(dark))
             Spacer()
             Button("Grant…") {
-                grantAccess()
+                if let grantAccess { grantAccess() } else { store.perform(.permission) }
             }
             .buttonStyle(.edith(.toolbar))
             .font(.system(size: UIScale.pt(11)))
@@ -140,12 +149,12 @@ struct HomeMeetingsCard: View {
 
 struct CalendarHomeScene: View {
     let tile: SurfaceTile
-    let store: CalendarStore
-    let presentation: CalendarPresentationState
+    let store: CalendarUIFacade
+    let open: () -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HomeMeetingsCard(dark: scheme == .dark, store: store, calendarPresentation: presentation)
+        HomeMeetingsCard(dark: scheme == .dark, store: store, open: open)
             .environment(
                 \.surfacePresentation,
                 SurfacePresentation(

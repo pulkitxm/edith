@@ -16,6 +16,7 @@ enum CalendarPermission {
     static func stopObserving(_ id: UUID) { model.stopObserving(id) }
     static func performRequest() { model.request() }
     static func shutdown() { model.shutdown() }
+    static func stopAndWait() async { await model.stopAndWait() }
 }
 
 @MainActor
@@ -113,6 +114,11 @@ final class CalendarPermissionModel {
         pending = false
         generation &+= 1
         worker?.cancel()
+    }
+
+    func stopAndWait() async {
+        shutdown()
+        await waitForRefresh()
     }
 
     func waitForRefresh() async {
