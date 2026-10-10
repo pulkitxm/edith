@@ -96,9 +96,30 @@ test("test plan construction uses original journey sources and rejects ambient S
   );
   const directory = await mkdtemp(join(tmpdir(), "edith-shell-plan-"));
   try {
-    const project = await writeUIProject(directory, {
-      EDITH_HOSTED_SHELL_JOURNEY: "1",
-    });
+    const runner = {
+      ...environment,
+      EDITH_GUI_FIXTURE_DIRECTORY:
+        "/Users/fixture/Applications/Edith Remote Fixture Journey 00000000-0000-4000-8000-000000000001",
+      EDITH_JOURNEY_ACCOUNT_HOME: "/Users/fixture",
+      EDITH_APPLICATION_IDENTIFIER: identifier,
+      EDITH_SHARED_DEFAULTS_SUITE: identifier,
+      EDITH_EXTENSION_FIXTURE_HOME:
+        "/Users/fixture/Applications/Edith Remote Fixture Journey 00000000-0000-4000-8000-000000000001/synthetic-data",
+    };
+    const project = await writeUIProject(directory, runner);
+    const scheme = await readFile(
+      join(project, "xcshareddata/xcschemes/HostedShellJourney.xcscheme"),
+      "utf8",
+    );
+    expect(scheme).not.toContain('key="HOME"');
+    expect(scheme).not.toContain('key="XDG_');
+    expect(scheme).toContain('key="EDITH_JOURNEY_ACCOUNT_HOME"');
+    await expect(
+      writeUIProject(directory, {
+        ...runner,
+        HOME: runner.EDITH_EXTENSION_FIXTURE_HOME,
+      }),
+    ).rejects.toThrow();
     const source = await readFile(join(project, "project.pbxproj"), "utf8");
     expect(source).toContain(
       "Tests/HostedOriginalShell/UITests/OriginalShellJourneyTests.swift",
@@ -188,6 +209,77 @@ test("fresh hosted accounts get only a validated single Applications directory",
       prepareJourneyParent({ ...options, environment: {} }),
     ).rejects.toThrow();
     await expect(lstat(applications)).rejects.toThrow();
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("runner metadata excludes ambient home and credentials while synthetic app paths stay exact", async () => {
+  const { journeyRunnerEnvironment, configureUITestRun } = await import(
+    "./hosted-original-shell/ui-project.mjs"
+  );
+  const { mkdtemp, rm, readFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { execFileSync } = await import("node:child_process");
+  const runner = journeyRunnerEnvironment({
+    ...environment,
+    EDITH_GUI_FIXTURE_DIRECTORY: directory,
+    EDITH_JOURNEY_ACCOUNT_HOME: "/Users/fixture",
+    EDITH_APPLICATION_IDENTIFIER: identifier,
+    EDITH_SHARED_DEFAULTS_SUITE: identifier,
+    EDITH_EXTENSION_FIXTURE_HOME: `${directory}/synthetic-data`,
+    HOME: `${directory}/synthetic-data`,
+    CFFIXED_USER_HOME: `${directory}/synthetic-data`,
+    SSH_AUTH_SOCK: "/ambient/socket",
+  });
+  expect(Object.keys(runner)).toHaveLength(9);
+  expect(runner.HOME).toBeUndefined();
+  expect(runner.CFFIXED_USER_HOME).toBeUndefined();
+  expect(runner.SSH_AUTH_SOCK).toBeUndefined();
+  for (const key of [
+    "EDITH_APPLICATION_IDENTIFIER",
+    "EDITH_SHARED_DEFAULTS_SUITE",
+    "EDITH_EXTENSION_FIXTURE_HOME",
+    "EDITH_JOURNEY_ACCOUNT_HOME",
+  ])
+    expect(() =>
+      journeyRunnerEnvironment({ ...runner, [key]: "invalid" }),
+    ).toThrow();
+  const temporary = await mkdtemp(join(tmpdir(), "edith-runner-environment-"));
+  const plan = join(temporary, "plan.xctestrun");
+  const write = (variables) =>
+    execFileSync("python3", [
+      "-c",
+      "import json,plistlib,sys; plistlib.dump({'__xctestrun_metadata__':{'FormatVersion':1},'HostedShellJourney':{'IsUITestBundle':True,'UseUITargetAppProvidedByTests':True,'EnvironmentVariables':json.loads(sys.argv[2])}},open(sys.argv[1],'wb'))",
+      plan,
+      JSON.stringify(variables),
+    ]);
+  try {
+    write({});
+    configureUITestRun(plan, runner);
+    const actual = JSON.parse(
+      execFileSync(
+        "python3",
+        [
+          "-c",
+          "import plistlib,json,sys; print(json.dumps(plistlib.load(open(sys.argv[1],'rb'))['HostedShellJourney']['EnvironmentVariables']))",
+          plan,
+        ],
+        { encoding: "utf8" },
+      ),
+    );
+    expect(actual).toEqual(runner);
+    for (const key of [
+      "HOME",
+      "CFFIXED_USER_HOME",
+      "XDG_CONFIG_HOME",
+      "SSH_AUTH_SOCK",
+    ]) {
+      write({ [key]: `${directory}/synthetic-data` });
+      expect(() => configureUITestRun(plan, runner)).toThrow();
+    }
+    expect((await readFile(plan)).length).toBeGreaterThan(0);
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
