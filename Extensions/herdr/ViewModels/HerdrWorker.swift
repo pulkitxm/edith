@@ -84,6 +84,7 @@ import Foundation
         self.prepareShell = prepareShell
         HerdrWorkOwnership.enable()
         ownedStore.ownsSpaceAgent = { [weak self] in self?.spaces.holds($0) ?? false }
+        ownedStore.prepareNotificationAgent = { [weak self] id in self?.spaces.removeAgent(id) }
     }
 
     func start() async {
@@ -337,7 +338,7 @@ import Foundation
             guard let chosen = HerdrAgentView(rawValue: view) else {
                 throw ExtensionPeerError.invalidRequest
             }
-            store.open(agent, showing: chosen)
+            await store.open(.init(agentID: agent.id, hostID: agent.machineID, view: chosen))
             ExtensionPresentation.showWindow()
             return Data("{\"opened\":true}".utf8)
         case "herdr.message":

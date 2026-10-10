@@ -25,6 +25,61 @@ import Testing
         return HerdrWorker(store: store, defaults: defaults, automaticActions: false)
     }
 
+    @Test func notificationOpenReturnsToOriginalMainViewAndPreservesUnrelatedSpaceAgents()
+        async throws
+    {
+        defer { HerdrWorkOwnership.enable() }
+        let worker = worker()
+        let client = HerdrUIClient { try await worker.execute($0, payload: $1) }
+        let group = try #require(worker.store.agentSpaces.first)
+        let space = try JSONDecoder().decode(
+            HerdrUIPresentation.self,
+            from: await client.perform(
+                "herdr.ui.present", object: ["kind": "space", "id": group.id]))
+        _ = try await client.perform(
+            "herdr.ui.presentation.admit", object: ["token": space.token.uuidString])
+        let agent = try #require(group.agents.first)
+        let other = try #require(group.agents.last)
+        let preserved = try #require(worker.spaces.agentTab(other.id)?.holder)
+        let request = HerdrOpenRequest(agentID: agent.id, hostID: agent.machineID, view: .diff)
+        await worker.store.open(request)
+        #expect(worker.spaces.agentTab(agent.id) == nil)
+        #expect(worker.store.session(agent.id)?.view == .diff)
+        #expect(worker.spaces.agentTab(other.id)?.holder === preserved)
+        #expect(worker.spaces.listed().first?.tabs == 1)
+        _ = try await worker.execute(
+            "herdr.open",
+            payload: JSONSerialization.data(withJSONObject: ["agentID": agent.id, "view": "agent"]))
+        #expect(worker.store.session(agent.id)?.view == .agent)
+        _ = try await client.perform(
+            "herdr.ui.presentation.close", object: ["token": space.token.uuidString])
+        _ = try await client.perform(
+            "herdr.ui.presentation.close", object: ["token": space.token.uuidString])
+        await #expect(throws: ExtensionPeerError.self) {
+            try await client.perform(
+                "herdr.ui.presentation.admit", object: ["token": space.token.uuidString])
+        }
+        let detached = try JSONDecoder().decode(
+            HerdrUIPresentation.self,
+            from: await client.perform(
+                "herdr.ui.present", object: ["kind": "agent", "id": agent.id]))
+        let holder = try #require(worker.store.detachedTab(id: agent.id)?.holder)
+        await worker.store.open(request)
+        #expect(worker.store.detachedTab(id: agent.id) == nil)
+        #expect(worker.store.session(agent.id)?.view == .diff)
+        #expect(worker.store.session(agent.id)?.holder !== holder)
+        #expect(worker.spaces.presentations.isEmpty)
+        await #expect(throws: ExtensionPeerError.self) {
+            try await client.perform(
+                "herdr.ui.presentation.close", object: ["token": UUID().uuidString])
+        }
+        _ = try await client.perform(
+            "herdr.ui.presentation.close", object: ["token": detached.token.uuidString])
+        _ = try await client.perform(
+            "herdr.ui.presentation.close", object: ["token": detached.token.uuidString])
+        await worker.shutdown()
+    }
+
     @Test func originalDetachedViewPickerMutatesOnlyItsAdmittedEnginePresentation() async throws {
         defer { HerdrWorkOwnership.enable() }
         let worker = worker()

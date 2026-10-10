@@ -95,6 +95,7 @@ final class HerdrStore {
     var terminalClient: OwnedTerminalClient.Invoke?
     var uiClient: HerdrUIClient?
     var ownsSpaceAgent: @MainActor (String) -> Bool = { _ in false }
+    var prepareNotificationAgent: @MainActor (String) -> Void = { _ in }
     @ObservationIgnored weak var uiActivity: AgentActivityMonitor?
     private var uiBaseline = HerdrUILayoutState(
         tabs: [], selected: HerdrStore.boardID, views: [:], arrangements: [])
@@ -907,6 +908,7 @@ final class HerdrStore {
     func open(_ request: HerdrOpenRequest) async {
         if !agents.contains(where: { $0.id == request.agentID }) { await refresh() }
         guard let agent = agents.first(where: { $0.id == request.agentID }) else { return }
+        prepareNotificationAgent(agent.id)
         open(agent, showing: request.view)
     }
 

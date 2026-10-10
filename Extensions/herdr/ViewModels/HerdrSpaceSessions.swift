@@ -35,6 +35,8 @@ struct HerdrUIPresentation: Codable {
     private var entries: [UUID: Entry] = [:]
     private var focused: UUID?
     private var stopped = false
+    private var retired: Set<UUID> = []
+    private var retiredOrder: [UUID] = []
 
     init(store: HerdrStore) { self.store = store }
 
@@ -105,9 +107,13 @@ struct HerdrUIPresentation: Codable {
     }
 
     func close(_ token: UUID) throws {
+        if retired.contains(token) { return }
         guard let entry = entries.removeValue(forKey: token) else {
             throw ExtensionPeerError.invalidRequest
         }
+        retired.insert(token)
+        retiredOrder.append(token)
+        if retiredOrder.count > 512 { retired.remove(retiredOrder.removeFirst()) }
         entry.model?.stopAll()
         if entry.kind == "agent" { store.reattach(entry.id) }
         if focused == token { focused = nil }
