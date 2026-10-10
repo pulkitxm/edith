@@ -1,6 +1,7 @@
 import AppKit
 import EdithExtensionSupport
 import EdithHostCore
+import ExtensionMarketplace
 import IOKit.ps
 import Observation
 import SwiftUI
@@ -25,6 +26,7 @@ import SwiftUI
     @ObservationIgnored private let settingsCapture: HostSettingsArchive
     @ObservationIgnored private var settingsScheduler: HostSettingsScheduler?
     @ObservationIgnored private var settingsObserver: NSObjectProtocol?
+    @ObservationIgnored private var workflowValue: HostWorkflowOnboardingModel?
 
     init(
         identity: HostIdentity, marketplace: HostMarketplace,
@@ -64,6 +66,12 @@ import SwiftUI
             update(try await process.start())
             failure = nil
             startSettingsScheduler()
+            if workflowModel.incomplete,
+                marketplace.downloadedIDs.isEmpty
+                    || defaults.bool(forKey: HostWorkflowOnboardingModel.reviewPendingKey)
+            {
+                workflowModel.present()
+            }
             observation = Task { [weak self] in
                 while !Task.isCancelled {
                     do { try await Task.sleep(for: .seconds(5)) } catch { return }
@@ -135,6 +143,7 @@ import SwiftUI
     }
 
     func shutdown() async {
+        await workflowValue?.shutdown()
         IPC.stopObserving(settingsObserver)
         settingsObserver = nil
         await settingsScheduler?.shutdown()
@@ -167,8 +176,89 @@ import SwiftUI
         case "agent": AnyView(HostBackgroundPage(services: self))
         case "data": AnyView(HostDataPage(services: self))
         case "icloud": AnyView(HostCloudPage(services: self))
+        case "home-setup":
+            workflowModel.presented
+                || (workflowModel.incomplete
+                    && (marketplace.downloadedIDs.isEmpty
+                        || defaults.bool(forKey: HostWorkflowOnboardingModel.reviewPendingKey)))
+                ? AnyView(
+                    HostWorkflowOnboardingView(
+                        model: workflowModel, progress: { [marketplace] in marketplace.progress }))
+                : nil
         default: nil
         }
+    }
+
+    func showWelcome() {
+        workflowModel.present()
+        defaults.set("home", forKey: AppStorageKeys.General.mainWindowSection)
+    }
+
+    var workflowModel: HostWorkflowOnboardingModel {
+        if let workflowValue { return workflowValue }
+        let model = HostWorkflowOnboardingModel(
+            entries: marketplace.entries, defaults: defaults,
+            environment: HostWorkflowEnvironment(
+                available: { [weak self] in self?.marketplace.available ?? [:] },
+                installed: { [weak self] in
+                    Set(
+                        self?.marketplace.installed.keys
+                            ?? Dictionary<String, ExtensionPackage>().keys)
+                },
+                active: { [weak self] in self?.readyWorkflowExtensions() ?? [] },
+                refresh: { [weak self] in
+                    guard let self, marketplace.operationID == nil else {
+                        throw HostWorkerError.rejected
+                    }
+                    await marketplace.checkForUpdates()
+                    try Task.checkCancellation()
+                    if let error = marketplace.error { throw HostWorkflowFailure(error) }
+                },
+                install: { [weak self] id in
+                    guard let self, marketplace.operationID == nil else {
+                        throw HostWorkerError.rejected
+                    }
+                    if marketplace.installed[id] == nil {
+                        await marketplace.download(id: id)
+                        try Task.checkCancellation()
+                        if let error = marketplace.error { throw HostWorkflowFailure(error) }
+                    }
+                    guard marketplace.installed[id] != nil else {
+                        throw HostWorkflowFailure(
+                            "A compatible download is unavailable for this extension.")
+                    }
+                    await marketplace.enable(id: id)
+                    try Task.checkCancellation()
+                    if let error = marketplace.error { throw HostWorkflowFailure(error) }
+                    guard readyWorkflowExtensions().contains(id) else {
+                        throw HostWorkerError.rejected
+                    }
+                },
+                restore: { [weak self] in
+                    guard let self else { throw CancellationError() }
+                    return try await synchronizeSettings(restoreOnly: true)
+                },
+                changed: { [weak self] in
+                    guard let self else { return }
+                    defaults.synchronize()
+                    IPC.post(IPC.Name.settingsChanged)
+                    settingsScheduler?.preferencesChanged()
+                }))
+        workflowValue = model
+        return model
+    }
+
+    private func readyWorkflowExtensions() -> Set<String> {
+        Set(
+            marketplace.sessions.activeIDs.filter { id in
+                guard !marketplace.pendingRemovalIDs.contains(id),
+                    let package = marketplace.installed[id],
+                    marketplace.sessions.versions[id] == package.version,
+                    let pid = marketplace.sessions.processIdentifiers[id],
+                    let process = try? HostRemoteKernelIdentity.read(pid)
+                else { return false }
+                return process.isRunning
+            })
     }
 
     private func startSettingsScheduler() {

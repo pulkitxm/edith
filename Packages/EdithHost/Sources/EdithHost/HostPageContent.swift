@@ -35,7 +35,7 @@ struct HostPageContent: View {
             HostHomePage(
                 marketplace: marketplace, customize: customize,
                 extensions: { select("extensions") }, openExtension: openExtension,
-                presenter: presenter)
+                presenter: presenter, workflowSetup: additionalSettings?("home-setup"))
         case "extensions": MarketplacePage(marketplace: marketplace, presenter: presenter)
         case "settings":
             HostSettingsContainer(category: settingsBinding, sections: settingsSections) {

@@ -11,6 +11,7 @@ struct HostHomePage: View {
     let extensions: () -> Void
     var openExtension: ((String) -> Void)? = nil
     var presenter: (any HostExtensionContentPresenting)? = nil
+    var workflowSetup: AnyView? = nil
     @Environment(\.compactLayout) private var compact
 
     @State private var editing = false
@@ -30,6 +31,7 @@ struct HostHomePage: View {
                 dark: scheme == .dark, editing: $editing, layouts: marketplace.surfaceLayouts,
                 customize: customize)
         } content: {
+            if let workflowSetup { workflowSetup }
             SurfaceCanvas(
                 layout: layout, singleColumn: compact, editing: editing, selected: selectedTile,
                 select: { selectedTile = $0 },
@@ -74,7 +76,7 @@ struct HostHomePage: View {
                         openExtension: openExtension, presenter: presenter)
                 }
             }
-            if layout.visible.isEmpty, !editing {
+            if layout.visible.isEmpty, !editing, workflowSetup == nil {
                 ContentUnavailableView(
                     "Make yourself at home", systemImage: "rectangle.3.group",
                     description: Text("Add widgets in the Home & Notch editor."))
@@ -264,6 +266,7 @@ private struct HostSurfaceProviderCard: View {
     let tile: SurfaceTile
     let showProvider: Bool
     var openExtension: ((String) -> Void)? = nil
+    var workflowSetup: AnyView? = nil
     @State private var snapshot: SurfaceSnapshot?
     @State private var load = ContentLoad()
     @State private var retry = 0
