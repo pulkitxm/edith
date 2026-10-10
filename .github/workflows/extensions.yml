@@ -145,6 +145,12 @@ jobs:
           name: frozen-extension-host
           path: local/extension-host-artifact
       - run: tar -xzf local/extension-host-artifact/host.tar.gz
+      - name: Verify native cache integrity and private SDK composition
+        timeout-minutes: 20
+        env:
+          EXTENSION_SUPPORT_NATIVE_TESTS: "1"
+          EXTENSION_SWIFT_JOBS: "2"
+        run: bun test scripts/extension-ghostty-native.test.js scripts/build-extension-support.native.test.js
       - run: make ci-marketplace-runtime ci-extension-support ci-extension-docs ci-extension-commands ci-comments
       - run: |
           mkdir -p Packages/ExtensionMarketplace/.build/debug

@@ -389,3 +389,24 @@ test("independent feature changes do not release or invalidate the host", () => 
     expect(matchesArea("host", path), path).toBe(true);
   }
 });
+
+test("native extension contracts run on macOS with private SDK execution enabled", () => {
+  const jobs = Bun.YAML.parse(
+    readFileSync(".github/workflows/extensions.yml", "utf8"),
+  ).jobs;
+  const job = jobs.tests;
+  const proof = job.steps.find((step) =>
+    step.run?.includes("scripts/build-extension-support.native.test.js"),
+  );
+  expect(job["runs-on"]).toBe("macos-26");
+  expect(job.needs).toContain("frozen-host");
+  expect(proof.env.EXTENSION_SUPPORT_NATIVE_TESTS).toBe("1");
+  expect(proof.run).toContain("scripts/extension-ghostty-native.test.js");
+  expect(proof.if).toBeUndefined();
+  expect(proof["timeout-minutes"]).toBeGreaterThan(0);
+  const restore = job.steps.findIndex((step) =>
+    step.run?.includes("tar -xzf local/extension-host-artifact/host.tar.gz"),
+  );
+  expect(restore).toBeGreaterThanOrEqual(0);
+  expect(job.steps.indexOf(proof)).toBeGreaterThan(restore);
+});
