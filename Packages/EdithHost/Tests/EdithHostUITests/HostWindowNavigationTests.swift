@@ -62,7 +62,7 @@ struct HostWindowNavigationTests {
             try await navigation.navigate(extensionID: "music", version: "1.0.0")
         }
         fixture.window.identifier = .init("EdithDetachedSection")
-        fixture.register(navigation)
+        fixture.register(navigation, expectedWorkspace: false)
         await #expect(throws: HostWindowNavigationError.unavailable) {
             try await navigation.navigate(extensionID: "music", version: "1.0.0")
         }
@@ -277,11 +277,13 @@ private final class NavigationFixture {
             defaults: defaults, activeVersions: { [weak self] in self?.versions ?? [:] },
             originatingWindow: originatingWindow, didApply: didApply)
     }
-    func register(_ navigation: HostWindowNavigation) {
+    func register(_ navigation: HostWindowNavigation, expectedWorkspace: Bool = true) {
         let registration = navigation.register(
             window: window, apply: { [self] in selected = $0.page },
             selected: { [self] in selected })
-        #expect(navigation.workspaceRegistration(for: window) == registration)
+        #expect(
+            navigation.workspaceRegistration(for: window)
+                == (expectedWorkspace ? registration : nil))
     }
     func finish() { window.close(); defaults.removePersistentDomain(forName: suite) }
 }
