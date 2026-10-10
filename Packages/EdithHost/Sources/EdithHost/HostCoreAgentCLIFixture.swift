@@ -29,6 +29,13 @@ import Foundation
                 else { return [] }
                 return Set(previous?.agent?.jobs.map(\.id) ?? [])
             },
+            command: { [self] operation, payload in
+                guard !stopping, let process, process.ready else {
+                    throw HostAgentCommandError(.unavailable, "The owned fixture core is offline.")
+                }
+                try record("command:" + operation.rawValue)
+                return try await process.performCommand(operation, payload: payload)
+            },
             status: { [self] in
                 try record("status")
                 let next = try await snapshot()

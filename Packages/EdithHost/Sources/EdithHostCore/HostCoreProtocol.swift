@@ -123,3 +123,16 @@ public struct HostCoreCommandRequest: Codable, Sendable {
         _ = try Self(operation: operation, payload: payload.encoded())
     }
 }
+
+public struct HostCoreCommandReply: Codable, Sendable {
+    public let result: HostCLIJSON?
+    public let failure: HostAgentCommandError?
+    public init(result: HostCLIJSON? = nil, failure: HostAgentCommandError? = nil) {
+        self.result = result; self.failure = failure
+    }
+    public func value() throws -> Data {
+        guard (result == nil) != (failure == nil) else { throw HostWorkerError.invalidResponse }
+        if let failure { throw failure }
+        return try result!.encoded()
+    }
+}

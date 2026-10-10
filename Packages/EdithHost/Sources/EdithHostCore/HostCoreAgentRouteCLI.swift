@@ -8,7 +8,7 @@ public enum HostCoreAgentRouteCLI {
         invoke: @escaping HostCLIProviderRegistry.Invoke
     ) async throws -> ExtensionCLIReply {
         let domain = arguments.count > 1 ? arguments[1] : ""
-        guard let owner = ["tasks": "herdr", "schedule": "herdr", "activity": "usage"][domain]
+        guard let owner = ["activity": "herdr"][domain]
         else {
             throw HostCLIError.usage("Unknown original agent route.")
         }
@@ -21,11 +21,15 @@ public enum HostCoreAgentRouteCLI {
         }
         let routes = (provider.catalog.routes ?? []).filter { arguments.starts(with: $0.route) }
             .sorted { $0.route.count > $1.route.count }
-        guard let command = routes.first, input.isEmpty else {
+        guard let command = routes.first, input.isEmpty || command.readsInput == true else {
             return try HostCoreCommandFailure(
                 "The original agent " + domain + " route is unavailable.",
                 hint: "Update " + owner + " to a provider with original agent route metadata."
             ).reply()
+        }
+        try Task.checkCancellation()
+        guard input.count <= HostCLIInvocationContext.maximumInputBytes else {
+            throw HostCLIError.usage("Input exceeds 4 MiB.")
         }
         let context = try HostCLIInvocationContext(
             arguments: Array(arguments.dropFirst()),

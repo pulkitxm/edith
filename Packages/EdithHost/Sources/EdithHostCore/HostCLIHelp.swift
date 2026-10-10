@@ -133,6 +133,9 @@ public enum HostCLIHelp {
                 leaf["defaultSubcommand"] = .string("ls")
             }
             if definition.route == ["agent"] { leaf["defaultSubcommand"] = .string("status") }
+            if [["agent", "tasks"], ["agent", "schedule"]].contains(definition.route) {
+                leaf["defaultSubcommand"] = .string("ls")
+            }
             if definition.route == ["app"] { leaf["defaultSubcommand"] = .string("actions") }
             root = insert(
                 root, route: definition.route,
@@ -145,9 +148,11 @@ public enum HostCLIHelp {
         var value: [String: HostCLIJSON] = [
             "kind": .string(kind), "shouldDisplay": .bool(true),
             "isOptional": .bool(kind != "positional" || name.hasPrefix("[")),
-            "isRepeating": .bool(false),
-            "parsingStrategy": .string("default"),
-            "valueName": .string(name.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))),
+            "isRepeating": .bool(name == "command..."),
+            "parsingStrategy": .string(name == "command..." ? "postTerminator" : "default"),
+            "valueName": .string(
+                name == "command..."
+                    ? "command" : name.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))),
         ]
         if kind != "positional" {
             let label: HostCLIJSON = .object(["kind": .string("long"), "name": .string(name)])
@@ -258,6 +263,30 @@ public enum HostCLIHelp {
         .init("app forward", "Navigate forward without focusing."),
         .init("app snapshot", "Save app window images.", options: ["dir"]),
         .init("agent", "Inspect and control the owned background core and optional jobs."),
+        Definition("agent tasks", "Inspect and control background tasks."),
+        Definition("agent tasks ls", "List active and completed background tasks."),
+        Definition(
+            "agent tasks inspect", "Read a task's progress and retained result.", words: ["id"]),
+        Definition(
+            "agent tasks cancel", "Cancel a queued or running background task.", words: ["id"]),
+        Definition(
+            "agent tasks exec", "Execute a command in the bounded core task queue.",
+            flags: ["json", "detach"], options: ["timeout"], words: ["command..."]),
+        Definition("agent schedule", "Run commands on a schedule in the background agent."),
+        Definition("agent schedule ls", "List scheduled commands with their next and last run."),
+        Definition(
+            "agent schedule add", "Schedule an absolute command on an interval or cron expression.",
+            options: ["every", "cron", "cwd", "timeout"], words: ["name", "command..."]),
+        Definition(
+            "agent schedule rm", "Remove a schedule while its already running task continues.",
+            words: ["name"]),
+        Definition("agent schedule enable", "Resume a paused scheduled command.", words: ["name"]),
+        Definition(
+            "agent schedule disable", "Pause a schedule while its already running task continues.",
+            words: ["name"]),
+        Definition(
+            "agent schedule run", "Run a schedule now without moving its next scheduled run.",
+            words: ["name"]),
         .init("agent status", "Show the actual owned process, build, memory and store."),
         .init("agent jobs", "List registered jobs from their actual owners."),
         .init("agent restart", "Restart the owned same-executable core process."),

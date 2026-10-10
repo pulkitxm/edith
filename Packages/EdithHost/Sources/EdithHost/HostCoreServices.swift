@@ -340,6 +340,21 @@ import SwiftUI
         return Set(snapshot?.agent?.jobs.map(\.id) ?? [])
     }
 
+    func cliCommand(_ operation: HostAgentCommandOperation, payload: Data) async throws -> Data {
+        try Task.checkCancellation()
+        guard !cliStopping, online, let process, let pid = process.processIdentifier else {
+            throw HostAgentCommandError(.unavailable, "The owned core command service is offline.")
+        }
+        let result = try await process.performCommand(operation, payload: payload)
+        try Task.checkCancellation()
+        guard !cliStopping, self.process === process, online, process.processIdentifier == pid
+        else {
+            throw HostAgentCommandError(
+                .unavailable, "The core process changed during the command.")
+        }
+        return result
+    }
+
     func cliStatus() async throws -> HostCoreAgentStatus {
         try HostCoreAgentStatus(snapshot: await cliSnapshot(), cpuPercent: cpuPercent)
     }

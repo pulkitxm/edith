@@ -26,8 +26,8 @@ import Foundation
             })
         let gateway = HostCLIGateway(marketplace: marketplace)
         let invoke: HostCLIProviderRegistry.Invoke = { try await gateway.execute($0) }
-        let agent = HostCoreAgentCLIFactory.make(
-            local: agentBackend ?? HostCoreAgentCLIAdapter.backend(core: core), invoke: invoke)
+        let backend = agentBackend ?? HostCoreAgentCLIAdapter.backend(core: core)
+        let agent = HostCoreAgentCLIFactory.make(local: backend, invoke: invoke)
         let readinessHooks = HostCoreOwnerHooks(invoke: invoke)
         let readiness = HostCoreReadinessCLI(
             backend: .init(
@@ -61,12 +61,24 @@ import Foundation
                 shared: shared, standard: standard, changed: changed),
             commandProvider: {
                 commands.filter { command in
-                    (command.route.first != "agent" || agentBackend?.ownedJobs().isEmpty == false
-                        || core()?.online == true)
+                    let generic =
+                        command.route.starts(with: ["agent", "tasks"])
+                        || command.route.starts(with: ["agent", "schedule"])
+                    return (!generic || backend.command != nil)
+                        && (command.route.first != "agent"
+                            || agentBackend?.ownedJobs().isEmpty == false
+                            || core()?.online == true)
                         && (command.route != ["app", "clean-keys"]
                             || marketplace.sessions.activeIDs.contains("system"))
                         && (command.route != ["app", "check-updates"] || updater.available)
                 }
+            },
+            commandHandler: { request in
+                guard let command = backend.command else {
+                    throw HostAgentCommandError(
+                        .unavailable, "The owned core command queue is unavailable.")
+                }
+                return try await command(request.operation, request.payload.encoded())
             },
             prepareConfiguration: { arguments in
                 if arguments.isEmpty
@@ -81,7 +93,18 @@ import Foundation
                 case "app": return try await app.execute(remainder)
                 case "permissions": return try await permissions.execute(remainder)
                 case "camera": return try await camera.execute(remainder)
-                case "agent": return try await agent.execute(remainder)
+                case "agent":
+                    if ["tasks", "schedule"].contains(remainder.first ?? "") {
+                        guard let command = backend.command else {
+                            throw HostAgentCommandError(
+                                .unavailable, "The owned core command queue is unavailable.")
+                        }
+                        return try await HostCoreCommandCLI(
+                            invoke: command,
+                            workingDirectory: { HostCoreCLIContext.workingDirectory }
+                        ).execute(remainder)
+                    }
+                    return try await agent.execute(remainder)
                 case "extensions"
                 where ["status", "verify", "doctor", "setup"].contains(remainder.first ?? ""):
                     return try await readiness.execute(remainder)
@@ -113,7 +136,11 @@ import Foundation
                 summary: "Run ed " + route.joined(separator: " "),
                 destructive: route == ["agent", "restart"]
                     || route.first == "agent" && ["run", "cancel"].contains(route.last ?? "")
-                    || route == ["extensions", "setup"],
+                    || route == ["extensions", "setup"]
+                    || route.starts(with: ["agent", "tasks"])
+                        && ["exec", "cancel"].contains(route.last ?? "")
+                    || route.starts(with: ["agent", "schedule"])
+                        && ["add", "rm", "enable", "disable", "run"].contains(route.last ?? ""),
                 timeout: route == ["extensions", "setup"] ? 120 : 30,
                 jsonOutput: route.first != "schema" && route.first != "guide"
                     && route.first != "completions")

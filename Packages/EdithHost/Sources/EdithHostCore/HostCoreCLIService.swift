@@ -33,6 +33,8 @@ public struct HostCoreCLIEnvelope: Codable, Sendable {
     public typealias Action = @MainActor @Sendable ([String]) async throws -> ExtensionCLIReply
     private let configuration: HostConfigurationCLI
     private let action: Action
+    private let commandHandler:
+        (@MainActor @Sendable (HostCoreCommandRequest) async throws -> Data)?
     private let commands: () -> [HostCLIProviderCommand]
     private let configurationCommands: [HostCLIProviderCommand]
     private let prepareConfiguration: @MainActor @Sendable ([String]) async throws -> Void
@@ -41,12 +43,14 @@ public struct HostCoreCLIEnvelope: Codable, Sendable {
     public init(
         configuration: HostConfigurationCLI, commands: [HostCLIProviderCommand] = [],
         commandProvider: (@MainActor () -> [HostCLIProviderCommand])? = nil,
+        commandHandler: (@MainActor @Sendable (HostCoreCommandRequest) async throws -> Data)? = nil,
         prepareConfiguration: @escaping @MainActor @Sendable ([String]) async throws -> Void = {
             _ in
         },
         action: @escaping Action
     ) {
-        self.configuration = configuration; self.action = action
+        self.configuration = configuration; self.action = action;
+        self.commandHandler = commandHandler
         self.prepareConfiguration = prepareConfiguration
         self.commands = commandProvider ?? { commands }
         configurationCommands =
@@ -60,7 +64,8 @@ public struct HostCoreCLIEnvelope: Codable, Sendable {
 
     public static func handles(_ request: HostCLIRequest) -> Bool {
         request.action == .invoke && request.id == "host"
-            && ["host.cli", "host.cli.catalog"].contains(request.operation ?? "")
+            && ["host.cli", "host.cli.catalog", "host.agent.command"].contains(
+                request.operation ?? "")
     }
 
     public func execute(_ request: HostCLIRequest) async throws -> Data {
@@ -69,6 +74,35 @@ public struct HostCoreCLIEnvelope: Codable, Sendable {
         }
         try request.validate()
         try Task.checkCancellation()
+        if request.operation == "host.agent.command" {
+            let command = try JSONDecoder().decode(
+                HostCoreCommandRequest.self, from: request.payload)
+            try command.validate()
+            let reply: HostCoreCommandReply
+            do {
+                guard let commandHandler else {
+                    throw HostAgentCommandError(
+                        .unavailable,
+                        "The installed core does not expose the command queue. Update this Edith app installation."
+                    )
+                }
+                let result = try await commandHandler(command)
+                try Task.checkCancellation()
+                guard !stopped else {
+                    throw HostAgentCommandError(
+                        .unavailable, "The core CLI stopped during the command.")
+                }
+                reply = .init(result: try JSONDecoder().decode(HostCLIJSON.self, from: result))
+            } catch is CancellationError { throw CancellationError() } catch let error
+                as HostAgentCommandError
+            {
+                reply = .init(failure: error)
+            } catch let error as HostCoreCommandFailure {
+                reply = .init(
+                    failure: .init(error.code == 4 ? .unavailable : .failed, error.message))
+            }
+            return try JSONEncoder().encode(reply)
+        }
         if request.operation == "host.cli.catalog" {
             return try JSONEncoder().encode(
                 HostCLIProviderCatalog(

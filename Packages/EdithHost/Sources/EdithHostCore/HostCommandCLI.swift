@@ -6,11 +6,21 @@ public struct HostCommandCLI: Sendable {
     public let version: String
     public let tooling: HostToolingCLI
     private let invoke: HostCLIProviderRegistry.Invoke
+    private let commandWorkingDirectory: @MainActor @Sendable () -> String
+    private let commandEnvironment: @MainActor @Sendable () -> [String: String]
 
     public init(
-        version: String, tooling: HostToolingCLI, invoke: @escaping HostCLIProviderRegistry.Invoke
+        version: String, tooling: HostToolingCLI, invoke: @escaping HostCLIProviderRegistry.Invoke,
+        commandWorkingDirectory: @escaping @MainActor @Sendable () -> String = {
+            FileManager.default.currentDirectoryPath
+        },
+        commandEnvironment: @escaping @MainActor @Sendable () -> [String: String] = {
+            HostCoreCommandCLI.currentEnvironment()
+        }
     ) {
         self.version = version; self.tooling = tooling; self.invoke = invoke
+        self.commandEnvironment = commandEnvironment
+        self.commandWorkingDirectory = commandWorkingDirectory
     }
 
     public static func main(arguments: [String]) -> Never {
@@ -131,8 +141,27 @@ public struct HostCommandCLI: Sendable {
             return try HostCLIOutput.text(Self.help)
         }
         let command = arguments[0]
+        if command == "agent", arguments.count > 1, ["tasks", "schedule"].contains(arguments[1]) {
+            guard input.isEmpty else {
+                throw HostCLIError.usage("This original core command does not accept stdin.")
+            }
+            if arguments.last == "--help", !arguments.contains("--") {
+                return try HostCLIOutput.text(HostCLIHelp.text(Array(arguments.dropLast())))
+            }
+            let handler = await HostCoreCommandCLI(
+                invoke: { operation, payload in
+                    let request = try HostCoreCommandRequest(operation: operation, payload: payload)
+                    let data = try await invoke(
+                        HostCLIRequest(
+                            action: .invoke, id: "host", operation: "host.agent.command",
+                            payload: JSONEncoder().encode(request),
+                            timeout: operation == .cancel ? 3 : 30))
+                    return try JSONDecoder().decode(HostCoreCommandReply.self, from: data).value()
+                }, environment: commandEnvironment, workingDirectory: commandWorkingDirectory)
+            return try await handler.execute(Array(arguments.dropFirst()), streamWrite: streamWrite)
+        }
         if command == "agent", arguments.count > 1,
-            ["tasks", "schedule", "activity"].contains(arguments[1])
+            arguments[1] == "activity"
         {
             return try await HostCoreAgentRouteCLI.execute(
                 arguments, input: input, streamWrite: streamWrite, invoke: invoke)
@@ -623,6 +652,17 @@ public struct HostCommandCLI: Sendable {
                             $0.readsInput == true && arguments.starts(with: $0.route)
                         }
                 } ?? false
+        }
+        if isatty(descriptor) == 0, arguments.starts(with: ["agent", "activity", "hook"]),
+            !arguments.contains("--help")
+        {
+            let owners = try await HostCoreOwnerRegistry.load(invoke: invoke)
+            declaredInput = owners.providers.contains { provider in
+                provider.state.id == "herdr"
+                    && provider.catalog.routes?.contains {
+                        $0.route == ["agent", "activity", "hook"] && $0.readsInput == true
+                    } == true
+            }
         }
         guard
             declaredInput

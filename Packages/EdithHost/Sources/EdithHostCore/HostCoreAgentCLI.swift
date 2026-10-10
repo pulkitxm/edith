@@ -18,6 +18,7 @@ public struct HostCoreCommandFailure: Error, LocalizedError, Sendable {
 }
 
 public struct HostCoreAgentCLIBackend {
+    public var command: HostCoreCommandCLI.Invoke?
     public var ownedJobs: @MainActor () -> Set<String>
     public var status: @MainActor () async throws -> HostCoreAgentStatus
     public var jobs: @MainActor () async throws -> [HostCoreJobSnapshot]
@@ -28,6 +29,7 @@ public struct HostCoreAgentCLIBackend {
     public var cancel: @MainActor (String) async throws -> Void
     public init(
         ownedJobs: @escaping @MainActor () -> Set<String> = { [] },
+        command: HostCoreCommandCLI.Invoke? = nil,
         status: @escaping @MainActor () async throws -> HostCoreAgentStatus,
         jobs: @escaping @MainActor () async throws -> [HostCoreJobSnapshot],
         restart: @escaping @MainActor () async throws -> Void,
@@ -36,7 +38,7 @@ public struct HostCoreAgentCLIBackend {
         run: @escaping @MainActor (String) async throws -> Void,
         cancel: @escaping @MainActor (String) async throws -> Void
     ) {
-        self.ownedJobs = ownedJobs
+        self.ownedJobs = ownedJobs; self.command = command
         self.status = status; self.jobs = jobs; self.restart = restart; self.logs = logs
         self.events = events; self.run = run; self.cancel = cancel
     }
