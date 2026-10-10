@@ -39,7 +39,8 @@ import Foundation
             let saved = try JSONDecoder().decode(Journal.self, from: data)
             guard saved.schemaVersion == 1, saved.events.count <= 500,
                 saved.jobs.map(\.descriptor) == Self.descriptors,
-                saved.jobs.allSatisfy({ $0.runCount >= 0 && $0.subscribers == 0 })
+                saved.jobs.allSatisfy({ (0..<Int.max).contains($0.runCount) && $0.subscribers == 0 }
+                )
             else { throw CocoaError(.fileReadCorruptFile) }
             journal = saved
             for index in journal.jobs.indices where journal.jobs[index].phase == .running {
@@ -73,6 +74,7 @@ import Foundation
         guard let index = journal.jobs.firstIndex(where: { $0.id == job }),
             journal.jobs[index].phase != .running, executions[execution] == nil
         else { throw HostWorkerError.rejected }
+        let saved = journal
         let previous = journal.jobs[index]
         journal.jobs[index] = HostCoreJobSnapshot(
             descriptor: previous.descriptor, phase: .running, subscribers: 0,
@@ -80,7 +82,10 @@ import Foundation
         executions[execution] = job
         record(
             .init(date: now, category: "jobs", name: job, message: "Started.", taskID: execution))
-        try save()
+        do { try save() } catch {
+            journal = saved; executions.removeValue(forKey: execution)
+            throw error
+        }
     }
 
     func finish(execution: UUID, phase: HostCoreTaskSnapshot.Phase, message: String?) throws {
@@ -95,7 +100,15 @@ import Foundation
                 category: "jobs", name: job,
                 message: message ?? (phase == .completed ? "Completed." : "Cancelled."),
                 duration: journal.jobs[index].lastDuration, taskID: execution))
-        try save()
+        do { try save() } catch {
+            let message = "The core job journal could not be saved."
+            journal.jobs[index] = Self.finished(previous, error: message)
+            record(
+                .init(
+                    level: .error, category: "jobs", name: job, message: message, taskID: execution)
+            )
+            throw error
+        }
     }
 
     func stopped() throws {

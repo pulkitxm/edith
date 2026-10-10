@@ -78,6 +78,79 @@ import Testing
         await runtime.shutdown()
     }
 
+    @Test func failedJobJournalWritesNeverLeaveAnOwnedJobRunning() async throws {
+        let fixture = try CoreAgentFixture()
+        defer { fixture.remove() }
+        let directory = fixture.identity.root.appendingPathComponent("Core")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = try HostCoreAgentStore(directory: directory)
+        let journal = directory.appendingPathComponent("agent.json")
+        let saved = directory.appendingPathComponent("saved.json")
+        let execution = UUID()
+        try FileManager.default.moveItem(at: journal, to: saved)
+        try FileManager.default.createDirectory(at: journal, withIntermediateDirectories: false)
+        #expect(throws: (any Error).self) {
+            try store.begin(job: "storage.inspect", execution: execution)
+        }
+        var job = try #require(store.snapshot().jobs.first { $0.id == "storage.inspect" })
+        #expect(job.phase == .idle && job.runCount == 0)
+        #expect(!store.snapshot().events.contains { $0.taskID == execution })
+        try FileManager.default.removeItem(at: journal)
+        try FileManager.default.moveItem(at: saved, to: journal)
+        try store.begin(job: "storage.inspect", execution: execution)
+        try FileManager.default.moveItem(at: journal, to: saved)
+        try FileManager.default.createDirectory(at: journal, withIntermediateDirectories: false)
+        #expect(throws: (any Error).self) {
+            try store.finish(execution: execution, phase: .completed, message: nil)
+        }
+        job = try #require(store.snapshot().jobs.first { $0.id == "storage.inspect" })
+        #expect(job.phase == .failed && job.runCount == 1)
+        #expect(job.lastError == "The core job journal could not be saved.")
+        try FileManager.default.removeItem(at: journal)
+        try FileManager.default.moveItem(at: saved, to: journal)
+        let retry = UUID()
+        try store.begin(job: "storage.inspect", execution: retry)
+        try store.finish(execution: retry, phase: .completed, message: nil)
+        #expect(store.snapshot().jobs.first { $0.id == job.id }?.runCount == 2)
+        #expect(store.snapshot().jobs.allSatisfy { $0.phase != .running })
+    }
+
+    @Test func failedTaskJournalWriteStopsBeforeStorageWorkAndCanRetry() async throws {
+        let fixture = try CoreAgentFixture()
+        defer { fixture.remove() }
+        let runtime = try HostCoreRuntime(identity: fixture.identity)
+        let journal = fixture.identity.root.appendingPathComponent("Core/tasks.json")
+        try FileManager.default.createDirectory(at: journal, withIntermediateDirectories: false)
+        await #expect(throws: (any Error).self) { try await runtime.inspect() }
+        let failed = runtime.snapshot()
+        #expect(failed.storage == nil)
+        #expect(failed.tasks.last?.phase == .failed)
+        #expect(failed.tasks.allSatisfy { $0.phase != .running })
+        #expect(failed.agent?.jobs.first { $0.id == "storage.inspect" }?.phase == .failed)
+        try FileManager.default.removeItem(at: journal)
+        let retry = try await runtime.inspect()
+        #expect(retry.storage != nil)
+        #expect(retry.agent?.jobs.first { $0.id == "storage.inspect" }?.runCount == 2)
+        #expect(retry.tasks.allSatisfy { $0.phase != .running })
+        await runtime.shutdown()
+    }
+
+    @Test func overflowingPersistedJobCounterIsRejected() throws {
+        let fixture = try CoreAgentFixture()
+        defer { fixture.remove() }
+        let directory = fixture.identity.root.appendingPathComponent("Core")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        _ = try HostCoreAgentStore(directory: directory)
+        let journal = directory.appendingPathComponent("agent.json")
+        var document = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: journal)) as? [String: Any])
+        var jobs = try #require(document["jobs"] as? [[String: Any]])
+        jobs[0]["runCount"] = Int.max
+        document["jobs"] = jobs
+        try HostCoreFiles.write(JSONSerialization.data(withJSONObject: document), to: journal)
+        #expect(throws: CocoaError.self) { try HostCoreAgentStore(directory: directory) }
+    }
+
     @Test func ownedRunningJobIsRecoveredAndUnsafeJournalIsRejected() async throws {
         let fixture = try CoreAgentFixture()
         defer { fixture.remove() }

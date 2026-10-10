@@ -197,6 +197,6 @@ public struct HostCoreOwnerHooks: Sendable {
     private static let originalOwners = [
         "usage.": "usage", "sessions.": "herdr", "machines.": "machines",
         "updates.": "appMaintenance", "cleaner.": "cleaner", "downloads.": "downloads",
-        "attention.": "attention", "companion.": "companion", "codeStats.": "codeStats",
+        "attention.": "attention", "companion.": "companion", "codestats.": "codeStats",
     ]
 }

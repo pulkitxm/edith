@@ -77,13 +77,7 @@ import SwiftUI
             {
                 workflowModel.present()
             }
-            observation = Task { [weak self] in
-                while !Task.isCancelled {
-                    do { try await Task.sleep(for: .seconds(5)) } catch { return }
-                    guard let self else { return }
-                    await self.refresh()
-                }
-            }
+            startObservation()
         } catch {
             await process.stop()
             self.process = nil
@@ -349,11 +343,45 @@ import SwiftUI
             throw HostCoreCommandFailure(
                 "background agent", hint: "No owned core process is available to restart.")
         }
-        await restart()
-        try Task.checkCancellation()
-        guard online, process?.processIdentifier != previous else {
-            throw HostCoreCommandFailure(
-                "background agent", hint: failure ?? "The owned core process did not restart.")
+        cliStopping = true
+        observation?.cancel(); await observation?.value; observation = nil
+        IPC.stopObserving(settingsObserver); settingsObserver = nil
+        await settingsScheduler?.shutdown(); settingsScheduler = nil
+        let flights = Array(cliJobFlights.values)
+        process?.cancelCurrentTask()
+        flights.forEach { $0.cancel() }
+        for flight in flights { await flight.value }
+        cliJobFlights.removeAll()
+        cliStatusFlight?.cancel(); _ = try? await cliStatusFlight?.value; cliStatusFlight = nil
+        await process?.stop()
+        process = nil; snapshot = nil; cpuPercent = 0
+        let next = HostCoreProcess(identity: identity, executable: executable)
+        process = next
+        do {
+            update(try await next.start())
+            guard online, next.processIdentifier != previous else {
+                throw HostWorkerError.invalidResponse
+            }
+            try Task.checkCancellation()
+            cliStopping = false; failure = nil
+            startSettingsScheduler(); startObservation()
+        } catch {
+            await next.stop(); process = nil; snapshot = nil; cpuPercent = 0
+            cliStopping = false
+            failure = "The owned core process could not restart."
+            if error is CancellationError { throw error }
+            throw HostCoreCommandFailure("background agent", hint: failure)
+        }
+    }
+
+    private func startObservation() {
+        guard observation == nil else { return }
+        observation = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(5)) } catch { return }
+                guard let self else { return }
+                await self.refresh()
+            }
         }
     }
 
