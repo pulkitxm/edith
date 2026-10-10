@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import SwiftUI
 import Testing
-import EdithExtensionUI
+import EdithExtensionUI_attention_native
 
 @testable import AttentionNative
 
@@ -24,17 +24,23 @@ struct AttentionViewRenderingTests {
         model.reload()
         await model.waitForReload()
         #expect(model.loaded && model.summary.activeDuration == 300)
-        for (width, dark) in [(CGFloat(1180), true), (CGFloat(680), false)] {
+        let scale = UIScale.current
+        defer { UIScale.apply(scale) }
+        for (width, dark, zoom) in [
+            (CGFloat(1180), true, 1.0), (CGFloat(1180), false, 1.0), (CGFloat(680), false, 1.0),
+            (CGFloat(1180), true, 1.5),
+        ] {
+            UIScale.apply(zoom)
             let height = CGFloat(900)
             let view = NSHostingView(
                 rootView: AttentionPage(model: model)
                     .environment(\.colorScheme, dark ? .dark : .light)
                     .environment(\.compactLayout, width < 800)
+                    .environment(\.automaticViewActionsEnabled, false)
                     .frame(width: width, height: height)
                     .transaction { $0.animation = nil })
             view.frame = NSRect(x: 0, y: 0, width: width, height: height)
-            let window = NSWindow(
-                contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            let window = AttentionTestWindowHost.window(contentRect: view.frame)
             window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
             window.contentView = view
             window.orderBack(nil)
@@ -45,6 +51,7 @@ struct AttentionViewRenderingTests {
             let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
             view.cacheDisplay(in: view.bounds, to: bitmap)
             let png = try #require(bitmap.representation(using: .png, properties: [:]))
+            #expect(!AttentionTestWindowHost.isExposedOnDesktop(window))
             #expect(png.count > 10_000)
             #expect(bitmap.pixelsWide >= Int(width))
             window.contentView = nil

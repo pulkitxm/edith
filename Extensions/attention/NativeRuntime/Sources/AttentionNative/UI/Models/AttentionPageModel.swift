@@ -1,5 +1,5 @@
-@_implementationOnly import EdithExtensionSupport
-@_implementationOnly import EdithExtensionUI
+@_implementationOnly import EdithExtensionSupport_attention_native
+@_implementationOnly import EdithExtensionUI_attention_native
 import AppKit
 import ApplicationServices
 import Foundation
@@ -84,6 +84,8 @@ final class AttentionPageModel {
     private(set) var categorizing = false
 
     private let repository: AttentionRepository
+    let uiClient: AttentionUIClient?
+    private var uiStatus = AttentionUIStatus()
     private var categorizeTask: Task<Void, Never>?
     private var backupTask: Task<Void, Never>?
     private var reloadTask: Task<Void, Never>?
@@ -91,11 +93,19 @@ final class AttentionPageModel {
     private var timelineTask: Task<Void, Never>?
     private var breakdownTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
+    private var settingsTask: Task<Void, Never>?
 
-    init(repository: AttentionRepository = AttentionRepository()) {
+    init(
+        repository: AttentionRepository = AttentionRepository(), uiClient: AttentionUIClient? = nil
+    ) {
+        self.uiClient = uiClient
         self.repository = repository
         let interval = AttentionPeriod().interval()
         summary = AttentionSummary(from: interval.start, to: interval.end)
+        if uiClient?.available == false {
+            section = .settings
+            loading.setContent()
+        }
     }
 
     var needsSetup: Bool {
@@ -112,7 +122,12 @@ final class AttentionPageModel {
         return period.isSingleDay ? .seconds(30) : .seconds(120)
     }
 
-    var cloudBackup: AttentionCloudBackup { AttentionCloudBackup() }
+    var cloudBackup: AttentionUIStatus {
+        if uiClient != nil { return uiStatus }
+        let backup = AttentionCloudBackup()
+        return AttentionUIStatus(
+            backupAvailable: backup.available, lastBackupAt: backup.lastBackupAt)
+    }
 
     func category(_ id: String) -> AttentionCategory { settings.category(id) }
 
@@ -183,6 +198,7 @@ final class AttentionPageModel {
         reloadTask?.cancel()
         let generation = loading.begin()
         let repository = repository
+        let uiClient = uiClient
         let period = period
         let window = window
         let parts: Set<AttentionSummaryPart> =
@@ -195,7 +211,8 @@ final class AttentionPageModel {
         reloadTask = Task.detached { [weak self] in
             do {
                 let state = try await AttentionPageModel.loadState(
-                    repository: repository, period: period, window: window, parts: parts,
+                    repository: repository, uiClient: uiClient, period: period, window: window,
+                    parts: parts,
                     settings: preserveSettings ? knownSettings : nil, current: current,
                     filter: filter, retaining: retained, knownSettings: knownSettings,
                     knownClassifications: knownClassifications)
@@ -219,10 +236,12 @@ final class AttentionPageModel {
     func shutdown() async {
         let pending = [
             categorizeTask, backupTask, reloadTask, timelineTask, breakdownTask, searchTask,
+            settingsTask,
         ].compactMap { $0 }
         cancelLoading()
         categorizeTask?.cancel(); categorizeTask = nil
         backupTask?.cancel(); backupTask = nil
+        settingsTask?.cancel(); settingsTask = nil
         for task in pending { task.cancel() }
         for task in pending { await task.value }
     }
@@ -259,6 +278,9 @@ final class AttentionPageModel {
         if classifications != state.classifications { classifications = state.classifications }
         hasStoredEvents = state.hasStoredEvents
         extensionInstalled = state.extensionInstalled
+        if let status = state.uiStatus {
+            uiStatus = status; browserConnected = status.browserConnected
+        }
         loadedParts = parts
         if state.derived != nil { refilterBreakdown() }
         loading.complete(generation)
@@ -273,7 +295,8 @@ final class AttentionPageModel {
     }
 
     nonisolated private static func loadState(
-        repository: AttentionRepository, period: AttentionPeriod, window: AttentionTimeWindow,
+        repository: AttentionRepository, uiClient: AttentionUIClient?, period: AttentionPeriod,
+        window: AttentionTimeWindow,
         parts: Set<AttentionSummaryPart>, settings: AttentionSettings?,
         current: AttentionSummary, filter: AttentionSpanFilter,
         retaining retained: Set<AttentionSummaryPart>, knownSettings: AttentionSettings,
@@ -286,7 +309,7 @@ final class AttentionPageModel {
             from: interval.start, to: interval.end, settings: settings,
             comparePeriod: period.comparePeriod, window: window, parts: parts,
             allTime: period.preset == .allTime && retained.isEmpty)
-        var snapshot = try await Self.snapshot(request, repository: repository)
+        var snapshot = try await Self.snapshot(request, repository: repository, uiClient: uiClient)
         try Task.checkCancellation()
         if !retained.isEmpty {
             if snapshot.settings == knownSettings, snapshot.classifications == knownClassifications
@@ -299,10 +322,11 @@ final class AttentionPageModel {
                         from: interval.start, to: interval.end, settings: settings,
                         comparePeriod: period.comparePeriod, window: window,
                         parts: retained.union(parts)),
-                    repository: repository)
+                    repository: repository, uiClient: uiClient)
             }
         }
         try Task.checkCancellation()
+        let status = try await uiClient?.status()
         let summary = snapshot.summary
         let derived: AttentionPageDerivedState? =
             summary == current && retained.isEmpty
@@ -319,13 +343,16 @@ final class AttentionPageModel {
             activeFocus: snapshot.activeFocus, focusSessions: snapshot.focusSessions,
             classifications: snapshot.classifications,
             hasStoredEvents: snapshot.hasStoredEvents,
-            extensionInstalled: FileManager.default.fileExists(
-                atPath: AttentionExtensionInstaller.installedDirectory.path))
+            extensionInstalled: status?.extensionInstalled
+                ?? FileManager.default.fileExists(
+                    atPath: AttentionExtensionInstaller.installedDirectory.path), uiStatus: status)
     }
 
     nonisolated private static func snapshot(
-        _ request: AttentionSummaryRequest, repository: AttentionRepository
+        _ request: AttentionSummaryRequest, repository: AttentionRepository,
+        uiClient: AttentionUIClient?
     ) async throws -> AttentionPageSnapshot {
+        if let uiClient { return try await uiClient.snapshot(request) }
         if repository.resolvedEventSink is AttentionEventStore {
             return try await AttentionBackgroundClient.summary(request)
         } else {
@@ -387,6 +414,28 @@ final class AttentionPageModel {
     }
 
     func saveSettings() {
+        if let uiClient {
+            guard uiClient.available, !uiClient.stopped else { return }
+            settings.normalizeCategories()
+            settingsTask?.cancel()
+            let next = settings
+            settingsTask = Task { [weak self] in
+                do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+                guard let self, !Task.isCancelled, !uiClient.stopped else { return }
+                do {
+                    let payload = try AttentionPayload.encode(next)
+                    uiClient.perform("attention.settings.set", payload: payload) {
+                        [weak self] result in
+                        do {
+                            _ = try result.get()
+                            self?.message = "Settings saved"; self?.errorMessage = nil
+                            self?.reload(preserveSettings: true)
+                        } catch { self?.errorMessage = error.localizedDescription }
+                    }
+                } catch { self.errorMessage = error.localizedDescription }
+            }
+            return
+        }
         do {
             settings.normalizeCategories()
             try repository.saveSettings(settings)
@@ -414,6 +463,9 @@ final class AttentionPageModel {
     }
 
     func installExtension() {
+        if uiClient != nil {
+            remote("attention.ui.extension.install", message: "Extension folder ready"); return
+        }
         do {
             try AttentionExtensionInstaller.reveal()
             extensionInstalled = true
@@ -424,21 +476,32 @@ final class AttentionPageModel {
     }
 
     func openChromeExtensions() {
+        if uiClient != nil { remote("attention.ui.extension.open"); return }
         _ = AttentionExtensionInstaller.openExtensionsPage()
     }
 
     func copyToken() {
+        if uiClient != nil {
+            remote("attention.ui.token.copy", message: "Private token copied"); return
+        }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(settings.serverToken, forType: .string)
         message = "Private token copied"
     }
 
     func requestAccessibility() {
+        if uiClient != nil { remote("attention.ui.accessibility"); return }
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
     }
 
     func startFocus(name: String, duration: TimeInterval) {
+        if uiClient != nil {
+            remote(
+                "attention.ui.focus.start",
+                value: AttentionFocusRequest(name: name, duration: duration));
+            return
+        }
         do {
             activeFocus = try AttentionFocusOperationExecution.start(
                 name: name, duration: duration, repository: repository)
@@ -450,6 +513,7 @@ final class AttentionPageModel {
     }
 
     func stopFocus() {
+        if uiClient != nil { remote("attention.ui.focus.stop"); return }
         do {
             try AttentionFocusOperationExecution.stop(repository: repository)
             activeFocus = nil
@@ -512,6 +576,24 @@ final class AttentionPageModel {
     }
 
     func categorizeNow() {
+        if let uiClient {
+            guard !categorizing else { return }
+            categorizing = true
+            uiClient.perform("attention.categorize") { [weak self] result in
+                self?.categorizing = false
+                do {
+                    let report = try AttentionPayload.decode(
+                        AttentionCategorizeReport.self, from: result.get())
+                    self?.message =
+                        report.available
+                        ? "Jev categorized \(report.entities) apps and sites and \(report.titles) titles"
+                        : "Add a Jev key in Settings to categorize automatically"
+                    self?.errorMessage = nil
+                    self?.reload()
+                } catch { self?.errorMessage = error.localizedDescription }
+            }
+            return
+        }
         guard !categorizing else { return }
         categorizing = true
         categorizeTask = Task { [weak self] in
@@ -558,6 +640,10 @@ final class AttentionPageModel {
     }
 
     func backupNow() {
+        if uiClient != nil {
+            remoteBackup("attention.backup", message: "Attention data backed up to iCloud Drive");
+            return
+        }
         guard !transferringBackup else { return }
         transferringBackup = true
         backupTask = Task { [weak self] in
@@ -573,6 +659,9 @@ final class AttentionPageModel {
     }
 
     func restoreBackup() {
+        if uiClient != nil {
+            remoteBackup("attention.restore", message: "Attention backup restored"); return
+        }
         guard !transferringBackup else { return }
         transferringBackup = true
         backupTask = Task { [weak self] in
@@ -589,11 +678,62 @@ final class AttentionPageModel {
     }
 
     func checkBrowser() async {
+        if let uiClient {
+            do {
+                let status = try await uiClient.status()
+                guard !Task.isCancelled else { return }
+                uiStatus = status; browserConnected = status.browserConnected
+            } catch {}
+            return
+        }
         guard settings.isEnabled, settings.browserTrackingEnabled else {
             browserConnected = false
             return
         }
         browserConnected = await AttentionIngestionServer.isHealthy(port: settings.serverPort)
+    }
+
+    private func remoteBackup(_ operation: String, message: String) {
+        guard !transferringBackup, let uiClient else { return }
+        transferringBackup = true
+        uiClient.perform(operation) { [weak self] result in
+            self?.transferringBackup = false
+            self?.receive(result, message: message)
+        }
+    }
+
+    private func remote(_ operation: String, message: String? = nil) {
+        uiClient?.perform(operation) { [weak self] result in self?.receive(result, message: message)
+        }
+    }
+
+    private func remote(_ operation: String, value: some Encodable, message: String? = nil) {
+        do {
+            let payload = try AttentionPayload.encode(value)
+            uiClient?.perform(operation, payload: payload) { [weak self] result in
+                self?.receive(result, message: message)
+            }
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func receive(_ result: Result<Data, Error>, message: String?) {
+        do { _ = try result.get(); self.message = message; errorMessage = nil; reload() } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func copyBreakdown() {
+        let interval = period.interval()
+        let request = AttentionUIBreakdownRequest(
+            summary: AttentionSummaryRequest(
+                from: interval.start, to: interval.end, window: window,
+                parts: [.breakdown], allTime: period.preset == .allTime),
+            dimension: breakdownDimension,
+            level: levelFilter, sphere: sphereFilter, category: categoryFilter, search: search,
+            sort: breakdownSort.rawValue)
+        remote(
+            "attention.ui.breakdown.copy", value: request,
+            message: "Copied \(breakdown.rows.count) rows")
     }
 
     func filter(category id: String?, navigate: Bool = true) {
@@ -674,4 +814,5 @@ private struct AttentionPageState: Sendable {
     var classifications: AttentionClassifications
     var hasStoredEvents: Bool
     var extensionInstalled: Bool
+    var uiStatus: AttentionUIStatus? = nil
 }

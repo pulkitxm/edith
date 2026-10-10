@@ -1,5 +1,5 @@
-@_implementationOnly import EdithExtensionSupport
-@_implementationOnly import EdithExtensionUI
+@_implementationOnly import EdithExtensionSupport_attention_native
+@_implementationOnly import EdithExtensionUI_attention_native
 import AppKit
 import SwiftUI
 
@@ -326,6 +326,7 @@ struct AttentionResolvedIcon: View {
         return bundleID
     }
 
+    @Environment(\.attentionUIClient) private var uiClient
     var body: some View {
         Group {
             switch descriptor {
@@ -359,7 +360,7 @@ struct AttentionResolvedIcon: View {
         .pageTask(id: faviconURL) {
             faviconImage = nil
             guard let faviconURL,
-                let data = try? await AgentFaviconClient().data(for: faviconURL),
+                let data = try? await faviconData(faviconURL),
                 !Task.isCancelled
             else { return }
             faviconImage = NSImage(data: data)
@@ -369,10 +370,29 @@ struct AttentionResolvedIcon: View {
             guard let applicationBundleID,
                 AttentionApplicationIcon.cached(bundleID: applicationBundleID) == nil
             else { return }
-            let icon = await AttentionApplicationIcon.resolve(bundleID: applicationBundleID)
+            let icon: NSImage?
+            if let uiClient {
+                let bytes = try? await uiClient.invoke(
+                    "attention.ui.application.icon",
+                    payload: AttentionPayload.encode(applicationBundleID))
+                let data = bytes.flatMap { try? AttentionPayload.decode(Data?.self, from: $0) }
+                icon = data.flatMap { NSImage(data: $0) }
+            } else {
+                icon = await AttentionApplicationIcon.resolve(bundleID: applicationBundleID)
+            }
             guard !Task.isCancelled else { return }
             applicationImage = icon
         }
+    }
+
+    private func faviconData(_ url: URL) async throws -> Data? {
+        if let uiClient {
+            return try AttentionPayload.decode(
+                Data?.self,
+                from: await uiClient.invoke(
+                    AgentFaviconClient.operation, payload: AttentionPayload.encode(url)))
+        }
+        return try await AgentFaviconClient().data(for: url)
     }
 
     private func fallback(_ systemName: String) -> some View {

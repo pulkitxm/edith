@@ -1,7 +1,7 @@
 import Foundation
 import Testing
-import EdithExtensionSupport
-import EdithExtensionUI
+import EdithExtensionSupport_attention_native
+import EdithExtensionUI_attention_native
 import AppKit
 import SwiftUI
 
@@ -10,9 +10,28 @@ import SwiftUI
 @MainActor
 @Suite(.serialized)
 struct AttentionWorkerContractTests {
-    @Test func originalHomeFocusControlsWriteOnlyTheOwnedRepository() async throws {
+    @Test(arguments: [false, true])
+    func originalHomeFocusControlsWriteOnlyTheOwnedRepository(remote: Bool) async throws {
         let fixture = try AttentionWorkerFixture()
         defer { fixture.remove() }
+        let deniedRoot = fixture.root.appendingPathComponent("must-remain-absent")
+        var holdNextFocusRead = false
+        var pendingFocusRead: CheckedContinuation<Data, Error>?
+        var heldFocusSnapshot: Data?
+        defer { pendingFocusRead?.resume(throwing: CancellationError()) }
+        let uiClient: AttentionUIClient? =
+            remote
+            ? AttentionUIClient(send: { operation, payload in
+                let response = try await AttentionUICommands.execute(
+                    operation, payload: payload, repository: fixture.repository,
+                    service: fixture.service)
+                if operation == "attention.ui.focus.get", holdNextFocusRead {
+                    holdNextFocusRead = false
+                    heldFocusSnapshot = response
+                    return try await withCheckedThrowingContinuation { pendingFocusRead = $0 }
+                }
+                return response
+            }) : nil
         NSApplication.shared.setActivationPolicy(.prohibited)
         let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
             NSAccessibility.Attribute(rawValue: $0)
@@ -28,9 +47,8 @@ struct AttentionWorkerContractTests {
         var tile = SurfaceTile(.focus)
         tile.focusMinutes = 25
         let host = NSHostingView(rootView: AnyView(EmptyView()))
-        let window = AttentionHomeTestWindow(
-            contentRect: .init(x: -10000, y: -10000, width: 360, height: 260),
-            styleMask: .borderless, backing: .buffered, defer: false)
+        let window = AttentionTestWindowHost.window(
+            contentRect: .init(x: 0, y: 0, width: 360, height: 260))
         window.contentView = host; window.orderBack(nil)
         defer { window.orderOut(nil) }
         func settle() async {
@@ -42,17 +60,30 @@ struct AttentionWorkerContractTests {
         func render(visible: Bool) async {
             host.rootView = AnyView(
                 AttentionHomeFocusCard(
-                    tile: tile, repository: fixture.repository, open: { _ in opened += 1 }
+                    tile: tile,
+                    repository: remote ? .init(root: deniedRoot) : fixture.repository,
+                    uiClient: uiClient, open: { _ in opened += 1 }
                 )
                 .environment(\.windowVisible, visible)
                 .transaction { $0.animation = nil })
             await settle()
         }
         await render(visible: true)
+        if remote {
+            holdNextFocusRead = true
+            tile.days += 1
+            await render(visible: true)
+            #expect(pendingFocusRead != nil)
+        }
         let start = try #require(find(host, label: "Start focus"))
         _ = (start as AnyObject).accessibilityPerformPress?()
         await settle()
         #expect(fixture.repository.activeFocus()?.plannedDuration == 1500)
+        if let heldFocusSnapshot {
+            pendingFocusRead?.resume(returning: heldFocusSnapshot)
+            pendingFocusRead = nil
+            await settle()
+        }
         #expect(find(host, label: "Deep work") != nil)
         #expect(find(host, label: "Finish") != nil)
         let open = try #require(find(host, label: "Open Focus timer"))
@@ -72,6 +103,8 @@ struct AttentionWorkerContractTests {
         #expect(fixture.repository.activeFocus() == nil)
         #expect(find(host, label: "Start focus") != nil)
         #expect(!NSScreen.screens.contains { $0.frame.intersects(window.frame) })
+        #expect(!FileManager.default.fileExists(atPath: deniedRoot.path))
+        uiClient?.stop()
         await fixture.service.stop()
         try fixture.database.close()
     }
@@ -205,12 +238,6 @@ struct AttentionWorkerContractTests {
         }
         await fixture.service.stop()
         try fixture.database.close()
-    }
-}
-
-private final class AttentionHomeTestWindow: NSWindow {
-    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
-        frameRect
     }
 }
 

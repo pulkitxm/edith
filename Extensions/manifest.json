@@ -780,7 +780,7 @@
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "inputs": [
       "Extensions/clipboard"
     ],
@@ -791,7 +791,8 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
     "roles": {
@@ -839,7 +840,13 @@
         "Extensions/clipboard/ClipboardThumbnailSnapshot.swift",
         "Extensions/clipboard/ClipboardTimeline.swift",
         "Extensions/clipboard/ClipboardWorker.swift",
-        "Extensions/clipboard/Runtime.swift"
+        "Extensions/clipboard/Runtime.swift",
+        "Extensions/clipboard/CLI/CLIDestructivePlan.swift",
+        "Extensions/clipboard/CLI/ClipboardCLIExecution.swift",
+        "Extensions/clipboard/CLI/ClipboardCommands.swift",
+        "Extensions/clipboard/ClipboardPreferences.swift",
+        "Extensions/clipboard/ClipboardPresentation.swift",
+        "Extensions/clipboard/ClipboardShortcutRecorder.swift"
       ]
     },
     "minimumSystemVersion": 14,
@@ -1701,7 +1708,9 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands",
+      "scripts/prepare-extension-native-support.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
@@ -1719,6 +1728,10 @@
       {
         "source": "Extensions/attention/Licenses/GRDB-LICENSE",
         "destination": "GRDB-LICENSE"
+      },
+      {
+        "source": "Packages/ExtensionSupport/Licenses/swift-argument-parser-license.txt",
+        "destination": "swift-argument-parser-license.txt"
       }
     ],
     "testTargets": [
@@ -1730,6 +1743,12 @@
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/AttentionExtensionController.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/AttentionRuleDocument.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/AttentionSurface.swift",
+      "Extensions/attention/NativeRuntime/Sources/AttentionNative/AttentionUIClient.swift",
+      "Extensions/attention/NativeRuntime/Sources/AttentionNative/AttentionUICommands.swift",
+      "Extensions/attention/NativeRuntime/Sources/AttentionNative/CLI/AttentionCLICommands.swift",
+      "Extensions/attention/NativeRuntime/Sources/AttentionNative/CLI/AttentionCLIExecution.swift",
+      "Extensions/attention/NativeRuntime/Sources/AttentionNative/CLI/AttentionExtensionCLICommands.swift",
+      "Extensions/attention/NativeRuntime/Sources/AttentionNative/CLI/AttentionRuleCLICommands.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/Collection/AttentionAgentRecorder.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/Collection/AttentionBackgroundService.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/Collection/AttentionContextBoard.swift",
@@ -1788,7 +1807,8 @@
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionSettingsView.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionTimelineView.swift"
     ],
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "nativeSupportProduct": "EdithExtensionCommands"
   },
   {
     "id": "machines",

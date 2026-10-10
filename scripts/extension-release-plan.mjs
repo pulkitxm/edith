@@ -33,6 +33,7 @@ export const workerRuntimeInputs = [
 export function definitionSupportInputs(definition) {
   const products = [
     definition.supportProduct,
+    definition.nativeSupportProduct,
     ...Object.values(definition.supportProducts ?? {}),
   ].filter(Boolean);
   return [...new Set(products.flatMap(supportSourceInputs))];
@@ -64,6 +65,7 @@ export async function supportCacheFingerprint(root, definition) {
   const support = {
     supportProduct: definition.supportProduct,
     supportProducts: definition.supportProducts,
+    nativeSupportProduct: definition.nativeSupportProduct,
     id: "support",
     inputs: ["scripts/build-extension-support.mjs", ...supportInputs],
     sharedInputs: [],

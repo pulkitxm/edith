@@ -1,5 +1,5 @@
-@_implementationOnly import EdithExtensionSupport
-@_implementationOnly import EdithExtensionUI
+@_implementationOnly import EdithExtensionSupport_attention_native
+@_implementationOnly import EdithExtensionUI_attention_native
 import SwiftUI
 
 struct AttentionSettingsView: View {
@@ -157,7 +157,7 @@ struct AttentionSettingsView: View {
                     Button("Restore before tracking") { model.restoreBackup() }
                         .buttonStyle(.edith(.secondary))
                         .disabled(
-                            model.transferringBackup || !model.cloudBackup.available
+                            model.transferringBackup || !model.cloudBackup.backupAvailable
                                 || model.hasStoredEvents)
                     Spacer()
                     if let date = model.cloudBackup.lastBackupAt {

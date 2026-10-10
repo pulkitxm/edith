@@ -23,6 +23,7 @@ import { verifyExtensionNativeDependencies } from "./extension-ghostty-native.mj
 import { writeHostABI } from "./extension-host-abi.mjs";
 import { buildHostInterfaces } from "./extension-host-build.mjs";
 import { extensionFingerprint } from "./extension-release-plan.mjs";
+import { prepareNativeSupport } from "./prepare-extension-native-support.mjs";
 
 export function presentationLinkerFlags(product) {
   return product && supportProducts(product).includes("EdithExtensionUI")
@@ -291,6 +292,7 @@ export async function buildExtensionPackage({
     ? (process.env.EXTENSION_HOST_PRODUCTS ?? (await buildHostInterfaces(root)))
     : undefined;
   if (definition.nativePackage) {
+    prepareNativeSupport(root, definition);
     execFileSync(
       "swift",
       nativeSwiftPackageArguments(root, definition, developer),

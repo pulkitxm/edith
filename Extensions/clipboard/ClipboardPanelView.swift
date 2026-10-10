@@ -279,7 +279,7 @@ struct ClipboardPanelView: View {
         if palette.isFiltered { return "Try another word or category." }
         if capturePaused { return "Resume capture to start collecting copies again." }
         return
-            "Copy anything and it lands here. \((SharedDefaults.store.string(forKey: "clipboardHotKeyLabel") ?? "⌃⇧C")) opens it from any app."
+            "Copy anything and it lands here. \((SharedDefaults.store.string(forKey: ClipboardPreferences.hotKeyLabelKey) ?? "⌃⇧C")) opens it from any app."
     }
 
     private func row(_ entry: ClipboardEntry) -> some View {

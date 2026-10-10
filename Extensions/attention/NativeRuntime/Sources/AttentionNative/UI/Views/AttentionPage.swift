@@ -1,5 +1,5 @@
-@_implementationOnly import EdithExtensionSupport
-@_implementationOnly import EdithExtensionUI
+@_implementationOnly import EdithExtensionSupport_attention_native
+@_implementationOnly import EdithExtensionUI_attention_native
 import AppKit
 import SwiftUI
 
@@ -29,6 +29,11 @@ struct AttentionPage: View {
                     }
                 })
         } content: {
+            if model.uiClient?.available == false {
+                PageNotice(
+                    "Enable Attention in Extensions to use activity tracking and settings.",
+                    tone: .information)
+            }
             if let message = model.message {
                 PageNotice(message, tone: .success)
             }
@@ -49,7 +54,7 @@ struct AttentionPage: View {
                 retry: { model.reload() }
             ) {
                 Group {
-                    if model.needsSetup {
+                    if model.needsSetup && model.uiClient?.available != false {
                         AttentionSetupView(model: model)
                     } else if model.section == .settings {
                         AttentionSettingsView(model: model)
@@ -78,8 +83,13 @@ struct AttentionPage: View {
                 }
             }
         }
+        .disabled(model.uiClient?.available == false || model.uiClient?.stopped == true)
+        .environment(\.attentionUIClient, model.uiClient)
         .navigationRoute("section", selection: $model.section)
         .pageRefresh(interval: { model.refreshInterval }, cancel: model.cancelLoading) {
+            guard model.uiClient?.available != false, model.uiClient?.stopped != true else {
+                return
+            }
             model.reload(
                 preserveSettings: model.loaded && (model.needsSetup || model.section == .settings))
             await model.waitForReload()

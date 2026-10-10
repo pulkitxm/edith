@@ -1,5 +1,5 @@
-@_implementationOnly import EdithExtensionSupport
-@_implementationOnly import EdithExtensionUI
+@_implementationOnly import EdithExtensionSupport_attention_native
+@_implementationOnly import EdithExtensionUI_attention_native
 import Foundation
 
 struct AttentionRuntimeSnapshot: Codable, Sendable {
@@ -90,6 +90,13 @@ actor AttentionBackgroundService {
             }
         }
         continuation.yield()
+    }
+
+    func runtimeStatus() throws -> AttentionRuntimeSnapshot {
+        guard !stopped else { throw CancellationError() }
+        return AttentionRuntimeSnapshot(
+            importedEvents: 0, browserListening: server?.state == .ready,
+            port: server?.boundPort, lastBackupAt: lastBackupAt)
     }
 
     func run(now: Date = Date()) async throws -> Data? {

@@ -1,5 +1,5 @@
-@_implementationOnly import EdithExtensionSupport
-@_implementationOnly import EdithExtensionUI
+@_implementationOnly import EdithExtensionSupport_attention_native
+@_implementationOnly import EdithExtensionUI_attention_native
 import AppKit
 import SwiftUI
 
@@ -214,6 +214,7 @@ struct AttentionBreakdownView: View {
     }
 
     private func copy(_ rows: [AttentionBreakdownItem], title: String) {
+        if model.uiClient != nil { model.copyBreakdown(); return }
         let total = rows.reduce(0) { $0 + $1.duration }
         let lines =
             ["\(DoubleQuoted.wrap(title)),seconds,minutes,share_percent"]

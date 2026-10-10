@@ -5,39 +5,8 @@ import EdithExtensionUI
 import SwiftUI
 
 struct ClipboardRows: View {
-    @AppStorage(AppStorageKeys.Clipboard.maxItems, store: SharedDefaults.store) private
-        var maxItems = ClipboardIndex.defaultMaxItems
-    @AppStorage(AppStorageKeys.Clipboard.maxItemBytes, store: SharedDefaults.store) private
-        var maxItemBytes =
-        ClipboardIndex.defaultMaxItemBytes
-    @AppStorage(AppStorageKeys.Clipboard.maxAgeDays, store: SharedDefaults.store) private
-        var maxAgeDays = 0
-    @AppStorage(AppStorageKeys.Clipboard.ignoredApps, store: SharedDefaults.store) private
-        var ignoredApps = ""
-    @AppStorage(AppStorageKeys.Clipboard.autoPaste, store: SharedDefaults.store) private
-        var autoPaste = true
-    @AppStorage(AppStorageKeys.Clipboard.capturePaused, store: SharedDefaults.store) private
-        var capturePaused = false
-    @AppStorage(AppStorageKeys.Clipboard.pastePlainText, store: SharedDefaults.store) private
-        var pastePlainText =
-        false
-    @AppStorage(AppStorageKeys.Clipboard.checkInterval, store: SharedDefaults.store) private
-        var checkInterval =
-        ClipboardIndex.defaultCheckInterval
-    @AppStorage(AppStorageKeys.Permissions.accessibilityGranted, store: SharedDefaults.store)
-    private var accessibilityGranted = false
-    @AppStorage(AppStorageKeys.Clipboard.popupAt, store: SharedDefaults.store) private var popupAt =
-        "cursor"
-    @AppStorage(AppStorageKeys.Clipboard.pinTo, store: SharedDefaults.store) private var pinTo =
-        "top"
-    @AppStorage(AppStorageKeys.Clipboard.showFooter, store: SharedDefaults.store) private
-        var showFooter = true
-    @AppStorage(AppStorageKeys.Clipboard.saveFiles, store: SharedDefaults.store) private
-        var saveFiles = true
-    @AppStorage(AppStorageKeys.Clipboard.saveImages, store: SharedDefaults.store) private
-        var saveImages = true
-    @AppStorage(AppStorageKeys.Clipboard.saveText, store: SharedDefaults.store) private
-        var saveText = true
+    @State private var preferences = ClipboardPreferences()
+    let presentation: ClipboardPresentation?
 
     @State private var tab = "general"
     @State private var recent: ClipboardRecentModel
@@ -46,7 +15,14 @@ struct ClipboardRows: View {
     @State private var refreshObserver: NSObjectProtocol?
     @State private var refreshTask: Task<Void, Never>?
 
-    init(client: ClipboardClient, history: ClipboardHistoryModel) {
+    init(
+        client: ClipboardClient, history: ClipboardHistoryModel,
+        presentation: ClipboardPresentation? = nil
+    ) {
+        self.presentation = presentation
+        _preferences = State(
+            initialValue: presentation?.preferences
+                ?? ClipboardPreferences.read(SharedDefaults.store))
         self.history = history
         _recent = State(
             initialValue: ClipboardRecentModel(load: {
@@ -57,20 +33,22 @@ struct ClipboardRows: View {
     private var maxItemMB: Binding<Int> {
         Binding(
             get: {
-                min(ClipboardArchive.maximumBlobBytes / 1_000_000, max(1, maxItemBytes / 1_000_000))
+                min(
+                    ClipboardArchive.maximumBlobBytes / 1_000_000,
+                    max(1, preferences.maxItemBytes / 1_000_000))
             },
             set: {
-                $maxItemBytes.notifyingSettingsChange().wrappedValue =
+                binding(\.maxItemBytes).wrappedValue =
                     $0 * 1_000_000
             })
     }
 
     private var boundedMaxItems: Binding<Int> {
         Binding(
-            get: { maxItems },
+            get: { preferences.maxItems },
             set: {
-                maxItems = min(999, max(1, $0))
-                IPC.post(IPC.Name.settingsChanged)
+                preferences.maxItems = min(999, max(1, $0))
+                savePreferences()
             })
     }
 
@@ -94,6 +72,9 @@ struct ClipboardRows: View {
             }
 
             Section {
+                if let error = presentation?.error {
+                    Text(error).settingsCaption().foregroundStyle(.orange)
+                }
                 if let error = recent.error {
                     Text(error).settingsCaption().foregroundStyle(.orange)
                     Button("Retry") { reload() }
@@ -128,10 +109,17 @@ struct ClipboardRows: View {
             if let refreshObserver { IPC.stopObserving(refreshObserver) }
             refreshObserver = nil
         }) {
-            if refreshObserver == nil {
+            if presentation == nil, refreshObserver == nil {
                 refreshObserver = IPC.observe(IPC.Name.clipboardChanged) { reload() }
             }
+            if let presentation {
+                await presentation.refresh()
+                preferences = presentation.preferences
+            }
             await recent.refresh()
+        }
+        .onChange(of: presentation?.preferences) { _, next in
+            if let next { preferences = next }
         }
         .edithSheet(isPresented: $showHistory) {
             ClipboardHistoryView(model: history)
@@ -141,7 +129,7 @@ struct ClipboardRows: View {
     @ViewBuilder private var generalSections: some View {
         Section {
             LabeledContent {
-                HotKeyRecorderControl(keyPrefix: "clipboardHotKey", defaultLabel: "⌃⇧C")
+                ClipboardShortcutRecorder(preferences: $preferences, save: savePreferences)
             } label: {
                 HStack(spacing: UIScale.pt(6)) {
                     Text("Open")
@@ -152,7 +140,7 @@ struct ClipboardRows: View {
         }
         Section {
             Toggle(
-                isOn: $capturePaused.notifyingSettingsChange()
+                isOn: binding(\.capturePaused)
             ) {
                 HStack(spacing: UIScale.pt(6)) {
                     Text("Pause capture")
@@ -167,12 +155,12 @@ struct ClipboardRows: View {
         Section {
             Toggle(
                 isOn: Binding(
-                    get: { autoPaste },
+                    get: { preferences.autoPaste },
                     set: { newValue in
-                        $autoPaste.notifyingSettingsChange().wrappedValue =
+                        binding(\.autoPaste).wrappedValue =
                             newValue
-                        if newValue, !accessibilityGranted {
-                            ClipboardPermission.request()
+                        if newValue, !preferences.accessibilityGranted {
+                            requestPermission()
                         }
                     })
             ) {
@@ -183,17 +171,17 @@ struct ClipboardRows: View {
                     )
                 }
             }
-            if autoPaste, !accessibilityGranted {
+            if preferences.autoPaste, !preferences.accessibilityGranted {
                 Text(
                     "Accessibility isn't granted yet - selecting an item only copies until you grant it."
                 )
                 .font(.system(size: UIScale.pt(10))).foregroundStyle(.orange)
-                Button("Grant Accessibility") { ClipboardPermission.request() }
+                Button("Grant Accessibility") { requestPermission() }
                     .buttonStyle(.edith(.secondary))
             }
             Toggle(
                 "Paste without formatting",
-                isOn: $pastePlainText.notifyingSettingsChange()
+                isOn: binding(\.pastePlainText)
             )
             Text("Strips fonts, colors and links so pasted text matches the destination.")
                 .settingsCaption()
@@ -205,13 +193,13 @@ struct ClipboardRows: View {
     @ViewBuilder private var storageSections: some View {
         Section {
             Toggle(
-                "Files", isOn: $saveFiles.notifyingSettingsChange()
+                "Files", isOn: binding(\.saveFiles)
             )
             Toggle(
-                "Images", isOn: $saveImages.notifyingSettingsChange()
+                "Images", isOn: binding(\.saveImages)
             )
             Toggle(
-                "Text", isOn: $saveText.notifyingSettingsChange()
+                "Text", isOn: binding(\.saveText)
             )
             Text("Change what types of copied content should be stored.")
                 .settingsCaption()
@@ -248,7 +236,7 @@ struct ClipboardRows: View {
                 }
             }
             Picker(
-                selection: $maxAgeDays.notifyingSettingsChange()
+                selection: binding(\.maxAgeDays)
             ) {
                 Text("Never").tag(0)
                 Text("7 days").tag(7)
@@ -261,11 +249,11 @@ struct ClipboardRows: View {
                 }
             }
             Stepper(
-                value: $checkInterval.notifyingSettingsChange(),
+                value: binding(\.checkInterval),
                 in: 0.2...5, step: 0.1
             ) {
                 HStack(spacing: UIScale.pt(6)) {
-                    Text("Check interval: \(String(format: "%.1f", checkInterval))s")
+                    Text("Check interval: \(String(format: "%.1f", preferences.checkInterval))s")
                     InfoDot(
                         "How often Edith peeks at the clipboard. Larger saves battery; smaller catches rapid copies."
                     )
@@ -276,7 +264,7 @@ struct ClipboardRows: View {
 
     @ViewBuilder private var appearanceSections: some View {
         Section {
-            Picker(selection: $popupAt.notifyingSettingsChange()) {
+            Picker(selection: binding(\.popupAt)) {
                 ForEach(PopupPosition.allCases) { position in
                     Text(position.title).tag(position.rawValue)
                 }
@@ -288,7 +276,7 @@ struct ClipboardRows: View {
                     )
                 }
             }
-            Picker(selection: $pinTo.notifyingSettingsChange()) {
+            Picker(selection: binding(\.pinTo)) {
                 Text("Top").tag("top")
                 Text("Bottom").tag("bottom")
             } label: {
@@ -297,7 +285,7 @@ struct ClipboardRows: View {
                     InfoDot("Whether pinned items stick to the top or the bottom of the list.")
                 }
             }
-            Toggle(isOn: $showFooter.notifyingSettingsChange()) {
+            Toggle(isOn: binding(\.showFooter)) {
                 HStack(spacing: UIScale.pt(6)) {
                     Text("Show keyboard hints")
                     InfoDot("Shows the keyboard hints at the bottom of the popup.")
@@ -312,13 +300,39 @@ struct ClipboardRows: View {
                 LabeledContent("Ignored apps") {
                     EdithTextField(
                         placeholder: "com.app.bundleid, com.other.app",
-                        text: $ignoredApps.notifyingSettingsChange())
+                        text: binding(\.ignoredApps))
                 }
                 Text(
                     "Copies made in these apps are never recorded (password managers are pre-listed)."
                 )
                 .settingsCaption()
             }
+        }
+    }
+
+    private func binding<Value>(_ key: WritableKeyPath<ClipboardPreferences, Value>) -> Binding<
+        Value
+    > {
+        Binding(
+            get: { preferences[keyPath: key] },
+            set: {
+                preferences[keyPath: key] = $0; savePreferences()
+            })
+    }
+
+    private func savePreferences() {
+        if let presentation {
+            presentation.preferences = preferences; presentation.save()
+        } else {
+            try? preferences.save(SharedDefaults.store)
+        }
+    }
+
+    private func requestPermission() {
+        if let presentation {
+            presentation.action("clipboard.ui.permission")
+        } else {
+            ClipboardPermission.request()
         }
     }
 

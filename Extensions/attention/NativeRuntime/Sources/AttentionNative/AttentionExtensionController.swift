@@ -1,5 +1,5 @@
-@_implementationOnly import EdithExtensionSupport
-@_implementationOnly import EdithExtensionUI
+@_implementationOnly import EdithExtensionSupport_attention_native
+@_implementationOnly import EdithExtensionUI_attention_native
 import AppKit
 import Foundation
 import SwiftUI
@@ -9,8 +9,10 @@ import SwiftUI
 public final class AttentionExtensionController: NSObject {
     private let bundle: Bundle
     private var database: AttentionDatabase?
+    private var uiClient: AttentionUIClient?
+    private var uiModel: AttentionPageModel?
+    private var uiConfigured = false
     private var service: AttentionBackgroundService?
-    private var model: AttentionPageModel?
     private var favicon: FaviconService?
     private var surface: AttentionSurface?
     private var repository: AttentionRepository?
@@ -36,6 +38,18 @@ public final class AttentionExtensionController: NSObject {
             defer { self.activeCalls -= 1 }
             await self.startup?.value
             try Task.checkCancellation()
+            if command.hasPrefix("attention.ui.") {
+                guard let repository = self.repository else { throw ExtensionPeerError.unavailable }
+                return try await AttentionUICommands.execute(
+                    command, payload: payload, repository: repository, service: service)
+            }
+            if command == "cli.execute" {
+                guard let repository = self.repository else { throw ExtensionPeerError.unavailable }
+                return try AttentionPayload.encode(
+                    try await AttentionCLIExecution.run(
+                        AttentionPayload.decode(ExtensionCLIRequest.self, from: payload),
+                        repository: repository, service: service))
+            }
             if command.hasPrefix("surface.") {
                 guard let surface = self.surface else { throw ExtensionPeerError.unavailable }
                 return try await surface.execute(command, payload: payload)
@@ -53,6 +67,7 @@ public final class AttentionExtensionController: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     public func prepareToStop(completion: @escaping () -> Void) {
+        stopUI()
         if let stoppingTask {
             Task {
                 await stoppingTask.value; completion()
@@ -62,13 +77,11 @@ public final class AttentionExtensionController: NSObject {
         stopped = true
         commands.shutdown()
         startup?.cancel()
-        let model = model
         let service = service
         let favicon = favicon
         let startup = startup
         let task = Task {
             await startup?.value
-            await model?.shutdown()
             await service?.stop()
             await favicon?.stop()
             while self.activeCalls > 0 { await Task.yield() }
@@ -96,7 +109,30 @@ public final class AttentionExtensionController: NSObject {
                     as? String ?? "",
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "attention"
+            else {
+                return ["ok": false] as NSDictionary
+            }
+            stopUI()
+            let client: AttentionUIClient
+            if let engine = configuration.engineClient {
+                client = AttentionUIClient(engine: engine)
+            } else {
+                client = AttentionUIClient(
+                    send: { _, _ in throw ExtensionPeerError.unavailable }, available: false)
+            }
+            uiClient = client
+            uiModel = AttentionPageModel(
+                repository: .init(root: URL(fileURLWithPath: "/unused")), uiClient: client)
+            uiConfigured = true
+        case "stopUI":
+            stopUI()
         case "start":
+            guard !uiConfigured, Bundle.main.bundleURL.pathExtension != "appex" else {
+                return ["ok": false] as NSDictionary
+            }
             guard !stopped, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -119,7 +155,6 @@ public final class AttentionExtensionController: NSObject {
                 let repository = AttentionRepository(
                     eventSink: AttentionEventStore(store: database))
                 self.repository = repository
-                model = AttentionPageModel(repository: repository)
                 favicon = FaviconService(allowsNetwork: !fixture)
                 if fixture, try !AttentionEventStore(store: database).hasEvents() {
                     try repository.append(
@@ -132,16 +167,21 @@ public final class AttentionExtensionController: NSObject {
                 startup = Task { await service.start() }
             } catch { return ["ok": false, "message": error.localizedDescription] as NSDictionary }
         case "view":
-            guard !stopped, let model else { return ["ok": false] as NSDictionary }
+            guard !stopped, let model = uiModel, let uiClient, !uiClient.stopped else {
+                return ["ok": false] as NSDictionary
+            }
             if input["location"] as? String == "home" {
-                guard input["section"] as? String == "focus", let repository,
+                guard input["section"] as? String == "focus",
                     let data = input["tile"] as? Data, data.count <= 65_536,
                     let tile = try? JSONDecoder().decode(SurfaceTile.self, from: data),
                     tile.widget == .focus
                 else { return ["ok": false] as NSDictionary }
                 return NSHostingController(
                     rootView: ExtensionPageHost {
-                        AttentionHomeFocusCard(tile: tile, repository: repository) { _ in
+                        AttentionHomeFocusCard(
+                            tile: tile, repository: .init(root: URL(fileURLWithPath: "/unused")),
+                            uiClient: uiClient
+                        ) { _ in
                             ExtensionPresentation.showWindow()
                         }
                     })
@@ -152,13 +192,22 @@ public final class AttentionExtensionController: NSObject {
             guard !stopped else { return ["ok": false] as NSDictionary }
             IPC.post(IPC.Name.settingsChanged)
         case "stop":
+            stopUI()
             if !stopped { prepareToStop(completion: {}) }
-            surface = nil; service = nil; model = nil; favicon = nil; startup = nil
+            surface = nil; service = nil; favicon = nil; startup = nil
         case "status": return ["ok": true, "running": !stopped && service != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
     }
+    private func stopUI() {
+        uiClient?.stop(); uiClient = nil
+        uiModel?.cancelLoading()
+        let model = uiModel
+        uiModel = nil
+        Task { await model?.shutdown() }
+    }
+
 }
 
 enum AttentionResources {
