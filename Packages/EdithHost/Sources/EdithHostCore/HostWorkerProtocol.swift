@@ -86,11 +86,12 @@ public struct HostWorkerNavigationRequest: Codable, Sendable {
     public let presentationID: UUID?
     public let location: String?
     public let machinesWindow: HostMachinesWindowTarget?
+    public let herdrWindow: HostHerdrWindowTarget?
 
     public init(
         token: UUID = UUID(), configuration: HostWorkerConfiguration, section: String? = nil,
         relativePath: String? = nil, presentationID: UUID? = nil, location: String? = nil,
-        machinesWindow: HostMachinesWindowTarget? = nil
+        machinesWindow: HostMachinesWindowTarget? = nil, herdrWindow: HostHerdrWindowTarget? = nil
     ) {
         kind = "navigation"
         self.token = token
@@ -101,6 +102,7 @@ public struct HostWorkerNavigationRequest: Codable, Sendable {
         self.presentationID = presentationID
         self.location = location
         self.machinesWindow = machinesWindow
+        self.herdrWindow = herdrWindow
     }
 
     public func validate(configuration: HostWorkerConfiguration) throws {
@@ -112,7 +114,8 @@ public struct HostWorkerNavigationRequest: Codable, Sendable {
                         $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "." || $0 == "-")
                     }
             }) ?? true,
-            machinesWindow != nil || (presentationID == nil) == (location == nil),
+            machinesWindow != nil || herdrWindow != nil
+                || (presentationID == nil) == (location == nil),
             location.map({
                 [
                     "main", "settings", "home", "notch", "sidebar.utility", "music.footer",
@@ -122,9 +125,15 @@ public struct HostWorkerNavigationRequest: Codable, Sendable {
         else { throw HostWorkerError.invalidResponse }
         if let machinesWindow {
             guard extensionID == "machines", presentationID != nil, location == nil,
-                section == nil, relativePath == nil
+                section == nil, relativePath == nil, herdrWindow == nil
             else { throw HostWorkerError.invalidResponse }
             try machinesWindow.validate()
+        }
+        if let herdrWindow {
+            guard extensionID == "herdr", presentationID != nil, location == nil,
+                section == nil, relativePath == nil, machinesWindow == nil
+            else { throw HostWorkerError.invalidResponse }
+            try herdrWindow.validate()
         }
         if let relativePath {
             guard extensionID == "music", relativePath.utf8.count <= 4096,

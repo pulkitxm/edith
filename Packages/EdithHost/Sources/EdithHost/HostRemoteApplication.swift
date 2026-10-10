@@ -211,6 +211,10 @@ final class HostRemoteApplication {
             input["target"] = try target.context(
                 presentationID: presentation.request.presentationID)
         }
+        if let target = presentation.request.herdrWindow {
+            input["target"] = target.target
+            input["herdrPresentationToken"] = target.token.uuidString
+        }
         if let surface = presentation.request.surface {
             input["tile"] = try JSONEncoder().encode(surface.tile)
             input["target"] = surface.target.rawValue

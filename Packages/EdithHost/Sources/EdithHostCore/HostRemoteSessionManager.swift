@@ -199,7 +199,8 @@ public final class HostRemoteSessionManager {
         if let presentationID = request.presentationID {
             guard let handle = presentations[presentationID], handle.isPresented,
                 handle.request.extensionID == id,
-                request.machinesWindow != nil || handle.request.location == request.location,
+                request.machinesWindow != nil || request.herdrWindow != nil
+                    || handle.request.location == request.location,
                 pendingCleanup[presentationID] == nil, handle.processIdentity?.isRunning == true
             else { throw HostWorkerError.rejected }
             let selected = try selectedConfiguration(for: handle.request)
@@ -207,9 +208,35 @@ public final class HostRemoteSessionManager {
                 let pid = marketplace.sessions.processIdentifiers[id],
                 handle.engineIdentity == (try HostRemoteKernelIdentity.read(pid))
             else { throw HostWorkerError.rejected }
-        } else if request.location != nil || request.machinesWindow != nil {
+        } else if request.location != nil || request.machinesWindow != nil
+            || request.herdrWindow != nil
+        {
             throw HostWorkerError.rejected
         }
+    }
+
+    public func herdrWindowLease(_ request: HostWorkerNavigationRequest) throws
+        -> HostHerdrWindowLease
+    {
+        guard request.extensionID == "herdr", let target = request.herdrWindow,
+            let id = request.presentationID, let handle = presentations[id]
+        else { throw HostWorkerError.rejected }
+        try validateNavigationOrigin(request)
+        let engine = try HostRemoteEngineOwner(
+            marketplace: marketplace,
+            configuration: selectedConfiguration(for: handle.request))
+        return HostHerdrWindowLease(
+            target: target,
+            invoke: { operation, payload in
+                try await engine.invoke(
+                    .init(
+                        presentationID: id, operation: operation, payload: payload,
+                        timeout: 5))
+            },
+            validateOrigin: { [weak self] in
+                guard let self else { throw HostWorkerError.rejected }
+                try self.validateNavigationOrigin(request)
+            })
     }
 
     public func terminalUI(presentationID: UUID, event: HostTerminalUIEvent) async throws -> Bool {
