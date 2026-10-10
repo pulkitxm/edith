@@ -1,16 +1,44 @@
 # Lightweight host rebuild measurements
 
-Measured on 2026-10-09. The rebuild is in progress and the PR is not ready to merge. 23 of the 39 indexed features have been migrated to self-contained workers. These measurements describe the current host foundation, not the final shipping app or all extension packages.
+The final all39 package report is pending. The latest controlled host measurement below is an intermediate build, not the shipping app. The PR is not ready to merge.
+
+| Controlled measurement | Installed bytes | Comparison ZIP bytes |
+| --- | ---: | ---: |
+| Bundled baseline at `91d0e13de56aaf297ad4630d2c36ef124da5bf0c` | 131,607,239 | 59,298,754 |
+| Intermediate empty host at `55af74b29bf663ccb545c28e30041784381af178` | 8,178,936 | Not measured |
+| Final shipping host | Pending | Pending |
+| All39 final extension release assets | Pending | Pending |
+
+The intermediate host contains zero extension payload. It is 93.79% smaller in logical installed bytes than the controlled bundled baseline. Both builds use arm64 Release configuration and development signatures. MB means 1,000,000 bytes. These measurements do not include user data, cache, retained extension versions, filesystem allocation, or a shipping DMG.
+
+| Intermediate host component | Logical bytes |
+| --- | ---: |
+| Host executable | 6,296,576 |
+| Sparkle updater and helpers | 1,441,041 |
+| Application icon | 209,225 |
+| Compressed marketplace artwork | 220,928 |
+| Metadata, resources and signatures | 11,166 |
+| Total | 8,178,936 |
+
+The checked-in 8 MB build guard fails for this intermediate host. Compiler and editor experiments saved at most74,336 bytes and did not meet the guard; those changes were not adopted. Restoring original controls and integrating command routing can change the final size further. Removing extension implementations does not remove the app's shared navigation, settings, marketplace, customization editors, updater or worker transport.
+
+The final extension report must count each actual ZIP, JSON release record, checksum and catalog asset. Expanded package sizes must include the complete signed carrier and every copy of the shared host executable. Installing all packages may use more disk space than the original bundled app. No aggregate saving is claimed before all39 current packages are built and verified. Historical packages below do not qualify as final artifacts.
+
+Background lifecycle tests validate install, update, restoration, disable and removal without opening the app. These tests do not establish managed native view behavior. The separate disposable hosted native UI probe is still outstanding. Music inert fixtures decline feature commands, and Studio inert fixtures validate static metadata only; neither is media feature coverage.
+
+## Historical foundation snapshot
+
+Measured on 2026-10-09. This superseded snapshot covers23 historical packages and a smaller host foundation. It does not describe the current source, final shipping app or all39 packages.
 
 The host contains its executable, marketplace runtime, Sparkle updater including its helpers, application icon, extension metadata, and signatures. It contains zero extension payloads. Feature navigation integration, required platform carriers, the remaining feature migrations, and shipping release packaging still need completion and measurement.
 
 | Measured build | Installed MB | Comparison ZIP MB |
 | --- | ---: | ---: |
-| Current main with bundled extensions | 131.61 | 59.30 |
-| Current host foundation with updater and shared UI | 4.84 | 2.13 |
+| Bundled baseline at91d0e13 | 131.61 | 59.30 |
+| Historical host foundation with updater and shared UI | 4.84 | 2.13 |
 | Host plus all 23 migrated extensions | 66.52 | 27.45 |
 
-MB means 1,000,000 bytes. The current host foundation is 96.32% smaller on disk than the current-main bundled app. That percentage will be recalculated after the remaining shipping components are integrated. Comparison ZIPs use deflate level 9 over regular files and exclude symlinks. They are a controlled comparison, not shipping installer sizes.
+MB means 1,000,000 bytes. The historical host foundation was 96.32% smaller in logical file bytes than the bundled baseline. That percentage will be recalculated after the remaining shipping components are integrated. Comparison ZIPs use deflate level 9 over regular files and exclude symlinks. They are a controlled comparison, not shipping installer sizes.
 
 | Independent release package | ZIP bytes | Installed bytes | Release metadata bytes |
 | --- | ---: | ---: | ---: |
@@ -45,7 +73,7 @@ Each enabled extension runs in a worker launched from the same Edith executable.
 
 Compatible installed extensions survive app updates without downloading them again. Enabled preferences persist, and workers restart when the updated app starts. Extension updates install immutable, verified packages and restart only the affected worker. A failed update attempts to restore the previous working version. Automatic checks run on app startup at most once every eight hours, only when extensions are installed and automatic extension updates are enabled. Users can also check and update manually. Incompatible installed packages are shown as needing a compatible update.
 
-Local `make ci-marketplace-host` verifies worker failure handling, package integrity and signatures, offline catalog behavior, update preferences, restored enabled extensions, and extension behavior. The real-bundle harness opens a native window, installs a newer version while the previous worker is active, replaces that worker, removes the old app, reconstructs persisted sessions and layouts in a replacement app, disables the extension, checks process exit, and removes its payloads. All 23 migrated extensions pass this flow. Visual review of the completed marketplace and cloud release testing remain outstanding.
+The historical lifecycle results are superseded by the corrected headless harness. Native-window and managed-view success must not be inferred from this snapshot. Current final-source lifecycle, visual verification and cloud release testing remain outstanding.
 
 Home and Notch customization from merged [PR #1010](https://github.com/pulkitxm/edith/pull/1010) is part of this rebuild. The visual editor, shared canvas and shelf controls, host-owned preferences, profiles, undo/redo, tab order, source filters, and read-only worker context are implemented. Native synthetic UI tests verify both editors at compact and regular widths, increased zoom, and light and dark appearance. Calendar supplies real filtered meeting data and validates Join actions in its worker. The native Notch renderer and world-clock controls are implemented. Live-card adapters for remaining extensions still need completion.
 
@@ -80,4 +108,4 @@ make ci-extension-workers EXTENSION=--retain-packages
 python3 -B scripts/extension-host-size-report.py --baseline local/baseline/current-main-size.json --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
 ```
 
-The baseline JSON records source commit `91d0e13de56aaf297ad4630d2c36ef124da5bf0c` and the current-main app measurements. The generator verifies each migrated package's ZIP size, SHA-256, expanded bytes, CRC, and current source fingerprint before producing the comparison. Installed sizes exclude filesystem allocation rounding, receipts, caches, user data, and retained versions.
+The baseline JSON records source commit `91d0e13de56aaf297ad4630d2c36ef124da5bf0c` and the controlled bundled app measurements. The generator verifies each migrated package's ZIP size, SHA-256, expanded bytes, CRC, and current source fingerprint before producing the comparison. Installed sizes exclude filesystem allocation rounding, receipts, caches, user data, and retained versions.

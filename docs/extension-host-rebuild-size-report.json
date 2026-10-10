@@ -212,7 +212,7 @@
     "comparisonZipAndPackageBytes": 27453005
   },
   "measuredAtUTC": "2026-10-09T14:36:15+00:00",
-  "status": "migration-in-progress",
+  "status": "superseded-foundation-snapshot",
   "migratedExtensions": 23,
   "indexedExtensions": 39,
   "hostExecutableSHA256": "992150ed3f1720bce3bc1cd2522bd21bc816180e6f7a3ed876dd1141897f1ad9",
@@ -274,5 +274,32 @@
       "remaining Home card data and action adapters",
       "final combined synthetic visual verification"
     ]
+  },
+  "latestInterimMeasurement": {
+    "sourceCommit": "55af74b29bf663ccb545c28e30041784381af178",
+    "installedBytes": 8178936,
+    "extensionPayloadBytes": 0,
+    "hostExecutableSHA256": "e9f596546abac16bfcbefc20ac8df407d67b4ca12c85dae62abd0eb1f7a58946",
+    "components": {
+      "hostExecutable": 6296576,
+      "sparkle": 1441041,
+      "icon": 209225,
+      "compressedMarketplaceArtwork": 220928,
+      "other": 11166
+    },
+    "build": {
+      "configuration": "Release",
+      "architecture": "arm64",
+      "optimization": "Osize",
+      "linkTimeOptimization": "full",
+      "signature": "ad-hoc",
+      "xcode": "27.0 (27A266a)",
+      "sdk": "27.0"
+    },
+    "sizeGuard8MBPassed": false,
+    "shippingBuild": false,
+    "finalSourceFrozen": false,
+    "finalVerifiedPackages": 0,
+    "all39Aggregate": null
   }
 }

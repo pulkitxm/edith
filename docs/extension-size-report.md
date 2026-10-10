@@ -1,6 +1,6 @@
 # Extension marketplace size report
 
-This report records the superseded partial extraction. The architecture is being rebuilt around a lightweight host and self-contained workers. See [the current rebuild measurements](extension-host-rebuild-size-report.md) for its measured size and remaining work.
+This report records the superseded partial extraction. The architecture is being rebuilt around a lightweight host and self-contained workers. See [the current rebuild measurements](extension-host-rebuild-size-report.md) for the latest intermediate measurement and outstanding final all39 report. The tables and loaded-bundle update behavior below are historical and do not describe the current worker architecture.
 
 Measured on 9 October 2026. MB means 1,000,000 bytes. These are measurements of the nine packages currently extracted in this PR. The remaining extension implementations still need extraction. Audio Mixer currently downloads its native voice inference backend; its interface and other audio code remain in the app.
 
