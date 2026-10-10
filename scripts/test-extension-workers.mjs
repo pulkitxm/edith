@@ -4,14 +4,16 @@ import { createHash } from "node:crypto";
 import {
   copyFile,
   cp,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
   realpath,
   rm,
 } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { requireRegularTree } from "./build-contained-host-runtime.mjs";
 import { buildExtensionPackage } from "./build-extension-package.mjs";
 import { validateWorkerLifecycleScope } from "./extension-worker-proof.mjs";
 
@@ -134,30 +136,167 @@ export function workerFixtureEnvironment(home, hostIdentifier) {
   return environment;
 }
 
+export function parseWorkerFixtureArguments(arguments_) {
+  const requested = [];
+  const flags = new Set();
+  let cameraFixtureHost;
+  for (let index = 0; index < arguments_.length; index++) {
+    const value = arguments_[index];
+    if (
+      ["--retain-packages", "--headless-cli", "--camera-fixture-host"].includes(
+        value,
+      )
+    ) {
+      assert(!flags.has(value), `Duplicate fixture option ${value}`);
+      flags.add(value);
+      if (value === "--camera-fixture-host") {
+        cameraFixtureHost = arguments_[++index];
+        assert(
+          cameraFixtureHost && !cameraFixtureHost.startsWith("--"),
+          "Missing Camera fixture host",
+        );
+        assert(
+          isAbsolute(cameraFixtureHost) &&
+            resolve(cameraFixtureHost) === cameraFixtureHost,
+          "Camera fixture host must be an absolute canonical path",
+        );
+      }
+    } else {
+      assert(!value.startsWith("-"), `Unknown fixture option ${value}`);
+      assert(!requested.includes(value), `Duplicate fixture owner ${value}`);
+      requested.push(value);
+    }
+  }
+  if (cameraFixtureHost !== undefined)
+    assert.deepEqual(
+      requested,
+      ["virtualCamera"],
+      "Camera fixture host is Camera-only",
+    );
+  if (flags.has("--headless-cli"))
+    assert.deepEqual(
+      requested,
+      ["database"],
+      "Headless CLI proof is Database-only",
+    );
+  return {
+    requested,
+    retainPackages: flags.has("--retain-packages"),
+    headlessCLI: flags.has("--headless-cli"),
+    cameraFixtureHost,
+  };
+}
+
+export async function validateCameraFixtureHost(
+  path,
+  {
+    readMetadata = (file) =>
+      JSON.parse(
+        execFileSync("/usr/bin/plutil", ["-convert", "json", "-o", "-", file], {
+          encoding: "utf8",
+          stdio: "pipe",
+        }),
+      ),
+    inspectArchitecture = (file) =>
+      execFileSync("/usr/bin/lipo", ["-archs", file], {
+        encoding: "utf8",
+        stdio: "pipe",
+      }).trim(),
+    verifySignature = (app) =>
+      execFileSync(
+        "/usr/bin/codesign",
+        ["--verify", "--deep", "--strict", app],
+        { stdio: "pipe" },
+      ),
+  } = {},
+) {
+  assert(
+    isAbsolute(path) && resolve(path) === path,
+    "Camera fixture host must be an absolute canonical path",
+  );
+  assert.equal(
+    await realpath(path),
+    path,
+    "Camera fixture host must not traverse symlinks",
+  );
+  assert(
+    path.endsWith(".app") && (await lstat(path)).isDirectory(),
+    "Camera fixture host must be an app directory",
+  );
+  await requireRegularTree(path);
+  const required = [
+    "Contents/Info.plist",
+    "Contents/MacOS/Edith",
+    "Contents/Resources/AppIcon.icns",
+    "Contents/Resources/index.json",
+    "Contents/Resources/EdithHost_EdithHost.bundle/MarketplaceArtwork.lzma",
+    "Contents/Frameworks/Sparkle.framework/Sparkle",
+    "Contents/Extensions/ExtensionUI.appextensionpoints",
+  ];
+  for (const relative of required) {
+    const entry = await lstat(join(path, relative));
+    assert(
+      entry.isFile() && entry.size > 0,
+      `Camera fixture host is missing a regular resource ${relative}`,
+    );
+  }
+  const executable = join(path, "Contents/MacOS/Edith");
+  assert(
+    (await lstat(executable)).mode & 0o111,
+    "Camera fixture host executable is not executable",
+  );
+  assert.equal(
+    await inspectArchitecture(executable),
+    "arm64",
+    "Camera fixture host must contain the arm64 executable",
+  );
+  const metadata = await readMetadata(join(path, "Contents/Info.plist"));
+  assert.match(
+    metadata.CFBundleIdentifier ?? "",
+    /^com\.pulkit\.edith\.tests\.worker-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  );
+  assert.equal(metadata.CFBundleExecutable, "Edith");
+  assert.equal(metadata.CFBundlePackageType, "APPL");
+  assert(
+    (await lstat(join(path, "Contents/Resources/index.json"))).size <=
+      128 * 1_024,
+    "Camera fixture host index is oversized",
+  );
+  const index = JSON.parse(
+    await readFile(join(path, "Contents/Resources/index.json"), "utf8"),
+  );
+  assert(
+    Array.isArray(index) &&
+      index.length === 39 &&
+      new Set(index.map((entry) => entry.id)).size === 39 &&
+      index.some((entry) => entry.id === "virtualCamera"),
+    "Camera fixture host must have the complete current extension index",
+  );
+  assert.deepEqual(
+    new Set(index.map((entry) => entry.id)),
+    supportedFixtureWorkers,
+    "Camera fixture host index does not match the admitted owners",
+  );
+  await verifySignature(path);
+  return { sourceApp: path, fixtureIdentifier: metadata.CFBundleIdentifier };
+}
+
 async function run() {
   const definitions = JSON.parse(
     await readFile("Extensions/manifest.json", "utf8"),
   );
-  const requested = process.argv
-    .slice(2)
-    .filter(
-      (value) => !["--retain-packages", "--headless-cli"].includes(value),
-    );
+  const { requested, retainPackages, headlessCLI, cameraFixtureHost } =
+    parseWorkerFixtureArguments(process.argv.slice(2));
+  const suppliedCameraHost =
+    cameraFixtureHost === undefined
+      ? undefined
+      : await validateCameraFixtureHost(cameraFixtureHost);
   validateWorkerFixtureSelection(definitions, requested);
   await mkdir(resolve("local"), { recursive: true });
   const root = await realpath(
     await mkdtemp(resolve("local/extension-worker-fixture-")),
   );
   try {
-    const retainPackages = process.argv.includes("--retain-packages");
-    const headlessCLI = process.argv.includes("--headless-cli");
-    if (headlessCLI)
-      assert.deepEqual(
-        requested,
-        ["database"],
-        "Headless CLI proof is Database-only",
-      );
-
     const workers = definitions.filter((entry) => entry.contractVersion === 1);
     for (const id of requested)
       assert(
@@ -175,7 +314,9 @@ async function run() {
       await mkdir(releases);
       let sourceApp = resolve("local/minimal-host/Edith.app");
       let fixtureIdentifier;
-      if (id === "virtualCamera") {
+      if (id === "virtualCamera" && suppliedCameraHost) {
+        ({ sourceApp, fixtureIdentifier } = suppliedCameraHost);
+      } else if (id === "virtualCamera") {
         fixtureIdentifier = `com.pulkit.edith.tests.worker-${crypto.randomUUID()}`;
         sourceApp = join(root, `${id}-frozen-host`, "Edith.app");
         await cp(resolve("local/minimal-host/Edith.app"), sourceApp, {
