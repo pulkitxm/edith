@@ -105,11 +105,12 @@ import Testing
 
     @Test func staleVersionAndInactiveOwnerCannotComplete() throws {
         let config = try configuration()
-        var active = true
+        let owner = OwnerState()
         var sent: HostWorkerNavigationRequest?
         var completions = 0
         let client = HostFolderChoiceNavigationClient(
-            configuration: config, available: { active }, send: { sent = $0 }, cancel: { _ in })
+            configuration: config, available: { owner.available }, send: { sent = $0 },
+            cancel: { _ in })
         _ = client.chooseFolder(["presentationID": UUID().uuidString]) { result, error in
             #expect(result == nil && error != nil)
             completions += 1
@@ -124,7 +125,7 @@ import Testing
                 .init(request: stale, ok: true, folderResult: .init(selectedPath: "/tmp/mock")))
         }
         #expect(completions == 0)
-        active = false
+        owner.available = false
         try client.receive(
             .init(request: request, ok: true, folderResult: .init(selectedPath: "/tmp/mock")))
         #expect(completions == 1)
@@ -166,5 +167,9 @@ import Testing
         #expect(throws: HostWorkerError.invalidResponse) {
             try request.validate(configuration: try configuration(id: "music"))
         }
+    }
+
+    @MainActor private final class OwnerState {
+        var available = true
     }
 }

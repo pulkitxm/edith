@@ -83,7 +83,7 @@ struct HostHerdrWindowTests {
 
     @Test func admissionAndFocusRequireCurrentOriginButCloseDrainsTheRetainedEngine() async throws {
         let target = try HostHerdrWindowTarget.decode(descriptor())
-        var available = true
+        let owner = OwnerState()
         var presented = false
         var calls: [String] = []
         let lease = HostHerdrWindowLease(
@@ -98,11 +98,11 @@ struct HostHerdrWindowTests {
                 if operation.hasSuffix("admit") { presented = true }
                 if operation.hasSuffix("close") { return Data("{\"presentations\":[]}".utf8) }
                 return try state(target, presented: presented)
-            }, validateOrigin: { if !available { throw HostWorkerError.rejected } })
+            }, validateOrigin: { if !owner.available { throw HostWorkerError.rejected } })
         try await lease.validate()
         try await lease.admit()
         try await lease.focus(true)
-        available = false
+        owner.available = false
         await #expect(throws: HostWorkerError.rejected) { try await lease.focus(false) }
         try await lease.close()
         #expect(
@@ -131,5 +131,9 @@ struct HostHerdrWindowTests {
                 identifier: "com.pulkit.edith.tests.herdr-" + UUID().uuidString,
                 supportDirectory: FileManager.default.temporaryDirectory), extensionID: id,
             version: "1.0.0")
+    }
+
+    @MainActor private final class OwnerState {
+        var available = true
     }
 }

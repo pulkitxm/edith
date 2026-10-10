@@ -80,12 +80,12 @@ import Testing
 
     @Test func hiddenOwnerCancelsOutstandingSyntheticSelectionAndDrains() async throws {
         let (request, original) = try fixture()
-        var active = true
+        let owner = OwnerState()
         var began = false
         var cancellations = 0
         let coordinator = HostFolderChoiceCoordinator(
             origin: { _ in
-                guard active else { throw HostWorkerError.rejected }; return original
+                guard owner.available else { throw HostWorkerError.rejected }; return original
             },
             select: { _ in
                 began = true
@@ -94,7 +94,7 @@ import Testing
             }, cancelSelection: { _ in cancellations += 1 })
         let task = Task { try await coordinator.choose(request) }
         while !began { await Task.yield() }
-        active = false
+        owner.available = false
         await #expect(throws: CancellationError.self) { try await task.value }
         #expect(cancellations == 1)
         #expect(coordinator.pendingCount == 0)
@@ -118,5 +118,9 @@ import Testing
             #expect(cancellations == 1)
             #expect(coordinator.pendingCount == 0)
         }
+    }
+
+    @MainActor private final class OwnerState {
+        var available = true
     }
 }
