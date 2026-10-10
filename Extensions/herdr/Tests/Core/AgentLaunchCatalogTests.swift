@@ -1,4 +1,4 @@
-@testable import HerdrExtension
+@testable import HerdrUI
 import EdithExtensionSupport
 import Foundation
 import Testing

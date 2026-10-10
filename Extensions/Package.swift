@@ -14,19 +14,6 @@ let package = Package(
             path: "fixtureSupport/Tests", exclude: ["Support"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
-            name: "HerdrExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "herdr",
-            exclude: [
-                "Tests", "CLI", "Transport", "Views", "ViewModels", "Package.swift",
-                "Runtime.swift",
-            ],
-            resources: [.process("Resources")],
-            swiftSettings: [.swiftLanguageMode(.v5)]),
-        .testTarget(
-            name: "HerdrExtensionTests", dependencies: ["HerdrExtension"],
-            path: "herdr/Tests/Core", swiftSettings: [.swiftLanguageMode(.v5)]),
-        .target(
             name: "KeepAwakeExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
             path: "keepAwake", exclude: ["Tests", "Runtime.swift"]),

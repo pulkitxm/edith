@@ -2,7 +2,7 @@ import EdithExtensionSupport
 import Foundation
 import Testing
 
-@testable import HerdrExtension
+@testable import HerdrUI
 
 @Suite struct AgentActivityHookInstallerTests {
     private func fixture() throws -> (URL, AgentActivityHookInstaller) {

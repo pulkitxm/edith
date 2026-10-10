@@ -1,7 +1,7 @@
 import EdithExtensionSupport
 import Foundation
 import Testing
-@testable import HerdrExtension
+@testable import HerdrUI
 
 @MainActor @Suite(.serialized) struct HerdrNotificationTests {
     @Test func originalDefaultsAndStuckBoundsRoundTrip() throws {

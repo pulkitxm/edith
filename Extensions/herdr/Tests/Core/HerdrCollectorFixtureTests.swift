@@ -1,7 +1,7 @@
 import EdithExtensionSupport
 import Foundation
 import Testing
-@testable import HerdrExtension
+@testable import HerdrUI
 
 @Suite(.serialized) struct HerdrCollectorFixtureTests {
     @Test func localCollectionUsesTheResolvedFixtureExecutableForEveryCommand() async throws {

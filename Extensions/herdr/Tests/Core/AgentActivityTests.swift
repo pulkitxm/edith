@@ -2,7 +2,7 @@ import EdithExtensionSupport
 import Foundation
 import Testing
 
-@testable import HerdrExtension
+@testable import HerdrUI
 
 private final class ActivityEnvironment: @unchecked Sendable {
     private let lock = NSLock()

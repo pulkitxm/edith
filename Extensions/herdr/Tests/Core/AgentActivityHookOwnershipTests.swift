@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import HerdrExtension
+@testable import HerdrUI
 
 @Suite struct AgentActivityHookOwnershipTests {
     @Test func suspendRestoresExactBytesAndRestartOnlyResumesKnownConsent() async throws {

@@ -498,13 +498,13 @@ ci-extension-native-tasks:
 	swift build --package-path Packages/EdithHost --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --product HostNativeTaskHarness
 	bun scripts/test-extension-native-tasks.mjs
 .PHONY: ci-extension-herdr-core
-ci-extension-herdr-core:
-	fixture=$$(mktemp -d /tmp/edith-herdr-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.herdr.fixture.$$(basename "$$fixture")" swift test --package-path Extensions --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter HerdrExtensionTests
+ci-extension-herdr-core: ghostty-extension
+	fixture=$$(mktemp -d /tmp/edith-herdr-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.herdr.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/herdr --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter HerdrExtensionTests
 
 
 .PHONY: ci-extension-herdr-ui ci-extension-herdr
 ci-extension-herdr-ui: ghostty-extension
-	fixture=$$(mktemp -d /tmp/edith-herdr-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.herdr.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/herdr --build-system native --no-parallel --skip AgentTranscriptMemoryTests --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+	fixture=$$(mktemp -d /tmp/edith-herdr-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.herdr.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/herdr --build-system native --no-parallel --skip AgentTranscriptMemoryTests --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter HerdrUITests
 	fixture=$$(mktemp -d /tmp/edith-herdr-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.herdr.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/herdr --build-system native --no-parallel --filter AgentTranscriptMemoryTests --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 ci-extension-herdr: ci-extension-herdr-core ci-extension-herdr-ui
 
