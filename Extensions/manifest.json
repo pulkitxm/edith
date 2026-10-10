@@ -1090,7 +1090,7 @@
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "inputs": [
       "Extensions/companion"
     ],
@@ -1106,6 +1106,15 @@
     "dependencies": [],
     "roles": {
       "app": [
+        "Extensions/companion/CLI/CLIDestructivePlan.swift",
+        "Extensions/companion/CLI/CompanionBrainCommands.swift",
+        "Extensions/companion/CLI/CompanionCLIExecution.swift",
+        "Extensions/companion/CLI/CompanionChatCommands.swift",
+        "Extensions/companion/CLI/CompanionCommands.swift",
+        "Extensions/companion/CLI/CompanionDataCommands.swift",
+        "Extensions/companion/CLI/CompanionSettingsOperationBridge.swift",
+        "Extensions/companion/CLI/CompanionStackCommands.swift",
+        "Extensions/companion/CompanionUIBridge.swift",
         "Extensions/companion/Models/CompanionBrain.swift",
         "Extensions/companion/Models/CompanionChat.swift",
         "Extensions/companion/Models/CompanionDataport.swift",

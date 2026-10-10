@@ -34,6 +34,11 @@ final class CompanionLibraryModel: CompanionRefreshable {
         self.reads = reads
     }
 
+    func shutdown() {
+        searchTask?.cancel(); searchTask = nil
+        loading.reset(); detailLoad.reset(); searchLoad.reset(); playback.stop()
+    }
+
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
     }
@@ -123,6 +128,11 @@ final class CompanionLibraryModel: CompanionRefreshable {
     func openExternally() async {
         guard let detail else { return }
         do {
+            if let remote = CompanionTransport.shared.remoteBridge {
+                _ = try await remote.invoke(
+                    "companion.ui.openMedia", JSONEncoder().encode(detail.id))
+                return
+            }
             let (data, contentType) = try await client.media(episodeId: detail.id)
             let url = try CompanionMedia.temporaryFile(
                 title: detail.title, contentType: contentType, data: data)

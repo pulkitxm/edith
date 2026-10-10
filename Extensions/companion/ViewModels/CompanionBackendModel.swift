@@ -6,6 +6,11 @@ import Observation
 @MainActor
 @Observable
 final class CompanionBackendModel: CompanionRefreshable {
+    private let remote: CompanionUIBridge?
+    private var remoteTask: Task<Void, Never>?
+    private var remoteStopped = false
+    init(remote: CompanionUIBridge? = nil) { self.remote = remote }
+    func shutdown() { remoteStopped = true; remoteTask?.cancel(); remoteTask = nil }
     private(set) var hosts: [CompanionHost] = []
     private(set) var deployment: CompanionDeployment?
     private(set) var services: [CompanionServiceStatus] = []
@@ -32,7 +37,12 @@ final class CompanionBackendModel: CompanionRefreshable {
 
     var runningCount: Int { services.filter(\.running).count }
 
+    func refreshSnapshot() async {
+        if remote != nil { await remoteAction("snapshot") } else { load() }
+    }
+
     func refresh() async {
+        if remote != nil { await remoteAction("refresh"); return }
         load()
         async let probed: Void = probeHosts()
         async let refreshed: Void = refreshServices()
@@ -42,6 +52,7 @@ final class CompanionBackendModel: CompanionRefreshable {
     private var configPrimed = false
 
     func load() {
+        if remote != nil { launchRemote("snapshot"); return }
         deployment = CompanionDeploymentStore.load()
         if !configPrimed {
             config = CompanionConfigStore.load()
@@ -52,6 +63,7 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func probeHosts() async {
+        if remote != nil { await remoteAction("probe"); return }
         guard !probing else { return }
         probing = true
         defer { probing = false }
@@ -60,6 +72,7 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func refreshServices() async {
+        if remote != nil { await remoteAction("services"); return }
         guard let deployment else {
             services = []
             return
@@ -68,6 +81,7 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func deploy() async {
+        if remote != nil { await remoteAction("deploy"); return }
         guard let host = selectedHost else { return }
         await perform("Setting up on \(host.name)") {
             let deployment = try await CompanionMindRuntimeOperationExecution.deploy {
@@ -82,6 +96,7 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func destroy() async {
+        if remote != nil { await remoteAction("destroy"); return }
         guard let deployment else { return }
         await perform("Destroying") {
             self.lastLog = try await CompanionStackControl.run(
@@ -96,6 +111,7 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func forgetDeployment() {
+        if remote != nil { launchRemote("forget"); return }
         CompanionDeploymentStore.clear()
         deployment = nil
         services = []
@@ -103,6 +119,7 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func start() async {
+        if remote != nil { await remoteAction("start"); return }
         guard let deployment else { return }
         await perform("Starting") {
             self.lastLog = try await CompanionStackControl.up(deployment)
@@ -110,6 +127,7 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func stop() async {
+        if remote != nil { await remoteAction("stop"); return }
         guard let deployment else { return }
         await perform("Stopping") {
             self.lastLog = try await CompanionStackControl.down(deployment)
@@ -117,6 +135,7 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func restart() async {
+        if remote != nil { await remoteAction("restart"); return }
         guard let deployment else { return }
         await perform("Restarting") {
             self.lastLog = try await CompanionStackControl.restart(deployment)
@@ -124,6 +143,7 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func readLogs(_ service: String?) async {
+        if remote != nil { await remoteAction("logs", service: service); return }
         guard let deployment else { return }
         await perform("Reading logs") {
             self.lastLog = try await CompanionStackControl.logs(deployment, service: service)
@@ -131,6 +151,7 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func saveConfig() {
+        if remote != nil { launchRemote("config"); return }
         configPrimed = true
         let problems = config.validated()
         guard problems.isEmpty else {
@@ -144,6 +165,7 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func saveSecrets() {
+        if remote != nil { launchRemote("secrets"); return }
         var written = 0
         for (value, kind) in [
             (secrets.anthropicKey, CompanionSecretKind.anthropicKey),
@@ -164,6 +186,7 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func clearSecret(_ kind: CompanionSecretKind) {
+        if remote != nil { launchRemote("clearSecret", kind: kind); return }
         CompanionSecrets.set("", kind: kind)
         secretsStatus = "Cleared."
         refreshSecretHints()
@@ -186,6 +209,7 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func importBundle(_ data: Data) {
+        if remote != nil { launchRemote("import", bundle: data); return }
         do {
             let bundle = try CompanionConfigBundle.decode(data)
             config = CompanionConfigStore.save(bundle.config)
@@ -198,6 +222,46 @@ final class CompanionBackendModel: CompanionRefreshable {
         }
     }
 
+    private func launchRemote(
+        _ action: String, kind: CompanionSecretKind? = nil, bundle: Data? = nil
+    ) {
+        remoteTask?.cancel()
+        remoteTask = Task { await remoteAction(action, kind: kind, bundle: bundle) }
+    }
+    private func remoteAction(
+        _ action: String, service: String? = nil, kind: CompanionSecretKind? = nil,
+        bundle: Data? = nil
+    ) async {
+        guard let remote, !remoteStopped else { return }
+        do {
+            var value = try await remote.backend(
+                .init(
+                    action: action, selectedHostID: selectedHostID, config: config,
+                    secrets: action == "secrets" ? secrets : nil, service: service, kind: kind,
+                    bundle: bundle))
+            while value.working || value.busy != nil || value.probing {
+                try Task.checkCancellation()
+                guard !remoteStopped else { return }
+                applyRemote(value)
+                try await Task.sleep(for: .milliseconds(250))
+                value = try await remote.backend(
+                    .init(
+                        action: "snapshot", selectedHostID: nil, config: config, secrets: nil,
+                        service: nil, kind: nil, bundle: nil))
+            }
+            guard !remoteStopped, !Task.isCancelled else { return }
+            applyRemote(value)
+            if action == "secrets" { secrets = .init() }
+        } catch { if !remoteStopped, !Task.isCancelled { self.error = error.localizedDescription } }
+    }
+
+    private func applyRemote(_ value: CompanionBackendState) {
+        hosts = value.hosts; deployment = value.deployment; services = value.services
+        selectedHostID = value.selectedHostID; config = value.config; probing = value.probing
+        busy = value.busy; error = value.error; lastLog = value.lastLog
+        configStatus = value.configStatus; configStatusIsError = value.configStatusIsError
+        secretsStatus = value.secretsStatus; secretHints = value.secretHints
+    }
     private func perform(_ label: String, _ work: @escaping () async throws -> Void) async {
         guard busy == nil else { return }
         busy = label

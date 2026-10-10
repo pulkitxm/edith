@@ -3,7 +3,7 @@ import EdithExtensionSupport
 import Observation
 import SwiftUI
 
-enum CompanionSetupStep: Int, CaseIterable, Identifiable {
+enum CompanionSetupStep: Int, Codable, CaseIterable, Identifiable {
     case welcome
     case machine
     case deploy
@@ -25,7 +25,7 @@ enum CompanionSetupStep: Int, CaseIterable, Identifiable {
     var optional: Bool { self == .intelligence }
 }
 
-enum CompanionStageState: Equatable {
+enum CompanionStageState: Codable, Equatable {
     case pending
     case running(String)
     case done(String)
@@ -53,8 +53,11 @@ final class CompanionSetupModel: Identifiable {
     private(set) var verifyPassed = false
     private(set) var savingReason = false
     let onFinish: (Bool) -> Void
+    private let remote: CompanionUIBridge?
+    private var remoteTask: Task<Void, Never>?
 
-    init(onFinish: @escaping (Bool) -> Void) {
+    init(remote: CompanionUIBridge? = nil, onFinish: @escaping (Bool) -> Void) {
+        self.remote = remote
         self.onFinish = onFinish
     }
 
@@ -67,6 +70,10 @@ final class CompanionSetupModel: Identifiable {
     }
 
     func begin(home: CompanionHomeModel, reasonerConfigured: Bool) {
+        if remote != nil {
+            remoteTask = Task { await remoteAction("begin", configured: reasonerConfigured) };
+            return
+        }
         deployed = CompanionDeploymentStore.load()
         step = Self.initialStep(
             deployment: deployed, reachable: home.reachable,
@@ -85,6 +92,7 @@ final class CompanionSetupModel: Identifiable {
     }
 
     func probeHosts() async {
+        if remote != nil { await remoteAction("probe"); return }
         guard !probing else { return }
         probing = true
         defer { probing = false }
@@ -95,6 +103,7 @@ final class CompanionSetupModel: Identifiable {
     }
 
     func runDeploy() async {
+        if remote != nil { await remoteAction("deploy"); return }
         guard !deploying else { return }
         if selectedHost == nil { await probeHosts() }
         guard let host = selectedHost else {
@@ -121,6 +130,25 @@ final class CompanionSetupModel: Identifiable {
             deployError = error.localizedDescription
         }
     }
+
+    private func remoteAction(_ action: String, configured: Bool? = nil) async {
+        guard let remote else { return }
+        do {
+            var value = try await remote.setup(
+                .init(
+                    action: action, selectedHostID: selectedHostID, reasonerConfigured: configured))
+            while !Task.isCancelled {
+                hosts = value.hosts; probing = value.probing; selectedHostID = value.selectedHostID
+                stages = value.stages; deploying = value.deploying; deployError = value.deployError
+                deployed = value.deployed
+                if action == "begin" { step = value.step }
+                if !value.probing, !value.deploying { break }
+                try await Task.sleep(for: .milliseconds(250))
+                value = try await remote.setup(.init(action: "snapshot"))
+            }
+        } catch { if !Task.isCancelled { deployError = error.localizedDescription } }
+    }
+    func shutdown() { remoteTask?.cancel(); remoteTask = nil }
 
     private func advance(to stage: CompanionDeployStage, detail: String) {
         for earlier in CompanionDeployStage.allCases {

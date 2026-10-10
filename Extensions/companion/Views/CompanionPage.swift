@@ -109,7 +109,11 @@ struct CompanionPage: View {
             item: Binding(
                 get: { setupModel },
                 set: { model in
-                    if model == nil { setupModel?.onFinish(false) } else { setupModel = model }
+                    if model == nil {
+                        setupModel?.shutdown(); setupModel?.onFinish(false)
+                    } else {
+                        setupModel = model
+                    }
                 }),
             dismissible: setupModel?.deploying != true
         ) { model in
@@ -132,13 +136,17 @@ struct CompanionPage: View {
         .onChange(of: windowVisible) { _, visible in
             capture.setCaptureActive(tab == .capture && visible)
         }
-        .onDisappear { capture.setCaptureActive(false) }
+        .onDisappear {
+            capture.setCaptureActive(false); setupModel?.shutdown()
+        }
         .pageRefresh(active: requestsEnabled, interval: { .seconds(20) }) {
             await home.refresh()
             guard !Task.isCancelled else { return }
             if !checkedSetup {
                 checkedSetup = true
-                if CompanionDeploymentStore.load() == nil, !home.reachable,
+                if CompanionTransport.shared.remoteBridge != nil { await backend.refreshSnapshot() }
+                if (CompanionTransport.shared.remoteBridge != nil
+                    ? backend.deployment : CompanionDeploymentStore.load()) == nil, !home.reachable,
                     !setupDeclined
                 {
                     openSetup()
@@ -322,12 +330,14 @@ struct CompanionPage: View {
 
     private func openSetup() {
         setupDeclined = false
-        let model = CompanionSetupModel(onFinish: { finished in
-            if !finished { setupDeclined = true }
-            setupModel = nil
-            refreshTick += 1
-            Task { await home.refresh() }
-        })
+        let model = CompanionSetupModel(
+            remote: CompanionTransport.shared.remoteBridge,
+            onFinish: { finished in
+                if !finished { setupDeclined = true }
+                setupModel = nil
+                refreshTick += 1
+                Task { await home.refresh() }
+            })
         model.begin(home: home, reasonerConfigured: reason.current?.configured == true)
         setupModel = model
     }

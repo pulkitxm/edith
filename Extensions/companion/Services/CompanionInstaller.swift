@@ -47,7 +47,7 @@ public enum CompanionSource {
 
 public typealias CompanionCommandRunner = (String, Data?, TimeInterval) async throws -> String
 
-public enum CompanionDeployStage: String, CaseIterable, Sendable {
+public enum CompanionDeployStage: String, Codable, CaseIterable, Sendable {
     case prepare
     case source
     case files

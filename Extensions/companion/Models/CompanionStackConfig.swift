@@ -89,7 +89,7 @@ public struct CompanionStackConfig: Codable, Equatable, Sendable {
     }
 }
 
-public struct CompanionSecretValues: Equatable, Sendable {
+public struct CompanionSecretValues: Codable, Equatable, Sendable {
     public var anthropicKey: String
     public var githubToken: String
     public var notionToken: String
@@ -105,7 +105,7 @@ public struct CompanionSecretValues: Equatable, Sendable {
     }
 }
 
-public enum CompanionSecretKind: String, CaseIterable, Sendable {
+public enum CompanionSecretKind: String, CaseIterable, Codable, Sendable {
     case anthropicKey
     case githubToken
     case notionToken
