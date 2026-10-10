@@ -271,12 +271,14 @@ import Testing
         await waiting.shutdown()
     }
 
-    @Test func currentSDKRejectsConcurrentCLIFollowWithoutCancellingOriginalNativeRefresh()
-        async throws
-    {
+    @Test(arguments: [false, true])
+    func concurrentOriginalCLIFollowObservesNativeRefreshWithoutOwningItsCancellation(
+        cancelFollower: Bool
+    ) async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let home = root.appendingPathComponent("home")
+        let directory = root.appendingPathComponent("published")
         let project = home.appendingPathComponent("projects/sample")
         try FileManager.default.createDirectory(
             at: project.appendingPathComponent(".git"), withIntermediateDirectories: true)
@@ -298,48 +300,125 @@ import Testing
         let gate = UsageCLINativeRefreshGate()
         defer { gate.resume() }
         let controller = UsageWorkerController(
-            dataDirectory: Repo.dataDir,
-            collect: { _, event in
-                await gate.pause()
-                try Task.checkCancellation()
-                return try await UsageNativeCollector.collect(
+            dataDirectory: directory,
+            collect: { policy, event in
+                #expect(policy == .skip)
+                await gate.startedCollection()
+                let data = try await UsageNativeCollector.collect(
                     home: home, dataDirectory: root.appendingPathComponent("collector-data"),
                     environment: ["EDITH_USAGE_OFFLINE": "1", "TZ": "UTC"], onEvent: event)
+                await gate.pause()
+                try Task.checkCancellation()
+                return data
             })
         let refresh = Task {
             try await run(["refresh", "--no-machines", "--json"], controller: controller)
         }
-        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
-        while !gate.waiting && ContinuousClock.now < deadline { await Task.yield() }
-        try #require(gate.waiting && controller.refreshing)
+        defer { refresh.cancel() }
         do {
-            _ = try await run(["refresh", "--follow", "--json"], controller: controller)
-            Issue.record("The current SDK admitted a simultaneous terminal command")
-        } catch ExtensionPeerError.rejected(let reason) {
-            #expect(reason == "Another terminal command is running.")
+            let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+            while !gate.waiting && ContinuousClock.now < deadline { await Task.yield() }
+            try #require(gate.waiting && controller.refreshing)
+            let observation = try #require(controller.refreshObservation)
+            let phases = observation.events.compactMap { event -> (String, String)? in
+                guard case .phase(let name, let detail, _) = event else { return nil }
+                return (name, detail)
+            }
+            try #require(!phases.isEmpty)
+            #expect(observation.events.contains(.summary(label: "journals", value: "1")))
+            let output = UsageCLIRefreshOutput()
+            let follow = Task {
+                try await UsageCLIEnvironment.$resources.withValue(
+                    UsageCLIResources(controller: controller)
+                ) {
+                    try await ExtensionCLIExecution.run(
+                        UsageCommand.self,
+                        request: ExtensionCLIRequest(
+                            arguments: ["refresh", "--follow"], workingDirectory: root.path,
+                            interactive: true),
+                        rawSink: { output.append($0, error: $1) })
+                }
+            }
+            defer { follow.cancel() }
+            let observedDeadline = ContinuousClock.now.advanced(by: .seconds(5))
+            while !output.stderr.contains("journals") && ContinuousClock.now < observedDeadline {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            try #require(output.stderr.contains("journals"))
+            #expect(output.stderr.contains("following"))
+            for (name, detail) in phases {
+                #expect(output.stderr.contains(name))
+                #expect(output.stderr.contains(detail))
+            }
+            #expect(output.stdout.isEmpty && gate.collectionStarts == 1)
+            if cancelFollower {
+                follow.cancel()
+                await #expect(throws: CancellationError.self) { try await follow.value }
+            }
+            #expect(controller.refreshing && !refresh.isCancelled)
+            gate.resume()
+            let reply = try await refresh.value
+            try #require(reply.exitCode == 0, Comment(rawValue: reply.stderr))
+            let result = try #require(
+                try JSONSerialization.jsonObject(with: Data(reply.stdout.utf8)) as? [String: Any])
+            #expect(result["completed"] as? Bool == true && result["followed"] as? Bool == false)
+            #expect((result["summary"] as? [String: String])?["journals"] == "1")
+            let reportedPhases = try #require(result["phases"] as? [[String: Any]])
+            #expect(reportedPhases.compactMap { $0["name"] as? String } == phases.map { $0.0 })
+            #expect(reportedPhases.compactMap { $0["detail"] as? String } == phases.map { $0.1 })
+            #expect(gate.collectionStarts == 1 && controller.failure == nil)
+            let published = try Data(contentsOf: directory.appendingPathComponent("usage.json"))
+            #expect(UsageHistory.isValidDocument(published))
+            let document = try JSONDecoder().decode(UsageDocument.self, from: published)
+            #expect(UsageAnalysis.totals(document.daily, sources: nil).tokens == 150)
+            if cancelFollower {
+                #expect(output.stdout.isEmpty)
+            } else {
+                #expect(try await follow.value == 0)
+                #expect(output.stdout == "usage refreshed\n")
+            }
+            await controller.shutdown()
+        } catch {
+            refresh.cancel()
+            gate.resume()
+            await controller.shutdown()
+            throw error
         }
-        #expect(controller.refreshing && !refresh.isCancelled)
-        gate.resume()
-        let reply = try await refresh.value
-        try #require(reply.exitCode == 0, Comment(rawValue: reply.stderr))
-        let result = try #require(
-            try JSONSerialization.jsonObject(with: Data(reply.stdout.utf8)) as? [String: Any])
-        #expect(result["completed"] as? Bool == true && result["followed"] as? Bool == false)
-        #expect((result["summary"] as? [String: String])?["journals"] == "1")
-        #expect(UsageHistory.isValidDocument(try Data(contentsOf: Repo.usageJSON)))
-        await controller.shutdown()
     }
 }
 
 @MainActor private final class UsageCLINativeRefreshGate {
     private var continuation: CheckedContinuation<Void, Never>?
     var waiting: Bool { continuation != nil }
+    private(set) var collectionStarts = 0
+
+    func startedCollection() { collectionStarts += 1 }
 
     func pause() async {
-        await withCheckedContinuation { continuation = $0 }
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                guard !Task.isCancelled else { continuation.resume(); return }
+                self.continuation = continuation
+            }
+        } onCancel: {
+            Task { @MainActor in self.resume() }
+        }
     }
 
     func resume() {
         continuation?.resume(); continuation = nil
+    }
+}
+
+private final class UsageCLIRefreshOutput: @unchecked Sendable {
+    private let lock = NSLock()
+    private var standardOutput = Data()
+    private var standardError = Data()
+    var stdout: String { lock.withLock { String(decoding: standardOutput, as: UTF8.self) } }
+    var stderr: String { lock.withLock { String(decoding: standardError, as: UTF8.self) } }
+    func append(_ data: Data, error: Bool) {
+        lock.withLock {
+            if error { standardError.append(data) } else { standardOutput.append(data) }
+        }
     }
 }
