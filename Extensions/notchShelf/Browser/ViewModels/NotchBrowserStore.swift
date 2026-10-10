@@ -65,6 +65,17 @@ final class NotchBrowserStore {
     @ObservationIgnored private var resizeStart:
         (size: CGSize, pointer: CGPoint, edge: NotchBrowserResizeEdge)?
     @ObservationIgnored private var menuObservers: [NSObjectProtocol] = []
+    @ObservationIgnored private var stopped = false
+    @ObservationIgnored private var teardown: Task<Void, Never>?
+    @ObservationIgnored private var storeDrains: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var nativeDownloads: [ObjectIdentifier: WKDownload] = [:]
+    @ObservationIgnored private var contentControllers:
+        [ObjectIdentifier: WKUserContentController] = [:]
+    @ObservationIgnored private let faviconSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 8
+        return URLSession(configuration: configuration)
+    }()
     @ObservationIgnored private lazy var delegate = NotchBrowserWebDelegate(store: self)
 
     static let syncInterval: TimeInterval = 300
@@ -96,14 +107,16 @@ final class NotchBrowserStore {
         {
             profile = saved
             session.profileName = saved.name
-            dataStore = dataStoreFactory(
-                remote?.state.dataStoreID
-                    ?? ChromeProfileImporter.dataStoreIdentifier(
+            if remote == nil {
+                dataStore = dataStoreFactory(
+                    ChromeProfileImporter.dataStoreIdentifier(
                         profile: saved, userData: installation.userData))
+            }
         }
         observeMenus()
         remote?.updated = { [weak self] state in self?.applyRemoteState(state) }
         remote?.failed = { [weak self] message in self?.syncState = .failed(message) }
+        remote?.revoked = { [weak self] in self?.revokePresentation() }
     }
 
     var selectedTab: BrowserTab? { tabs.first { $0.id == selectedTabID } }
@@ -122,21 +135,78 @@ final class NotchBrowserStore {
     }
 
     func shutdown() {
-        for task in deliveries.values { task.cancel() }
-        deliveries = [:]
+        guard !stopped else { return }
+        saveSession()
+        stopped = true
+        let syncing = syncTask
+        let delivering = Array(deliveries.values)
+        let favicons = Array(faviconTasks.values)
+        syncTask?.cancel()
+        toastTask?.cancel()
+        delivering.forEach { $0.cancel() }
+        revokePresentation()
+        faviconSession.invalidateAndCancel()
+        for observer in menuObservers { NotificationCenter.default.removeObserver(observer) }
+        menuObservers = []
+        remote?.stop()
+        teardown = Task {
+            await syncing?.value
+            for task in delivering + favicons { await task.value }
+            await drainStores()
+            await remote?.stopAndWait()
+            deliveries = [:]; faviconTasks = [:]; faviconCache = [:]
+        }
+    }
+
+    func shutdownAndWait() async { shutdown(); await teardown?.value }
+
+    var permitsNativeNavigation: Bool {
+        !stopped && (remote == nil || remote?.hasLiveLease == true)
+    }
+
+    private func revokePresentation() {
+        syncTask?.cancel()
+        closeAllTabs()
+        for controller in contentControllers.values {
+            controller.removeScriptMessageHandler(forName: LocalStorageSeed.messageName)
+            controller.removeAllUserScripts()
+        }
+        contentControllers = [:]
+        for download in nativeDownloads.values {
+            download.delegate = nil
+            let id = UUID()
+            storeDrains[id] = Task {
+                await withCheckedContinuation { continuation in
+                    download.cancel { _ in continuation.resume() }
+                }
+            }
+        }
+        nativeDownloads = [:]
         for (_, url) in remoteDownloads.values {
             try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
         }
         remoteDownloads = [:]
-        remote?.stop()
-        syncTask?.cancel()
-        toastTask?.cancel()
-        dialog?.resolve(false, nil)
-        dialog = nil
-        saveSession()
-        closeAllTabs()
-        for observer in menuObservers { NotificationCenter.default.removeObserver(observer) }
-        menuObservers = []
+        if let dataStore { drain(dataStore, after: syncTask) }
+        dataStore = nil
+        pendingSeeds = [:]; closedTabs = []; cookieKey = nil
+        cookieWatermark = nil; lastSync = nil
+    }
+
+    private func drain(_ store: WKWebsiteDataStore, after task: Task<Void, Never>? = nil) {
+        let id = UUID()
+        storeDrains[id] = Task {
+            await task?.value
+            let cookies = await store.httpCookieStore.allCookies()
+            for cookie in cookies { await store.httpCookieStore.deleteCookie(cookie) }
+            await store.removeData(
+                ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
+        }
+    }
+
+    func drainStores() async {
+        let tasks = storeDrains
+        for task in tasks.values { await task.value }
+        for id in tasks.keys { storeDrains[id] = nil }
     }
 
     func refreshEnvironment() {
@@ -147,11 +217,12 @@ final class NotchBrowserStore {
     }
 
     func appeared() {
+        guard !stopped else { return }
         guard let profile, !choosingProfile else {
             refreshEnvironment()
             return
         }
-        if tabs.isEmpty { restoreTabs() }
+        if tabs.isEmpty, permitsNativeNavigation { restoreTabs() }
         if let lastSync, Date().timeIntervalSince(lastSync) < Self.syncInterval { return }
         load(profile, full: lastSync == nil)
     }
@@ -195,7 +266,13 @@ final class NotchBrowserStore {
         syncTask?.cancel()
         syncState = .idle
         syncSummary = nil
-        closeAllTabs()
+        if remote != nil {
+            revokePresentation()
+            let id = UUID()
+            storeDrains[id] = Task { await remote?.endLease() }
+        } else {
+            closeAllTabs()
+        }
         let released = dataStore
         let identifier = profile.map {
             ChromeProfileImporter.dataStoreIdentifier(profile: $0, userData: installation.userData)
@@ -223,6 +300,7 @@ final class NotchBrowserStore {
     }
 
     private func load(_ target: ChromeProfile, full: Bool) {
+        guard !stopped else { return }
         if let remote {
             syncTask?.cancel()
             syncState = .unlocking
@@ -231,16 +309,24 @@ final class NotchBrowserStore {
                     let (descriptor, snapshot) = try await remote.importProfile(target.directory)
                     try Task.checkCancellation()
                     guard let self else { return }
-                    if target != profile {
+                    if target != profile || dataStore == nil {
+                        if let dataStore { drain(dataStore) }
                         closeAllTabs(); closedTabs = []; pendingSeeds = [:]
-                        dataStore = dataStoreFactory(descriptor.dataStoreID)
+                        dataStore = WKWebsiteDataStore.nonPersistent()
                     }
-                    guard let dataStore else { throw ExtensionPeerError.unavailable }
+                    guard !stopped, remote.hasLiveLease, let dataStore else {
+                        throw ExtensionPeerError.unavailable
+                    }
                     session = descriptor.session
                     syncState = .importing("Importing \(snapshot.cookies.count) cookies")
                     let applied = await ChromeProfileImporter.apply(
                         snapshot.cookies, to: dataStore.httpCookieStore)
-                    try Task.checkCancellation()
+                    guard !Task.isCancelled, !stopped, remote.hasLiveLease,
+                        self.dataStore === dataStore
+                    else {
+                        drain(dataStore)
+                        throw CancellationError()
+                    }
                     finishInstall(target, snapshot: snapshot, applied: applied, readStorage: true)
                 } catch {
                     if !Task.isCancelled { self?.syncState = .failed(error.localizedDescription) }
@@ -356,7 +442,10 @@ final class NotchBrowserStore {
         _ url: URL? = nil, after anchor: BrowserTab? = nil, select: Bool = true,
         configuration: WKWebViewConfiguration? = nil
     ) -> BrowserTab? {
-        guard let dataStore else { return nil }
+        guard permitsNativeNavigation, tabs.count < 128, let dataStore,
+            url.map({ Self.permittedURL($0, remote: remote != nil) }) ?? true,
+            configuration.map({ $0.websiteDataStore === dataStore }) ?? true
+        else { return nil }
         let webView = NotchWebView(
             frame: .zero, configuration: configuration ?? makeConfiguration(dataStore))
         webView.navigationDelegate = delegate
@@ -388,6 +477,8 @@ final class NotchBrowserStore {
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.userContentController.add(
             NotchBrowserScriptProxy(store: self), name: LocalStorageSeed.messageName)
+        contentControllers[ObjectIdentifier(configuration.userContentController)] =
+            configuration.userContentController
         return configuration
     }
 
@@ -423,7 +514,7 @@ final class NotchBrowserStore {
             if closedTabs.count > Self.closedTabLimit { closedTabs.removeFirst() }
         }
         faviconTasks.removeValue(forKey: tab.id)?.cancel()
-        tab.close()
+        retire(tab)
         tabs.remove(at: index)
         if selectedTabID == tab.id {
             selectedTabID = tabs.isEmpty ? nil : tabs[min(index, tabs.count - 1)].id
@@ -462,7 +553,10 @@ final class NotchBrowserStore {
     }
 
     func submitAddress(_ text: String) {
-        guard let url = BrowserAddress.url(for: text, engine: searchEngine) else { return }
+        guard permitsNativeNavigation,
+            let url = BrowserAddress.url(for: text, engine: searchEngine),
+            Self.permittedURL(url, remote: remote != nil)
+        else { return }
         if let tab = selectedTab {
             tab.webView.load(URLRequest(url: url))
         } else {
@@ -568,13 +662,10 @@ final class NotchBrowserStore {
     }
 
     func policy(for action: WKNavigationAction, in webView: WKWebView) -> WKNavigationActionPolicy {
+        guard permitsNativeNavigation, tab(for: webView) != nil else { return .cancel }
+        guard let url = action.request.url else { return .cancel }
+        guard Self.permittedURL(url, remote: remote != nil) else { return .cancel }
         if action.shouldPerformDownload { return .download }
-        guard let url = action.request.url else { return .allow }
-        let scheme = url.scheme?.lowercased() ?? ""
-        guard Self.webSchemes.contains(scheme) else {
-            NSWorkspace.shared.open(url)
-            return .cancel
-        }
         let wantsNewTab =
             action.navigationType == .linkActivated
             && (action.modifierFlags.contains(.command) || action.buttonNumber == 2)
@@ -588,6 +679,15 @@ final class NotchBrowserStore {
     }
 
     static let webSchemes: Set<String> = ["http", "https", "about", "data", "blob", "file"]
+
+    static func permittedURL(_ url: URL, remote: Bool) -> Bool {
+        let scheme = url.scheme?.lowercased() ?? ""
+        if remote {
+            return ["http", "https", "data", "blob"].contains(scheme)
+                || url.absoluteString == "about:blank"
+        }
+        return webSchemes.contains(scheme)
+    }
 
     static func responsePolicy(_ response: WKNavigationResponse) -> WKNavigationResponsePolicy {
         let disposition =
@@ -622,7 +722,7 @@ final class NotchBrowserStore {
     }
 
     func pageFinished(_ webView: WKWebView) {
-        guard let tab = tab(for: webView) else { return }
+        guard permitsNativeNavigation, let tab = tab(for: webView) else { return }
         loadFavicon(for: tab)
         saveSession()
     }
@@ -630,7 +730,7 @@ final class NotchBrowserStore {
     func present(_ kind: BrowserDialog.Kind, message: String, frame: WKFrameInfo) async -> (
         Bool, String?
     ) {
-        guard dialog == nil else { return (false, nil) }
+        guard permitsNativeNavigation, dialog == nil else { return (false, nil) }
         return await withCheckedContinuation { continuation in
             dialog = BrowserDialog(
                 kind: kind, host: frame.securityOrigin.host, message: message,
@@ -642,6 +742,7 @@ final class NotchBrowserStore {
     }
 
     func chooseFiles(_ parameters: WKOpenPanelParameters, window: NSWindow?) async -> [URL]? {
+        guard permitsNativeNavigation, !NotchWorkerPresentation.isTesting else { return nil }
         filePanelOpen = true
         defer { filePanelOpen = false }
         let panel = NSOpenPanel()
@@ -657,12 +758,18 @@ final class NotchBrowserStore {
     }
 
     func downloadDestination(for download: WKDownload, suggestedFilename: String) async -> URL? {
+        guard permitsNativeNavigation else { return nil }
+        nativeDownloads[ObjectIdentifier(download)] = download
         if let remote {
             guard remoteDownloads.count + deliveries.count < 8 else {
                 showToast("The download capacity has been reached."); return nil
             }
             do {
                 let descriptor = try await remote.beginDownload(suggestedFilename)
+                guard permitsNativeNavigation, !Task.isCancelled else {
+                    await remote.cancelDownload(descriptor)
+                    return nil
+                }
                 let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
                     "notch-download-" + descriptor.id.uuidString, isDirectory: true)
                 try FileManager.default.createDirectory(
@@ -703,6 +810,7 @@ final class NotchBrowserStore {
     }
 
     func downloadFinished(_ download: WKDownload) {
+        nativeDownloads[ObjectIdentifier(download)] = nil
         if let remote,
             let (descriptor, url) = remoteDownloads.removeValue(forKey: ObjectIdentifier(download))
         {
@@ -725,6 +833,7 @@ final class NotchBrowserStore {
     }
 
     func downloadFailed(_ download: WKDownload) {
+        nativeDownloads[ObjectIdentifier(download)] = nil
         if let remote,
             let (descriptor, url) = remoteDownloads.removeValue(forKey: ObjectIdentifier(download))
         {
@@ -749,6 +858,7 @@ final class NotchBrowserStore {
     }
 
     private func loadFavicon(for tab: BrowserTab) {
+        guard permitsNativeNavigation, !NotchWorkerPresentation.isTesting else { return }
         guard let url = tab.url, let host = url.host() else { return }
         if let cached = faviconCache[host] {
             tab.favicon = cached
@@ -758,22 +868,17 @@ final class NotchBrowserStore {
         let webView = tab.webView
         faviconTasks[tab.id] = Task { [weak self, weak tab] in
             let href = await Self.faviconHref(in: webView)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, let self, permitsNativeNavigation else { return }
             let fallback = URL(string: "/favicon.ico", relativeTo: url)?.absoluteURL
             guard let iconURL = href.flatMap({ URL(string: $0) }) ?? fallback,
-                let (data, _) = try? await Self.faviconSession.data(from: iconURL)
+                Self.permittedURL(iconURL, remote: remote != nil),
+                let (data, _) = try? await faviconSession.data(from: iconURL), data.count <= 262144
             else { return }
             guard !Task.isCancelled, let image = NSImage(data: data) else { return }
-            self?.faviconCache[host] = image
+            faviconCache[host] = image
             tab?.favicon = image
         }
     }
-
-    private static let faviconSession: URLSession = {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 8
-        return URLSession(configuration: configuration)
-    }()
 
     private static let faviconScript = """
         (function () {
@@ -795,9 +900,23 @@ final class NotchBrowserStore {
         dialog?.resolve(false, nil)
         for task in faviconTasks.values { task.cancel() }
         faviconTasks = [:]
-        for tab in tabs { tab.close() }
+        for tab in tabs { retire(tab) }
         tabs = []
         selectedTabID = nil
+    }
+
+    private func retire(_ tab: BrowserTab) {
+        let controller = tab.webView.configuration.userContentController
+        if !tabs.contains(where: {
+            $0.id != tab.id && $0.webView.configuration.userContentController === controller
+        }) {
+            controller.removeAllUserScripts()
+            controller.removeScriptMessageHandler(forName: LocalStorageSeed.messageName)
+            contentControllers[ObjectIdentifier(controller)] = nil
+        }
+        let task = tab.close()
+        let id = UUID()
+        storeDrains[id] = Task { await task.value }
     }
 
     private func saveSession() {

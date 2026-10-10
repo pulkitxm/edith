@@ -15,6 +15,7 @@ final class ExtensionRuntime: NSObject {
         let chrome: NotchChromeClient?
     }
     private var uiScenes: [UUID: UIScene] = [:]
+    private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private var selectedPresentation: UUID?
     private let commands = ExtensionCommandRegistry()
     private var panelEngine: NotchPanelEngine?
@@ -200,6 +201,7 @@ final class ExtensionRuntime: NSObject {
         NotchPresenterState.shared.privacy = nil
         ShelfThumbnails.clear()
         Task {
+            for task in Array(uiDrains.values) { await task.value }
             await commands.shutdownAndWait()
             await cliStreams.stopAndWait()
             await browserEngine?.stopAndWait()
@@ -214,7 +216,12 @@ final class ExtensionRuntime: NSObject {
             guard let scene = uiScenes.removeValue(forKey: key) else { continue }
             scene.settings?.stop()
             scene.chrome?.stop()
-            scene.client?.invalidate()
+            let drainID = UUID()
+            uiDrains[drainID] = Task {
+                await scene.chrome?.stopAndWait()
+                scene.client?.invalidate()
+                uiDrains[drainID] = nil
+            }
         }
         if presentation == nil || selectedPresentation == presentation {
             selectedPresentation = nil

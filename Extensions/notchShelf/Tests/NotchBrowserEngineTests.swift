@@ -125,6 +125,8 @@ import Testing
         #expect(throws: (any Error).self) { try engine.start("invalid\u{0}name", owner: owner) }
     }
     @Test func streamedDownloadsRejectOtherScenesAndReleaseOnlyTheirOwnedFiles() async throws {
+        let synthetic = try SyntheticChrome(profiles: [.init(directory: "Default", name: "Mock")])
+        defer { synthetic.remove() }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "notch-download-scene-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -137,8 +139,9 @@ import Testing
             staging: root.appendingPathComponent("Staging"), now: { now }, completed: { _ in })
         let engine = NotchBrowserEngine(
             installation: .init(
-                applicationURL: { nil }, defaultBrowser: { nil },
-                userData: .init(root: root.appendingPathComponent("Chrome"))),
+                applicationURL: { synthetic.root.appendingPathComponent("Mock Chrome.app") },
+                defaultBrowser: { (ChromeInstallation.bundleIdentifier, "Mock") },
+                userData: synthetic.userData),
             sessionFile: .init(url: root.appendingPathComponent("Session.json")),
             defaults: defaults, keyProvider: { SyntheticChrome.key },
             open: { _, _ in Issue.record("No app may open") }, downloads: storage)
@@ -152,6 +155,7 @@ import Testing
                 .init(identity: identity, displayID: 42, presentationID: owner, operation: $0)
             }, invoke: { try await engine.execute($0) })
         defer { remote.stop() }
+        _ = try await remote.importProfile("Default")
         let bytes = Data(repeating: 83, count: 180000)
         let source = root.appendingPathComponent("synthetic-download")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

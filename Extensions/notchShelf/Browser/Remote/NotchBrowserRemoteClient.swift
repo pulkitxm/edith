@@ -13,8 +13,15 @@ import Observation
     private var stopped = false
     private var lastHeld: Bool?
     private var pending = 0
+    private(set) var lease: NotchBrowserLease?
+    private var leaseEnd: NotchBrowserRemoteRequest?
+    private var renewal: Task<Void, Never>?
+    private var teardown: Task<Void, Never>?
     var updated: ((NotchBrowserClientState) -> Void)?
     var failed: ((String) -> Void)?
+    var revoked: (() -> Void)?
+
+    var hasLiveLease: Bool { !stopped && lease.map { $0.expiresAt > Date() } == true }
 
     init(
         state: NotchBrowserClientState,
@@ -74,9 +81,23 @@ import Observation
         let token = generation
         let descriptor = try JSONDecoder().decode(
             NotchBrowserImport.self, from: await invoke(start))
-        guard descriptor.profile.directory == id, (1...33554432).contains(descriptor.byteCount)
-        else { throw ExtensionPeerError.invalidRequest }
         do {
+            lease = descriptor.lease
+            var cleanup = start
+            cleanup = NotchBrowserRemoteRequest(
+                identity: start.identity, displayID: start.displayID,
+                presentationID: start.presentationID, operation: .leaseEnd)
+            cleanup.lease = descriptor.lease
+            leaseEnd = cleanup
+            guard !stopped, generation == token, descriptor.profile.directory == id,
+                (1...33554432).contains(descriptor.byteCount),
+                descriptor.lease.profileID == id, descriptor.lease.revision == 1,
+                descriptor.lease.ownershipID == start.identity.ownershipID,
+                descriptor.lease.presentationID == start.presentationID,
+                descriptor.lease.displayID == start.displayID,
+                descriptor.lease.expiresAt > Date(),
+                descriptor.lease.expiresAt.timeIntervalSinceNow <= 121
+            else { throw ExtensionPeerError.invalidRequest }
             var bytes = Data()
             var offset = 0
             while offset < descriptor.byteCount {
@@ -85,6 +106,7 @@ import Observation
                     throw ExtensionPeerError.unavailable
                 }
                 read.importID = descriptor.id; read.offset = offset
+                read.lease = lease
                 let data = try await invoke(read)
                 guard data.count <= NotchPanelEngine.maximumBytes else {
                     throw ExtensionPeerError.invalidRequest
@@ -102,20 +124,25 @@ import Observation
             if var end = request(.importEnd) {
                 end.importID = descriptor.id; _ = try await invoke(end)
             }
+            try Task.checkCancellation()
+            guard !stopped, generation == token else { throw CancellationError() }
+            scheduleRenewal()
             return (descriptor, snapshot)
         } catch {
             if var end = request(.importEnd) {
                 end.importID = descriptor.id; _ = try? await invoke(end)
             }
+            await endLease()
             throw error
         }
     }
 
     func beginDownload(_ name: String) async throws -> NotchBrowserDownloadDescriptor {
-        guard !stopped, var input = request(.downloadStart) else {
+        guard hasLiveLease, var input = request(.downloadStart) else {
             throw ExtensionPeerError.unavailable
         }
         input.fileName = name
+        input.lease = lease
         return try JSONDecoder().decode(
             NotchBrowserDownloadDescriptor.self, from: await invoke(input))
     }
@@ -134,6 +161,7 @@ import Observation
                     throw ExtensionPeerError.unavailable
                 }
                 input.downloadID = descriptor.id; input.byteOffset = offset; input.bytes = bytes
+                input.lease = lease
                 _ = try await invoke(input)
                 offset += UInt64(bytes.count)
             }
@@ -141,6 +169,7 @@ import Observation
                 throw ExtensionPeerError.unavailable
             }
             commit.downloadID = descriptor.id
+            commit.lease = lease
             return try JSONDecoder().decode(
                 NotchBrowserDownloadDescriptor.self, from: await invoke(commit)
             ).name
@@ -159,7 +188,61 @@ import Observation
 
     func drainActions() async { await actionTask?.value }
     func stop() {
-        stopped = true; generation = UUID(); actionTask?.cancel(); actionTask = nil; updated = nil;
+        guard !stopped else { return }
+        stopped = true; generation = UUID(); actionTask?.cancel(); updated = nil;
         failed = nil
+        renewal?.cancel()
+        let actions = actionTask
+        let renewing = renewal
+        teardown = Task {
+            await actions?.value
+            await renewing?.value
+            await endLease()
+        }
+        revoked = nil
+    }
+
+    func stopAndWait() async { stop(); await teardown?.value }
+
+    func endLease() async {
+        renewal?.cancel(); renewal = nil
+        let cleanup = leaseEnd
+        lease = nil; leaseEnd = nil
+        if let cleanup { _ = try? await invoke(cleanup) }
+    }
+
+    func renewLease() async throws {
+        guard hasLiveLease, let current = lease, var input = request(.leaseRenew) else {
+            throw ExtensionPeerError.unavailable
+        }
+        input.lease = current
+        let next = try JSONDecoder().decode(NotchBrowserLease.self, from: await invoke(input))
+        try Task.checkCancellation()
+        guard !stopped, lease == current, next.id == current.id,
+            next.ownershipID == current.ownershipID, next.presentationID == current.presentationID,
+            next.displayID == current.displayID, next.generation == current.generation,
+            next.profileID == current.profileID, next.revision == current.revision + 1,
+            next.expiresAt > Date(), next.expiresAt.timeIntervalSinceNow <= 121
+        else { throw ExtensionPeerError.invalidRequest }
+        lease = next; leaseEnd?.lease = next
+    }
+
+    private func scheduleRenewal() {
+        renewal?.cancel()
+        renewal = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(60))
+                    guard let self else { return }
+                    try await renewLease()
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    self?.failed?(error.localizedDescription)
+                    self?.revoked?()
+                    await self?.endLease()
+                    return
+                }
+            }
+        }
     }
 }

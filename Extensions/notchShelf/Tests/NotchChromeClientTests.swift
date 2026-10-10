@@ -190,12 +190,11 @@ import Testing
         for _ in 0..<100 where (try fixture.engine.batch()).transfers.isEmpty { await Task.yield() }
         let transfer = try #require(try fixture.engine.batch().transfers.first)
         #expect(!replied)
-        await #expect(throws: (any Error).self) {
-            try await ShelfCLIExecution.run(
-                .init(arguments: ["clear", "--yes"]), root: controller.store.root,
-                defaults: fixture.defaults, checkAccess: controller.requireShelfCLIAccess
-            ) { _ in Issue.record("Busy commands must not share") }
-        }
+        let busy = try await ShelfCLIExecution.run(
+            .init(arguments: ["clear", "--yes"]), root: controller.store.root,
+            defaults: fixture.defaults, checkAccess: controller.requireShelfCLIAccess
+        ) { _ in Issue.record("Busy commands must not share") }
+        #expect(busy.exitCode != 0)
         #expect(throws: CLIFailure.self) { try controller.requireShelfCLIAccess() }
         try fixture.engine.acknowledgeTransfer(
             .init(identity: identity, id: transfer.id, opened: true, error: nil))
