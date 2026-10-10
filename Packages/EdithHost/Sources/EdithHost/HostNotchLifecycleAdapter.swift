@@ -72,15 +72,17 @@ final class HostNotchLifecycleAdapter {
     convenience init(
         marketplace: HostMarketplace, manager: HostRemoteSessionManager,
         association: HostNotchWindowAssociation,
-        compactNavigate: @escaping HostNotchCompactCardModel.Navigate
+        compactNavigate: @escaping HostNotchCompactCardModel.Navigate,
+        owningWorkspaceAvailable: @escaping @MainActor () -> Bool = { true }
     ) {
         weak var adapter: HostNotchLifecycleAdapter?
         let environment: HostNotchPanelCoordinator.Environment = {
-            let versions = marketplace.sessions.versions.filter {
+            var versions = marketplace.sessions.versions.filter {
                 marketplace.sessions.activeIDs.contains($0.key)
                     && marketplace.installed[$0.key]?.version == $0.value
                     && !marketplace.pendingRemovalIDs.contains($0.key)
             }
+            if !owningWorkspaceAvailable() { versions["notchShelf"] = nil }
             let layout = marketplace.surfaceLayouts.notch
             let hidden = Set(
                 SurfaceWidget.library(extensionIDs: marketplace.entries.map(\.id)).filter {
@@ -128,6 +130,11 @@ final class HostNotchLifecycleAdapter {
 
     var pendingCleanupCount: Int { coordinator?.pendingCleanupCount ?? 0 }
     var panelCount: Int { coordinator?.panelCount ?? 0 }
+
+    func compactVersions(_ origin: HostNotchCompactOrigin) -> [String: String]? {
+        guard !stopped, environment().activeVersions["notchShelf"] == version else { return nil }
+        return coordinator?.compactVersions(origin)
+    }
 
     func window(for presentationID: UUID) -> NSWindow? {
         guard !stopped, environment().activeVersions["notchShelf"] == version else { return nil }

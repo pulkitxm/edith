@@ -16,6 +16,7 @@ struct HostApplication: App {
     @State private var windowNavigation: HostWindowNavigation?
     @State private var musicSlots: HostMusicSlots?
     @State private var machinesWindows: HostMachinesWindows?
+    @State private var notchStartup: HostNotchStartup?
     @State private var remoteCleanupNotice = false
     @Environment(\.openWindow) private var openWindow
     @State private var startupError = false
@@ -125,22 +126,34 @@ struct HostApplication: App {
             coreCLI = core
             let manager = HostRemoteSessionManager(marketplace: loaded)
             let presenter = HostRemoteContentPresenter(manager: manager)
+            weak var ownedNotch: HostNotchStartup?
             let navigation = HostWindowNavigation(
                 activeVersions: {
                     loaded.sessions.versions.filter {
                         loaded.surfaceAvailability.activeIDs.contains($0.key)
                     }
-                }, originatingWindow: { [weak presenter] in presenter?.window(for: $0) }
+                },
+                originatingWindow: { [weak presenter] in
+                    presenter?.window(for: $0) ?? ownedNotch?.window(for: $0)
+                }
             )
             let slots = HostMusicSlots.live(marketplace: loaded)
             let ownedMachines = HostMachinesWindows(
                 manager: manager, presenter: presenter, navigation: navigation)
+            let notch = HostNotchStartup(
+                marketplace: loaded, manager: manager, navigation: navigation)
+            ownedNotch = notch
+            notchStartup = notch
             loaded.sessions.didRequestNavigation = {
-                [weak manager, weak navigation, weak ownedMachines] request in
+                [weak manager, weak navigation, weak ownedMachines, weak notch] request in
                 guard let manager, let navigation, let ownedMachines else {
                     throw HostWorkerError.rejected
                 }
                 try manager.validateNavigationOrigin(request)
+                let notchOrigin = request.presentationID.flatMap { notch?.window(for: $0) }
+                guard request.location != "notch" || notchOrigin != nil else {
+                    throw HostWorkerError.rejected
+                }
                 if request.machinesWindow != nil {
                     try await ownedMachines.open(request)
                 } else {
@@ -150,6 +163,11 @@ struct HostApplication: App {
                         presentationID: request.presentationID,
                         location: request.location)
                 }
+                guard
+                    request.location != "notch"
+                        || request.presentationID.flatMap({ notch?.window(for: $0) })
+                            === notchOrigin
+                else { throw HostWorkerError.rejected }
                 try manager.validateNavigationOrigin(request)
             }
             let disable = loaded.sessions.willDisable
@@ -187,6 +205,7 @@ struct HostApplication: App {
             sectionWindows = windows
             windows.install()
             delegate.shutdown = {
+                do { try await notch.stop() } catch { return false }
                 let ready = await loaded.sessions.shutdown()
                 if ready {
                     windows.closeAll(); windows.uninstall()
