@@ -168,6 +168,11 @@ function publisherFixture(interrupt) {
     record,
     build,
     state: () => JSON.parse(readFileSync(stateFile)),
+    updateState: (change) => {
+      const current = JSON.parse(readFileSync(stateFile));
+      change(current);
+      writeFileSync(stateFile, JSON.stringify(current));
+    },
     run: () =>
       spawnSync(process.execPath, [resolve("scripts/extension-publish.mjs")], {
         env: environment,
@@ -177,6 +182,100 @@ function publisherFixture(interrupt) {
     close: () => rmSync(directory, { recursive: true, force: true }),
   };
 }
+
+test("an archive-only interruption rejects a byte-different rebuild until the original artifacts are recovered", () => {
+  const fixture = publisherFixture("calendar.zip");
+  try {
+    expect(fixture.run().status).not.toBe(0);
+    const partial = fixture.state();
+    const originalAssets = structuredClone(partial.bytes);
+    fixture.build(Buffer.from("byte-different rebuilt signed archive"));
+    const rejected = fixture.run();
+    expect(rejected.status).not.toBe(0);
+    expect(rejected.stderr).toContain(
+      "Immutable asset differs from build output",
+    );
+    expect(fixture.state().bytes).toEqual(originalAssets);
+    expect(fixture.state().uploads).toEqual(["calendar.zip"]);
+    expect(fixture.state().pointerEdits).toBe(0);
+    fixture.build(fixture.original);
+    const resumed = fixture.run();
+    expect(resumed.status).toBe(0);
+    const complete = fixture.state();
+    expect(complete.duplicateUploads).toBe(0);
+    expect(
+      complete.uploads.filter((name) => name === "calendar.zip"),
+    ).toHaveLength(1);
+    for (const [id, bytes] of Object.entries(originalAssets))
+      expect(complete.bytes[id]).toBe(bytes);
+  } finally {
+    fixture.close();
+  }
+}, 45_000);
+
+for (const interruption of [
+  "calendar.json",
+  "calendar.zip.sha256",
+  "catalog",
+]) {
+  test(`a rebuilt retry restores verified original artifacts after ${interruption}`, () => {
+    const fixture = publisherFixture(interruption);
+    try {
+      expect(fixture.run().status).not.toBe(0);
+      const originalAssets = structuredClone(fixture.state().bytes);
+      fixture.build(Buffer.from("byte-different rebuilt signed archive"));
+      const resumed = fixture.run();
+      expect(resumed.status).toBe(0);
+      expect(readFileSync(join(fixture.directory, "calendar.zip"))).toEqual(
+        fixture.original,
+      );
+      expect(
+        JSON.parse(readFileSync(join(fixture.directory, "calendar.json"))),
+      ).toEqual(fixture.record(fixture.original));
+      expect(
+        readFileSync(join(fixture.directory, "calendar.zip.sha256"), "utf8"),
+      ).toBe(extensionChecksum(fixture.record(fixture.original)));
+      const complete = fixture.state();
+      expect(complete.duplicateUploads).toBe(0);
+      expect(
+        complete.uploads.filter((name) => name === "calendar.zip"),
+      ).toHaveLength(1);
+      for (const [id, bytes] of Object.entries(originalAssets))
+        expect(complete.bytes[id]).toBe(bytes);
+    } finally {
+      fixture.close();
+    }
+  }, 30_000);
+}
+
+test("recovery rejects tampered original bytes before replacing local artifacts or promoting the catalog", () => {
+  const fixture = publisherFixture("calendar.json");
+  try {
+    expect(fixture.run().status).not.toBe(0);
+    fixture.updateState((state) => {
+      const archive = state.releases
+        .flatMap((item) => item.assets)
+        .find((asset) => asset.name === "calendar.zip");
+      const changed = Buffer.from(state.bytes[archive.id], "base64");
+      changed[0] ^= 1;
+      state.bytes[archive.id] = changed.toString("base64");
+    });
+    const rebuilt = Buffer.from("byte-different rebuilt signed archive");
+    fixture.build(rebuilt);
+    const before = fixture.state();
+    const rejected = fixture.run();
+    expect(rejected.status).not.toBe(0);
+    expect(rejected.stderr).toContain("Release asset checksum mismatch");
+    expect(readFileSync(join(fixture.directory, "calendar.zip"))).toEqual(
+      rebuilt,
+    );
+    expect(fixture.state().bytes).toEqual(before.bytes);
+    expect(fixture.state().uploads).toEqual(before.uploads);
+    expect(fixture.state().pointerEdits).toBe(0);
+  } finally {
+    fixture.close();
+  }
+}, 30_000);
 
 for (const interruption of [
   "calendar.zip",
