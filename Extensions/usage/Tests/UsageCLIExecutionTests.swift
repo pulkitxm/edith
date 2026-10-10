@@ -271,9 +271,9 @@ import Testing
         await waiting.shutdown()
     }
 
-    @Test(arguments: [false, true])
+    @Test(arguments: UsageCLIRefreshScenario.allCases)
     func concurrentOriginalCLIFollowObservesNativeRefreshWithoutOwningItsCancellation(
-        cancelFollower: Bool
+        scenario: UsageCLIRefreshScenario
     ) async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -304,10 +304,11 @@ import Testing
             collect: { policy, event in
                 #expect(policy == .skip)
                 await gate.startedCollection()
+                if scenario == .fastCompletion { await gate.pause() }
                 let data = try await UsageNativeCollector.collect(
                     home: home, dataDirectory: root.appendingPathComponent("collector-data"),
                     environment: ["EDITH_USAGE_OFFLINE": "1", "TZ": "UTC"], onEvent: event)
-                await gate.pause()
+                if scenario != .fastCompletion { await gate.pause() }
                 try Task.checkCancellation()
                 return data
             })
@@ -319,13 +320,6 @@ import Testing
             let deadline = ContinuousClock.now.advanced(by: .seconds(5))
             while !gate.waiting && ContinuousClock.now < deadline { await Task.yield() }
             try #require(gate.waiting && controller.refreshing)
-            let observation = try #require(controller.refreshObservation)
-            let phases = observation.events.compactMap { event -> (String, String)? in
-                guard case .phase(let name, let detail, _) = event else { return nil }
-                return (name, detail)
-            }
-            try #require(!phases.isEmpty)
-            #expect(observation.events.contains(.summary(label: "journals", value: "1")))
             let output = UsageCLIRefreshOutput()
             let follow = Task {
                 try await UsageCLIEnvironment.$resources.withValue(
@@ -341,17 +335,14 @@ import Testing
             }
             defer { follow.cancel() }
             let observedDeadline = ContinuousClock.now.advanced(by: .seconds(5))
-            while !output.stderr.contains("journals") && ContinuousClock.now < observedDeadline {
+            let marker = scenario == .fastCompletion ? "following" : "journals"
+            while !output.stderr.contains(marker) && ContinuousClock.now < observedDeadline {
                 try await Task.sleep(for: .milliseconds(10))
             }
-            try #require(output.stderr.contains("journals"))
+            try #require(output.stderr.contains(marker))
             #expect(output.stderr.contains("following"))
-            for (name, detail) in phases {
-                #expect(output.stderr.contains(name))
-                #expect(output.stderr.contains(detail))
-            }
             #expect(output.stdout.isEmpty && gate.collectionStarts == 1)
-            if cancelFollower {
+            if scenario == .cancellation {
                 follow.cancel()
                 await #expect(throws: CancellationError.self) { try await follow.value }
             }
@@ -363,6 +354,13 @@ import Testing
                 try JSONSerialization.jsonObject(with: Data(reply.stdout.utf8)) as? [String: Any])
             #expect(result["completed"] as? Bool == true && result["followed"] as? Bool == false)
             #expect((result["summary"] as? [String: String])?["journals"] == "1")
+            let observation = try #require(controller.refreshObservation)
+            let phases = observation.events.compactMap { event -> (String, String)? in
+                guard case .phase(let name, let detail, _) = event else { return nil }
+                return (name, detail)
+            }
+            try #require(!phases.isEmpty)
+            #expect(observation.events.contains(.summary(label: "journals", value: "1")))
             let reportedPhases = try #require(result["phases"] as? [[String: Any]])
             #expect(reportedPhases.compactMap { $0["name"] as? String } == phases.map { $0.0 })
             #expect(reportedPhases.compactMap { $0["detail"] as? String } == phases.map { $0.1 })
@@ -371,12 +369,17 @@ import Testing
             #expect(UsageHistory.isValidDocument(published))
             let document = try JSONDecoder().decode(UsageDocument.self, from: published)
             #expect(UsageAnalysis.totals(document.daily, sources: nil).tokens == 150)
-            if cancelFollower {
+            if scenario == .cancellation {
                 #expect(output.stdout.isEmpty)
             } else {
                 #expect(try await follow.value == 0)
                 #expect(output.stdout == "usage refreshed\n")
             }
+            for (name, detail) in phases {
+                #expect(output.stderr.contains(name))
+                #expect(output.stderr.contains(detail))
+            }
+            #expect(output.stderr.contains("journals"))
             await controller.shutdown()
         } catch {
             refresh.cancel()
@@ -421,4 +424,10 @@ private final class UsageCLIRefreshOutput: @unchecked Sendable {
             if error { standardError.append(data) } else { standardOutput.append(data) }
         }
     }
+}
+
+enum UsageCLIRefreshScenario: CaseIterable, Sendable {
+    case completion
+    case cancellation
+    case fastCompletion
 }

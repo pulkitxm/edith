@@ -175,6 +175,29 @@ import Testing
         await controller.shutdown()
     }
 
+    @Test func wrappedStatuslineStreamPreservesRawBytesAndExactCallerInput() async throws {
+        let controller = UsageWorkerController(
+            dataDirectory: Repo.dataDir,
+            collect: { _, _ in
+                Issue.record("Statusline must not start a collector")
+                throw ExtensionPeerError.unavailable
+            })
+        let streams = try ExtensionCLIStreams(owner: "usage")
+        let input = Data(#"{"rate_limits":{"five_hour":{"used_percentage":31}}}"#.utf8)
+        let command = #"printf '\000\377\303\050'; /bin/cat; printf 'discarded diagnostic' >&2"#
+        let handle = try start(
+            ["statusline", "record", "--then", command], streams: streams,
+            controller: controller, input: input)
+        let (chunks, frame) = try await drain(handle, streams: streams)
+        #expect(frame.state == .completed && frame.exitCode == 0)
+        #expect(chunks.allSatisfy { $0.channel == .stdout })
+        let output = chunks.reduce(into: Data()) { $0.append($1.data) }
+        #expect(output == Data([0, 255, 195, 40]) + input)
+        try streams.end(handle)
+        await streams.stopAndWait()
+        await controller.shutdown()
+    }
+
     @Test func cancellingAndStoppingStreamsCancelOnlyTheirOwnedRefresh() async throws {
         var cancelled = false
         let controller = UsageWorkerController(

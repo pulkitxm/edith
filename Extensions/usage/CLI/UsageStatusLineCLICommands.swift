@@ -230,7 +230,7 @@ struct UsageStatusLineRecordCommand: AsyncParsableCommand {
             }
             if let then {
                 let output = await Self.output(of: then, input: data)
-                CLIOut.raw(String(decoding: output, as: UTF8.self))
+                try CLIOut.raw(output)
                 return
             }
             if let limits { CLIOut.out(ClaudeStatusLine.line(for: limits)) }

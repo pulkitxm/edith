@@ -61,8 +61,8 @@ import Foundation
             let identifier = try controller.requestRefresh(policy: policy)
             if !attached { ownedRun = identifier }
         }
+        var seen = 0
         let observer = Task { @MainActor in
-            var seen = 0
             while !Task.isCancelled {
                 let events = controller.refreshObservation?.events ?? []
                 for event in events.dropFirst(seen) { printer.show(event) }
@@ -70,8 +70,9 @@ import Foundation
                 do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
             }
         }
-        defer { observer.cancel() }
         await controller.waitForRefresh()
+        observer.cancel()
+        await observer.value
         if Task.isCancelled {
             if let ownedRun { await controller.cancelRefresh(matching: ownedRun) }
             throw CancellationError()
@@ -80,6 +81,7 @@ import Foundation
         if let failure = controller.failure { throw CLIFailure.unavailable(failure) }
         let result = controller.refreshObservation
         let events = result?.events ?? []
+        for event in events.dropFirst(seen) { printer.show(event) }
         let summaries = events.compactMap { event -> (String, JSONValue)? in
             if case .summary(let label, let value) = event { return (label, .string(value)) }
             return nil
