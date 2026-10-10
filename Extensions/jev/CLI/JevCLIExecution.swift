@@ -4,7 +4,8 @@ import Foundation
 
 @MainActor enum JevCLIEnvironment {
     static var owner: JevCLIEngine?
-    static var stdin = Data()
+    @TaskLocal static var streamOwner: JevCLIEngine?
+    static var currentOwner: JevCLIEngine? { streamOwner ?? owner }
 }
 
 struct JevCLIEngine {
@@ -20,16 +21,20 @@ struct JevCLIEngine {
 }
 
 @MainActor enum JevCLIExecution {
-    static func run(_ request: ExtensionCLIRequest, engine: JevEngine, stdin: Data = Data())
+    private static var executing = false
+    static func run(_ request: ExtensionCLIRequest, engine: JevEngine)
         async throws -> ExtensionCLIReply
     {
         try request.validate()
-        guard stdin.count <= 1_048_576 else { throw ExtensionPeerError.invalidRequest }
+        while executing {
+            try Task.checkCancellation(); try await Task.sleep(for: .milliseconds(10))
+        }
+        try Task.checkCancellation()
+        executing = true
+        defer { executing = false }
         let previous = JevCLIEnvironment.owner
-        let previousInput = JevCLIEnvironment.stdin
         JevCLIEnvironment.owner = JevCLIEngine(engine: engine)
-        JevCLIEnvironment.stdin = stdin
-        defer { JevCLIEnvironment.owner = previous; JevCLIEnvironment.stdin = previousInput }
-        return try await ExtensionCLIExecution.run(JevCommand.self, arguments: request.arguments)
+        defer { JevCLIEnvironment.owner = previous }
+        return try await ExtensionCLIExecution.run(JevCommand.self, request: request)
     }
 }

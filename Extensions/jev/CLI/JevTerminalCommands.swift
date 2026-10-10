@@ -21,7 +21,9 @@ struct JevCommand: AsyncParsableCommand {
 @MainActor enum JevCLI {
     static func run<Value>(_ body: (JevCLIEngine) async throws -> Value) async throws -> Value {
         do {
-            guard let owner = JevCLIEnvironment.owner else { throw ExtensionPeerError.unavailable }
+            guard let owner = JevCLIEnvironment.currentOwner else {
+                throw ExtensionPeerError.unavailable
+            }
             return try await body(owner)
         } catch let error as JevError {
             throw failure(error)
@@ -173,7 +175,7 @@ struct JevKeySetCommand: AsyncParsableCommand {
     @MainActor func run() async throws {
         try await execute {
             let key = String(
-                decoding: JevCLIEnvironment.stdin, as: UTF8.self
+                decoding: (ExtensionCLIContext.request?.standardInput ?? Data()), as: UTF8.self
             ).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !key.isEmpty else {
                 throw CLIFailure.usage(
@@ -251,8 +253,10 @@ struct JevAskCommand: AsyncParsableCommand {
         try await execute {
             let data =
                 request == "-"
-                ? JevCLIEnvironment.stdin
-                : try Data(contentsOf: URL(fileURLWithPath: request))
+                ? (ExtensionCLIContext.request?.standardInput ?? Data())
+                : try Data(
+                    contentsOf: try ExtensionCLIContext.resolvePath(
+                        (request as NSString).expandingTildeInPath))
             let parsed = try Self.parse(data)
             let decision = try await JevCLI.run { try await $0.decide(parsed, purpose: "cli.ask") }
             guard !json else {

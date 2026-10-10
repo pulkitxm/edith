@@ -486,7 +486,8 @@
         "Extensions/jev/Views/JevSettingsPane.swift",
         "Extensions/jev/Surface.swift",
         "Extensions/jev/CLI/JevTerminalCommands.swift",
-        "Extensions/jev/CLI/JevCLIExecution.swift"
+        "Extensions/jev/CLI/JevCLIExecution.swift",
+        "Extensions/jev/CLI/JevCLICatalog.swift"
       ]
     },
     "inputs": [
