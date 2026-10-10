@@ -8,6 +8,7 @@ import Foundation
         shared: UserDefaults, standard: UserDefaults,
         showMainWindow: @escaping @MainActor () -> Void,
         navigation: @escaping HostAppCLIAdapter.Navigation,
+        core: @escaping @MainActor () -> HostCoreServices? = { nil },
         changed: @escaping @MainActor () -> Void
     ) throws -> HostCoreCLIService {
         let permissionState = HostPermissions()
@@ -15,7 +16,7 @@ import Foundation
             permissions: permissionState, marketplace: marketplace, defaults: shared)
         let app = HostAppCLIAdapter(
             identity: identity, marketplace: marketplace, updater: updater,
-            showMainWindow: showMainWindow, navigation: navigation,
+            showMainWindow: showMainWindow, navigation: navigation, core: core,
             relaunch: {
                 throw HostCLIError.rejected(
                     "Relaunch must be performed by the matching CLI caller.")

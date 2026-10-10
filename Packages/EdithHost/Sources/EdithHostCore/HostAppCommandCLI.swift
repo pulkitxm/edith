@@ -118,6 +118,50 @@ import Foundation
         if action == "snapshot", let files = value.object?["files"]?.array {
             return try HostCLIOutput.text(files.compactMap(\.string).joined(separator: "\n"))
         }
+        if ["info", "diagnostics"].contains(action), let object = value.object {
+            let info = action == "info" ? object : object["info"]?.object ?? [:]
+            var rows = [
+                ["name", HostCLIOutput.text(info["name"] ?? .null)],
+                ["version", HostCLIOutput.text(info["version"] ?? .null)],
+                ["build", HostCLIOutput.text(info["build"] ?? .null)],
+            ]
+            if action == "diagnostics" {
+                rows += [
+                    ["pid", HostCLIOutput.text(object["pid"] ?? .null)],
+                    ["uptime", HostCLIOutput.text(object["uptime"] ?? .null)],
+                    ["idle wakeups", HostCLIOutput.text(object["idleWakeups"] ?? .null)],
+                    ["agent", HostCLIOutput.text(object["agent"]?.object?["state"] ?? .null)],
+                ]
+            } else {
+                rows.append(["bundle id", HostCLIOutput.text(info["bundleID"] ?? .null)])
+            }
+            rows.append(["bundle path", HostCLIOutput.text(info["bundlePath"] ?? .null)])
+            return try HostCLIOutput.text(
+                HostCLIOutput.table(headers: ["FIELD", "VALUE"], rows: rows))
+        }
+        if ["paths", "links"].contains(action), let rows = value.array?.compactMap(\.object) {
+            if action == "paths" {
+                return try HostCLIOutput.text(
+                    HostCLIOutput.table(
+                        headers: ["ID", "STATE", "PATH"],
+                        rows: rows.map {
+                            [
+                                $0["id"]?.string ?? "",
+                                $0["exists"]?.bool == true ? "exists" : "missing",
+                                $0["path"]?.string ?? "",
+                            ]
+                        }))
+            }
+            return try HostCLIOutput.text(
+                HostCLIOutput.table(
+                    headers: ["NAME", "LABEL", "URL"],
+                    rows: rows.map {
+                        [
+                            $0["id"]?.string ?? "", $0["label"]?.string ?? "",
+                            $0["url"]?.string ?? "",
+                        ]
+                    }))
+        }
         if let string = value.string { return try HostCLIOutput.text(string) }
         if ["open", "quit", "test-notification"].contains(action) {
             return try HostCLIOutput.text(action + " requested")

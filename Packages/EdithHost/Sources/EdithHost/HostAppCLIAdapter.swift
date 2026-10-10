@@ -12,16 +12,19 @@ import UserNotifications
     private let showMainWindow: @MainActor () -> Void
     private let navigation: Navigation
     private let relaunch: @MainActor () async throws -> HostCLIJSON
+    private let core: @MainActor () -> HostCoreServices?
     private let startedAt = Date()
 
     init(
         identity: HostIdentity, marketplace: HostMarketplace, updater: HostUpdater,
         showMainWindow: @escaping @MainActor () -> Void,
         navigation: @escaping Navigation,
+        core: @escaping @MainActor () -> HostCoreServices? = { nil },
         relaunch: @escaping @MainActor () async throws -> HostCLIJSON
     ) {
         self.identity = identity; self.marketplace = marketplace; self.updater = updater
         self.showMainWindow = showMainWindow; self.navigation = navigation; self.relaunch = relaunch
+        self.core = core
     }
 
     func execute(_ arguments: [String]) async throws -> ExtensionCLIReply {
@@ -43,16 +46,23 @@ import UserNotifications
         switch action {
         case "info": return info()
         case "diagnostics":
-            return .object([
-                "info": info(), "pid": .integer(Int64(getpid())),
-                "uptimeSeconds": .integer(Int64(Date().timeIntervalSince(startedAt))),
-                "extensions": .strings(marketplace.sessions.activeIDs.sorted()),
-            ])
+            let service = core()
+            await service?.refresh()
+            try Task.checkCancellation()
+            return try HostAppDiagnosticsCLI.process(
+                info: info(), startedAt: startedAt,
+                agent: HostAppDiagnosticsCLI.core(
+                    snapshot: service?.snapshot, online: service?.online == true,
+                    state: service?.activityLabel.lowercased() ?? "unavailable",
+                    build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+                        ?? "development"),
+                extensionIDs: Array(marketplace.sessions.activeIDs))
         case "paths":
             return .array(
-                paths().sorted { $0.key < $1.key }.map { id, url in
+                HostAppPathsCLI.entries(identity: identity).map { id, label, url in
                     .object([
-                        "id": .string(id), "label": .string(id), "path": .string(url.path),
+                        "id": .string(id), "label": .string(label),
+                        "path": .string(url.path),
                         "exists": .bool(FileManager.default.fileExists(atPath: url.path)),
                     ])
                 })
@@ -65,19 +75,20 @@ import UserNotifications
                     ])
                 }.sorted { ($0.object?["id"]?.string ?? "") < ($1.object?["id"]?.string ?? "") })
         case "open-path":
-            guard let id = payload["id"]?.string, let url = paths()[id] else {
+            guard let id = payload["id"]?.string else {
                 throw HostCLIError.usage("Unknown app path.")
             }
-            if id == "refresh-log" {
-                NSWorkspace.shared.activateFileViewerSelecting([url])
+            let target = try HostAppPathsCLI.prepareOpen(id, identity: identity)
+            if target.reveal {
+                NSWorkspace.shared.activateFileViewerSelecting([target.url])
             } else {
-                guard NSWorkspace.shared.open(url) else {
+                guard NSWorkspace.shared.open(target.url) else {
                     throw HostCLIError.rejected("Could not open the app path.")
                 }
             }
             return .object([
-                "id": .string(id), "url": .string(url.absoluteString),
-                "mode": .string(id == "refresh-log" ? "reveal" : "open"), "opened": .bool(true),
+                "id": .string(id), "url": .string(target.url.absoluteString),
+                "mode": .string(target.reveal ? "reveal" : "open"), "opened": .bool(true),
             ])
         case "open-link":
             guard let id = payload["id"]?.string, let link = links().first(where: { $0.id == id })
@@ -207,24 +218,13 @@ import UserNotifications
             "creatorURL": .string("https://pulkit.page"),
         ])
     }
-    private func paths() -> [String: URL] {
-        [
-            "app-data": identity.root, "data": identity.extensionDirectory("usage"),
-            "music": identity.extensionDirectory("music"),
-            "refresh-log": identity.extensionDirectory("usage").appendingPathComponent(
-                "refresh.log"), "icloud": HostCoreCloud.directory(identity: identity),
-            "caches": FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent(identity.identifier),
-            "logs": FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(
-                "Library/Logs/" + identity.identifier),
-        ]
-    }
     private func links() -> [(id: String, label: String, url: URL)] {
         HostAppLinksCLI.entries(
             extensions: marketplace.entries,
             contributors: Dictionary(
-                uniqueKeysWithValues: HostContributors.cacheSnapshot(identity: identity).people.map
-                { ($0.login, $0.profileURL) }))
+                HostContributors.cacheSnapshot(identity: identity).people.map {
+                    ($0.login, $0.profileURL)
+                }, uniquingKeysWith: { first, _ in first }))
     }
     private func json(_ value: Any) throws -> HostCLIJSON {
         try JSONDecoder().decode(
