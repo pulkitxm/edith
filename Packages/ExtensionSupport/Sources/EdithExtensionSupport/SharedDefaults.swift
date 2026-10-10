@@ -1,6 +1,8 @@
 import Foundation
 
 public enum SharedDefaults {
+    public static let systemAppearanceKey = "AppleInterfaceStyle"
+
     public static func applicationStore(identifier: String) -> UserDefaults? {
         if Bundle.main.bundleIdentifier == identifier { return .standard }
         return UserDefaults(suiteName: identifier)

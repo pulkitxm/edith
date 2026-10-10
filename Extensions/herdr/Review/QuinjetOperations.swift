@@ -213,7 +213,7 @@ public struct QuinjetLaunchConfiguration: Equatable, Sendable {
         case "dark": appearance = .dark
         default:
             appearance =
-                standardDefaults.string(forKey: "AppleInterfaceStyle") == "Dark"
+                standardDefaults.string(forKey: SharedDefaults.systemAppearanceKey) == "Dark"
                 ? .dark : .light
         }
         return QuinjetLaunchConfiguration(

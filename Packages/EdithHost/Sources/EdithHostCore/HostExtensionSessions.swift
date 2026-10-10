@@ -5,6 +5,8 @@ import Observation
 @MainActor
 @Observable
 public final class HostExtensionSessions {
+    public static let enabledExtensionsKey = "enabledExtensions"
+
     public private(set) var states: [String: HostActivationState] = [:] {
         didSet { didChange() }
     }
@@ -24,7 +26,7 @@ public final class HostExtensionSessions {
     }
 
     public var enabledIDs: Set<String> {
-        Set(defaults.stringArray(forKey: "enabledExtensions") ?? [])
+        Set(defaults.stringArray(forKey: Self.enabledExtensionsKey) ?? [])
     }
     public var processIdentifiers: [String: Int32] {
         workers.compactMapValues(\.processIdentifier)
@@ -124,6 +126,6 @@ public final class HostExtensionSessions {
     }
 
     private func save(_ ids: Set<String>) {
-        defaults.set(ids.sorted(), forKey: "enabledExtensions")
+        defaults.set(ids.sorted(), forKey: Self.enabledExtensionsKey)
     }
 }
