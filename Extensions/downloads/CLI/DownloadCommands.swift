@@ -27,7 +27,7 @@ import Foundation
 }
 
 @MainActor enum DownloadBridge {
-    static var file: URL { DownloadQueue.file }
+    static var file: URL { DownloadsCLIEnvironment.worker.historyFile }
 
     static func records() -> [DownloadRecord] {
         DownloadsCLIEnvironment.records

@@ -348,6 +348,8 @@ public final class YoutubeDownloader {
                 if let remote {
                     let configuration = try await remote.configuration()
                     remoteDirectories = configuration.directories
+                    SharedDefaults.store.set(
+                        configuration.kind.rawValue, forKey: AppStorageKeys.Music.downloadKind)
                     tools.apply(configuration.tools)
                     status = .init(executable: snapshot.executable, version: configuration.version)
                 } else {
@@ -484,6 +486,17 @@ public final class YoutubeDownloader {
 
     func defaultDirectory(for kind: DownloadKind) -> URL {
         remoteDirectories[kind.rawValue] ?? MediaDownloadInput.defaultDirectory(for: kind)
+    }
+
+    func setPreferredKind(_ kind: DownloadKind) {
+        guard let remote else { return }
+        let token = UUID()
+        mutationTasks[token] = Task {
+            defer { mutationTasks[token] = nil }
+            do { try await remote.perform(.init(action: "kind", kind: kind)) } catch {
+                if !Task.isCancelled { errorMessage = error.localizedDescription }
+            }
+        }
     }
 
     func setAudioDirectory(_ url: URL) {

@@ -100,7 +100,11 @@ final class ExtensionRuntime: NSObject {
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost {
-                    DownloadSheet(isPage: true, downloader: model)
+                    if input["location"] as? String == "settings" {
+                        DownloadsSettings(downloader: model)
+                    } else {
+                        DownloadSheet(isPage: true, downloader: model)
+                    }
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": worker?.downloader.checkAvailability()

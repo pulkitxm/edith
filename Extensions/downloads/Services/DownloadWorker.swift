@@ -52,6 +52,7 @@ public actor DownloadWorker {
     public typealias Publish = @Sendable (DownloadWorkerSnapshot) async -> Void
 
     private let file: URL
+    public nonisolated var historyFile: URL { file }
     private let executable: @Sendable () -> URL?
     private let galleryExecutable: @Sendable () -> URL?
     private let isEnabled: @Sendable () -> Bool

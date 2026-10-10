@@ -4,6 +4,33 @@ import Testing
 @testable import DownloadsExtension
 
 @Suite(.serialized) @MainActor struct DownloadsOriginalCLITests {
+    @Test func preferencesAndFolderSelectionAreCheckedAndPersistInTheEngine() async throws {
+        let fixture = try #require(
+            ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"])
+        let root = URL(fileURLWithPath: fixture)
+        let queue = DownloadWorker(
+            file: root.appendingPathComponent("preference-queue.json"), executable: { nil },
+            isEnabled: { true })
+        let worker = DownloadsWorker(queue: queue, start: false)
+        let bridge = DownloadsUIBridge(invoke: {
+            try await DownloadsUIBridge.execute($0, payload: $1, worker: worker)
+        })
+        try await bridge.perform(.init(action: "kind", kind: .video))
+        #expect(try await bridge.configuration().kind == .video)
+        let folder = root.appendingPathComponent("synthetic-audio")
+        try await bridge.perform(.init(action: "audioFolder", directory: folder))
+        #expect(try await bridge.configuration().directories[DownloadKind.audio.rawValue] == folder)
+        await #expect(throws: ExtensionPeerError.self) {
+            try await bridge.perform(
+                .init(action: "audioFolder", directory: URL(fileURLWithPath: "/private")))
+        }
+        await #expect(throws: ExtensionPeerError.self) {
+            try await bridge.perform(.init(action: "kind"))
+        }
+        await worker.shutdown()
+        await #expect(throws: ExtensionPeerError.self) { _ = try await bridge.configuration() }
+    }
+
     @Test func originalQueueCommandsPreservePlansAndChangeOnlyOwnedHistory() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

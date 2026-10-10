@@ -50,9 +50,9 @@ final class DownloadsWorker {
                 case .done = record.status
             else { throw ExtensionPeerError.invalidRequest }
             if command == "downloads.open" {
-                _ = try DownloadOperationExecution.open(id: id)
+                _ = try DownloadOperationExecution.open(id: id, file: queue.historyFile)
             } else {
-                _ = try DownloadOperationExecution.reveal(id: id)
+                _ = try DownloadOperationExecution.reveal(id: id, file: queue.historyFile)
             }
             return Data()
         default: throw ExtensionPeerError.invalidRequest

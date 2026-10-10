@@ -58,7 +58,12 @@ struct DownloadsSettings: View {
                     }
                 }
             }.edithForm()
-        }.pageTask { tools.refresh() }
+        }.pageTask {
+            tools.refresh(); downloader.checkAvailability()
+        }
+        .onChange(of: downloadKind) { _, value in
+            if let kind = DownloadKind(rawValue: value) { downloader.setPreferredKind(kind) }
+        }
     }
     private func chooseAudioFolder() {
         let panel = NSOpenPanel()

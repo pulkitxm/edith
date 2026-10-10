@@ -90,6 +90,9 @@ struct DownloadSheet: View {
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .pageTask { downloader.checkAvailability() }
+        .onChange(of: downloadKindRaw) { _, value in
+            if let kind = DownloadKind(rawValue: value) { downloader.setPreferredKind(kind) }
+        }
         .alert(
             "Download request failed",
             isPresented: Binding(

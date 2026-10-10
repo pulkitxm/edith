@@ -10,12 +10,14 @@ struct DownloadsUIConfiguration: Codable {
     let tools: DownloadsToolsSnapshot
     let directories: [String: URL]
     let version: String?
+    let kind: DownloadKind
 }
 struct DownloadsUIAction: Codable {
     let action: String
     var id: UUID? = nil
     var directory: URL? = nil
     var tool: String? = nil
+    var kind: DownloadKind? = nil
 }
 
 @MainActor struct DownloadsUIBridge {
@@ -51,7 +53,10 @@ struct DownloadsUIAction: Codable {
                     directories: Dictionary(
                         uniqueKeysWithValues: DownloadKind.allCases.map {
                             ($0.rawValue, MediaDownloadInput.defaultDirectory(for: $0))
-                        }), version: status.version))
+                        }), version: status.version,
+                    kind: DownloadKind(
+                        rawValue: SharedDefaults.store.string(
+                            forKey: AppStorageKeys.Music.downloadKind) ?? "") ?? .post))
         case "downloads.ui.update":
             guard !fixture, payload == Data("{}".utf8) else {
                 throw ExtensionPeerError.invalidRequest
@@ -62,13 +67,24 @@ struct DownloadsUIAction: Codable {
         case "downloads.ui.action":
             let action = try JSONDecoder().decode(DownloadsUIAction.self, from: payload)
             switch action.action {
+            case "kind":
+                guard let kind = action.kind else { throw ExtensionPeerError.invalidRequest }
+                SharedDefaults.store.set(kind.rawValue, forKey: AppStorageKeys.Music.downloadKind)
             case "open", "reveal":
-                guard let id = action.id else { throw ExtensionPeerError.invalidRequest }
+                guard !fixture, let id = action.id else { throw ExtensionPeerError.invalidRequest }
                 _ = try await worker.execute(
                     "downloads." + action.action, payload: JSONEncoder().encode(id))
             case "audioFolder":
                 guard let directory = action.directory, directory.isFileURL else {
                     throw ExtensionPeerError.invalidRequest
+                }
+                if let path = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] {
+                    let root = URL(fileURLWithPath: path).standardizedFileURL
+                        .resolvingSymlinksInPath()
+                    let chosen = directory.standardizedFileURL.resolvingSymlinksInPath()
+                    guard chosen == root || chosen.path.hasPrefix(root.path + "/") else {
+                        throw ExtensionPeerError.invalidRequest
+                    }
                 }
                 DownloadsStorage.setAudioDirectory(directory)
             case "install":
