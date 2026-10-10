@@ -3,7 +3,7 @@ import EdithExtensionUI
 import Foundation
 import Observation
 
-struct HerdrSpaceTerminalContext: Identifiable, Hashable {
+struct HerdrSpaceTerminalContext: Codable, Identifiable, Hashable {
     let machineID: UUID
     let machineName: String
     let workingDirectory: String?
@@ -71,12 +71,14 @@ enum HerdrSpacePaneContent {
 @MainActor
 @Observable
 final class HerdrSpaceTabModel: Identifiable {
-    let id = UUID()
+    let id: UUID
+    @ObservationIgnored var uiChanged: (@MainActor () -> Void)?
     private(set) var title: String
-    var layout: WorkspaceLayout
+    var layout: WorkspaceLayout { didSet { uiChanged?() } }
     private var contents: [UUID: HerdrSpacePaneContent]
 
     init(agent: HerdrAgent, tab: HerdrOpenTab, context: HerdrSpaceTerminalContext?) {
+        id = UUID()
         let target = (context ?? .local).target
         let placeholder = PaneTab(target: target, titleOverride: agent.title)
         let pane = PaneNode(tabs: [placeholder], selected: placeholder.id)
@@ -86,6 +88,7 @@ final class HerdrSpaceTabModel: Identifiable {
     }
 
     init(shellNumber: Int, context: HerdrSpaceTerminalContext) {
+        id = UUID()
         let placeholder = PaneTab(
             target: context.target, titleOverride: "Shell \(shellNumber)")
         let pane = PaneNode(tabs: [placeholder], selected: placeholder.id)
@@ -93,6 +96,52 @@ final class HerdrSpaceTabModel: Identifiable {
         self.title = title
         layout = WorkspaceLayout(name: title, root: .pane(pane), focused: pane.id)
         contents = [placeholder.id: .terminal(TerminalSessionHolder())]
+    }
+
+    init(state: HerdrUISpaceTab, store: HerdrStore) {
+        id = state.id
+        title = state.title
+        layout = state.layout
+        contents = [:]
+        adopt(state, store: store)
+    }
+
+    var uiState: HerdrUISpaceTab {
+        var agents: [UUID: String] = [:]
+        var views: [String: HerdrAgentView] = [:]
+        for (id, content) in contents {
+            if let tab = content.agent { agents[id] = tab.id; views[tab.id] = tab.view }
+        }
+        return .init(id: id, title: title, layout: layout, agents: agents, views: views)
+    }
+
+    func adopt(_ state: HerdrUISpaceTab, store: HerdrStore) {
+        let callback = uiChanged
+        uiChanged = nil
+        defer { uiChanged = callback }
+        let old = contents
+        var next: [UUID: HerdrSpacePaneContent] = [:]
+        for placeholder in state.layout.root.panes.flatMap(\.tabs) {
+            if let id = state.agents[placeholder.id],
+                let agent = store.projectionAgent(id) ?? old[placeholder.id]?.agent?.agent
+            {
+                var tab = old[placeholder.id]?.agent ?? store.makeTab(for: agent)
+                tab.agent = agent
+                tab.view = state.views[id] ?? .agent
+                next[placeholder.id] = .agent(tab)
+                HerdrAgentViews.set(tab.view, for: id, store.uiDefaults)
+            } else {
+                if case .terminal(let holder) = old[placeholder.id] {
+                    next[placeholder.id] = .terminal(holder)
+                } else {
+                    next[placeholder.id] = .terminal(TerminalSessionHolder())
+                }
+            }
+        }
+        for (id, content) in old where next[id] == nil { content.stop() }
+        contents = next
+        title = state.title
+        layout = state.layout
     }
 
     var paneCount: Int { layout.paneCount }
@@ -140,6 +189,7 @@ final class HerdrSpaceTabModel: Identifiable {
         tab.view = view
         contents[entry.key] = .agent(tab)
         HerdrAgentViews.set(view, for: tab.id, defaults)
+        uiChanged?()
     }
 
     func split(_ side: InsertSide) {
@@ -229,9 +279,13 @@ final class HerdrSpaceWindowModel {
     let spaceID: String
     let spaceTitle: String
     let contexts: [HerdrSpaceTerminalContext]
-    private(set) var tabs: [HerdrSpaceTabModel]
+    @ObservationIgnored var uiChanged: (@MainActor () -> Void)?
+    private(set) var tabs: [HerdrSpaceTabModel] {
+        didSet { bindChanges(); uiChanged?() }
+    }
     var selected: UUID? {
         didSet {
+            defer { if selected != oldValue { uiChanged?() } }
             guard selected != oldValue, let agent = selectedTab?.agentTab?.agent else { return }
             usage.record(agent)
         }
@@ -253,6 +307,45 @@ final class HerdrSpaceWindowModel {
         selected = tabs.first?.id
         if let agent = selectedTab?.agentTab?.agent { usage.record(agent) }
         if tabs.isEmpty { addTerminal() }
+    }
+
+    init(state: HerdrUISpace, store: HerdrStore) {
+        spaceID = state.id
+        spaceTitle = state.title
+        contexts = state.contexts
+        usage = store.usage
+        tabs = state.tabs.map { HerdrSpaceTabModel(state: $0, store: store) }
+        selected = state.selected
+        shellNumber = tabs.count
+        bindChanges()
+    }
+
+    func uiState(token: UUID) -> HerdrUISpace {
+        .init(
+            token: token, id: spaceID, title: spaceTitle, contexts: contexts,
+            selected: selected, tabs: tabs.map(\.uiState))
+    }
+
+    func adopt(_ state: HerdrUISpace, store: HerdrStore) {
+        let callback = uiChanged
+        uiChanged = nil
+        defer { uiChanged = callback }
+        let old = Dictionary(uniqueKeysWithValues: tabs.map { ($0.id, $0) })
+        let ids = Set(state.tabs.map(\.id))
+        for tab in tabs where !ids.contains(tab.id) { tab.stopAll() }
+        tabs = state.tabs.map { record in
+            let tab = old[record.id] ?? HerdrSpaceTabModel(state: record, store: store)
+            tab.uiChanged = nil
+            tab.adopt(record, store: store)
+            return tab
+        }
+        selected = state.selected
+        bindChanges()
+        shellNumber = max(shellNumber, tabs.count)
+    }
+
+    private func bindChanges() {
+        for tab in tabs { tab.uiChanged = { [weak self] in self?.uiChanged?() } }
     }
 
     var selectedTab: HerdrSpaceTabModel? {

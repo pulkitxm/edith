@@ -98,6 +98,12 @@ final class HerdrStore {
     @ObservationIgnored weak var uiActivity: AgentActivityMonitor?
     private var uiBaseline = HerdrUILayoutState(
         tabs: [], selected: HerdrStore.boardID, views: [:], arrangements: [])
+    private(set) var uiSpaces: [String: HerdrSpaceWindowModel] = [:]
+    private(set) var uiPresentations: [HerdrUIPresentation] = []
+    private var uiSpaceBaselines: [String: HerdrUISpace] = [:]
+    private var uiSpaceTasks: [String: Task<Void, Never>] = [:]
+    private var uiSpaceDirty = Set<String>()
+    private var uiPresentationTasks: [UUID: Task<Void, Never>] = [:]
     private var uiOpenedAgents: [HerdrAgent] = []
     private var adoptingUI = false
     private var uiMutation: Task<Void, Never>?
@@ -612,6 +618,9 @@ final class HerdrStore {
         uiMutation?.cancel()
         for holder in terminalHolders { holder.stopRendering() }
         terminalPanels.stopRendering()
+        for task in uiSpaceTasks.values { task.cancel() }
+        for task in uiPresentationTasks.values { task.cancel() }
+        for model in uiSpaces.values { model.uiChanged = nil; model.stopAll() }
     }
 
     func shutdown() async {
@@ -620,6 +629,10 @@ final class HerdrStore {
             await terminalPanels.shutdownRendering()
             await uiPoll?.value
             await uiMutation?.value
+            for task in uiSpaceTasks.values { await task.value }
+            uiSpaceTasks.removeAll()
+            for task in uiPresentationTasks.values { await task.value }
+            uiPresentationTasks.removeAll()
             uiPoll = nil
             uiMutation = nil
             return
@@ -872,7 +885,13 @@ final class HerdrStore {
         revealWorkspaceWindow()
     }
 
-    func revealWorkspaceWindow() { workspacePresenter() }
+    func revealWorkspaceWindow() {
+        if uiClient != nil {
+            dispatchPresentation("herdr.ui.navigate", object: [:])
+        } else {
+            workspacePresenter()
+        }
+    }
 
     func openInNewTab(_ agent: HerdrAgent) {
         open(agent)
@@ -979,6 +998,15 @@ final class HerdrStore {
             detachedTabs[id] = tab
             HerdrAgentViews.set(view, for: id, defaults)
             if view == .split { detailOpen = false }
+            if uiClient != nil, !adoptingUI,
+                let presentation = uiPresentations.first(where: {
+                    $0.location == "herdr.agent" && $0.target == id
+                })
+            {
+                dispatchPresentation(
+                    "herdr.ui.presentation.view",
+                    object: ["token": presentation.token.uuidString, "view": view.rawValue])
+            }
             return
         }
         guard let index = sessions.firstIndex(where: { $0.id == id }) else {
@@ -2349,6 +2377,7 @@ final class HerdrStore {
         uiBaseline = state.layout
         uiOpenedAgents = state.openedAgents
         hosts = state.hosts
+        adoptSpaces(state)
         inventoryReceived = true
         settling = false
         refreshing = false
@@ -2359,6 +2388,116 @@ final class HerdrStore {
         messaging.adopt(state.hooks)
         uiActivity?.adoptUI(state)
         uiError = nil
+    }
+
+    func projectionAgent(_ id: String) -> HerdrAgent? {
+        (agents + uiOpenedAgents + hosts.map { HerdrMachineTerminal.agent(for: $0) }
+            + sessions.map(\.agent) + detachedTabs.values.map(\.agent)).first { $0.id == id }
+    }
+
+    private func adoptSpaces(_ state: HerdrUIState) {
+        uiPresentations = state.presentations
+        let detached = state.presentations.filter { $0.location == "herdr.agent" }.map(\.target)
+        for id in Array(detachedTabs.keys) where !detached.contains(id) { reattach(id) }
+        for id in detached {
+            if let agent = projectionAgent(id) {
+                var tab = detachedTab(for: agent)
+                tab.view = state.detachedViews[id] ?? .agent
+                detachedTabs[id] = tab
+            }
+        }
+        let ids = Set(state.spaces.map(\.id))
+        for (id, model) in uiSpaces where !ids.contains(id) {
+            model.uiChanged = nil; model.stopAll(); uiSpaceTasks[id]?.cancel()
+            uiSpaceBaselines[id] = nil
+            uiSpaceDirty.remove(id)
+        }
+        uiSpaces = uiSpaces.filter { ids.contains($0.key) }
+        for record in state.spaces
+        where uiSpaceTasks[record.id] == nil && !uiSpaceDirty.contains(record.id) {
+            let model = uiSpaces[record.id] ?? HerdrSpaceWindowModel(state: record, store: self)
+            model.adopt(record, store: self)
+            uiSpaces[record.id] = model
+            uiSpaceBaselines[record.id] = record
+            model.uiChanged = { [weak self] in self?.scheduleSpaceChange(record.id) }
+        }
+    }
+
+    private func scheduleSpaceChange(_ id: String) {
+        guard let client = uiClient, !adoptingUI else { return }
+        uiSpaceDirty.insert(id)
+        guard uiSpaceTasks[id] == nil else { return }
+        uiSpaceTasks[id] = Task { [weak self] in
+            await Task.yield()
+            guard let self else { return }
+            defer { self.uiSpaceTasks[id] = nil }
+            while self.uiSpaceDirty.remove(id) != nil, !Task.isCancelled {
+                guard let baseline = self.uiSpaceBaselines[id], let model = self.uiSpaces[id] else {
+                    return
+                }
+                do {
+                    let payload = try JSONEncoder().encode(
+                        HerdrUISpaceMutation(
+                            baseline: baseline, space: model.uiState(token: baseline.token)))
+                    let data = try await client.perform("herdr.ui.space.layout", payload: payload)
+                    guard let state = try client.state(data),
+                        let next = state.spaces.first(where: { $0.id == id })
+                    else { throw ExtensionPeerError.unavailable }
+                    self.uiSpaceBaselines[id] = next
+                    if !self.uiSpaceDirty.contains(id) { model.adopt(next, store: self) }
+                } catch { self.uiError = error.localizedDescription; return }
+            }
+        }
+    }
+
+    func requestPresentation(kind: String, id: String, agents: [String]? = nil) {
+        guard let client = uiClient, uiPresentationTasks.count < 8 else { return }
+        let taskID = UUID()
+        uiPresentationTasks[taskID] = Task { [weak self] in
+            guard let self else { return }
+            defer { self.uiPresentationTasks[taskID] = nil }
+            do {
+                await self.uiMutation?.value
+                var object: [String: Any] = ["kind": kind, "id": id]
+                if let agents { object["agentIDs"] = agents }
+                let data = try await client.perform("herdr.ui.present", object: object)
+                let reply = try JSONDecoder().decode(HerdrUIPresentation.self, from: data)
+                guard reply.owner == "herdr", reply.version == 1, reply.target == id,
+                    reply.location == "herdr." + kind, reply.presented
+                else {
+                    throw ExtensionPeerError.rejected("Could not open the window.")
+                }
+                try await self.performUI("herdr.ui.read")
+            } catch { self.uiError = error.localizedDescription }
+        }
+    }
+
+    private func dispatchPresentation(_ operation: String, object: [String: Any]) {
+        guard uiClient != nil, uiPresentationTasks.count < 8 else { return }
+        let taskID = UUID()
+        uiPresentationTasks[taskID] = Task { [weak self] in
+            defer { self?.uiPresentationTasks[taskID] = nil }
+            do { try await self?.performUI(operation, object: object) } catch {
+                self?.uiError = error.localizedDescription
+            }
+        }
+    }
+
+    func closePresentation(kind: String, id: String) {
+        guard
+            let presentation = uiPresentations.first(where: {
+                $0.location == "herdr." + kind && $0.target == id
+            })
+        else { return }
+        guard uiPresentationTasks.count < 8 else { return }
+        let taskID = UUID()
+        uiPresentationTasks[taskID] = Task { [weak self] in
+            defer { self?.uiPresentationTasks[taskID] = nil }
+            do {
+                try await self?.performUI(
+                    "herdr.ui.presentation.close", object: ["token": presentation.token.uuidString])
+            } catch { self?.uiError = error.localizedDescription }
+        }
     }
 
     func performUI(_ operation: String, object: [String: Any] = [:]) async throws {

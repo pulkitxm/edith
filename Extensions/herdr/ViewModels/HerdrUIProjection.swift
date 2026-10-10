@@ -64,6 +64,9 @@ struct HerdrUIState: Codable {
     let sequence: UInt64
     let hosts: [HerdrHostSnapshot]
     let openedAgents: [HerdrAgent]
+    let spaces: [HerdrUISpace]
+    let presentations: [HerdrUIPresentation]
+    let detachedViews: [String: HerdrAgentView]
     let panels: HerdrUIPanelState
     let layout: HerdrUILayoutState
     let hooks: HerdrHooksSnapshot
@@ -86,6 +89,26 @@ struct HerdrUIState: Codable {
             throw ExtensionPeerError.invalidRequest
         }
         for (key, value) in preferences { try HerdrUIEngine.validatePreference(key, value) }
+        guard spaces.count <= 64, Set(spaces.map(\.id)).count == spaces.count,
+            presentations.count <= 64, Set(presentations.map(\.token)).count == presentations.count,
+            presentations.allSatisfy({
+                $0.owner == "herdr" && $0.version == 1
+                    && ["herdr.agent", "herdr.space"].contains($0.location)
+            })
+        else { throw ExtensionPeerError.invalidRequest }
+        let known = Set(agents.map(\.id) + openedAgents.map(\.id))
+        guard
+            Set(detachedViews.keys)
+                == Set(presentations.filter { $0.location == "herdr.agent" }.map(\.target)),
+            Set(detachedViews.keys).isSubset(
+                of: known.union(hosts.map { HerdrMachineTerminal.agent(for: $0).id }))
+        else { throw ExtensionPeerError.invalidRequest }
+        for space in spaces {
+            try space.validate()
+            guard Set(space.tabs.flatMap { $0.agents.values }).isSubset(of: known) else {
+                throw ExtensionPeerError.invalidRequest
+            }
+        }
         try panels.validate()
         try layout.validate(
             allowed: Set(
@@ -233,6 +256,20 @@ final class HerdrUIDefaults: UserDefaults {
         else { throw ExtensionPeerError.invalidRequest }
         let store = worker.store
         switch operation {
+        case "herdr.ui.presentation.view":
+            guard Set(object.keys) == ["token", "view"], let raw = object["token"] as? String,
+                let token = UUID(uuidString: raw), let value = object["view"] as? String,
+                let view = HerdrAgentView(rawValue: value)
+            else { throw ExtensionPeerError.invalidRequest }
+            try worker.spaces.setAgentView(view, token: token)
+        case "herdr.ui.navigate":
+            guard object.isEmpty else { throw ExtensionPeerError.invalidRequest }
+            ExtensionPresentation.showWindow()
+        case "herdr.ui.space.layout":
+            guard Set(object.keys) == ["baseline", "space"] else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            try worker.spaces.apply(JSONDecoder().decode(HerdrUISpaceMutation.self, from: payload))
         case "herdr.ui.present":
             return try JSONEncoder().encode(worker.spaces.present(object))
         case "herdr.ui.presentation.admit", "herdr.ui.presentation.close",
@@ -287,6 +324,7 @@ final class HerdrUIDefaults: UserDefaults {
             let layout = mutation.layout
             let agents = store.agents + store.hosts.map { HerdrMachineTerminal.agent(for: $0) }
             try layout.validate(allowed: Set((agents + store.sessions.map(\.agent)).map(\.id)))
+            for id in layout.views.keys { worker.spaces.removeAgent(id) }
             store.applyUILayout(layout)
         case "herdr.ui.preferences":
             guard Set(object.keys) == ["baseline", "preferences"] else {
@@ -472,7 +510,17 @@ final class HerdrUIDefaults: UserDefaults {
         let store = worker.store
         let value = HerdrUIState(
             owner: "herdr", generation: generation, sequence: sequence,
-            hosts: store.hosts, openedAgents: store.sessions.map(\.agent),
+            hosts: store.hosts,
+            openedAgents: Array(
+                Dictionary(
+                    (store.sessions.map(\.agent)
+                        + store.detachedIDs.compactMap { store.detachedTab(id: $0)?.agent }
+                        + worker.spaces.openedAgents).map { ($0.id, $0) },
+                    uniquingKeysWith: { first, _ in first }
+                ).values),
+            spaces: worker.spaces.uiSpaces, presentations: worker.spaces.presentations,
+            detachedViews: Dictionary(
+                uniqueKeysWithValues: store.detachedIDs.map { ($0, store.view(for: $0)) }),
             panels: store.terminalPanels.uiState, layout: store.uiLayout,
             hooks: await worker.hooks.list(), startupMessages: store.agentStartupMessages,
             preferences: store.uiPreferences, activity: worker.activity.activity,

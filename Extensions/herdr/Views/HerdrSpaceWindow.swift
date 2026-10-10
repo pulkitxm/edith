@@ -98,6 +98,11 @@ enum HerdrSpaceWindow {
     }
 
     static func open(space: HerdrAgentSpace, store: HerdrStore, launchEnabled: Bool) {
+        if store.uiClient != nil {
+            store.requestPresentation(kind: "space", id: space.id, agents: space.agents.map(\.id));
+            return
+        }
+        guard Bundle.main.bundleURL.pathExtension != "appex" else { return }
         store.usage.record(space.agents.map { ["space", $0.machineID, $0.workspace] })
         if raise(space.id) { return }
         for agent in space.agents { HerdrAgentWindow.close(agent.id) }
@@ -415,7 +420,7 @@ struct HerdrSpaceView: View {
             HStack(spacing: UIScale.pt(2)) {
                 ForEach([HerdrAgentView.agent, .split, .diff], id: \.self) { mode in
                     Button {
-                        tab?.setAgentView(mode)
+                        tab?.setAgentView(mode, defaults: store.uiDefaults)
                     } label: {
                         Label(mode.shortTitle, systemImage: mode.icon)
                             .font(.system(size: UIScale.pt(10), weight: .semibold))
@@ -504,7 +509,13 @@ struct HerdrSpaceView: View {
 
     private func close(_ tab: HerdrSpaceTabModel) {
         model.selected = tab.id
-        if !model.closeSelectedTab() { HerdrSpaceWindow.close(model.spaceID) }
+        if !model.closeSelectedTab() {
+            if store.uiClient != nil {
+                store.closePresentation(kind: "space", id: model.spaceID)
+            } else {
+                HerdrSpaceWindow.close(model.spaceID)
+            }
+        }
     }
 }
 
@@ -590,7 +601,7 @@ private struct HerdrSpacePaneView: View {
                         store: store, tab: agent, launchEnabled: launchEnabled,
                         presented: active, wantsFocus: focused,
                         onFocus: { tab.focus(pane.id) },
-                        onSetView: { tab.setAgentView($0) }
+                        onSetView: { tab.setAgentView($0, defaults: store.uiDefaults) }
                     )
                     .herdrAgentContextMenu(agent.agent, store: store)
                 case let .terminal(holder):
@@ -634,7 +645,13 @@ private struct HerdrSpaceTerminalView: View {
 
     @Environment(\.colorScheme) private var scheme
 
-    private var known: Bool { machines.knows(target.machineID) }
+    private var known: Bool {
+        if store.uiClient != nil {
+            return target.machineID == Machine.localID
+                || store.hosts.contains { $0.id == target.machineID.uuidString }
+        }
+        return machines.knows(target.machineID)
+    }
     private var dark: Bool { scheme == .dark }
 
     var body: some View {

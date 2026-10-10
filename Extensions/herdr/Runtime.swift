@@ -77,15 +77,21 @@ final class ExtensionRuntime: NSObject {
             ] as NSDictionary
         case "configureUI":
             guard worker == nil, let location = input["location"] as? String,
-                ["main", "settings"].contains(location),
+                ["main", "settings", "herdr.agent", "herdr.agent.controls", "herdr.space"].contains(
+                    location),
                 let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "herdr",
                 location == "settings" || configuration.engineClient != nil
             else { return ["ok": false] as NSDictionary }
+            if location.hasPrefix("herdr.") {
+                guard let target = input["target"] as? String, !target.isEmpty,
+                    target.utf8.count <= 4096, !target.utf8.contains(0)
+                else { return ["ok": false] as NSDictionary }
+            }
             stopUI()
             uiLocation = location
             uiClient = configuration.engineClient
-            if location == "main", let client = configuration.engineClient {
+            if location != "settings", let client = configuration.engineClient {
                 let facade = HerdrUIClient(client: client)
                 let store = HerdrStore(uiClient: facade)
                 let activity = AgentActivityMonitor(defaults: store.uiDefaults, uiClient: facade)
@@ -94,8 +100,16 @@ final class ExtensionRuntime: NSObject {
                 uiActivity = activity
                 uiController = NSHostingController(
                     rootView: ExtensionPageHost {
-                        HerdrPage(store: store, activity: activity)
+                        if location == "main" {
+                            HerdrPage(store: store, activity: activity)
+                                .environment(\.terminalLaunchEnabled, true)
+                        } else {
+                            HerdrRemoteScene(
+                                store: store, location: location,
+                                target: input["target"] as? String ?? ""
+                            )
                             .environment(\.terminalLaunchEnabled, true)
+                        }
                     })
                 PresenterState.shared.start()
             } else {

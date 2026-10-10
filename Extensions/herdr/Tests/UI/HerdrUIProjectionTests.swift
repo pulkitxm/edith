@@ -25,6 +25,121 @@ import Testing
         return HerdrWorker(store: store, defaults: defaults, automaticActions: false)
     }
 
+    @Test func originalDetachedViewPickerMutatesOnlyItsAdmittedEnginePresentation() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let worker = worker()
+        let client = HerdrUIClient { try await worker.execute($0, payload: $1) }
+        let agent = try #require(worker.store.agents.first)
+        let presentation = try JSONDecoder().decode(
+            HerdrUIPresentation.self,
+            from: await client.perform(
+                "herdr.ui.present", object: ["kind": "agent", "id": agent.id]))
+        _ = try await client.perform(
+            "herdr.ui.presentation.admit", object: ["token": presentation.token.uuidString])
+        let ui = HerdrStore(uiClient: client)
+        try await ui.performUI("herdr.ui.read")
+        #expect(ui.detachedTab(id: agent.id)?.view == .agent)
+        ui.setView(.split, for: agent.id)
+        for _ in 0..<200 {
+            if worker.store.detachedTab(id: agent.id)?.view == .split { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(worker.store.detachedTab(id: agent.id)?.view == .split && !worker.store.detailOpen)
+        await #expect(throws: ExtensionPeerError.self) {
+            try await client.perform(
+                "herdr.ui.presentation.view", object: ["token": UUID().uuidString, "view": "diff"])
+        }
+        _ = try await client.perform(
+            "herdr.ui.presentation.close", object: ["token": presentation.token.uuidString])
+        #expect(worker.store.detachedTab(id: agent.id) == nil)
+        await ui.shutdown()
+        await worker.shutdown()
+    }
+
+    @Test func originalSpaceControlsUseCheckedEngineLayoutAndRejectStaleOrInjectedTargets()
+        async throws
+    {
+        defer { HerdrWorkOwnership.enable() }
+        let worker = worker()
+        let client = HerdrUIClient { try await worker.execute($0, payload: $1) }
+        let space = try #require(worker.store.agentSpaces.first)
+        let data = try await client.perform(
+            "herdr.ui.present", object: ["kind": "space", "id": space.id])
+        let presentation = try JSONDecoder().decode(HerdrUIPresentation.self, from: data)
+        let ui = HerdrStore(uiClient: client)
+        try await ui.performUI("herdr.ui.read")
+        let initial = try #require(ui.uiSpaces[space.id])
+        #expect(initial.tabs.map(\.agentID) == worker.spaces.openedAgents.map { Optional($0.id) })
+        #expect(
+            initial.tabs.flatMap(\.holders).allSatisfy {
+                $0.terminalLaunch == nil && $0.descriptor == nil
+            })
+        let baseline = try #require(worker.spaces.uiSpaces.first)
+        initial.addTerminal()
+        initial.split(.bottom)
+        for _ in 0..<200 {
+            if worker.spaces.uiSpaces.first?.tabs.count == initial.tabs.count,
+                worker.spaces.uiSpaces.first?.tabs.last?.layout.paneCount == 2
+            {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let live = try #require(worker.spaces.uiSpaces.first)
+        #expect(live.tabs.count == 3 && live.tabs.last?.layout.paneCount == 2)
+        await #expect(throws: ExtensionPeerError.self) {
+            try await client.perform(
+                "herdr.ui.space.layout",
+                payload: JSONEncoder().encode(
+                    HerdrUISpaceMutation(baseline: baseline, space: baseline)))
+        }
+        var injected = live
+        let last = injected.tabs.count - 1
+        let paneID = injected.tabs[last].layout.focused
+        injected.tabs[last].layout.root.updatePane(paneID) { pane in
+            pane.tabs[0].target.argument = "/untrusted-target"
+        }
+        await #expect(throws: ExtensionPeerError.self) {
+            try await client.perform(
+                "herdr.ui.space.layout",
+                payload: JSONEncoder().encode(
+                    HerdrUISpaceMutation(baseline: live, space: injected)))
+        }
+        #expect(worker.spaces.uiSpaces.first == live)
+        let previous = UIScale.current
+        defer { UIScale.apply(previous) }
+        _ = TestWindowHost.application
+        for width in [760.0, 1180.0] {
+            for dark in [false, true] {
+                for zoom in [1.0, 1.4] {
+                    UIScale.apply(zoom)
+                    let host = NSHostingView(
+                        rootView: ExtensionPageHost {
+                            HerdrSpaceView(model: initial, store: ui, launchEnabled: false)
+                                .environment(\.colorScheme, dark ? .dark : .light)
+                                .environment(\.automaticViewActionsEnabled, false)
+                        })
+                    let frame = NSRect(x: 0, y: 0, width: width, height: 760)
+                    let window = TestWindowHost.window(contentRect: frame)
+                    window.isReleasedWhenClosed = false
+                    window.contentView = host
+                    host.frame = frame
+                    host.layoutSubtreeIfNeeded()
+                    let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+                    host.cacheDisplay(in: host.bounds, to: bitmap)
+                    #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
+                    #expect(!TestWindowHost.isExposedOnDesktop(window))
+                    window.contentView = nil
+                    window.close()
+                }
+            }
+        }
+        _ = try await client.perform(
+            "herdr.ui.presentation.close", object: ["token": presentation.token.uuidString])
+        await ui.shutdown()
+        await worker.shutdown()
+    }
+
     @Test func originalTerminalSettingsAndSplitPreferencesPersistOnlyInEngine() async throws {
         defer { HerdrWorkOwnership.enable() }
         let worker = worker()

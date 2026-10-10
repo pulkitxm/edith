@@ -43,6 +43,12 @@ struct HerdrUIPresentation: Codable {
             let id = object["id"] as? String, id.utf8.count <= 4096,
             Set(object.keys).isSubset(of: ["kind", "id", "agentIDs"])
         else { throw ExtensionPeerError.invalidRequest }
+        if let supplied = object["agentIDs"] {
+            guard kind == "space", let ids = supplied as? [String], !ids.isEmpty, ids.count <= 4096,
+                Set(ids).count == ids.count,
+                ids.allSatisfy({ $0.utf8.count <= 512 && !$0.utf8.contains(0) })
+            else { throw ExtensionPeerError.invalidRequest }
+        }
         if let entry = entries.values.first(where: { $0.kind == kind && $0.id == id }) {
             return presentation(entry)
         }
@@ -63,6 +69,10 @@ struct HerdrUIPresentation: Codable {
                 let lookup = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, $0) })
                 agents = ids.compactMap { lookup[$0] }
             }
+            for agent in agents {
+                for entry in Array(entries.values)
+                where entry.kind == "agent" && entry.id == agent.id { try close(entry.token) }
+            }
             title = original.title
             model = HerdrSpaceWindowModel(
                 space: .init(id: id, title: title, agents: agents), store: store)
@@ -71,6 +81,7 @@ struct HerdrUIPresentation: Codable {
                 let agent = (store.agents + store.hosts.map { HerdrMachineTerminal.agent(for: $0) })
                     .first(where: { $0.id == id })
             else { throw ExtensionPeerError.invalidRequest }
+            removeAgent(id)
             title = "\(agent.title) · \(agent.machineName)"
             store.close(id, rememberingPlacement: false)
             _ = store.detachedTab(for: agent)
@@ -127,6 +138,60 @@ struct HerdrUIPresentation: Codable {
         if listed().isEmpty { return "no space window is open" }
         if let token, !token.isEmpty { return "no space window matches \(token)" }
         return "more than one space window is open"
+    }
+
+    var presentations: [HerdrUIPresentation] {
+        entries.values.map(presentation).sorted { $0.token.uuidString < $1.token.uuidString }
+    }
+    var uiSpaces: [HerdrUISpace] {
+        entries.values.compactMap { entry in entry.model?.uiState(token: entry.token) }.sorted {
+            $0.id < $1.id
+        }
+    }
+    var openedAgents: [HerdrAgent] {
+        entries.values.compactMap(\.model).flatMap(\.tabs).compactMap { $0.agentTab?.agent }
+    }
+
+    func setAgentView(_ view: HerdrAgentView, token: UUID) throws {
+        guard !stopped, let entry = entries[token], entry.kind == "agent", entry.admitted,
+            store.detachedTab(id: entry.id) != nil
+        else { throw ExtensionPeerError.invalidRequest }
+        store.setView(view, for: entry.id)
+    }
+
+    func apply(_ mutation: HerdrUISpaceMutation) throws {
+        guard !stopped, let entry = entries[mutation.space.token], let model = entry.model,
+            mutation.baseline == model.uiState(token: entry.token),
+            mutation.space.id == entry.id, mutation.space.title == model.spaceTitle,
+            mutation.space.contexts == model.contexts
+        else {
+            throw ExtensionPeerError.rejected(
+                "The space changed in another view. Refresh and try again.")
+        }
+        try mutation.space.validate()
+        let baseline = mutation.baseline
+        let targets = Set(
+            baseline.contexts.map(\.target)
+                + baseline.tabs.flatMap { $0.layout.root.panes.flatMap(\.tabs).map(\.target) })
+        let agents = Set(baseline.tabs.flatMap { $0.agents.values })
+        guard
+            mutation.space.tabs.flatMap({ $0.layout.root.panes.flatMap(\.tabs) }).allSatisfy({
+                targets.contains($0.target)
+            }),
+            Set(mutation.space.tabs.flatMap { $0.agents.values }).isSubset(of: agents)
+        else { throw ExtensionPeerError.invalidRequest }
+        model.adopt(mutation.space, store: store)
+    }
+
+    func removeAgent(_ id: String) {
+        for entry in Array(entries.values) {
+            if entry.kind == "agent", entry.id == id {
+                try? close(entry.token)
+            } else if let model = entry.model {
+                model.removeAgent(id)
+                if model.tabs.isEmpty { try? close(entry.token) }
+            }
+        }
     }
 
     func agentTab(_ id: String) -> HerdrOpenTab? {
