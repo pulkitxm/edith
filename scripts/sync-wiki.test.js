@@ -62,9 +62,7 @@ test("a marketplace command page nests under its group", () => {
 });
 
 test("a group README keeps the group slug", () => {
-  const group = docs.find(
-    (d) => d.src === "docs/cli/extensions/README.md",
-  );
+  const group = docs.find((d) => d.src === "docs/cli/extensions/README.md");
   expect(group.slug).toBe("CLI-Extensions");
   expect(group.isGroup).toBe(true);
   expect(group.depth).toBe(0);
@@ -108,13 +106,15 @@ test("a link between siblings in a group resolves", () => {
   expect(mapTarget("./enable.md", "docs/cli/extensions", options)).toBe(
     "CLI-Extensions-Enable",
   );
-  expect(mapTarget("./README.md", "docs/cli/extensions", options)).toBe("CLI-Extensions");
+  expect(mapTarget("./README.md", "docs/cli/extensions", options)).toBe(
+    "CLI-Extensions",
+  );
 });
 
 test("anchors and link titles survive rewriting", () => {
-  expect(mapTarget("./enable.md#examples", "docs/cli/extensions", options)).toBe(
-    "CLI-Extensions-Enable#examples",
-  );
+  expect(
+    mapTarget("./enable.md#examples", "docs/cli/extensions", options),
+  ).toBe("CLI-Extensions-Enable#examples");
 });
 
 test("external and anchor-only links are left alone", () => {
