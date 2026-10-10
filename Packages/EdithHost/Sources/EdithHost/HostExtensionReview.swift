@@ -32,6 +32,17 @@ struct HostExtensionReview: View {
             || marketplace.sessions.pendingDisableIDs.contains(entry.id)
     }
 
+    static func settingsRequest(
+        id: String, marketplace: HostMarketplace, presentationID: UUID = UUID()
+    ) -> HostExtensionContentRequest? {
+        HostExtensionSettingsPolicy.request(
+            id: id, installed: marketplace.installed[id], state: marketplace.sessions.states[id],
+            activeVersion: marketplace.sessions.versions[id],
+            pendingDisable: marketplace.sessions.pendingDisableIDs.contains(id),
+            pendingRemoval: marketplace.pendingRemovalIDs.contains(id),
+            presentationID: presentationID)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -47,12 +58,11 @@ struct HostExtensionReview: View {
                 }
             }.padding(.horizontal, UIScale.pt(28)).padding(.vertical, UIScale.pt(18))
             Divider()
-            if installed, !pending,
-                HostExtensionSettingsPolicy.canPresent(id: entry.id, active: active)
-            {
+            if let request = Self.settingsRequest(id: entry.id, marketplace: marketplace) {
                 HostExtensionContent(
-                    marketplace: marketplace, extensionID: entry.id, location: "settings",
-                    section: "extension", presenter: presenter, openMarketplace: done)
+                    marketplace: marketplace, extensionID: request.extensionID,
+                    location: request.location, section: request.section,
+                    presenter: presenter, openMarketplace: done)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: UIScale.pt(16)) {
