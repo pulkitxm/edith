@@ -1,13 +1,21 @@
 import AppKit
+import IOKit.ps
 import EdithExtensionSupport
 import EdithExtensionUI
 import Observation
 import SwiftUI
 
+struct CleanerEstimateSnapshot: Codable, Sendable {
+    let scannedAt: Date
+    let reclaimableBytes: Int64
+    let categoryCount: Int
+}
+
 @MainActor
 @Observable
 final class CleanerModel {
     private static let confirmedExternalPathsKey = "cleaner.confirmedExternalPaths"
+    static let backgroundEstimateKey = "cleaner.backgroundEstimate"
 
     private(set) var previewToken = UUID()
     private(set) var categories: [JunkCategory] = [] {
@@ -34,6 +42,9 @@ final class CleanerModel {
     private var scanToken: CleanerCancellation?
     private let defaults: UserDefaults
     private let services: CleanerServices
+    private let now: @Sendable () -> Date
+    private var backgroundEstimates: Task<Void, Never>?
+    private(set) var latestEstimate: CleanerEstimateSnapshot?
     private var workTask: Task<Void, Never>?
     private var driveTask: Task<Void, Never>?
     private var engineClient: ExtensionEngineClient?
@@ -44,11 +55,24 @@ final class CleanerModel {
 
     init(
         scanned: Bool = false, defaults: UserDefaults = SharedDefaults.store,
-        services: CleanerServices = CleanerServices()
+        services: CleanerServices = CleanerServices(),
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.defaults = defaults
         self.services = services
+        self.now = now
         self.scanned = scanned
+        if let data = defaults.data(forKey: Self.backgroundEstimateKey), data.count <= 1_024,
+            let estimate = try? JSONDecoder().decode(CleanerEstimateSnapshot.self, from: data),
+            estimate.scannedAt.timeIntervalSince1970.isFinite,
+            estimate.scannedAt <= now(), estimate.reclaimableBytes >= 0,
+            (0...10_000).contains(estimate.categoryCount)
+        {
+            latestEstimate = estimate
+            try? ExtensionSharedState.current?.publish([
+                "reclaimableBytes": String(estimate.reclaimableBytes)
+            ])
+        }
         let confirmed = Set(
             defaults.array(forKey: Self.confirmedExternalPathsKey) as? [String] ?? [])
         if let raw = defaults.array(forKey: "cleaner.selectedDrives") as? [String] {
@@ -234,7 +258,46 @@ final class CleanerModel {
         defaults.set(Array(confirmed), forKey: Self.confirmedExternalPathsKey)
     }
 
-    func scan() {
+    func startBackgroundEstimates(
+        onBattery: @escaping @MainActor () -> Bool = {
+            guard let sources = IOPSCopyPowerSourcesInfo()?.takeRetainedValue() else {
+                return false
+            }
+            return IOPSGetProvidingPowerSourceType(sources).takeUnretainedValue() as String
+                == kIOPMBatteryPowerKey
+        },
+        delay: @escaping @Sendable (Duration) async throws -> Void = {
+            try await Task.sleep(for: $0)
+        }
+    ) {
+        guard !stopped, !remote, backgroundEstimates == nil else { return }
+        backgroundEstimates = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, !stopped else { return }
+                await estimateIfDue(onBattery: onBattery())
+                do { try await delay(.seconds(60)) } catch { return }
+            }
+        }
+    }
+
+    func estimateIfDue(onBattery: Bool) async {
+        guard !stopped, !remote, !Task.isCancelled, !onBattery, !scanning, workTask == nil,
+            latestEstimate.map({ now().timeIntervalSince($0.scannedAt) < 604_800 }) != true
+        else { return }
+        scan(background: true)
+        await withTaskCancellationHandler {
+            await finishWork()
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.cancelScan() }
+        }
+    }
+
+    func stopBackgroundEstimates() {
+        backgroundEstimates?.cancel()
+        cancelScan()
+    }
+
+    func scan(background: Bool = false) {
         if remote { sendRemote("scan"); return }
         guard !scanning, !stopped else { return }
         cancelScan()
@@ -251,13 +314,18 @@ final class CleanerModel {
         let categoryChoices = categoryDefaults
         workTask = Task { [services] in
             defer { finish(token) }
-            let all = await services.drives()
-            guard owns(token), !token.isCancelled else { return }
-            driveOptions = all
-            drives = JunkScanner.drivesForScanning(all, selectedDriveIDs: driveSelection)
-            let home = FileManager.default.homeDirectoryForCurrentUser
-            var roots = drives.map { $0.id == "/" ? home : URL(fileURLWithPath: $0.id) }
-            roots += customFolders.filter { isDriveSelected($0) }.map { URL(fileURLWithPath: $0) }
+            var roots: [URL] = []
+            if !background {
+                let all = await services.drives()
+                guard owns(token), !token.isCancelled else { return }
+                driveOptions = all
+                drives = JunkScanner.drivesForScanning(all, selectedDriveIDs: driveSelection)
+                let home = FileManager.default.homeDirectoryForCurrentUser
+                roots = drives.map { $0.id == "/" ? home : URL(fileURLWithPath: $0.id) }
+                roots += customFolders.filter { isDriveSelected($0) }.map {
+                    URL(fileURLWithPath: $0)
+                }
+            }
             let result = await services.scan(roots, token) { [weak self = self] note in
                 Task { @MainActor in
                     guard let self, self.owns(token), !token.isCancelled else { return }
@@ -278,6 +346,14 @@ final class CleanerModel {
             log("Done · \(JunkScanner.format(reclaimableTotal)) reclaimable.")
             scanned = true
             scanning = false
+            let estimate = CleanerEstimateSnapshot(
+                scannedAt: now(), reclaimableBytes: reclaimableTotal,
+                categoryCount: categories.count)
+            latestEstimate = estimate
+            if let data = try? JSONEncoder().encode(estimate), data.count <= 1_024 {
+                defaults.set(data, forKey: Self.backgroundEstimateKey)
+            }
+            guard !background else { return }
             do { try await Task.sleep(for: .milliseconds(900)) } catch { return }
             if owns(token), !token.isCancelled {
                 withAnimation(.easeInOut(duration: 0.35)) { logsExpanded = false }
@@ -310,6 +386,9 @@ final class CleanerModel {
     func shutdown() async {
         guard !stopped else { return }
         stopped = true
+        stopBackgroundEstimates()
+        await backgroundEstimates?.value
+        backgroundEstimates = nil
         remoteGeneration += 1; remoteTask?.cancel()
         await remoteTask?.value; remoteTask = nil
         cancelScan()
