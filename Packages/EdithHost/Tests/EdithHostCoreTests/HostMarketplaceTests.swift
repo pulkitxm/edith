@@ -29,6 +29,63 @@ import Testing
         #expect(HostRemoteSession.extensionIDs.isEmpty)
     }
 
+    @Test func cancellingTheLastSceneCallerCancelsSharedDiscoveryAndAllowsRetry() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.store.commit([fixture.package("1.0.0")])
+        let marketplace = try fixture.marketplace()
+        let manager = HostRemoteSessionManager(marketplace: marketplace)
+        let state = RemoteDiscoveryState()
+        manager.discover = { _ in
+            state.starts += 1
+            state.active += 1
+            defer { state.active -= 1 }
+            try await Task.sleep(for: .seconds(20))
+            return []
+        }
+        let first = Task {
+            try await manager.scene(
+                for: HostExtensionContentRequest(
+                    extensionID: "sample", location: "settings", section: "extension"))
+        }
+        let deadline = ContinuousClock.now + .seconds(3)
+        while state.active == 0 {
+            guard ContinuousClock.now < deadline else { throw HostWorkerError.timedOut }
+            await Task.yield()
+        }
+        let second = Task {
+            try await manager.scene(
+                for: HostExtensionContentRequest(
+                    extensionID: "sample", location: "settings", section: "extension"))
+        }
+        for _ in 0..<10 { await Task.yield() }
+        first.cancel()
+        for _ in 0..<10 { await Task.yield() }
+        #expect(state.active == 1)
+        #expect(state.starts == 1)
+        second.cancel()
+        await #expect(throws: CancellationError.self) { try await first.value }
+        await #expect(throws: CancellationError.self) { try await second.value }
+        #expect(state.active == 0)
+        manager.discover = { _ in
+            state.starts += 1; return []
+        }
+        await #expect(throws: HostRemoteAvailabilityError.approvalRequired) {
+            try await manager.scene(
+                for: HostExtensionContentRequest(
+                    extensionID: "sample", location: "settings", section: "extension"))
+        }
+        #expect(state.starts == 2)
+        #expect(HostRemoteSession.extensionIDs.isEmpty)
+        #expect(marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(await fixture.network.count == 0)
+    }
+
+    @MainActor private final class RemoteDiscoveryState {
+        var starts = 0
+        var active = 0
+    }
+
     @Test func remoteFeatureAdmissionTracksTheCurrentWorkerAndPendingDisable() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }

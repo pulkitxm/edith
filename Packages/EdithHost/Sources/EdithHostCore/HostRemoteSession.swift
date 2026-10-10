@@ -116,6 +116,10 @@ public final class HostRemoteSession {
         do {
             let result = try await channel.request(
                 HostRemoteCommand(operation: "reserve", payload: HostRemoteWire.encode(request)))
+            try Task.checkCancellation()
+            guard !stopping, !stopped, peer?.isRunning == true else {
+                throw HostWorkerError.exited
+            }
             let descriptor = try HostRemoteWire.decode(
                 HostRemoteSceneDescriptor.self, from: result.payload)
             guard descriptor.presentationID == request.presentationID,
@@ -143,11 +147,15 @@ public final class HostRemoteSession {
     }
 
     public func release(_ presentationID: UUID) async throws {
-        guard let handle = handles.removeValue(forKey: presentationID) else { return }
+        guard let handle = handles[presentationID] else { return }
         handle.detach()
-        guard !stopping, !stopped, let channel else { return }
+        guard !stopping, !stopped, let channel else {
+            handles[presentationID] = nil
+            return
+        }
         _ = try await channel.request(
             HostRemoteCommand(operation: "release", payload: HostRemoteWire.encode(presentationID)))
+        handles[presentationID] = nil
     }
 
     public static func stopAll(extensionID: String) async throws {
@@ -220,6 +228,8 @@ public final class HostRemoteSceneHandle {
     private var channel: HostRemoteChannel?
     private var bootstrap: NSXPCConnection?
     private var closed = false
+    private var presented = false
+    private var desired: HostRemotePresentation?
 
     fileprivate init(
         session: HostRemoteSession, request: HostExtensionContentRequest,
@@ -236,11 +246,22 @@ public final class HostRemoteSceneHandle {
     ) async throws {
         guard !closed, channel == nil, self.bootstrap == nil else { throw HostWorkerError.rejected }
         self.bootstrap = bootstrap
+        if desired == nil {
+            desired = try context(compact: compact, visible: visible, width: width)
+        }
         do {
             let channel = try await session.connect(
                 handle: self, bootstrap: bootstrap, receive: receive)
+            guard !closed, let initial = desired else {
+                channel.invalidate()
+                throw HostWorkerError.exited
+            }
             self.channel = channel
-            try await send("present", compact: compact, visible: visible, width: width)
+            try await send("present", presentation: initial)
+            presented = true
+            if let latest = desired, latest != initial {
+                try await send("update", presentation: latest)
+            }
         } catch {
             try? await close()
             throw error
@@ -249,12 +270,12 @@ public final class HostRemoteSceneHandle {
 
     public func update(compact: Bool, visible: Bool, width: Double) async throws {
         guard !closed else { throw HostWorkerError.rejected }
-        guard channel != nil else { return }
-        try await send("update", compact: compact, visible: visible, width: width)
+        desired = try context(compact: compact, visible: visible, width: width)
+        guard presented, let desired else { return }
+        try await send("update", presentation: desired)
     }
 
     public func close() async throws {
-        guard !closed else { return }
         try await session.release(presentationID)
     }
 
@@ -266,14 +287,19 @@ public final class HostRemoteSceneHandle {
         bootstrap = nil
     }
 
-    private func send(_ operation: String, compact: Bool, visible: Bool, width: Double) async throws
+    private func context(compact: Bool, visible: Bool, width: Double) throws
+        -> HostRemotePresentation
     {
-        guard let channel else { throw HostWorkerError.rejected }
         let presentation = HostRemotePresentation(
             session: session.configuration.session, request: request, compact: compact,
             visible: visible, availableWidth: width)
         try presentation.validate(
             session: session.configuration.session, extensionID: request.extensionID)
+        return presentation
+    }
+
+    private func send(_ operation: String, presentation: HostRemotePresentation) async throws {
+        guard let channel, !closed else { throw HostWorkerError.rejected }
         _ = try await channel.request(
             HostRemoteCommand(operation: operation, payload: HostRemoteWire.encode(presentation)))
     }
