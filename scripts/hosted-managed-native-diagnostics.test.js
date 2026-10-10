@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { collectProbeDiagnostics } from "./hosted-managed-native/probe-diagnostics.mjs";
@@ -8,6 +15,7 @@ const uuid = "00000000-0000-4000-8000-000000000001";
 const identifier = `com.pulkit.edith.tests.remote-${uuid}`;
 async function fixture(work) {
   const temporary = await mkdtemp(join(tmpdir(), "hosted-probe-diagnostics-"));
+  const home = await realpath(temporary);
   const directory = join(
     home,
     "Applications",
