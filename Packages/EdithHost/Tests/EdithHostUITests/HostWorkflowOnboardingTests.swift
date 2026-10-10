@@ -195,6 +195,38 @@ import Testing
         #expect(!model.incomplete)
     }
 
+    @Test func workflowPassesTheFullReviewedPackageToItsOwnedInstaller() async throws {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        let reviewed = package("usage")
+        fixture.available = ["usage": reviewed]
+        let model = fixture.model()
+        model.present()
+        model.choose(.agentic)
+        model.toggle("herdr")
+        model.installSelection()
+        await finish(model)
+        #expect(fixture.reviewedInstalls == [reviewed])
+        #expect(model.stage == .finished)
+    }
+
+    @Test func packageChangedInsideDownloadReturnsToReviewBeforeRetry() async throws {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        fixture.available = ["usage": package("usage")]
+        fixture.changedDuringInstall = true
+        let model = fixture.model()
+        model.present()
+        model.choose(.agentic)
+        model.toggle("herdr")
+        model.installSelection()
+        await finish(model)
+        #expect(model.stage == .review)
+        #expect(model.failure?.contains("Review your selection") == true)
+        #expect(fixture.installed.isEmpty && fixture.active.isEmpty)
+        #expect(!fixture.defaults.bool(forKey: HostSettingsCatalog.onboardingCompletedKey))
+    }
+
     @Test func emptyFirstLaunchPreservesTheExplicitEmptySetupOption() {
         let fixture = Fixture()
         defer { fixture.remove() }
@@ -287,6 +319,8 @@ import Testing
         var installed = Set<String>()
         var active = Set<String>()
         var installs: [String] = []
+        var reviewedInstalls: [ExtensionPackage] = []
+        var changedDuringInstall = false
         var failures = Set<String>()
         var ready = true
         var installDelay = Duration.zero
@@ -307,8 +341,10 @@ import Testing
                 environment: HostWorkflowEnvironment(
                     available: { self.available }, installed: { self.installed },
                     active: { self.active }, refresh: { try await self.refresh() },
-                    install: { id in
+                    install: { id, expected in
+                        if let expected { self.reviewedInstalls.append(expected) }
                         self.installs.append(id)
+                        if self.changedDuringInstall { throw HostWorkflowReviewChanged() }
                         if self.installDelay > .zero {
                             try await Task.sleep(for: self.installDelay)
                         }

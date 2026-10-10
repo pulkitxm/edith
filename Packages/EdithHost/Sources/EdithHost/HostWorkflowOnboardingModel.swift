@@ -9,7 +9,7 @@ import Observation
     let installed: () -> Set<String>
     let active: () -> Set<String>
     let refresh: () async throws -> Void
-    let install: (String) async throws -> Void
+    let install: (String, ExtensionPackage?) async throws -> Void
     let restore: () async throws -> HostSettingsBackupResult
     let changed: () -> Void
 }
@@ -160,7 +160,7 @@ import Observation
                 }
                 model.states[id] = .installing
                 do {
-                    try await model.environment.install(id)
+                    try await model.environment.install(id, reviewed[id])
                     try Task.checkCancellation()
                     guard model.environment.installed().contains(id),
                         model.environment.active().contains(id)
@@ -169,7 +169,12 @@ import Observation
                             "The downloaded extension could not start. Retry to finish setup.")
                     }
                     model.states[id] = .ready
-                } catch is CancellationError { throw CancellationError() } catch {
+                } catch is CancellationError { throw CancellationError() } catch let error
+                    as HostWorkflowReviewChanged
+                {
+                    model.stage = .review
+                    throw error
+                } catch {
                     model.states[id] = .failed(error.localizedDescription)
                 }
             }
@@ -264,4 +269,10 @@ struct HostWorkflowFailure: LocalizedError {
     let message: String
     init(_ message: String) { self.message = message }
     var errorDescription: String? { message }
+}
+
+struct HostWorkflowReviewChanged: LocalizedError {
+    var errorDescription: String? {
+        "The extension package changed. Review your selection and try again."
+    }
 }
