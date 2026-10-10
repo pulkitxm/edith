@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
 import Observation
@@ -8,28 +9,45 @@ final class JevSettingsModel {
     var status: JevStatus?
     var draft = ""
     let loading = ContentLoad()
-    private let engine: JevEngine
+    private let read: (Bool) async throws -> JevStatus
+    private let write: (String?) async throws -> JevStatus
     private var task: Task<Void, Never>?
     private var stopped = false
 
-    init(engine: JevEngine) { self.engine = engine }
+    init(engine: JevEngine) {
+        read = { await engine.status(probe: $0) }
+        write = {
+            await engine.setKey($0); return await engine.status(probe: false)
+        }
+    }
 
-    func load(probe: Bool) { begin { await self.engine.status(probe: probe) } }
+    init(engineClient: ExtensionEngineClient) {
+        read = { probe in
+            let payload = try JSONEncoder().encode(JevStatusQuery(probe: probe))
+            let data = try await engineClient.invoke("jev.status", payload: payload)
+            return try JSONDecoder().decode(JevStatus.self, from: data)
+        }
+        write = { key in
+            let payload = try JSONEncoder().encode(JevKeyUpdate(key: key))
+            let data = try await engineClient.invoke("jev.key.set", payload: payload)
+            return try JSONDecoder().decode(JevStatus.self, from: data)
+        }
+    }
+
+    func load(probe: Bool) { begin { try await self.read(probe) } }
 
     func save() {
         let value = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }
         begin {
-            await self.engine.setKey(value)
-            return await self.engine.status(probe: false)
+            return try await self.write(value)
         }
         draft = ""
     }
 
     func remove() {
         begin {
-            await self.engine.setKey(nil)
-            return await self.engine.status(probe: false)
+            return try await self.write(nil)
         }
     }
 
@@ -45,16 +63,22 @@ final class JevSettingsModel {
         draft = ""
     }
 
-    private func begin(_ operation: @escaping @MainActor () async -> JevStatus) {
+    private func begin(_ operation: @escaping @MainActor () async throws -> JevStatus) {
         guard !stopped else { return }
         cancel()
         let generation = loading.begin()
         task = Task { [weak self] in
-            let status = await operation()
-            guard let self, !self.stopped, self.loading.isCurrent(generation) else { return }
-            self.status = status
-            self.loading.complete(generation)
-            self.task = nil
+            do {
+                let status = try await operation()
+                guard let self, !self.stopped, self.loading.isCurrent(generation) else { return }
+                self.status = status
+                self.loading.complete(generation)
+                self.task = nil
+            } catch {
+                guard let self, !self.stopped, self.loading.owns(generation) else { return }
+                self.loading.fail(generation, error: error)
+                self.task = nil
+            }
         }
     }
 }

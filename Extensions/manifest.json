@@ -463,7 +463,7 @@
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "app": [
         "Extensions/jev/Models/JevCommandPayloads.swift",
@@ -479,7 +479,9 @@
         "Extensions/jev/Services/JevSecrets.swift",
         "Extensions/jev/ViewModels/JevSettingsModel.swift",
         "Extensions/jev/Views/JevSettingsPane.swift",
-        "Extensions/jev/Surface.swift"
+        "Extensions/jev/Surface.swift",
+        "Extensions/jev/CLI/JevTerminalCommands.swift",
+        "Extensions/jev/CLI/JevCLIExecution.swift"
       ]
     },
     "inputs": [

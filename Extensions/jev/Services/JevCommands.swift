@@ -1,3 +1,4 @@
+import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 
@@ -23,6 +24,20 @@ final class JevCommands {
         guard !stopped else { completion(nil, "The extension is disabled."); return }
         registry.invoke(request, completion: completion) { [engine] command, payload in
             switch command {
+            case "jev.cli":
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                let input = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
+                let stdin: Data
+                if let value = input?["stdin"] {
+                    guard let value = value as? String, let data = Data(base64Encoded: value),
+                        data.count <= 1_048_576
+                    else { throw ExtensionPeerError.invalidRequest }
+                    stdin = data
+                } else {
+                    stdin = Data()
+                }
+                return try JSONEncoder().encode(
+                    try await JevCLIExecution.run(request, engine: engine, stdin: stdin))
             case "surface.snapshot", "surface.perform":
                 return try await SurfaceCommandService.execute(
                     providerID: "jev", command: command, payload: payload,
@@ -50,6 +65,11 @@ final class JevCommands {
     }
 
     func cancel(_ token: String) { registry.cancel(token) }
+
+    func shutdownAndWait() async {
+        stopped = true
+        await registry.shutdownAndWait()
+    }
 
     func shutdown() {
         stopped = true
