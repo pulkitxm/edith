@@ -8,6 +8,27 @@ import Testing
 struct AttentionAmbientPolicyTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
+    @Test func policyOnlySynchronizationDoesNotEnqueueExplicitIngestion() throws {
+        var explicitCalls = 0
+        let controller = AttentionExtensionController(bundle: .main) { explicitCalls += 1 }
+        let context: NSMutableDictionary = [
+            "operation": "synchronize", "ambientPolicyOnly": true,
+            "ambientPolicy": [
+                "pauseAmbientOnBattery": true, "subscribers": ["attention.ingest": 0],
+            ],
+        ]
+        #expect((controller.execute(context) as? NSDictionary)?["ok"] as? Bool == true)
+        #expect(explicitCalls == 0)
+        context["ambientPolicyOnly"] = false
+        #expect((controller.execute(context) as? NSDictionary)?["ok"] as? Bool == true)
+        context.removeObject(forKey: "ambientPolicyOnly")
+        #expect((controller.execute(context) as? NSDictionary)?["ok"] as? Bool == true)
+        #expect(explicitCalls == 2)
+        context["ambientPolicyOnly"] = "true"
+        #expect((controller.execute(context) as? NSDictionary)?["ok"] as? Bool == false)
+        #expect(explicitCalls == 2)
+    }
+
     @Test func pausedPeriodicIngestPreservesManualAndFilesystemAdmission() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }

@@ -304,11 +304,15 @@ final class ExtensionRuntime: NSObject {
             return scene.controller() ?? (["ok": false] as NSDictionary)
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":
-            do { try controller?.applyAmbientPolicy(context: input) } catch {
+            do {
+                guard let controller else { return ["ok": false] as NSDictionary }
+                try controller.synchronizeAmbientPolicy(context: input) {
+                    usageStore?.syncStatusItem(); usageStore?.refreshMenuBarItem()
+                    backup?.preferencesChanged()
+                }
+            } catch {
                 return ["ok": false, "error": error.localizedDescription] as NSDictionary
             }
-            usageStore?.syncStatusItem(); usageStore?.refreshMenuBarItem()
-            backup?.preferencesChanged()
         case "stop": prepareToStop(completion: {})
         case "status": return ["ok": true, "running": controller != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary

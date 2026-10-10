@@ -1,6 +1,7 @@
 @_implementationOnly import EdithExtensionSupport_attention_native
 @_implementationOnly import EdithExtensionUI_attention_native
 import AppKit
+import CoreFoundation
 import Foundation
 import SwiftUI
 
@@ -29,7 +30,14 @@ public final class AttentionExtensionController: NSObject {
         "attention.ingest": ExtensionAmbientCadence(ambient: 900, live: 900)
     ])
 
-    public init(bundle: Bundle) {
+    private let notifySettingsChanged: () -> Void
+
+    public convenience init(bundle: Bundle) {
+        self.init(bundle: bundle, notifySettingsChanged: { IPC.post(IPC.Name.settingsChanged) })
+    }
+
+    init(bundle: Bundle, notifySettingsChanged: @escaping () -> Void) {
+        self.notifySettingsChanged = notifySettingsChanged
         self.bundle = bundle
         super.init()
     }
@@ -205,10 +213,21 @@ public final class AttentionExtensionController: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":
             guard !stopped else { return ["ok": false] as NSDictionary }
-            do { try ambientPolicy.apply(context: input) } catch {
+            do {
+                let policyOnly: Bool
+                if let value = input["ambientPolicyOnly"] {
+                    guard let number = value as? NSNumber,
+                        CFGetTypeID(number) == CFBooleanGetTypeID()
+                    else { throw ExtensionPeerError.invalidRequest }
+                    policyOnly = number.boolValue
+                } else {
+                    policyOnly = false
+                }
+                try ambientPolicy.apply(context: input)
+                if !policyOnly { notifySettingsChanged() }
+            } catch {
                 return ["ok": false, "message": error.localizedDescription] as NSDictionary
             }
-            IPC.post(IPC.Name.settingsChanged)
         case "stop":
             stopUI()
             if !stopped { prepareToStop(completion: {}) }

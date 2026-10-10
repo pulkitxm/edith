@@ -8,6 +8,31 @@ import Testing
 struct UsageAmbientPolicyTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
+    @Test func policyOnlySynchronizationDoesNotPerformExplicitSettingsWork() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        var explicitCalls = 0
+        let context = NSMutableDictionary(
+            dictionary: Fixture.context(paused: true) as! [AnyHashable: Any])
+        context["ambientPolicyOnly"] = true
+        try fixture.controller.synchronizeAmbientPolicy(context: context) { explicitCalls += 1 }
+        #expect(explicitCalls == 0)
+        #expect(fixture.controller.nextPeriodicDelay(now: now) == nil)
+        #expect(await fixture.counts.snapshot() == [0, 0])
+        context["ambientPolicyOnly"] = false
+        try fixture.controller.synchronizeAmbientPolicy(context: context) { explicitCalls += 1 }
+        context.removeObject(forKey: "ambientPolicyOnly")
+        try fixture.controller.synchronizeAmbientPolicy(context: context) { explicitCalls += 1 }
+        #expect(explicitCalls == 2)
+        context["ambientPolicyOnly"] = 1
+        #expect(throws: (any Error).self) {
+            try fixture.controller.synchronizeAmbientPolicy(context: context) { explicitCalls += 1 }
+        }
+        #expect(explicitCalls == 2)
+        #expect(fixture.controller.nextPeriodicDelay(now: now) == nil)
+        await fixture.controller.shutdown()
+    }
+
     @Test func batteryPauseBlocksPeriodicWorkButNotExplicitRefreshes() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }

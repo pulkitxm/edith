@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import CoreFoundation
 import Foundation
 import Observation
 
@@ -187,6 +188,20 @@ public final class UsageWorkerController {
     func applyAmbientPolicy(context: NSDictionary) throws {
         guard !stopped else { throw ExtensionPeerError.unavailable }
         try ambientPolicy.apply(context: context)
+    }
+
+    func synchronizeAmbientPolicy(context: NSDictionary, explicit: () -> Void) throws {
+        let policyOnly: Bool
+        if let value = context["ambientPolicyOnly"] {
+            guard let number = value as? NSNumber,
+                CFGetTypeID(number) == CFBooleanGetTypeID()
+            else { throw ExtensionPeerError.invalidRequest }
+            policyOnly = number.boolValue
+        } else {
+            policyOnly = false
+        }
+        try applyAmbientPolicy(context: context)
+        if !policyOnly { explicit() }
     }
 
     func requestPeriodicCollection(now: Date) throws {
