@@ -249,6 +249,42 @@ import Testing
         }
     }
 
+    @Test func validRootSignatureWithForeignSigningIdentifierRejects() throws {
+        let fixture = try fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let signed = try process(
+            "/usr/bin/codesign",
+            [
+                "--force", "--sign", "-", "--identifier",
+                "com.pulkit.edith.tests." + UUID().uuidString, fixture.app.path,
+            ])
+        #expect(signed.status == 0)
+        let verified = try process(
+            "/usr/bin/codesign", ["--verify", "--deep", "--strict", fixture.app.path])
+        #expect(verified.status == 0)
+        #expect(throws: (any Error).self) {
+            try HostPublicLauncher.capture(
+                applicationURL: fixture.app, hostIdentifier: fixture.identifier,
+                teamIdentifier: nil)
+        }
+    }
+
+    @Test func signedResourceSymlinkCannotSubstituteForRegularOriginalLauncher() throws {
+        let fixture = try fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let resource = fixture.app.appendingPathComponent("Contents/Resources/ed-launcher")
+        let external = fixture.app.appendingPathComponent("Contents/Resources/stored-launcher")
+        try FileManager.default.moveItem(at: resource, to: external)
+        try FileManager.default.createSymbolicLink(
+            atPath: resource.path, withDestinationPath: "stored-launcher")
+        try sign(fixture.app)
+        #expect(throws: (any Error).self) {
+            try HostPublicLauncher.capture(
+                applicationURL: fixture.app, hostIdentifier: fixture.identifier,
+                teamIdentifier: nil)
+        }
+    }
+
     private func fixture() throws -> Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "edith-public-launcher-" + UUID().uuidString)
