@@ -27,6 +27,17 @@ final class HostWindowNavigation {
     private let didApply: @MainActor (HostWindowRoute) async throws -> Void
     private var registrations: [UUID: Registration] = [:]
     private var sequence: UInt64 = 0
+    private var publishedWorkspaceToken: UUID?
+    var didChangeMainWorkspace: (@MainActor () -> Void)?
+
+    var registeredMainWorkspace: (token: UUID, window: NSWindow)? {
+        guard
+            let selected = registrations.filter({
+                $0.value.window?.identifier?.rawValue == "EdithMainWindow"
+            }).max(by: { $0.value.order < $1.value.order }), let window = selected.value.window
+        else { return nil }
+        return (selected.key, window)
+    }
 
     init(
         defaults: UserDefaults = SharedDefaults.store,
@@ -48,6 +59,7 @@ final class HostWindowNavigation {
         let token = UUID()
         registrations[token] = Registration(
             window: window, order: sequence, apply: apply, selected: selected)
+        publishWorkspaceChange()
         return token
     }
 
@@ -76,7 +88,17 @@ final class HostWindowNavigation {
 
     func removeAssociation(_ token: UUID) { relationships[token] = nil }
 
-    func unregister(_ token: UUID) { registrations[token] = nil }
+    private func publishWorkspaceChange() {
+        let current = registeredMainWorkspace?.token
+        guard current != publishedWorkspaceToken else { return }
+        publishedWorkspaceToken = current
+        didChangeMainWorkspace?()
+    }
+
+    func unregister(_ token: UUID) {
+        registrations[token] = nil
+        publishWorkspaceChange()
+    }
 
     func navigate(
         extensionID: String, version: String, section: String? = nil,
