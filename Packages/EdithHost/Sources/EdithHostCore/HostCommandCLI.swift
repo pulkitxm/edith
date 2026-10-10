@@ -39,7 +39,8 @@ public struct HostCommandCLI: Sendable {
                     let io = try HostMCPStdio()
                     let server = HostMCPCLI(
                         version: cli.version, invoke: cli.invoke, send: { try await io.send($0) },
-                        stop: { io.cancel() }, coreExecute: { try await cli.execute($0) })
+                        stop: { io.cancel() }, coreExecute: { try await cli.execute($0, input: $1) }
+                    )
                     do {
                         try await withTaskCancellationHandler {
                             try await server.run(receive: { try await io.receive() })
@@ -164,13 +165,17 @@ public struct HostCommandCLI: Sendable {
         if command == "__complete" { return try await complete(Array(arguments.dropFirst())) }
         if command == "config" {
             var configArguments = Array(arguments.dropFirst())
+            var configInput = input
             if configArguments.first == "import" {
                 let parsed = try HostCLIArguments(
                     Array(configArguments.dropFirst()), flags: ["--json", "--dry-run"])
                 try parsed.require(words: 1...1, flags: ["--json", "--dry-run"])
+                if configInput.isEmpty, parsed.words[0] != "-" {
+                    configInput = try await Self.inputForCommand(arguments, invoke: invoke)
+                }
                 configArguments = ["import", "-"] + parsed.flags.sorted()
             }
-            return try await configuration(configArguments, input: input)
+            return try await configuration(configArguments, input: configInput)
         }
         if ["app", "permissions"].contains(command) {
             if arguments.starts(with: ["app", "relaunch"]) {
@@ -188,7 +193,16 @@ public struct HostCommandCLI: Sendable {
             return try await core(arguments, input: input)
         }
         if ["extensions", "invoke"].contains(command) {
-            switch try HostCLICommand.parse(arguments, readInput: { input }) {
+            var normalized = arguments
+            if command == "extensions" {
+                guard arguments.filter({ $0 == "--json" }).count <= 1 else {
+                    throw HostCLIError.usage("Duplicate --json flag.")
+                }
+                normalized.removeAll { $0 == "--json" }
+                if normalized.count == 1 { normalized.append("ls") }
+                if normalized.count > 1, normalized[1] == "list" { normalized[1] = "ls" }
+            }
+            switch try HostCLICommand.parse(normalized, readInput: { input }) {
             case .help: return try HostCLIOutput.text(HostCLICommand.usageText)
             case .request(let request):
                 return try HostCLIOutput.text(

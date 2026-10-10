@@ -12,7 +12,7 @@ public actor HostMCPCLI {
     private let invoke: HostCLIProviderRegistry.Invoke
     private let send: Send
     private let stop: @Sendable () -> Void
-    private let coreExecute: (@Sendable ([String]) async throws -> ExtensionCLIReply)?
+    private let coreExecute: (@Sendable ([String], Data) async throws -> ExtensionCLIReply)?
     private var initialized = false
     private var ready = false
     private var stopping = false
@@ -23,7 +23,7 @@ public actor HostMCPCLI {
     public init(
         version: String, invoke: @escaping HostCLIProviderRegistry.Invoke, send: @escaping Send,
         stop: @escaping @Sendable () -> Void = {},
-        coreExecute: (@Sendable ([String]) async throws -> ExtensionCLIReply)? = nil
+        coreExecute: (@Sendable ([String], Data) async throws -> ExtensionCLIReply)? = nil
     ) {
         self.version = version; self.invoke = invoke; self.send = send
         self.stop = stop; self.coreExecute = coreExecute
@@ -186,10 +186,15 @@ public actor HostMCPCLI {
             params["arguments"] == nil || params["arguments"]?.object != nil
         else { throw HostCLIError.usage("Unknown or unavailable tool.") }
         let object = params["arguments"]?.object ?? [:]
-        guard Set(object.keys).isSubset(of: ["arguments", "confirm"]),
+        guard Set(object.keys).isSubset(of: ["arguments", "confirm", "input"]),
             object["arguments"] == nil || object["arguments"]?.array != nil,
-            object["confirm"] == nil || object["confirm"]?.bool != nil
+            object["confirm"] == nil || object["confirm"]?.bool != nil,
+            object["input"] == nil || object["input"]?.string != nil
         else { throw HostCLIError.usage("Invalid tool arguments.") }
+        let input = Data((object["input"]?.string ?? "").utf8)
+        guard input.count <= HostCLIInvocationContext.maximumInputBytes,
+            object["input"] == nil || command.readsInput == true
+        else { throw HostCLIError.usage("This tool does not accept the supplied stdin.") }
         let values = object["arguments"]?.array ?? []
         guard values.allSatisfy({ $0.string != nil }) else {
             throw HostCLIError.usage("Tool arguments must all be strings.")
@@ -200,21 +205,24 @@ public actor HostMCPCLI {
             throw HostCLIError.usage(
                 "Pass confirm: true instead of a confirmation flag inside arguments.")
         }
-        var routed = command.route + ["--json"]
+        var routed = command.route
+        if command.jsonOutput != false, !arguments.contains("--json") { routed.append("--json") }
         if command.destructive, object["confirm"] == .bool(true) { routed.append("--yes") }
         routed += arguments
         do {
             let reply: ExtensionCLIReply
             if let coreExecute {
-                reply = try await coreExecute(routed)
+                reply = try await coreExecute(routed, input)
                 try reply.validate()
             } else if coreCatalog?.commands.contains(command) == true {
                 reply = try JSONDecoder().decode(
                     ExtensionCLIReply.self,
-                    from: await invoke(HostCoreCLIEnvelope(arguments: routed).request()))
+                    from: await invoke(
+                        HostCoreCLIEnvelope(arguments: routed, input: input).request(
+                            timeout: command.timeout)))
                 try reply.validate()
             } else {
-                reply = try await registry.execute(routed, invoke: invoke)
+                reply = try await registry.execute(routed, input: input, invoke: invoke)
             }
             let output =
                 reply.exitCode == 0
@@ -243,6 +251,13 @@ public actor HostMCPCLI {
             properties["confirm"] = .object([
                 "type": .string("boolean"),
                 "description": .string("Leave false to preview. Pass true to apply."),
+            ])
+        }
+        if command.readsInput == true {
+            properties["input"] = .object([
+                "type": .string("string"),
+                "maxLength": .integer(Int64(HostCLIInvocationContext.maximumInputBytes)),
+                "description": .string("Text supplied as the original command's stdin."),
             ])
         }
         return .object([

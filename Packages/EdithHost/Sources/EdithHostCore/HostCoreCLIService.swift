@@ -24,20 +24,29 @@ public struct HostCoreCLIEnvelope: Codable, Sendable {
     public typealias Action = @MainActor @Sendable ([String]) async throws -> ExtensionCLIReply
     private let configuration: HostConfigurationCLI
     private let action: Action
-    private let commands: [HostCLIProviderCommand]
+    private let commands: () -> [HostCLIProviderCommand]
+    private let configurationCommands: [HostCLIProviderCommand]
+    private let prepareConfiguration: @MainActor @Sendable ([String]) async throws -> Void
     private var stopped = false
 
     public init(
         configuration: HostConfigurationCLI, commands: [HostCLIProviderCommand] = [],
+        commandProvider: (@MainActor () -> [HostCLIProviderCommand])? = nil,
+        prepareConfiguration: @escaping @MainActor @Sendable ([String]) async throws -> Void = {
+            _ in
+        },
         action: @escaping Action
     ) {
         self.configuration = configuration; self.action = action
-        self.commands =
+        self.prepareConfiguration = prepareConfiguration
+        self.commands = commandProvider ?? { commands }
+        configurationCommands =
             ["ls", "get", "set", "unset", "describe", "export", "import"].map {
                 .init(
                     route: ["config", $0], operation: "host.cli",
-                    summary: "Read and write application settings.")
-            } + commands
+                    summary: "Read and write application settings.", readsInput: $0 == "import",
+                    jsonOutput: $0 != "export")
+            }
     }
 
     public static func handles(_ request: HostCLIRequest) -> Bool {
@@ -54,7 +63,7 @@ public struct HostCoreCLIEnvelope: Codable, Sendable {
         if request.operation == "host.cli.catalog" {
             return try JSONEncoder().encode(
                 HostCLIProviderCatalog(
-                    owner: "host", commands: commands,
+                    owner: "host", commands: configurationCommands + commands(),
                     settings: HostConfigurationCLI.applicationSettings, acceptsInput: true))
         }
         let envelope = try JSONDecoder().decode(HostCoreCLIEnvelope.self, from: request.payload)
@@ -62,10 +71,16 @@ public struct HostCoreCLIEnvelope: Codable, Sendable {
         try Task.checkCancellation()
         let reply: ExtensionCLIReply
         if envelope.arguments.first == "config" {
+            try await prepareConfiguration(Array(envelope.arguments.dropFirst()))
+            try Task.checkCancellation()
             reply = try configuration.execute(
                 Array(envelope.arguments.dropFirst()), input: envelope.input)
         } else {
-            guard ["app", "permissions", "camera"].contains(envelope.arguments.first ?? ""),
+            guard
+                [
+                    "app", "permissions", "camera", "guide", "schema", "version", "status",
+                    "install", "uninstall", "completions", "extensions",
+                ].contains(envelope.arguments.first ?? ""),
                 envelope.input.isEmpty
             else {
                 throw HostCLIError.usage("Unknown core command.")

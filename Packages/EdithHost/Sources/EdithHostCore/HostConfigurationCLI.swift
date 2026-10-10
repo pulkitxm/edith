@@ -166,85 +166,104 @@ import Foundation
         return .object(result)
     }
 
-    public nonisolated static let applicationSettings: [HostCLISetting] = [
-        .init(
-            AppStorageKeys.General.appearance, .string, group: "appearance",
-            summary: "Window and panel appearance.", allowed: ["system", "light", "dark"],
-            fallback: .string("system")),
-        .init(
-            AppStorageKeys.General.theme, .string, group: "appearance",
-            summary: "Accent palette name.", fallback: .string("default")),
-        .init(
-            AppStorageKeys.General.lastPaletteTheme, .string, group: "appearance",
-            summary: "Palette restored when a custom accent is cleared."),
-        .init(
-            AppStorageKeys.General.showDockIcon, .bool, group: "appearance",
-            summary: "Show Edith in the Dock.", fallback: .bool(false)),
-        .init(
-            AppStorageKeys.General.creditHidden, .bool, group: "appearance",
-            summary: "Hide the panel credit line.", fallback: .bool(false)),
-        .init(
-            AppStorageKeys.General.homeClockZones, .csv, group: "appearance",
-            summary: "Comma separated Home clock time zones."),
-        .init(
-            "surfaceLayoutProfiles", .string, group: "appearance",
-            summary: "Named Home and Notch layout profiles."),
-        .init(
-            SurfaceTarget.home.key, .string, group: "appearance",
-            summary: "Home widget layout and configuration."),
-        .init(
-            SurfaceTarget.notch.key, .string, group: "appearance",
-            summary: "Notch widget layout and configuration."),
-        .init(
-            AppStorageKeys.General.settingsSection, .string, group: "panel",
-            summary: "Settings section a deep link opens."),
-        .init(
-            "extensionsExpand", .string, group: "panel",
-            summary: "Extension card selected by a deep link."),
-        .init(
-            AppStorageKeys.General.editMainWindowFullScreen, .bool, group: "panel",
-            summary: "Whether the main window opens in full screen.", scope: "standard",
-            fallback: .bool(false)),
-        .init(
-            AppStorageKeys.General.mainWindowZoom, .number, group: "panel",
-            summary: "Main window zoom factor.", fallback: .number(1)),
-        .init(
-            "onboardingCompleted", .bool, group: "panel",
-            summary: "Whether the welcome tour is finished.", fallback: .bool(false)),
-        .init(
-            AppStorageKeys.General.hotKeyCode, .int, group: "panel",
-            summary: "Global panel shortcut key code.", fallback: .integer(14)),
-        .init(
-            AppStorageKeys.General.hotKeyMods, .int, group: "panel",
-            summary: "Global panel shortcut modifiers.", fallback: .integer(2304)),
-        .init(
-            AppStorageKeys.General.hotKeyLabel, .string, group: "panel",
-            summary: "Global panel shortcut label."),
-        .init(
-            AppStorageKeys.General.mainWindowSection, .string, group: "panel",
-            summary: "Section the main window opens on."),
-        .init(
-            AppStorageKeys.General.settingsTab, .string, group: "panel",
-            summary: "Settings tab shown on open."),
-        .init(
-            AppStorageKeys.General.mainSidebarOpen, .bool, group: "panel",
-            summary: "Whether the main sidebar starts open.", fallback: .bool(true)),
-        .init(
-            AppStorageKeys.General.mainSidebarWidth, .number, group: "panel",
-            summary: "Main sidebar width in points."),
-        .init(
-            AppStorageKeys.General.settingsCategoriesExpanded, .bool, group: "panel",
-            summary: "Whether Settings categories are expanded.", fallback: .bool(false)),
-        .init(
-            AppStorageKeys.Extensions.automaticUpdates, .bool, group: "panel",
-            summary: "Automatically update downloaded extensions.", fallback: .bool(true)),
-        .init(
-            AppStorageKeys.Backup.icloud, .bool, group: "backup",
-            summary: "Use iCloud for owned backups.", fallback: .bool(true)),
-        .init(
-            AppStorageKeys.Backup.settings, .bool, group: "backup",
-            summary: "Back up application settings.", fallback: .bool(true)),
-    ]
+    public nonisolated static let applicationSettings: [HostCLISetting] =
+        [
+            .init(
+                AppStorageKeys.General.appearance, .string, group: "appearance",
+                summary: "Window and panel appearance.", allowed: ["system", "light", "dark"],
+                fallback: .string("system")),
+            .init(
+                AppStorageKeys.General.theme, .string, group: "appearance",
+                summary: "Accent palette name.", fallback: .string("default")),
+            .init(
+                AppStorageKeys.General.lastPaletteTheme, .string, group: "appearance",
+                summary: "Palette restored when a custom accent is cleared."),
+            .init(
+                AppStorageKeys.General.showDockIcon, .bool, group: "appearance",
+                summary: "Show Edith in the Dock.", fallback: .bool(false)),
+            .init(
+                AppStorageKeys.General.creditHidden, .bool, group: "appearance",
+                summary: "Hide the panel credit line.", fallback: .bool(false)),
+            .init(
+                AppStorageKeys.General.homeClockZones, .csv, group: "appearance",
+                summary: "Comma separated Home clock time zones."),
+            .init(
+                "surfaceLayoutProfiles", .string, group: "appearance",
+                summary: "Named Home and Notch layout profiles."),
+            .init(
+                SurfaceTarget.home.key, .string, group: "appearance",
+                summary: "Home widget layout and configuration."),
+            .init(
+                SurfaceTarget.notch.key, .string, group: "appearance",
+                summary: "Notch widget layout and configuration."),
+            .init(
+                AppStorageKeys.General.settingsSection, .string, group: "panel",
+                summary: "Settings section a deep link opens."),
+            .init(
+                "extensionsExpand", .string, group: "panel",
+                summary: "Extension card selected by a deep link."),
+            .init(
+                AppStorageKeys.General.editMainWindowFullScreen, .bool, group: "panel",
+                summary: "Whether the main window opens in full screen.", scope: "standard",
+                fallback: .bool(false)),
+            .init(
+                AppStorageKeys.General.mainWindowZoom, .number, group: "panel",
+                summary: "Main window zoom factor.", fallback: .number(1)),
+            .init(
+                "onboardingCompleted", .bool, group: "panel",
+                summary: "Whether the welcome tour is finished.", fallback: .bool(false)),
+            .init(
+                AppStorageKeys.General.hotKeyCode, .int, group: "panel",
+                summary: "Global panel shortcut key code.", fallback: .integer(14)),
+            .init(
+                AppStorageKeys.General.hotKeyMods, .int, group: "panel",
+                summary: "Global panel shortcut modifiers.", fallback: .integer(2304)),
+            .init(
+                AppStorageKeys.General.hotKeyLabel, .string, group: "panel",
+                summary: "Global panel shortcut label."),
+            .init(
+                AppStorageKeys.General.mainWindowSection, .string, group: "panel",
+                summary: "Section the main window opens on."),
+            .init(
+                AppStorageKeys.General.settingsTab, .string, group: "panel",
+                summary: "Settings tab shown on open."),
+            .init(
+                AppStorageKeys.General.mainSidebarOpen, .bool, group: "panel",
+                summary: "Whether the main sidebar starts open.", fallback: .bool(true)),
+            .init(
+                AppStorageKeys.General.mainSidebarWidth, .number, group: "panel",
+                summary: "Main sidebar width in points."),
+            .init(
+                AppStorageKeys.General.settingsCategoriesExpanded, .bool, group: "panel",
+                summary: "Whether Settings categories are expanded.", fallback: .bool(false)),
+            .init(
+                AppStorageKeys.Extensions.automaticUpdates, .bool, group: "panel",
+                summary: "Automatically update downloaded extensions.", fallback: .bool(true)),
+            .init(
+                AppStorageKeys.Backup.icloud, .bool, group: "backup",
+                summary: "Use iCloud for owned backups.", fallback: .bool(true)),
+            .init(
+                AppStorageKeys.Backup.settings, .bool, group: "backup",
+                summary: "Back up application settings.", fallback: .bool(true)),
+        ]
+        + [
+            (AppStorageKeys.Permissions.accessibilityGranted, "Accessibility"),
+            (AppStorageKeys.Permissions.calendarGranted, "Calendar"),
+            (AppStorageKeys.Permissions.cameraGranted, "Camera"),
+            (AppStorageKeys.Permissions.fullDiskGranted, "Full Disk Access"),
+            (AppStorageKeys.Permissions.inputMonitoringGranted, "Input Monitoring"),
+            (AppStorageKeys.Permissions.notificationsGranted, "Notifications"),
+            (AppStorageKeys.Permissions.screenRecordingGranted, "Screen Recording"),
+        ].map { key, name in
+            .init(
+                key, .bool, group: "permissions",
+                summary: "\(name) permission, as observed by Edith.", fallback: .bool(false),
+                readOnly: true)
+        } + [
+            .init(
+                AppStorageKeys.Permissions.filter, .string, group: "permissions",
+                summary: "Filter the Permissions page opens with.")
+        ]
 }
 
 struct HostCLIArguments {

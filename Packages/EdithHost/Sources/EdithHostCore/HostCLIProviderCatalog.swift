@@ -63,6 +63,7 @@ public struct HostCLIProviderCommand: Codable, Equatable, Sendable {
     public let streamOperation: String?
     public let streamDeadline: Double?
     public let readsInput: Bool?
+    public let jsonOutput: Bool?
 
     public var toolName: String {
         "edith_"
@@ -73,12 +74,13 @@ public struct HostCLIProviderCommand: Codable, Equatable, Sendable {
     public init(
         route: [String], operation: String, summary: String, destructive: Bool = false,
         timeout: Double = 30, streamOperation: String? = nil, streamDeadline: Double? = nil,
-        readsInput: Bool = false
+        readsInput: Bool = false, jsonOutput: Bool = true
     ) {
         self.route = route; self.operation = operation; self.summary = summary
         self.destructive = destructive; self.timeout = timeout
         self.streamOperation = streamOperation; self.streamDeadline = streamDeadline
         self.readsInput = readsInput
+        self.jsonOutput = jsonOutput
     }
 }
 
@@ -232,7 +234,10 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
     }
 
     public static let prefixes: [String: Set<String>] = [
-        "host": ["config", "app", "permissions"],
+        "host": [
+            "config", "app", "permissions", "guide", "schema", "version", "status", "install",
+            "uninstall", "completions", "extensions",
+        ],
         "keepAwake": [], "focusDim": [], "windowSweaters": [], "keystrokeHighlight": [],
         "micMute": [], "blitztree": [], "timeLapse": [], "terminal": [],
         "calendar": ["calendar"], "music": ["music"], "usage": ["usage"],

@@ -15,6 +15,38 @@ import Testing
             Data("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}".utf8))
     }
 
+    @MainActor @Test func coreConfigExportAndImportUseOriginalFlagsAndExplicitInput() async throws {
+        let name = "com.pulkit.edith.tests.mcp-config-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let service = HostCoreCLIService(
+            configuration: try HostConfigurationCLI(shared: defaults, standard: defaults),
+            action: { _ in throw HostCLIError.usage("Unexpected action") })
+        let output = MCPOutputFixture()
+        let server = HostMCPCLI(
+            version: "fixture",
+            invoke: { request in
+                if request.action == .ls { return Data("[]".utf8) }
+                return try await service.execute(request)
+            }, send: { try await output.append($0) })
+        try await initialize(server)
+        try await server.accept(
+            Data(
+                "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"edith_config_import\",\"arguments\":{\"arguments\":[\"-\",\"--dry-run\"],\"input\":\"{\\\"appearance\\\":\\\"dark\\\"}\"}}}"
+                    .utf8))
+        let preview = try await output.response(2).object?["result"]?.object
+        #expect(preview?["isError"] == .bool(false))
+        #expect(defaults.object(forKey: "appearance") == nil)
+        try await server.accept(
+            Data(
+                "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"edith_config_export\"}}"
+                    .utf8))
+        let export = try await output.response(3).object?["result"]?.object
+        #expect(export?["isError"] == .bool(false))
+        #expect(export?["content"]?.array?.first?.object?["text"] == .string("{}\n"))
+        await server.shutdown()
+    }
+
     @Test func stdioFramingUsesRealOwnedPipesAndCancellationWakesIdleRead() async throws {
         var input: [Int32] = [-1, -1], output: [Int32] = [-1, -1]
         #expect(pipe(&input) == 0 && pipe(&output) == 0)

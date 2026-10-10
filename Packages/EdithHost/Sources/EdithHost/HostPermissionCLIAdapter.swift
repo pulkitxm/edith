@@ -6,17 +6,33 @@ import Foundation
     private let permissions: HostPermissions
     private let entries: () -> [HostExtension]
     private let activeIDs: () -> Set<String>
+    private let defaults: UserDefaults?
 
-    init(permissions: HostPermissions, marketplace: HostMarketplace) {
+    init(permissions: HostPermissions, marketplace: HostMarketplace, defaults: UserDefaults? = nil)
+    {
         self.permissions = permissions; entries = { marketplace.entries }
         activeIDs = { marketplace.sessions.enabledIDs }
+        self.defaults = defaults
     }
 
     init(
         permissions: HostPermissions, entries: @escaping () -> [HostExtension],
-        activeIDs: @escaping () -> Set<String>
+        activeIDs: @escaping () -> Set<String>, defaults: UserDefaults? = nil
     ) {
         self.permissions = permissions; self.entries = entries; self.activeIDs = activeIDs
+        self.defaults = defaults
+    }
+
+    func refresh() async throws {
+        await permissions.refresh()
+        try Task.checkCancellation()
+        recordObservedGrants()
+    }
+
+    private func recordObservedGrants() {
+        for (permission, granted) in permissions.granted {
+            if let key = permission.grantedDefaultsKey { defaults?.set(granted, forKey: key) }
+        }
     }
 
     func execute(_ arguments: [String]) async throws -> ExtensionCLIReply {
@@ -34,8 +50,7 @@ import Foundation
             guard words.isEmpty, !attention || action != "refresh" else {
                 throw HostCLIError.usage("Invalid permission arguments.")
             }
-            await permissions.refresh()
-            try Task.checkCancellation()
+            try await refresh()
             var rows = permissions.usages(
                 entries: entries(), activeIDs: activeIDs())
             if attention { rows = rows.filter(\.blocksEnabledExtension) }
@@ -62,6 +77,7 @@ import Foundation
                 }
                 await permissions.request(permission)
                 try Task.checkCancellation()
+                recordObservedGrants()
                 let granted = permissions.granted[permission] == true
                 values = .object([
                     "permission": .string(permission.rawValue), "requested": .bool(true),
