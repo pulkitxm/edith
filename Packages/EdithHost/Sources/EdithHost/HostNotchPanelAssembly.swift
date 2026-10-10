@@ -15,6 +15,7 @@ final class HostNotchPanelAssembly {
     private let reportFailure: @MainActor (UUID, String) -> Void
     private var records: [UUID: Record] = [:]
     private var creating: [UUID: Task<Void, Never>] = [:]
+    private var creationRequests: [UUID: UUID] = [:]
     private var retiring: [UUID: HostNotchSceneLease] = [:]
     private var closing: [UUID: Task<Void, Never>] = [:]
     private(set) var state: HostNotchPanelState?
@@ -154,22 +155,44 @@ final class HostNotchPanelAssembly {
             record.slot?.providerVersion == slot?.providerVersion
         {
             record.slot = slot
-            if let lease = record.lease { position(lease, record: record) }
+            if let lease = record.lease {
+                position(lease, record: record)
+            } else if record.task == nil {
+                startCreate(id: id, record: record)
+            }
             return
         }
         remove(id)
         let record = Record(request: request, slot: slot)
         records[id] = record
+        startCreate(id: id, record: record)
+    }
+
+    private func startCreate(id: UUID, record: Record) {
+        let request = record.request
         let token = record.token
         let task = Task { [weak self, weak record] in
             guard let self, let record else { return }
-            defer { creating[token] = nil }
+            defer { creating[token] = nil; creationRequests[token] = nil; record.task = nil }
             do {
+                try Task.checkCancellation()
+                for (other, pending) in Array(creating)
+                where other != token && creationRequests[other] == request.presentationID {
+                    await pending.value
+                }
+                if let pending = closing[request.presentationID] { await pending.value }
+                if let previous = retiring[request.presentationID] {
+                    try await release(previous)
+                    retiring[request.presentationID] = nil
+                }
+                try Task.checkCancellation()
+                guard !stopped, records[id] === record else { return }
                 let lease = try await create(request)
                 guard !Task.isCancelled, !stopped, records[id] === record else {
                     retire(lease); return
                 }
                 record.lease = lease
+                failures[id] = nil
                 lease.measuredHeight = { [weak self, weak record] height in
                     guard let self, let record, records[id] === record, !stopped,
                         let slot = record.slot, height.isFinite, (0...1200).contains(height)
@@ -189,6 +212,7 @@ final class HostNotchPanelAssembly {
         }
         record.task = task
         creating[token] = task
+        creationRequests[token] = request.presentationID
     }
 
     private func position(_ lease: HostNotchSceneLease, record: Record) {

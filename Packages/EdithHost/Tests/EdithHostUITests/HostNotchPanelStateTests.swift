@@ -7,6 +7,28 @@ import Testing
 @testable import EdithHost
 
 struct HostNotchPanelStateTests {
+    @Test func actualCalendarNotchRoutePreservesOriginalTileAndEightSceneCapacity() throws {
+        let fixture = HostNotchStateFixture()
+        var tile = SurfaceTile(.calendar)
+        tile.title = "Synthetic meetings"
+        tile.itemLimit = 3
+        let slot = fixture.slot(provider: "calendar", tile: tile)
+        let state = fixture.state(slots: [slot])
+        let request = try slot.request(presentationID: UUID())
+        #expect(request.location == "notch" && request.section == "calendar")
+        #expect(request.surface?.target == .notch && request.surface?.tile == tile)
+        try state.validate(
+            fixture.admission(
+                active: ["notchShelf": "1.0.0", "calendar": "1.0.0"],
+                layout: .init(tiles: [tile]), reserved: ["calendar": 7]))
+        #expect(throws: HostNotchPanelError.capacityExceeded) {
+            try state.validate(
+                fixture.admission(
+                    active: ["notchShelf": "1.0.0", "calendar": "1.0.0"],
+                    layout: .init(tiles: [tile]), reserved: ["calendar": 8]))
+        }
+    }
+
     @Test func originalTileCustomizationAndHardwarePositionArePreserved() throws {
         let fixture = HostNotchStateFixture()
         let state = fixture.state()

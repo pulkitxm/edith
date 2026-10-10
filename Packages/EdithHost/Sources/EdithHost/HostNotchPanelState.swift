@@ -91,12 +91,16 @@ struct HostNotchPanelState: Codable, Equatable, Sendable {
     let acceptsPointer: Bool
     let acceptsKeyFocus: Bool
     let slots: [HostNotchNativeSlot]
+    var layoutEditing: Bool? = nil
     var capacityWidth: Double? = nil
     var capacityHeight: Double? = nil
 
     static let maximumBytes = 131_072
     static let maximumSlots = 32
     static let providerSceneLimit = 16
+    static func sceneLimit(for provider: String) -> Int {
+        provider == "calendar" ? 8 : providerSceneLimit
+    }
 
     static func decode(_ data: Data) throws -> Self {
         guard !data.isEmpty, data.count <= maximumBytes else {
@@ -133,8 +137,8 @@ struct HostNotchPanelState: Codable, Equatable, Sendable {
                 $0.isFinite && $0 >= shapeHeight
                     && $0 <= admission.display.frame.height - 12
             }) ?? true,
-            admission.reservedProviderScenes.values.allSatisfy({
-                (0...Self.providerSceneLimit).contains($0)
+            admission.reservedProviderScenes.allSatisfy({
+                (0...Self.sceneLimit(for: $0.key)).contains($0.value)
             }),
             slots.count <= Self.maximumSlots, Set(slots.map(\.id)).count == slots.count,
             !slots.contains(where: { $0.id == presentationID }),
@@ -181,7 +185,9 @@ struct HostNotchPanelState: Codable, Equatable, Sendable {
                 }
             }
             providerCounts[slot.providerID, default: 0] += 1
-            guard providerCounts[slot.providerID, default: 0] <= Self.providerSceneLimit else {
+            guard
+                providerCounts[slot.providerID, default: 0] <= Self.sceneLimit(for: slot.providerID)
+            else {
                 throw HostNotchPanelError.capacityExceeded
             }
         }

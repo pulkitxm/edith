@@ -220,7 +220,7 @@ final class HostNotchPanelCoordinator {
             $0[$1.providerID, default: 0] += 1
         }
         counts["notchShelf", default: 0] += next.states.filter(\.visible).count
-        guard counts.values.allSatisfy({ $0 <= HostNotchPanelState.providerSceneLimit }) else {
+        guard counts.allSatisfy({ $0.value <= HostNotchPanelState.sceneLimit(for: $0.key) }) else {
             throw HostNotchPanelError.capacityExceeded
         }
         var admissions: [UInt32: HostNotchPanelAdmission] = [:]

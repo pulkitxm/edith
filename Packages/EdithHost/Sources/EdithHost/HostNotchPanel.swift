@@ -73,6 +73,7 @@ final class HostNotchContainerController: NSViewController {
         loadViewIfNeeded()
         view.frame.size = size
         nativeLayer.frame = view.bounds
+        nativeLayer.interactionEnabled = state.layoutEditing != true
         mask.frame = nativeLayer.bounds
         let top: CGFloat = state.phase == .collapsed ? 0 : 10
         let bottom: CGFloat = state.phase == .expanded ? 22 : state.phase == .alert ? 20 : 12
@@ -148,7 +149,9 @@ private class HostNotchFlippedView: NSView {
 }
 
 private final class HostNotchPassthroughView: HostNotchFlippedView {
+    var interactionEnabled = true
     override func hitTest(_ point: NSPoint) -> NSView? {
+        guard interactionEnabled else { return nil }
         let result = super.hitTest(point)
         return result === self ? nil : result
     }

@@ -338,12 +338,13 @@ private final class HostNotchAppKitAction: NSObject, HostNotchNativeAction,
         _ sharingServicePicker: NSSharingServicePicker,
         delegateFor sharingService: NSSharingService
     ) -> (any NSSharingServiceDelegate)? {
-        self.service = sharingService; return self
+        return self
     }
     func sharingServicePicker(
         _ sharingServicePicker: NSSharingServicePicker,
         didChoose service: NSSharingService?
     ) {
+        self.service = service
         if service == nil { end(completed: false, outside: false, error: nil) }
     }
     func sharingService(_ sharingService: NSSharingService, didShareItems items: [Any]) {
