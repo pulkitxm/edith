@@ -119,171 +119,200 @@ async function artifacts(root, exported = api) {
   return vendor;
 }
 
-describe("verified native cache", () => {
-  test("production build gate reuses unchanged artifacts and propagates patch-triggered rebuild failure", async () => {
-    const root = await fixture();
-    try {
-      for (const path of ghosttyBuildInputs) {
-        await copyFile(path, join(root, path));
-      }
-      await artifacts(root);
-      await recordGhosttyArtifacts(root, await ghosttyNativeFingerprint(root));
-      const tools = join(root, "tools");
-      await mkdir(tools);
-      const marker = join(root, "rebuild-attempted");
-      await writeFile(
-        join(tools, "git"),
-        '#!/bin/sh\nprintf rebuild > "$GHOSTTY_REBUILD_MARKER"\nexit 23\n',
-        { mode: 0o755 },
-      );
-      const options = {
-        cwd: root,
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          PATH: `${tools}:${process.env.PATH}`,
-          GHOSTTY_REBUILD_MARKER: marker,
-        },
-      };
-      const unchanged = spawnSync(
-        "bash",
-        ["scripts/build-ghostty.sh", "--extension-only"],
-        options,
-      );
-      expect(unchanged.status).toBe(0);
-      expect(unchanged.stdout).toContain(
-        "Reusing verified Ghostty native fingerprint",
-      );
-      await expect(readFile(marker)).rejects.toThrow();
-      const patch = join(root, "scripts/patches/ghostty-external-io.patch");
-      await writeFile(patch, `${await readFile(patch, "utf8")}\n`);
-      const changed = spawnSync(
-        "bash",
-        ["scripts/build-ghostty.sh", "--extension-only"],
-        options,
-      );
-      expect(changed.status).toBe(23);
-      expect(await readFile(marker, "utf8")).toBe("rebuild");
-      expect(changed.stdout).not.toContain("Reusing verified");
-      await expect(
-        verifyGhosttyArtifacts(root, await ghosttyNativeFingerprint(root)),
-      ).rejects.toThrow("Stale Ghostty");
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+const nativeTest = process.platform === "darwin" ? test : test.skip;
 
-  test("unchanged input reuses a verified archive; source, pin, toolchain and architecture invalidate", async () => {
-    const root = await fixture();
-    try {
-      await artifacts(root);
-      const fingerprint = await ghosttyNativeFingerprint(root, toolchain);
-      await recordGhosttyArtifacts(root, fingerprint);
-      await verifyGhosttyArtifacts(
-        root,
-        await ghosttyNativeFingerprint(root, toolchain),
-      );
-      const receipt = await readFile(
-        join(root, "Extensions/terminal/Native/vendor/.ghostty-native.json"),
-        "utf8",
-      );
-      await verifyGhosttyArtifacts(root, fingerprint);
-      expect(
-        await readFile(
+describe("verified native cache", () => {
+  nativeTest(
+    "production build gate reuses unchanged artifacts and propagates patch-triggered rebuild failure",
+    async () => {
+      const root = await fixture();
+      try {
+        for (const path of ghosttyBuildInputs) {
+          await copyFile(path, join(root, path));
+        }
+        await artifacts(root);
+        await recordGhosttyArtifacts(
+          root,
+          await ghosttyNativeFingerprint(root),
+        );
+        const tools = join(root, "tools");
+        await mkdir(tools);
+        const marker = join(root, "rebuild-attempted");
+        await writeFile(
+          join(tools, "git"),
+          '#!/bin/sh\nprintf rebuild > "$GHOSTTY_REBUILD_MARKER"\nexit 23\n',
+          { mode: 0o755 },
+        );
+        const options = {
+          cwd: root,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            PATH: `${tools}:${process.env.PATH}`,
+            GHOSTTY_REBUILD_MARKER: marker,
+          },
+        };
+        const unchanged = spawnSync(
+          "bash",
+          ["scripts/build-ghostty.sh", "--extension-only"],
+          options,
+        );
+        expect(unchanged.status).toBe(0);
+        expect(unchanged.stdout).toContain(
+          "Reusing verified Ghostty native fingerprint",
+        );
+        await expect(readFile(marker)).rejects.toThrow();
+        const patch = join(root, "scripts/patches/ghostty-external-io.patch");
+        await writeFile(patch, `${await readFile(patch, "utf8")}\n`);
+        const changed = spawnSync(
+          "bash",
+          ["scripts/build-ghostty.sh", "--extension-only"],
+          options,
+        );
+        expect(changed.status).toBe(23);
+        expect(await readFile(marker, "utf8")).toBe("rebuild");
+        expect(changed.stdout).not.toContain("Reusing verified");
+        await expect(
+          verifyGhosttyArtifacts(root, await ghosttyNativeFingerprint(root)),
+        ).rejects.toThrow("Stale Ghostty");
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  nativeTest(
+    "unchanged input reuses a verified archive; source, pin, toolchain and architecture invalidate",
+    async () => {
+      const root = await fixture();
+      try {
+        await artifacts(root);
+        const fingerprint = await ghosttyNativeFingerprint(root, toolchain);
+        await recordGhosttyArtifacts(root, fingerprint);
+        await verifyGhosttyArtifacts(
+          root,
+          await ghosttyNativeFingerprint(root, toolchain),
+        );
+        const receipt = await readFile(
           join(root, "Extensions/terminal/Native/vendor/.ghostty-native.json"),
           "utf8",
-        ),
-      ).toBe(receipt);
-      for (const path of ghosttyBuildInputs) {
-        const original = await readFile(join(root, path), "utf8");
-        await writeFile(join(root, path), `${original}\nchanged pin or source`);
-        const changed = await ghosttyNativeFingerprint(root, toolchain);
-        expect(changed).not.toBe(fingerprint);
-        await expect(verifyGhosttyArtifacts(root, changed)).rejects.toThrow(
-          "Stale Ghostty",
         );
-        await writeFile(join(root, path), original);
-      }
-      for (const change of [
-        { zig: "changed" },
-        { sdk: "changed" },
-        { architecture: "other" },
-      ]) {
+        await verifyGhosttyArtifacts(root, fingerprint);
         expect(
-          await ghosttyNativeFingerprint(root, { ...toolchain, ...change }),
-        ).not.toBe(fingerprint);
+          await readFile(
+            join(
+              root,
+              "Extensions/terminal/Native/vendor/.ghostty-native.json",
+            ),
+            "utf8",
+          ),
+        ).toBe(receipt);
+        for (const path of ghosttyBuildInputs) {
+          const original = await readFile(join(root, path), "utf8");
+          await writeFile(
+            join(root, path),
+            `${original}\nchanged pin or source`,
+          );
+          const changed = await ghosttyNativeFingerprint(root, toolchain);
+          expect(changed).not.toBe(fingerprint);
+          await expect(verifyGhosttyArtifacts(root, changed)).rejects.toThrow(
+            "Stale Ghostty",
+          );
+          await writeFile(join(root, path), original);
+        }
+        for (const change of [
+          { zig: "changed" },
+          { sdk: "changed" },
+          { architecture: "other" },
+        ]) {
+          expect(
+            await ghosttyNativeFingerprint(root, { ...toolchain, ...change }),
+          ).not.toBe(fingerprint);
+        }
+      } finally {
+        await rm(root, { recursive: true, force: true });
       }
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+    },
+  );
 
-  test("missing API symbols cannot acquire a receipt; partial and modified resources fail verification", async () => {
-    const root = await fixture();
-    try {
-      const vendor = await artifacts(root, api.slice(0, -1));
-      const fingerprint = await ghosttyNativeFingerprint(root, toolchain);
-      await expect(recordGhosttyArtifacts(root, fingerprint)).rejects.toThrow(
-        "Missing Ghostty symbol",
-      );
-      await expect(
-        readFile(join(vendor, ".ghostty-native.json")),
-      ).rejects.toThrow();
-      await artifacts(root);
-      await recordGhosttyArtifacts(root, fingerprint);
-      const terminfo = join(
-        vendor,
-        "GhosttyResources/terminfo/78/xterm-ghostty",
-      );
-      await writeFile(terminfo, "corrupted resource");
-      await expect(verifyGhosttyArtifacts(root, fingerprint)).rejects.toThrow(
-        "contents differ",
-      );
-      await rm(terminfo);
-      await expect(verifyGhosttyArtifacts(root, fingerprint)).rejects.toThrow();
-      await expect(recordGhosttyArtifacts(root, fingerprint)).rejects.toThrow();
-      await artifacts(root);
-      await rm(
-        join(
+  nativeTest(
+    "missing API symbols cannot acquire a receipt; partial and modified resources fail verification",
+    async () => {
+      const root = await fixture();
+      try {
+        const vendor = await artifacts(root, api.slice(0, -1));
+        const fingerprint = await ghosttyNativeFingerprint(root, toolchain);
+        await expect(recordGhosttyArtifacts(root, fingerprint)).rejects.toThrow(
+          "Missing Ghostty symbol",
+        );
+        await expect(
+          readFile(join(vendor, ".ghostty-native.json")),
+        ).rejects.toThrow();
+        await artifacts(root);
+        await recordGhosttyArtifacts(root, fingerprint);
+        const terminfo = join(
           vendor,
-          "GhosttyKit.xcframework",
-          `macos-${architecture}`,
-          "Headers/module.modulemap",
-        ),
-      );
-      await expect(recordGhosttyArtifacts(root, fingerprint)).rejects.toThrow();
-      await expect(
-        verifyGhosttyArtifacts(root, fingerprint, "other"),
-      ).rejects.toThrow();
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+          "GhosttyResources/terminfo/78/xterm-ghostty",
+        );
+        await writeFile(terminfo, "corrupted resource");
+        await expect(verifyGhosttyArtifacts(root, fingerprint)).rejects.toThrow(
+          "contents differ",
+        );
+        await rm(terminfo);
+        await expect(
+          verifyGhosttyArtifacts(root, fingerprint),
+        ).rejects.toThrow();
+        await expect(
+          recordGhosttyArtifacts(root, fingerprint),
+        ).rejects.toThrow();
+        await artifacts(root);
+        await rm(
+          join(
+            vendor,
+            "GhosttyKit.xcframework",
+            `macos-${architecture}`,
+            "Headers/module.modulemap",
+          ),
+        );
+        await expect(
+          recordGhosttyArtifacts(root, fingerprint),
+        ).rejects.toThrow();
+        await expect(
+          verifyGhosttyArtifacts(root, fingerprint, "other"),
+        ).rejects.toThrow();
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
 
-  test("packaging rejects absent native receipt before touching host, staging or signing", async () => {
-    const root = await fixture();
-    try {
-      await writeFile(
-        join(root, "Extensions/manifest.json"),
-        JSON.stringify([consumer("terminal")]),
-      );
-      await expect(
-        buildExtensionPackage({
-          root,
-          id: "terminal",
-          containedHostApp: "/nonexistent-synthetic-host.app",
-        }),
-      ).rejects.toThrow(".ghostty-native.json");
-      await expect(
-        readFile(join(root, "dist/extensions/.staging/terminal")),
-      ).rejects.toThrow();
-      await verifyExtensionNativeDependencies(root, {
-        nativeProduct: "Unrelated",
-      });
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+  nativeTest(
+    "packaging rejects absent native receipt before touching host, staging or signing",
+    async () => {
+      const root = await fixture();
+      try {
+        await writeFile(
+          join(root, "Extensions/manifest.json"),
+          JSON.stringify([consumer("terminal")]),
+        );
+        await expect(
+          buildExtensionPackage({
+            root,
+            id: "terminal",
+            containedHostApp: "/nonexistent-synthetic-host.app",
+          }),
+        ).rejects.toThrow(".ghostty-native.json");
+        await expect(
+          readFile(join(root, "dist/extensions/.staging/terminal")),
+        ).rejects.toThrow();
+        await verifyExtensionNativeDependencies(root, {
+          nativeProduct: "Unrelated",
+        });
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
 
   test("patch and native source select all declared consumers and dependents, never unrelated extensions", async () => {
     const root = await fixture();
