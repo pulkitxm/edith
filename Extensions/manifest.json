@@ -2828,6 +2828,7 @@
         "Extensions/herdr/Activity/HerdrNotificationService.swift",
         "Extensions/herdr/CLI/CLIEnvironment.swift",
         "Extensions/herdr/CLI/HerdrCLIExecution.swift",
+        "Extensions/herdr/CLI/HerdrCLICatalog.swift",
         "Extensions/herdr/CLI/HerdrCommands.swift",
         "Extensions/herdr/CLI/HerdrLaunchCommands.swift",
         "Extensions/herdr/CLI/HerdrLayoutCommands.swift",
@@ -2946,6 +2947,7 @@
         "Extensions/quinjet/Views/Support/TerminalSessionHolder.swift",
         "Extensions/quinjet/CLI/CLIEnvironment.swift",
         "Extensions/quinjet/CLI/QuinjetCLIExecution.swift",
+        "Extensions/quinjet/CLI/QuinjetCLICatalog.swift",
         "Extensions/quinjet/CLI/QuinjetCommands.swift",
         "Extensions/quinjet/Transport/OwnedTerminalPTY.swift",
         "Extensions/quinjet/Transport/OwnedTerminalSession.swift"

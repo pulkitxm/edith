@@ -100,6 +100,13 @@ import Foundation
     func execute(_ command: String, payload: Data) async throws -> Data {
         guard !isStopped else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
+        if command == "herdr.cli.catalog" {
+            guard payload.count <= 16384,
+                let value = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
+                value.isEmpty
+            else { throw ExtensionPeerError.invalidRequest }
+            return try HerdrCLICatalog.data()
+        }
         if ["herdr.cli.start", "herdr.cli.read", "herdr.cli.cancel", "herdr.cli.end"].contains(
             command)
         {

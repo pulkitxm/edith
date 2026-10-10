@@ -188,7 +188,8 @@ struct QuinjetLaunchCommand: AsyncParsableCommand {
         try await execute {
             let plan = try await QuinjetCLI.plan(
                 path: path, machine: target.machine, launch: launch)
-            let status = try await QuinjetCLIEnvironment.launch(plan.request, json)
+            let status = try await QuinjetCLIEnvironment.launch(
+                plan.request, json || ExtensionCLIContext.request?.interactive == false)
             guard status == 0 else { throw ExitCode(status) }
             if json {
                 QuinjetCLI.renderPlan(plan, launched: true, json: true)
@@ -615,7 +616,11 @@ enum QuinjetCLIEnvironment {
                 standardInputData: ExtensionCLIContext.request?.standardInput,
                 terminatesProcessGroup: true)
         ) { _ in }
-        CLIOut.rawError(String(decoding: result.standardOutputData, as: UTF8.self))
+        if ExtensionCLIContext.request?.arguments.contains("--json") == true {
+            CLIOut.rawError(String(decoding: result.standardOutputData, as: UTF8.self))
+        } else {
+            CLIOut.raw(String(decoding: result.standardOutputData, as: UTF8.self))
+        }
         CLIOut.rawError(String(decoding: result.standardErrorData, as: UTF8.self))
         return result.terminationStatus
     }

@@ -131,6 +131,13 @@ import Foundation
     func execute(_ command: String, payload: Data) async throws -> Data {
         guard !isStopped else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
+        if command == "quinjet.cli.catalog" {
+            guard payload.count <= 16384,
+                let value = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
+                value.isEmpty
+            else { throw ExtensionPeerError.invalidRequest }
+            return try QuinjetCLICatalog.data()
+        }
         if ["quinjet.cli.start", "quinjet.cli.read", "quinjet.cli.cancel", "quinjet.cli.end"]
             .contains(command)
         {

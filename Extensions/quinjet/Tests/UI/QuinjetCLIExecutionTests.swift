@@ -93,8 +93,37 @@ import Testing
             worker: worker)
         #expect(reply.exitCode == 17 && reply.stdout.isEmpty)
         #expect(reply.stderr == "fixture-input ☃fixture-error")
+        let foreground = try await QuinjetCLIExecution.run(
+            .init(
+                arguments: ["launch", "synthetic project"],
+                standardInput: Data("fixture-input ☃".utf8),
+                workingDirectory: root.path, interactive: false), worker: worker)
+        #expect(foreground.exitCode == 17 && foreground.stdout == "fixture-input ☃")
+        #expect(foreground.stderr == "fixture-error")
         #expect(ExtensionCLIContext.request == nil && QuinjetCLIEnvironment.context == nil)
         await worker.shutdown()
+    }
+
+    @Test func liveCatalogPublishesOriginalLeafRoutesAndWithdrawsWithOwner() async throws {
+        defer { QuinjetWorkOwnership.enable() }
+        let worker = QuinjetWorker(
+            client: .init(execute: { _ in Data("[]".utf8) }), automaticActions: false)
+        let data = try await worker.execute("quinjet.cli.catalog", payload: Data("{}".utf8))
+        let value = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(value["owner"] as? String == "quinjet" && value["version"] as? Int == 1)
+        let commands = try #require(value["commands"] as? [[String: Any]])
+        let routes = commands.compactMap { $0["route"] as? [String] }
+        #expect(routes.contains(["quinjet", "launch"]))
+        #expect(Set(routes.map { $0.joined(separator: " ") }).count == routes.count)
+        #expect(
+            commands.allSatisfy {
+                $0["operation"] as? String == "quinjet.cli"
+                    && $0["streamOperation"] as? String == "quinjet.cli"
+            })
+        await worker.shutdown()
+        await #expect(throws: ExtensionPeerError.self) {
+            try await worker.execute("quinjet.cli.catalog", payload: Data("{}".utf8))
+        }
     }
 
     @Test func originalMachineSelectorsAcceptSavedIDsNamesTargetsAndUnambiguousPrefixes() throws {

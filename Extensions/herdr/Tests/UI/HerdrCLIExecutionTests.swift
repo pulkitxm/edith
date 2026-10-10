@@ -58,6 +58,27 @@ import Testing
         #expect(HerdrCLIEnvironment.context == nil && ExtensionCLIContext.request == nil)
     }
 
+    @Test func liveCatalogPublishesOriginalLeafRoutesAndWithdrawsWithOwner() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let worker = makeWorker()
+        let data = try await worker.execute("herdr.cli.catalog", payload: Data("{}".utf8))
+        let value = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(value["owner"] as? String == "herdr" && value["version"] as? Int == 1)
+        let commands = try #require(value["commands"] as? [[String: Any]])
+        let routes = commands.compactMap { $0["route"] as? [String] }
+        #expect(routes.contains(["herdr", "layout", "ls"]))
+        #expect(Set(routes.map { $0.joined(separator: " ") }).count == routes.count)
+        #expect(
+            commands.allSatisfy {
+                $0["operation"] as? String == "herdr.cli"
+                    && $0["streamOperation"] as? String == "herdr.cli"
+            })
+        await worker.shutdown()
+        await #expect(throws: ExtensionPeerError.self) {
+            try await worker.execute("herdr.cli.catalog", payload: Data("{}".utf8))
+        }
+    }
+
     @Test func originalMachineSelectorsAcceptSavedIDsNamesTargetsAndUnambiguousPrefixes() throws {
         let first = Machine(
             id: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!,
