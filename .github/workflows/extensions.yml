@@ -221,6 +221,7 @@ jobs:
           path: "dist/extensions/previous.json\ndist/extensions/previous-state.json\ndist/extensions/plan.json\n"
           retention-days: 7
   build:
+    name: "build (${{ matrix.id }})"
     needs:
       - tests
       - plan

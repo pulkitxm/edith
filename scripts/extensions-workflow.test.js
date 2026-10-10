@@ -399,3 +399,7 @@ test("lifecycle tool packaging does not alter any shipping package fingerprint i
     ]),
   ).toEqual([]);
 });
+
+test("package build job names bind the closed artifact intake to one owner", () => {
+  expect(workflow.jobs.build.name).toBe("build (${{ matrix.id }})");
+});
