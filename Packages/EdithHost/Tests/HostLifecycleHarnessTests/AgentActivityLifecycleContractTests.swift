@@ -1,4 +1,5 @@
 import Foundation
+import EdithHostCore
 import Testing
 @testable import HostLifecycleHarness
 
@@ -33,10 +34,55 @@ import Testing
         }
     }
 
+    @Test(arguments: [
+        "legacy-operation", "foreign-provider", "foreign-integration", "missing-marker",
+        "missing-event", "empty-group", "non-command", "missing-synthetic",
+    ])
+    func invalidProviderConfigurationsAreRejected(mode: String) throws {
+        var command = Worker.command
+        switch mode {
+        case "legacy-operation":
+            command = command.replacingOccurrences(
+                of: "agent activity hook --provider claude --integration-id edith-surfaces",
+                with: "activity.hook.claude")
+        case "foreign-provider":
+            command = command.replacingOccurrences(of: "provider claude", with: "provider codex")
+        case "foreign-integration":
+            command = command.replacingOccurrences(
+                of: "integration-id edith-surfaces", with: "integration-id unrelated")
+        case "missing-marker":
+            command = command.replacingOccurrences(
+                of: "EDITH_PROVIDER_HOOK=edith-surfaces", with: "OTHER=unrelated")
+        default: break
+        }
+        var hooks = Worker.hooks(command: command)
+        if mode == "missing-event" { hooks["PermissionRequest"] = nil }
+        if mode == "empty-group" { hooks["PreToolUse"] = [] }
+        if mode == "non-command" {
+            hooks["PreToolUse"] = [["hooks": [["type": "prompt", "command": command]]]]
+        }
+        var object: [String: Any] = ["synthetic": true, "hooks": hooks]
+        if mode == "missing-synthetic" { object["synthetic"] = nil }
+        let bytes = try JSONSerialization.data(withJSONObject: object)
+        #expect(throws: HostWorkerError.self) {
+            try AgentActivityFixture.validateSyntheticHooks(bytes)
+        }
+    }
+
     @MainActor final class Worker {
         let configuration = URL(fileURLWithPath: "/owned/synthetic/.claude/settings.json")
         let token = UUID()
-        let replacement = Data(#"{"hooks":"activity.hook.claude"}"#.utf8)
+        static let command =
+            "set -- /owned/fixture/ed agent activity hook --provider claude --integration-id edith-surfaces; if [ -n \"${TMUX_PANE-}\" ]; then set -- \"$@\" --pane \"$TMUX_PANE\"; fi; exec /usr/bin/env EDITH_PROVIDER_HOOK=edith-surfaces \"$@\""
+        static func hooks(command: String) -> [String: [[String: Any]]] {
+            Dictionary(
+                uniqueKeysWithValues: ["PreToolUse", "PermissionRequest", "SubagentStart"].map {
+                    ($0, [["hooks": [["type": "command", "command": command]]]])
+                })
+        }
+        let replacement = try! JSONSerialization.data(withJSONObject: [
+            "synthetic": true, "hooks": Worker.hooks(command: Worker.command),
+        ])
         var bytes = Data("{\n  \"synthetic\": true\n}\n".utf8)
         var commands: [String] = []
         let mode: String
