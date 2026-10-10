@@ -360,7 +360,8 @@ ci-osv:
 
 ci-semgrep:
 	@command -v semgrep >/dev/null || { echo "semgrep missing: run make ci-tools" >&2; exit 1; }
-	semgrep scan --error --config p/rust --config p/swift --config p/secrets --config p/github-actions .
+	python3 scripts/test-semgrep.py
+	python3 scripts/check-semgrep.py -- semgrep
 
 ci-trivy:
 	@command -v trivy >/dev/null || { echo "trivy missing: run make ci-tools" >&2; exit 1; }
