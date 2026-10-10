@@ -55,8 +55,10 @@ import Observation
         }
     }
     func stop() {
+        guard !stopped else { return }
         stopped = true
         operations.cancel()
+        client.invalidate()
         for task in tasks.values { task.cancel() }
         tasks.removeAll()
     }

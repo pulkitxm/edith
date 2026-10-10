@@ -19,7 +19,6 @@ import Foundation
     ) {
         self.defaults = defaults; self.confirm = confirm; self.recoveryOnly = recoveryOnly
         if !recoveryOnly { defaults.set(true, forKey: LidAwakeState.enabledKey) }
-        defaults.set(true, forKey: LidAwakeState.restoreOnQuitKey)
         let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
         let created =
             engine
@@ -55,10 +54,7 @@ import Foundation
     ) async throws -> LidAwakeSnapshot {
         switch request {
         case .status: return engine.snapshot()
-        case .setRestoreOnQuit(false):
-            throw ExtensionPeerError.rejected(
-                "Sleep restoration is required before disabling, updating, or quitting Edith.")
-        case .setBatteryThreshold, .setRestoreOnQuit(true):
+        case .setBatteryThreshold, .setRestoreOnQuit:
             guard LidAwakeOperationExecution.applySetting(request, defaults: defaults) else {
                 throw ExtensionPeerError.invalidRequest
             }
@@ -83,6 +79,17 @@ import Foundation
 
     func prepareDisable() async throws { try await engine.prepareDisable() }
     func requestApproval() throws { try engine.requestApproval() }
+    func prepareToStop() async {
+        if !stopped {
+            stopped = true
+            operations.cancel()
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+            observer = nil
+        }
+        await engine.shutdownForTermination()
+        defaults.set(false, forKey: LidAwakeState.enabledKey)
+    }
+
     func shutdown() {
         guard !stopped else { return }; stopped = true
         operations.cancel()

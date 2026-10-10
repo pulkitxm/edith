@@ -2,6 +2,7 @@ import Combine
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
+import Observation
 import SwiftUI
 
 struct LidAwakeRows: View {
@@ -12,6 +13,13 @@ struct LidAwakeRows: View {
     @State private var confirmingActivation = false
     @ObservedObject var operations: LidAwakeOperationModel
     var chooseSession: (LidAwakeSession) -> Void
+    @State private var restoration: LidAwakeRestorationControl
+
+    init(operations: LidAwakeOperationModel, chooseSession: @escaping (LidAwakeSession) -> Void) {
+        self.operations = operations
+        self.chooseSession = chooseSession
+        _restoration = State(initialValue: LidAwakeRestorationControl(operations: operations))
+    }
 
     private var activeBinding: Binding<Bool> {
         Binding(
@@ -73,11 +81,14 @@ struct LidAwakeRows: View {
                     "When the Mac is on battery and reaches this floor, lid awake pauses until it is charged again. Starting it manually below the floor overrides the pause for that discharge."
                 )
                 .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
-                Label(
-                    "Sleep is restored before disabling, updating, or quitting Edith",
-                    systemImage: "checkmark.shield"
-                )
-                .font(.edithText(.caption))
+                Toggle(isOn: restoration.binding) {
+                    HStack(spacing: UIScale.pt(6)) {
+                        Text("Restore normal sleep when Edith quits")
+                        InfoDot(
+                            "Leave this on so the Mac sleeps normally again once Edith is not running. Turning the extension off always restores it, whatever this is set to."
+                        )
+                    }
+                }
                 Text(
                     "While this is on the Mac stays awake with a closed lid, so it keeps drawing power and shedding heat. Do not put it in a bag like this."
                 )
@@ -130,7 +141,52 @@ struct LidAwakeRows: View {
                     for: .on((LidAwakeSession(rawValue: sessionRaw) ?? .indefinite)))?.warning
                     ?? "")
         }
+        .alert(
+            "Leave lid-close sleep disabled after quitting?",
+            isPresented: $restoration.confirmingDisabled
+        ) {
+            Button("Turn Off Restoration", role: .destructive) { restoration.confirmDisable() }
+            Button("Cancel", role: .cancel) { restoration.cancelDisable() }
+        } message: {
+            Text(LidAwakeOperationExecution.preview(for: .setRestoreOnQuit(false))?.warning ?? "")
+        }
     }
 
     private func applySetting(_ request: LidAwakeRequest) { operations.perform(request) }
+}
+
+@MainActor @Observable
+final class LidAwakeRestorationControl {
+    var confirmingDisabled = false
+    private let operations: LidAwakeOperationModel
+
+    init(operations: LidAwakeOperationModel) { self.operations = operations }
+
+    var binding: Binding<Bool> {
+        Binding(
+            get: { self.operations.lastSnapshot?.restoreOnQuit ?? true },
+            set: { self.choose($0) })
+    }
+
+    func choose(_ enabled: Bool) {
+        guard operations.lastSnapshot?.extensionEnabled == true, !operations.applying else {
+            return
+        }
+        if enabled {
+            operations.perform(.setRestoreOnQuit(true))
+        } else {
+            confirmingDisabled = true
+        }
+    }
+
+    func confirmDisable() {
+        guard confirmingDisabled else { return }
+        confirmingDisabled = false
+        guard operations.lastSnapshot?.extensionEnabled == true, !operations.applying else {
+            return
+        }
+        operations.perform(.setRestoreOnQuit(false))
+    }
+
+    func cancelDisable() { confirmingDisabled = false }
 }

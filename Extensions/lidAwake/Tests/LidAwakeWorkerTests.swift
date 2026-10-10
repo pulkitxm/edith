@@ -144,9 +144,9 @@ private final class LidAwakeJournalProbe: @unchecked Sendable {
                 payload: SurfaceSnapshotRequest(target: .home, tile: tile).encoded(
                     providerID: "lidAwake")), providerID: "lidAwake")
         #expect(masked.rows.isEmpty && masked.actions.isEmpty && masked.metrics.isEmpty)
-        await #expect(throws: ExtensionPeerError.self) {
-            try await worker.perform(.setRestoreOnQuit(false))
-        }
+        let changed = try await worker.perform(.setRestoreOnQuit(false))
+        #expect(!changed.restoreOnQuit)
         try await worker.prepareDisable()
+        #expect(mutations == [true, false])
     }
 }

@@ -82,7 +82,7 @@ final class ExtensionRuntime: NSObject {
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         Task {
-            await commands.shutdownAndWait(); try? await worker?.prepareDisable(); completion()
+            await commands.shutdownAndWait(); await worker?.prepareToStop(); completion()
         }
     }
 }
