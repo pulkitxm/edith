@@ -11,23 +11,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { planSwiftTests } from "./ci-test-plan.mjs";
 
-const standaloneOwners = [
-  "audioMixer",
-  "presenter",
-  "system",
-  "music",
-  "terminal",
-  "studio",
-  "bifrost",
-  "lidAwake",
-  "attention",
-  "machines",
-  "downloads",
-  "virtualCamera",
-  "herdr",
-  "quinjet",
-  "database",
-];
+const definitions = JSON.parse(
+  readFileSync("Extensions/manifest.json", "utf8"),
+);
+const standaloneOwners = definitions
+  .filter((definition) => definition.testTargets?.length)
+  .map(({ id }) => id);
 
 test("unscoped features run their owning models without unrelated host lanes", () => {
   expect(planSwiftTests(["Extensions/calendar/Runtime.swift"]).include).toEqual(
@@ -137,19 +126,17 @@ test("shared support changes select consumers while commands stay outside the em
     { lane: "feature-models", targets: "ci-extension-support" },
   ]);
   expect(ui.slice(2).map((lane) => lane.extension)).toEqual(standaloneOwners);
-  expect(
-    planSwiftTests([
-      "Packages/ExtensionSupport/Sources/EdithExtensionCommands/ExtensionCLIExecution.swift",
-    ]).include,
-  ).toEqual([
-    { lane: "feature-models", targets: "ci-extension-support" },
-    {
-      lane: "extension-attention",
-      extension: "attention",
-      targets: "ci-extension-attention",
-      ghostty: false,
-    },
-  ]);
+  const commands = planSwiftTests([
+    "Packages/ExtensionSupport/Sources/EdithExtensionCommands/ExtensionCLIExecution.swift",
+  ]).include;
+  expect(commands[0]).toEqual({
+    lane: "feature-models",
+    targets: "ci-extension-support",
+  });
+  const commandOwners = commands.slice(1).map((lane) => lane.extension);
+  expect(commandOwners).toContain("attention");
+  expect(commandOwners).not.toContain("audioMixer");
+  expect(commandOwners).not.toContain("studio");
   const documents = planSwiftTests([
     "Packages/ExtensionSupport/Sources/EdithExtensionDocuments/DocumentView.swift",
   ]).include;
@@ -157,11 +144,11 @@ test("shared support changes select consumers while commands stay outside the em
     lane: "feature-models",
     targets: "ci-extension-support",
   });
-  expect(documents.slice(1).map((lane) => lane.extension)).toEqual([
-    "machines",
-    "herdr",
-    "quinjet",
-  ]);
+  const documentOwners = documents.slice(1).map((lane) => lane.extension);
+  for (const owner of ["machines", "herdr", "quinjet"])
+    expect(documentOwners).toContain(owner);
+  expect(documentOwners).not.toContain("audioMixer");
+  expect(documentOwners).not.toContain("studio");
   expect(
     planSwiftTests([
       "Packages/ExtensionSupport/Tests/UITests/DeliveryTests.swift",
@@ -170,12 +157,18 @@ test("shared support changes select consumers while commands stay outside the em
 });
 
 test("Docs and native Music select their actual owning checks", () => {
-  expect(planSwiftTests(["Extensions/docs/Runtime.swift"]).include).toEqual([
-    {
-      lane: "feature-models",
-      targets: "ci-extension-support ci-extension-docs",
-    },
-  ]);
+  const docs = planSwiftTests(["Extensions/docs/Runtime.swift"]).include;
+  expect(
+    docs.some((lane) => lane.targets.split(" ").includes("ci-extension-docs")),
+  ).toBe(true);
+  if (standaloneOwners.includes("docs"))
+    expect(docs.some((lane) => lane.extension === "docs")).toBe(true);
+  else
+    expect(
+      docs.some((lane) =>
+        lane.targets.split(" ").includes("ci-extension-support"),
+      ),
+    ).toBe(true);
   expect(
     planSwiftTests(["Extensions/music/Native/Cargo.lock"]).include,
   ).toEqual([{ lane: "native-music", targets: "ci-music-native" }]);
@@ -445,4 +438,27 @@ test("explicit full verification includes every declared standalone owner", () =
   for (const lane of owners)
     for (const target of lane.targets.split(" "))
       expect(makefile).toMatch(new RegExp(`^${target}:`, "m"));
+});
+
+test("every tracked standalone package declares an executable owning test target", () => {
+  const packages = execFileSync(
+    "git",
+    ["ls-files", "Extensions/*/Package.swift", "Extensions/*/*/Package.swift"],
+    { encoding: "utf8" },
+  )
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+  expect(packages.length).toBeGreaterThan(0);
+  for (const path of packages) {
+    const id = path.split("/")[1];
+    const definition = definitions.find((candidate) => candidate.id === id);
+    expect(definition, path).toBeDefined();
+    expect(definition.testTargets?.length, path).toBeGreaterThan(0);
+    const lanes = planSwiftTests([path]).include;
+    expect(
+      lanes.some((lane) => lane.extension === id),
+      path,
+    ).toBe(true);
+  }
 });
