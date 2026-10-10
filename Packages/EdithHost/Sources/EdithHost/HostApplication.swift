@@ -228,7 +228,7 @@ struct HostApplication: App {
                     try await notch.stop()
                     try await ownedHerdr.stop()
                 } catch { return false }
-                let ready = await loaded.sessions.shutdown()
+                let ready = await loaded.sessions.shutdown(reason: .applicationQuit)
                 if ready {
                     windows.closeAll(); windows.uninstall()
                     await slots.stop()
