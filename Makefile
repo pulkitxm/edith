@@ -196,11 +196,6 @@ ci-extension-camera-voice:
 	python3 scripts/build-camera-microphone.py --test --driver local/camera-microphone/com.pulkit.edith.tests.camera.microphone.driver --output local/camera-microphone
 	swift test --package-path Extensions/virtualCamera/NativeRuntime --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --no-parallel
 
-.PHONY: ci-extension-camera-provider
-ci-extension-camera-provider: host
-	swift test --package-path Extensions/virtualCamera/Provider --build-system native --jobs $(EXTENSION_SWIFT_JOBS)
-	CAMERA_PROVIDER_LIBRARY=Extensions/virtualCamera/Provider/.build/debug/libCameraProvider.dylib bun scripts/test-camera-carrier.mjs
-
 ci-extension-docs:
 	swift test --package-path Packages/EdithDocsWorker --build-system native --jobs $(EXTENSION_SWIFT_JOBS)
 
