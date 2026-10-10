@@ -6,6 +6,50 @@ import Testing
 @testable import EdithHostCore
 
 @Suite @MainActor struct HostMarketplaceTests {
+    @Test func remoteSettingsAdmissionDoesNotDownloadOrStartADisabledEngine() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.store.commit([fixture.package("1.0.0")])
+        let marketplace = try fixture.marketplace()
+        let manager = HostRemoteSessionManager(marketplace: marketplace)
+        let settings = HostExtensionContentRequest(
+            extensionID: "sample", location: "settings", section: "extension")
+        let configuration = try manager.selectedConfiguration(for: settings)
+        #expect(configuration.uiOnly)
+        #expect(configuration.package == fixture.package("1.0.0"))
+        for location in ["main", "home", "notch", "sidebar.utility"] {
+            let request = HostExtensionContentRequest(extensionID: "sample", location: location)
+            await #expect(throws: HostWorkerError.rejected) {
+                try await manager.scene(for: request)
+            }
+        }
+        #expect(marketplace.sessions.enabledIDs.isEmpty)
+        #expect(marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(await fixture.network.count == 0)
+        #expect(HostRemoteSession.extensionIDs.isEmpty)
+    }
+
+    @Test func remoteFeatureAdmissionTracksTheCurrentWorkerAndPendingDisable() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let package = fixture.package("1.0.0")
+        try fixture.store.commit([package])
+        let marketplace = try fixture.marketplace(workerMode: { _ in "normal" })
+        let manager = HostRemoteSessionManager(marketplace: marketplace)
+        let request = HostExtensionContentRequest(
+            extensionID: "sample", location: "main", section: "sample")
+        try await marketplace.sessions.enable(package)
+        #expect(try !manager.selectedConfiguration(for: request).uiOnly)
+        marketplace.sessions.requestDisable(ids: ["sample"])
+        #expect(throws: HostWorkerError.rejected) {
+            try manager.selectedConfiguration(for: request)
+        }
+        let settings = HostExtensionContentRequest(
+            extensionID: "sample", location: "settings", section: "extension")
+        #expect(try manager.selectedConfiguration(for: settings).uiOnly)
+        #expect(await marketplace.sessions.shutdown())
+    }
+
     @Test func bootWithInstalledButDisabledExtensionsUsesNoNetworkOrWorkers() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }

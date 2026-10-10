@@ -11,6 +11,9 @@ public final class HostExtensionSessions {
         didSet { didChange() }
     }
     @ObservationIgnored public var didChange: @MainActor () -> Void = {}
+    @ObservationIgnored public var willDisable: @MainActor (String) async throws -> Void = { id in
+        try await HostRemoteSession.stopAll(extensionID: id)
+    }
     public private(set) var versions: [String: String] = [:]
     public private(set) var failures: Set<String> = []
     public private(set) var pendingDisableIDs: Set<String> {
@@ -118,6 +121,7 @@ public final class HostExtensionSessions {
         if remember, enabledIDs.contains(id) || workers[id] != nil { pendingDisableIDs.insert(id) }
         states[id] = .stopping
         do {
+            try await willDisable(id)
             if workers[id]?.ready != true, pendingDisableIDs.contains(id) {
                 guard let package = packages[id] else { throw HostWorkerError.rejected }
                 let worker = try create(package)
@@ -167,10 +171,10 @@ public final class HostExtensionSessions {
     }
 
     @discardableResult public func shutdown() async -> Bool {
-        for id in Array(workers.keys) {
+        for id in Set(workers.keys).union(HostRemoteSession.extensionIDs) {
             do { try await disable(id: id, remember: false) } catch { failures.insert(id) }
         }
-        return workers.isEmpty
+        return workers.isEmpty && HostRemoteSession.extensionIDs.isEmpty
     }
 
     private func save(_ ids: Set<String>) {

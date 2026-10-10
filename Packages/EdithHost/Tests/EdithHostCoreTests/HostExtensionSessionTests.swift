@@ -7,6 +7,36 @@ import Testing
 @testable import EdithHostCore
 
 @Suite @MainActor struct HostExtensionSessionTests {
+    @Test func UIExitFailureKeepsTheEngineAndDisableIntentUntilRetry() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try await fixture.sessions.enable(fixture.package("1.0.0"))
+        let pid = try #require(fixture.sessions.processIdentifiers["sample"])
+        fixture.sessions.willDisable = { id in
+            #expect(id == "sample")
+            #expect(fixture.sessions.states[id] == .stopping)
+            #expect(kill(pid, 0) == 0)
+            throw HostWorkerError.stillRunning
+        }
+        await #expect(throws: HostWorkerError.stillRunning) {
+            try await fixture.sessions.disable(id: "sample")
+        }
+        #expect(fixture.sessions.pendingDisableIDs == ["sample"])
+        #expect(fixture.sessions.enabledIDs == ["sample"])
+        #expect(fixture.sessions.processIdentifiers["sample"] == pid)
+        #expect(kill(pid, 0) == 0)
+        var detached = false
+        fixture.sessions.willDisable = { _ in
+            #expect(kill(pid, 0) == 0)
+            detached = true
+        }
+        try await fixture.sessions.disable(id: "sample")
+        #expect(detached)
+        #expect(kill(pid, 0) == -1)
+        #expect(fixture.sessions.pendingDisableIDs.isEmpty)
+        #expect(fixture.sessions.enabledIDs.isEmpty)
+    }
+
     @Test func batchDisableIntentSurvivesInterruptionBeforeAnyWorkerStops() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }

@@ -69,6 +69,10 @@ final class HostRemoteApplication {
                         return try self.controller(presentation: context)
                     }))
         }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(45))
+            if self?.configuration == nil { self?.shutdown() }
+        }
     }
 
     var sceneConfiguration: AppExtensionSceneConfiguration {

@@ -11,6 +11,7 @@ public final class HostMarketplace {
     public let surfaces: HostSurfaces
     public var surfaceLayouts: SurfaceLayoutStore { surfaces.layouts }
     public let sessions: HostExtensionSessions
+    public var packageStore: ExtensionPackageStore { store }
     public private(set) var installed: [String: ExtensionPackage] = [:]
     public private(set) var downloadedIDs: Set<String> = []
     public private(set) var installedVersions: [String: [ExtensionPackage]] = [:]
