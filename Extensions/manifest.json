@@ -1381,6 +1381,9 @@
         "Extensions/studio/CLI/StudioReviewReportCommand.swift",
         "Extensions/studio/CLI/StudioWorkflowCommands.swift",
         "Extensions/studio/CLI/TextColumns.swift",
+        "Extensions/studio/UIBridge/StudioUICommands.swift",
+        "Extensions/studio/UIBridge/StudioUIFacade.swift",
+        "Extensions/studio/UIBridge/StudioUIState.swift",
         "Extensions/studio/CLI/StudioWorkflowPlan.swift",
         "Extensions/studio/CLI/StudioCLIRequest.swift"
       ]

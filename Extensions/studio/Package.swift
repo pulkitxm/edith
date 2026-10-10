@@ -16,7 +16,7 @@ let package = Package(
                 .product(name: "EdithStudio", package: "NativeRuntime"),
             ],
             path: ".",
-            exclude: ["Tests", "Runtime.swift", "NativeRuntime", "Makefile", "test.mjs"],
+            exclude: ["Tests", "NativeRuntime", "Makefile", "test.mjs"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "StudioExtensionTests",

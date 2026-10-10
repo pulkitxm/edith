@@ -15,6 +15,9 @@ final class ExtensionRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let model = self.model else { throw ExtensionPeerError.unavailable }
+            if command.hasPrefix("studio.ui.") {
+                return try await StudioUICommands.execute(command, payload: payload, model: model)
+            }
             if command == "studio.cli" {
                 let request = try JSONDecoder().decode(StudioCLIRequest.self, from: payload)
                 return try JSONEncoder().encode(
@@ -61,7 +64,8 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard let suite = input["defaultsSuite"] as? String,
+            guard input["remoteUI"] as? Bool != true,
+                let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             if model == nil {
