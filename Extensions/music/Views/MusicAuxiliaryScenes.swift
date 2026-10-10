@@ -5,6 +5,7 @@ import SwiftUI
 
 enum MusicSceneRoute: String, CaseIterable {
     case page = "main"
+    case settings = "settings"
     case footer = "music.footer"
     case sidebar = "music.sidebar"
     case detail = "music.detail"
@@ -24,6 +25,8 @@ enum MusicSceneRoute: String, CaseIterable {
         switch route {
         case .page:
             return NSHostingController(rootView: ExtensionPageHost { MusicPage() })
+        case .settings:
+            return NSHostingController(rootView: ExtensionPageHost { MusicSettingsScene() })
         case .footer:
             return NSHostingController(rootView: ExtensionPageHost { MusicFooterScene() })
         case .sidebar:
@@ -63,4 +66,11 @@ struct MusicSidebarScene: View {
             }
         }
     }
+}
+
+struct MusicSettingsScene: View {
+    @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
+        var section = "home"
+
+    var body: some View { MusicSettings { section = "music" } }
 }

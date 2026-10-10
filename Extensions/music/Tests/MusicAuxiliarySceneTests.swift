@@ -19,6 +19,9 @@ extension MusicExtensionTests {
                 switch route {
                 case .page:
                     #expect(controller is NSHostingController<ExtensionPageHost<MusicPage>>)
+                case .settings:
+                    #expect(
+                        controller is NSHostingController<ExtensionPageHost<MusicSettingsScene>>)
                 case .footer:
                     #expect(controller is NSHostingController<ExtensionPageHost<MusicFooterScene>>)
                 case .sidebar:
@@ -29,7 +32,7 @@ extension MusicExtensionTests {
                 }
             }
             for input: NSDictionary in [
-                [:], ["location": "main"], ["location": "settings", "section": "music"],
+                [:], ["location": "main"], ["location": "settings", "section": "foreign"],
                 ["location": "main", "section": "downloads"],
                 ["location": "music.footer", "section": "foreign"],
                 ["location": "music.footer", "section": 1],
@@ -38,6 +41,35 @@ extension MusicExtensionTests {
                 #expect(MusicAuxiliaryScenes.controller(input) == nil)
             }
             #expect(ExtensionPresentationState.current == nil)
+        }
+
+        @Test func originalSettingsConnectActionUsesMainWindowSelection() async throws {
+            let restore = accessibility()
+            defer { restore() }
+            let defaults = SharedDefaults.store
+            let previous = defaults.object(forKey: AppStorageKeys.General.mainWindowSection)
+            defer {
+                if let previous {
+                    defaults.set(previous, forKey: AppStorageKeys.General.mainWindowSection)
+                } else {
+                    defaults.removeObject(forKey: AppStorageKeys.General.mainWindowSection)
+                }
+            }
+            defaults.set("home", forKey: AppStorageKeys.General.mainWindowSection)
+            let controller = try #require(
+                MusicAuxiliaryScenes.controller([
+                    "location": "settings", "section": "music",
+                ]))
+            controller.view.frame = CGRect(x: 0, y: 0, width: 620, height: 800)
+            let window = TestWindowHost.window(contentRect: controller.view.frame)
+            window.contentViewController = controller; window.orderBack(nil)
+            defer { window.orderOut(nil); window.contentViewController = nil }
+            await settle(window)
+            let button = try #require(find(controller.view, label: "Connect in Music"))
+            #expect((button as AnyObject).accessibilityPerformPress?() == true)
+            await settle(window)
+            #expect(defaults.string(forKey: AppStorageKeys.General.mainWindowSection) == "music")
+            #expect(!TestWindowHost.isExposedOnDesktop(window))
         }
 
         @Test func nativeSidebarExpandAndFooterCollapseShareOriginalPreference() async throws {
