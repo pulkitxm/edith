@@ -439,6 +439,7 @@ test("independent feature changes do not release or invalidate the host", () => 
     "Packages/ExtensionSupport/Sources/EdithExtensionUI/PageScaffold.swift",
     "scripts/package-shipping-host.py",
     "scripts/verify_shipping_host.py",
+    "scripts/host_build_metadata.py",
     ".github/actions/cache-host/action.yml",
   ]) {
     expect(matchesArea("host", path), path).toBe(true);

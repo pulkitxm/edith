@@ -28,6 +28,7 @@ name: Extensions
       - .github/workflows/extensions.yml
       - scripts/package-shipping-host.py
       - scripts/verify_shipping_host.py
+      - scripts/host_build_metadata.py
   push:
     branches:
       - main
@@ -58,6 +59,7 @@ name: Extensions
       - .github/workflows/extensions.yml
       - scripts/package-shipping-host.py
       - scripts/verify_shipping_host.py
+      - scripts/host_build_metadata.py
   workflow_dispatch:
     inputs:
       publish:
