@@ -109,6 +109,7 @@ final class HerdrStore {
     }
 
     var uiDefaults: UserDefaults { defaults }
+    private var uiSettingsRevision = 0
 
     var hosts: [HerdrHostSnapshot] = [] {
         didSet { rememberSidebarOrder() }
@@ -550,6 +551,8 @@ final class HerdrStore {
 
     func setSplitFraction(_ fraction: Double, for id: String) {
         HerdrSplitFraction.set(fraction, for: id, defaults)
+        uiSettingsRevision += 1
+        scheduleUIChange()
     }
 
     var openIDs: Set<String> { Set(sessions.map(\.id)) }
@@ -2122,7 +2125,23 @@ final class HerdrStore {
             mouse: terminalSettings.mouse)
     }
 
-    var terminalSettings: HerdrTerminalSettings { HerdrTerminalSettings.load(defaults) }
+    var terminalSettings: HerdrTerminalSettings {
+        _ = uiSettingsRevision
+        return HerdrTerminalSettings.load(defaults)
+    }
+
+    func saveTerminalSettings(_ settings: HerdrTerminalSettings) {
+        defaults.set(settings.mouse.rawValue, forKey: AppStorageKeys.Herdr.terminalMouse)
+        defaults.set(
+            HerdrTerminalSettings.clampedFontSize(settings.fontSize),
+            forKey: AppStorageKeys.Herdr.terminalFontSize)
+        defaults.set(
+            settings.startFolder.rawValue, forKey: AppStorageKeys.Herdr.terminalStartFolder)
+        defaults.set(settings.startupCommand, forKey: AppStorageKeys.Herdr.terminalStartupCommand)
+        defaults.set(settings.confirmClose, forKey: AppStorageKeys.Herdr.terminalConfirmClose)
+        uiSettingsRevision += 1
+        scheduleUIChange()
+    }
 
     private func controlRequest(
         for agent: HerdrAgent, machine: Machine?, environment: [String],
@@ -2286,7 +2305,22 @@ final class HerdrStore {
     }
 
     func applyUIPreferences(_ values: [String: HerdrUIPreference]) {
+        let oldMouse = terminalSettings.mouse
+        for key in HerdrUIEngine.preferenceKeys where values[key] == nil {
+            defaults.removeObject(forKey: key)
+        }
         for (key, value) in values { defaults.set(value.value, forKey: key) }
+        uiSettingsRevision += 1
+        agentsCollapsedCount = Self.optionalInt(
+            defaults, key: AppStorageKeys.Herdr.agentsCollapsedCount)
+        terminalsCollapsedCount = Self.optionalInt(
+            defaults, key: AppStorageKeys.Herdr.terminalsCollapsedCount)
+        collapsedSpaceCounts = Self.spaceCounts(
+            defaults.dictionary(forKey: AppStorageKeys.Herdr.collapsedSpaceCounts) ?? [:])
+        if uiClient == nil, oldMouse != terminalSettings.mouse {
+            for tab in sessions { tab.holder.stop() }
+            for terminal in terminalPanels.terminals.values { terminal.holder.stop() }
+        }
         railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
         detailOpen = defaults.object(forKey: AppStorageKeys.Herdr.detailOpen) as? Bool ?? true
         animatesLayout =

@@ -25,6 +25,44 @@ import Testing
         return HerdrWorker(store: store, defaults: defaults, automaticActions: false)
     }
 
+    @Test func originalTerminalSettingsAndSplitPreferencesPersistOnlyInEngine() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let worker = worker()
+        let client = HerdrUIClient { try await worker.execute($0, payload: $1) }
+        let ui = HerdrStore(uiClient: client)
+        try await ui.performUI("herdr.ui.read")
+        let first = try #require(ui.agents.first)
+        ui.open(first)
+        ui.saveTerminalSettings(
+            .init(
+                mouse: .scroll, fontSize: 18, startFolder: .home,
+                startupCommand: "printf synthetic", confirmClose: false))
+        ui.setSplitFraction(0.7, for: first.id)
+        for _ in 0..<200 {
+            if worker.store.terminalSettings.fontSize == 18
+                && worker.store.splitFraction(for: first.id) == 0.7
+            {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(worker.store.terminalSettings == ui.terminalSettings)
+        #expect(worker.store.terminalSettings.startupCommand == "printf synthetic")
+        #expect(worker.store.splitFraction(for: first.id) == 0.7)
+        let state = try #require(try client.state(await client.perform("herdr.ui.read")))
+        var forged = state.preferences
+        forged[AppStorageKeys.Herdr.terminalFontSize] = .flag(true)
+        await #expect(throws: ExtensionPeerError.self) {
+            try await client.perform(
+                "herdr.ui.preferences",
+                payload: JSONEncoder().encode(
+                    HerdrUIPreferencesMutation(baseline: state.preferences, preferences: forged)))
+        }
+        #expect(worker.store.terminalSettings.fontSize == 18)
+        await ui.shutdown()
+        await worker.shutdown()
+    }
+
     @Test func runtimeRejectsUnvalidatedUIAndNeverReturnsAnEnginePage() {
         let runtime = ExtensionRuntime()
         #expect(

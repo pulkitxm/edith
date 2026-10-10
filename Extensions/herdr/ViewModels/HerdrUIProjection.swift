@@ -85,6 +85,7 @@ struct HerdrUIState: Codable {
         guard Set(agents.map(\.id)).count == agents.count else {
             throw ExtensionPeerError.invalidRequest
         }
+        for (key, value) in preferences { try HerdrUIEngine.validatePreference(key, value) }
         try panels.validate()
         try layout.validate(
             allowed: Set(
@@ -98,7 +99,7 @@ enum HerdrUIPreference: Codable, Equatable {
     case number(Double)
     case text(String)
     case strings([String])
-    case data(Data)
+    case numbers([String: Double])
 
     var value: Any {
         switch self {
@@ -106,7 +107,7 @@ enum HerdrUIPreference: Codable, Equatable {
         case .number(let value): return value
         case .text(let value): return value
         case .strings(let value): return value
-        case .data(let value): return value
+        case .numbers(let value): return value
         }
     }
 
@@ -119,8 +120,8 @@ enum HerdrUIPreference: Codable, Equatable {
             self = .text(value)
         } else if let value = value as? [String] {
             self = .strings(value)
-        } else if let value = value as? Data {
-            self = .data(value)
+        } else if let value = value as? [String: NSNumber] {
+            self = .numbers(value.mapValues(\.doubleValue))
         } else {
             return nil
         }
@@ -213,7 +214,11 @@ final class HerdrUIDefaults: UserDefaults {
         AppStorageKeys.Herdr.terminalsCollapsed, AppStorageKeys.Herdr.spaceGroupingEnabled,
         AppStorageKeys.Herdr.sidebarAgentOrder, AppStorageKeys.Herdr.sidebarSpaceOrder,
         AppStorageKeys.Herdr.collapsedSpaces, AppStorageKeys.Herdr.terminalPanelHeight,
-        AppStorageKeys.Herdr.terminalMouse,
+        AppStorageKeys.Herdr.terminalMouse, AppStorageKeys.Herdr.terminalFontSize,
+        AppStorageKeys.Herdr.terminalStartFolder, AppStorageKeys.Herdr.terminalStartupCommand,
+        AppStorageKeys.Herdr.terminalConfirmClose, AppStorageKeys.Herdr.agentsCollapsedCount,
+        AppStorageKeys.Herdr.terminalsCollapsedCount, AppStorageKeys.Herdr.collapsedSpaceCounts,
+        AppStorageKeys.Herdr.splitFraction,
     ]
     private unowned let worker: HerdrWorker
     private let generation = UUID()
@@ -279,25 +284,7 @@ final class HerdrUIDefaults: UserDefaults {
             guard Set(preferences.keys).isSubset(of: Self.preferenceKeys) else {
                 throw ExtensionPeerError.invalidRequest
             }
-            for (key, value) in preferences {
-                switch value {
-                case .flag: break
-                case .text(let value):
-                    guard key == AppStorageKeys.Herdr.terminalMouse,
-                        HerdrTerminalMouse(rawValue: value) != nil
-                    else { throw ExtensionPeerError.invalidRequest }
-                case .number(let number):
-                    guard number.isFinite, (0...2048).contains(number) else {
-                        throw ExtensionPeerError.invalidRequest
-                    }
-                case .strings(let strings):
-                    guard strings.count <= 4096, strings.allSatisfy({ $0.utf8.count <= 512 }) else {
-                        throw ExtensionPeerError.invalidRequest
-                    }
-                default: throw ExtensionPeerError.invalidRequest
-                }
-                store.uiDefaults.set(value.value, forKey: key)
-            }
+            for (key, value) in preferences { try Self.validatePreference(key, value) }
             store.applyUIPreferences(preferences)
         case "herdr.ui.closeAgent":
             guard Set(object.keys) == ["agentID"], let id = object["agentID"] as? String,
@@ -387,6 +374,80 @@ final class HerdrUIDefaults: UserDefaults {
         try Task.checkCancellation()
         guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
         return try await snapshot()
+    }
+
+    nonisolated static func validatePreference(_ key: String, _ value: HerdrUIPreference) throws {
+        let flags: Set<String> = [
+            AppStorageKeys.Herdr.railOpen, AppStorageKeys.Herdr.detailOpen,
+            AppStorageKeys.Herdr.animatesLayout, AppStorageKeys.Herdr.agentsCollapsed,
+            AppStorageKeys.Herdr.terminalsCollapsed, AppStorageKeys.Herdr.spaceGroupingEnabled,
+            AppStorageKeys.Herdr.terminalConfirmClose,
+        ]
+        let arrays: Set<String> = [
+            AppStorageKeys.Herdr.sidebarAgentOrder,
+            AppStorageKeys.Herdr.sidebarSpaceOrder, AppStorageKeys.Herdr.collapsedSpaces,
+        ]
+        switch value {
+        case .flag: guard flags.contains(key) else { throw ExtensionPeerError.invalidRequest }
+        case .number(let number):
+            guard number.isFinite else { throw ExtensionPeerError.invalidRequest }
+            switch key {
+            case AppStorageKeys.Herdr.railWidth, AppStorageKeys.Herdr.detailWidth,
+                AppStorageKeys.Herdr.terminalPanelHeight:
+                guard (0...2048).contains(number) else { throw ExtensionPeerError.invalidRequest }
+            case AppStorageKeys.Herdr.terminalFontSize:
+                guard HerdrTerminalSettings.fontSizeRange.contains(number),
+                    number.rounded() == number
+                else { throw ExtensionPeerError.invalidRequest }
+            case AppStorageKeys.Herdr.agentsCollapsedCount,
+                AppStorageKeys.Herdr.terminalsCollapsedCount:
+                guard (0...4096).contains(number), number.rounded() == number
+                else { throw ExtensionPeerError.invalidRequest }
+            default: throw ExtensionPeerError.invalidRequest
+            }
+        case .text(let text):
+            switch key {
+            case AppStorageKeys.Herdr.terminalMouse:
+                guard HerdrTerminalMouse(rawValue: text) != nil else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+            case AppStorageKeys.Herdr.terminalStartFolder:
+                guard HerdrTerminalSettings.StartFolder(rawValue: text) != nil else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+            case AppStorageKeys.Herdr.terminalStartupCommand:
+                guard text.utf8.count <= 4096, !text.utf8.contains(0) else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+            default: throw ExtensionPeerError.invalidRequest
+            }
+        case .strings(let strings):
+            guard arrays.contains(key), strings.count <= 4096,
+                Set(strings).count == strings.count,
+                strings.allSatisfy({ $0.utf8.count <= 512 && !$0.utf8.contains(0) })
+            else { throw ExtensionPeerError.invalidRequest }
+        case .numbers(let values):
+            guard values.count <= 4096,
+                values.keys.allSatisfy({ $0.utf8.count <= 512 && !$0.utf8.contains(0) })
+            else { throw ExtensionPeerError.invalidRequest }
+            if key == AppStorageKeys.Herdr.splitFraction {
+                guard
+                    values.values.allSatisfy({
+                        $0.isFinite
+                            && (HerdrSplitFraction.minimum...HerdrSplitFraction.maximum).contains(
+                                $0)
+                    })
+                else { throw ExtensionPeerError.invalidRequest }
+            } else if key == AppStorageKeys.Herdr.collapsedSpaceCounts {
+                guard
+                    values.values.allSatisfy({
+                        $0.isFinite && (0...4096).contains($0) && $0.rounded() == $0
+                    })
+                else { throw ExtensionPeerError.invalidRequest }
+            } else {
+                throw ExtensionPeerError.invalidRequest
+            }
+        }
     }
 
     private func snapshot() async throws -> Data {

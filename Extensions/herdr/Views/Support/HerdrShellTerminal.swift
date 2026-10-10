@@ -26,7 +26,7 @@ struct HerdrShellTerminal: View {
         ZStack {
             TerminalPane(
                 holder: holder, palette: .edith(dark: scheme == .dark), active: active,
-                wantsFocus: wantsFocus, onFocus: onFocus)
+                wantsFocus: wantsFocus, fontSize: store.terminalSettings.fontSize, onFocus: onFocus)
             if let error {
                 VStack(spacing: UIScale.pt(10)) {
                     Text(error).font(.edithText(.body)).textSelection(.enabled)

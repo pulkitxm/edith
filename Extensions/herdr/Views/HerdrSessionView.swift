@@ -135,8 +135,7 @@ struct HerdrSessionView: View {
     private var quinjetThemeName = QuinjetThemePreference.app
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
     private var appThemeName = AppTheme.accent.rawValue
-    @AppStorage(AppStorageKeys.Herdr.terminalMouse, store: SharedDefaults.store)
-    private var mouse = HerdrTerminalMouse.buttons
+    private var mouse: HerdrTerminalMouse { store.terminalSettings.mouse }
     @State private var startedMouse: HerdrTerminalMouse?
     @State private var connectError: String?
     @State private var starting = false
@@ -169,7 +168,9 @@ struct HerdrSessionView: View {
         }
         .task(id: "\(tab.id)|\(mouse.rawValue)") { await startIfNeeded() }
         .task(id: diffRequest) { await prepareDiffIfNeeded() }
-        .agentTopic(.hooks, as: HerdrHooksSnapshot.self, active: showsDetails) {
+        .agentTopic(
+            .hooks, as: HerdrHooksSnapshot.self, active: showsDetails && store.uiClient == nil
+        ) {
             store.messaging.adopt($0)
         }
         .edithSheet(item: messageDraft, dismissible: false) { draft in
@@ -291,6 +292,7 @@ struct HerdrSessionView: View {
                 holder: tab.holder, palette: .edith(dark: dark),
                 active: presented && tab.view.showsAgent,
                 wantsFocus: wantsFocus && terminalFocus == .agent,
+                fontSize: store.terminalSettings.fontSize,
                 onDropFiles: agent.machineIsLocal ? nil : handleRemoteDrop,
                 onFocus: {
                     splitTerminalFocus = .agent
@@ -367,6 +369,7 @@ struct HerdrSessionView: View {
                 holder: tab.quinjet.holder, palette: palette,
                 active: presented && tab.view.showsDiff && tab.quinjet.live,
                 wantsFocus: wantsFocus && terminalFocus == .diff,
+                fontSize: store.terminalSettings.fontSize,
                 onFocus: {
                     splitTerminalFocus = .diff
                     onFocus?()
