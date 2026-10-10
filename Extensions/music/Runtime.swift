@@ -56,6 +56,7 @@ final class ExtensionRuntime: NSObject {
                 return NSHostingController(
                     rootView: ExtensionPageHost { MusicHomeScene(tile: tile) })
             }
+            if let controller = MusicAuxiliaryScenes.controller(input) { return controller }
             return NSHostingController(rootView: ExtensionPageHost { MusicRootView() })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
