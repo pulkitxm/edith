@@ -8,6 +8,25 @@ const workflow = Bun.YAML.parse(
 const { plan, build, publish } = workflow.jobs;
 const text = (value) => JSON.stringify(value).replaceAll("\\n", "\n");
 
+test("portable planning uses Ubuntu while native checks and publication keep macOS", () => {
+  expect(plan["runs-on"]).toBe("ubuntu-latest");
+  for (const job of [workflow.jobs.tests, build, publish])
+    expect(job["runs-on"]).toBe("macos-26");
+  expect(text(plan)).toContain("node scripts/verify-extension-catalog.mjs");
+  expect(text(plan)).toContain(
+    "node --test scripts/verify-extension-catalog.test.mjs",
+  );
+  expect(text(plan)).not.toContain("swift ");
+  expect(
+    plan.steps.find((step) => step.uses?.startsWith("actions/setup-node@"))
+      .with["node-version"],
+  ).toBe(24);
+  expect(text(publish)).toContain("extension-publish.mjs");
+  expect(readFileSync("scripts/extension-publish.mjs", "utf8")).toContain(
+    "extension-catalog-sign.swift",
+  );
+});
+
 test("downloaded Docs source and reference changes run independent package checks", () => {
   for (const event of [workflow.on.pull_request, workflow.on.push]) {
     expect(event.paths).toContain("Packages/EdithDocsWorker/**");

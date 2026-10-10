@@ -79,7 +79,7 @@ jobs:
       - run: bun scripts/test-extension-marketplace.mjs
 
   plan:
-    runs-on: macos-26
+    runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       changed: ${{ steps.plan.outputs.changed }}
@@ -88,6 +88,10 @@ jobs:
         with:
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - run: node --test scripts/verify-extension-catalog.test.mjs
       - run: bun scripts/extension-host-abi.mjs --write
       - name: Compare with the last trusted catalog
         id: plan
@@ -97,7 +101,7 @@ jobs:
           if [ "$status" = 404 ]; then
             printf '%s' '{"schemaVersion":1,"revision":0,"packages":[]}' > dist/extensions/previous.json
           elif [ "$status" = 200 ]; then
-            swift scripts/extension-catalog-sign.swift verify dist/extensions/catalog.json dist/extensions/previous.json "$EXTENSION_CATALOG_PUBLIC_KEY"
+            node scripts/verify-extension-catalog.mjs dist/extensions/catalog.json dist/extensions/previous.json "$EXTENSION_CATALOG_PUBLIC_KEY"
           else
             echo "Cannot read the published catalog: HTTP $status" >&2
             exit 1
