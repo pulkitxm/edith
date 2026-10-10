@@ -1,6 +1,7 @@
 @testable import HerdrExtension
 import EdithExtensionSupport
 import Foundation
+import Darwin
 import Testing
 
 @Suite struct HerdrListParserTests {
@@ -314,14 +315,53 @@ import Testing
 
     @Test func aMissingSocketThrowsInsteadOfAborting() {
         #expect(throws: HerdrSocketError.self) {
-            try HerdrSocketClient.unix(path: "/tmp/edith-herdr-missing.sock")
+            try HerdrSocketClient.unix(path: "/tmp/edith-herdr-missing-\(UUID().uuidString).sock")
         }
     }
 
-    @Test func closingALiveSocketDoesNotAbort() throws {
-        guard let path = HerdrSocketDiscovery.local().first?.path else { return }
+    @Test func closingAnOwnedSyntheticSocketStopsEventsAndRejectsRequests() async throws {
+        let directory = URL(fileURLWithPath: "/tmp/herdr-socket-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("fixture.sock").path
+        let server = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
+        #expect(server >= 0)
+        guard server >= 0 else { throw HerdrSocketError(message: "synthetic socket failed") }
+        defer { Darwin.close(server) }
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        let bytes = Array(path.utf8) + [0]
+        let capacity = MemoryLayout.size(ofValue: address.sun_path)
+        #expect(bytes.count <= capacity)
+        guard bytes.count <= capacity else {
+            throw HerdrSocketError(message: "synthetic path too long")
+        }
+        withUnsafeMutableBytes(of: &address.sun_path) { raw in raw.copyBytes(from: bytes) }
+        let bound = withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.bind(server, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        #expect(bound == 0 && Darwin.listen(server, 1) == 0)
+        guard bound == 0 else { throw HerdrSocketError(message: "synthetic socket bind failed") }
         let client = try HerdrSocketClient.unix(path: path)
+        defer { client.close() }
+        let peer = Darwin.accept(server, nil, nil)
+        #expect(peer >= 0)
+        guard peer >= 0 else { throw HerdrSocketError(message: "synthetic socket accept failed") }
+        defer { Darwin.close(peer) }
+        var timeout = timeval(tv_sec: 1, tv_usec: 0)
+        #expect(
+            setsockopt(
+                peer, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size)) == 0
+        )
+        var events = client.events.makeAsyncIterator()
         client.close()
+        client.close()
+        var byte: UInt8 = 0
+        #expect(Darwin.recv(peer, &byte, 1, 0) == 0)
+        #expect(await events.next() == nil)
+        await #expect(throws: HerdrSocketError.self) { try await client.snapshot() }
     }
 
     @Test func workspacesReadsTheRealListShape() {
