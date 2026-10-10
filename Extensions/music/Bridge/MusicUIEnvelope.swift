@@ -157,3 +157,8 @@ struct MusicUITools: Codable, Sendable {
     var installing: String?
     var error: String?
 }
+
+struct MusicUISettings: Codable, Sendable {
+    var version: String
+    var preferences: MusicUIPreferences
+}

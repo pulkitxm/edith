@@ -18,9 +18,20 @@ import WebKit
     private var videoActivity = Date()
     private var resumeAudio = false
     private var stopped = false
-    init(worker: MusicWorker, version: String = "", browser: MusicBrowserPresentation? = nil) {
+    private let invalidateHostSlots: () -> Void
+    init(
+        worker: MusicWorker, version: String = "", browser: MusicBrowserPresentation? = nil,
+        invalidateHostSlots: (() -> Void)? = nil
+    ) {
         self.worker = worker
         self.version = version
+        self.invalidateHostSlots =
+            invalidateHostSlots ?? {
+                guard let namespace = ExtensionSharedState.current?.namespace else { return }
+                DistributedNotificationCenter.default().postNotificationName(
+                    .init(namespace + ".musicHostSlots"), object: nil, userInfo: nil,
+                    deliverImmediately: true)
+            }
         self.browser =
             browser
             ?? MusicBrowserPresentation(
@@ -61,12 +72,16 @@ import WebKit
             return try await downloads!.execute(operation, payload: payload)
         }
         switch operation {
-        case "music.ui.hostSlots":
+        case "music.ui.settings", "music.ui.hostSlots":
             guard payload.count <= 256,
                 let request = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
                 request.isEmpty, !version.isEmpty, version.utf8.count <= 128,
                 !version.utf8.contains(0)
             else { throw ExtensionPeerError.invalidRequest }
+            if operation == "music.ui.settings" {
+                return try JSONEncoder().encode(
+                    MusicUISettings(version: version, preferences: preferences()))
+            }
             let accounts = worker.accounts
             let title: String?
             switch accounts.selected {
@@ -134,16 +149,7 @@ import WebKit
                 privacy: MusicPrivacyState.shared.active,
                 videoControl: video?.control,
                 folderIntent: MusicHostNavigation.folderIntent,
-                preferences: .init(
-                    crossfade: SharedDefaults.store.object(forKey: MusicFade.enabledKey) as? Bool
-                        ?? true,
-                    fadeLength: SharedDefaults.store.object(forKey: MusicFade.secondsKey) as? Double
-                        ?? 2,
-                    barCollapsed: SharedDefaults.store.bool(
-                        forKey: AppStorageKeys.Music.barCollapsed),
-                    barAutoHide: SharedDefaults.store.bool(
-                        forKey: AppStorageKeys.Music.barAutoHide),
-                    gridView: SharedDefaults.store.bool(forKey: AppStorageKeys.Music.gridView)),
+                preferences: preferences(),
                 tools: .init(
                     installed: MusicTools.shared.installed,
                     installing: MusicTools.shared.installing, error: MusicTools.shared.error))
@@ -419,7 +425,11 @@ import WebKit
             case .barAutoHide: key = AppStorageKeys.Music.barAutoHide
             default: key = AppStorageKeys.Music.gridView
             }
+            let changed = SharedDefaults.store.object(forKey: key) as? Bool != (value == 1)
             SharedDefaults.store.set(value == 1, forKey: key)
+            if changed, [.barCollapsed, .barAutoHide].contains(action.kind) {
+                invalidateHostSlots()
+            }
         case .fadeLength:
             guard let value = action.value, MusicFade.secondsRange.contains(value) else {
                 throw ExtensionPeerError.invalidRequest
@@ -453,6 +463,23 @@ import WebKit
         downloads?.stop(); downloads = nil; resumeAudio = false; closeVideo()
         worker.accounts.spotify.receiveUIEvent = nil
         events.removeAll()
+    }
+
+    private func preferences() -> MusicUIPreferences {
+        let defaults = SharedDefaults.store
+        let seconds =
+            defaults.object(forKey: MusicFade.secondsKey) as? Double
+            ?? MusicFade.defaultSeconds
+        return MusicUIPreferences(
+            crossfade: defaults.object(forKey: MusicFade.enabledKey) as? Bool ?? true,
+            fadeLength: seconds.isFinite
+                ? min(
+                    max(seconds, MusicFade.secondsRange.lowerBound),
+                    MusicFade.secondsRange.upperBound)
+                : MusicFade.defaultSeconds,
+            barCollapsed: defaults.bool(forKey: AppStorageKeys.Music.barCollapsed),
+            barAutoHide: defaults.bool(forKey: AppStorageKeys.Music.barAutoHide),
+            gridView: defaults.bool(forKey: AppStorageKeys.Music.gridView))
     }
 
     private func playbackSnapshot() -> PlayerSnapshot {

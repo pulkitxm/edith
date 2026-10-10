@@ -6,6 +6,85 @@ import Testing
 
 extension MusicExtensionTests {
     @MainActor @Suite(.serialized) struct MusicUIServiceTests {
+        @Test func settingsWritesDriveHostSlotsAndKeepDisableSeparateFromAutoHide() async throws {
+            let defaults = SharedDefaults.store
+            let keys = [
+                AppStorageKeys.Music.barCollapsed, AppStorageKeys.Music.barAutoHide,
+                MusicFade.enabledKey, MusicFade.secondsKey, "musicSelectedProvider",
+            ]
+            let prior = keys.map { defaults.object(forKey: $0) }
+            defer { for (key, value) in zip(keys, prior) { defaults.set(value, forKey: key) } }
+            defaults.set("local", forKey: "musicSelectedProvider")
+            defaults.set(false, forKey: AppStorageKeys.Music.barCollapsed)
+            defaults.set(false, forKey: AppStorageKeys.Music.barAutoHide)
+            let accounts = MusicAccounts(
+                defaults: defaults,
+                spotify: MusicSpotifySession(libraryURL: nil, defaults: defaults), pauseLocal: {})
+            let worker = MusicWorker(accounts: accounts, startImmediately: false)
+            var invalidations = 0
+            let service = MusicUIService(
+                worker: worker, version: "1.2.3", invalidateHostSlots: { invalidations += 1 })
+            defer { service.stop(); worker.stop() }
+            func read() async throws -> MusicUISettings {
+                let data = try await service.execute("music.ui.settings", payload: Data("{}".utf8))
+                #expect(data.count < 1024)
+                let settings = try JSONDecoder().decode(MusicUISettings.self, from: data)
+                #expect(settings.version == "1.2.3")
+                return settings
+            }
+            func slots() async throws -> MusicHostSlots {
+                try JSONDecoder().decode(
+                    MusicHostSlots.self,
+                    from: await service.execute("music.ui.hostSlots", payload: Data("{}".utf8)))
+            }
+            func write(_ kind: MusicUIActionKind, _ value: Double) async throws {
+                _ = try await service.execute(
+                    "music.ui.action",
+                    payload: JSONEncoder().encode(MusicUIAction(kind: kind, value: value)))
+            }
+            #expect(try await slots().footer)
+            try await write(.barCollapsed, 1)
+            #expect(try await read().preferences.barCollapsed)
+            #expect(!(try await slots().footer))
+            #expect(try await slots().sidebar)
+            #expect(invalidations == 1)
+            try await write(.barCollapsed, 1)
+            #expect(invalidations == 1)
+            try await write(.barAutoHide, 1)
+            #expect(try await read().preferences.barAutoHide)
+            #expect(!(try await slots().footer))
+            #expect(!(try await slots().sidebar))
+            #expect(accounts.playerReady)
+            try await write(.barAutoHide, 0)
+            #expect(try await slots().sidebar)
+            try await write(.barCollapsed, 0)
+            #expect(try await slots().footer)
+            #expect(invalidations == 4)
+            for value in [-1.0, 0.5, 2.0] {
+                await #expect(throws: (any Error).self) { try await write(.barCollapsed, value) }
+                await #expect(throws: (any Error).self) { try await write(.barAutoHide, value) }
+            }
+            #expect(invalidations == 4)
+            #expect(!(try await read().preferences.barCollapsed))
+            #expect(!(try await read().preferences.barAutoHide))
+            for (raw, expected) in [(0.0, 0.5), (100.0, 8.0), (Double.nan, 2.0)] {
+                defaults.set(raw, forKey: MusicFade.secondsKey)
+                #expect(try await read().preferences.fadeLength == expected)
+            }
+            try await write(.fadeLength, 3.5)
+            #expect(try await read().preferences.fadeLength == 3.5)
+            for invalid in ["[]", "{\"extra\":true}", String(repeating: " ", count: 257)] {
+                await #expect(throws: (any Error).self) {
+                    try await service.execute("music.ui.settings", payload: Data(invalid.utf8))
+                }
+            }
+            service.stop()
+            await #expect(throws: (any Error).self) { try await write(.barCollapsed, 1) }
+            await #expect(throws: (any Error).self) { try await read() }
+            #expect(!defaults.bool(forKey: AppStorageKeys.Music.barCollapsed))
+            #expect(invalidations == 4)
+        }
+
         @Test func folderIntentRequiresAcknowledgementAndRejectsLateCompletionAfterStop()
             async throws
         {
