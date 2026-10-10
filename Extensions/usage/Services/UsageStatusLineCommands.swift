@@ -1,17 +1,6 @@
 import EdithExtensionSupport
 import Foundation
 
-public struct UsageStatusLineRecordRequest: Codable, Sendable {
-    public let input: Data
-
-    public init(input: Data) { self.input = input }
-}
-
-public struct UsageStatusLineRecordResponse: Codable, Equatable, Sendable {
-    public let recorded: Bool
-    public let line: String
-}
-
 public struct UsageStatusLineStatusResponse: Codable, Equatable, Sendable {
     public let installed: Bool
     public let recordedAt: Date?
@@ -22,8 +11,7 @@ public struct UsageStatusLineChangeResponse: Codable, Equatable, Sendable {
 }
 
 public actor UsageStatusLineCommands {
-    public static let maximumInputBytes = 1_024 * 1_024
-    public static let maximumRequestBytes = 1_536 * 1_024
+    public static let maximumRequestBytes = 512 * 1_024
     public static let maximumResponseBytes = 16 * 1_024
     private let settings: URL
     private let history: URL
@@ -56,16 +44,14 @@ public actor UsageStatusLineCommands {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
             switch command {
-            case "usage.statusline.record":
-                guard Set(object.keys) == ["input"],
-                    let request = try? JSONDecoder().decode(
-                        UsageStatusLineRecordRequest.self, from: payload),
-                    request.input.count <= Self.maximumInputBytes
+            case "usage.statusline.hook":
+                guard
+                    Set(object.keys).isDisjoint(with: [
+                        "input", "settings", "executable", "command", "then",
+                    ])
                 else { throw ExtensionPeerError.invalidRequest }
-                let limits = ClaudeStatusLine.record(request.input, history: history)
-                result = try encoder.encode(
-                    UsageStatusLineRecordResponse(
-                        recorded: limits != nil, line: limits.map(ClaudeStatusLine.line) ?? ""))
+                let limits = ClaudeStatusLine.record(payload, history: history)
+                result = try encoder.encode(limits.map(ClaudeStatusLine.line) ?? "")
                 if limits != nil { UsageEvents.post(UsageEvents.limitsUpdated) }
             case "usage.statusline.status":
                 guard object.isEmpty else { throw ExtensionPeerError.invalidRequest }

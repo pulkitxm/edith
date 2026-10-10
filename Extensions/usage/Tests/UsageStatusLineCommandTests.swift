@@ -19,16 +19,15 @@ import Testing
         #expect(change.change == "installed")
         #expect(
             ClaudeStatusLine.installedCommand(settings: settings)
-                == "'/fixture/Edith' extension command usage usage.statusline.record")
+                == "'/fixture/Edith' invoke usage usage.statusline.hook --json - --raw")
         let input = Data(
             #"{"rate_limits":{"five_hour":{"used_percentage":42,"resets_at":4102444800}}}"#.utf8)
         let result = try JSONDecoder().decode(
-            UsageStatusLineRecordResponse.self,
+            String.self,
             from: await service.execute(
-                "usage.statusline.record",
-                payload: JSONEncoder().encode(UsageStatusLineRecordRequest(input: input))))
-        #expect(result.recorded)
-        #expect(result.line == "5h 42%")
+                "usage.statusline.hook",
+                payload: input))
+        #expect(result == "5h 42%")
         #expect(LimitsHistory.latest(provider: .claude, url: history)?.session?.percent == 42)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -46,7 +45,7 @@ import Testing
 
     @Test(arguments: [
         "usage.statusline.status", "usage.statusline.install", "usage.statusline.remove",
-        "usage.statusline.record",
+        "usage.statusline.hook",
     ])
     func arbitraryPathsAndCommandsAreRejected(command: String) async throws {
         let root = try sandbox()
@@ -68,16 +67,15 @@ import Testing
         let history = root.appendingPathComponent("limits.jsonl")
         let service = UsageStatusLineCommands(
             settings: root.appendingPathComponent("settings.json"), history: history)
-        let oversized = UsageStatusLineRecordRequest(
-            input: Data(repeating: 32, count: 1_024 * 1_024 + 1))
+        let oversized = Data(repeating: 32, count: 512 * 1_024 + 1)
         await #expect(throws: ExtensionPeerError.self) {
             _ = try await service.execute(
-                "usage.statusline.record", payload: JSONEncoder().encode(oversized))
+                "usage.statusline.hook", payload: oversized)
         }
         let task = Task {
             withUnsafeCurrentTask { $0?.cancel() }
             return try await service.execute(
-                "usage.statusline.record", payload: Data(#"{"input":"e30="}"#.utf8))
+                "usage.statusline.hook", payload: Data(#"{"input":"e30="}"#.utf8))
         }
         await #expect(throws: CancellationError.self) { _ = try await task.value }
         #expect(!FileManager.default.fileExists(atPath: history.path))

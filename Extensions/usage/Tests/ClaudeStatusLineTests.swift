@@ -101,7 +101,7 @@ import Testing
         #expect(statusLine["type"] as? String == "command")
         #expect(
             statusLine["command"] as? String
-                == "'\(executable)' extension command usage usage.statusline.record")
+                == "'\(executable)' invoke usage usage.statusline.hook --json - --raw")
         #expect(ClaudeStatusLine.isInstalled(settings: settings))
     }
 
@@ -224,15 +224,17 @@ import Testing
         #expect(snapshot.week?.percent == 15)
     }
 
-    @Test func applicationExecutableIsUsedDirectly() throws {
+    @Test func applicationLauncherIsUsedWithoutOpeningWindows() throws {
         let root = try sandbox()
         defer { try? FileManager.default.removeItem(at: root) }
         let executable = root.appendingPathComponent("Edith")
-        try Data("#!/bin/sh\n".utf8).write(to: executable)
+        let launcher = root.appendingPathComponent("ed")
+        try Data("#!/bin/sh\n".utf8).write(to: launcher)
         try FileManager.default.setAttributes(
-            [.posixPermissions: 0o755], ofItemAtPath: executable.path)
-        #expect(ClaudeStatusLine.launcher(beside: executable) == executable.path)
-        #expect(ClaudeStatusLine.launcher(beside: root.appendingPathComponent("missing")) == nil)
+            [.posixPermissions: 0o755], ofItemAtPath: launcher.path)
+        #expect(ClaudeStatusLine.launcher(beside: executable) == launcher.path)
+        try FileManager.default.removeItem(at: launcher)
+        #expect(ClaudeStatusLine.launcher(beside: executable) == nil)
     }
 
     @Test func oversizedStatusLineInputRecordsNothing() throws {

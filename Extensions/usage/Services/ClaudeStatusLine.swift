@@ -38,7 +38,7 @@ public enum ClaudeStatusLine {
     public static let setupHint =
         "Connect Claude Code’s status line in Usage settings to collect its limits"
 
-    static let recordInvocation = "extension command usage usage.statusline.record"
+    static let recordInvocation = "invoke usage usage.statusline.hook --json - --raw"
     static let thenFlag = " --then "
 
     public static func settingsURL(
@@ -102,7 +102,16 @@ public enum ClaudeStatusLine {
     public static func command(executable: String, wrapping previous: String?) -> String {
         let recorder = "\(shellQuoted(executable)) \(recordInvocation)"
         guard let previous else { return recorder }
-        return recorder + thenFlag + shellQuoted(previous)
+        let script = """
+            input="$(/usr/bin/mktemp "${TMPDIR:-/tmp}/edith-statusline.XXXXXX")" || exit 1
+            trap '/bin/rm -f "$input"' EXIT
+            /usr/bin/head -c 524289 >"$input"
+            [ "$(/usr/bin/wc -c <"$input")" -le 524288 ] || exit 1
+            \(recorder) <"$input" >/dev/null 2>/dev/null
+            /bin/sh -c "$2" <"$input"
+            """
+        return "/bin/sh -c \(shellQuoted(script)) edith-statusline" + thenFlag
+            + shellQuoted(previous)
     }
 
     public static func isRecorder(_ command: String) -> Bool {
@@ -111,7 +120,7 @@ public enum ClaudeStatusLine {
 
     public static func wrappedCommand(in command: String) -> String? {
         guard isRecorder(command),
-            let marker = command.range(of: recordInvocation + thenFlag)
+            let marker = command.range(of: " edith-statusline" + thenFlag)
         else { return nil }
         return shellUnquoted(String(command[marker.upperBound...]))
     }
@@ -151,7 +160,8 @@ public enum ClaudeStatusLine {
     }
 
     static func launcher(beside executable: URL, fileManager: FileManager = .default) -> String? {
-        let launcher = executable.standardizedFileURL
+        let launcher = executable.deletingLastPathComponent().appendingPathComponent("ed")
+            .standardizedFileURL
         return fileManager.isExecutableFile(atPath: launcher.path) ? launcher.path : nil
     }
 
