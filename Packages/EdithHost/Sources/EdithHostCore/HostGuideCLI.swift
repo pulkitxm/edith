@@ -1,0 +1,788 @@
+import Foundation
+
+public enum HostGuideCLI {
+    public static let text = """
+        # ed, in five minutes, for agents and humans
+
+        `ed` is the command line for Edith, the macOS menu bar app. Everything the app
+        can configure, `ed` can configure, and everything the Machines extension can
+        reach over SSH, `ed` can reach. `edith` is the same binary under its full
+        name, so use whichever reads better in your shell history.
+
+        Optional feature commands require their compatible downloaded extension to be enabled.
+        The manual describes the original feature commands. The live catalog and MCP
+        tools include only available checked providers. Discovery does not enable an extension.
+
+        There are two command surfaces:
+
+        ```
+        ed <command> ...          Edith itself.  Config, extensions, usage, limits,
+                                  system metrics, music, calendar, permissions.
+                                  ed config set, ed usage limits, ed system stats
+
+        ed <machine> <cmd...>     A configured machine, over SSH.  Everything after
+                                  the machine name is run there, verbatim, with your
+                                  exit code and both streams preserved.
+                                  ed tuf docker ps, ed tuf ls -la /srv
+        ```
+
+        The second form is why `ed <machine> docker <TAB>` completes docker's own
+        subcommands: `ed` asks the remote shell what it would have offered, so any
+        tool installed there completes, not just the ones `ed` knows about.
+
+        ## Map
+
+        Command families, the same names `ed --help` prints:
+
+        - App and settings: `ed config`, `ed app`, `ed agent`, `ed extensions`,
+          `ed permissions`, `ed install`, `ed uninstall`, `ed completions`,
+          `ed schema`, `ed version`, `ed status`, `ed mcp`.
+        - This Mac: `ed system`, `ed apps`, `ed music`, `ed calendar`,
+          `ed attention`, `ed clipboard`, `ed shelf`, `ed color`, `ed emoji`,
+          `ed bifrost`, `ed presenter`, `ed lid-awake`, `ed camera`,
+          `ed download`, `ed cleaner`, `ed brew`, `ed maintenance`, `ed tools`.
+        - Usage and projects: `ed usage`, `ed quinjet`, `ed herdr`, `ed studio`, `ed latex`,
+          `ed docs`, `ed guide`.
+        - Other machines: `ed machines`, plus `ed <machine> <command...>` for a
+          remote shell.
+        - Memory, databases, decisions: `ed companion`, `ed database`, `ed jev`.
+
+        Global conventions, on every command:
+
+        - `--json` on a leaf prints one JSON document on stdout. Diagnostics stay
+          on stderr. `ed schema` and `ed config export` are already JSON, so they
+          have no switch. A remote shell, a container shell, completion scripts,
+          and MCP stdio are streams or another protocol: `ed <command> --help`
+          shows whether `--json` exists.
+        - Exit codes: 0 success, 1 failure, 2 bad usage, 3 not found, 4 unavailable
+          (the app is not running, or a machine is down).
+        - Destructive commands go through `CLIDestructivePlan`. Without `--yes`
+          they print the action and its targets and change nothing. Pass `--yes`
+          to apply that plan. With `--json`, the plan reports `applied` and
+          `changed`.
+        - Remote targeting: `ed machines ls` lists configured machines.
+          `ed <machine> <command...>` runs a shell there. Parsed machine commands
+          take the machine as an argument, as in `ed machines show <machine>`.
+          Where a command accepts `--machine`, `local` means this Mac.
+
+        Discover more:
+
+        - `ed --help` lists families. `ed <command> --help` lists that family's
+          subcommands. `ed <command> <subcommand> --help` is the leaf: what it
+          does, what it reads or changes, its arguments, and an example.
+        - `ed guide --json` is the whole parser catalog. `ed docs ls` and
+          `ed docs ask "<request>"` search the written reference.
+          `ed docs show <command>` prints one page.
+
+        ## Discover, then act
+
+        ```
+        ed machines ls              every machine configured in Edith
+        ed machines show <m>        one machine, with live facts
+        ed config ls                every setting, with its current value
+        ed config describe <key>    one setting: type, scope, allowed values
+        ed extensions ls            every extension and whether it is on
+        ed database connections     saved database connection summaries
+        ed database pack status     whether the driver pack matches this app
+        ed database capabilities <id>  detected support for one connection id
+        ed database mcp             read-only database tools over MCP stdio
+        ed lid-awake status          closed-lid state, session, battery and helper
+        ed camera status             virtual camera, apps using it, framing and scene
+        ed audio ls                  per-app volume for whatever is playing
+        ed permissions ls           every macOS permission Edith uses
+        ed color pick               open Edith's system colour sampler
+        ed color copy 1 --format hex
+        ed emoji pick               open Edith's emoji picker
+        ed bifrost open             open the Bifrost launcher bar
+        ed usage sources            the agents that produced your usage history
+        ed usage export             branded PNG cards for sharing your activity
+        ed schema                   JSON Schema for the config document
+        ed version                  the CLI version, and whether the app is up
+        ed status                   command-line links and shell completions
+        ed docs ask "<request>"     the commands that handle a plain-language request
+        ed docs show <command>      the reference page for one command
+        ed guide                    this text
+        ed guide agent              repository instructions making an agent ed-aware
+        ed guide --json             the complete parser command catalog
+        ```
+
+        `ed install` links `ed` and `edith` into a directory on PATH, and
+        `ed uninstall` removes those links again. Neither touches anything else.
+
+        Add `--json` to any read command for machine-readable output on stdout with
+        stable field names. Diagnostics go to stderr, so stdout stays one parseable
+        document. Exit codes are the contract: 0 success, 1 failure, 2 bad usage,
+        3 not found, 4 unavailable (the app is not running, or a machine is down).
+
+        ## Configuration
+
+        Every preference the UI writes is a key in the same defaults suite the app
+        reads, so a change from `ed` shows up in the running app without a restart.
+
+        ```
+        ed config get preventSleep
+        ed extensions enable keepAwake
+        ed config set preventSleep true
+        ed config set warnPercent 70
+        ed config ls --group presenter
+        ed config export > edith.json
+        ed config import edith.json
+        ```
+
+        `ed config set` validates against the catalog: an unknown key, a value of the
+        wrong type, or a value outside the allowed set all fail before anything is
+        written. `ed schema` prints the same catalog as JSON Schema, which is what
+        `ed config import` accepts.
+
+        Extensions are settings too, but they have their own verbs because turning one
+        on can need a permission:
+
+        ```
+        ed extensions ls
+        ed extensions enable machines
+        ed extensions disable notchShelf
+        ed extensions info clipboard
+        ed extensions status --json
+        ed extensions setup quinjet --dry-run --json
+        ed extensions setup quinjet --install-tools
+        ed extensions verify quinjet --json
+        ed extensions doctor --json
+        ```
+
+        For automation, begin with `status --json` or `doctor --json`. An unhealthy
+        extension is still a successful report, so read `verified`, `state.phase`,
+        `state.runtimePhase`, `checks`, and `remediation`. `setup --dry-run` previews
+        enablement and every remaining requirement. Rerun without it to apply the
+        setup, adding `--install-tools` when the plan calls for command-line tools,
+        then use `verify` to check the live adapter again.
+
+        Lid Awake has runtime verbs because changing the system power state is not
+        the same as writing a preference:
+
+        ```
+        ed lid-awake on
+        ed lid-awake on --for 30m --yes
+        ed lid-awake on --until-lid-reopens --yes
+        ed lid-awake battery 20
+        ed lid-awake status --json
+        ed lid-awake off
+        ```
+
+        The virtual camera takes live changes while a call is running:
+
+        ```
+        ed camera zoom 1.5
+        ed camera frame --x 0.4 --y 0.45 --auto medium
+        ed camera look studio
+        ed camera background blur --blur 0.7
+        ed camera scene apply Close-up
+        ed camera scene next             step scenes from a hotkey
+        ed camera extension status       Edith Camera system extension
+        ed camera pause --style card --message "Back in 5"
+        ed camera resume
+        ```
+
+        ## Databases
+
+        Database reads go through the authenticated local broker used by the app.
+        Connection output never includes credential references or secret values.
+
+        ```
+        ed database connections
+        printf '%s\n' "$DB_PASSWORD" | ed database connections add "TUF PostgreSQL" --product postgresql --host 127.0.0.1 --port 15432 --username edith --database million_rows --password-stdin
+        ed database connections list --product postgresql --environment production
+        ed database connections get <connection-id>
+        ed database connections test <connection-id> --timeout-milliseconds 10000 --json
+        ed database connections edit <connection-id> --environment production --protection read-only
+        ed database connections duplicate <connection-id> "TUF PostgreSQL copy"
+        ed database connections rename <connection-id> "TUF PostgreSQL"
+        ed database connections delete <connection-id> --yes
+        printf 'select * from public.orders limit 100' | ed database saved-queries save "recent orders" --connection <connection-id>
+        ed database saved-queries list --connection <connection-id> --json
+        ed database saved-queries get <query-id>
+        ed database saved-queries rename <query-id> "recent orders by id"
+        ed database saved-queries delete <query-id> --yes
+        ed database capabilities <connection-id>
+        ed database capabilities <connection-id> --refresh --json
+        ed database connect <connection-id> --json
+        ed database browse <connection-id> --path public --path orders --limit 100 --json
+        printf 'select * from public.orders limit 100' | ed database query <connection-id> --json
+        ed database mutations row-request <connection-id> --action update --path public --path orders --identity identity.json --values values.json > mutation.json
+        ed database mutations document-request <connection-id> --action update --path app --path people --document-id 507f1f77bcf86cd799439011 --document person.json > mutation.json
+        ed database mutations preview --request mutation.json --json > preview.json
+        ed database mutations apply --request mutation.json --confirmation preview.json --yes --json > receipt.json
+        ed database mutations preview --request mutation.json --json | ed database mutations apply --request mutation.json --confirmation - --yes --json
+        ed database mutations status --receipt receipt.json --json
+        ed database mutations cancel --receipt receipt.json --yes --json
+        ed database mutations outcome <operation-id> --json
+        ed database operations list --connection <connection-id> --state running --json
+        ed database operations cancel <operation-id> --json
+        ed database disconnect <connection-id> --json
+        ed database mcp
+        ```
+
+        The bare `database` command defaults to `connections`, and bare `connections`
+        defaults to `list`. Use `--json` for stable fields and UUID connection ids.
+        `connections add` tests the exact connection through the broker before saving it.
+        Passwords are accepted only from stdin and stored in Keychain; arguments and
+        output contain no credential values or Keychain identifiers.
+        Connection edits preserve endpoints and credential references while changing labels,
+        grouping, favorites, colors, and safety policies. Duplicate connections intentionally
+        share their existing Keychain credentials and report that fact without printing their
+        references. Delete commands require `--yes` and disconnect active sessions first.
+        Saved query text is accepted only from stdin or a UTF-8 file, never from process
+        arguments. Lists omit query text, while `get` and `save --json` return the bounded body.
+        Capability discovery uses the cached report when possible. `--refresh` asks the
+        broker to reconnect and discover the current product, version, topology,
+        permissions, limits, supported operations, and safety limitations.
+        Browse and query return bounded pages. Use `--ndjson` for one record per line,
+        pass the opaque continuation back with `--continuation`, and set an operation
+        deadline with `--timeout-milliseconds`. Query text is read only from stdin or
+        a UTF-8 file so statements do not leak through process arguments.
+        Destructive work starts from a bounded `DatabaseDestructiveRequest` JSON file.
+        `mutations row-request` builds PostgreSQL insert, update, and delete requests with
+        quoted identifiers and bound values from typed identity and value documents.
+        `mutations document-request` builds MongoDB insert, update, and delete requests from
+        bounded JSON documents and an explicitly typed document identifier.
+        `mutations preview` returns the exact effect, impact, confirmation text, expiry,
+        and a short-lived one-time token. `mutations apply` requires the unchanged request,
+        the saved preview document, and `--yes`; it never accepts tokens or confirmation
+        text in process arguments. Save an accepted apply result to check status, request
+        cancellation, or reconcile the durable outcome after an interrupted operation.
+        `database operations` lists broker history, shows progress, and requests
+        cancellation using operation UUIDs returned by execution commands.
+
+        `ed database mcp` stays in the foreground and reserves stdout for MCP
+        protocol traffic. It exposes bounded connection and capability inspection
+        through the same authenticated broker. Tool failures remain structured MCP
+        responses, while process diagnostics use stderr.
+
+        ## Machines
+
+        Machines come from Edith's own machine list, so `ed` never asks you to
+        re-enter a host. Transport is `/usr/bin/ssh` with a ControlMaster socket
+        shared with the app: if the app already holds a connection, `ed` reuses it
+        and every command is a round trip on an open channel.
+
+        ```
+        ed machines ls
+        ed machines tuf                         one machine, with live facts
+        ed machines tuf metrics                 one sample
+        ed machines tuf metrics --follow        a sample every two seconds
+        ed machines tuf uptime                  run a command there
+        ed tuf uptime                           the same thing, shorter
+        ed machines tuf files ls /var/log
+        ed machines tuf files get /etc/os-release ./os-release
+        ed machines files get-many tuf /etc/hosts /etc/services --to ./system-files
+        ed machines files transfer tuf box /srv/report.txt --into /archive --dry-run
+        ed machines tuf files put ./deploy.sh /tmp/deploy.sh
+        ed machines tuf files preview /etc/os-release
+        ed machines tuf files launch /srv/reports/latest.pdf
+        ed machines tuf services
+        ed machines tuf disconnect
+        ```
+
+        A machine's disk can also come to you. `mount` hangs its file system off a
+        folder on this Mac over the same connection, so Finder and every local tool
+        read and write it in place. It needs an sshfs here, FUSE-T for a kext-free
+        one or macFUSE if you already run it. A mount that dies with the machine is
+        put back the way saved port forwards are: the app checks the machines it is
+        connected to, and `mount` run again repairs rather than refusing.
+
+        ```
+        ed machines mount tuf                   all of / at ~/Edith/tuf
+        ed machines mount tuf /srv --read-only  one directory, look but do not touch
+        ed machines mounts                      what is mounted, and whether it answers
+        ed machines mount tuf                   again: puts a dead mount back
+        ed machines unmount tuf
+        ed machines tuf files open /var/log     a Files window, in its own small app
+        ```
+
+        The list itself is yours to edit from here, and a change reaches a running
+        Edith immediately.
+
+        ```
+        ed machines add box --host 10.0.0.4 --user pi
+        ed machines edit box --name shed --key ~/.ssh/id_ed25519
+        ed machines rm shed --yes               with its forwards, snippets and secrets
+        ed machines forwards add box --local 8080 --remote 80
+        ed machines forwards open box 1          open localhost:8080 in a browser
+        ed machines snippets add box logs journalctl -xe
+        ed machines snippets run box 1
+        ```
+
+        Power, units and processes. Restart and shut down need --yes, and report
+        the machine's own refusal rather than claiming success.
+
+        ```
+        ed machines power status box            up? wakeable? rebootable?
+        ed machines power reboot box --yes
+        ed machines power wake box              works while it is off
+        ed machines services restart box nginx.service
+        ed machines kill box 4213 --signal KILL
+        ed machines thermal status box          active platform profile and choices
+        ed machines thermal set box performance --minutes 30
+        ed machines box control status          live brightness, audio and radios
+        ed machines box control volume 40       set output volume to 40 percent
+        ed machines box control wifi off         preview a disruptive Wi-Fi change
+        ed machines box control wifi off --yes   apply it explicitly
+        ```
+
+        Thermal controls use the Linux platform profile or Windows power scheme
+        exposed by the machine. A timed profile change schedules its reversion on
+        that machine, so it still restores the previous profile if Edith closes or
+        the SSH connection drops.
+
+        The machine name comes first, subject then verb. The older order with the
+        machine last still parses, so `ed machines docker ps tuf` keeps working. A
+        subcommand name always wins, so a machine literally called `ls` or `docker`
+        has to be named explicitly: `ed machines show docker`.
+
+        Docker on a machine has both a parsed form and a raw form. The parsed form is
+        for scripts, the raw form is for everything docker can do:
+
+        ```
+        ed machines tuf docker ps --json        parsed, stable field names
+        ed machines tuf docker images
+        ed machines tuf docker logs api --tail 100 --follow
+        ed machines tuf docker inspect api --json
+        ed machines tuf docker top api --json
+        ed machines tuf docker start|stop|restart|rm api
+        ed machines tuf docker prune images --yes
+        ed machines tuf docker compose ls
+        ed machines tuf docker compose up|down|restart|pull web
+        ed tuf docker buildx ls                 raw docker, straight through
+        ```
+
+        `ed <machine> <anything>` is the general escape hatch, and it is not limited to
+        docker: `ed tuf systemctl status nginx`, `ed tuf tail -f /var/log/syslog`, `ed
+        tuf 'ls -la | head'`. Stdin is forwarded, so pipes work in both directions.
+
+        `cd` sticks, so the commands after it run where you left off. The directory
+        belongs to the terminal it was set in, like a local shell, and remote path
+        completion follows it.
+
+        ```
+        ed tuf cd Desktop
+        ed tuf pwd                              /home/pulkit/Desktop
+        ed tuf cd -                             back to where you were before
+        ed tuf cd                               back to the home directory
+        ```
+
+        ## Quinjet review workspaces
+
+        Quinjet discovery and launch use the same request builder as Edith's Quinjet
+        page. `--machine` accepts a configured machine or `local`, and remote requests
+        reuse Edith's shared SSH control socket.
+
+        ```
+        ed quinjet projects                     recent local projects
+        ed quinjet projects --machine build     recent projects on build
+        ed quinjet worktrees ~/code/edith       every worktree in one project
+        ed quinjet open ~/code/edith            print the launch command, do not run it
+        ed quinjet launch ~/code/edith          launch in the current terminal
+        ed quinjet launch ~/code/edith --cmux   launch in cmux
+        ed quinjet sessions                     native tabs in the running Edith page
+        ed quinjet new                          create and select a native picker tab
+        ed quinjet focus 2                      select a native tab or cmux workspace
+        ed quinjet restart 2                    restart a review in the same tab
+        ed quinjet switch 2 ~/code/other        switch a tab to another worktree
+        ed quinjet close 2                      preview closing a native tab
+        ed quinjet close 2 --yes                close the tab and its process or workspace
+        ```
+
+        `open` is always safe to inspect or pipe. It resolves the worktree and prints
+        the exact quoted command without starting Quinjet. `launch` is the explicit
+        standalone execution boundary. It never controls a native Edith tab. Native
+        session commands use bounded IPC with the open Quinjet page. Session numbers,
+        ids, exact titles, branches and worktree paths are accepted as selectors.
+
+        ## Companion memory
+
+        The companion stores Markdown notes as append-only episodes. `ed` can choose
+        a capable machine, deploy the stack there, keep its port forward open, and
+        use that deployment for every memory command.
+
+        ```
+        ed companion hosts                      machines that can run the stack
+        ed companion deploy tuf                 install, start and remember its host
+        ed companion stack status               host, tier, services and ports
+        ed companion status                     counts and latest ingest
+        ed companion doctor                     postgres, redis and vault checks
+        ed companion search "launch plan"        search indexed memory
+        ed companion ingest ./notes --json      ingest a Markdown tree
+        ed companion chat "how was my week" --persona analyst
+        ed companion conversations              list chats, replay one by id
+        ed companion episode <id>               read one episode in full
+        ed companion reason set --api-key sk-x  configure the reasoner in place
+        ed companion nightly                    run the learning pipeline now
+        ed companion export ~/backup --include-media
+        ed companion import ~/backup            put a bundle back, idempotently
+        ed companion db reindex                  preview a full search-index rebuild
+        ed companion db reindex --yes            rebuild the search index now
+        ed companion erase <id> --yes           delete one episode for good
+        ed companion wipe                       preview a complete memory wipe
+        ed companion wipe --yes                 apply the complete memory wipe
+        ```
+
+        `ed companion stack down` keeps memory by default. `--wipe` removes the
+        stack volumes, so export a restorable bundle before using it.
+
+        ## Jev decisions
+
+        Jev is TypeSafe's fast decision model. It answers typed questions (yes or
+        no, one of up to 255 options, or a score) in well under a second. Edith
+        uses it only after a key is saved in Settings > Jev or with `ed jev key
+        set`; without one, every feature keeps its own rules.
+
+        ```
+        printf %s "$KEY" | ed jev key set   store the key and check it
+        ed jev status --probe               key, models, credits and latency
+        ed jev key clear --yes              remove the key, Jev turns off
+        ed jev ask --request req.json       a raw state plus typed questions
+        ```
+
+        With a key, `ed mcp` also lists `edith_find`, which ranks Edith's tools
+        for a plain-language request.
+
+        ## Usage and limits
+
+        Usage numbers come from the same `usage.json` the dashboard reads, and limits
+        come from the same `limits-history.jsonl` the rings read. `ed` never recomputes
+        them, so the CLI and the UI can never disagree. provider limits arrive through
+        the saved provider login or a profile-scoped shell OAuth token, with the status line as a fallback.
+
+        ```
+        ed usage limits                 session and weekly, per provider
+        ed usage alerts                 burn rate, projected cap and the alert due now
+        ed usage summary --range week   cost and tokens for a window
+        ed usage daily --range month
+        ed usage models
+        ed usage projects list         repositories, with folders in JSON
+        ed usage projects show edith   one repository and its folders
+        ed usage projects open edith   open its validated link
+        ed usage projects copy-link edith
+        ed usage projects copy-chat <chat-id>
+        ed usage attribution ls         folders matched to a repository, and why
+        ed usage attribution reset --yes  forget those decisions
+        ed usage sources
+        ed usage export --card activity --output ./shares
+        ed usage machines               machines counted with this Mac
+        ed usage machines collect tuf   run the collector there, bring it back
+        ed usage refresh                re-collect from every agent, live progress
+        ed usage refresh --follow       watch a refresh that is already running
+        ```
+
+        `--range` is one of today, week, month, all. Week is the current calendar
+        week, from Monday through today. `--source` filters to one agent and repeats,
+        `--machine` filters to one machine by name and repeats, and `--machine local`
+        is this Mac on its own.
+
+        `ed usage projects list` groups folders that share a GitHub remote into one
+        repository, including folders on different machines. The table shows only the
+        repository name, cost and tokens. JSON adds the repository identity, GitHub
+        URL and every folder with its path and machine. Repositories with the same
+        visible name stay separate by identity. Project detail is normalized per
+        source to the canonical totals, and unmatched usage appears as Unattributed.
+        `show` selects by stable identity, visible name or URL. Duplicate names require
+        the identity. `open`, `copy-link` and `copy-chat` use the same shared actions as
+        the dashboard project drilldown.
+
+        After a refresh, an unknown or non-GitHub folder whose name or path clearly
+        names one known repository moves under it, and so does a chat whose title
+        does. With a Jev key, Jev picks a repository or none for the rest. Moved
+        folders keep their path, `show` marks them "attributed by name" or
+        "attributed by Jev", and `list --json` adds `attribution` per folder.
+
+        A machine keeps its agent history on its own disk, so `ed usage machines
+        collect` pipes the collector over SSH and runs it there, installing what is
+        missing under ~/.cache/edith on that machine. Its agents come back as sources
+        named `<machine>:<agent>`, which every other usage command then counts.
+
+        ## The Mac itself
+
+        ```
+        ed system stats                 one sample of this Mac
+        ed system stats --follow        keep sampling
+        ed system disks
+        ed music status                 whatever is playing, on whichever player
+        ed music play|pause|stop|toggle|next|previous
+        ed music volume 0.4
+        ed music players                every player, and which one is active
+        ed music open-current           open whichever player is active
+        ed music reveal-current         reveal the library track or open its player
+        ed music favorite <track>       keep or remove with unfavorite
+        ed music reveal <track> | open  Finder actions from the Music page
+        ed calendar ls --days 7
+        ed calendar join <event-id>     open the event's meeting link
+        ed calendar directions <event>  open its location in Maps
+        ed calendar open                open the Calendar application
+        ed presenter status | start | stop
+        ed herdr ls                     live Herdr sessions here and over SSH
+        ed herdr attach w3:p1N          attach this terminal to a live pane
+        ed herdr models codex           models, effort levels and fast mode per agent
+        ed herdr defaults set codex --model gpt-6-sol --effort high --fast on
+        ed herdr layout ls              tabs, saved layouts, and agent terminals
+        ed herdr split <agent> --side right
+        ed herdr close-tab --yes        close the selected Herdr tab
+        ed permissions ls
+        ed permissions request calendar
+        ed permissions settings screenRecording
+        ```
+
+        `ed music` targets whatever is actually playing. Spotify and Apple Music are
+        driven straight over AppleScript, so they work whether or not Edith is running;
+        Edith's own library is driven through the menu bar app. A player that is not
+        already open is never launched. Pass `--player builtin|spotify|apple` to force
+        one, and `ed music status --json` reports every player it can see plus the
+        active one. `ed nowplaying` and `ed np` are the same command.
+
+        Calendar runs through the menu bar app, because the calendar grant lives there.
+        If the app is not running those commands exit 4 and say so rather than
+        pretending.
+
+        `ed herdr ls` asks `herdr` on this Mac and on every configured SSH machine.
+        A missing binary is an empty host, not an error. `ed herdr command <pane>`
+        prints the attach line, `ssh -tt` when the pane is remote. `attach` runs
+        that same launch request in the current terminal.
+
+        `ed herdr models [<kind>]` lists the models, effort levels and fast mode each
+        agent offers, asked live from codex, opencode, pi and cursor (on this Mac or
+        `--machine`) and built in for provider, Gemini and Amp. `ed herdr defaults
+        set <kind>` stores the model, effort and fast mode Edith passes whenever it
+        starts that agent; `none` clears a value.
+
+        ## Attention and focus
+
+        Attention data is local files, so agents can inspect and categorize it with
+        the app closed. Initial collection, privacy and browser permissions stay in
+        the guided Attention screen.
+
+        ```
+        ed attention status --json
+        ed attention summary --range today --json
+        ed attention breakdown --by machine --range 7d --json
+        ed attention agents --range week --json
+        ed attention timeline --range 24h --limit 100 --json
+        ed attention music --range 30d --json
+        ed attention categories ls --json
+        ed attention categories set web:example.com focus --name Example
+        ed attention categories auto --json
+        ed attention focus start --for 25m --name "Write proposal"
+        ed attention focus status --json
+        ed attention focus stop
+        ed attention doctor --json
+        ```
+
+        Summary entities carry stable IDs. Passing one to `categories set` changes
+        the identity rule, so past and future events are reclassified without raw
+        history being rewritten. Browser intervals replace the enclosing browser app
+        in summaries, avoiding double counting. Idle video is not engaged
+        entertainment, while audio listening remains available under `music`.
+
+        ## The desk
+
+        Everything the UI parks somewhere is readable, and most of it without the app
+        running, because it lives in files and preferences rather than in memory.
+
+        ```
+        ed tools ls                     yt-dlp and the agent CLIs
+        ed machines broadcast -- uptime one SSH command, every configured machine
+        ed machines terminal broadcast box -- uptime one line, every open tab for box
+        ed apps ls                      what is running here
+        ed apps quit Safari --yes | --all --yes
+        ed brew ls --outdated           installed Homebrew packages with updates
+        ed brew search firefox          available casks matching a query
+        ed brew install ripgrep         install one exact formula
+        ed brew uninstall ripgrep       preview before removing anything
+        ed maintenance ignore <id> --available <version>
+        ed maintenance snooze <id> --for 7d
+        ed maintenance reset --yes
+        ed attention backup
+        ed attention breakdown --by app --from 2026-09-01 --to 2026-09-30 --csv
+        ed emoji forget 1F600
+        ed app quit --completely --yes
+        ed usage export --clipboard
+        ed maintenance inventory        installed apps and Homebrew updates
+        ed maintenance scan <app>       exact app and support-file Trash plan
+        ed maintenance remove <app>     preview the reviewed selection
+        ed maintenance remove <app> --yes
+        ed seo ls                       saved site-audit projects
+        ed seo pages <id> --refresh     discover pages and choose with --all or --only
+        ed seo start <id> --json        audit the selected pages
+        ed code-stats status            mirror folder, schedule and live progress
+        ed code-stats run --wait        refresh the GitHub mirror and recount
+        ed code-stats report --range 90d
+        ed code-stats export --card highlights -o ~/Desktop
+        ed download ls                  the yt-dlp queue
+        ed download status              lifecycle totals for the queue
+        ed download add <url> --kind audio
+        ed download retry --all | clear --yes | tool --update
+        ed download cancel 1 | cancel
+        ed download open 1 | reveal 1
+        ```
+
+        ```
+        ed clipboard ls                 the clipboard history, pinned first
+        ed clipboard ls --search token  only entries mentioning it
+        ed clipboard stats              how many entries, and what they weigh
+        ed clipboard get 3              entry three, as text
+        ed clipboard copy 3             put it back on the pasteboard
+        ed clipboard pin 3 | unpin 3
+        ed clipboard rm 3 --yes | clear --yes
+        ed color ls --format hex        the colours you picked
+        ed color copy 1                 copy the newest using your configured format
+        ed skills ls                    Edith skills and detected agents
+        ed skills preview edith-remote-work
+        ed skills install edith-remote-work --agent cursor
+        ed browser ls                  notch browser tabs and Chrome profiles
+        ed browser navigate https://example.com
+        ed browser detach               preview clearing the attached profile
+        ed emoji ls --search rocket     the emoji this Mac can render
+        ed emoji insert 1F600           type one into the app in front of you
+        ed emoji tone medium            the default skin tone
+        ed bifrost ls --search code     the applications Bifrost indexed
+        ed bifrost calc "12 * 8 + 4%"   the answer the bar would show
+        ed bifrost convert "12 km in miles"
+        ed shelf ls                     what is parked on the notch shelf
+        ed shelf add ./report.pdf
+        ed shelf open 1 | reveal 1 | share 1
+        ed studio tools --kind pdf      Studio's tools for one kind of file
+        ed studio record status         screen, microphone, system audio and cursor
+        ed studio workflow ls           saved chains of Studio tools
+        ed studio edit schema           Headless video edit-plan schema
+        ed studio edit apply demo.openscreen --plan edit.json --dry-run --json
+        ed studio edit render demo.openscreen --output demo.mp4 --json
+        ed studio edit audio analyze demo.openscreen --asset ASSET_ID --json
+        ed studio edit markers add demo.openscreen --frame 60 --fps 60000/1001 --label Cue --json
+        ed studio edit markers snap demo.openscreen --frame 62 --fps 60000/1001 --threshold-frames 2 --json
+        ed studio edit publications create uploads.json --input projects.json --json
+        ed studio edit publications show uploads.json --json
+        ed studio edit publications reorder uploads.json --input order.json --overwrite --json
+        ed studio run pdf.merge a.pdf b.pdf
+        ed studio run image.convert photo.heic --set format=jpg
+        ed cleaner scan                 developer caches worth reclaiming
+        ed cleaner clean --yes          moves them to the Trash, never deletes
+        ```
+
+        ## One-shot actions
+
+        Inspect Edith itself, then ask it to perform a one-shot action:
+
+        ```
+        ed app info                     installed identity, version and build
+        ed app diagnostics              live helper uptime and idle wakeups
+        ed app paths                    app data, logs, iCloud and music locations
+        ed app links                    repository and profile destinations
+        ed app open-path refresh-log    reveal the log, or open its folder
+        ed app open-link repository     open one listed URL
+        ed app actions                  what can be asked for, and whether it can run
+        ed app clean-keys               lock the keyboard so it can be wiped
+        ed app test-notification
+        ed app open                     open Edith's panel
+        ed app check-updates            ask Sparkle to look now
+        ed app updates                  the checks already made
+        ed app quit                     preview quitting the main window
+        ed app quit --yes               apply it, leaving the menu bar running
+        ed app relaunch                 preview restarting both processes
+        ed app relaunch --yes           apply the restart after a permission grant
+        ed app clear-updates            preview clearing the update history
+        ed app reveal companion --tab chat  show a section, and a tab inside it
+        ed app route                    print where the window is, without focusing it
+        ed app navigate companion/chat  move there without ordering the window forward
+        ed app back                     previous route, still in the background
+        ed app snapshot                 the open windows as PNGs, no screen recording
+        ```
+
+        ## The background agent
+
+        `edithd` is a headless LaunchAgent that owns collection and long jobs.
+        It has no window and never asks for a permission:
+
+        ```
+        ed agent status                 registration, build, uptime, memory, store schema
+        ed agent jobs                   the live job table with cadences and subscribers
+        ed agent restart                stop it so launchd starts a fresh one
+        ed agent logs --last 10m        recent lines from its log subsystem
+        ```
+
+        ## Serving yourself
+
+        `ed mcp` exposes available provider operations as MCP tools over stdio, so an
+        agent can call them directly instead of shelling out:
+
+        ```
+        ed mcp                          one tool per route, JSON in and out
+        ```
+
+        ## Completions
+
+        ```
+        ed completions install          zsh, bash and fish, auto-detected
+        ed completions zsh > _ed        or place it yourself
+        ```
+
+        Completion is dynamic. It offers machine names where a machine goes, setting
+        keys where a key goes, allowed values where a value goes, and after a machine
+        name it asks that machine what it would complete. Remote completion only runs
+        when a ControlMaster socket for the machine is already open, so pressing TAB
+        never opens a connection or blocks on a sleeping host.
+
+        ## Agent etiquette
+
+        - Prefer `--json` and parse stdout; treat stderr as commentary. On failure
+          stdout may be empty; the exit code is the contract.
+        - Discover before acting. `ed machines ls --json` and `ed config ls --json`
+          are cheap and tell you the exact names the other commands expect.
+        - `ed config set` writes to the live app. Read the current value first if you
+          intend to restore it.
+        - `ed <machine> <cmd>` runs with your SSH identity on a real machine. Treat it
+          with the care you would give a shell there.
+        - The first `ed` command against a machine may open a ControlMaster socket that
+          outlives the process, which is what makes later commands fast.
+          `ed machines disconnect <m>` closes it.
+        - Commands that need the app say so and exit 4. That is a signal to start
+          Edith, not to retry.
+        - `ed color pick` returns after requesting desktop UI. It never reads stdin,
+          but someone at the logged-in Mac still has to select a colour.
+        """
+
+    public static let agentSnippet = """
+        ## Edith, from the command line
+
+        This machine runs Edith, a macOS menu bar app with a first-class CLI. Prefer it
+        over ad hoc scripts for anything about this Mac, its settings, agent usage, or
+        the machines it can reach over SSH.
+
+        - `ed guide` is the full manual, including the command-family map.
+          `ed --help` lists commands, `ed <command> --help` drills in.
+        - `ed guide --json` is the complete command, alias, argument, option and help
+          catalog. Prefer `--json` when a command advertises it: stdout is exactly one
+          JSON document, logs go to stderr, and the exit code is reliable (0 ok,
+          1 failed, 2 bad usage, 3 not found, 4 unavailable). Gate on it.
+        - Destructive commands print a CLIDestructivePlan and change nothing until
+          `--yes`. `ed <machine> <command>` runs on a configured machine; `--machine
+          local` means this Mac.
+        - `ed config ls --json`, `ed config get <key>`, `ed config set <key> <value>`
+          reach every setting the UI exposes, and the running app picks changes up
+          live. `ed schema` is the JSON Schema for the whole config document.
+        - `ed extensions ls` and `ed extensions enable|disable <id>` toggle features.
+          Before relying on one, run `ed extensions status <id> --json` and read
+          `verified`, `state.phase`, `state.runtimePhase`, `checks`, and `remediation`.
+          An unhealthy readiness report still exits 0, so gate on `verified`.
+        - `ed extensions setup <id> --dry-run --json` previews noninteractive setup.
+          Rerun without `--dry-run`, add `--install-tools` when required, then run
+          `ed extensions verify <id> --json`. `ed extensions doctor --json` reports
+          recovery steps across every extension.
+        - `ed machines ls --json` lists configured machines. `ed <machine> <command>`
+          runs a command there over the app's shared SSH ControlMaster, preserving the
+          exit code and both streams: `ed tuf docker ps`, `ed tuf systemctl status`.
+        - `ed usage limits --json` and `ed usage summary --json` read the same usage
+          pipeline the app's dashboard does, so never re-derive token or cost numbers
+          from raw logs.
+        - `ed system stats --json` samples this Mac; add `--follow` to stream.
+
+        Do not shell out to `ssh` directly for a configured machine; `ed` reuses the
+        app's connection and its known-hosts pinning.
+        """
+}

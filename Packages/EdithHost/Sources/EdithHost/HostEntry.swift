@@ -40,7 +40,7 @@ struct HostEntry: AppExtension {
                 && !arguments[0].hasPrefix("--contained-extension-")
                 && arguments[0] != "--cli-fixture")
         {
-            exit(HostCLI.run(arguments))
+            HostCommandCLI.main(arguments: arguments)
         }
         #if EDITH_CLI_FIXTURE
         if arguments.count == 2, arguments[0] == "--extension-remote-registration-fixture" {
@@ -141,7 +141,7 @@ struct HostEntry: AppExtension {
             } catch { exit(1) }
             return
         }
-        guard arguments.isEmpty else { exit(HostCLI.run(arguments)) }
+        guard arguments.isEmpty else { HostCommandCLI.main(arguments: arguments) }
         HostApplication.main()
     }
 }

@@ -106,6 +106,7 @@ import Foundation
             "compatible": marketplace.installed[id] != nil,
             "enabled": marketplace.sessions.enabledIDs.contains(id),
             "running": marketplace.sessions.activeIDs.contains(id),
+            "processIdentifier": marketplace.sessions.processIdentifiers[id] as Any? ?? NSNull(),
             "state": marketplace.sessions.states[id]?.rawValue ?? "notInstalled",
             "version": marketplace.installed[id]?.version as Any? ?? NSNull(),
             "availableVersion": marketplace.available[id]?.version as Any? ?? NSNull(),

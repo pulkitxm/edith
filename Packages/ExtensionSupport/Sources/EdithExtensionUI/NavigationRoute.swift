@@ -478,8 +478,8 @@ public final class WindowRouter {
 }
 
 @MainActor
-enum NavigationCommands {
-    static func perform(action: String, route: String?) -> [String: Any] {
+public enum NavigationCommands {
+    public static func perform(action: String, route: String?) -> [String: Any] {
         guard let router = WindowRouter.commandTarget else {
             return ["ok": false, "error": "the main window has not registered a route"]
         }
