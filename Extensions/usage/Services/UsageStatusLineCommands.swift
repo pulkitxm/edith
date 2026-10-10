@@ -24,7 +24,7 @@ public actor UsageStatusLineCommands {
 
     public init(
         settings: URL = ClaudeStatusLine.settingsURL(), history: URL = LimitsHistory.url,
-        executable: String? = ClaudeStatusLine.defaultExecutable(),
+        executable: String? = nil,
         defaults: UserDefaults = SharedDefaults.store
     ) {
         self.settings = settings
