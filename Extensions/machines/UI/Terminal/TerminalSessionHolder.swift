@@ -15,12 +15,22 @@ final class TerminalSessionHolder {
         let completion: @MainActor (Bool) -> Void
     }
 
+    let id = UUID()
+    private var closingTask: Task<Void, Never>?
+    private var queuedExternalInput = Data()
+    private var inputEvents = 0
     private(set) var generation = 0
     private(set) var started = false
     private(set) var exitMessage: String?
     private(set) var currentTitle: String?
     private(set) var currentWorkingDirectory: String?
-    private(set) var ghosttyLaunch: GhosttyLaunch?
+    private(set) var hasTerminal = false
+    private var externalIO: GhosttyExternalIO?
+    private var engineRequest: MachineTerminalRequest?
+    private var engineClient: MachineUIClient?
+    private var engineTask: Task<Void, Never>?
+    private var inputTask: Task<Void, Never>?
+    private var inputBytes = 0
     private(set) var ghosttyView: GhosttyTerminalView?
 
     private(set) var transferringDrop = false
@@ -41,35 +51,143 @@ final class TerminalSessionHolder {
         self.deliverGhosttyInput = deliverGhosttyInput
     }
 
-    func start(_ launch: TerminalLaunch) {
-        guard !started else { return }
+    func start(
+        session: MachineSession, context: MachineTerminalContext? = nil,
+        windowsShell: WindowsTerminalShell = .automatic, containerID: String? = nil
+    ) {
+        guard !started, let client = session.uiClient else { return }
         queuedGhosttyInput = ""
         started = true
+        hasTerminal = true
         exitMessage = nil
         currentTitle = nil
-        currentWorkingDirectory = launch.currentDirectory
-        ghosttyLaunch = GhosttyLaunch(
-            executable: launch.executable, arguments: launch.arguments,
-            environment: launch.environment, workingDirectory: launch.currentDirectory,
-            allowsLocalFileLinks: true)
-        if let command = launch.startupCommand { sendInput(command + "\n") }
+        currentWorkingDirectory = context?.startingDirectory
+        engineClient = client
+        engineRequest = MachineTerminalRequest(
+            operation: .open, machineID: session.id, tabID: id,
+            directory: context?.startingDirectory, containerID: containerID,
+            windowsShell: windowsShell)
+        externalIO = GhosttyExternalIO(
+            write: { [weak self] bytes in self?.enqueueInput(bytes) },
+            resize: { [weak self] columns, rows, _, _ in
+                self?.enqueueResize(columns: columns, rows: rows)
+            },
+            failure: { [weak self] in self?.fail("The terminal input queue is full.") })
     }
 
-    func start(
-        executable: String, arguments: [String], environment: [String],
-        currentDirectory: String? = nil, allowsLocalFileLinks: Bool = true,
-        resetTerminalAfterInterrupt: Bool = false
-    ) {
-        guard !started else { return }
-        queuedGhosttyInput = ""
-        started = true
-        exitMessage = nil
-        currentTitle = nil
-        currentWorkingDirectory = currentDirectory
-        ghosttyLaunch = GhosttyLaunch(
-            executable: executable, arguments: arguments, environment: environment,
-            workingDirectory: currentDirectory, allowsLocalFileLinks: allowsLocalFileLinks,
-            resetTerminalAfterInterrupt: resetTerminalAfterInterrupt)
+    private func startEngine() {
+        guard engineTask == nil, let client = engineClient, let request = engineRequest else {
+            return
+        }
+        let generation = generation
+        let previous = closingTask
+        engineTask = Task { [weak self] in
+            var handle: UUID?
+            do {
+                await previous?.value
+                try Task.checkCancellation()
+                let opened = try await client.terminal(request)
+                handle = opened.handle
+                guard let handle, let self, generation == self.generation else {
+                    throw CancellationError()
+                }
+                var owned = request
+                owned.handle = handle
+                self.engineRequest = owned
+                let queued = queuedExternalInput + Data(queuedGhosttyInput.utf8)
+                queuedExternalInput = Data(); queuedGhosttyInput = ""
+                for offset in stride(from: 0, to: queued.count, by: 16_384) {
+                    enqueueInput(queued.subdata(in: offset..<min(offset + 16_384, queued.count)))
+                }
+                var cursor: UInt64 = 0
+                while !Task.isCancelled {
+                    owned.operation = .read; owned.offset = cursor
+                    let frame = try await client.terminal(owned)
+                    guard generation == self.generation, let view = ghosttyView else {
+                        throw CancellationError()
+                    }
+                    if !frame.bytes.isEmpty {
+                        guard view.receiveOutput(frame.bytes) else {
+                            throw MachineUIError.unavailable
+                        }
+                    }
+                    cursor = frame.nextOffset
+                    _ = view.setTermios(canonical: frame.canonical, echo: frame.echo)
+                    if let code = frame.exitCode {
+                        _ = view.processExited(code)
+                        started = false
+                        exitMessage = Self.exitMessage(code)
+                        break
+                    }
+                    try await Task.sleep(for: .milliseconds(30))
+                }
+            } catch {
+                if !Task.isCancelled, let self, generation == self.generation {
+                    fail(error.localizedDescription)
+                }
+            }
+            if let handle {
+                var close = request; close.operation = .close; close.handle = handle
+                let cleanup = Task { _ = try? await client.terminal(close) }
+                await cleanup.value
+            }
+        }
+    }
+
+    private func enqueueInput(_ bytes: Data) {
+        guard !bytes.isEmpty, bytes.count <= 16_384,
+            inputBytes + queuedExternalInput.count + bytes.count <= 262_144, inputEvents < 256
+        else { fail("The terminal input queue is full."); return }
+        guard let client = engineClient, let request = engineRequest, request.handle != nil else {
+            queuedExternalInput += bytes
+            return
+        }
+        let previous = inputTask
+        let generation = generation
+        inputBytes += bytes.count
+        inputEvents += 1
+        inputTask = Task { [weak self] in
+            await previous?.value
+            guard let self else { return }
+            defer { inputBytes -= bytes.count; inputEvents -= 1 }
+            guard !Task.isCancelled, generation == self.generation else { return }
+            var input = request; input.operation = .input; input.bytes = bytes
+            do { _ = try await client.terminal(input) } catch {
+                if !Task.isCancelled, generation == self.generation {
+                    fail(error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func enqueueResize(columns: UInt16, rows: UInt16) {
+        guard let client = engineClient, var request = engineRequest else { return }
+        request.columns = columns; request.rows = rows
+        if request.handle == nil { engineRequest = request; return }
+        guard inputEvents < 256 else { fail("The terminal input queue is full."); return }
+        inputEvents += 1
+        let previous = inputTask
+        let generation = generation
+        inputTask = Task { [weak self] in
+            await previous?.value
+            guard let self else { return }
+            defer { inputEvents -= 1 }
+            guard !Task.isCancelled, generation == self.generation else { return }
+            request.operation = .resize
+            do { _ = try await client.terminal(request) } catch {
+                if !Task.isCancelled, generation == self.generation {
+                    fail(error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func fail(_ message: String) {
+        engineTask?.cancel()
+        inputTask?.cancel()
+        externalIO?.invalidate()
+        started = false
+        exitMessage = message
     }
 
     func deliverRemoteDrop(
@@ -100,8 +218,13 @@ final class TerminalSessionHolder {
 
     func reset() {
         dropTask?.cancel(); dropTask = nil
+        engineTask?.cancel(); closingTask = engineTask; engineTask = nil
+        inputTask?.cancel(); inputTask = nil
+        externalIO?.invalidate(); externalIO = nil
+        engineRequest = nil; engineClient = nil
         pendingUserClose = nil
         queuedGhosttyInput = ""
+        queuedExternalInput = Data()
         generation += 1
         started = false
         exitMessage = nil
@@ -109,7 +232,7 @@ final class TerminalSessionHolder {
         currentWorkingDirectory = nil
         ghosttyView?.shutdown()
         ghosttyView = nil
-        ghosttyLaunch = nil
+        hasTerminal = false
     }
 
     func stop() {
@@ -138,7 +261,8 @@ final class TerminalSessionHolder {
     }
 
     func sendInput(_ text: String) {
-        guard !text.isEmpty, ghosttyLaunch != nil else { return }
+        guard !text.isEmpty, hasTerminal else { return }
+        if engineRequest?.handle != nil { enqueueInput(Data(text.utf8)); return }
         if let ghosttyView, queuedGhosttyInput.isEmpty, deliverGhosttyInput(ghosttyView, text) {
             return
         }
@@ -148,13 +272,18 @@ final class TerminalSessionHolder {
 
     var hasQueuedInput: Bool { !queuedGhosttyInput.isEmpty }
 
-    func retainedGhosttyView(launch: GhosttyLaunch, theme: GhosttyTheme) -> GhosttyTerminalView {
+    func retainedGhosttyView(theme: GhosttyTheme) -> GhosttyTerminalView {
         if let ghosttyView {
             ghosttyView.apply(theme: theme)
             flushQueuedInput(to: ghosttyView)
             return ghosttyView
         }
-        let view = GhosttyTerminalView(launch: launch, theme: theme)
+        guard let externalIO else {
+            preconditionFailure("The terminal must have an engine client.")
+        }
+        let view = GhosttyTerminalView(
+            externalIO: externalIO, workingDirectory: currentWorkingDirectory,
+            allowsLocalFileLinks: engineRequest?.machineID == Machine.localID, theme: theme)
         let viewGeneration = generation
         view.onClose = { [weak self, weak view] exitCode in
             Task { @MainActor in
@@ -174,7 +303,7 @@ final class TerminalSessionHolder {
         }
         view.onReady = { [weak self, weak view] in
             guard let self, let view, self.generation == viewGeneration else { return }
-            self.flushQueuedInput(to: view)
+            self.startEngine()
         }
         ghosttyView = view
         flushQueuedInput(to: view)
@@ -183,10 +312,13 @@ final class TerminalSessionHolder {
 
     func finishSession(_ view: GhosttyTerminalView, exitCode: Int32?) {
         let closeCompletion = takeUserCloseCompletion(for: view)
+        engineTask?.cancel(); closingTask = engineTask; engineTask = nil
+        inputTask?.cancel(); inputTask = nil
+        externalIO?.invalidate(); externalIO = nil
         queuedGhosttyInput = ""
         view.shutdown()
         ghosttyView = nil
-        ghosttyLaunch = nil
+        hasTerminal = false
         generation += 1
         started = false
         currentTitle = nil
@@ -221,7 +353,9 @@ final class TerminalSessionHolder {
     }
 
     private func flushQueuedInput(to view: GhosttyTerminalView) {
-        guard ghosttyView === view, !queuedGhosttyInput.isEmpty else { return }
+        guard ghosttyView === view, engineRequest?.handle != nil, !queuedGhosttyInput.isEmpty else {
+            return
+        }
         let input = queuedGhosttyInput
         guard deliverGhosttyInput(view, input) else { return }
         queuedGhosttyInput = ""

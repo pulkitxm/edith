@@ -12,10 +12,11 @@ public struct CLIRemoteDirectoryTarget: Sendable {
 
 public enum MachinesCLIEnvironment {
     nonisolated(unsafe) static var runner: (Machine) -> RemoteRunner = { RemoteRunner(machine: $0) }
-    nonisolated(unsafe) static var interactive: (Machine, [String], [String]) throws -> Int32 = {
-        _, _, _ in
-        throw CLIFailure.unavailable("the terminal input bridge is unavailable")
-    }
+    nonisolated(unsafe) static var interactive:
+        (Machine, [String], [String]) async throws -> Int32 = {
+            _, _, _ in
+            throw CLIFailure.unavailable("the terminal input bridge is unavailable")
+        }
     nonisolated(unsafe) static var changed: () -> Void = {}
     nonisolated(unsafe) static var broadcast:
         (UUID, MachineBroadcastPlan, String) async throws -> [String: Any] = { _, _, _ in

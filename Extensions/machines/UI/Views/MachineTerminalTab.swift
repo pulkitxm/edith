@@ -185,77 +185,22 @@ struct MachineTerminalTab: View {
                 active: active, launchEnabled: shellLaunchEnabled, started: holder.started,
                 isLocal: session.isLocal, connected: session.state.isConnected)
         else { return }
-        guard let context else {
-            if !session.isLocal, session.remotePlatform == .windows {
-                startWindowsShell()
-                return
-            }
-            startStandardShell()
-            return
-        }
-        let connection = session.isLocal ? nil : session.connectionRef
-        guard
-            let launch = MachineTerminalLaunchPlan.make(
-                isLocal: session.isLocal, connection: connection,
-                environment: TerminalLaunchPlan.environment(
-                    base: ProcessInfo.processInfo.environment, shell: "/bin/zsh"),
-                context: context, platform: session.remotePlatform ?? .linux,
-                windowsShell: selectedWindowsShell)
-        else { return }
-        holder.start(
-            executable: launch.executable, arguments: launch.arguments,
-            environment: launch.environment, currentDirectory: launch.currentDirectory,
-            allowsLocalFileLinks: session.isLocal)
-    }
-
-    private func startStandardShell() {
-        if session.isLocal {
-            holder.start(
-                executable: "/bin/zsh", arguments: ["-l"],
-                environment: TerminalLaunchPlan.environment(
-                    base: ProcessInfo.processInfo.environment, shell: "/bin/zsh"))
-            return
-        }
-        guard session.state.isConnected, let connection = session.connectionRef else { return }
-        holder.start(
-            executable: SSHConnection.executable.path,
-            arguments: connection.terminalArguments(),
-            environment: TerminalLaunchPlan.environment(
-                base: ProcessInfo.processInfo.environment, shell: "/bin/zsh")
-                + connection.terminalEnvironment(),
-            allowsLocalFileLinks: false)
-    }
-
-    private func startWindowsShell() {
-        guard session.state.isConnected, let connection = session.connectionRef else { return }
-        let command = WindowsTerminalCommands.interactiveShell(selectedWindowsShell)
-        holder.start(
-            executable: SSHConnection.executable.path,
-            arguments: connection.terminalArguments(remoteCommand: command),
-            environment: TerminalLaunchPlan.environment(
-                base: ProcessInfo.processInfo.environment, shell: "/bin/zsh")
-                + connection.terminalEnvironment(),
-            allowsLocalFileLinks: false)
+        holder.start(session: session, context: context, windowsShell: selectedWindowsShell)
     }
 
     private func detectWindowsShells() async {
         guard session.state.isConnected, session.remotePlatform == .windows,
-            let connection = session.connectionRef
+            let client = session.uiClient
         else {
-            availableWindowsShells = [.automatic]
-            detectingWindowsShells = false
-            return
+            availableWindowsShells = [.automatic]; detectingWindowsShells = false; return
         }
         detectingWindowsShells = true
         defer { detectingWindowsShells = false }
-        guard
-            let result = try? await connection.run(
-                WindowsTerminalCommands.availableShells(), timeout: 10),
-            result.succeeded
-        else { return }
-        availableWindowsShells =
-            [.automatic]
-            + WindowsTerminalCommands.parseAvailableShells(result.stdoutText)
+        do {
+            availableWindowsShells = try await client.terminal(
+                MachineTerminalRequest(operation: .shells, machineID: session.id)
+            ).shells
+        } catch { availableWindowsShells = [.automatic] }
     }
 
     private func selectWindowsShell(_ shell: WindowsTerminalShell) {
@@ -275,10 +220,13 @@ struct MachineTerminalTab: View {
     }
 
     private func uploadDrop(_ payload: TerminalDropPayload) -> Bool {
-        guard let connection = session.connectionRef else { return false }
+        guard let client = session.uiClient else { return false }
         Task {
             await holder.deliverRemoteDrop(payload) { files in
-                try await TerminalDropTransfer.upload(files, over: connection)
+                try await client.terminal(
+                    MachineTerminalRequest(
+                        operation: .upload, machineID: session.id, paths: files.map(\.path))
+                ).paths
             }
         }
         return true
@@ -470,13 +418,6 @@ struct ContainerTerminalSheet: View {
 
     private func start() {
         guard launchEnabled else { return }
-        guard let connection = session.connectionRef else { return }
-        let launch = MachineExecOperationExecution.dockerShellLaunch(
-            containerID: container.id, connection: connection,
-            environment: TerminalLaunchPlan.environment(
-                base: ProcessInfo.processInfo.environment, shell: "/bin/zsh"))
-        holder.start(
-            executable: launch.executable, arguments: launch.arguments,
-            environment: launch.environment, allowsLocalFileLinks: session.isLocal)
+        holder.start(session: session, containerID: container.id)
     }
 }

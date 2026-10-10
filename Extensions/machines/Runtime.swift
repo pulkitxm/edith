@@ -14,6 +14,7 @@ final class ExtensionRuntime: NSObject {
     private var previewEngine: MachinePreviewEngine?
     private var filesEngine: MachineFilesEngine?
     private var logEngine: MachineLogEngine?
+    private var terminalEngine: MachineTerminalEngine?
     private var uiEngine: MachineUIEngine?
     private var uiClient: MachineUIClient?
     private var health: MachineHealthLifecycle?
@@ -31,6 +32,12 @@ final class ExtensionRuntime: NSObject {
             if command.hasPrefix("machines.ui.") {
                 guard let uiEngine = self.uiEngine else { throw ExtensionPeerError.unavailable }
                 return try await uiEngine.execute(command, payload: payload)
+            }
+            if command.hasPrefix("machines.cli.pty.") {
+                guard let terminals = self.terminalEngine else {
+                    throw ExtensionPeerError.unavailable
+                }
+                return try terminals.cliInvoke(command, payload: payload)
             }
             if command.hasPrefix("machines.cli.stream.") {
                 guard let cli = self.cli else { throw ExtensionPeerError.unavailable }
@@ -184,6 +191,20 @@ final class ExtensionRuntime: NSObject {
                     return MachinesModel.shared.session(for: id)
                 })
                 logEngine = logs
+                let terminals = MachineTerminalEngine(session: { id in
+                    guard MachinesModel.shared.knows(id) else {
+                        throw MachineUIError.invalidRequest
+                    }
+                    return MachinesModel.shared.session(for: id)
+                })
+                terminalEngine = terminals
+                MachinesCLIEnvironment.interactive = { machine, arguments, environment in
+                    try await terminals.runCLI(
+                        machine: machine, arguments: arguments, environment: environment)
+                }
+                MachinesCLIEnvironment.broadcast = { id, plan, requestID in
+                    try await terminals.broadcast(machineID: id, plan: plan, requestID: requestID)
+                }
                 MachinesCLIEnvironment.undo = { id in try await files.undo(machineID: id) }
                 uiEngine = MachineUIEngine(
                     session: { id in
@@ -223,7 +244,8 @@ final class ExtensionRuntime: NSObject {
                         if active, !fixture { MachinesModel.shared.reconcileSSHClipboards() }
                     }, files: { value in try await files.execute(value) },
                     preview: { value in try await previews.execute(value) },
-                    logs: { value in try logs.execute(value) })
+                    logs: { value in try logs.execute(value) },
+                    terminal: { value in try await terminals.execute(value) })
                 do {
                     cli = try MachineCLIService(runner: { machine, owner in
                         let session = MachinesModel.shared.session(for: machine.id)
@@ -240,7 +262,6 @@ final class ExtensionRuntime: NSObject {
                     health.start()
                 }
                 MachinePrivacy.shared.start()
-                MachineTerminalBroadcastBridge.install()
                 TextEditingCommands.install()
                 running = true
             }
@@ -249,7 +270,7 @@ final class ExtensionRuntime: NSObject {
             return NSHostingController(
                 rootView: ExtensionPageHost {
                     MachinesPage().environment(\.machineConnectionsEnabled, true)
-                        .environment(\.terminalLaunchEnabled, false)
+                        .environment(\.terminalLaunchEnabled, true)
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
@@ -267,13 +288,15 @@ final class ExtensionRuntime: NSObject {
         filesEngine?.shutdown(); filesEngine = nil
         previewEngine?.shutdown(); previewEngine = nil
         await logEngine?.shutdown(); logEngine = nil
+        await terminalEngine?.shutdown(); terminalEngine = nil
+        MachinesCLIEnvironment.broadcast = { _, _, _ in throw MachineUIError.unavailable }
+        MachinesCLIEnvironment.interactive = { _, _, _ in throw MachineUIError.unavailable }
         MachinesCLIEnvironment.undo = { _ in throw MachineUIError.unavailable }
         await commands.shutdownAndWait()
         await health?.stop(); health = nil
         await cli?.shutdown(); cli = nil
         MachinesCLIEnvironment.changed = {}
         peer?.shutdown()
-        MachineTerminalBroadcastBridge.shutdown()
         FinderUndoBridge.shutdown()
         PaneViewStore.shared.shutdown()
         MachineWindow.shutdown(); FinderWindow.shutdown(); DockerWindow.shutdown();

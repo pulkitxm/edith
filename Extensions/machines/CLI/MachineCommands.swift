@@ -385,7 +385,7 @@ struct MachinesExecCommand: AsyncParsableCommand {
                 let stored = MachineWorkingDirectory.load(machineID: runner.machine.id)
                 let command = MachineExecOperationExecution.interactiveCommand(
                     words: words, workingDirectory: stored, platform: platform)
-                throw ExitCode(try runner.interactive(command))
+                throw ExitCode(try await runner.interactive(command))
             }
             let stored = MachineWorkingDirectory.load(machineID: runner.machine.id)
             guard !MachineWorkingDirectory.isChangeDirectory(words) else {

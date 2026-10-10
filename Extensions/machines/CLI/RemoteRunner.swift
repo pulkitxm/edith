@@ -74,8 +74,8 @@ public struct RemoteRunner {
         return result.stdoutText
     }
 
-    public func interactive(_ command: String?) throws -> Int32 {
-        try MachinesCLIEnvironment.interactive(
+    public func interactive(_ command: String?) async throws -> Int32 {
+        try await MachinesCLIEnvironment.interactive(
             machine, connection.terminalArguments(remoteCommand: command),
             connection.terminalEnvironment())
     }

@@ -47,6 +47,8 @@ import Foundation
             })
         else { throw MachineUIError.invalidRequest }
         receive(state)
+        _ = try await terminal(
+            MachineTerminalRequest(operation: .heartbeat, machineID: Machine.localID))
     }
 
     public func action<Value: Decodable>(_ value: MachineUIAction) async throws -> Value {
@@ -116,6 +118,23 @@ import Foundation
     func logs(_ value: MachineLogRequest) async throws -> MachineLogFrame {
         try value.validate()
         return try await request("machines.ui.logs", value: value)
+    }
+
+    func terminal(_ value: MachineTerminalRequest) async throws -> MachineTerminalFrame {
+        var value = value
+        value.presentationID = client.presentationID
+        try value.validate()
+        let frame: MachineTerminalFrame = try await request("machines.ui.terminal", value: value)
+        guard frame.bytes.count <= 32_768, frame.paths.count <= 128,
+            frame.paths.allSatisfy({ $0.utf8.count <= 4096 && !$0.utf8.contains(0) }),
+            frame.shells.count <= WindowsTerminalShell.allCases.count + 1
+        else { throw MachineUIError.invalidRequest }
+        if value.operation == .read {
+            guard frame.handle == value.handle, frame.nextOffset >= value.offset,
+                frame.nextOffset - value.offset == UInt64(frame.bytes.count)
+            else { throw MachineUIError.stale }
+        }
+        return frame
     }
 
     func configuration() async throws -> MachineUIConfigurationState {

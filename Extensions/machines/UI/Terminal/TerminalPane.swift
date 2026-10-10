@@ -31,9 +31,9 @@ struct TerminalPane: View {
     private var preferredFontSize = TerminalSettings.fontSizeDefault
 
     var body: some View {
-        if let launch = holder.ghosttyLaunch {
+        if holder.hasTerminal {
             GhosttyPane(
-                holder: holder, launch: launch,
+                holder: holder,
                 theme: GhosttyTheme(
                     palette: palette,
                     fontSize: TerminalSettings.clampedFontSize(preferredFontSize)),
@@ -46,7 +46,6 @@ struct TerminalPane: View {
 
 struct GhosttyPane: NSViewRepresentable {
     let holder: TerminalSessionHolder
-    let launch: GhosttyLaunch
     let theme: GhosttyTheme
     var active = true
     var wantsFocus = true
@@ -66,7 +65,7 @@ struct GhosttyPane: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> GhosttyTerminalView {
-        let view = holder.retainedGhosttyView(launch: launch, theme: theme)
+        let view = holder.retainedGhosttyView(theme: theme)
         view.onFocus = onFocus
         view.onDropFiles = onDropFiles
         view.setRenderingActive(active)

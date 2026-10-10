@@ -34,10 +34,10 @@ import Testing
         while model.logs.count < 2, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(10))
         }
-        #expect(model.logs.first?.text == "original log")
-        #expect(model.logs.first?.timestamp == "2026-01-01T00:00:00Z")
-        #expect(model.logs.last?.isStderr == true)
-        #expect(model.logs.last?.text == "failure")
+        #expect(model.logs.first(where: { !$0.isStderr })?.text == "original log")
+        #expect(model.logs.first(where: { !$0.isStderr })?.timestamp == "2026-01-01T00:00:00Z")
+        #expect(model.logs.filter(\.isStderr).count == 1)
+        #expect(model.logs.first(where: { $0.isStderr })?.text == "failure")
         #expect(session.connectionRef == nil)
         model.stop()
         while !bridge.operations.contains(.cancel), ContinuousClock.now < deadline {

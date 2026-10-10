@@ -18,6 +18,7 @@ final class TerminalTabsModel {
         var holder: TerminalSessionHolder
     }
 
+    let id = UUID()
     private(set) var tabs: [Tab] = []
     var selected: UUID?
     var broadcast = false
@@ -133,11 +134,24 @@ struct TerminalTabsView: View {
         .onAppear {
             model.ensureFirstTab(named: "Shell 1")
             TerminalTabRegistry.register(model, machineID: session.machine.id)
+            syncEngineRegistration(active: true)
         }
+        .onChange(of: model.tabs.map(\.id)) { _, _ in syncEngineRegistration(active: presented) }
         .onDisappear {
             TerminalTabRegistry.unregister(model, machineID: session.machine.id)
+            syncEngineRegistration(active: false)
         }
         .background(shortcuts)
+    }
+
+    private func syncEngineRegistration(active: Bool) {
+        guard let client = session.uiClient else { return }
+        client.enqueue {
+            _ = try await client.terminal(
+                MachineTerminalRequest(
+                    operation: active ? .register : .unregister, machineID: session.id,
+                    tabID: model.id, tabIDs: model.tabs.map { $0.holder.id }))
+        }
     }
 
     private var shortcuts: some View {

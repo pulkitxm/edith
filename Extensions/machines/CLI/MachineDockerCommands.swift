@@ -146,7 +146,7 @@ struct DockerShellCommand: AsyncParsableCommand {
             try Task.checkCancellation()
             let command = MachineExecOperationExecution.dockerShellCommand(
                 containerID: container, platform: await runner.ssh.remotePlatform ?? .linux)
-            throw ExitCode(try runner.interactive(command))
+            throw ExitCode(try await runner.interactive(command))
         }
     }
 }

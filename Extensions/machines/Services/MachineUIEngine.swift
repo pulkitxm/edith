@@ -8,6 +8,7 @@ import Foundation
     private let mutation: (MachineUIMutation) async throws -> Void
     private let preview: (MachinePreviewRequest) async throws -> Data
     private let logs: (MachineLogRequest) throws -> MachineLogFrame
+    private let terminal: (MachineTerminalRequest) async throws -> MachineTerminalFrame
     private let files: (MachineFileRequest) async throws -> MachineFileState
     private let observe: (UUID, Bool) -> Void
     private let workspace: (WorkspaceStore) throws -> Void
@@ -34,6 +35,9 @@ import Foundation
         },
         logs: @escaping (MachineLogRequest) throws -> MachineLogFrame = { _ in
             throw MachineUIError.unavailable
+        },
+        terminal: @escaping (MachineTerminalRequest) async throws -> MachineTerminalFrame = { _ in
+            throw MachineUIError.unavailable
         }
     ) {
         self.session = session
@@ -44,6 +48,7 @@ import Foundation
         self.files = files
         self.preview = preview
         self.logs = logs
+        self.terminal = terminal
     }
 
     func stop() {
@@ -141,6 +146,11 @@ import Foundation
             try value.validate()
             _ = try session(value.machineID)
             return try encode(logs(value))
+        case "machines.ui.terminal":
+            let value = try JSONDecoder().decode(MachineTerminalRequest.self, from: payload)
+            try value.validate()
+            _ = try session(value.machineID)
+            return try encode(try await terminal(value))
         case "machines.ui.files":
             let value = try JSONDecoder().decode(MachineFileRequest.self, from: payload)
             try value.validate()
