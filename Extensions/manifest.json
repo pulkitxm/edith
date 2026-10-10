@@ -896,27 +896,25 @@
         "Extensions/notchShelf/Browser/Remote/NotchBrowserCLIQueue.swift",
         "Extensions/notchShelf/Browser/Remote/NotchBrowserCommandClient.swift",
         "Extensions/notchShelf/CLI/BrowserCommands.swift",
-        "Extensions/notchShelf/CLI/BrowserCLIExecution.swift"
+        "Extensions/notchShelf/CLI/BrowserCLIExecution.swift",
+        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
       ]
     },
-    "inputs": [
-      "Extensions/notchShelf"
-    ],
+    "inputs": ["Extensions/notchShelf"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-contained-host-runtime.mjs"
+      "scripts/build-contained-host-runtime.mjs",
+      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
     ],
     "dependencies": [],
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
     "surfaceContractVersion": 1,
     "sameExecutableWorker": true,
-    "testTargets": [
-      "ci-extension-notch-native"
-    ]
+    "testTargets": ["ci-extension-notch-native"]
   },
   {
     "id": "clipboard",

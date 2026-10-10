@@ -12,6 +12,7 @@ import Testing
         defer { fixture.clean() }
         var created: [NotchShelfController] = []
         let runtime = ExtensionRuntime(
+            fixtureAdmission: { _ in nil },
             contextSource: { fixture.context },
             connectedDisplays: { [42: CGSize(width: 1280, height: 900)] },
             createController: { context, displays in

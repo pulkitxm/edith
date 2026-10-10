@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import EdithExtensionCommands
 import EdithExtensionSupport
@@ -8,6 +11,10 @@ import SwiftUI
 @MainActor
 final class ExtensionRuntime: NSObject {
     private var startRequested = false
+    private var fixture: WorkerFixtureAdmission?
+    private var fixtureRejected = false
+    private var stopped = false
+    private let fixtureAdmission: @MainActor (NSDictionary) throws -> WorkerFixtureAdmission?
     private var controller: NotchShelfController?
     private struct UIScene {
         let client: ExtensionEngineClient?
@@ -19,8 +26,8 @@ final class ExtensionRuntime: NSObject {
     private var selectedPresentation: UUID?
     private let commands = ExtensionCommandRegistry()
     private var panelEngine: NotchPanelEngine?
-    private let cliStreams = try! ExtensionCLIStreams(owner: "notchShelf")
-    private let browserStreams = try! ExtensionCLIStreams(owner: "notchShelf")
+    private var cliStreams: ExtensionCLIStreams?
+    private var browserStreams: ExtensionCLIStreams?
 
     private let contextSource: @MainActor () -> SurfaceHostContext?
     private let connectedDisplays: @MainActor () -> [UInt32: CGSize]
@@ -28,6 +35,11 @@ final class ExtensionRuntime: NSObject {
         @MainActor (SurfaceHostContext, [NotchPanelDisplay]) -> NotchShelfController
 
     init(
+        fixtureAdmission: @escaping @MainActor (NSDictionary) throws -> WorkerFixtureAdmission? = {
+            try WorkerFixtureAdmission.current(
+                extensionID: "notchShelf", context: $0,
+                roleBundle: Bundle(for: ExtensionRuntime.self))
+        },
         contextSource: @escaping @MainActor () -> SurfaceHostContext? = {
             SurfaceHostContext.current
         },
@@ -47,6 +59,7 @@ final class ExtensionRuntime: NSObject {
                 NotchShelfController(context: $0, hostDisplays: $1)
             }
     ) {
+        self.fixtureAdmission = fixtureAdmission
         self.contextSource = contextSource
         self.connectedDisplays = connectedDisplays
         self.createController = createController
@@ -55,16 +68,17 @@ final class ExtensionRuntime: NSObject {
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self else { throw ExtensionPeerError.unavailable }
+            guard let self, !stopped, !fixtureRejected else { throw ExtensionPeerError.unavailable }
+            if command == "notchShelf.cli.catalog" {
+                return try NotchCLIProviderCatalog.encode(payload)
+            }
+            guard startRequested, fixture == nil else { throw ExtensionPeerError.unavailable }
             if command.hasPrefix("notch.panel.") || command == "notch.chrome.read"
                 || command == "notch.chrome.action" || command == "notch.chrome.thumbnail"
                 || command == "notch.chrome.browser" || command == "notch.chrome.quick"
                 || command == "notch.chrome.camera"
             {
                 return try await self.executePanel(command, payload: payload)
-            }
-            if command == "notchShelf.cli.catalog" {
-                return try NotchCLIProviderCatalog.encode(payload)
             }
             if command == "browser.cli" || command.hasPrefix("browser.cli.") {
                 let configuration = BrowserCLIExecution.configuration(request: {
@@ -82,7 +96,13 @@ final class ExtensionRuntime: NSObject {
                             try await ExtensionCLIExecution.run(
                                 BrowserCommand.self, request: request))
                     }
-                    return try self.browserStreams.invoke(
+                    if self.browserStreams == nil {
+                        self.browserStreams = try ExtensionCLIStreams(owner: "notchShelf")
+                    }
+                    guard let streams = self.browserStreams else {
+                        throw ExtensionPeerError.unavailable
+                    }
+                    return try streams.invoke(
                         BrowserCommand.self, operation: command, prefix: "browser.cli",
                         payload: payload)
                 }
@@ -99,7 +119,13 @@ final class ExtensionRuntime: NSObject {
                     share: { try await controller.shareCLIItems($0) },
                     checkAccess: controller.requireShelfCLIAccess)
                 return try ShelfCLIEnvironment.$configuration.withValue(configuration) {
-                    try self.cliStreams.invoke(
+                    if self.cliStreams == nil {
+                        self.cliStreams = try ExtensionCLIStreams(owner: "notchShelf")
+                    }
+                    guard let streams = self.cliStreams else {
+                        throw ExtensionPeerError.unavailable
+                    }
+                    return try streams.invoke(
                         ShelfCommand.self, operation: command, prefix: "notch.cli", payload: payload
                     )
                 }
@@ -216,9 +242,19 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        startRequested = false
+        stopped = true
         commands.shutdown()
-        cliStreams.stop()
-        browserStreams.stop()
+        if controller == nil, panelEngine == nil, uiScenes.isEmpty, uiDrains.isEmpty,
+            cliStreams == nil, browserStreams == nil
+        {
+            Task {
+                await commands.shutdownAndWait(); completion()
+            }
+            return
+        }
+        cliStreams?.stop()
+        browserStreams?.stop()
         panelEngine?.stop()
         stopUI()
         let cameraEngine = panelEngine?.cameraEngine
@@ -230,8 +266,8 @@ final class ExtensionRuntime: NSObject {
         Task {
             for task in Array(uiDrains.values) { await task.value }
             await commands.shutdownAndWait()
-            await cliStreams.stopAndWait()
-            await browserStreams.stopAndWait()
+            await cliStreams?.stopAndWait()
+            await browserStreams?.stopAndWait()
             await browserEngine?.stopAndWait()
             await cameraEngine?.shutdownAndWait()
             completion()
@@ -267,6 +303,9 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
+            guard !stopped, !fixtureRejected, fixture == nil else {
+                return ["ok": false] as NSDictionary
+            }
             guard let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "notchShelf", input["tile"] == nil,
                 input["target"] == nil,
@@ -304,6 +343,28 @@ final class ExtensionRuntime: NSObject {
         case "stopUI":
             stopUI((input["presentationID"] as? String).flatMap(UUID.init(uuidString:)))
         case "start":
+            guard !stopped, !fixtureRejected else { return ["ok": false] as NSDictionary }
+            do {
+                let admitted = try fixtureAdmission(input)
+                if let admitted {
+                    guard admitted.extensionID == "notchShelf", admitted.role == .helper,
+                        controller == nil, panelEngine == nil, uiScenes.isEmpty
+                    else { throw WorkerFixtureError.invalid }
+                    if let fixture {
+                        guard fixture.home == admitted.home,
+                            fixture.dataDirectory == admitted.dataDirectory
+                        else { throw WorkerFixtureError.invalid }
+                    }
+                    fixture = admitted
+                    startRequested = true
+                    return ["ok": true] as NSDictionary
+                }
+                guard fixture == nil else { throw WorkerFixtureError.invalid }
+            } catch {
+                fixtureRejected = true
+                startRequested = false
+                return ["ok": false] as NSDictionary
+            }
             guard Bundle.main.bundleURL.pathExtension != "appex",
                 let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
@@ -312,6 +373,9 @@ final class ExtensionRuntime: NSObject {
             startRequested = true
             startAttachedController(context)
         case "view":
+            guard !stopped, !fixtureRejected, fixture == nil else {
+                return ["ok": false] as NSDictionary
+            }
             guard
                 let key = (input["presentationID"] as? String).flatMap(UUID.init(uuidString:))
                     ?? selectedPresentation,
@@ -325,9 +389,20 @@ final class ExtensionRuntime: NSObject {
             return NSHostingController(
                 rootView: ExtensionPageHost { NotchSettingsPage(model: model) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": controller?.synchronize()
+        case "synchronize":
+            guard !stopped, !fixtureRejected, fixture == nil else {
+                return ["ok": false] as NSDictionary
+            }
+            controller?.synchronize()
         case "stop": prepareToStop(completion: {})
-        case "status": return ["ok": true, "running": controller != nil] as NSDictionary
+        case "status":
+            return [
+                "ok": true, "running": controller != nil, "startRequested": startRequested,
+                "controllerAttached": controller != nil,
+                "panelAttached": panelEngine?.attached == true,
+                "fixture": fixture != nil, "fixtureRejected": fixtureRejected,
+                "stopped": stopped,
+            ] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
