@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithHostCore
 import Foundation
 import Testing
 @testable import EdithHost
@@ -196,7 +197,13 @@ struct HostNotchStartupTests {
         }
         try await fixture.context!.navigate(fixture.origin, "calendar", "1.0.0")
         #expect(fixture.collapseCalls == 0)
-        try await startup.navigationAcknowledged(ticket)
+        try await fixture.context!.postNavigation(fixture.origin, "calendar", "1.0.0")
+        await #expect(throws: HostWindowNavigationError.routeRejected) {
+            try await fixture.context!.postNavigation(fixture.origin, "calendar", "1.0.0")
+        }
+        await #expect(throws: HostWindowNavigationError.routeRejected) {
+            try await startup.navigationAcknowledged(ticket)
+        }
         #expect(order == ["apply", "final-ack", "collapse"] && fixture.collapseCalls == 1)
         fixture.context!.association.remove(association)
         navigation.unregister(token)
@@ -247,8 +254,76 @@ struct HostNotchStartupTests {
         try await startup.stop()
     }
 
+    @Test
+    func actualCompactModelFinalValidationPrecedesLeaseRetirementAndRejectsFailedOrForeignReceipts()
+        async throws
+    {
+        let main = window("EdithMainWindow")
+        let panel = window("EdithNotchPanel")
+        defer { main.close(); panel.close() }
+        let suite = "notch-compact-ack-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let fixture = Lifecycle()
+        fixture.panel = panel
+        var selected = "home"
+        fixture.rejectFinal = true
+        let navigation = HostWindowNavigation(
+            defaults: defaults, activeVersions: { ["calendar": "1.0.0"] },
+            originatingWindow: { fixture.window(for: $0) },
+            didApply: { _ in if fixture.rejectFinal { fixture.admitted = false } })
+        let startup = HostNotchStartup(navigation: navigation) {
+            fixture.context = $0; return fixture
+        }
+        let token = navigation.register(
+            window: main, apply: { selected = $0.page }, selected: { selected })
+        await startup.settled()
+        let association = try fixture.context!.association.associate(panel)
+        let requests = SurfaceSnapshotClient(activeVersions: { ["calendar": "1.0.0"] }) { _, _, _ in
+            Issue.record("Opening must not invent a provider snapshot")
+            throw HostWorkerError.rejected
+        }
+        let model = HostNotchCompactCardModel(
+            origin: fixture.origin, requests: requests,
+            admission: { fixture.compactVersions($0) },
+            navigate: fixture.context!.navigate, postNavigation: fixture.context!.postNavigation)
+        let request = HostExtensionContentRequest(
+            extensionID: "calendar", location: "notch", section: "surface.card",
+            presentationID: fixture.origin.cardPresentationID,
+            surface: .init(target: .notch, tile: fixture.origin.tile))
+        let lease = HostNotchCompactController.lease(
+            request: request, model: model, layout: .init(tiles: [fixture.origin.tile]),
+            automatic: false)
+        panel.contentViewController = lease.controller
+        await #expect(throws: HostWindowNavigationError.routeRejected) {
+            try await model.open(providerID: "calendar")
+        }
+        await #expect(throws: HostWindowNavigationError.routeRejected) {
+            try await fixture.context!.postNavigation(fixture.origin, "calendar", "1.0.0")
+        }
+        #expect(fixture.collapseCalls == 0 && !lease.closed)
+        fixture.admitted = true
+        fixture.rejectFinal = false
+        try await fixture.context!.navigate(fixture.origin, "calendar", "1.0.0")
+        await #expect(throws: HostWindowNavigationError.routeRejected) {
+            try await fixture.context!.postNavigation(fixture.origin, "foreign", "1.0.0")
+        }
+        #expect(fixture.collapseCalls == 0)
+        fixture.collapsed = { _ in
+            #expect(selected == "calendar" && model.pendingCount == 0)
+            fixture.admitted = false
+            try await lease.close()
+        }
+        try await model.open(providerID: "calendar")
+        #expect(fixture.collapseCalls == 1 && lease.closed && model.pendingCount == 0)
+        #expect(!main.isVisible && !panel.isVisible)
+        fixture.context!.association.remove(association)
+        navigation.unregister(token)
+        try await startup.stop()
+    }
+
     private func window(_ identifier: String) -> NSWindow {
-        _ = NSApplication.shared
+        _ = TestWindowHost.application
         let value = NSWindow(
             contentRect: .init(x: 0, y: 0, width: 400, height: 300),
             styleMask: [.titled, .closable], backing: .buffered, defer: true)
@@ -265,8 +340,9 @@ struct HostNotchStartupTests {
     var stops = 0
     var failStop = false
     var admitted = true
+    var rejectFinal = false
     var collapseCalls = 0
-    var collapsed: (HostNotchNavigationTicket) -> Void = { _ in }
+    var collapsed: (HostNotchNavigationTicket) async throws -> Void = { _ in }
     var panel: NSWindow?
     let origin = HostNotchCompactOrigin(
         identity: .init(ownershipID: UUID(), generation: UUID()), displayID: 1,
@@ -288,7 +364,7 @@ struct HostNotchStartupTests {
             versions: [providerID: version])
     }
     func collapseAfterAcknowledgement(_ ticket: HostNotchNavigationTicket) async throws {
-        collapseCalls += 1; collapsed(ticket)
+        collapseCalls += 1; try await collapsed(ticket)
     }
     func install() { installed += 1 }
     func owningWorkspaceChanged() async throws { availability.append(context!.available()) }

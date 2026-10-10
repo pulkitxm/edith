@@ -73,6 +73,7 @@ final class HostNotchLifecycleAdapter {
         marketplace: HostMarketplace, manager: HostRemoteSessionManager,
         association: HostNotchWindowAssociation,
         compactNavigate: @escaping HostNotchCompactCardModel.Navigate,
+        compactNavigationAcknowledged: HostNotchCompactCardModel.Navigate? = nil,
         owningWorkspaceAvailable: @escaping @MainActor () -> Bool = { true }
     ) {
         weak var adapter: HostNotchLifecycleAdapter?
@@ -106,7 +107,8 @@ final class HostNotchLifecycleAdapter {
                             origin: origin,
                             requests: marketplace.surfaces.requests,
                             admission: { [weak coordinator] in coordinator?.compactVersions($0) },
-                            navigate: compactNavigate)
+                            navigate: compactNavigate, postNavigation: compactNavigationAcknowledged
+                        )
                         return HostNotchCompactController.lease(
                             request: request, model: model, layout: environment().layout)
                     }

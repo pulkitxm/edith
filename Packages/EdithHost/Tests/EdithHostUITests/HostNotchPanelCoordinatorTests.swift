@@ -13,6 +13,7 @@ struct HostNotchPanelCoordinatorTests {
         async throws
     {
         let fixture = NotchCoordinatorFixture()
+        fixture.transport.onlyFirstDisplayExpanded = true
         fixture.screens.append(
             .init(
                 display: .init(
@@ -21,7 +22,7 @@ struct HostNotchPanelCoordinatorTests {
                     collapsedSize: .init(width: 150, height: 28)), isBuiltin: false))
         let coordinator = fixture.coordinator()
         try await coordinator.start(version: "1.0.0", screens: fixture.screens)
-        await settle { coordinator.attachedSceneCount == 4 }
+        await settle { coordinator.attachedSceneCount == 3 }
         let native = try #require(fixture.leases.first { $0.request.extensionID == "music" })
         let ticket = try #require(
             coordinator.navigationTicket(
@@ -44,7 +45,7 @@ struct HostNotchPanelCoordinatorTests {
         #expect(coordinator.window(for: other.presentationID) === otherWindow)
         #expect(
             fixture.transport.current?.states.first { $0.displayID == other.displayID }?.phase
-                == .expanded)
+                == .collapsed)
         #expect(fixture.transport.detached == 0)
         await #expect(throws: HostNotchPanelError.staleState) {
             try await coordinator.collapseAfterAcknowledgement(ticket)
@@ -411,6 +412,7 @@ private final class NotchCoordinatorTransport {
     }
     var loseFirstAttachReply = false
     var invalidSecondDisplay = false
+    var onlyFirstDisplayExpanded = false
     private var attachedRequest: HostNotchPanelAttach?
     private var wait: CheckedContinuation<Data, any Error>?
     var waiting: Bool { wait != nil }
@@ -442,9 +444,15 @@ private final class NotchCoordinatorTransport {
                         return HostNotchPanelState(
                             contractVersion: 1, ownershipID: request.ownershipID,
                             version: request.version, revision: 1, displayID: display.displayID,
-                            presentationID: display.presentationID, phase: .expanded,
+                            presentationID: display.presentationID,
+                            phase: onlyFirstDisplayExpanded
+                                && display.displayID != request.displays.first?.displayID
+                                ? .collapsed : .expanded,
                             activeTab: "home", shapeWidth: 580, shapeHeight: 400, visible: true,
-                            acceptsPointer: true, acceptsKeyFocus: false, slots: [slot])
+                            acceptsPointer: true, acceptsKeyFocus: false,
+                            slots: onlyFirstDisplayExpanded
+                                && display.displayID != request.displays.first?.displayID
+                                ? [] : [slot])
                     })
             }
             #expect(current?.identity.ownershipID == request.ownershipID)
