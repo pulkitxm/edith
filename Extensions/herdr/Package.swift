@@ -15,6 +15,9 @@ let package = Package(
             ], path: ".", exclude: ["Tests"], resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
+            name: "HerdrExtensionTests", dependencies: ["HerdrUI"], path: "Tests/Core",
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
             name: "HerdrUITests", dependencies: ["HerdrUI"], path: "Tests/UI",
             swiftSettings: [.swiftLanguageMode(.v5)]),
     ])

@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import QuinjetExtension
+@testable import QuinjetUI
 import EdithExtensionSupport
 
 @Suite struct QuinjetClientTests {
