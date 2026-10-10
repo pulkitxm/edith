@@ -21,7 +21,8 @@ async function fixture(run) {
   );
   const options = {
     directory,
-    identifier: "com.pulkit.edith.tests.remote-unit",
+    identifier:
+      "com.pulkit.edith.tests.remote-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
     package_: {
       id: "calendar",
       hostABI: "edith-host-2",
@@ -32,7 +33,7 @@ async function fixture(run) {
   await mkdir(
     join(
       directory,
-      "support/Edith Tests/remote-unit/Extensions/calendar/edith-host-2/arm64/1.0.0/calendar",
+      "support/Edith Tests/remote-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/Extensions/calendar/edith-host-2/arm64/1.0.0/calendar",
     ),
     { recursive: true },
   );
@@ -95,10 +96,27 @@ test("private data preparation rejects an aliased package root", async () => {
   await fixture(async (options) => {
     const path = join(
       options.directory,
-      "support/Edith Tests/remote-unit/Extensions/calendar/edith-host-2/arm64/1.0.0/calendar",
+      "support/Edith Tests/remote-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/Extensions/calendar/edith-host-2/arm64/1.0.0/calendar",
     );
     await rm(path, { recursive: true });
     await symlink(options.directory, path);
     await assert.rejects(() => prepareManagedShippingData(options));
   });
 });
+
+for (const identifier of [
+  "com.pulkit.edith.tests.remote-owned-20261010",
+  "com.pulkit.edith.tests.remote-unit",
+  "com.pulkit.edith.tests.remote-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee",
+]) {
+  test(`private data preparation rejects an identifier outside provider admission: ${identifier}`, async () => {
+    await fixture(async (options) => {
+      await assert.rejects(() =>
+        prepareManagedShippingData({ ...options, identifier }),
+      );
+      await assert.rejects(() =>
+        lstat(join(options.directory, "synthetic-data")),
+      );
+    });
+  });
+}

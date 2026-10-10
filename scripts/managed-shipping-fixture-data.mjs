@@ -14,7 +14,7 @@ export async function prepareManagedShippingData({
   );
   assert.match(
     identifier,
-    /^com\.pulkit\.edith\.tests\.remote-[a-z0-9-]{1,60}$/,
+    /^com\.pulkit\.edith\.tests\.remote-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/,
   );
   assert.equal(await realpath(directory), directory);
   assert.match(package_.hostABI, /^[a-zA-Z0-9.-]{1,100}$/);
