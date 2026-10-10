@@ -102,7 +102,9 @@ struct NotchSurfaceCard: View {
         if let client = controller as? NotchChromeClient, tile.widget != .clocks {
             if tile.widget == .actions {
                 NotchQuickActionsView(client: client, tile: tile)
-            } else if tile.widget.providerIDs.count == 1 {
+            } else if NotchPanelSlot.supportsSharedCard(tile.widget)
+                || tile.widget.providerIDs.count == 1
+            {
                 NotchNativeSlotView(client: client, tile: tile, kind: .card)
             } else {
                 Text("This widget's native surface is unavailable.")
