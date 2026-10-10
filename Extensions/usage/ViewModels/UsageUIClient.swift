@@ -9,6 +9,7 @@ import Observation
     private let invalidateClient: @MainActor () -> Void
     private(set) var stopped = false
     private var tasks: [UUID: Task<Void, Never>] = [:]
+    private var requests: [UUID: Task<Data, Error>] = [:]
     private var polling: Task<Void, Never>?
     private var preferences: UsageUIPreferences?
     private var preferencesTask: Task<Void, Never>?
@@ -34,9 +35,18 @@ import Observation
 
     func invoke(_ command: String, payload: Data = Data("{}".utf8)) async throws -> Data {
         guard !stopped else { throw ExtensionPeerError.unavailable }
-        let data = try await invokeOperation(command, payload)
         try Task.checkCancellation()
+        let id = UUID()
+        let operation = Task { try await invokeOperation(command, payload) }
+        requests[id] = operation
+        defer { requests[id] = nil }
+        let data = try await withTaskCancellationHandler {
+            try await operation.value
+        } onCancel: {
+            operation.cancel()
+        }
         guard !stopped else { throw ExtensionPeerError.unavailable }
+        try Task.checkCancellation()
         return data
     }
 
@@ -52,8 +62,22 @@ import Observation
     }
 
     func document() async throws -> DashUsage {
+        let data = try await checkedPayload("usage.ui.document")
+        guard UsageHistory.isValidDocument(data) else { throw ExtensionPeerError.invalidRequest }
+        return try JSONDecoder().decode(DashUsage.self, from: data)
+    }
+
+    func limits(provider: LimitProvider) async throws -> UsageUILimits {
+        try await JSONDecoder().decode(
+            UsageUILimits.self,
+            from: checkedPayload("usage.ui.limits", object: ["provider": provider.rawValue]))
+    }
+
+    private func checkedPayload(_ operation: String, object: [String: String] = [:]) async throws
+        -> Data
+    {
         struct Receipt: Decodable { let id: UUID; let byteCount: Int; let sha256: String }
-        let receipt: Receipt = try await value("usage.ui.document")
+        let receipt: Receipt = try await value(operation, object: object)
         do {
             guard (1...67_108_864).contains(receipt.byteCount), receipt.sha256.count == 64 else {
                 throw ExtensionPeerError.invalidRequest
@@ -73,10 +97,10 @@ import Observation
                 else { throw ExtensionPeerError.invalidRequest }
                 document.append(chunk.data)
             }
-            guard UsageMachinesPeer.hash(document) == receipt.sha256,
-                UsageHistory.isValidDocument(document)
-            else { throw ExtensionPeerError.invalidRequest }
-            return try JSONDecoder().decode(DashUsage.self, from: document)
+            guard UsageMachinesPeer.hash(document) == receipt.sha256 else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            return document
         } catch {
             let cleanup = Task {
                 _ = try? await self.value(
@@ -132,8 +156,7 @@ import Observation
         let limitsDate = object["limitsUpdatedAt"] as? Double
         let refreshedAt = object["limitsRefreshedAt"] as? Double
         if limitsUpdatedAt != limitsDate || limitsRefreshedAt != refreshedAt {
-            let snapshot: UsageUILimits = try await value(
-                "usage.ui.limits", object: ["provider": "claude"])
+            let snapshot: UsageUILimitsSummary = try await value("usage.ui.limits.latest")
             latestLimits = snapshot.current
             limitsUpdatedAt = limitsDate
             limitsRefreshedAt = refreshedAt
@@ -181,6 +204,8 @@ import Observation
         preferencesTask?.cancel(); preferencesTask = nil
         for task in tasks.values { task.cancel() }
         tasks = [:]
+        for request in requests.values { request.cancel() }
+        requests = [:]
         if let observer { NotificationCenter.default.removeObserver(observer) }
         observer = nil
         invalidateClient()

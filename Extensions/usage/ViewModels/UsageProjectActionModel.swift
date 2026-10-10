@@ -62,10 +62,10 @@ final class UsageProjectActionModel {
         operation = Task { [weak self] in
             do {
                 _ = try await client.value(command, object: [key: value], as: String.self)
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, !client.stopped else { return }
                 self?.failureMessage = nil
             } catch {
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, !client.stopped else { return }
                 self?.failureMessage = error.localizedDescription + " Try again."
             }
         }

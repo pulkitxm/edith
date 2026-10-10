@@ -3,6 +3,11 @@ import EdithExtensionUI
 import Foundation
 import UserNotifications
 
+struct UsageUILimitsSummary: Codable, Sendable {
+    let providers: [LimitProvider: LimitsHistory.Latest]
+    let current: LimitsTopicSnapshot?
+}
+
 struct UsageUILimits: Codable, Sendable {
     let providers: [LimitProvider: LimitsHistory.Latest]
     let points: [LimitPoint]
@@ -50,12 +55,7 @@ struct UsageUILimits: Codable, Sendable {
             guard !stopped, let data, UsageHistory.isValidDocument(data) else {
                 throw ExtensionPeerError.unavailable
             }
-            guard documents.count < 8 else { throw ExtensionPeerError.unavailable }
-            let id = UUID(); documents[id] = (data, Date().addingTimeInterval(60))
-            return try JSONSerialization.data(withJSONObject: [
-                "id": id.uuidString, "byteCount": data.count,
-                "sha256": UsageMachinesPeer.hash(data),
-            ])
+            return try receipt(data)
         case "usage.ui.chunk":
             guard Set(object.keys) == ["id", "offset"],
                 let text = object["id"] as? String, let id = UUID(uuidString: text),
@@ -103,6 +103,14 @@ struct UsageUILimits: Codable, Sendable {
             let value = try JSONDecoder().decode(UsageUIPreferences.self, from: payload)
             try value.validate(); value.apply(to: defaults); controller.settingsChanged()
             return Data("{}".utf8)
+        case "usage.ui.limits.latest":
+            try empty(object)
+            let providers = await LimitsHistory.loadLatestProviders(
+                url: directory.appendingPathComponent("limits-history.jsonl"))
+            try Task.checkCancellation()
+            guard !stopped else { throw ExtensionPeerError.unavailable }
+            return try encoder.encode(
+                UsageUILimitsSummary(providers: providers, current: controller.latestLimits))
         case "usage.ui.limits":
             guard Set(object.keys) == ["provider"], let text = object["provider"] as? String,
                 let provider = LimitProvider(rawValue: text)
@@ -114,11 +122,12 @@ struct UsageUILimits: Codable, Sendable {
                 url: directory.appendingPathComponent("limits-history.jsonl"))
             try Task.checkCancellation()
             guard !stopped else { throw ExtensionPeerError.unavailable }
-            return try encoder.encode(
-                UsageUILimits(
-                    providers: snapshot.latest, points: snapshot.points,
-                    provider: snapshot.provider, current: controller.latestLimits
-                ))
+            return try receipt(
+                encoder.encode(
+                    UsageUILimits(
+                        providers: snapshot.latest, points: snapshot.points,
+                        provider: snapshot.provider, current: controller.latestLimits
+                    )))
         case "usage.ui.log":
             try empty(object)
             return try encoder.encode(
@@ -188,6 +197,17 @@ struct UsageUILimits: Codable, Sendable {
             return try encoder.encode(machines)
         default: throw ExtensionPeerError.invalidRequest
         }
+    }
+
+    private func receipt(_ data: Data) throws -> Data {
+        guard !stopped, (1...67_108_864).contains(data.count), documents.count < 8 else {
+            throw ExtensionPeerError.unavailable
+        }
+        let id = UUID()
+        documents[id] = (data, Date().addingTimeInterval(60))
+        return try JSONSerialization.data(withJSONObject: [
+            "id": id.uuidString, "byteCount": data.count, "sha256": UsageMachinesPeer.hash(data),
+        ])
     }
 
     private func empty(_ object: [String: Any]) throws {

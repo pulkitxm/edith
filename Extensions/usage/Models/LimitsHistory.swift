@@ -237,7 +237,7 @@ public struct LimitsHistory {
     ) async -> [LimitProvider: Latest] {
         if let client = await UsageUIClient.current {
             let snapshot = try? await client.value(
-                "usage.ui.limits", object: ["provider": "claude"], as: UsageUILimits.self)
+                "usage.ui.limits.latest", as: UsageUILimitsSummary.self)
             return snapshot?.providers.filter { providers.contains($0.key) } ?? [:]
         }
         let load = Task.detached(priority: .utility) {
@@ -254,10 +254,7 @@ public struct LimitsHistory {
         preferredProvider: LimitProvider, url: URL = LimitsHistory.url
     ) async -> Snapshot {
         if let client = await UsageUIClient.current {
-            if let snapshot = try? await client.value(
-                "usage.ui.limits", object: ["provider": preferredProvider.rawValue],
-                as: UsageUILimits.self)
-            {
+            if let snapshot = try? await client.limits(provider: preferredProvider) {
                 return Snapshot(
                     providers: LimitProvider.allCases.filter { snapshot.providers[$0] != nil },
                     provider: snapshot.provider, latest: snapshot.providers, points: snapshot.points

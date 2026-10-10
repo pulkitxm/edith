@@ -84,6 +84,37 @@ import Testing
         #expect(invalidations == 1)
     }
 
+    @Test func stoppingCancelsOwnedRequestsAndCallerCancellationPropagates() async throws {
+        var started = false
+        var cancelled = false
+        let client = UsageUIClient(invoke: { _, _ in
+            started = true
+            do { try await Task.sleep(for: .seconds(60)) } catch {
+                cancelled = Task.isCancelled; throw error
+            }
+            return Data("{}".utf8)
+        })
+        let request = Task { try await client.invoke("usage.status") }
+        while !started { await Task.yield() }
+        client.stop()
+        await #expect(throws: CancellationError.self) { try await request.value }
+        #expect(cancelled)
+        started = false; cancelled = false
+        let next = UsageUIClient(invoke: { _, _ in
+            started = true
+            do { try await Task.sleep(for: .seconds(60)) } catch {
+                cancelled = Task.isCancelled; throw error
+            }
+            return Data("{}".utf8)
+        })
+        let caller = Task { try await next.invoke("usage.status") }
+        while !started { await Task.yield() }
+        caller.cancel()
+        await #expect(throws: CancellationError.self) { try await caller.value }
+        #expect(cancelled)
+        next.stop()
+    }
+
     @Test func ownedLimitsPreserveProviderWindowsAndHistory() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             UUID().uuidString)
@@ -101,9 +132,9 @@ import Testing
             dataDirectory: directory, collect: { _, _ in Data() })
         let service = UsageUICommands(
             controller: controller, directory: directory, defaults: defaults)
-        let reply = try await service.execute(
-            "usage.ui.limits", payload: Data(#"{"provider":"claude"}"#.utf8))
-        let value = try JSONDecoder().decode(UsageUILimits.self, from: reply)
+        let client = UsageUIClient(invoke: { try await service.execute($0, payload: $1) })
+        defer { client.stop() }
+        let value = try await client.limits(provider: .claude)
         #expect(value.provider == .claude)
         #expect(value.providers[.claude]?.session?.percent == 42)
         #expect(value.providers[.claude]?.week?.percent == 18)
@@ -115,6 +146,48 @@ import Testing
                     UsageUIPreferences(values: [AppStorageKeys.Budget.enabled: .number(2)])))
         }
         service.shutdown(); await controller.shutdown()
+    }
+
+    @Test func fullLimitsHistoryCrossesTransportCapWithoutDroppingPoints() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let row =
+            #"{"ts":"2026-10-09T12:00:00Z","p":"claude","s":42,"w":18,"sr":"2026-10-09T13:00:00Z","wr":"2026-10-10T12:00:00Z"}"#
+            + "\n"
+        try Data(String(repeating: row, count: 115_000).utf8)
+            .write(to: directory.appendingPathComponent("limits-history.jsonl"))
+        let suite = "usage-ui-test-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let controller = UsageWorkerController(
+            dataDirectory: directory, collect: { _, _ in Data() })
+        let service = UsageUICommands(
+            controller: controller, directory: directory, defaults: defaults)
+        var chunks = 0
+        var byteCount = 0
+        let client = UsageUIClient(invoke: { command, payload in
+            let reply = try await service.execute(command, payload: payload)
+            #expect(reply.count <= ExtensionPeerEndpoint.maximumPayloadBytes)
+            if command == "usage.ui.limits" {
+                let object = try #require(
+                    try JSONSerialization.jsonObject(with: reply) as? [String: Any])
+                byteCount = try #require(object["byteCount"] as? Int)
+            }
+            if command == "usage.ui.chunk" { chunks += 1 }
+            return reply
+        })
+        defer { client.stop(); service.shutdown() }
+        let snapshot = try await client.limits(provider: .claude)
+        #expect(byteCount > ExtensionPeerEndpoint.maximumPayloadBytes)
+        #expect(chunks > 1)
+        #expect(snapshot.points.count == 115_000)
+        #expect(snapshot.points.first?.s == 42 && snapshot.points.last?.w == 18)
+        #expect(snapshot.providers[.claude]?.week?.percent == 18)
+        let latest: UsageUILimitsSummary = try await client.value("usage.ui.limits.latest")
+        #expect(latest.providers[.claude]?.session?.percent == 42)
+        await controller.shutdown()
     }
 
     @Test func statuslineUsesOwnedSettingsAndDecodesRecordedTimestamp() async throws {
