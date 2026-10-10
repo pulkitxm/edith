@@ -245,7 +245,9 @@ final class ExtensionRuntime: NSObject {
         startRequested = false
         stopped = true
         commands.shutdown()
-        if controller == nil, panelEngine == nil, uiScenes.isEmpty, uiDrains.isEmpty {
+        if controller == nil, panelEngine == nil, uiScenes.isEmpty, uiDrains.isEmpty,
+            cliStreams == nil, browserStreams == nil
+        {
             Task {
                 await commands.shutdownAndWait(); completion()
             }
