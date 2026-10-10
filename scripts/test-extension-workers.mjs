@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { buildExtensionPackage } from "./build-extension-package.mjs";
 import { validateWorkerLifecycleScope } from "./extension-worker-proof.mjs";
 
-export const unsupportedFixtureWorkers = new Set([
+export const inertFixtureWorkers = new Set([
   "focusDim",
   "windowSweaters",
   "micMute",
@@ -30,6 +30,18 @@ export const unsupportedFixtureWorkers = new Set([
 ]);
 
 export const supportedFixtureWorkers = new Set([
+  "focusDim",
+  "windowSweaters",
+  "micMute",
+  "keystrokeHighlight",
+  "presenter",
+  "colorPicker",
+  "systemStats",
+  "emoji",
+  "music",
+  "plugins",
+  "studio",
+
   "keepAwake",
   "audioMixer",
   "homebrew",
@@ -72,10 +84,24 @@ export function validateWorkerFixtureSelection(definitions, requested) {
         });
   for (const { id } of selected)
     assert(
-      supportedFixtureWorkers.has(id) && !unsupportedFixtureWorkers.has(id),
+      supportedFixtureWorkers.has(id),
       `Worker ${id} has no admitted inert fixture on this parent; startup rejected`,
     );
   return selected;
+}
+
+export function validateWorkerFixtureProof(
+  result,
+  { id, surfaceContractVersion },
+) {
+  assert(supportedFixtureWorkers.has(id), `Unknown fixture owner ${id}`);
+  assert.equal(
+    result.surfaceDataValidated,
+    surfaceContractVersion === 1 && id !== "music",
+  );
+  assert.equal(result.inertFeatureDeclineValidated, id === "music");
+  assert.equal(result.studioDataValidated, false);
+  assert.equal(result.studioMetadataValidated, id === "studio");
 }
 
 async function run() {
@@ -222,12 +248,12 @@ async function run() {
       assert.equal(result.headlessCLI, headlessCLI);
       assert.equal(result.headlessLifecycle, true);
       assert.equal(result.disabledProcesses, 0);
-      assert.equal(result.surfaceDataValidated, surfaceContractVersion === 1);
+      validateWorkerFixtureProof(result, { id, surfaceContractVersion });
       assert.equal(result.clipboardDataValidated, id === "clipboard");
       assert.equal(result.latexDataValidated, id === "latex");
       assert.equal(result.companionDataValidated, id === "companion");
       assert.equal(result.terminalDataValidated, id === "terminal");
-      assert.equal(result.studioDataValidated, id === "studio");
+
       assert.equal(result.audioMixerDataValidated, id === "audioMixer");
       assert.equal(result.usageDataValidated, id === "usage");
       assert.equal(result.usageHookLifecycleValidated, id === "usage");
