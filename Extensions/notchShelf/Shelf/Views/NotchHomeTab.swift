@@ -42,7 +42,8 @@ struct NotchHomeTab: View {
                     ) { tile in tileContent(tile) }
                 }
             }
-        }.padding(.horizontal, 12).padding(.bottom, 12)
+        }.environment(\.colorScheme, .dark)
+            .padding(.horizontal, 16).padding(.bottom, 14)
     }
 
     private func tileContent(_ tile: SurfaceTile) -> some View {
@@ -97,24 +98,51 @@ struct NotchSurfaceCard: View {
     @Environment(\.surfacePresentation) private var presentation
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            if tile.showTitle {
-                Label(tile.displayTitle, systemImage: tile.widget.icon).font(.edithText(.headline))
-            }
-            if tile.widget == .clocks {
-                SurfaceWorldClocks(tile: tile, defaults: controller.context.defaults)
-            } else {
+        if tile.widget == .clocks {
+            NotchClockCard(tile: tile)
+        } else {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                if tile.showTitle {
+                    Label(tile.displayTitle, systemImage: tile.widget.icon).font(
+                        .edithText(.headline))
+                }
                 ForEach(
                     tile.widget.providerIDs.intersection(controller.activeIDs).sorted(), id: \.self
                 ) { id in
                     NotchProviderCard(controller: controller, providerID: id, tile: tile)
                 }
-            }
-        }.padding(UIScale.pt(presentation?.padding ?? 12))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                .white.opacity(0.07),
-                in: RoundedRectangle(cornerRadius: UIScale.pt(presentation?.cornerRadius ?? 12)))
+            }.padding(UIScale.pt(presentation?.padding ?? 12))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    .white.opacity(0.07),
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(presentation?.cornerRadius ?? 12))
+                )
+        }
+    }
+}
+
+private struct NotchClockCard: View {
+    let tile: SurfaceTile
+    @Environment(\.surfacePresentation) private var presentation
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                if tile.showTitle {
+                    Label(tile.displayTitle, systemImage: "clock")
+                        .font(.edithText(.caption).weight(.semibold))
+                }
+                Text(context.date.formatted(.dateTime.hour().minute().second()))
+                    .font(.edithText(.title2).weight(.medium)).monospacedDigit()
+                if tile.showDetails, !tile.dense {
+                    Text(TimeZone.current.identifier).font(.edithText(.caption2))
+                        .foregroundStyle(.secondary)
+                }
+            }.padding(UIScale.pt(presentation?.padding ?? tile.paddingOverride ?? 14))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }.background(
+            .white.opacity(0.055),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(presentation?.cornerRadius ?? 12)))
     }
 }
 

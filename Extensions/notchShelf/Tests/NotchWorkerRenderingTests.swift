@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
@@ -72,8 +73,11 @@ import Testing
     }
 
     private func settle(_ window: NSWindow, _ host: NSView) async {
-        for _ in 0..<8 {
+        for _ in 0..<16 {
             window.layoutIfNeeded(); host.layoutSubtreeIfNeeded()
+            host.needsDisplay = true
+            host.displayIfNeeded()
+            CATransaction.flush()
             try? await Task.sleep(for: .milliseconds(25))
         }
     }

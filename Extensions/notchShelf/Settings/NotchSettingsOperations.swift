@@ -1,11 +1,12 @@
+import AppKit
+import CoreBluetooth
 import EdithExtensionSupport
 import Foundation
 
 extension NotchShelfController {
     func settingsSnapshot() -> NotchSettingsSnapshot {
-        let preferences = NotchSettingsSchema.defaults.mapValues { $0 }
-        var result = preferences
-        for (key, fallback) in preferences {
+        var result = NotchSettingsSchema.defaults
+        for (key, fallback) in NotchSettingsSchema.defaults {
             if NotchSettingsSchema.isString(key) {
                 let value = context.defaults.string(forKey: key) ?? fallback
                 result[key] = NotchSettingsSchema.accepts(key, value: value) ? value : fallback
@@ -15,7 +16,9 @@ extension NotchShelfController {
             }
         }
         return .init(
-            preferences: result, activeIDs: activeIDs, browserProfile: browser?.profile?.name)
+            preferences: result, activeIDs: activeIDs, browserProfile: browser?.profile?.name,
+            bluetoothPrivacyRequired: CBManager.authorization == .denied
+                || CBManager.authorization == .restricted)
     }
 
     func executeSettings(_ command: String, payload: Data) throws -> Data {
@@ -33,6 +36,15 @@ extension NotchShelfController {
             }
             synchronize()
             if startsPanelServices { rebuildPanels() }
+        case "notch.bluetooth.settings":
+            guard
+                let url = URL(
+                    string:
+                        "x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth")
+            else {
+                throw ExtensionPeerError.unavailable
+            }
+            guard NSWorkspace.shared.open(url) else { throw ExtensionPeerError.unavailable }
         case "notch.customize": openCustomization()
         case "notch.browser.detach": browser?.detach()
         default: throw ExtensionPeerError.invalidRequest

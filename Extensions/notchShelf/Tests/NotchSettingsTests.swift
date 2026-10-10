@@ -98,16 +98,26 @@ import Testing
         await refresh.value
         #expect(model.snapshot.preferences[AppStorageKeys.Notch.shelfOpenOnHover] == "0")
         let stoppedGate = Gate()
-        let stopped = NotchSettingsModel { _, _ in await stoppedGate.hold() }
+        var actionWasCancelled = false
+        var actionCompleted = false
+        let stopped = NotchSettingsModel { _, _ in
+            let bytes = await stoppedGate.hold()
+            actionWasCancelled = Task.isCancelled
+            actionCompleted = true
+            return bytes
+        }
         stopped.perform("notch.customize")
         while stoppedGate.continuation == nil { await Task.yield() }
         stopped.stop()
-        stoppedGate.release(try JSONEncoder().encode(NotchSettingsSnapshot.empty))
-        await Task.yield()
+        var late = NotchSettingsSnapshot.empty
+        late.preferences[AppStorageKeys.Notch.shelfOpenOnHover] = "0"
+        stoppedGate.release(try JSONEncoder().encode(late))
+        while !actionCompleted { await Task.yield() }
         #expect(!stopped.available)
         #expect(!stopped.busy)
         #expect(stopped.error == nil)
         #expect(stopped.snapshot == .empty)
+        #expect(actionWasCancelled)
     }
 
     @Test func customizationPreservesSavedUnavailableTilesAndUsesOwnedRequestChannel() async throws
