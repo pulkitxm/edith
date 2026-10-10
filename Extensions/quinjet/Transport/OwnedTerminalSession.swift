@@ -159,6 +159,86 @@ enum OwnedTerminalContext {
     }
 }
 
+@MainActor final class OwnedEngineRequests {
+    typealias Invoke = @MainActor (String, Data) async throws -> Data
+    private struct Waiting {
+        let id: UUID
+        let read: Bool
+        let bytes: Int
+        let continuation: CheckedContinuation<Void, Error>
+    }
+    private let invoke: Invoke
+    private var activeReads = 0
+    private var activeControls = 0
+    private var waiting: [Waiting] = []
+    private var waitingBytes = 0
+    private var stopped = false
+
+    init(invoke: @escaping Invoke) { self.invoke = invoke }
+
+    func perform(_ operation: String, payload: Data) async throws -> Data {
+        try Task.checkCancellation()
+        let id = UUID()
+        let read = operation == OwnedTerminalSession.owner + ".terminal.read"
+        try await withTaskCancellationHandler {
+            try await acquire(id, read: read, bytes: payload.count)
+        } onCancel: {
+            Task { @MainActor in self.cancel(id) }
+        }
+        defer { release(read: read) }
+        try Task.checkCancellation()
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        let data = try await invoke(operation, payload)
+        try Task.checkCancellation()
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        return data
+    }
+
+    func stop() {
+        stopped = true
+        let pending = waiting
+        waiting.removeAll()
+        waitingBytes = 0
+        for request in pending { request.continuation.resume(throwing: CancellationError()) }
+    }
+
+    private func acquire(_ id: UUID, read: Bool, bytes: Int) async throws {
+        try Task.checkCancellation()
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        if (read ? activeReads : activeControls) < 4 {
+            reserve(read: read)
+            return
+        }
+        guard waiting.count < 512, bytes <= 2_097_152 - waitingBytes else {
+            throw ExtensionPeerError.unavailable
+        }
+        try await withCheckedThrowingContinuation { continuation in
+            waiting.append(.init(id: id, read: read, bytes: bytes, continuation: continuation))
+            waitingBytes += bytes
+        }
+    }
+
+    private func reserve(read: Bool) {
+        if read { activeReads += 1 } else { activeControls += 1 }
+    }
+
+    private func release(read: Bool) {
+        if read { activeReads -= 1 } else { activeControls -= 1 }
+        guard !stopped, let index = waiting.firstIndex(where: { $0.read == read }) else { return }
+        let request = waiting.remove(at: index)
+        waitingBytes -= request.bytes
+        reserve(read: read)
+        request.continuation.resume()
+    }
+
+    private func cancel(_ id: UUID) {
+        guard let index = waiting.firstIndex(where: { $0.id == id }) else { return }
+        let request = waiting.remove(at: index)
+        waitingBytes -= request.bytes
+        request.continuation.resume(throwing: CancellationError())
+    }
+}
+
 @MainActor final class OwnedTerminalClient {
     typealias Invoke = @MainActor (String, Data) async throws -> Data
     let descriptor: OwnedTerminalDescriptor

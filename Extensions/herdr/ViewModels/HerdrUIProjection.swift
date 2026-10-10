@@ -173,31 +173,31 @@ final class HerdrUIDefaults: UserDefaults {
 
 @MainActor final class HerdrUIClient {
     typealias Invoke = @MainActor (String, Data) async throws -> Data
-    private let invoke: Invoke
+    private let requests: OwnedEngineRequests
     private var pending: [UUID: Task<Data, Error>] = [:]
     private var generation: UUID?
     private var sequence: UInt64 = 0
     private var stopped = false
 
-    init(invoke: @escaping Invoke) { self.invoke = invoke }
+    init(invoke: @escaping Invoke) { requests = OwnedEngineRequests(invoke: invoke) }
 
     convenience init(client: ExtensionEngineClient) {
         self.init { operation, payload in try await client.invoke(operation, payload: payload) }
     }
 
     func perform(_ operation: String, object: [String: Any] = [:]) async throws -> Data {
-        guard !stopped, pending.count < 16 else { throw ExtensionPeerError.unavailable }
+        guard !stopped, pending.count < 520 else { throw ExtensionPeerError.unavailable }
         let payload = try JSONSerialization.data(withJSONObject: object)
         return try await perform(operation, payload: payload)
     }
 
     func perform(_ operation: String, payload: Data) async throws -> Data {
-        guard !stopped, pending.count < 16, payload.count <= 131072,
+        guard !stopped, pending.count < 520, payload.count <= 131072,
             operation.hasPrefix("herdr.") || operation.hasPrefix("activity.")
         else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
         let id = UUID()
-        let task = Task { try await invoke(operation, payload) }
+        let task = Task { try await requests.perform(operation, payload: payload) }
         pending[id] = task
         defer { pending[id] = nil }
         let result = try await withTaskCancellationHandler {
@@ -224,6 +224,7 @@ final class HerdrUIDefaults: UserDefaults {
 
     func stop() {
         stopped = true
+        requests.stop()
         for task in pending.values { task.cancel() }
         pending.removeAll()
     }

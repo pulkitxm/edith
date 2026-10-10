@@ -109,12 +109,19 @@ struct QuinjetUIState: Codable {
 @MainActor final class QuinjetUIClient {
     typealias Invoke = @MainActor (String, Data) async throws -> Data
     private let invoke: Invoke
+    private let requests: OwnedEngineRequests
     private var pending: [UUID: Task<Data, Error>] = [:]
     private var stopped = false
     private var generation: UUID?
     private var sequence: UInt64 = 0
 
-    init(invoke: @escaping Invoke) { self.invoke = invoke }
+    init(invoke: @escaping Invoke) {
+        let requests = OwnedEngineRequests(invoke: invoke)
+        self.requests = requests
+        self.invoke = { operation, payload in
+            try await requests.perform(operation, payload: payload)
+        }
+    }
     convenience init(client: ExtensionEngineClient) {
         self.init { try await client.invoke($0, payload: $1) }
     }
@@ -138,7 +145,7 @@ struct QuinjetUIState: Codable {
     }
 
     func request(_ operation: String, object: [String: Any]) async throws -> Data {
-        guard !stopped, pending.count < 8, operation.hasPrefix("quinjet.ui.") else {
+        guard !stopped, pending.count < 520, operation.hasPrefix("quinjet.ui.") else {
             throw ExtensionPeerError.unavailable
         }
         try Task.checkCancellation()
@@ -163,7 +170,7 @@ struct QuinjetUIState: Codable {
         for task in pending.values { task.cancel() }
         pending.removeAll()
     }
-    func stop() { stopped = true; cancel() }
+    func stop() { stopped = true; requests.stop(); cancel() }
 }
 
 @MainActor final class QuinjetUIEngine {
