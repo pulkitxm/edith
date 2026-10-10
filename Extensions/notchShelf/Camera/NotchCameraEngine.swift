@@ -83,10 +83,10 @@ struct NotchCameraRequest: Codable, Sendable {
         generation = UUID()
         let token = generation
         running = true
-        let hardware = hardware
+        let selectedHardware = hardware
         let selectedID = selectedID
         let task = Task { [weak self] in
-            try await hardware.start(deviceID: selectedID) { [weak self] bytes in
+            try await selectedHardware.start(deviceID: selectedID) { [weak self] bytes in
                 guard bytes.count <= 524288 else { return }
                 Task { @MainActor [weak self] in
                     guard let self, !stopped, running, generation == token else { return }
