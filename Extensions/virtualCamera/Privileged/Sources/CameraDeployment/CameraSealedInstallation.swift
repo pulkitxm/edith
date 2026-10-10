@@ -206,6 +206,20 @@ public final class CameraSealedInstallation {
         guard try verify(embedded) == ownIdentity else {
             throw failure("The carrier does not contain its approved installer.")
         }
+        if bundle.object(forInfoDictionaryKey: "EdithCameraTransport") as? String == "obs" {
+            let providers = url.appendingPathComponent("Contents/Library/SystemExtensions")
+            guard !files.fileExists(atPath: providers.path) else {
+                throw failure("An OBS microphone carrier cannot contain a camera provider.")
+            }
+            let driver = url.appendingPathComponent(
+                "Contents/Library/Audio/Plug-Ins/HAL/" + configuration.hostIdentifier
+                    + ".microphone.driver")
+            let microphoneIdentity = try verify(driver)
+            guard microphoneIdentity.identifier == configuration.hostIdentifier + ".microphone",
+                microphoneIdentity.team == ownIdentity.team
+            else { throw failure("The microphone signature is invalid.") }
+            return identity
+        }
         let provider = url.appendingPathComponent(
             "Contents/Library/SystemExtensions/" + configuration.hostIdentifier
                 + ".camera.systemextension")

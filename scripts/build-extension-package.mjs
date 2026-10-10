@@ -457,9 +457,9 @@ export async function buildExtensionPackage({
       }
       if (
         frameworkBinaries.length &&
-        !execFileSync("otool", ["-l", library], { encoding: "utf8" }).includes(
-          "path @loader_path (",
-        )
+        !execFileSync("otool", ["-l", library], {
+          encoding: "utf8",
+        }).includes("path @loader_path (")
       )
         execFileSync("install_name_tool", [
           "-add_rpath",
@@ -649,7 +649,10 @@ export async function buildExtensionPackage({
     );
     await rm(resolve(payload, "camera-carrier-provenance.json"));
     await rm(resolve(payload, "cameraCarrier.bundle"), { recursive: true });
-    await rm(resolve(payload, "cameraProvider.bundle"), { recursive: true });
+    await rm(resolve(payload, "cameraProvider.bundle"), {
+      recursive: true,
+      force: true,
+    });
   }
   const payloadManifest = {
     id,

@@ -1929,7 +1929,6 @@
     "supportProducts": {
       "app": "EdithExtensionUI",
       "cameraCarrier": "EdithExtensionSupport",
-      "cameraProvider": null,
       "privileged": null
     },
     "roles": {
@@ -2014,18 +2013,6 @@
         "Extensions/virtualCamera/CameraSystemExtensionController.swift",
         "Extensions/virtualCamera/Carrier/Factory.swift"
       ],
-      "cameraProvider": [
-        "Extensions/virtualCamera/Provider/Sources/CameraProvider/CameraDeviceSource.swift",
-        "Extensions/virtualCamera/Provider/Sources/CameraProvider/CameraProviderSource.swift",
-        "Extensions/virtualCamera/Provider/Sources/CameraProvider/CameraStreamSource.swift",
-        "Extensions/virtualCamera/Provider/Sources/CameraProvider/Runtime.swift",
-        "Extensions/virtualCamera/Provider/Sources/CameraProvider/VirtualCameraExtensionStatus.swift",
-        "Extensions/virtualCamera/Provider/Sources/CameraProvider/VirtualCameraFormat.swift",
-        "Extensions/virtualCamera/Provider/Sources/CameraProvider/VirtualCameraIdentity.swift",
-        "Extensions/virtualCamera/Provider/Sources/CameraProvider/VirtualCameraPlaceholder.swift",
-        "Extensions/virtualCamera/Provider/Sources/CameraProvider/VirtualCameraRelay.swift",
-        "Extensions/virtualCamera/Provider/Sources/CameraProvider/VirtualCameraSampleBuffer.swift"
-      ],
       "privileged": [
         "Extensions/virtualCamera/Privileged/Sources/CameraDeployment/CameraMicrophoneRetirement.swift",
         "Extensions/virtualCamera/Privileged/Sources/CameraDeployment/CameraPrivilegedRuntime.swift",
@@ -2089,16 +2076,13 @@
     "testTargets": [
       "ci-extension-camera",
       "ci-extension-camera-carrier",
-      "ci-extension-camera-provider",
       "ci-extension-camera-voice"
     ],
     "systemExtensionCarrier": {
       "role": "cameraCarrier",
-      "providerRole": "cameraProvider",
+      "transport": "obs",
       "applicationIdentifier": "com.pulkit.edith.cameraCarrier",
-      "extensionIdentifier": "com.pulkit.edith.camera",
-      "minimumSystemVersion": 14,
-      "installEntitlement": "com.apple.developer.system-extension.install"
+      "minimumSystemVersion": 14
     }
   },
   {

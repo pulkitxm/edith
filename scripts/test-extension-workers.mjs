@@ -31,7 +31,11 @@ try {
       workers.some((entry) => entry.id === id),
       `Unknown worker extension ${id}`,
     );
-  for (const { id, surfaceContractVersion } of workers.filter(
+  for (const {
+    id,
+    surfaceContractVersion,
+    systemExtensionCarrier,
+  } of workers.filter(
     (entry) => requested.length === 0 || requested.includes(entry.id),
   )) {
     const releases = join(root, id);
@@ -71,10 +75,12 @@ try {
           .digest("hex");
         assert.equal(provenance.hostIdentifier, fixtureIdentifier);
         assert.equal(provenance.version, version);
-        assert.deepEqual(provenance.roles.map(({ role }) => role).sort(), [
-          "cameraCarrier",
-          "cameraProvider",
-        ]);
+        assert.deepEqual(
+          provenance.roles.map(({ role }) => role).sort(),
+          systemExtensionCarrier.transport === "obs"
+            ? ["cameraCarrier"]
+            : ["cameraCarrier", "cameraProvider"],
+        );
         for (const role of provenance.roles) {
           assert.equal(role.executableBeforeSigningSHA256, original);
           assert.match(role.executableAfterSigningSHA256, /^[0-9a-f]{64}$/);
@@ -110,7 +116,9 @@ try {
             ...process.env,
             EDITH_EXTENSION_FIXTURE_HOME: fixtureHome,
             ...(fixtureIdentifier
-              ? { EDITH_EXTENSION_TEST_HOST_IDENTIFIER: fixtureIdentifier }
+              ? {
+                  EDITH_EXTENSION_TEST_HOST_IDENTIFIER: fixtureIdentifier,
+                }
               : {}),
           },
         },

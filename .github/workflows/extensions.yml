@@ -131,16 +131,6 @@ jobs:
           EXTENSION_ID: ${{ matrix.id }}
         run: |
           bun -e 'const entry=JSON.parse(await Bun.file("Extensions/manifest.json").text()).find(item=>item.id===process.env.EXTENSION_ID); if (entry?.contractVersion!==1 || entry.surfaceContractVersion!==1 || entry.usesHostFramework) throw new Error("Only native extension workers can ship")'
-      - name: Require Camera publication profiles
-        if: matrix.id == 'virtualCamera' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))
-        env:
-          CAMERA_CARRIER_PROVISIONING_PROFILE: ${{ secrets.CAMERA_CARRIER_PROVISIONING_PROFILE }}
-          CAMERA_EXTENSION_PROVISIONING_PROFILE: ${{ secrets.CAMERA_EXTENSION_PROVISIONING_PROFILE }}
-        run: |
-          if [ -z "$CAMERA_CARRIER_PROVISIONING_PROFILE" ] || [ -z "$CAMERA_EXTENSION_PROVISIONING_PROFILE" ]; then
-            echo "Camera publication requires base64 CMS profiles in CAMERA_CARRIER_PROVISIONING_PROFILE and CAMERA_EXTENSION_PROVISIONING_PROFILE repository secrets" >&2
-            exit 1
-          fi
       - name: Identify optional native prerequisites
         id: native
         env:
@@ -201,12 +191,10 @@ jobs:
           fi
           test -n "$identity"
           echo "EXTENSION_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
-      - name: Prepare the frozen Camera host and provisioning profiles
+      - name: Prepare the frozen Camera microphone host
         if: matrix.id == 'virtualCamera'
         env:
           DEVELOPMENT: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.publish != true) }}
-          CAMERA_CARRIER_PROVISIONING_PROFILE: ${{ secrets.CAMERA_CARRIER_PROVISIONING_PROFILE }}
-          CAMERA_EXTENSION_PROVISIONING_PROFILE: ${{ secrets.CAMERA_EXTENSION_PROVISIONING_PROFILE }}
         run: python3 scripts/prepare-camera-extension-release.py
       - name: Build only this extension
         env:

@@ -14,7 +14,7 @@ import Testing
         var wrongInstaller = false
         var revision: UInt8 = 1
         let host = "com.pulkit.edith.dev.fixture"
-        init() throws {
+        init(obs: Bool = false) throws {
             let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(
                 "camera-install-" + UUID().uuidString)
             try FileManager.default.createDirectory(
@@ -36,6 +36,10 @@ import Testing
                 try FileManager.default.createDirectory(
                     at: directory, withIntermediateDirectories: true)
             }
+            if obs {
+                try FileManager.default.removeItem(
+                    at: source.appendingPathComponent("Contents/Library/SystemExtensions"))
+            }
             try Data([1, 2, 3]).write(to: source.appendingPathComponent("Contents/MacOS/Edith"))
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o755],
@@ -46,6 +50,7 @@ import Testing
                 "EdithContainedRole": "cameraCarrier", "EdithContainedExtensionID": "virtualCamera",
                 "EdithHostIdentifier": host, "EdithHostABI": "edith-host-1",
                 "EdithExecutableProvenance": String(repeating: "a", count: 64),
+                "EdithCameraTransport": obs ? "obs" : "native",
             ])
         }
         deinit { try? FileManager.default.removeItem(at: root) }
@@ -88,6 +93,28 @@ import Testing
                         team: wrongTeam && path != privilege ? "OTHERTEAM1" : "TEAM123456",
                         digest: Data([digest]))
                 })
+        }
+    }
+
+    @Test func obsCarrierInstallsOnlyItsVerifiedMicrophone() throws {
+        let fixture = try Fixture(obs: true)
+        let installer = try fixture.installer()
+        let installed = try installer.installCarrier(source: fixture.source, providerExited: true)
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: installed.appendingPathComponent("Contents/Library/SystemExtensions").path))
+        #expect(try installer.installMicrophone(carrier: installed))
+        #expect(try installer.removeMicrophone())
+    }
+
+    @Test func obsCarrierRejectsAnEmbeddedCameraProvider() throws {
+        let fixture = try Fixture(obs: true)
+        try FileManager.default.createDirectory(
+            at: fixture.source.appendingPathComponent("Contents/Library/SystemExtensions"),
+            withIntermediateDirectories: true)
+        let installer = try fixture.installer()
+        #expect(throws: (any Error).self) {
+            try installer.installCarrier(source: fixture.source, providerExited: true)
         }
     }
 

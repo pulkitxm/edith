@@ -31,6 +31,24 @@ test("camera carrier metadata permits only the matching sealed roles and identit
     ).toThrow();
 });
 
+test("OBS microphone carriers require no provider role or installation entitlement", () => {
+  const obs = {
+    role: "cameraCarrier",
+    transport: "obs",
+    applicationIdentifier: "com.pulkit.edith.cameraCarrier",
+    minimumSystemVersion: 14,
+  };
+  expect(validateCameraCarrierDefinition(obs)).toEqual(obs);
+  for (const change of [
+    { providerRole: "cameraProvider" },
+    { installEntitlement: "com.apple.developer.system-extension.install" },
+    { transport: "unrecognized" },
+  ])
+    expect(() =>
+      validateCameraCarrierDefinition({ ...obs, ...change }),
+    ).toThrow();
+});
+
 test("contained camera archive rejects nested links rather than following them", async () => {
   const root = await mkdtemp(join(tmpdir(), "camera-regular-tree-"));
   try {

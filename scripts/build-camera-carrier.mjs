@@ -20,17 +20,24 @@ const hash = async (file) =>
 const identifierPattern = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
 
 export function validateCameraCarrierDefinition(value) {
+  const obs = value?.transport === "obs";
+  const native = !obs && value?.transport === undefined;
   if (
     value?.role !== "cameraCarrier" ||
-    value.providerRole !== "cameraProvider" ||
+    (!obs && (!native || value.providerRole !== "cameraProvider")) ||
+    (obs &&
+      (value.providerRole !== undefined ||
+        value.installEntitlement !== undefined)) ||
     value.minimumSystemVersion !== 14 ||
-    value.installEntitlement !==
-      "com.apple.developer.system-extension.install" ||
+    (!obs &&
+      (value.installEntitlement !==
+        "com.apple.developer.system-extension.install" ||
+        !identifierPattern.test(value.extensionIdentifier ?? ""))) ||
     !identifierPattern.test(value.applicationIdentifier ?? "") ||
-    !identifierPattern.test(value.extensionIdentifier ?? "") ||
     !value.applicationIdentifier.endsWith(".cameraCarrier") ||
-    value.extensionIdentifier !==
-      `${value.applicationIdentifier.slice(0, -14)}.camera` ||
+    (!obs &&
+      value.extensionIdentifier !==
+        `${value.applicationIdentifier.slice(0, -14)}.camera`) ||
     Object.keys(value).some(
       (key) =>
         ![
@@ -40,6 +47,7 @@ export function validateCameraCarrierDefinition(value) {
           "extensionIdentifier",
           "minimumSystemVersion",
           "installEntitlement",
+          "transport",
         ].includes(key),
     )
   ) {
@@ -183,6 +191,7 @@ export async function buildCameraCarrier({
   providerProfile = process.env.CAMERA_EXTENSION_PROFILE,
 }) {
   const metadata = validateCameraCarrierDefinition(definition);
+  const obs = metadata.transport === "obs";
   const hostIdentifier = metadata.applicationIdentifier.slice(0, -14);
   if (
     !hostApp ||
@@ -202,21 +211,24 @@ export async function buildCameraCarrier({
     if (
       !identity ||
       identity === "-" ||
-      !/^[A-Z0-9]{10}$/.test(team ?? "") ||
-      !carrierProfile ||
-      !providerProfile
+      (!obs &&
+        (!/^[A-Z0-9]{10}$/.test(team ?? "") ||
+          !carrierProfile ||
+          !providerProfile))
     )
       throw new Error(
         "Camera release signing and matching provisioning profiles are required",
       );
-    for (const [profile, identifier, entitlement] of [
-      [
-        carrierProfile,
-        metadata.applicationIdentifier,
-        metadata.installEntitlement,
-      ],
-      [providerProfile, metadata.extensionIdentifier, ""],
-    ])
+    for (const [profile, identifier, entitlement] of obs
+      ? []
+      : [
+          [
+            carrierProfile,
+            metadata.applicationIdentifier,
+            metadata.installEntitlement,
+          ],
+          [providerProfile, metadata.extensionIdentifier, ""],
+        ])
       execFileSync(
         "python3",
         [
@@ -240,7 +252,16 @@ export async function buildCameraCarrier({
   );
   const provenance = [];
   for (const [role, bundle, identifier, profile] of [
-    ["cameraProvider", provider, metadata.extensionIdentifier, providerProfile],
+    ...(obs
+      ? []
+      : [
+          [
+            "cameraProvider",
+            provider,
+            metadata.extensionIdentifier,
+            providerProfile,
+          ],
+        ]),
     [
       "cameraCarrier",
       destination,
@@ -307,6 +328,7 @@ export async function buildCameraCarrier({
       EdithHostIdentifier: hostIdentifier,
       EdithHostABI: hostABI,
       EdithExecutableProvenance: runtime.originalSHA256,
+      EdithCameraTransport: obs ? "obs" : "native",
     };
     if (role === "cameraProvider") {
       info.CMIOExtension = {
@@ -319,7 +341,7 @@ export async function buildCameraCarrier({
     } else info.LSUIElement = true;
     await plist(join(contents, "Info.plist"), info);
     const entitlements = join(output, `${role}-entitlements.plist`);
-    if (!development) {
+    if (!development && !obs) {
       await copyFile(profile, join(contents, "embedded.provisionprofile"));
       const group = `${team}.${metadata.extensionIdentifier}`;
       await plist(
@@ -337,8 +359,13 @@ export async function buildCameraCarrier({
             },
       );
     }
-    sign(bundle, identity, development, development ? undefined : entitlements);
-    if (!development) await rm(entitlements);
+    sign(
+      bundle,
+      identity,
+      development,
+      development || obs ? undefined : entitlements,
+    );
+    if (!development && !obs) await rm(entitlements);
     execFileSync("codesign", ["--verify", "--strict", "--deep", bundle], {
       stdio: "inherit",
     });
