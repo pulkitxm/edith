@@ -1043,6 +1043,7 @@
         "Extensions/music/UI/MusicProviderViews.swift",
         "Extensions/music/UI/MusicRemoteFacade.swift",
         "Extensions/music/UI/MusicSettings.swift",
+        "Extensions/music/UI/MusicSettingsModel.swift",
         "Extensions/music/UI/MusicSpotifyComponents.swift",
         "Extensions/music/UI/MusicSpotifyLibrary.swift",
         "Extensions/music/UI/MusicSpotifyWorkspace.swift",

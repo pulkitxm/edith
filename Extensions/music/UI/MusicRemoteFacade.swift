@@ -183,16 +183,7 @@ import Observation
         let tools = EmbeddedMusicTools.shared
         tools.installed = value.tools.installed; tools.installing = value.tools.installing;
         tools.error = value.tools.error
-        let defaults = SharedDefaults.store
-        for (key, next) in [
-            (EmbeddedMusicFade.enabledKey, value.preferences.crossfade),
-            (AppStorageKeys.Music.barCollapsed, value.preferences.barCollapsed),
-            (AppStorageKeys.Music.barAutoHide, value.preferences.barAutoHide),
-            (AppStorageKeys.Music.gridView, value.preferences.gridView),
-        ] where defaults.object(forKey: key) as? Bool != next { defaults.set(next, forKey: key) }
-        if defaults.double(forKey: EmbeddedMusicFade.secondsKey) != value.preferences.fadeLength {
-            defaults.set(value.preferences.fadeLength, forKey: EmbeddedMusicFade.secondsKey)
-        }
+        applyPreferences(value.preferences)
 
         cursor = value.cursor
         EmbeddedMusicPrivacyState.shared.active = value.privacy
@@ -211,6 +202,20 @@ import Observation
                 rescan()
             }
         }
+    }
+
+    func applyPreferences(_ preferences: EmbeddedMusicUIPreferences) {
+        let defaults = SharedDefaults.store
+        for (key, next) in [
+            (EmbeddedMusicFade.enabledKey, preferences.crossfade),
+            (AppStorageKeys.Music.barCollapsed, preferences.barCollapsed),
+            (AppStorageKeys.Music.barAutoHide, preferences.barAutoHide),
+            (AppStorageKeys.Music.gridView, preferences.gridView),
+        ] where defaults.object(forKey: key) as? Bool != next { defaults.set(next, forKey: key) }
+        if defaults.double(forKey: EmbeddedMusicFade.secondsKey) != preferences.fadeLength {
+            defaults.set(preferences.fadeLength, forKey: EmbeddedMusicFade.secondsKey)
+        }
+
     }
 
     func dataRequest(_ operation: String, payload: Data = Data("{}".utf8)) async throws -> Data {
