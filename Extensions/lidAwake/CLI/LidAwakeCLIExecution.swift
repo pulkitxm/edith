@@ -19,6 +19,6 @@ import Foundation
         LidAwakeCLIEnvironment.worker = worker
         defer { LidAwakeCLIEnvironment.worker = previous }
         return try await ExtensionCLIExecution.run(
-            LidAwakeCLICommand.self, arguments: request.arguments)
+            LidAwakeCLICommand.self, request: request)
     }
 }

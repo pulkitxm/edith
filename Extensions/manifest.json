@@ -1725,7 +1725,8 @@
         "Extensions/lidAwake/Views/LidAwakeSettings.swift",
         "Extensions/lidAwake/Views/LidAwakeSettingsModel.swift",
         "Extensions/lidAwake/CLI/LidAwakeCommands.swift",
-        "Extensions/lidAwake/CLI/LidAwakeCLIExecution.swift"
+        "Extensions/lidAwake/CLI/LidAwakeCLIExecution.swift",
+        "Extensions/lidAwake/CLI/LidAwakeCLICatalog.swift"
       ],
       "privileged": [
         "Extensions/lidAwake/Privileged/LidAwakePrivilegedController.swift",

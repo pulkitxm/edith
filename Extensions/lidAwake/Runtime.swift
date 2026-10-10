@@ -16,6 +16,7 @@ final class ExtensionRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let surface = self?.surface else { throw ExtensionPeerError.unavailable }
+            if command == "lidAwake.cli.catalog" { return try LidAwakeCLICatalog.data() }
             if command == "lidAwake.cli" {
                 guard let worker = self?.worker else { throw ExtensionPeerError.unavailable }
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
