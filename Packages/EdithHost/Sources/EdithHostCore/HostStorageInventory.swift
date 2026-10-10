@@ -57,6 +57,8 @@ public struct HostStorageInventory: Sendable {
         marketplace: HostMarketplace, appBundle: URL, appVersion: String?,
         preferencesDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Preferences"),
+        ownerDefaults: UserDefaults = SharedDefaults.store,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         systemVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
     ) throws {
         let store = marketplace.packageStore
@@ -105,6 +107,15 @@ public struct HostStorageInventory: Sendable {
                     scopes.append(
                         .init(id: key, root: identity.root.appendingPathComponent(relative)))
                 }
+            }
+            if id == "music",
+                let custom = ExtensionData.selectedMusicDirectory(
+                    defaults: ownerDefaults, homeDirectory: homeDirectory),
+                !identity.persistentExtensionLocations(id).contains(custom)
+            {
+                let key = "music-selected-directory"
+                preservedIDs.append(key)
+                scopes.append(.init(id: key, root: custom))
             }
             var versions: [HostStorageVersion] = []
             let installed = (marketplace.installedVersions[id] ?? []).sorted {

@@ -39,13 +39,18 @@ import Testing
             try Data(
                 contentsOf: identity.effectiveExtensionDirectory("usage").appendingPathComponent(
                     "data/usage.json")) == bytes)
-        let diagnostics = HostAppPathsCLI.entries(identity: identity)
+        let suite = "host-production-paths-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let diagnostics = HostAppPathsCLI.entries(identity: identity, defaults: defaults)
         #expect(diagnostics.first { $0.id == "data" }?.url == usage.deletingLastPathComponent())
         #expect(
-            try HostAppPathsCLI.prepareOpen("data", identity: identity).url
+            try HostAppPathsCLI.prepareOpen("data", identity: identity, defaults: defaults).url
                 == usage.deletingLastPathComponent())
         #expect(
-            HostStorageTarget.defaults(identity: identity).first { $0.id == "usage" }?.url
+            HostStorageTarget.defaults(identity: identity, defaults: defaults).first {
+                $0.id == "usage"
+            }?.url
                 == usage.deletingLastPathComponent())
         #expect(
             identity.persistentExtensionLocations("herdr")[0]
@@ -53,6 +58,30 @@ import Testing
         #expect(
             identity.effectiveExtensionDirectory("machines")
                 == identity.root.appendingPathComponent("machines", isDirectory: true))
+    }
+
+    @Test func storedCustomMusicDirectoryIsTheActualDiagnosticAndStorageTarget() throws {
+        let suite = "host-production-music-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let root = URL(fileURLWithPath: "/private/tmp").appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let home = root.appendingPathComponent("home")
+        let library = home.appendingPathComponent("Music/Selected")
+        try FileManager.default.createDirectory(at: library, withIntermediateDirectories: true)
+        defaults.set(library.path, forKey: AppStorageKeys.Music.folderPath)
+        let identity = try HostIdentity(identifier: "com.pulkit.edith", supportDirectory: root)
+        #expect(
+            HostAppPathsCLI.entries(identity: identity, defaults: defaults, homeDirectory: home)
+                .first { $0.id == "music" }?.url.path == library.resolvingSymlinksInPath().path)
+        #expect(
+            try HostAppPathsCLI.prepareOpen(
+                "music", identity: identity, defaults: defaults,
+                homeDirectory: home
+            ).url.path == library.resolvingSymlinksInPath().path)
+        #expect(
+            HostStorageTarget.defaults(identity: identity, defaults: defaults, homeDirectory: home)
+                .first { $0.id == "music" }?.url.path == library.resolvingSymlinksInPath().path)
     }
 
     @Test func packageReplacementAndRemovalCannotDeleteOriginalOrNewOwnerData() throws {

@@ -7,10 +7,22 @@ public enum DownloadsStorage {
     private static let confirmationKey = "downloadsAudioFolderExternalConfirmation"
 
     public static var audioDirectory: URL {
-        selectedAudioDirectory()
+        resolvedAudioDirectory(
+            defaults: SharedDefaults.store,
+            homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
+            environment: ProcessInfo.processInfo.environment, root: ExtensionData.root)
+    }
+
+    public static func resolvedAudioDirectory(
+        defaults: UserDefaults, homeDirectory: URL, environment: [String: String], root: URL
+    ) -> URL {
+        selectedAudioDirectory(defaults: defaults, homeDirectory: homeDirectory)
+            ?? (environment["EDITH_APPLICATION_IDENTIFIER"] == "com.pulkit.edith"
+                ? ExtensionData.selectedMusicDirectory(
+                    defaults: defaults, homeDirectory: homeDirectory) : nil)
             ?? ExtensionData.productionDirectory(
-                "music",
-                fallback: ExtensionData.root.appendingPathComponent("library", isDirectory: true))
+                "music", fallback: root.appendingPathComponent("library", isDirectory: true),
+                environment: environment)
     }
 
     public static var dataDir: URL { ExtensionData.root }
