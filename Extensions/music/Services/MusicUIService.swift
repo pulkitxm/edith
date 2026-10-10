@@ -27,7 +27,8 @@ import WebKit
                 connected: {
                     worker.accounts.youtubeConnected && worker.accounts.selected == .youtubeMusic
                 },
-                cookies: { await worker.accounts.presentationCookies() })
+                cookies: { await worker.accounts.presentationCookies() },
+                store: { worker.accounts.presentationStore() })
         worker.browserPresentation = self.browser
         worker.player.presentationTransport = { [weak self] request in
             guard let self, self.video != nil else { return false }
@@ -211,6 +212,10 @@ import WebKit
             guard payload.count <= 20_480 else { throw ExtensionPeerError.invalidRequest }
             return try JSONEncoder().encode(
                 browser.sync(JSONDecoder().decode(MusicBrowserReport.self, from: payload)))
+        case "music.ui.youtube.cookies":
+            guard payload.count <= 524_288 else { throw ExtensionPeerError.invalidRequest }
+            try await browser.commit(JSONDecoder().decode(MusicBrowserLease.self, from: payload))
+            return Data("{}".utf8)
         case "music.ui.youtube.close":
             guard payload.count <= 256 else { throw ExtensionPeerError.invalidRequest }
             try browser.close(JSONDecoder().decode(MusicBrowserToken.self, from: payload))
@@ -285,7 +290,8 @@ import WebKit
             }
         case .volume:
             if let video {
-                video.setVolume(try fraction(action))
+                let value = try fraction(action)
+                video.setVolume(value); player.volume = value
             } else {
                 player.perform(.volume(try fraction(action)))
             }
@@ -364,7 +370,7 @@ import WebKit
             guard let provider = MusicProvider(rawValue: action.target) else {
                 throw ExtensionPeerError.invalidRequest
             }
-            browser.revoke()
+            browser.revoke(); await browser.drain()
             worker.accounts.select(provider)
         case .connectSpotify: worker.accounts.spotify.connect()
         case .disconnectSpotify: await worker.accounts.spotify.disconnect()
@@ -374,9 +380,10 @@ import WebKit
             guard let profile = profiles.first(where: { $0.id == action.target }) else {
                 throw ExtensionPeerError.invalidRequest
             }
-            browser.revoke()
+            browser.revoke(); await browser.drain()
             await worker.accounts.connectYoutube(profile)
-        case .disconnectYoutube: browser.revoke(); await worker.accounts.disconnectYoutube()
+        case .disconnectYoutube:
+            browser.revoke(); await browser.drain(); await worker.accounts.disconnectYoutube()
         case .reloadYoutube:
             worker.accounts.youtubeError = nil; try browser.send("reload")
         case .openChrome:
@@ -435,6 +442,8 @@ import WebKit
         }
     }
 
+    func drain() async { await browser.drain() }
+
     func stop() {
         guard !stopped else { return }
         stopped = true
@@ -467,7 +476,7 @@ import WebKit
         case .toggle: video.toggle()
         case .stop: video.pause(); video.seek(0)
         case .seek(let value): video.seek(value)
-        case .volume(let value): video.setVolume(value)
+        case .volume(let value): video.setVolume(value); worker.player.volume = value
         case .status: break
         case .shuffle, .repeat: worker.player.perform(request)
         default: closeVideo(); worker.player.perform(request)
@@ -504,7 +513,7 @@ import WebKit
         let same = worker.player.current?.relativePath == video.track.relativePath
         video.stop(); self.video = nil; worker.videoPresentation = nil
         worker.player.presentationDidChange()
-        if same { worker.player.perform(.seek(position)) }
+        if same, video.duration > 0 { worker.player.perform(.seek(position)) }
         if resumeAudio { worker.player.perform(.play) }
         resumeAudio = false
     }

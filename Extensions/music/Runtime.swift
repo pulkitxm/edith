@@ -37,6 +37,7 @@ final class ExtensionRuntime: NSObject {
         Task {
             await EmbeddedMusicVideoSession.drainAll()
             await EmbeddedMusicBrowserSession.drainAll()
+            await uiService?.drain()
             await backup?.shutdown()
             await commands.shutdownAndWait()
             await worker?.shutdown()
@@ -87,6 +88,7 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
+            embeddedUI.stop()
             backup?.beginShutdown()
             uiService?.stop(); commands.shutdown(); worker?.stop(); worker = nil; surface = nil;
             uiService = nil

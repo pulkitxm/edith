@@ -12,6 +12,7 @@ import EdithExtensionUI
     private(set) var youtubeConnected = false
     private(set) var youtubeConnecting = false
     var youtubeError: String?
+    var youtubePresentationRevision: UInt64 = 0
     var playerReady: Bool {
         selected == .local || (selected == .spotify ? spotify.connected : youtubeConnected)
     }
@@ -47,7 +48,13 @@ import EdithExtensionUI
         EmbeddedMusicBrowserSession.stopAll()
         EmbeddedMusicRemote.shared.send(.disconnectYoutube)
     }
-    func reloadYoutube() { EmbeddedMusicRemote.shared.send(.reloadYoutube) }
+    func reloadYoutube() {
+        if EmbeddedMusicBrowserSession.current != nil {
+            EmbeddedMusicRemote.shared.send(.reloadYoutube)
+        } else {
+            youtubeError = nil; youtubePresentationRevision &+= 1
+        }
+    }
     func activate() { EmbeddedMusicRemote.shared.start() }
     func apply(_ state: EmbeddedMusicUIState) {
         selected = EmbeddedMusicProvider(rawValue: state.selected) ?? .local

@@ -84,7 +84,25 @@ private final class MusicVideoFile: @unchecked Sendable {
     private let identity: stat
 
     init(url: URL) throws {
-        descriptor = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        descriptor = -1
+        guard url.isFileURL else { throw ExtensionPeerError.invalidRequest }
+        guard let resolved = realpath(url.path, nil) else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        defer { free(resolved) }
+        let components = String(cString: resolved).split(separator: "/").map(String.init)
+        var parent = Darwin.open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC)
+        guard parent >= 0 else { throw ExtensionPeerError.unavailable }
+        for (index, component) in components.enumerated() {
+            let flags =
+                O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK
+                | (index < components.count - 1 ? O_DIRECTORY : 0)
+            let next = openat(parent, component, flags)
+            Darwin.close(parent)
+            guard next >= 0 else { throw ExtensionPeerError.invalidRequest }
+            parent = next
+        }
+        descriptor = parent
         var value = stat()
         guard descriptor >= 0, fstat(descriptor, &value) == 0,
             value.st_mode & S_IFMT == S_IFREG, value.st_size > 0,

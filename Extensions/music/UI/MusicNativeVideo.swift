@@ -6,7 +6,8 @@ import Foundation
 import Observation
 import SwiftUI
 
-@MainActor final class EmbeddedMusicAssetLoader: NSObject, AVAssetResourceLoaderDelegate {
+@MainActor
+final class EmbeddedMusicAssetLoader: NSObject, @preconcurrency AVAssetResourceLoaderDelegate {
     let lease: EmbeddedMusicVideoLease
     let url: URL
     private let invoke: (String, Data) async throws -> Data

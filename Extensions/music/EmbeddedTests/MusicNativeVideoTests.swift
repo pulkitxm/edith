@@ -2,6 +2,7 @@ import AVFoundation
 import AVKit
 import AudioToolbox
 import CoreVideo
+import Darwin
 import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
@@ -244,6 +245,7 @@ import Testing
         #expect(state.playback.elapsed == 0.5)
         #expect(state.videoControl?.playing == false)
         #expect(state.videoControl?.volume == 0.2)
+        #expect(worker.player.volume == 0.2)
         #expect(state.videoControl?.seek == 0.25)
         #expect(state.videoControl?.revision == 3)
         #expect(worker.player.nowPlayingSnapshot.title == "Mock Garden")
@@ -268,6 +270,45 @@ import Testing
                 payload: JSONEncoder().encode(
                     MusicVideoRange(
                         id: lease.id, revision: lease.revision, sequence: 1, offset: 0, count: 8)))
+        }
+    }
+
+    @Test func byteLeasesRejectSpecialFilesAndRevokeChangedAssets() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "music-video-file-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fifo = root.appendingPathComponent("Mock Pipe.mov")
+        #expect(mkfifo(fifo.path, 0o600) == 0)
+        #expect(throws: (any Error).self) {
+            try MusicVideoPlayback(
+                track: Track(url: fifo, relativePath: "Mock Pipe.mov"), position: 0, playing: false,
+                volume: 0.5)
+        }
+        let file = root.appendingPathComponent("Mock Bytes.mov")
+        let bytes = Data((0..<600_000).map { UInt8($0 % 251) })
+        try bytes.write(to: file)
+        let engine = try MusicVideoPlayback(
+            track: Track(url: file, relativePath: "Mock Bytes.mov"), position: 0, playing: false,
+            volume: 0.5)
+        defer { engine.stop() }
+        let lease = engine.lease
+        #expect(
+            try await engine.read(
+                .init(
+                    id: lease.id, revision: lease.revision, sequence: 1, offset: 262_144,
+                    count: 262_144)
+            ).data == bytes.subdata(in: 262_144..<524_288))
+        #expect(
+            try await engine.read(
+                .init(
+                    id: lease.id, revision: lease.revision, sequence: 2, offset: 599_995, count: 8)
+            ).data == bytes.suffix(5))
+        let handle = try FileHandle(forWritingTo: file)
+        try handle.truncate(atOffset: 16); try handle.close()
+        await #expect(throws: (any Error).self) {
+            try await engine.read(
+                .init(id: lease.id, revision: lease.revision, sequence: 3, offset: 0, count: 8))
         }
     }
 

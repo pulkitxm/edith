@@ -12,22 +12,29 @@ import WebKit
             HTTPCookie(properties: [
                 .name: "SID", .value: "mock-music-session", .domain: domain, .path: "/",
                 .secure: "TRUE", HTTPCookiePropertyKey("HttpOnly"): "TRUE",
+                .sameSitePolicy: "Strict",
             ]))
     }
 
     @Test func originalNativeBrowserHasOfflineInteractionAndDrainsItsEphemeralSession() async throws
     {
         let values = [try cookie(), try cookie(domain: ".example.com")]
-        let engine = MusicBrowserPresentation(connected: { true }, cookies: { values })
+        let saved = WKWebsiteDataStore.nonPersistent()
+        let engine = MusicBrowserPresentation(
+            connected: { true }, cookies: { values }, store: { saved })
         let engineLease = try await engine.open()
         let lease = try JSONDecoder().decode(
             EmbeddedMusicBrowserLease.self, from: JSONEncoder().encode(engineLease))
         #expect(lease.cookies.count == 1)
+        #expect(lease.cookies.first?.sameSite?.lowercased() == "strict")
         let session = try EmbeddedMusicBrowserSession(lease: lease) { operation, payload in
             switch operation {
             case "music.ui.youtube.sync":
                 return try JSONEncoder().encode(
                     engine.sync(JSONDecoder().decode(MusicBrowserReport.self, from: payload)))
+            case "music.ui.youtube.cookies":
+                try await engine.commit(JSONDecoder().decode(MusicBrowserLease.self, from: payload))
+                return Data("{}".utf8)
             case "music.ui.youtube.close":
                 try engine.close(JSONDecoder().decode(MusicBrowserToken.self, from: payload));
                 return Data("{}".utf8)
@@ -60,12 +67,36 @@ import WebKit
             "document.getElementById('mock-control').click(); document.getElementById('mock-result').textContent"
         )
         #expect(result as? String == "selected")
-        try await session.synchronize()
+        for _ in 0..<100 where engine.metadata == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
         #expect(engine.metadata?.title == "YouTube Music")
+        #expect(EmbeddedMusicBrowserSession.current === session)
+        for _ in 0..<100 {
+            if await saved.httpCookieStore.allCookies().map(\.value) == ["mock-music-session"] {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(await saved.httpCookieStore.allCookies().map(\.value) == ["mock-music-session"])
+        let refreshed = try #require(
+            HTTPCookie(properties: [
+                .name: "SID", .value: "mock-refreshed-session", .domain: ".youtube.com", .path: "/",
+                .secure: "TRUE", HTTPCookiePropertyKey("HttpOnly"): "TRUE",
+            ]))
+        await session.store.httpCookieStore.setCookie(refreshed)
+        for _ in 0..<100 {
+            if await saved.httpCookieStore.allCookies().map(\.value) == ["mock-refreshed-session"] {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(await saved.httpCookieStore.allCookies().map(\.value) == ["mock-refreshed-session"])
         session.webViewWebContentProcessDidTerminate(session.webView)
         #expect(session.error == "YouTube Music stopped. Reload to reconnect.")
-        session.stop()
+        EmbeddedMusicRemote.shared.stop()
         await EmbeddedMusicBrowserSession.drainAll()
+        #expect(EmbeddedMusicBrowserSession.current == nil)
         #expect(session.stopped)
         #expect(session.webView.navigationDelegate == nil)
         #expect(session.webView.uiDelegate == nil)
@@ -115,6 +146,41 @@ import WebKit
             #expect(!EmbeddedMusicBrowserSession.isYoutubePage(URL(string: value)!))
         }
         #expect(!EmbeddedMusicBrowserSession.isExternal(URL(string: "javascript:alert('mock')")!))
+    }
+
+    @Test func refreshedCredentialsStayEngineOwnedAndDrainBeforeDisconnect() async throws {
+        let store = WKWebsiteDataStore.nonPersistent()
+        let value = try cookie()
+        let engine = MusicBrowserPresentation(
+            connected: { true }, cookies: { await store.httpCookieStore.allCookies() },
+            store: { store })
+        await store.httpCookieStore.setCookie(value)
+        let lease = try await engine.open()
+        let removed = try #require(
+            HTTPCookie(properties: [
+                .name: "MOCK_REMOVED", .value: "mock-old", .domain: ".youtube.com", .path: "/",
+            ]))
+        await store.httpCookieStore.setCookie(removed)
+        var updated = lease; updated.cookies[0].value = "mock-updated-session"
+        try await engine.commit(updated)
+        #expect(await store.httpCookieStore.allCookies().map(\.value) == ["mock-updated-session"])
+        let write = Task { try await engine.commit(updated) }
+        await Task.yield()
+        engine.revoke()
+        await engine.drain()
+        _ = try? await write.value
+        await store.removeData(
+            ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
+        await #expect(throws: (any Error).self) { try await engine.commit(updated) }
+        #expect(await store.httpCookieStore.allCookies().isEmpty)
+        #expect(engine.metadata == nil)
+        await store.httpCookieStore.setCookie(value)
+        let reopened = try await engine.open()
+        var logout = reopened; logout.cookies = []
+        try await engine.commit(logout)
+        #expect(await store.httpCookieStore.allCookies().isEmpty)
+        await #expect(throws: MusicConnectionError.self) { try await engine.open() }
+        engine.stop()
     }
 
     @Test func engineRevocationRejectsLateCookieHandoffsAndStaleFixedControls() async throws {

@@ -376,6 +376,8 @@ final class MusicAccounts: NSObject, WKNavigationDelegate, WKUIDelegate {
         youtubeError = nil
     }
 
+    func presentationStore() -> WKWebsiteDataStore { youtubeStore }
+
     func presentationCookies() async -> [HTTPCookie] {
         await youtubeStore.httpCookieStore.allCookies()
     }

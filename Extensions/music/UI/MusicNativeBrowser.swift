@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
@@ -15,6 +16,8 @@ final class EmbeddedMusicBrowserSession: NSObject, WKNavigationDelegate, WKUIDel
     let store: WKWebsiteDataStore
     private let invoke: (String, Data) async throws -> Data
     private var cursor: UInt64 = 0
+    private var cookieSignature: Data?
+    private var heartbeat: Task<Void, Never>?
     private(set) var stopped = false
     var error: String?
     private var external: [UUID: Task<Void, Never>] = [:]
@@ -39,23 +42,13 @@ final class EmbeddedMusicBrowserSession: NSObject, WKNavigationDelegate, WKUIDel
 
     func start(loadHome: Bool = true) async throws {
         guard !stopped else { throw CancellationError() }
+        guard loadingTask == nil, heartbeat == nil else { throw ExtensionPeerError.invalidRequest }
         let task = Task { [weak self] in
             guard let self else { throw CancellationError() }
             for value in self.lease.cookies {
                 try Task.checkCancellation()
                 guard !self.stopped else { throw CancellationError() }
-                var properties: [HTTPCookiePropertyKey: Any] = [
-                    .name: value.name, .value: value.value, .domain: value.domain,
-                    .path: value.path,
-                    .secure: value.secure ? "TRUE" : "FALSE",
-                ]
-                if value.httpOnly { properties[HTTPCookiePropertyKey("HttpOnly")] = "TRUE" }
-                if let expires = value.expires {
-                    properties[.expires] = Date(timeIntervalSince1970: expires)
-                }
-                guard let cookie = HTTPCookie(properties: properties) else {
-                    throw ExtensionPeerError.invalidRequest
-                }
+                let cookie = try value.nativeCookie()
                 await self.store.httpCookieStore.setCookie(cookie)
             }
             try Task.checkCancellation()
@@ -68,6 +61,20 @@ final class EmbeddedMusicBrowserSession: NSObject, WKNavigationDelegate, WKUIDel
         defer { loadingTask = nil }
         try await withTaskCancellationHandler(
             operation: { try await task.value }, onCancel: { task.cancel() })
+        guard !stopped else { throw CancellationError() }
+        heartbeat = Task { [weak self] in
+            while !Task.isCancelled, let self, !self.stopped {
+                do {
+                    try await self.synchronize()
+                    try await Task.sleep(for: .milliseconds(500))
+                } catch {
+                    if !Task.isCancelled, !self.stopped {
+                        self.error = error.localizedDescription; self.stop()
+                    }
+                    return
+                }
+            }
+        }
     }
 
     static func isYoutubePage(_ url: URL) -> Bool {
@@ -152,6 +159,36 @@ final class EmbeddedMusicBrowserSession: NSObject, WKNavigationDelegate, WKUIDel
             guard !stopped else { throw CancellationError() }
             cursor = command.sequence
         }
+        try await persistCookies()
+    }
+
+    private func persistCookies() async throws {
+        let cookies = await store.httpCookieStore.allCookies()
+        try Task.checkCancellation()
+        guard !stopped else { throw CancellationError() }
+        let values = cookies.filter {
+            [".youtube.com", "youtube.com", "music.youtube.com", ".music.youtube.com"].contains(
+                $0.domain)
+                && ($0.expiresDate.map { $0 > Date() } ?? true)
+        }.map {
+            EmbeddedMusicBrowserCookie(
+                name: $0.name, value: $0.value, domain: $0.domain, path: $0.path,
+                secure: $0.isSecure, httpOnly: $0.isHTTPOnly,
+                expires: $0.expiresDate?.timeIntervalSince1970,
+                sameSite: $0.properties?[.sameSitePolicy] as? String)
+        }.sorted { ($0.domain, $0.path, $0.name) < ($1.domain, $1.path, $1.name) }
+        let update = EmbeddedMusicBrowserLease(
+            id: lease.id, revision: lease.revision, cookies: values)
+        try update.validate(requireSignIn: false)
+        let encoder = JSONEncoder(); encoder.outputFormatting = .sortedKeys
+        let data = try encoder.encode(update)
+        let signature = Data(SHA256.hash(data: data))
+        if cookieSignature != signature {
+            _ = try await invoke("music.ui.youtube.cookies", data)
+            try Task.checkCancellation()
+            guard !stopped else { throw CancellationError() }
+            cookieSignature = signature
+        }
     }
 
     private func openExternal(_ url: URL) {
@@ -186,7 +223,7 @@ final class EmbeddedMusicBrowserSession: NSObject, WKNavigationDelegate, WKUIDel
                 ? .allow : .cancel
         }
         if Self.isYoutubePage(url) { return .allow }
-        if navigationAction.navigationType == .linkActivated { openExternal(url) }
+        openExternal(url)
         if url.host == "accounts.google.com" {
             error = "Sign in in Chrome, then reconnect your YouTube Music session."
         }
@@ -197,8 +234,7 @@ final class EmbeddedMusicBrowserSession: NSObject, WKNavigationDelegate, WKUIDel
         _ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
         for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
-        if navigationAction.navigationType == .linkActivated, let url = navigationAction.request.url
-        {
+        if let url = navigationAction.request.url {
             openExternal(url)
         }
         return nil
@@ -221,24 +257,27 @@ final class EmbeddedMusicBrowserSession: NSObject, WKNavigationDelegate, WKUIDel
 
     func stop() {
         guard !stopped else { return }
-        stopped = true; loadingTask?.cancel()
+        stopped = true; loadingTask?.cancel(); heartbeat?.cancel(); cookieSignature = nil
         webView.stopLoading(); webView.navigationDelegate = nil; webView.uiDelegate = nil
         Self.sessions[lease.id] = nil
-        let loading = loadingTask; let tasks = Array(external.values)
+        let loading = loadingTask; let heartbeat = heartbeat; let tasks = Array(external.values)
         for task in tasks { task.cancel() }
         external.removeAll()
         let view = webView; let store = store; let invoke = invoke; let token = token
         Self.closing[lease.id] = Task {
-            _ = try? await loading?.value
-            for task in tasks { await task.value }
             await view.setAllMediaPlaybackSuspended(true)
             await view.closeAllMediaPresentations()
+            _ = try? await loading?.value
+            await heartbeat?.value
+            for task in tasks { await task.value }
             await store.removeData(
                 ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
             _ = try? await invoke("music.ui.youtube.close", JSONEncoder().encode(token))
             Self.closing[lease.id] = nil
         }
     }
+
+    static var current: EmbeddedMusicBrowserSession? { sessions.values.first { !$0.stopped } }
 
     static func stopAll() { for session in Array(sessions.values) { session.stop() } }
     static func drainAll() async { for task in Array(closing.values) { await task.value } }
@@ -248,7 +287,7 @@ private struct EmbeddedMusicNativeBrowser: NSViewRepresentable {
     let session: EmbeddedMusicBrowserSession
     func makeNSView(context: Context) -> WKWebView { session.webView }
     func updateNSView(_ view: WKWebView, context: Context) {}
-    static func dismantleNSView(_ view: WKWebView, coordinator: ()) { view.stopLoading() }
+    static func dismantleNSView(_ view: WKWebView, coordinator: ()) {}
 }
 
 struct EmbeddedMusicYoutubeWebView: View {
@@ -263,8 +302,10 @@ struct EmbeddedMusicYoutubeWebView: View {
                 LoadingIndicator()
             }
         }
-        .pageTask {
+        .pageTask(id: EmbeddedMusicAccounts.shared.youtubePresentationRevision) {
+            failure = nil
             do {
+                if let current = EmbeddedMusicBrowserSession.current { session = current; return }
                 let remote = EmbeddedMusicRemote.shared
                 let data = try await remote.dataRequest("music.ui.youtube.open")
                 let lease = try JSONDecoder().decode(EmbeddedMusicBrowserLease.self, from: data)
@@ -277,13 +318,6 @@ struct EmbeddedMusicYoutubeWebView: View {
                 do { try await next.start() } catch { next.stop(); throw error }
             } catch { if !Task.isCancelled { failure = error.localizedDescription } }
         }
-        .pageRefresh(interval: { .milliseconds(500) }) {
-            do { try await session?.synchronize() } catch {
-                if !Task.isCancelled { failure = error.localizedDescription; session?.stop() }
-            }
-        }
-        .onDisappear {
-            session?.stop(); session = nil
-        }
+        .onDisappear { session = nil }
     }
 }
