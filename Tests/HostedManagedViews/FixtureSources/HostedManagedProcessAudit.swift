@@ -31,7 +31,9 @@ struct HostedManagedProcessAudit {
             guard pid > 1, proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &before, Int32(size)) == size,
                 before.pbi_uid == getuid(), before.pbi_ruid == getuid(),
                 proc_pidpath(pid, &actualPath, UInt32(actualPath.count)) > 0,
-                String(cString: actualPath) == executable.path,
+                String(
+                    decoding: actualPath.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) },
+                    as: UTF8.self) == executable.path,
                 proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &after, Int32(size)) == size,
                 after.pbi_uid == before.pbi_uid, after.pbi_ruid == before.pbi_ruid,
                 after.pbi_start_tvsec == before.pbi_start_tvsec,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { constants } from "node:fs";
-import { open, realpath, writeFile } from "node:fs/promises";
+import { lstat, open, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { validateManagedViewProof } from "./contract.mjs";
@@ -19,6 +19,7 @@ export async function readOwnedManagedDocument(
   directory,
   name,
   maximum = 65536,
+  afterRead = async () => {},
 ) {
   assert(
     [
@@ -29,30 +30,72 @@ export async function readOwnedManagedDocument(
   );
   assert.equal(await realpath(directory), directory);
   assert(Number.isSafeInteger(maximum) && maximum > 0 && maximum <= 131072);
-  const handle = await open(
-    join(directory, name),
-    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  const root = await open(
+    directory,
+    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
   );
+  let handle;
   try {
-    const before = await handle.stat();
+    const rootBefore = await root.stat({ bigint: true });
+    assert(
+      rootBefore.isDirectory() &&
+        rootBefore.uid === BigInt(process.getuid()) &&
+        (rootBefore.mode & 0o7777n) === 0o700n,
+    );
+    handle = await open(
+      join(directory, name),
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+    const before = await handle.stat({ bigint: true });
     assert(
       before.isFile() &&
-        before.uid === process.getuid() &&
-        before.nlink === 1 &&
-        (before.mode & 0o022) === 0 &&
-        before.size > 0 &&
-        before.size <= maximum,
+        before.uid === BigInt(process.getuid()) &&
+        before.nlink === 1n &&
+        before.size > 0n &&
+        before.size <= BigInt(maximum),
+    );
+    const mode = before.mode & 0o7777n;
+    assert(
+      name === "approval-result.json"
+        ? mode === 0o600n
+        : mode === 0o600n || mode === 0o644n,
     );
     const buffer = Buffer.alloc(maximum + 1);
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    assert.equal(bytesRead, before.size);
-    const after = await handle.stat();
-    assert.equal(after.ino, before.ino);
-    assert.equal(after.size, before.size);
-    assert.equal(after.mtimeMs, before.mtimeMs);
+    assert.equal(BigInt(bytesRead), before.size);
+    await afterRead();
+    const after = await handle.stat({ bigint: true });
+    for (const key of [
+      "dev",
+      "ino",
+      "uid",
+      "mode",
+      "nlink",
+      "size",
+      "mtimeNs",
+      "ctimeNs",
+    ])
+      assert.equal(after[key], before[key]);
+    const current = await lstat(join(directory, name), { bigint: true });
+    for (const key of [
+      "dev",
+      "ino",
+      "uid",
+      "mode",
+      "nlink",
+      "size",
+      "mtimeNs",
+      "ctimeNs",
+    ])
+      assert.equal(current[key], before[key]);
+    const rootAfter = await lstat(directory, { bigint: true });
+    for (const key of ["dev", "ino", "uid", "mode"])
+      assert.equal(rootAfter[key], rootBefore[key]);
+    assert.equal(await realpath(directory), directory);
     return JSON.parse(buffer.subarray(0, bytesRead).toString("utf8"));
   } finally {
-    await handle.close();
+    await handle?.close();
+    await root.close();
   }
 }
 

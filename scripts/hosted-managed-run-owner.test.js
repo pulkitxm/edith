@@ -1,5 +1,16 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import {
+  chmod,
+  link,
+  mkdtemp,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -182,6 +193,72 @@ test("producer refuses unsafe postlaunch reads, unknown names and tool credentia
       HOME: "/owned-runner",
     });
   } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("owned receipt reader rejects FIFO, hardlink, public modes and real same-size mutations", async () => {
+  const fixture = await setup();
+  const path = join(fixture.directory, "result-managed-shipping.json");
+  try {
+    execFileSync("mkfifo", [path]);
+    await expect(
+      readOwnedManagedDocument(
+        fixture.directory,
+        "result-managed-shipping.json",
+      ),
+    ).rejects.toThrow();
+    await rm(path);
+    await writeFile(path, '{"value":1}', { mode: 0o644 });
+    expect(
+      await readOwnedManagedDocument(
+        fixture.directory,
+        "result-managed-shipping.json",
+      ),
+    ).toEqual({ value: 1 });
+    await link(path, join(fixture.directory, "hardlink"));
+    await expect(
+      readOwnedManagedDocument(
+        fixture.directory,
+        "result-managed-shipping.json",
+      ),
+    ).rejects.toThrow();
+    await rm(join(fixture.directory, "hardlink"));
+    await chmod(path, 0o666);
+    await expect(
+      readOwnedManagedDocument(
+        fixture.directory,
+        "result-managed-shipping.json",
+      ),
+    ).rejects.toThrow();
+    await chmod(path, 0o644);
+    const before = await stat(path);
+    await expect(
+      readOwnedManagedDocument(
+        fixture.directory,
+        "result-managed-shipping.json",
+        65536,
+        async () => {
+          await writeFile(path, '{"value":2}');
+          await utimes(path, before.atime, before.mtime);
+        },
+      ),
+    ).rejects.toThrow();
+    await writeFile(join(fixture.directory, "approval-result.json"), "{}", {
+      mode: 0o644,
+    });
+    await expect(
+      readOwnedManagedDocument(fixture.directory, "approval-result.json"),
+    ).rejects.toThrow();
+    await chmod(fixture.directory, 0o740);
+    await expect(
+      readOwnedManagedDocument(
+        fixture.directory,
+        "result-managed-shipping.json",
+      ),
+    ).rejects.toThrow();
+  } finally {
+    await chmod(fixture.directory, 0o700);
     await rm(fixture.directory, { recursive: true, force: true });
   }
 });
