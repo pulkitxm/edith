@@ -109,7 +109,7 @@ def validate_camera_clone(receipt, app, expected_commit, host_hash, unsigned_has
     source_info = plistlib.loads((source / "Contents/Info.plist").read_bytes())
     clone_info = plistlib.loads((clone / "Contents/Info.plist").read_bytes())
     identifier = receipt.get("identifier", "")
-    prefix = "com.pulkit.edith.tests.camera-build-"
+    prefix = "com.pulkit.edith.tests.worker-"
     if not identifier.startswith(prefix):
         raise ValueError("Camera clone requires a synthetic identity")
     try:
