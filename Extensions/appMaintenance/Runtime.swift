@@ -9,8 +9,12 @@ import SwiftUI
 @objc(EdithAppMaintenanceExtensionRuntime)
 final class ExtensionRuntime: NSObject {
     private var model: AppMaintenanceModel?
+    private var stopped = false
     private var uiModel: AppMaintenanceModel?
     private var uiClient: ExtensionEngineClient?
+    private(set) var settingsModel: MaintenanceSettingsModel?
+    private var uiLocation: String?
+    private var uiSection: String?
     private let commands = ExtensionCommandRegistry()
     private let cliStreams = try? ExtensionCLIStreams(owner: "appMaintenance")
 
@@ -48,6 +52,8 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        stopped = true
+        stopUI()
         Task {
             await commands.shutdownAndWait()
             await cliStreams?.stopAndWait()
@@ -67,24 +73,41 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard let suite = input["defaultsSuite"] as? String,
+            guard !stopped, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             if model == nil { model = AppMaintenanceModel() }
             TextEditingCommands.install()
         case "configureUI":
             guard let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "appMaintenance", !configuration.uiOnly,
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
-            stopUI(); uiClient = client; uiModel = AppMaintenanceModel(engineClient: client)
-        case "stopUI": stopUI()
+            guard configurePresentation(input, client: client) else {
+                return ["ok": false] as NSDictionary
+            }
+        case "stopUI":
+            guard input["presentationID"] as? String == uiClient?.presentationID.uuidString else {
+                return ["ok": false] as NSDictionary
+            }
+            stopUI()
         case "view":
+            guard input["presentationID"] as? String == uiClient?.presentationID.uuidString,
+                input["location"] as? String == uiLocation,
+                input["section"] as? String == uiSection
+            else { return ["ok": false] as NSDictionary }
+            if let settingsModel {
+                return NSHostingController(
+                    rootView: ExtensionPageHost { AppMaintenanceSettings(model: settingsModel) })
+            }
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost { AppMaintenanceView(model: model) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
+            stopped = true
+            stopUI()
             commands.shutdown(); cliStreams?.stop()
             model = nil
             TextEditingCommands.shutdown()
@@ -94,7 +117,34 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
 
+    func configurePresentation(_ input: NSDictionary, client: ExtensionEngineClient) -> Bool {
+        guard !stopped, input["extensionID"] as? String == "appMaintenance",
+            input["uiOnly"] as? Bool == false,
+            input["presentationID"] as? String == client.presentationID.uuidString,
+            let location = input["location"] as? String, let section = input["section"] as? String,
+            (location == "settings" && section == "extension")
+                || (location == "main"
+                    && (section == "appMaintenance"
+                        || AppMaintenanceSection(rawValue: section) != nil))
+        else { return false }
+        guard location != "settings" || (input["tile"] == nil && input["target"] == nil) else {
+            return false
+        }
+        stopUI()
+        uiClient = client
+        uiLocation = location
+        uiSection = section
+        if location == "settings" {
+            settingsModel = MaintenanceSettingsModel(engine: client)
+        } else {
+            uiModel = AppMaintenanceModel(engineClient: client)
+        }
+        return true
+    }
+
     private func stopUI() {
+        settingsModel?.stop(); settingsModel = nil
+        uiLocation = nil; uiSection = nil
         let model = uiModel; uiModel = nil
         uiClient?.invalidate(); uiClient = nil
         Task { await model?.shutdown() }

@@ -2,6 +2,8 @@ import AppKit
 import EdithExtensionSupport
 import Foundation
 
+typealias MaintenancePackagePreference = @MainActor (String, Data) async throws -> Data
+
 struct MaintenanceUISettings: Codable, Equatable {
     var installDestination = AppMaintenanceInstallDestination.user.rawValue
     var autoRefresh = false
@@ -59,10 +61,51 @@ struct AppMaintenanceUIAction: Codable {
     let integer: Int?; let number: Double?; let previewToken: UUID
 }
 @MainActor enum AppMaintenanceUICommands {
-    static func execute(_ command: String, payload: Data, model: AppMaintenanceModel) async throws
+    static func execute(
+        _ command: String, payload: Data, model: AppMaintenanceModel,
+        packagePreference: MaintenancePackagePreference = { command, payload in
+            guard let endpoint = ExtensionPeerEndpoint.current(owner: "homebrew") else {
+                throw ExtensionPeerError.unavailable
+            }
+            return try await endpoint.invoke(command, payload: payload)
+        }
+    ) async throws
         -> Data
     {
-        guard !model.stopped else { throw ExtensionPeerError.unavailable }
+        try Task.checkCancellation()
+        guard payload.count <= 65_536, !model.stopped else { throw ExtensionPeerError.unavailable }
+        if command == "maintenance.ui.settings.read" {
+            guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
+            return try JSONEncoder().encode(MaintenanceUISettings.load(model.preferenceDefaults))
+        }
+        if command == "maintenance.ui.settings.write" {
+            let settings = try JSONDecoder().decode(MaintenanceUISettings.self, from: payload)
+            try settings.save(model.preferenceDefaults)
+            model.preferences = settings
+            return try JSONEncoder().encode(settings)
+        }
+        if command == "maintenance.ui.packageKind.read"
+            || command == "maintenance.ui.packageKind.write"
+        {
+            let values = try JSONDecoder().decode([String: String].self, from: payload)
+            let writing = command == "maintenance.ui.packageKind.write"
+            guard
+                writing
+                    ? (Set(values.keys) == ["kind"]
+                        && ["formula", "cask"].contains(values["kind"] ?? "")) : values.isEmpty
+            else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            let data = try await packagePreference(
+                writing ? "homebrew.preference.write" : "homebrew.preference.read", payload)
+            try Task.checkCancellation()
+            guard !model.stopped, let kind = try? JSONDecoder().decode(String.self, from: data),
+                ["formula", "cask"].contains(kind)
+            else {
+                throw ExtensionPeerError.unavailable
+            }
+            return try JSONEncoder().encode(kind)
+        }
         if command == "maintenance.ui.snapshot" {
             guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
         } else if command == "maintenance.ui.preferences" {
