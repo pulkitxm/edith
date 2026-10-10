@@ -17,12 +17,27 @@ const rawKey = publicKey
   .subarray(-32)
   .toString("base64");
 const expected = [
-  { id: "calendar", hostABI: "runtime-2", fingerprint: "current-source" },
+  {
+    id: "calendar",
+    hostABI: "runtime-2",
+    architecture: "arm64",
+    minimumSystemVersion: 14,
+    fingerprint: "a".repeat(64),
+  },
 ];
 const record = {
-  ...expected[0],
-  sourceFingerprint: "current-source",
+  id: "calendar",
+  hostABI: "runtime-2",
+  version: "1.0.0",
+  minimumSystemVersion: 14,
+  sourceFingerprint: "a".repeat(64),
   architecture: "arm64",
+  dependencies: [],
+  sha256: "c".repeat(64),
+  downloadBytes: 100,
+  installedBytes: 200,
+  downloadURL:
+    "https://github.com/pulkitxm/edith/releases/download/synthetic/calendar.zip",
 };
 function signed(packages) {
   const payload = Buffer.from(
@@ -37,7 +52,7 @@ function signed(packages) {
 test("app publication requires its own source and host contract", () => {
   for (const change of [
     { hostABI: "runtime-1" },
-    { sourceFingerprint: "old-source" },
+    { sourceFingerprint: "b".repeat(64) },
     { architecture: "x86_64" },
   ])
     expect(
@@ -45,9 +60,12 @@ test("app publication requires its own source and host contract", () => {
     ).toEqual(expected);
   expect(
     missingPackages(expected, {
-      packages: [record, { ...record, sourceFingerprint: "newer-source" }],
+      packages: [
+        record,
+        { ...record, version: "1.1.0", sourceFingerprint: "b".repeat(64) },
+      ],
     }),
-  ).toEqual([]);
+  ).toEqual(expected);
 });
 
 test("the release guard authenticates the catalog before trusting fingerprints", () => {
@@ -114,4 +132,98 @@ test("the Node command rejects an invalid release source instead of skipping val
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("source reverts wait for the new selected release instead of retained rollback code", async () => {
+  const changed = {
+    ...record,
+    version: "1.1.0",
+    sourceFingerprint: "b".repeat(64),
+  };
+  const reverted = { ...record, version: "1.2.0" };
+  expect(missingPackages(expected, { packages: [record, changed] })).toEqual(
+    expected,
+  );
+  expect(
+    missingPackages(expected, { packages: [record, changed, reverted] }),
+  ).toEqual([]);
+  let calls = 0;
+  await waitForPackages({
+    expected,
+    url: "https://synthetic.invalid/catalog.json",
+    publicKey: rawKey,
+    fetchCatalog: async () =>
+      new Response(
+        signed(++calls === 1 ? [record, changed] : [changed, reverted]),
+      ),
+    sleep: async () => {},
+  });
+  expect(calls).toBe(2);
+});
+
+test("every supported OS tier selects its highest compatible numeric version", () => {
+  const future = {
+    ...record,
+    version: "1.10.0",
+    minimumSystemVersion: 15,
+    sourceFingerprint: "b".repeat(64),
+  };
+  const current = { ...record, version: "1.9.0" };
+  expect(missingPackages(expected, { packages: [future, current] })).toEqual(
+    expected,
+  );
+  expect(
+    missingPackages(expected, {
+      packages: [future, { ...current, version: "1.11.0" }],
+    }),
+  ).toEqual([]);
+  expect(missingPackages(expected, { packages: [future] })).toEqual(expected);
+  const onlyNewerOS = [{ ...expected[0], minimumSystemVersion: 15 }];
+  expect(missingPackages(onlyNewerOS, { packages: [future, current] })).toEqual(
+    onlyNewerOS,
+  );
+  expect(
+    missingPackages(onlyNewerOS, {
+      packages: [{ ...future, sourceFingerprint: record.sourceFingerprint }],
+    }),
+  ).toEqual([]);
+  expect(
+    missingPackages(expected, {
+      packages: [current, { ...future, architecture: "x86_64" }],
+    }),
+  ).toEqual([]);
+  expect(
+    missingPackages(expected, {
+      packages: [current, { ...future, hostABI: "runtime-3" }],
+    }),
+  ).toEqual([]);
+});
+
+test("signed malformed, duplicate, missing dependency and oversized catalogs reject before selection", () => {
+  for (const packages of [
+    [record, record],
+    [{ ...record, version: "broken" }],
+    [{ ...record, sourceFingerprint: "invalid" }],
+    [{ ...record, minimumSystemVersion: 13 }],
+    [{ ...record, dependencies: ["missing"] }],
+    [{ ...record, downloadURL: "https://synthetic.invalid/calendar.zip" }],
+    Array.from({ length: 1001 }, (_, index) => ({
+      ...record,
+      version: `1.0.${index}`,
+    })),
+  ])
+    expect(() => verifyCatalog(signed(packages), rawKey)).toThrow();
+  const envelope = JSON.parse(signed([record]));
+  expect(() =>
+    verifyCatalog(JSON.stringify({ ...envelope, extra: true }), rawKey),
+  ).toThrow();
+  expect(() =>
+    verifyCatalog(
+      JSON.stringify({
+        ...envelope,
+        payload: `${envelope.payload}=`,
+      }),
+      rawKey,
+    ),
+  ).toThrow();
 });
