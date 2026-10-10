@@ -22,7 +22,10 @@ import { buildExtensionUICarrier } from "./build-extension-ui-carrier.mjs";
 import { verifyExtensionNativeDependencies } from "./extension-ghostty-native.mjs";
 import { writeHostABI } from "./extension-host-abi.mjs";
 import { buildHostInterfaces } from "./extension-host-build.mjs";
-import { extensionFingerprint } from "./extension-release-plan.mjs";
+import {
+  extensionFingerprint,
+  extensionReleaseTag,
+} from "./extension-release-plan.mjs";
 import { prepareNativeSupport } from "./prepare-extension-native-support.mjs";
 
 export function presentationLinkerFlags(product) {
@@ -307,7 +310,9 @@ export async function buildExtensionPackage({
   if (!development && (!identity || identity === "-"))
     throw new Error("A release signing identity is required");
   const fingerprint = await extensionFingerprint(root, definition, definitions);
-  const tag = tagOverride ?? `extensions/${id}/${fingerprint.slice(0, 20)}`;
+  const tag =
+    tagOverride ??
+    extensionReleaseTag({ id, version: releaseVersion, fingerprint });
   const target = resolve(output ?? resolve(root, "dist/extensions"));
   const staging = resolve(target, ".staging", id);
   await rm(staging, { recursive: true, force: true });

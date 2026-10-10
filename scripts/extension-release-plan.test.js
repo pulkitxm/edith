@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   extensionFingerprint,
+  extensionReleaseTag,
   planExtensionBuilds,
   supportCacheFingerprint,
   workerRuntimeInputs,
@@ -31,6 +32,29 @@ const definitions = [
 ];
 
 describe("independent extension releases", () => {
+  test("immutable release identities include the version and exact source", () => {
+    const identity = {
+      id: "music",
+      version: "1.0.0",
+      fingerprint: "a".repeat(64),
+    };
+    expect(extensionReleaseTag(identity)).toBe(
+      `extensions/music/1.0.0-${"a".repeat(20)}`,
+    );
+    expect(extensionReleaseTag({ ...identity, version: "1.0.1" })).not.toBe(
+      extensionReleaseTag(identity),
+    );
+    for (const invalid of [
+      { id: "../music" },
+      { version: "1.0" },
+      { version: "1.0.9007199254740992" },
+      { fingerprint: "a".repeat(63) },
+      { fingerprint: "g".repeat(64) },
+    ])
+      expect(() => extensionReleaseTag({ ...identity, ...invalid })).toThrow(
+        "release identity",
+      );
+  });
   test("native Cargo sources rebuild Music while compiled Cargo outputs do not", async () => {
     const root = await mkdtemp(join(tmpdir(), "extension-cargo-inputs-"));
     const definition = {
@@ -424,6 +448,60 @@ test("publication resumes from released fingerprints after skipped workflow runs
     expect(pending[0].version).toBe("1.0.1");
     expect(pending[0].fingerprint).not.toBe(initial[0].fingerprint);
     expect(pending[0].tag).not.toBe(initial[0].tag);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("returning to earlier source publishes a new immutable version and then reuses it", async () => {
+  const { planUnpublishedExtensions } = await import(
+    "./extension-release-plan.mjs"
+  );
+  const root = await mkdtemp(join(tmpdir(), "extension-source-revert-"));
+  const definition = {
+    id: "calendar",
+    version: "1.0.0",
+    hostABI: "runtime-2",
+    inputs: ["Extensions/calendar"],
+    sharedInputs: [],
+    dependencies: [],
+  };
+  const records = [];
+  try {
+    await mkdir(join(root, "Extensions/calendar"), { recursive: true });
+    const plans = [];
+    for (const source of ["first", "second", "first"]) {
+      await writeFile(join(root, "Extensions/calendar/Runtime.swift"), source);
+      const [plan] = await planUnpublishedExtensions(
+        root,
+        [definition],
+        records,
+      );
+      plans.push(plan);
+      records.push({
+        id: definition.id,
+        hostABI: definition.hostABI,
+        architecture: "arm64",
+        version: plan.version,
+        sourceFingerprint: plan.fingerprint,
+      });
+    }
+    expect(plans.map(({ version }) => version)).toEqual([
+      "1.0.0",
+      "1.0.1",
+      "1.0.2",
+    ]);
+    expect(plans[2].fingerprint).toBe(plans[0].fingerprint);
+    expect(new Set(plans.map(({ tag }) => tag)).size).toBe(3);
+    expect(
+      await planUnpublishedExtensions(root, [definition], records),
+    ).toEqual([]);
+    const retry = await planUnpublishedExtensions(
+      root,
+      [definition],
+      records.slice(0, 2),
+    );
+    expect(retry).toEqual([plans[2]]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

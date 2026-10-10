@@ -221,11 +221,26 @@ export async function planUnpublishedExtensions(
       id: definition.id,
       fingerprint,
       version,
-      tag: `extensions/${definition.id}/${fingerprint.slice(0, 20)}`,
+      tag: extensionReleaseTag({ id: definition.id, version, fingerprint }),
       supportFingerprint: await supportCacheFingerprint(root, definition),
     });
   }
   return result;
+}
+
+export function extensionReleaseTag({ id, version, fingerprint }) {
+  if (
+    typeof id !== "string" ||
+    !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(id) ||
+    typeof version !== "string" ||
+    version.length > 96 ||
+    !/^\d+\.\d+\.\d+$/.test(version) ||
+    !version.split(".").every((part) => Number.isSafeInteger(Number(part))) ||
+    typeof fingerprint !== "string" ||
+    !/^[a-f0-9]{64}$/.test(fingerprint)
+  )
+    throw new Error("Invalid extension release identity");
+  return `extensions/${id}/${version}-${fingerprint.slice(0, 20)}`;
 }
 
 if (import.meta.main) {
