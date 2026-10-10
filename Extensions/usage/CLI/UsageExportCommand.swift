@@ -122,7 +122,7 @@ struct UsageExportCommand: AsyncParsableCommand {
         }
         var files: [URL] = []
         for card in plan.cards {
-            let data = try await UsageShareRenderer.pngData(
+            let data = try UsageShareRenderer.pngData(
                 snapshot: snapshot, card: card, scale: 2)
             let file =
                 plan.explicitFile

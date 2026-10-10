@@ -48,7 +48,8 @@ struct UsageStatusLineStatusCommand: AsyncParsableCommand {
 
     @MainActor func run() async throws {
         try await execute {
-            let url = settings.map { URL(fileURLWithPath: $0) } ?? ClaudeStatusLine.settingsURL()
+            let url =
+                try settings.map(UsageCLIEnvironment.fileURL) ?? ClaudeStatusLine.settingsURL()
             let command = ClaudeStatusLine.installedCommand(settings: url)
             let wraps = command.flatMap(ClaudeStatusLine.wrappedCommand)
             let recordedAt = LimitsHistory.latest(provider: .claude)?.date
@@ -100,11 +101,12 @@ struct UsageStatusLineInstallCommand: AsyncParsableCommand {
 
     @MainActor func run() async throws {
         try await execute {
-            let url = settings.map { URL(fileURLWithPath: $0) } ?? ClaudeStatusLine.settingsURL()
-            guard let executable = ClaudeStatusLine.defaultExecutable() else {
-                throw CLIFailure.unavailable("could not locate the ed executable")
+            let url =
+                try settings.map(UsageCLIEnvironment.fileURL) ?? ClaudeStatusLine.settingsURL()
+            guard let hooks = UsageCLIEnvironment.hookOwner else {
+                throw CLIFailure.unavailable("the Usage hook owner is unavailable")
             }
-            let change = try ClaudeStatusLine.connect(executable: executable, settings: url)
+            let change = try hooks.connect(settings: url)
             guard !json else {
                 CLIOut.json(
                     .object(["settings": .string(url.path), "change": .string(change.rawValue)]))
@@ -147,8 +149,12 @@ struct UsageStatusLineRemoveCommand: AsyncParsableCommand {
 
     @MainActor func run() async throws {
         try await execute {
-            let url = settings.map { URL(fileURLWithPath: $0) } ?? ClaudeStatusLine.settingsURL()
-            let change = try ClaudeStatusLine.disconnect(settings: url)
+            let url =
+                try settings.map(UsageCLIEnvironment.fileURL) ?? ClaudeStatusLine.settingsURL()
+            guard let hooks = UsageCLIEnvironment.hookOwner else {
+                throw CLIFailure.unavailable("the Usage hook owner is unavailable")
+            }
+            let change = try hooks.disconnect(settings: url)
             guard !json else {
                 CLIOut.json(
                     .object(["settings": .string(url.path), "change": .string(change.rawValue)]))
@@ -200,7 +206,11 @@ struct UsageStatusLineRecordCommand: AsyncParsableCommand {
             let data: Data
             if let input {
                 do {
-                    data = try Data(contentsOf: URL(fileURLWithPath: input))
+                    guard
+                        let contents = try UsageDataFiles.readRegularFile(
+                            at: UsageCLIEnvironment.fileURL(input), maximumBytes: 1_024 * 1_024)
+                    else { throw CLIFailure.notFound("no status line input at \(input)") }
+                    data = contents
                 } catch {
                     throw CLIFailure.notFound("no status line input at \(input)")
                 }

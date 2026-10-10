@@ -1679,6 +1679,7 @@
         "Extensions/usage/Views/UsageShareCardView.swift",
         "Extensions/usage/Models/UsageUIPreferences.swift",
         "Extensions/usage/Services/UsageUICommands.swift",
+        "Extensions/usage/Services/UsageCLIHookOwner.swift",
         "Extensions/usage/ViewModels/UsageUIClient.swift",
         "Extensions/usage/Views/UsageHomeActivityCard.swift",
         "Extensions/usage/Views/UsageHomeScene.swift",

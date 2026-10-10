@@ -21,6 +21,7 @@ final class ExtensionRuntime: NSObject {
     private var backupRestoreTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
     private let commands = ExtensionCommandRegistry()
+    private var cliHooks: UsageCLIHookOwner?
     private var uiCommands: UsageUICommands?
     private var uiClient: UsageUIClient?
     private var uiOnly = false
@@ -40,7 +41,13 @@ final class ExtensionRuntime: NSObject {
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
                 let context = try JSONDecoder().decode(UsageCLIContext.self, from: payload)
                 let reply = try await UsageCLIExecution.run(
-                    request, controller: controller,
+                    request, controller: controller, hookOwner: self.cliHooks,
+                    forgetMachine: { id in
+                        guard let projection = self.machinesProjection else {
+                            throw ExtensionPeerError.unavailable
+                        }
+                        try await projection.forget(machineID: id)
+                    },
                     standardInput: context.standardInput ?? Data(),
                     workingDirectory: context.workingDirectory
                         ?? FileManager.default.currentDirectoryPath)
@@ -80,6 +87,7 @@ final class ExtensionRuntime: NSObject {
             await commands.shutdownAndWait()
             await statusLineConnectionTask?.value
             do {
+                try cliHooks?.shutdown()
                 try await statusLine?.shutdown()
                 completion(nil)
             } catch { completion(error as NSError) }
@@ -107,6 +115,7 @@ final class ExtensionRuntime: NSObject {
         let reports = reports; self.reports = nil
         let projection = machinesProjection; machinesProjection = nil
         let statusLine = self.statusLine; self.statusLine = nil
+        let cliHooks = self.cliHooks; self.cliHooks = nil
         let connectionTask = statusLineConnectionTask; statusLineConnectionTask = nil
         let backup = self.backup; self.backup = nil
         let backupRestoreTask = self.backupRestoreTask; self.backupRestoreTask = nil
@@ -118,6 +127,7 @@ final class ExtensionRuntime: NSObject {
             await backupRestoreTask?.value
             await commands.shutdownAndWait()
             await connectionTask?.value
+            try? cliHooks?.shutdown()
             try? await statusLine?.shutdown()
             await controller?.shutdown()
             await task?.value
@@ -177,6 +187,8 @@ final class ExtensionRuntime: NSObject {
             let fixture = UsageExecutionEnvironment.fixtureHome != nil
             let statusLine = UsageStatusLineCommands()
             self.statusLine = statusLine
+            let cliHooks = UsageCLIHookOwner()
+            self.cliHooks = cliHooks
             if input["recoveryOnly"] as? Bool == true {
                 recovering = true
                 return ["ok": true] as NSDictionary
@@ -207,7 +219,10 @@ final class ExtensionRuntime: NSObject {
                 controller: controller, store: cache,
                 forgetMachine: { try await projection.forget(machineID: $0) })
             usageStore = UsageStore(showMenuBar: !fixture)
-            statusLineConnectionTask = Task { try? await statusLine.resumeOwnedHook() }
+            statusLineConnectionTask = Task {
+                try? await statusLine.resumeOwnedHook()
+                try? cliHooks.resumeOwnedHooks()
+            }
             if !fixture {
                 let alerts = UsageLimitAlerts(); self.alerts = alerts
                 _ = LimitNotifier.shared

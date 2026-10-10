@@ -330,7 +330,12 @@ struct UsageMachinesForgetCommand: AsyncParsableCommand {
                 atPath: Repo.dataDir.appendingPathComponent(
                     "machines/" + id.uuidString.lowercased() + ".json"
                 ).path)
-            try await UsageWorkerOperations.forgetMachine(id)
+            guard let controller = UsageCLIEnvironment.controller else {
+                throw CLIFailure.unavailable("the Usage extension is off")
+            }
+            await controller.cancelRefresh()
+            try Task.checkCancellation()
+            try await UsageCLIEnvironment.forgetMachine(id)
             UsageCLIMachines.setCounted(false, id: id)
             let progress = CLIProgress.forCommand(json: json)
             let merging =

@@ -4,6 +4,10 @@ import Foundation
 
 @MainActor enum UsageCLIEnvironment {
     static var controller: UsageWorkerController?
+    static var hookOwner: UsageCLIHookOwner?
+    static var forgetMachine: @MainActor (UUID) async throws -> Void = {
+        try UsageMachinesPeer.forget(machineID: $0)
+    }
     static var standardInput = Data()
     static var workingDirectory = FileManager.default.currentDirectoryPath
     static var machines: () -> [Machine] = { MachineRegistry.machines() }
@@ -13,6 +17,16 @@ import Foundation
             throw ExtensionPeerError.unavailable
         }
         return try await peer.collect(machineID: machine.id, force: true)
+    }
+
+    static func fileURL(_ path: String) throws -> URL {
+        guard !path.isEmpty, path.utf8.count <= 4_096, !path.utf8.contains(0) else {
+            throw CLIFailure.usage("the file path is invalid")
+        }
+        return URL(
+            fileURLWithPath: path,
+            relativeTo: URL(fileURLWithPath: workingDirectory, isDirectory: true)
+        ).standardizedFileURL
     }
 
     static func refreshLimits() async throws {
@@ -97,6 +111,10 @@ import Foundation
 @MainActor enum UsageCLIExecution {
     static func run(
         _ request: ExtensionCLIRequest, controller: UsageWorkerController,
+        hookOwner: UsageCLIHookOwner? = nil,
+        forgetMachine: @escaping @MainActor (UUID) async throws -> Void = {
+            try UsageMachinesPeer.forget(machineID: $0)
+        },
         standardInput: Data = Data(),
         workingDirectory: String = FileManager.default.currentDirectoryPath
     ) async throws -> ExtensionCLIReply {
@@ -105,13 +123,19 @@ import Foundation
             workingDirectory.utf8.count <= 4_096, !workingDirectory.utf8.contains(0)
         else { throw ExtensionPeerError.invalidRequest }
         let previous = UsageCLIEnvironment.controller
+        let previousHooks = UsageCLIEnvironment.hookOwner
+        let previousForget = UsageCLIEnvironment.forgetMachine
         let previousInput = UsageCLIEnvironment.standardInput
         let previousDirectory = UsageCLIEnvironment.workingDirectory
         UsageCLIEnvironment.controller = controller
+        UsageCLIEnvironment.hookOwner = hookOwner
+        UsageCLIEnvironment.forgetMachine = forgetMachine
         UsageCLIEnvironment.standardInput = standardInput
         UsageCLIEnvironment.workingDirectory = workingDirectory
         defer {
             UsageCLIEnvironment.controller = previous
+            UsageCLIEnvironment.hookOwner = previousHooks
+            UsageCLIEnvironment.forgetMachine = previousForget
             UsageCLIEnvironment.standardInput = previousInput
             UsageCLIEnvironment.workingDirectory = previousDirectory
         }

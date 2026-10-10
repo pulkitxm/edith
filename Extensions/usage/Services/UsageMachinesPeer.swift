@@ -120,7 +120,7 @@ struct UsageMachinesPeer: Sendable {
             var data = try UsageDataFiles.readRegularFile(at: file, maximumBytes: 67_108_864)
             let date = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?
                 .contentModificationDate
-            let due = date.map { Date().timeIntervalSince($0) >= 900 } ?? true
+            let due = date.map { Date().timeIntervalSince($0) >= 1_800 } ?? true
             if let peer, policy != .skip, policy == .all || due {
                 do {
                     onEvent(.note("Collecting " + String(machine.name.prefix(256))))
