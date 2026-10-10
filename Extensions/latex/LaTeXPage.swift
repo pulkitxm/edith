@@ -352,7 +352,9 @@ struct LaTeXPage: View {
                         .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                     }
                 } else if let data = model.pdfPreview, model.remote != nil {
-                    LaTeXPDFPane(data: data, generation: model.buildGeneration)
+                    LaTeXPDFPane(
+                        data: data, generation: model.buildGeneration,
+                        delivery: { model.openPDF(save: $0) })
                 } else if model.remote == nil,
                     FileManager.default.fileExists(atPath: project.pdfURL.path)
                 {
@@ -379,7 +381,9 @@ struct LaTeXPage: View {
                     }
                     if let url = model.buildURL { Link("View PDF build", destination: url) }
                     if let data = model.pdfPreview {
-                        LaTeXPDFPane(data: data, generation: model.buildGeneration)
+                        LaTeXPDFPane(
+                            data: data, generation: model.buildGeneration,
+                            delivery: { model.openPDF(save: $0) })
                     } else {
                         ContentUnavailableView(
                             model.buildingPDF

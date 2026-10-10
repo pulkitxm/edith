@@ -1,3 +1,5 @@
+import AppKit
+import PDFKit
 import EdithExtensionSupport
 import Foundation
 import Testing
@@ -34,6 +36,41 @@ import Testing
         #expect(!engine.isStopped && engine.dirty)
         await engine.shutdown()
         #expect(try store.loadDraft()?.text == "edited document")
+    }
+
+    @Test func largeValidPDFIsTransferredInCheckedChunksAndRemainsRenderable() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("synthetic.tex")
+        try Data("synthetic document".utf8).write(to: source)
+        let project = LaTeXProject(name: "Synthetic", location: .disk, sourcePath: source.path)
+        let image = NSImage(size: NSSize(width: 64, height: 64), flipped: false) { rect in
+            NSColor.white.setFill(); rect.fill(); return true
+        }
+        let document = PDFDocument()
+        document.insert(try #require(PDFPage(image: image)), at: 0)
+        document.documentAttributes = [
+            PDFDocumentAttribute.titleAttribute: String(repeating: "synthetic", count: 300_000)
+        ]
+        let bytes = try #require(document.dataRepresentation())
+        #expect(bytes.count > 2_097_152)
+        try bytes.write(to: project.pdfURL)
+        let engine = LaTeXModel(
+            store: LaTeXProjectStore(url: root.appendingPathComponent("projects.json")))
+        try await engine.add(project)
+        let bridge = LaTeXUIBridge(invoke: {
+            try await LaTeXUIBridge.execute($0, payload: $1, model: engine)
+        })
+        let snapshot = try await bridge.snapshot()
+        let transferred = try #require(snapshot.pdfPreview)
+        #expect(transferred == bytes && PDFDocument(data: transferred)?.pageCount == 1)
+        let stale = LaTeXPDFChunkRequest(projectID: project.id, generation: UUID(), offset: 0)
+        await #expect(throws: ExtensionPeerError.self) {
+            _ = try await LaTeXUIBridge.execute(
+                "latex.ui.pdfChunk", payload: JSONEncoder().encode(stale), model: engine)
+        }
+        await engine.shutdown()
     }
 
     @Test func originalCLIReadsAndPreviewsCheckedEditsWithoutChangingFiles() async throws {

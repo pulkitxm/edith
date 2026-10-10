@@ -466,6 +466,39 @@ final class LaTeXModel {
         }
     }
 
+    func openPDF(save: Bool) {
+        if remote != nil {
+            launch {
+                await self.remoteAction(
+                    .init(action: save ? "savePDF" : "openPDF", projectID: self.selectedID))
+            }
+        } else {
+            do { try deliverPDF(save: save) } catch { message = error.localizedDescription }
+        }
+    }
+    func deliverPDF(save: Bool) throws {
+        guard ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil,
+            let project = selected
+        else { throw ExtensionPeerError.invalidRequest }
+        let bytes = project.location == .disk ? try Data(contentsOf: project.pdfURL) : pdfPreview
+        guard let bytes else { throw ExtensionPeerError.unavailable }
+        if save {
+            let panel = NSSavePanel(); panel.nameFieldStringValue = project.pdfURL.lastPathComponent
+            if panel.runModal() == .OK, let url = panel.url {
+                try bytes.write(to: url, options: .atomic)
+            }
+        } else if project.location == .disk {
+            NSWorkspace.shared.open(project.pdfURL)
+        } else {
+            let directory = ExtensionData.root.appendingPathComponent(
+                "PDFPreviews", isDirectory: true)
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true)
+            let url = directory.appendingPathComponent(project.id.uuidString + ".pdf")
+            try bytes.write(to: url, options: .atomic); NSWorkspace.shared.open(url)
+        }
+    }
+
     private func publishDraft() {
         guard let remote, !isStopped, let id = selectedID, let original else { return }
         draftTask?.cancel()

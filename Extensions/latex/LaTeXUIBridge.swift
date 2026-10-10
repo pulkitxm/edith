@@ -14,7 +14,8 @@ struct LaTeXUISnapshot: Codable {
     let source: String
     let original: LaTeXSource?
     let review: LaTeXReview?
-    let pdfPreview: Data?
+    var pdfPreview: Data?
+    let pdfByteCount: Int
     let log: String
     let buildGeneration: UUID
     let editorRequest: UInt64
@@ -28,16 +29,17 @@ struct LaTeXUISnapshot: Codable {
     @MainActor init(model: LaTeXModel) throws {
         projects = model.projects; selectedID = model.selectedID
         source = model.source; original = model.original; review = model.review
+        pdfPreview = nil
         if let project = model.selected, project.location == .disk,
             FileManager.default.fileExists(atPath: project.pdfURL.path)
         {
             let attributes = try FileManager.default.attributesOfItem(atPath: project.pdfURL.path)
-            guard (attributes[.size] as? Int ?? 0) <= 2_097_152 else {
-                throw ExtensionPeerError.rejected("The PDF exceeds the embedded preview limit.")
-            }
-            pdfPreview = try Data(contentsOf: project.pdfURL)
+            pdfByteCount = attributes[.size] as? Int ?? 0
         } else {
-            pdfPreview = model.pdfPreview
+            pdfByteCount = model.pdfPreview?.count ?? 0
+        }
+        guard pdfByteCount <= 67_108_864 else {
+            throw ExtensionPeerError.rejected("The PDF exceeds the 64 MiB transfer limit.")
         }
         editorRequest = model.editorRequest
         log = model.log; buildGeneration = model.buildGeneration
@@ -57,7 +59,10 @@ struct LaTeXUIAction: Codable {
     var tool: String? = nil
 }
 
-@MainActor struct LaTeXUIBridge {
+struct LaTeXPDFChunkRequest: Codable { let projectID: UUID; let generation: UUID; let offset: Int }
+
+@MainActor final class LaTeXUIBridge {
+    private var cachedPDF: (UUID, UUID, Data)?
     let invoke: (String, Data) async throws -> Data
 
     init(client: ExtensionEngineClient) {
@@ -68,12 +73,39 @@ struct LaTeXUIAction: Codable {
 
     func snapshot() async throws -> LaTeXUISnapshot {
         let data = try await invoke("latex.ui.snapshot", Data("{}".utf8))
-        return try JSONDecoder().decode(LaTeXUISnapshot.self, from: data)
+        return try await withPDF(JSONDecoder().decode(LaTeXUISnapshot.self, from: data))
     }
 
     func perform(_ request: LaTeXUIAction) async throws -> LaTeXUISnapshot {
         let data = try await invoke("latex.ui.action", JSONEncoder().encode(request))
-        return try JSONDecoder().decode(LaTeXUISnapshot.self, from: data)
+        return try await withPDF(JSONDecoder().decode(LaTeXUISnapshot.self, from: data))
+    }
+
+    private func withPDF(_ value: LaTeXUISnapshot) async throws -> LaTeXUISnapshot {
+        guard let id = value.selectedID, value.pdfByteCount > 0 else {
+            cachedPDF = nil; return value
+        }
+        var bytes = Data()
+        if let cachedPDF, cachedPDF.0 == id, cachedPDF.1 == value.buildGeneration,
+            cachedPDF.2.count == value.pdfByteCount
+        {
+            bytes = cachedPDF.2
+        } else {
+            while bytes.count < value.pdfByteCount {
+                try Task.checkCancellation()
+                let request = LaTeXPDFChunkRequest(
+                    projectID: id, generation: value.buildGeneration, offset: bytes.count)
+                let chunk = try JSONDecoder().decode(
+                    Data.self,
+                    from: await invoke("latex.ui.pdfChunk", JSONEncoder().encode(request)))
+                guard !chunk.isEmpty, bytes.count + chunk.count <= value.pdfByteCount else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                bytes.append(chunk)
+            }
+            cachedPDF = (id, value.buildGeneration, bytes)
+        }
+        var result = value; result.pdfPreview = bytes; return result
     }
 
     static func execute(_ command: String, payload: Data, model: LaTeXModel) async throws -> Data {
@@ -83,6 +115,28 @@ struct LaTeXUIAction: Codable {
         await model.start()
         try Task.checkCancellation()
         switch command {
+        case "latex.ui.pdfChunk":
+            let request = try JSONDecoder().decode(LaTeXPDFChunkRequest.self, from: payload)
+            guard let project = model.selected, project.id == request.projectID,
+                model.buildGeneration == request.generation, request.offset >= 0
+            else { throw ExtensionPeerError.invalidRequest }
+            let bytes: Data
+            if project.location == .disk {
+                let file = try FileHandle(forReadingFrom: project.pdfURL);
+                defer { try? file.close() }
+                let length = try file.seekToEnd()
+                guard length <= 67_108_864, request.offset < length else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                try file.seek(toOffset: UInt64(request.offset));
+                bytes = try file.read(upToCount: 65_536) ?? Data()
+            } else {
+                guard let data = model.pdfPreview, request.offset < data.count else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                bytes = data.subdata(in: request.offset..<min(data.count, request.offset + 65_536))
+            }
+            return try JSONEncoder().encode(bytes)
         case "latex.ui.snapshot":
             guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
         case "latex.ui.action":
@@ -132,6 +186,9 @@ struct LaTeXUIAction: Codable {
                     case "review": model.refreshReview()
                     case "merge": model.merge(automatically: request.automatically ?? false)
                     case "reveal": model.revealSource()
+                    case "openPDF": try model.deliverPDF(save: false)
+                    case "savePDF": try model.deliverPDF(save: true)
+                    case "buildURL": if let url = model.buildURL { NSWorkspace.shared.open(url) }
                     default: throw ExtensionPeerError.invalidRequest
                     }
                 }

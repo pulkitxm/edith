@@ -23,12 +23,13 @@ struct LaTeXPDFPane: View {
     let url: URL?
     let data: Data?
     let generation: UUID
+    var delivery: ((Bool) -> Void)? = nil
     @State private var controls = LaTeXPDFControls()
     init(url: URL, generation: UUID) {
         self.url = url; data = nil; self.generation = generation
     }
-    init(data: Data, generation: UUID) {
-        url = nil; self.data = data; self.generation = generation
+    init(data: Data, generation: UUID, delivery: ((Bool) -> Void)? = nil) {
+        url = nil; self.data = data; self.generation = generation; self.delivery = delivery
     }
     var body: some View {
         VStack(spacing: UIScale.pt(10)) {
@@ -41,7 +42,12 @@ struct LaTeXPDFPane: View {
                 }
             }
             LaTeXPDFView(url: url, data: data, generation: generation, controls: controls)
-            if let url {
+            if let delivery {
+                HStack {
+                    Button("Open PDF") { delivery(false) }; Spacer()
+                    Button("Save PDF as…") { delivery(true) }
+                }
+            } else if let url {
                 HStack {
                     Button("Open PDF") { NSWorkspace.shared.open(url) }
                     Spacer()
