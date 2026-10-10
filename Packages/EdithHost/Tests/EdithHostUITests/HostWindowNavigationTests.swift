@@ -8,6 +8,24 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct HostWindowNavigationTests {
+    @Test func registrationIdentityChangesWhenTheSameHiddenWindowRegistersAgain() throws {
+        let fixture = NavigationFixture()
+        defer { fixture.finish() }
+        let navigation = fixture.navigation()
+        let first = navigation.register(
+            window: fixture.window, apply: { fixture.selected = $0.page },
+            selected: { fixture.selected })
+        #expect(navigation.workspaceRegistration(for: fixture.window) == first)
+        navigation.unregister(first)
+        #expect(navigation.workspaceRegistration(for: fixture.window) == nil)
+        let second = navigation.register(
+            window: fixture.window, apply: { fixture.selected = $0.page },
+            selected: { fixture.selected })
+        #expect(first != second)
+        #expect(navigation.workspaceRegistration(for: fixture.window) == second)
+        #expect(!fixture.window.isVisible && !fixture.window.isKeyWindow)
+    }
+
     @Test func existingWindowAcknowledgesOnlyAfterSelectionAppliesWithoutShowingIt() async throws {
         let fixture = NavigationFixture()
         defer { fixture.finish() }

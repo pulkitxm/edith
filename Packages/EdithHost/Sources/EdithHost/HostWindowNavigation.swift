@@ -86,6 +86,12 @@ final class HostWindowNavigation {
         return owner
     }
 
+    func workspaceRegistration(for window: NSWindow) -> UUID? {
+        guard window.identifier?.rawValue == "EdithMainWindow" else { return nil }
+        return registrations.filter { $0.value.window === window }
+            .max(by: { $0.value.order < $1.value.order })?.key
+    }
+
     func associate(window: NSWindow, with owner: NSWindow) throws -> UUID {
         guard relationships.values.allSatisfy({ $0.window !== window }), window !== owner,
             registrations.values.contains(where: { $0.window === owner }),

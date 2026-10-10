@@ -3,19 +3,12 @@ import EdithHostCore
 
 @MainActor
 final class HostFolderChoicePresentation {
-    private final class WindowIdentity {
-        weak var window: NSWindow?
-        let token = UUID()
-        init(window: NSWindow) { self.window = window }
-    }
-
     private let manager: HostRemoteSessionManager
     private let presenter: HostRemoteContentPresenter
     private let navigation: HostWindowNavigation
     private let readyWindow: @MainActor (UUID) -> NSWindow?
     private let currentOrigin:
         @MainActor (HostWorkerNavigationRequest, UUID) throws -> HostFolderChoiceOrigin
-    private var identities: [ObjectIdentifier: WindowIdentity] = [:]
 
     init(
         manager: HostRemoteSessionManager, presenter: HostRemoteContentPresenter,
@@ -34,15 +27,12 @@ final class HostFolderChoicePresentation {
         guard let id = request.presentationID, let owner = readyWindow(id),
             presenter.window(for: id) === owner,
             owner.identifier?.rawValue == "EdithMainWindow", owner.isVisible, !owner.isMiniaturized,
-            navigation.owningWorkspace(for: owner) === owner
+            navigation.owningWorkspace(for: owner) === owner,
+            let registration = navigation.workspaceRegistration(for: owner)
         else { throw HostWorkerError.rejected }
-        identities = identities.filter { $0.value.window != nil }
-        let key = ObjectIdentifier(owner)
-        let identity = identities[key] ?? WindowIdentity(window: owner)
-        identities[key] = identity
-        let result = try currentOrigin(request, identity.token)
+        let result = try currentOrigin(request, registration)
         try result.validate(request)
-        guard result.windowRegistration == identity.token else { throw HostWorkerError.rejected }
+        guard result.windowRegistration == registration else { throw HostWorkerError.rejected }
         return result
     }
 }

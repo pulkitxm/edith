@@ -14,6 +14,8 @@ public final class HostWorker {
     public var didExit: (@MainActor () -> Void)?
     public var didRequestNavigation:
         (@MainActor (HostWorkerNavigationRequest) async throws -> Void)?
+    public var didRequestFolderChoice:
+        (@MainActor (HostWorkerNavigationRequest) async throws -> HostFolderChoiceResult)?
     public var processIdentifier: Int32? { process.isRunning ? process.processIdentifier : nil }
     private let process = Process()
     private let input = Pipe()
@@ -279,7 +281,8 @@ public final class HostWorker {
 
     private func receiveNavigation(_ request: HostWorkerNavigationRequest) throws {
         guard ready, !configuration.recoveryOnly, preparationToken == nil,
-            let didRequestNavigation
+            request.folderChoice == true
+                ? didRequestFolderChoice != nil : didRequestNavigation != nil
         else { try acknowledgeNavigation(request, ok: false); return }
         guard navigation.count < 8, navigation[request.token] == nil else {
             throw HostWorkerError.invalidResponse
@@ -287,35 +290,61 @@ public final class HostWorker {
         let task = Task { [weak self] in
             do {
                 try Task.checkCancellation()
-                try await didRequestNavigation(request)
+                guard let self else { throw HostWorkerError.rejected }
+                let result: HostFolderChoiceResult?
+                if request.folderChoice == true {
+                    guard let choose = self.didRequestFolderChoice else {
+                        throw HostWorkerError.rejected
+                    }
+                    result = try await choose(request)
+                    try result?.validate()
+                } else {
+                    guard let navigate = self.didRequestNavigation else {
+                        throw HostWorkerError.rejected
+                    }
+                    try await navigate(request)
+                    result = nil
+                }
                 try Task.checkCancellation()
-                self?.finishNavigation(request.token, request: request, ok: true)
+                self.finishNavigation(
+                    request.token, request: request, ok: true, folderResult: result)
             } catch { self?.finishNavigation(request.token, request: request, ok: false) }
         }
         let deadline = Task { [weak self] in
-            do { try await Task.sleep(for: .seconds(5)) } catch { return }
+            do {
+                try await Task.sleep(
+                    for: request.folderChoice == true ? .seconds(120) : .seconds(5))
+            } catch { return }
             self?.finishNavigation(request.token, request: request, ok: false)
         }
         navigation[request.token] = NavigationPending(
             request: request, task: task, deadline: deadline)
     }
 
-    private func finishNavigation(_ token: UUID, request: HostWorkerNavigationRequest?, ok: Bool) {
+    private func finishNavigation(
+        _ token: UUID, request: HostWorkerNavigationRequest?, ok: Bool,
+        folderResult: HostFolderChoiceResult? = nil
+    ) {
         guard let pending = navigation.removeValue(forKey: token) else { return }
         pending.task.cancel()
         pending.deadline.cancel()
         guard let request, ready else { return }
         do {
+            let admitted = ok && !configuration.recoveryOnly && preparationToken == nil
             try acknowledgeNavigation(
-                request, ok: ok && !configuration.recoveryOnly && preparationToken == nil)
+                request, ok: admitted, folderResult: admitted ? folderResult : nil)
         } catch { fail(HostWorkerError.invalidResponse) }
     }
 
-    private func acknowledgeNavigation(_ request: HostWorkerNavigationRequest, ok: Bool) throws {
+    private func acknowledgeNavigation(
+        _ request: HostWorkerNavigationRequest, ok: Bool,
+        folderResult: HostFolderChoiceResult? = nil
+    ) throws {
         guard process.isRunning else { throw HostWorkerError.exited }
         let reply = HostWorkerRequest(
             token: request.token, operation: "navigationReply",
-            navigation: HostWorkerNavigationReply(request: request, ok: ok))
+            navigation: HostWorkerNavigationReply(
+                request: request, ok: ok, folderResult: folderResult))
         var bytes = try JSONEncoder().encode(reply)
         guard bytes.count <= HostWorkerFrames.maximumBytes else {
             throw HostWorkerError.invalidResponse

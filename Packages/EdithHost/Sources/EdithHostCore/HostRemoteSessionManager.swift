@@ -215,6 +215,68 @@ public final class HostRemoteSessionManager {
         }
     }
 
+    public func folderChoiceOrigin(
+        _ request: HostWorkerNavigationRequest, windowRegistration: UUID
+    ) throws -> HostFolderChoiceOrigin {
+        try validateNavigationOrigin(request)
+        guard let id = request.presentationID, let handle = presentations[id],
+            handle.request.location == "settings", handle.request.section == "agentActivity",
+            let engine = handle.engineIdentity, let renderer = handle.processIdentity
+        else { throw HostWorkerError.rejected }
+        try request.validate(configuration: handle.configuration.worker)
+        let origin = HostFolderChoiceOrigin(
+            extensionID: request.extensionID, version: request.version, presentationID: id,
+            enginePID: engine.pid, engineGeneration: engine.generation,
+            rendererPID: renderer.pid, rendererGeneration: renderer.generation,
+            windowRegistration: windowRegistration)
+        try origin.validate(request)
+        return origin
+    }
+
+    public func herdrNotificationPresentations(version: String) -> [UUID] {
+        presentations.compactMap { id, handle in
+            guard handle.request.extensionID == "herdr", handle.request.location == "main",
+                handle.configuration.worker.version == version, handle.isPresented,
+                pendingCleanup[id] == nil
+            else { return nil }
+            return id
+        }
+    }
+
+    public func herdrNotificationLease(
+        presentationID: UUID, version: String,
+        validateWindow: @escaping @MainActor () throws -> Void,
+        open: @escaping @MainActor (HostWorkerNavigationRequest) async throws -> Void
+    ) throws -> HostHerdrNotificationLease {
+        guard let handle = presentations[presentationID], handle.request.extensionID == "herdr",
+            handle.request.location == "main", handle.configuration.worker.version == version
+        else { throw HostWorkerError.rejected }
+        let request = HostWorkerNavigationRequest(
+            configuration: handle.configuration.worker, presentationID: presentationID,
+            location: "main")
+        try validateNavigationOrigin(request)
+        try validateWindow()
+        let engine = try HostRemoteEngineOwner(
+            marketplace: marketplace, configuration: selectedConfiguration(for: handle.request))
+        return HostHerdrNotificationLease(
+            configuration: handle.configuration.worker, presentationID: presentationID,
+            enginePID: engine.process.pid, engineGeneration: engine.process.generation,
+            validateOrigin: { [weak self, weak handle] in
+                guard let self, let handle, self.presentations[presentationID] === handle else {
+                    throw HostWorkerError.rejected
+                }
+                try engine.validate()
+                try self.validateNavigationOrigin(request)
+                try validateWindow()
+            },
+            invoke: { operation, payload in
+                try await engine.invoke(
+                    .init(
+                        presentationID: presentationID, operation: operation, payload: payload,
+                        timeout: 5))
+            }, open: open)
+    }
+
     public func herdrWindowLease(_ request: HostWorkerNavigationRequest) throws
         -> HostHerdrWindowLease
     {

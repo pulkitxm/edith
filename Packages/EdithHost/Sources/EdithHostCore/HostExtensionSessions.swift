@@ -15,6 +15,10 @@ public final class HostExtensionSessions {
         @MainActor (HostWorkerNavigationRequest) async throws -> Void = { _ in
             throw HostWorkerError.rejected
         }
+    @ObservationIgnored public var didRequestFolderChoice:
+        @MainActor (HostWorkerNavigationRequest) async throws -> HostFolderChoiceResult = { _ in
+            throw HostWorkerError.rejected
+        }
     @ObservationIgnored public var willDisable: @MainActor (String) async throws -> Void = { id in
         try await HostRemoteCarrierCheckIn.stop(extensionID: id)
         try await HostRemoteSession.stopAll(extensionID: id)
@@ -113,6 +117,21 @@ public final class HostExtensionSessions {
                 guard self.workers[id] === worker, worker.ready,
                     self.activeIDs.contains(id), self.versions[id] == worker.configuration.version
                 else { throw HostWorkerError.rejected }
+            }
+            worker.didRequestFolderChoice = { [weak self, weak worker] request in
+                guard let self, let worker, self.workers[id] === worker, worker.ready,
+                    !worker.configuration.recoveryOnly, let pid = worker.processIdentifier,
+                    self.activeIDs.contains(id), self.versions[id] == worker.configuration.version
+                else { throw HostWorkerError.rejected }
+                let process = try HostRemoteKernelIdentity.read(pid)
+                let result = try await self.didRequestFolderChoice(request)
+                try Task.checkCancellation()
+                guard self.workers[id] === worker, worker.ready,
+                    worker.processIdentifier == process.pid,
+                    process.isRunning, self.activeIDs.contains(id),
+                    self.versions[id] == worker.configuration.version
+                else { throw HostWorkerError.rejected }
+                return result
             }
             try await worker.start()
             guard workers[id] === worker, worker.ready else { throw HostWorkerError.exited }
