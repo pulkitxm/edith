@@ -234,6 +234,7 @@ final class ExtensionRuntime: NSObject {
         let client = self.client
         var environment = VirtualCameraEngineEnvironment.live
         if fixture {
+            environment.applicationNotifications = { nil }
             environment.authorization = { .denied };
             environment.obsRunning = { hardware?.obsRunning == true }
             environment.frontmostApplication = {
