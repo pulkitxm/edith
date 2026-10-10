@@ -82,10 +82,12 @@ import Testing
         })
         defer { facade.shutdown() }
         let tile = SurfaceTile(.calendar)
-        let scene = CalendarUIPresentation(facade: facade, location: "home", tile: tile)
+        let scene = CalendarUIPresentation(
+            facade: facade, route: .init(location: .home, tile: tile))
         #expect(
             scene.matches([
-                "location": "home", "section": "calendar", "tile": try JSONEncoder().encode(tile),
+                "location": "home", "target": "home", "section": "calendar",
+                "tile": try JSONEncoder().encode(tile),
             ]))
         #expect(!scene.matches(["location": "main", "section": "calendar"]))
         #expect(
@@ -114,7 +116,7 @@ import Testing
             let facade = CalendarUIFacade(
                 invoke: { _, _ in Data("{}".utf8) }, invalidate: { invalidated += 1 })
             released = facade
-            scene = CalendarUIPresentation(facade: facade, location: "main")
+            scene = CalendarUIPresentation(facade: facade, route: .init(location: .main))
             let controller = scene?.controller()
             #expect(controller != nil && scene?.isRetained == true)
         }

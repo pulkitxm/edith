@@ -97,6 +97,40 @@ import Testing
         #expect(facade.error != nil && !facade.loaded && facade.events.isEmpty && facade.blurEvents)
     }
 
+    @Test func distinctSimultaneousMaskedMeetingsKeepTheirOwnedIdentities() async throws {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let events = ["first", "second"].map {
+            CalendarEventPayload(
+                id: $0, title: "Meeting", calendarID: "hidden", start: start,
+                end: start.addingTimeInterval(600), isAllDay: false)
+        }
+        let facade = CalendarUIFacade(invoke: { _, _ in
+            try JSONEncoder().encode(
+                CalendarUISnapshot(
+                    authorized: true, blurEvents: true, days: 14, events: events))
+        })
+        defer { facade.shutdown() }
+        await facade.refreshAndWait()
+        #expect(facade.loaded && facade.blurEvents)
+        #expect(Set(facade.events.map(\.id)) == ["first", "second"])
+        #expect(facade.groupedDays.count == 1 && facade.groupedDays.first?.events.count == 2)
+    }
+
+    @Test func duplicatedOwnedIdentityIsRejectedBeforeRendering() async throws {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let event = CalendarEventPayload(
+            id: "duplicate", title: "Meeting", start: start, end: start.addingTimeInterval(600),
+            isAllDay: false)
+        let facade = CalendarUIFacade(invoke: { _, _ in
+            try JSONEncoder().encode(
+                CalendarUISnapshot(
+                    authorized: true, blurEvents: true, days: 14, events: [event, event]))
+        })
+        defer { facade.shutdown() }
+        await facade.refreshAndWait()
+        #expect(facade.error != nil && !facade.loaded && facade.events.isEmpty)
+    }
+
     @Test func invalidSnapshotCannotRenderSensitiveData() async throws {
         let event = CalendarEventPayload(
             id: "invalid", title: "Synthetic inaccessible event", start: Date(), end: Date(),

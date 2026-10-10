@@ -18,10 +18,9 @@ struct HomeMeetingsCard: View {
     private var blurCalendar: Bool { store.blurEvents }
 
     private var todayEvents: [CalendarEventPayload] {
-        store.events.filter {
-            Calendar.current.isDateInToday($0.start)
-                && (presentation?.tile.sourceIDs?.contains($0.calendarID) ?? true)
-        }
+        CalendarWidgetEvents.selected(
+            store.events, tile: presentation?.tile ?? SurfaceTile(.calendar), target: .home)
+
     }
 
     var body: some View {

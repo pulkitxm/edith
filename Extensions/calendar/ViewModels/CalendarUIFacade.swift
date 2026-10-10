@@ -125,6 +125,7 @@ final class CalendarUIFacade {
             guard !stopped, request == generation else { return }
             guard (0...CalendarEventQuery.maximumDays).contains(snapshot.days),
                 snapshot.events.count <= 10000,
+                Set(snapshot.events.map(\.id)).count == snapshot.events.count,
                 snapshot.authorized || snapshot.events.isEmpty,
                 snapshot.events.allSatisfy({
                     !$0.id.isEmpty && $0.start.timeIntervalSince1970.isFinite
@@ -134,8 +135,9 @@ final class CalendarUIFacade {
             blurEvents = snapshot.blurEvents
             authorized = snapshot.authorized
             days = snapshot.days
-            events = CalendarDayEvents.sorted(CalendarDayEvents.deduplicated(snapshot.events))
-            groupedDays = CalendarDayEvents.groupedByDay(events)
+            events = CalendarDayEvents.sorted(snapshot.events)
+            let groups = Dictionary(grouping: events) { Calendar.current.startOfDay(for: $0.start) }
+            groupedDays = groups.keys.sorted().map { (day: $0, events: groups[$0] ?? []) }
             error = nil
             loaded = true
         } catch {
