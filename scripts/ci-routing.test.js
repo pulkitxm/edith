@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { planSwiftTests } from "./ci-test-plan.mjs";
 
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
 const ciJobs = Bun.YAML.parse(ciWorkflow).jobs;
@@ -172,6 +173,10 @@ test("pull requests build the release app that main releases rebuild", () => {
     ciWorkflow.indexOf("\n  swift-test:"),
   );
   expect(swiftBuild).toContain("github.event_name == 'pull_request'");
+  expect(swiftBuild).toContain("needs.changes.outputs.host == 'true'");
+  expect(swiftBuild).not.toContain(
+    "needs.changes.outputs.swift == 'true'\n      ||",
+  );
   expect(swiftBuild).toContain("run: ./build.sh --no-open --release");
   expect(swiftBuild).toContain('EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"');
   const releaseBuild = ciWorkflow.slice(
@@ -186,7 +191,11 @@ test("Swift lanes exercise only independent host and extension packages", () => 
   const job = ciJobs["swift-test"];
   expect(job.strategy["fail-fast"]).toBe(false);
   expect(job.strategy["max-parallel"]).toBe(3);
-  expect(job.strategy.matrix.include).toEqual([
+  expect(job.strategy.matrix).toBe(
+    ["$", "{{ fromJSON(needs.changes.outputs.swift_matrix) }}"].join(""),
+  );
+  expect(job.if).toBe("needs.changes.outputs.swift_tests == 'true'");
+  expect(planSwiftTests([], { all: true }).include).toEqual([
     { lane: "host-runtime", targets: "ci-host ci-marketplace-runtime" },
     {
       lane: "feature-models",
@@ -281,7 +290,7 @@ test("every workflow change runs the runtime guard", () => {
     ciWorkflow.indexOf("\n  swift-test:"),
     ciWorkflow.indexOf("\n  version:"),
   );
-  expect(swiftTest).toContain("needs.changes.outputs.workflows == 'true'");
+  expect(swiftTest).toContain("needs.changes.outputs.swift_tests == 'true'");
   expect(ciWorkflow).toContain(
     "go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12",
   );

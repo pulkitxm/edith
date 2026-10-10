@@ -41,6 +41,8 @@ jobs:
     outputs:
       swift: ${{ steps.areas.outputs.swift }}
       host: ${{ steps.areas.outputs.host }}
+      swift_matrix: ${{ steps.areas.outputs.swift_matrix }}
+      swift_tests: ${{ steps.areas.outputs.swift_tests }}
       docs: ${{ steps.areas.outputs.docs }}
       workflows: ${{ steps.areas.outputs.workflows }}
       promo: ${{ steps.areas.outputs.promo }}
@@ -99,6 +101,13 @@ jobs:
           area companion '^apps/companion/'
           area companion_runtime '^apps/companion/(Dockerfile|compose(\.[^/]+)?\.yaml)$'
           area music_player '^(apps/music-player/|build\.sh$|\.github/workflows/)'
+          if [ -z "$base" ]; then
+            test_plan="$(printf '%s\n' "$changed" | node scripts/ci-test-plan.mjs --all)"
+          else
+            test_plan="$(printf '%s\n' "$changed" | node scripts/ci-test-plan.mjs)"
+          fi
+          echo "swift_matrix=$test_plan" >> "$GITHUB_OUTPUT"
+          printf '%s' "$test_plan" | node -e 'const fs=require("node:fs"); const plan=JSON.parse(fs.readFileSync(0,"utf8")); console.log("swift_tests="+(plan.include.length > 0));' >> "$GITHUB_OUTPUT"
 
   music-player:
     name: music-player
@@ -198,7 +207,7 @@ jobs:
     needs: changes
     if: >-
       github.event_name == 'pull_request'
-      && (needs.changes.outputs.swift == 'true'
+      && (needs.changes.outputs.host == 'true'
       || needs.changes.outputs.workflows == 'true')
     runs-on: macos-26
     concurrency:
@@ -224,9 +233,7 @@ jobs:
   swift-test:
     name: swift-test (${{ matrix.lane }})
     needs: changes
-    if: >-
-      needs.changes.outputs.swift == 'true'
-      || needs.changes.outputs.workflows == 'true'
+    if: needs.changes.outputs.swift_tests == 'true'
     runs-on: macos-26
     concurrency:
       group: ci-swift-test-${{ matrix.lane }}-${{ github.ref }}-${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' && 'product' || github.run_id }}
@@ -235,14 +242,7 @@ jobs:
     strategy:
       fail-fast: false
       max-parallel: 3
-      matrix:
-        include:
-          - lane: host-runtime
-            targets: ci-host ci-marketplace-runtime
-          - lane: feature-models
-            targets: ci-extension-support ci-extension-docs
-          - lane: native-music
-            targets: ci-music-native
+      matrix: ${{ fromJSON(needs.changes.outputs.swift_matrix) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
