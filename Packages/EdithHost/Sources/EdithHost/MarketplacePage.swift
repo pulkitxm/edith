@@ -155,12 +155,14 @@ struct MarketplacePage: View {
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 Text(status(entry)).font(.edithText(.caption)).foregroundStyle(.secondary)
-                if let package = marketplace.available[entry.id] ?? marketplace.installed[entry.id]
-                {
-                    Text(
-                        "\(ByteCountFormatter.string(fromByteCount: package.downloadBytes, countStyle: .file)) download · \(ByteCountFormatter.string(fromByteCount: package.installedBytes, countStyle: .file)) installed"
-                    )
-                    .font(.edithText(.caption2)).foregroundStyle(.secondary)
+                let sizes = HostMarketplacePackageSummary(
+                    candidate: marketplace.available[entry.id] ?? marketplace.installed[entry.id],
+                    downloadedVersions: marketplace.installedVersions[entry.id] ?? [])
+                if let estimate = sizes.estimate {
+                    Text(estimate).font(.edithText(.caption2)).foregroundStyle(.secondary)
+                }
+                if let downloaded = sizes.downloaded {
+                    Text(downloaded).font(.edithText(.caption2)).foregroundStyle(.secondary)
                 }
                 if marketplace.sessions.pendingDisableIDs.contains(entry.id) {
                     Text(

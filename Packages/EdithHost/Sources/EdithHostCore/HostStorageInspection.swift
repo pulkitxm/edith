@@ -18,7 +18,8 @@ public struct HostStorageTarget: Sendable {
             Self(id: "machines", title: "Machines", url: identity.extensionDirectory("machines")),
             Self(
                 id: "clipboard", title: "Clipboard", url: identity.extensionDirectory("clipboard")),
-            Self(id: "seo", title: "Site audits", url: identity.extensionDirectory("seo")),
+            Self(
+                id: "seoAudit", title: "Site audits", url: identity.extensionDirectory("seoAudit")),
             Self(id: "usage", title: "Usage files", url: identity.extensionDirectory("usage")),
             Self(id: "music", title: "Music", url: identity.extensionDirectory("music")),
             Self(
