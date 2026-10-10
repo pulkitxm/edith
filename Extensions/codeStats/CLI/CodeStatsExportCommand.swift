@@ -57,7 +57,8 @@ import Foundation
             let plan = try CodeStatsExportFiles.plan(
                 cards: selected, output: output,
                 workingDirectory: URL(
-                    fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true))
+                    fileURLWithPath: ExtensionCLIContext.request?.workingDirectory ?? "/",
+                    isDirectory: true))
             let files = try await CodeStatsExportFiles.write(snapshot: snapshot, plan: plan)
             if clipboard { try CodeStatsExportFiles.copyToClipboard(files) }
             guard !json else {

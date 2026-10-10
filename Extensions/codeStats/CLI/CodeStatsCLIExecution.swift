@@ -39,6 +39,6 @@ struct CodeStatsCLIClient: Sendable {
             throw ExtensionPeerError.unavailable
         }
         return try await ExtensionCLIExecution.run(
-            CodeStatsCLICommand.self, arguments: request.arguments)
+            CodeStatsCLICommand.self, request: request)
     }
 }

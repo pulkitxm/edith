@@ -18,12 +18,22 @@ final class ExtensionRuntime: NSObject {
     private var volumeWatch: CodeStatsVolumeWatch?
     private var defaultsObserver: NSObjectProtocol?
     private let commands = ExtensionCommandRegistry()
+    private var cliStreams: ExtensionCLIStreams?
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, self.workflow != nil else { throw ExtensionPeerError.unavailable }
             await self.startup?.value
             try Task.checkCancellation()
+            if command.hasPrefix("codeStats.cli.") {
+                if self.cliStreams == nil {
+                    self.cliStreams = try ExtensionCLIStreams(owner: "codeStats")
+                }
+                guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
+                return try streams.invoke(
+                    CodeStatsCLICommand.self, operation: command, prefix: "codeStats.cli",
+                    payload: payload)
+            }
             if command == "codeStats.cli" {
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
                 return try JSONEncoder().encode(try await CodeStatsCLIExecution.run(request))
@@ -42,6 +52,7 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        let streams = cliStreams; cliStreams = nil; streams?.stop()
         commands.shutdown()
         schedule?.cancel(); wake?.cancel(); startup?.cancel()
         volumeWatch?.stop(); volumeWatch = nil
@@ -57,6 +68,8 @@ final class ExtensionRuntime: NSObject {
             await workflow?.shutdown()
             await operations?.shutdown()
             for job in jobs { await job?.value }
+            await streams?.stopAndWait()
+            await commands.shutdownAndWait()
             completion()
         }
     }
