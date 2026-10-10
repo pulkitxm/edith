@@ -63,6 +63,7 @@ import Foundation
     }
 
     public func inspect() async throws -> HostCoreSnapshot {
+        try Task.checkCancellation()
         guard !stopping, backup == nil else { throw HostWorkerError.rejected }
         if let inspection { storage = try await inspection.value; return snapshot() }
         let id = UUID()
@@ -101,6 +102,7 @@ import Foundation
     }
 
     public func synchronizeSettings(restoreOnly: Bool = false) async throws -> HostCoreSnapshot {
+        try Task.checkCancellation()
         guard !stopping, inspection == nil, backup == nil else { throw HostWorkerError.rejected }
         let id = UUID()
         tasks.append(

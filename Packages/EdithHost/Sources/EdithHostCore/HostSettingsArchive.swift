@@ -98,7 +98,7 @@ public struct HostSettingsBackupResult: Codable, Sendable {
             suggestedExtensionIDs: transfer.enabledIDs, completedAt: completed)
     }
 
-    private func capture() throws -> Data {
+    public func capture() throws -> Data {
         var preferences: [String: [String: HostSettingsValue]] = [:]
         for (id, (name, defaults)) in domains {
             let values = (defaults.persistentDomain(forName: name) ?? [:])

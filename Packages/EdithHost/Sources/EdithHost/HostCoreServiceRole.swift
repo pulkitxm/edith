@@ -56,7 +56,7 @@ import Foundation
                     guard next.configuration == nil, let runtime else {
                         throw HostWorkerError.rejected
                     }
-                    if next.operation == .cancel { runtime.cancel() }
+                    if next.operation == .cancel { request?.cancel(); runtime.cancel() }
                     try control.send(
                         HostCoreResponse(token: next.token, snapshot: runtime.snapshot()))
                     continue
@@ -72,7 +72,8 @@ import Foundation
                         try? control.send(
                             HostCoreResponse(
                                 token: next.token,
-                                failure: "The background service could not complete this action."))
+                                failure: "The background service could not complete this action.",
+                                cancelled: error is CancellationError))
                         if next.operation == .start { terminate() }
                     }
                 }
@@ -81,6 +82,7 @@ import Foundation
     }
 
     private func execute(_ request: HostCoreRequest) async throws -> HostCoreSnapshot? {
+        try Task.checkCancellation()
         guard parent.isAlive else { throw HostWorkerError.rejected }
         if request.operation == .start {
             guard runtime == nil, let configuration = request.configuration,
