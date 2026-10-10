@@ -41,9 +41,7 @@ import Observation
         if let lease, state.leaseRevision >= lease.stateRevision,
             !state.leaseIDs.contains(lease.id)
         {
-            renewal?.cancel()
-            revoked?()
-            revocation = Task { await endLease() }
+            revokeLease()
         }
         updated?(state)
     }
@@ -145,7 +143,7 @@ import Observation
             if var end = request(.importEnd) {
                 end.importID = descriptor.id; _ = try? await invoke(end)
             }
-            await endLease()
+            if lease?.id == descriptor.lease.id { await endLease() }
             throw error
         }
     }
@@ -220,10 +218,27 @@ import Observation
     func stopAndWait() async { stop(); await teardown?.value }
 
     func endLease() async {
+        let renewing = renewal
+        let cleanup = takeLeaseEnd()
+        await renewing?.value
+        if let cleanup { _ = try? await invoke(cleanup) }
+    }
+
+    private func revokeLease() {
+        let renewing = renewal
+        let cleanup = takeLeaseEnd()
+        revoked?()
+        revocation = Task {
+            await renewing?.value
+            if let cleanup { _ = try? await invoke(cleanup) }
+        }
+    }
+
+    private func takeLeaseEnd() -> NotchBrowserRemoteRequest? {
         renewal?.cancel(); renewal = nil
         let cleanup = leaseEnd
         lease = nil; leaseEnd = nil
-        if let cleanup { _ = try? await invoke(cleanup) }
+        return cleanup
     }
 
     func renewLease() async throws {
@@ -244,18 +259,20 @@ import Observation
     }
 
     private func scheduleRenewal() {
-        renewal?.cancel()
+        let previous = renewal
+        previous?.cancel()
+        let id = lease?.id
         renewal = Task { [weak self] in
+            await previous?.value
             while !Task.isCancelled {
                 do {
                     try await Task.sleep(for: .seconds(60))
-                    guard let self else { return }
+                    guard let self, lease?.id == id else { return }
                     try await renewLease()
                 } catch {
-                    guard !Task.isCancelled else { return }
+                    guard !Task.isCancelled, self?.lease?.id == id else { return }
                     self?.failed?(error.localizedDescription)
-                    self?.revoked?()
-                    await self?.endLease()
+                    self?.revokeLease()
                     return
                 }
             }
