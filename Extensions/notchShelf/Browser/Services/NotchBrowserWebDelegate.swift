@@ -15,13 +15,14 @@ final class NotchBrowserWebDelegate: NSObject, WKNavigationDelegate, WKUIDelegat
     func webView(
         _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction
     ) async -> WKNavigationActionPolicy {
-        store?.policy(for: navigationAction, in: webView) ?? .allow
+        store?.policy(for: navigationAction, in: webView) ?? .cancel
     }
 
     func webView(
         _ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse
     ) async -> WKNavigationResponsePolicy {
-        NotchBrowserStore.responsePolicy(navigationResponse)
+        guard store?.permitsNativeNavigation == true else { return .cancel }
+        return NotchBrowserStore.responsePolicy(navigationResponse)
     }
 
     func webView(
@@ -42,7 +43,9 @@ final class NotchBrowserWebDelegate: NSObject, WKNavigationDelegate, WKUIDelegat
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        webView.reload()
+        if store?.permitsNativeNavigation == true, store?.tab(for: webView) != nil {
+            webView.reload()
+        }
     }
 
     func webView(

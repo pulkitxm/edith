@@ -556,12 +556,26 @@ import Foundation
     }
 
     func browser(_ request: NotchBrowserRemoteRequest) async throws -> Data {
-        try validate(
-            request.identity, display: request.displayID, presentation: request.presentationID)
+        let cleanup = [.leaseEnd, .downloadCancel, .importEnd].contains(request.operation)
+        if cleanup {
+            try validateOwnership(
+                request.identity, display: request.displayID, presentation: request.presentationID)
+        } else {
+            try validate(
+                request.identity, display: request.displayID, presentation: request.presentationID)
+        }
         guard let engine = controller?.browserEngine else { throw ExtensionPeerError.unavailable }
         let data = try await engine.execute(request)
-        try validate(
-            request.identity, display: request.displayID, presentation: request.presentationID)
+        if !cleanup {
+            do {
+                try validate(
+                    request.identity, display: request.displayID,
+                    presentation: request.presentationID)
+            } catch {
+                engine.release(owner: request.presentationID)
+                throw error
+            }
+        }
         return data
     }
 

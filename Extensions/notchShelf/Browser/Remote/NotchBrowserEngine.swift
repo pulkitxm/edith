@@ -19,6 +19,10 @@ import Foundation
     private let downloads: NotchBrowserDownloadEngine
     private var importExpiry: Task<Void, Never>?
     private var heldOwner: UUID?
+    private let now: () -> Date
+    private let leaseGeneration = UUID()
+    private var leases: [UUID: NotchBrowserLease] = [:]
+    private var leaseExpiries: [UUID: Task<Void, Never>] = [:]
     var held = false
     var changed: (() -> Void)?
 
@@ -29,8 +33,10 @@ import Foundation
             try ChromeSafeStorage.keychainKey()
         },
         open: ((URL, ChromeProfile?) -> Void)? = nil, downloads: NotchBrowserDownloadEngine? = nil,
-        openURL: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) }
+        openURL: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
+        now: @escaping () -> Date = Date.init
     ) {
+        self.now = now
         self.openURL = openURL
         self.downloads = downloads ?? NotchBrowserDownloadEngine()
         self.installation = installation
@@ -84,16 +90,39 @@ import Foundation
         guard !stopped else { throw ExtensionPeerError.unavailable }
         let encoder = JSONEncoder()
         switch request.operation {
+        case .leaseRenew:
+            let current = try validateLease(request)
+            let renewed = NotchBrowserLease(
+                id: current.id, ownershipID: current.ownershipID,
+                presentationID: current.presentationID, displayID: current.displayID,
+                generation: current.generation, revision: current.revision + 1,
+                profileID: current.profileID, expiresAt: now().addingTimeInterval(120))
+            leases[request.presentationID] = renewed
+            scheduleExpiry(renewed)
+            return try encoder.encode(renewed)
+        case .leaseEnd:
+            guard let lease = request.lease, lease.presentationID == request.presentationID,
+                lease.ownershipID == request.identity.ownershipID,
+                lease.displayID == request.displayID, lease.generation == leaseGeneration
+            else { throw ExtensionPeerError.invalidRequest }
+            if let current = leases[request.presentationID] {
+                guard current.id == lease.id else { throw ExtensionPeerError.invalidRequest }
+                release(owner: request.presentationID)
+            }
+            return Data("{}".utf8)
         case .downloadStart:
+            _ = try validateLease(request)
             guard let name = request.fileName else { throw ExtensionPeerError.invalidRequest }
             return try encoder.encode(downloads.start(name, owner: request.presentationID))
         case .downloadWrite:
+            _ = try validateLease(request)
             guard let id = request.downloadID, let offset = request.byteOffset,
                 let bytes = request.bytes
             else { throw ExtensionPeerError.invalidRequest }
             try downloads.write(id: id, owner: request.presentationID, offset: offset, bytes: bytes)
             return Data("{}".utf8)
         case .downloadCommit:
+            _ = try validateLease(request)
             guard let id = request.downloadID else { throw ExtensionPeerError.invalidRequest }
             return try encoder.encode(downloads.commit(id: id, owner: request.presentationID))
         case .downloadCancel:
@@ -103,8 +132,9 @@ import Foundation
         case .read: break
         case .importStart:
             return try encoder.encode(
-                await beginImport(request.profileID, owner: request.presentationID))
+                await beginImport(request))
         case .importRead:
+            _ = try validateLease(request)
             guard importOwner == request.presentationID, let imported,
                 request.importID == imported.0.id, let offset = request.offset,
                 offset >= 0, offset < imported.1.count
@@ -139,6 +169,7 @@ import Foundation
             sessionFile.save(session)
             changed?()
         case .detach:
+            for owner in Array(leases.keys) { release(owner: owner) }
             imported = nil; cookieKey = nil
             session.profile = nil; session.profileName = nil; session.tabs = [];
             session.selected = 0
@@ -185,8 +216,13 @@ import Foundation
         return try encoder.encode(state())
     }
 
-    private func beginImport(_ profileID: String?, owner: UUID) async throws -> NotchBrowserImport {
-        guard importTask == nil, imported == nil, let profileID,
+    private func beginImport(_ request: NotchBrowserRemoteRequest) async throws
+        -> NotchBrowserImport
+    {
+        expireLeases()
+        let owner = request.presentationID
+        guard importTask == nil, imported == nil, let profileID = request.profileID,
+            leases[owner] != nil || leases.count < 8,
             let profile = installation.inspect().profiles.first(where: { $0.directory == profileID }
             )
         else { throw ExtensionPeerError.invalidRequest }
@@ -223,6 +259,14 @@ import Foundation
             throw ExtensionPeerError.rejected("The browser import exceeds its capacity.")
         }
         cookieKey = key
+        releaseLease(owner: owner)
+        downloads.release(owner: owner)
+        let lease = NotchBrowserLease(
+            id: UUID(), ownershipID: request.identity.ownershipID, presentationID: owner,
+            displayID: request.displayID, generation: leaseGeneration, revision: 1,
+            profileID: profile.directory, expiresAt: now().addingTimeInterval(120))
+        leases[owner] = lease
+        scheduleExpiry(lease)
         var updated = session
         updated.profile = profile.directory; updated.profileName = profile.name
         let descriptor = NotchBrowserImport(
@@ -231,7 +275,8 @@ import Foundation
                 directory: profile.directory, name: profile.name, email: profile.email,
                 pictureURL: nil, colorARGB: profile.colorARGB),
             dataStoreID: ChromeProfileImporter.dataStoreIdentifier(
-                profile: profile, userData: userData), byteCount: data.count, session: updated)
+                profile: profile, userData: userData), byteCount: data.count, session: updated,
+            lease: lease)
         imported = (descriptor, data)
         importExpiry?.cancel()
         importExpiry = Task { [weak self] in
@@ -242,12 +287,14 @@ import Foundation
     }
 
     func detach() {
+        for owner in Array(leases.keys) { release(owner: owner) }
         imported = nil; cookieKey = nil
         session.profile = nil; session.profileName = nil; session.tabs = []; session.selected = 0
         sessionFile.save(session); changed?()
     }
 
     func release(owner: UUID) {
+        releaseLease(owner: owner)
         downloads.release(owner: owner)
         if heldOwner == owner { held = false; heldOwner = nil; changed?() }
         if importOwner == owner {
@@ -259,10 +306,41 @@ import Foundation
     func stop() {
         stopped = true; importTask?.cancel(); imported = nil; cookieKey = nil; changed = nil
         importExpiry?.cancel(); importExpiry = nil; downloads.stop()
+        for task in leaseExpiries.values { task.cancel() }
+        leaseExpiries = [:]; leases = [:]
     }
     func stopAndWait() async {
         let task = importTask
         stop()
         _ = await task?.value
+    }
+
+    private func validateLease(_ request: NotchBrowserRemoteRequest) throws -> NotchBrowserLease {
+        expireLeases()
+        guard let supplied = request.lease, let current = leases[request.presentationID],
+            supplied == current, current.ownershipID == request.identity.ownershipID,
+            current.displayID == request.displayID, current.expiresAt > now()
+        else { throw ExtensionPeerError.rejected("The browser presentation lease is stale.") }
+        return current
+    }
+
+    func expireLeases() {
+        for lease in Array(leases.values) where lease.expiresAt <= now() {
+            release(owner: lease.presentationID)
+        }
+    }
+
+    private func releaseLease(owner: UUID) {
+        leases[owner] = nil
+        leaseExpiries.removeValue(forKey: owner)?.cancel()
+    }
+
+    private func scheduleExpiry(_ lease: NotchBrowserLease) {
+        leaseExpiries.removeValue(forKey: lease.presentationID)?.cancel()
+        leaseExpiries[lease.presentationID] = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(120)) } catch { return }
+            guard self?.leases[lease.presentationID] == lease else { return }
+            self?.release(owner: lease.presentationID)
+        }
     }
 }

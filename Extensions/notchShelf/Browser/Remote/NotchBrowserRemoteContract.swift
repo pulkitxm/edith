@@ -16,6 +16,18 @@ struct NotchBrowserImport: Codable, Sendable {
     let dataStoreID: UUID
     let byteCount: Int
     let session: BrowserSession
+    let lease: NotchBrowserLease
+}
+
+struct NotchBrowserLease: Codable, Sendable, Equatable {
+    let id: UUID
+    let ownershipID: UUID
+    let presentationID: UUID
+    let displayID: UInt32
+    let generation: UUID
+    let revision: UInt64
+    let profileID: String
+    let expiresAt: Date
 }
 
 struct NotchBrowserImportChunk: Codable, Sendable {
@@ -30,6 +42,7 @@ struct NotchBrowserRemoteRequest: Codable, Sendable {
         case read, importStart, importRead, importEnd, save, detach, makeDefault, downloadChrome
         case privacy, openInChrome, copyLink, held, downloadStart, downloadWrite, downloadCommit,
             downloadCancel
+        case leaseRenew, leaseEnd
     }
     let identity: NotchPanelIdentity
     let displayID: UInt32
@@ -45,4 +58,5 @@ struct NotchBrowserRemoteRequest: Codable, Sendable {
     var fileName: String? = nil
     var byteOffset: UInt64? = nil
     var bytes: Data? = nil
+    var lease: NotchBrowserLease? = nil
 }

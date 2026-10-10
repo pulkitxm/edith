@@ -25,6 +25,8 @@ import Observation
     private(set) var camera: NotchCameraClient?
     private let namespace: String
     private(set) var browser: NotchBrowserStore?
+    private var browserDrains: [UUID: Task<Void, Never>] = [:]
+    private var teardown: Task<Void, Never>?
     private var remoteBrowser: NotchBrowserRemoteClient?
     private var thumbnailTasks: [UUID: Task<NSImage?, Never>] = [:]
 
@@ -72,6 +74,11 @@ import Observation
     }
 
     func stop() {
+        guard !stopped else { return }
+        let refreshing = refreshTask
+        let acting = actionTask
+        let geometry = geometryTask
+        let thumbnails = Array(thumbnailTasks.values)
         stopped = true
         generation = UUID()
         refreshTask?.cancel(); refreshTask = nil
@@ -84,8 +91,26 @@ import Observation
         snapshot = nil; reported = []; slotsByKey = [:]
         remoteLayouts.changed = nil
         camera?.stop(); camera = nil
-        browser?.shutdown(); browser = nil
-        remoteBrowser?.stop(); remoteBrowser = nil
+        drainBrowser()
+        let drains = Array(browserDrains.values)
+        teardown = Task {
+            await refreshing?.value; await acting?.value; await geometry?.value
+            for task in thumbnails { _ = await task.value }
+            for task in drains { await task.value }
+        }
+    }
+
+    func stopAndWait() async { stop(); await teardown?.value }
+
+    private func drainBrowser() {
+        guard let browser else { return }
+        browser.shutdown()
+        let id = UUID()
+        browserDrains[id] = Task {
+            await browser.shutdownAndWait()
+            browserDrains[id] = nil
+        }
+        self.browser = nil; remoteBrowser = nil
     }
 
     private func apply(_ data: Data, generation token: UUID) throws {
@@ -153,8 +178,7 @@ import Observation
                             identity: snapshot.identity, displayID: displayID,
                             presentationID: presentationID, operation: operation)
                     },
-                    invoke: { [weak self] request in
-                        guard let self, !stopped else { throw ExtensionPeerError.unavailable }
+                    invoke: { [invoke] request in
                         return try await invoke(
                             "notch.chrome.browser", JSONEncoder().encode(request))
                     })
@@ -168,7 +192,7 @@ import Observation
                 }
             }
         } else {
-            browser?.shutdown(); browser = nil; remoteBrowser?.stop(); remoteBrowser = nil
+            drainBrowser()
         }
         error = nil
     }
