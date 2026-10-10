@@ -58,7 +58,7 @@ public struct AgentActivitySettings: Codable, Equatable, Sendable {
     }
 
     public func save() throws {
-        SharedDefaults.store.set(encoded, forKey: defaultsKey)
+        SharedDefaults.store.set(encoded, forKey: Self.defaultsKey)
     }
 }
 

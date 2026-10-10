@@ -18,7 +18,8 @@ private final class LidAwakeJournalProbe: @unchecked Sendable {
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(true, forKey: LidAwakeState.activeKey)
         LidAwakeState.setSession(.oneHour, defaults)
-        let deadline = Date().addingTimeInterval(600)
+        let deadline = Date(
+            timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down) + 600)
         LidAwakeState.setSessionDeadline(deadline, defaults)
         var mutations: [Bool] = []
         let engine = LidAwakeEngine(
