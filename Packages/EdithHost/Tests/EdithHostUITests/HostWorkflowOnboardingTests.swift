@@ -21,6 +21,29 @@ import Testing
         #expect(model.selected == ["usage", "herdr"])
     }
 
+    @Test func essentialsReviewWithFullCatalogInstallsOnlyExplicitCalendarSelection() async throws {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        let entries = try HostIndex.bundled()
+        #expect(entries.count == 39)
+        let suggested = Set(["clipboard", "calendar", "system", "keepAwake", "emoji"])
+        fixture.available = Dictionary(uniqueKeysWithValues: suggested.map { ($0, package($0)) })
+        let model = fixture.model(entries: entries)
+        model.present()
+        model.choose(.essentials)
+        #expect(model.selected == suggested)
+        for id in ["clipboard", "system", "keepAwake", "emoji"] { model.toggle(id) }
+        #expect(model.selected == ["calendar"])
+        #expect(model.selected.count == 1)
+        #expect(model.canInstall)
+        #expect(fixture.installs.isEmpty)
+        model.installSelection()
+        await finish(model)
+        #expect(fixture.installs == ["calendar"])
+        #expect(fixture.active == ["calendar"])
+        #expect(model.stage == .finished)
+    }
+
     @Test func signedSizesCountDependenciesOnceAndExcludeDownloadedCompatiblePackages() {
         let packages = [
             "usage": package("usage", dependencies: ["terminal"]),
@@ -330,9 +353,9 @@ import Testing
         }
         init() { defaults = UserDefaults(suiteName: name)! }
         func remove() { defaults.removePersistentDomain(forName: name) }
-        func model() -> HostWorkflowOnboardingModel {
+        func model(entries: [HostExtension]? = nil) -> HostWorkflowOnboardingModel {
             HostWorkflowOnboardingModel(
-                entries: [
+                entries: entries ?? [
                     HostExtension(
                         id: "usage", title: "Usage", symbolName: "chart.bar", category: "agents"),
                     HostExtension(

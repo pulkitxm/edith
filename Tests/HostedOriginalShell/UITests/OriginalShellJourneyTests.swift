@@ -25,7 +25,9 @@ final class OriginalShellJourneyTests: XCTestCase {
         try fixture.validate(accountHome: accountHome, environment: environment)
         let application = XCUIApplication(bundleIdentifier: fixture.identifier)
         application.launchEnvironment = try fixture.applicationEnvironment(from: environment)
+        var journeyFinished = false
         defer {
+            if !journeyFinished { try? captureFailureDiagnostics(application, fixture: fixture) }
             if application.state != .notRunning { application.terminate() }
             try? saveOutcome()
         }
@@ -50,16 +52,30 @@ final class OriginalShellJourneyTests: XCTestCase {
         let entries = try XCTUnwrap(
             JSONSerialization.jsonObject(with: indexData) as? [[String: Any]])
         XCTAssertEqual(entries.count, 39)
+        var reviewScroll: XCUIElement?
         for id in ["clipboard", "system", "keepAwake", "emoji"] {
             let entry = try XCTUnwrap(entries.first { $0["id"] as? String == id })
             let title = try XCTUnwrap(entry["title"] as? String)
             let checkbox = application.checkBoxes[title]
             try reveal(checkbox, in: application)
+            reviewScroll = application.scrollViews.containing(.checkBox, identifier: title)
+                .allElementsBoundByIndex.min {
+                    $0.frame.height * $0.frame.width < $1.frame.height * $1.frame.width
+                }
             XCTAssertEqual(checkbox.value as? String, "1")
             checkbox.click()
             XCTAssertEqual(checkbox.value as? String, "0")
         }
-        try click(application.buttons["Install 1 extensions"], in: application)
+        let install = application.buttons["workflow.install-selection"]
+        let scroll = try XCTUnwrap(reviewScroll)
+        for _ in 0..<12 {
+            if install.exists && install.isHittable { break }
+            scroll.scroll(byDeltaX: 0, deltaY: -400)
+        }
+        XCTAssertTrue(install.exists)
+        XCTAssertTrue(install.isHittable)
+        XCTAssertEqual(install.label, "Install 1 extensions")
+        try click(install, in: application)
         try await waitState("recommended-calendar-installed") {
             ($0["versions"] as? [String: String])?["calendar"] == "1.0.0"
                 && ($0["active"] as? [String]) == ["calendar"]
@@ -167,6 +183,69 @@ final class OriginalShellJourneyTests: XCTestCase {
             attachment.lifetime = .keepAlways
             add(attachment)
         }
+        journeyFinished = true
+    }
+
+    private func captureFailureDiagnostics(
+        _ application: XCUIApplication, fixture: JourneyFixture
+    ) throws {
+        guard application.state != .notRunning else { return }
+        let environment = ProcessInfo.processInfo.environment
+        try fixture.validate(
+            accountHome: try XCTUnwrap(environment["EDITH_JOURNEY_ACCOUNT_HOME"]),
+            environment: environment)
+        try fixture.validateApplicationEnvironment(application.launchEnvironment)
+        guard root.path == fixture.directory,
+            root.resolvingSymlinksInPath().standardizedFileURL == root.standardizedFileURL
+        else { throw JourneyContractError.invalidEnvironment }
+        let description = application.debugDescription
+        let hierarchy = String(decoding: description.utf8.prefix(65_536), as: UTF8.self)
+        var diagnostic: [String: Any] = [
+            "schema": 1, "lastStage": snapshots.last?["stage"] as? String ?? "startup",
+            "hierarchy": hierarchy, "hierarchyTruncated": description.utf8.count > 65_536,
+            "applicationState": application.state.rawValue,
+            "buttons": application.buttons.allElementsBoundByIndex.prefix(128).map { element in
+                [
+                    "identifier": String(element.identifier.prefix(256)),
+                    "label": String(element.label.prefix(256)),
+                    "enabled": element.isEnabled, "hittable": element.isHittable,
+                    "frame": Self.frame(element.frame),
+                ] as [String: Any]
+            },
+            "scrollViews": application.scrollViews.allElementsBoundByIndex.prefix(16).map {
+                element in
+                [
+                    "identifier": String(element.identifier.prefix(256)),
+                    "hittable": element.isHittable, "frame": Self.frame(element.frame),
+                ] as [String: Any]
+            },
+        ]
+        let window = application.windows.firstMatch
+        if window.exists {
+            let bytes = window.screenshot().pngRepresentation
+            guard !bytes.isEmpty, bytes.count <= 8_388_608 else {
+                throw JourneyContractError.invalidMetadata
+            }
+            diagnostic["windowFrame"] = Self.frame(window.frame)
+            diagnostic["privateWindowSnapshotBytes"] = bytes.count
+            diagnostic["privateWindowSnapshotSHA256"] = SHA256.hash(data: bytes).map {
+                String(format: "%02x", $0)
+            }.joined()
+            let attachment = XCTAttachment(data: bytes, uniformTypeIdentifier: "public.png")
+            attachment.name = "hosted-shell-private-failure-window.png"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        let bytes = try JSONSerialization.data(withJSONObject: diagnostic, options: .sortedKeys)
+        guard bytes.count <= 131_072 else { throw JourneyContractError.invalidMetadata }
+        startup["privateFailureDiagnostics"] = diagnostic
+    }
+
+    private static func frame(_ value: CGRect) -> [String: Double] {
+        [
+            "x": Double(value.origin.x), "y": Double(value.origin.y),
+            "width": Double(value.width), "height": Double(value.height),
+        ]
     }
 
     private func captureWindow(
