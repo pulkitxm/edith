@@ -28,7 +28,7 @@ final class TerminalSessionHolder {
     private var readTask: Task<Void, Never>?
     private var deliveryTask: Task<Void, Never>?
     private var offset: UInt64 = 0
-    private enum Event { case input(Data); case resize(UInt16, UInt16) }
+    private enum Event { case input(Data); case resize(UInt16, UInt16, UInt32, UInt32) }
     private var events: [Event] = []
     private var queuedBytes = 0
     private(set) var ghosttyView: GhosttyTerminalView?
@@ -196,9 +196,9 @@ final class TerminalSessionHolder {
                 guard let self, self.generation == viewGeneration else { return }
                 self.enqueue(.input(bytes), bytes: bytes.count)
             },
-            resize: { [weak self] columns, rows, _, _ in
+            resize: { [weak self] columns, rows, width, height in
                 guard let self, self.generation == viewGeneration else { return }
-                self.enqueue(.resize(columns, rows), bytes: 0)
+                self.enqueue(.resize(columns, rows, width, height), bytes: 0)
             }, failure: { [weak self] in self?.failStream("The terminal input queue is full.") })
         let view = GhosttyTerminalView(
             externalIO: io, workingDirectory: descriptor?.directory,
@@ -331,8 +331,9 @@ final class TerminalSessionHolder {
                     case .input(let data):
                         self.queuedBytes -= data.count
                         try await client.input(data)
-                    case .resize(let columns, let rows):
-                        try await client.resize(columns: columns, rows: rows)
+                    case .resize(let columns, let rows, let width, let height):
+                        try await client.resize(
+                            columns: columns, rows: rows, pixelWidth: width, pixelHeight: height)
                     }
                 } catch is CancellationError { return } catch {
                     guard !Task.isCancelled, self.generation == generation else { return }

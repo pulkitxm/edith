@@ -50,17 +50,21 @@ final class OwnedTerminalPTY {
         try flushInput()
     }
 
-    func resize(columns: UInt16, rows: UInt16) throws {
+    func resize(columns: UInt16, rows: UInt16, pixelWidth: UInt16 = 0, pixelHeight: UInt16 = 0)
+        throws
+    {
         guard !closed, columns > 0, rows > 0 else { throw POSIXError(.EINVAL) }
-        var size = winsize(ws_row: rows, ws_col: columns, ws_xpixel: 0, ws_ypixel: 0)
+        var size = winsize(
+            ws_row: rows, ws_col: columns, ws_xpixel: pixelWidth, ws_ypixel: pixelHeight)
         guard ioctl(descriptor, TIOCSWINSZ, &size) == 0 else { throw Self.error() }
     }
 
     func read(after cursor: UInt64, limit: Int = 32_768) throws -> Output {
         guard !closed, limit > 0, limit <= 32_768 else { throw POSIXError(.EINVAL) }
-        try poll()
+        let retainedBeginning = offset - UInt64(output.count)
+        guard cursor >= retainedBeginning, cursor <= offset else { throw POSIXError(.EOVERFLOW) }
+        try poll(after: cursor)
         let beginning = offset - UInt64(output.count)
-        guard cursor >= beginning, cursor <= offset else { throw POSIXError(.EOVERFLOW) }
         let index = Int(cursor - beginning)
         let bytes = Data(output.dropFirst(index).prefix(limit))
         let next = cursor + UInt64(bytes.count)
@@ -91,18 +95,22 @@ final class OwnedTerminalPTY {
         while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
     }
 
-    func poll() throws {
+    private func poll(after cursor: UInt64) throws {
         observeExit()
         if exitCode == nil { try flushInput() } else { pendingInput.removeAll() }
         var buffer = [UInt8](repeating: 0, count: 8_192)
         for _ in 0..<32 {
-            let count = Darwin.read(descriptor, &buffer, buffer.count)
+            if output.count == Self.maximumBufferedBytes {
+                let beginning = offset - UInt64(output.count)
+                let acknowledged = Int(cursor - beginning)
+                guard acknowledged > 0 else { break }
+                output.removeFirst(acknowledged)
+            }
+            let capacity = min(buffer.count, Self.maximumBufferedBytes - output.count)
+            let count = Darwin.read(descriptor, &buffer, capacity)
             if count > 0 {
                 output.append(contentsOf: buffer.prefix(count))
                 offset += UInt64(count)
-                if output.count > Self.maximumBufferedBytes {
-                    output.removeFirst(output.count - Self.maximumBufferedBytes)
-                }
             } else if count == 0 || (count < 0 && errno == EIO) {
                 break
             } else if count < 0 && errno == EINTR {
@@ -116,7 +124,11 @@ final class OwnedTerminalPTY {
         observeExit()
     }
 
-    private func flushInput() throws {
+    var hasPendingInput: Bool { !pendingInput.isEmpty }
+
+    func discardPendingInput() { pendingInput.removeAll() }
+
+    func flushInput() throws {
         while !pendingInput.isEmpty {
             let count = pendingInput.withUnsafeBytes {
                 Darwin.write(descriptor, $0.baseAddress, $0.count)

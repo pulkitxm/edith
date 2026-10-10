@@ -174,6 +174,99 @@ import Testing
         #expect(!running)
     }
 
+    @Test func outputBeyondBufferCapacityIsBackpressuredWithoutLosingVTBytes() async throws {
+        let script =
+            "import os; data = b'\\x1b[32m' + b'x' * (1024 * 1024) + b'\\x1b[0m';\nwhile data:\n data = data[os.write(1, data):]\n"
+        let session = try OwnedTerminalSession(
+            launch: .init(
+                executable: "/usr/bin/python3", arguments: ["-c", script],
+                environment: ["PATH=/usr/bin:/bin", "TERM=xterm-256color"],
+                currentDirectory: "/private/tmp", allowsLocalFileLinks: true,
+                resetTerminalAfterInterrupt: false))
+        defer { session.stop() }
+        let client = try client(session)
+        defer { client.stop() }
+        var bytes = Data()
+        var offset: UInt64 = 0
+        var exit: Int32?
+        let deadline = ContinuousClock.now + .seconds(10)
+        while exit == nil, ContinuousClock.now < deadline {
+            let output = try await client.read(after: offset)
+            bytes.append(output.bytes)
+            offset = output.nextOffset
+            if let code = output.exitCode { exit = code; break }
+        }
+        #expect(exit == 0)
+        #expect(
+            bytes == Data("\u{1b}[32m".utf8) + Data(repeating: 120, count: 1024 * 1024)
+                + Data("\u{1b}[0m".utf8))
+    }
+
+    @Test func largeNativePasteWaitsForRealPTYInputBackpressure() async throws {
+        let script =
+            "import os, tty, time; tty.setraw(0); os.write(1, b'ready'); time.sleep(0.2); data = b'';\nwhile len(data) < 65536:\n data += os.read(0, 65536-len(data))\nwhile data:\n data = data[os.write(1, data):]\n"
+        let session = try OwnedTerminalSession(
+            launch: .init(
+                executable: "/usr/bin/python3", arguments: ["-c", script],
+                environment: ["PATH=/usr/bin:/bin", "TERM=xterm-256color"],
+                currentDirectory: "/private/tmp", allowsLocalFileLinks: true,
+                resetTerminalAfterInterrupt: false))
+        defer { session.stop() }
+        let client = try client(session)
+        defer { client.stop() }
+        var offset: UInt64 = 0
+        var ready = Data()
+        for _ in 0..<100 {
+            let output = try await client.read(after: offset)
+            ready.append(output.bytes); offset = output.nextOffset
+            if ready == Data("ready".utf8) { break }
+        }
+        #expect(ready == Data("ready".utf8))
+        let chunk = Data(repeating: 120, count: 16384)
+        let writer = Task { for _ in 0..<4 { try await client.input(chunk) } }
+        defer { writer.cancel() }
+        var bytes = Data()
+        var exit: Int32?
+        let deadline = ContinuousClock.now + .seconds(10)
+        while exit == nil, ContinuousClock.now < deadline {
+            let output = try await client.read(after: offset)
+            bytes.append(output.bytes); offset = output.nextOffset
+            exit = output.exitCode
+        }
+        try await writer.value
+        #expect(exit == 0 && bytes == Data(repeating: 120, count: 65536))
+    }
+
+    @Test func resizeCarriesNativePixelGeometryAndClampsOnlyPixelRange() async throws {
+        let script =
+            "import os, fcntl, termios, struct; os.write(1, b'ready'); os.read(0, 4096); size = struct.unpack('HHHH', fcntl.ioctl(0, termios.TIOCGWINSZ, bytes(8))); os.write(1, ','.join(str(n) for n in size).encode())"
+        let session = try OwnedTerminalSession(
+            launch: .init(
+                executable: "/usr/bin/python3", arguments: ["-c", script],
+                environment: ["PATH=/usr/bin:/bin", "TERM=xterm-256color"],
+                currentDirectory: "/private/tmp", allowsLocalFileLinks: true,
+                resetTerminalAfterInterrupt: false))
+        defer { session.stop() }
+        let client = try client(session)
+        defer { client.stop() }
+        var offset: UInt64 = 0
+        var bytes = Data()
+        for _ in 0..<100 {
+            let output = try await client.read(after: offset)
+            bytes.append(output.bytes); offset = output.nextOffset
+            if String(decoding: bytes, as: UTF8.self).contains("ready") { break }
+        }
+        #expect(String(decoding: bytes, as: UTF8.self).contains("ready"))
+        try await client.resize(columns: 120, rows: 40, pixelWidth: 1080, pixelHeight: UInt32.max)
+        try await client.input(Data("fixture\n".utf8))
+        for _ in 0..<100 {
+            let output = try await client.read(after: offset)
+            bytes.append(output.bytes); offset = output.nextOffset
+            if output.exitCode != nil { break }
+        }
+        #expect(String(decoding: bytes, as: UTF8.self).hasSuffix("40,120,1080,65535"))
+    }
+
     @Test func cancelledClientRejectsLateRepliesAndInvalidOutputCursors() async throws {
         let descriptor = OwnedTerminalDescriptor(
             handle: .init(owner: "herdr", id: UUID(), generation: UUID()),

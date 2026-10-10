@@ -30,6 +30,8 @@ struct OwnedTerminalRequest: Codable {
     var bytes: Data? = nil
     var columns: UInt16? = nil
     var rows: UInt16? = nil
+    var pixelWidth: UInt16? = nil
+    var pixelHeight: UInt16? = nil
 }
 
 @MainActor final class OwnedTerminalSession {
@@ -37,6 +39,7 @@ struct OwnedTerminalRequest: Codable {
     let descriptor: OwnedTerminalDescriptor
     private let terminal: OwnedTerminalPTY
     private var stopped = false
+    private var writing = false
 
     init(launch: OwnedTerminalLaunch) throws {
         guard Bundle.main.bundleURL.pathExtension != "appex" else {
@@ -78,14 +81,34 @@ struct OwnedTerminalRequest: Codable {
             guard Set(object.keys) == ["session", "bytes"], let bytes = request.bytes else {
                 throw ExtensionPeerError.invalidRequest
             }
-            try terminal.send(bytes)
+            guard !writing else { throw ExtensionPeerError.unavailable }
+            writing = true
+            defer { writing = false }
+            do {
+                try terminal.send(bytes)
+                let deadline = ContinuousClock.now + .seconds(5)
+                while terminal.hasPendingInput {
+                    try Task.checkCancellation()
+                    guard !stopped else { throw ExtensionPeerError.unavailable }
+                    guard ContinuousClock.now < deadline else {
+                        throw ExtensionPeerError.rejected("The terminal is not consuming input.")
+                    }
+                    try terminal.flushInput()
+                    if terminal.hasPendingInput { try await Task.sleep(for: .milliseconds(10)) }
+                }
+            } catch {
+                terminal.discardPendingInput()
+                throw error
+            }
         case "quinjet.terminal.resize":
-            guard Set(object.keys) == ["session", "columns", "rows"],
-                let columns = request.columns, let rows = request.rows
+            guard Set(object.keys) == ["session", "columns", "rows", "pixelWidth", "pixelHeight"],
+                let columns = request.columns, let rows = request.rows,
+                let width = request.pixelWidth, let height = request.pixelHeight
             else {
                 throw ExtensionPeerError.invalidRequest
             }
-            try terminal.resize(columns: columns, rows: rows)
+            try terminal.resize(
+                columns: columns, rows: rows, pixelWidth: width, pixelHeight: height)
         case "quinjet.terminal.close":
             guard Set(object.keys) == ["session"] else { throw ExtensionPeerError.invalidRequest }
             stop()
@@ -141,10 +164,16 @@ struct OwnedTerminalRequest: Codable {
         _ = try await perform("input", request: .init(session: descriptor.handle, bytes: bytes))
     }
 
-    func resize(columns: UInt16, rows: UInt16) async throws {
+    func resize(columns: UInt16, rows: UInt16, pixelWidth: UInt32 = 0, pixelHeight: UInt32 = 0)
+        async throws
+    {
         guard columns > 0, rows > 0 else { throw ExtensionPeerError.invalidRequest }
         _ = try await perform(
-            "resize", request: .init(session: descriptor.handle, columns: columns, rows: rows))
+            "resize",
+            request: .init(
+                session: descriptor.handle, columns: columns, rows: rows,
+                pixelWidth: UInt16(clamping: pixelWidth), pixelHeight: UInt16(clamping: pixelHeight)
+            ))
     }
 
     func close() async throws {
