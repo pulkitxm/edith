@@ -11,6 +11,7 @@ struct WorkerLifecycleFixture {
         "focusDim", "windowSweaters", "micMute", "keystrokeHighlight", "presenter",
         "colorPicker", "systemStats", "emoji", "music", "plugins", "studio",
         "keepAwake", "notchShelf",
+        "usage", "herdr", "machines", "attention", "companion", "codeStats",
     ]
     static let supportedIDs: Set<String> = [
         "focusDim", "windowSweaters", "micMute", "keystrokeHighlight", "presenter", "colorPicker",
@@ -153,7 +154,10 @@ struct WorkerLifecycleFixture {
         try Self.requireSupported(selection.extensionID)
         if Self.inertIDs.contains(selection.extensionID) {
             let role =
-                ["music", "plugins", "studio"].contains(selection.extensionID) ? "app" : "helper"
+                [
+                    "music", "plugins", "studio", "usage", "herdr", "machines", "attention",
+                    "companion", "codeStats",
+                ].contains(selection.extensionID) ? "app" : "helper"
             guard selection.roleDirectory.lastPathComponent == role + ".bundle" else {
                 throw WorkerLifecycleFixtureError.package
             }
