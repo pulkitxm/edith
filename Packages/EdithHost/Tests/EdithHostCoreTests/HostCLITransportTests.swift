@@ -1,4 +1,5 @@
 import Darwin
+import EdithExtensionSupport
 import Foundation
 import Testing
 @testable import EdithHostCore
@@ -24,6 +25,89 @@ import Testing
         }.value
         #expect(result == request.payload)
     }
+    @Test func maximumEnginePayloadAndStdinRoundTripOverAuthenticatedSocket() async throws {
+        let identity = try identity()
+        let server = HostCLIServer(identity: identity) { $0.payload }
+        try server.start()
+        defer { server.shutdown() }
+        let payload = Data(
+            ("\"" + String(repeating: "?", count: HostCLIRequest.maximumPayload - 2) + "\"").utf8)
+        let maximum = try HostCLIRequest(
+            action: .invoke, id: "synthetic", operation: "synthetic.echo", payload: payload)
+        #expect(
+            try await Task.detached { try HostCLITransport.invoke(maximum, identity: identity) }
+                .value == payload)
+        let input = Data(repeating: 0xFF, count: ExtensionCLIRequest.maximumInputBytes)
+        let context = try ExtensionCLIRequest(
+            arguments: ["ls", "--json"], standardInput: input,
+            workingDirectory: "/tmp/synthetic-caller", interactive: true)
+        guard
+            case .terminal(let request) = try HostCLICommand.parse(
+                ["calendar", "ls", "--json"], standardInput: input,
+                workingDirectory: context.workingDirectory, interactive: true)
+        else { Issue.record("Calendar context missing"); return }
+        let result = try await Task.detached {
+            try HostCLITransport.invoke(request, identity: identity)
+        }.value
+        #expect(try JSONDecoder().decode(ExtensionCLIRequest.self, from: result) == context)
+    }
+
+    @Test func malformedResponsesRejectInvalidPayloadAndNumericExitCodes() throws {
+        for object: [String: Any] in [
+            ["exitCode": 0, "payload": "invalid!"],
+            ["exitCode": true, "payload": "e30="],
+            ["exitCode": 0.5, "payload": "e30="],
+            ["exitCode": 4_294_967_296.0, "payload": "e30="],
+            ["exitCode": 0, "payload": "e30=", "error": "conflicting"],
+            ["exitCode": 1, "payload": "e30="],
+            ["exitCode": 0], ["exitCode": 0, "payload": "e30=", "unexpected": true],
+        ] {
+            #expect(throws: HostCLIError.self) {
+                try HostCLIResponse.decoded(JSONSerialization.data(withJSONObject: object))
+            }
+        }
+        let oversized = try JSONSerialization.data(withJSONObject: [
+            "exitCode": 0,
+            "payload": Data(count: HostCLIRequest.maximumPayload + 1).base64EncodedString(),
+        ])
+        #expect(throws: HostCLIError.self) { try HostCLIResponse.decoded(oversized) }
+    }
+
+    @Test func malformedAndTruncatedFramesCloseOnlyOwnedConnections() throws {
+        for length: UInt32 in [0, UInt32(HostCLITransport.maximumRequest + 1), 16] {
+            var descriptors = [Int32](repeating: -1, count: 2)
+            #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
+            let input = HostCLIConnection(descriptors[0])
+            let output = HostCLIConnection(descriptors[1])
+            defer { input.close(); output.close() }
+            var header = length.bigEndian
+            #expect(
+                withUnsafeBytes(of: &header) {
+                    Darwin.write(output.descriptor, $0.baseAddress!, $0.count)
+                } == 4)
+            output.cancel()
+            #expect(throws: HostCLIError.self) {
+                try input.read(limit: HostCLITransport.maximumRequest)
+            }
+            input.close()
+            #expect(fcntl(input.descriptor, F_GETFD) == -1 && errno == EBADF)
+        }
+    }
+
+    @Test func cancellingAReadDrainsAndClosesTheExactSocket() async throws {
+        var descriptors = [Int32](repeating: -1, count: 2)
+        #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
+        let input = HostCLIConnection(descriptors[0])
+        let output = HostCLIConnection(descriptors[1])
+        defer { input.close(); output.close() }
+        let reading = Task.detached { try input.read(limit: 16) }
+        input.cancel()
+        await #expect(throws: HostCLIError.self) { try await reading.value }
+        input.close()
+        #expect(fcntl(input.descriptor, F_GETFD) == -1 && errno == EBADF)
+        #expect(fcntl(output.descriptor, F_GETFD) != -1)
+    }
+
     @Test func timeoutCancelsWorkAndKeepsControlResponsive() async throws {
         let identity = try identity()
         var cancelled = false

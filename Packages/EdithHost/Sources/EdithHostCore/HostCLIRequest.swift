@@ -1,3 +1,4 @@
+import Darwin
 import EdithExtensionSupport
 import Foundation
 
@@ -36,7 +37,7 @@ public struct HostCLIRequest: Sendable, Equatable {
     public let payload: Data
     public let timeout: Double
     public let raw: Bool
-    public static let maximumPayload = 512 * 1024
+    public static let maximumPayload = ExtensionPeerEndpoint.maximumPayloadBytes
 
     public init(
         action: Action, id: String? = nil, operation: String? = nil,
@@ -52,19 +53,28 @@ public struct HostCLIRequest: Sendable, Equatable {
     }
 
     public func encoded() throws -> Data {
+        try validate()
         var object: [String: Any] = [
             "action": action.rawValue, "payload": payload.base64EncodedString(), "timeout": timeout,
         ]
         object["id"] = id
         object["operation"] = operation
-        return try JSONSerialization.data(withJSONObject: object)
+        let data = try JSONSerialization.data(
+            withJSONObject: object, options: .withoutEscapingSlashes)
+        guard data.count <= HostCLITransport.maximumRequest else {
+            throw HostCLIError.usage("The command request exceeds 12 MiB.")
+        }
+        return data
     }
 
     public static func decoded(_ data: Data) throws -> Self {
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+        guard data.count <= HostCLITransport.maximumRequest,
+            let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
             Set(object.keys).isSubset(of: ["action", "id", "operation", "payload", "timeout"]),
             let value = object["action"] as? String, let action = Action(rawValue: value),
-            let encoded = object["payload"] as? String, let payload = Data(base64Encoded: encoded),
+            let encoded = object["payload"] as? String,
+            encoded.utf8.count <= 4 * ((maximumPayload + 2) / 3),
+            let payload = Data(base64Encoded: encoded),
             let timeout = object["timeout"] as? NSNumber,
             CFGetTypeID(timeout) != CFBooleanGetTypeID(),
             object["id"] == nil || object["id"] is String,
@@ -127,15 +137,15 @@ public enum HostCLICommand: Equatable {
         Results are JSON. Use --json - to read an invoke payload from stdin.
         Edith must already be running. Invoke requires a compatible, enabled worker.
         Commands never open the app or enable a worker implicitly.
-        Timeout: 1 to 120 seconds, default 30. Payload limit: 512 KiB.
+        Timeout: 1 to 120 seconds, default 30. Payload limit: 8 MiB.
         """
 
     public static func parse(
         _ arguments: [String],
-        readInput: () throws -> Data = {
-            try FileHandle.standardInput.read(upToCount: HostCLIRequest.maximumPayload + 1)
-                ?? Data()
-        }
+        readInput: () throws -> Data = { try HostCLI.readInput() },
+        standardInput: Data = Data(),
+        workingDirectory: String = FileManager.default.currentDirectoryPath,
+        interactive: Bool = HostCLI.callerInteractive
     ) throws -> Self {
         if arguments.isEmpty || arguments == ["--help"] || arguments == ["help"]
             || arguments == ["extensions", "--help"] || arguments == ["invoke", "--help"]
@@ -145,12 +155,18 @@ public enum HostCLICommand: Equatable {
         if arguments == ["--version"] || arguments == ["version"] { return .version }
         if arguments.first == "calendar" {
             let request: ExtensionCLIRequest
-            do { request = try ExtensionCLIRequest(arguments: Array(arguments.dropFirst())) } catch
-            { throw HostCLIError.usage("The terminal arguments exceed their limits.") }
+            do {
+                request = try ExtensionCLIRequest(
+                    arguments: Array(arguments.dropFirst()),
+                    standardInput: standardInput, workingDirectory: workingDirectory,
+                    interactive: interactive)
+            } catch { throw HostCLIError.usage("The terminal request context exceeds its limits.") }
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .withoutEscapingSlashes
             return .terminal(
                 try HostCLIRequest(
                     action: .terminal, id: "calendar", operation: "calendar.cli",
-                    payload: JSONEncoder().encode(request)))
+                    payload: encoder.encode(request)))
         }
         if arguments.first == "extensions" {
             var args = Array(arguments.dropFirst())
