@@ -247,6 +247,7 @@ final class MusicAccounts: NSObject, WKNavigationDelegate, WKUIDelegate {
     private(set) var youtubeView: WKWebView?
     var youtubeError: String?
     private let defaults: UserDefaults
+    var presentationOwnedYoutube = false
     private var youtubeGeneration = 0
     private let pauseLocal: @MainActor () -> Void
 
@@ -375,8 +376,12 @@ final class MusicAccounts: NSObject, WKNavigationDelegate, WKUIDelegate {
         youtubeError = nil
     }
 
+    func presentationCookies() async -> [HTTPCookie] {
+        await youtubeStore.httpCookieStore.allCookies()
+    }
+
     func loadYoutube() {
-        guard youtubeView == nil, youtubeConnected else { return }
+        guard !presentationOwnedYoutube, youtubeView == nil, youtubeConnected else { return }
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = youtubeStore
         configuration.mediaTypesRequiringUserActionForPlayback = .all

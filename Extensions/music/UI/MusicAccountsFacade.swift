@@ -37,16 +37,23 @@ import EdithExtensionUI
         spotify.library.reset()
     }
     func select(_ provider: EmbeddedMusicProvider) {
+        if provider != .youtubeMusic { EmbeddedMusicBrowserSession.stopAll() }
         EmbeddedMusicRemote.shared.send(.selectProvider, target: provider.rawValue)
     }
     func connectYoutube(_ profile: EmbeddedChromeProfile) async {
         EmbeddedMusicRemote.shared.send(.connectYoutube, target: profile.id)
     }
-    func disconnectYoutube() async { EmbeddedMusicRemote.shared.send(.disconnectYoutube) }
+    func disconnectYoutube() async {
+        EmbeddedMusicBrowserSession.stopAll()
+        EmbeddedMusicRemote.shared.send(.disconnectYoutube)
+    }
     func reloadYoutube() { EmbeddedMusicRemote.shared.send(.reloadYoutube) }
     func activate() { EmbeddedMusicRemote.shared.start() }
     func apply(_ state: EmbeddedMusicUIState) {
         selected = EmbeddedMusicProvider(rawValue: state.selected) ?? .local
+        if !state.youtubeConnected || state.selected != "youtubeMusic" {
+            EmbeddedMusicBrowserSession.stopAll()
+        }
         youtubeConnected = state.youtubeConnected
         youtubeConnecting = state.youtubeConnecting; youtubeError = state.youtubeError
         spotify.state = state.spotify

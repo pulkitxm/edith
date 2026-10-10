@@ -1041,7 +1041,11 @@
         "Extensions/music/Views/VideoPreview.swift",
         "Extensions/music/Bridge/MusicVideoEnvelope.swift",
         "Extensions/music/UI/MusicVideoEnvelope.swift",
-        "Extensions/music/UI/MusicNativeVideo.swift"
+        "Extensions/music/UI/MusicNativeVideo.swift",
+        "Extensions/music/Bridge/MusicBrowserEnvelope.swift",
+        "Extensions/music/Services/MusicBrowserPresentation.swift",
+        "Extensions/music/UI/MusicBrowserEnvelope.swift",
+        "Extensions/music/UI/MusicNativeBrowser.swift"
       ]
     },
     "nativeCargo": {

@@ -71,6 +71,7 @@ import Observation
     func start() { rescan() }
 
     func stop() {
+        EmbeddedMusicBrowserSession.stopAll()
         EmbeddedMusicVideoSession.stopAll()
         generation &+= 1; lifecycle &+= 1; cursor = 0
         folderIntentRevision = 0
@@ -290,20 +291,6 @@ import Observation
             .init(id: $0.id, name: $0.name)
         }
     }
-    func youtubeFrame(width: Double, height: Double) async -> NSImage? {
-        guard let invoke else { return nil }
-        let token = lifecycle
-        guard
-            let payload = try? JSONEncoder().encode(
-                EmbeddedMusicUIFrameRequest(
-                    width: max(100, min(2560, width)), height: max(100, min(1440, height)))),
-            let data = try? await invoke("music.ui.youtube.frame", payload),
-            !Task.isCancelled, lifecycle == token,
-            let bytes = try? JSONDecoder().decode(Data.self, from: data), bytes.count <= 1_048_576
-        else { return nil }
-        return NSImage(data: bytes)
-    }
-
     func noteSearch(_ text: String) { query = text; rescan() }
     func subfolders(of path: String) -> [EmbeddedMusicFolder]? { folderCache[path] }
     func open(_ folder: EmbeddedMusicFolder) { navigate(to: folder.relativePath) }

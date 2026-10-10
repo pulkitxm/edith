@@ -15,6 +15,7 @@ final class MusicWorker {
     private var artwork: [URL: SurfaceThumbnail] = [:]
     private var stopped = false
     private let tasks = MusicTaskOwner()
+    var browserPresentation: MusicBrowserPresentation?
 
     init(
         player: LocalMusicPlayer? = nil, external: ExternalMusic? = nil,
@@ -23,6 +24,7 @@ final class MusicWorker {
         self.player = player ?? LocalMusicPlayer()
         self.external = external ?? ExternalMusic()
         self.accounts = accounts ?? .shared
+        self.accounts.presentationOwnedYoutube = true
         if startImmediately {
             self.accounts.activate()
             self.external.start()
@@ -64,32 +66,7 @@ final class MusicWorker {
             }
             result.append(value)
         }
-        if accounts.youtubeConnected, let view = accounts.youtubeView {
-            let metadata =
-                try? await view.evaluateJavaScript(
-                    """
-                    (() => { const video = document.querySelector('video');
-                        if (!video) return null;
-                        return { key: video.currentSrc || location.href,
-                            title: document.querySelector('ytmusic-player-bar .title')?.textContent || document.title,
-                            artist: document.querySelector('ytmusic-player-bar .byline')?.textContent || '',
-                            playing: !video.paused, elapsed: video.currentTime,
-                            duration: Number.isFinite(video.duration) ? video.duration : 0,
-                            volume: video.volume }; })()
-                    """) as? [String: Any]
-            if let metadata {
-                result.append(
-                    .init(
-                        sourceID: "youtubeMusic", sourceTitle: "YouTube Music",
-                        trackKey: metadata["key"] as? String ?? "",
-                        title: metadata["title"] as? String ?? "YouTube Music",
-                        artist: metadata["artist"] as? String ?? "",
-                        playing: metadata["playing"] as? Bool ?? false,
-                        elapsed: metadata["elapsed"] as? Double ?? 0,
-                        duration: metadata["duration"] as? Double ?? 0,
-                        volume: metadata["volume"] as? Double ?? 0.7))
-            }
-        }
+        if let metadata = browserPresentation?.metadata { result.append(metadata) }
         if let track = external.current {
             let playback = external.playback
             result.append(
@@ -150,26 +127,10 @@ final class MusicWorker {
                 ])
             default: throw ExtensionPeerError.invalidRequest
             }
-        } else if command.sourceID == "youtubeMusic", let view = accounts.youtubeView {
-            let script: String
-            switch command.action {
-            case "toggle": script = "video.paused ? video.play() : video.pause()"
-            case "next":
-                script = "document.querySelector('ytmusic-player-bar #next-button')?.click()"
-            case "previous":
-                script = "document.querySelector('ytmusic-player-bar #previous-button')?.click()"
-            case "backward": script = "video.currentTime = Math.max(0, video.currentTime - 15)"
-            case "forward":
-                script = "video.currentTime = Math.min(video.duration, video.currentTime + 15)"
-            case "seek":
-                script =
-                    "video.currentTime = video.duration * \(UnitInterval.clamp(command.value ?? 0))"
-            case "volume": script = "video.volume = \(UnitInterval.clamp(command.value ?? 0))"
-            default: throw ExtensionPeerError.invalidRequest
-            }
-            _ = try await view.evaluateJavaScript(
-                "(() => { const video = document.querySelector('video'); if (video) { \(script); } })()"
-            )
+        } else if command.sourceID == "youtubeMusic", let browserPresentation,
+            browserPresentation.metadata?.trackKey == command.trackKey
+        {
+            try browserPresentation.send(command.action, value: command.value)
         } else if let track = external.current,
             command.sourceID == "external." + track.app.rawValue,
             command.trackKey == track.title + "\0" + track.artist
@@ -193,6 +154,7 @@ final class MusicWorker {
     func stop() {
         guard !stopped else { return }
         stopped = true
+        browserPresentation?.stop(); browserPresentation = nil
         tasks.shutdown()
         session.invalidateAndCancel(); artwork.removeAll()
         player.shutdown(); external.stop(); accounts.shutdown()

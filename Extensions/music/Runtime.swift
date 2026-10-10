@@ -36,6 +36,7 @@ final class ExtensionRuntime: NSObject {
         backup?.beginShutdown()
         Task {
             await EmbeddedMusicVideoSession.drainAll()
+            await EmbeddedMusicBrowserSession.drainAll()
             await backup?.shutdown()
             await commands.shutdownAndWait()
             await worker?.shutdown()

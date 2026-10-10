@@ -7,6 +7,7 @@ import WebKit
 @MainActor final class MusicUIService {
     private let worker: MusicWorker
     private let version: String
+    private let browser: MusicBrowserPresentation
     private var downloads: MusicDownloadsService?
     private var libraryPanel: NSOpenPanel?
 
@@ -17,9 +18,17 @@ import WebKit
     private var videoActivity = Date()
     private var resumeAudio = false
     private var stopped = false
-    init(worker: MusicWorker, version: String = "") {
+    init(worker: MusicWorker, version: String = "", browser: MusicBrowserPresentation? = nil) {
         self.worker = worker
         self.version = version
+        self.browser =
+            browser
+            ?? MusicBrowserPresentation(
+                connected: {
+                    worker.accounts.youtubeConnected && worker.accounts.selected == .youtubeMusic
+                },
+                cookies: { await worker.accounts.presentationCookies() })
+        worker.browserPresentation = self.browser
         MusicHostNavigation.reset()
         worker.accounts.spotify.receiveUIEvent = { [weak self] event in
             guard let self, let data = try? JSONSerialization.data(withJSONObject: event),
@@ -182,30 +191,29 @@ import WebKit
             try Task.checkCancellation()
             return try JSONEncoder().encode(
                 profiles.map { MusicUIProfile(id: $0.id, name: $0.name) })
-        case "music.ui.youtube.frame":
-            let request = try JSONDecoder().decode(MusicUIFrameRequest.self, from: payload)
-            guard request.width.isFinite, request.height.isFinite,
-                (100...2560).contains(request.width), (100...1440).contains(request.height),
-                let view = worker.accounts.youtubeView
+        case "music.ui.youtube.open":
+            guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
+            return try JSONEncoder().encode(await browser.open())
+        case "music.ui.youtube.sync":
+            guard payload.count <= 20_480 else { throw ExtensionPeerError.invalidRequest }
+            return try JSONEncoder().encode(
+                browser.sync(JSONDecoder().decode(MusicBrowserReport.self, from: payload)))
+        case "music.ui.youtube.close":
+            guard payload.count <= 256 else { throw ExtensionPeerError.invalidRequest }
+            try browser.close(JSONDecoder().decode(MusicBrowserToken.self, from: payload))
+            return Data("{}".utf8)
+        case "music.ui.youtube.external":
+            guard payload.count <= 4096,
+                let request = try JSONSerialization.jsonObject(with: payload) as? [String: String],
+                Set(request.keys) == ["id", "revision", "url"],
+                let id = UUID(uuidString: request["id"] ?? ""),
+                let revision = UUID(uuidString: request["revision"] ?? ""),
+                let url = URL(string: request["url"] ?? ""), url.scheme == "https",
+                url.user == nil, url.password == nil, url.port == nil
             else { throw ExtensionPeerError.invalidRequest }
-            view.frame.size = NSSize(width: request.width, height: request.height)
-            let configuration = WKSnapshotConfiguration()
-            configuration.snapshotWidth = NSNumber(value: min(1280, request.width))
-            let image: NSImage = try await withCheckedThrowingContinuation { continuation in
-                view.takeSnapshot(with: configuration) { image, error in
-                    if let image {
-                        continuation.resume(returning: image)
-                    } else {
-                        continuation.resume(throwing: error ?? ExtensionPeerError.unavailable)
-                    }
-                }
-            }
-            try Task.checkCancellation()
-            let bytes =
-                image.tiffRepresentation.flatMap { NSBitmapImageRep(data: $0) }?.representation(
-                    using: .jpeg, properties: [.compressionFactor: 0.65]) ?? Data()
-            guard bytes.count <= 1_048_576 else { throw ExtensionPeerError.invalidRequest }
-            return try JSONEncoder().encode(bytes)
+            try browser.validate(.init(id: id, revision: revision))
+            guard NSWorkspace.shared.open(url) else { throw ExtensionPeerError.unavailable }
+            return Data("{}".utf8)
         case "music.ui.spotify":
             guard let command = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
                 let action = command["action"] as? String,
@@ -343,6 +351,7 @@ import WebKit
             guard let provider = MusicProvider(rawValue: action.target) else {
                 throw ExtensionPeerError.invalidRequest
             }
+            browser.revoke()
             worker.accounts.select(provider)
         case .connectSpotify: worker.accounts.spotify.connect()
         case .disconnectSpotify: await worker.accounts.spotify.disconnect()
@@ -352,10 +361,11 @@ import WebKit
             guard let profile = profiles.first(where: { $0.id == action.target }) else {
                 throw ExtensionPeerError.invalidRequest
             }
+            browser.revoke()
             await worker.accounts.connectYoutube(profile)
-        case .disconnectYoutube: await worker.accounts.disconnectYoutube()
+        case .disconnectYoutube: browser.revoke(); await worker.accounts.disconnectYoutube()
         case .reloadYoutube:
-            worker.accounts.youtubeError = nil; worker.accounts.youtubeView?.reload()
+            worker.accounts.youtubeError = nil; try browser.send("reload")
         case .openChrome:
             guard
                 let chrome = NSWorkspace.shared.urlForApplication(
@@ -416,6 +426,7 @@ import WebKit
         guard !stopped else { return }
         stopped = true
         MusicHostNavigation.reset()
+        browser.stop()
         libraryPanel?.cancel(nil); libraryPanel = nil
         downloads?.stop(); downloads = nil; resumeAudio = false; closeVideo()
         worker.accounts.spotify.receiveUIEvent = nil

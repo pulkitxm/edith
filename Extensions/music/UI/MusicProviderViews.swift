@@ -268,25 +268,6 @@ struct EmbeddedMusicProviderContent: View {
     }
 }
 
-struct EmbeddedMusicYoutubeWebView: View {
-    @State private var frame: NSImage?
-    var body: some View {
-        GeometryReader { geometry in
-            Group {
-                if let frame {
-                    Image(nsImage: frame).resizable().scaledToFit()
-                } else {
-                    LoadingIndicator()
-                }
-            }
-            .pageRefresh(interval: { .seconds(1) }) {
-                frame = await EmbeddedMusicRemote.shared.youtubeFrame(
-                    width: geometry.size.width, height: geometry.size.height)
-            }
-        }
-    }
-}
-
 private struct EmbeddedMusicSourceEmblem: View {
     let provider: EmbeddedMusicProvider
     let size: Double
