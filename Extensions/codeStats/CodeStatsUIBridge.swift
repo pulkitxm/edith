@@ -2,8 +2,61 @@ import AppKit
 import EdithExtensionUI
 import EdithExtensionSupport
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 
 struct CodeStatsPNGDelivery: Codable { let data: Data; let name: String; let save: Bool }
+
+@MainActor struct CodeStatsExportDelivery {
+    static let maximumBytes = 4 * 1024 * 1024
+    let chooseSaveURL: (String) async throws -> URL?
+    let copy: (Data) throws -> Void
+    var write: (Data, URL) throws -> Void = ExportDelivery.write
+
+    static var live: Self {
+        Self(
+            chooseSaveURL: { name in
+                guard CodeStatsExecutionEnvironment.fixtureHome == nil else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                return await ExportDelivery.chooseSaveURL(suggestedName: name, in: nil)
+            },
+            copy: { data in
+                guard CodeStatsExecutionEnvironment.fixtureHome == nil else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                try ExportDelivery.copyPNG(data)
+            })
+    }
+
+    func deliver(_ request: CodeStatsPNGDelivery) async throws -> String {
+        try Task.checkCancellation()
+        guard request.name.hasSuffix(".png"), request.name.utf8.count <= 128,
+            !request.name.contains("/"), !request.name.contains("\\"),
+            !request.name.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
+            request.data.count <= Self.maximumBytes,
+            request.data.prefix(8) == Data([137, 80, 78, 71, 13, 10, 26, 10]),
+            let source = CGImageSourceCreateWithData(request.data as CFData, nil),
+            CGImageSourceGetType(source) as String? == UTType.png.identifier,
+            CGImageSourceGetCount(source) == 1,
+            let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+            let width = properties[kCGImagePropertyPixelWidth] as? Int,
+            let height = properties[kCGImagePropertyPixelHeight] as? Int,
+            (1...4096).contains(width), (1...4096).contains(height),
+            CGImageSourceCreateImageAtIndex(source, 0, nil) != nil
+        else { throw ExtensionPeerError.invalidRequest }
+        if request.save {
+            let url = try await chooseSaveURL(request.name)
+            try Task.checkCancellation()
+            guard let url else { return "Save cancelled" }
+            try write(request.data, url)
+            return "Saved to " + url.lastPathComponent
+        }
+        try Task.checkCancellation()
+        try copy(request.data)
+        return "Image copied"
+    }
+}
 
 struct CodeStatsUIPreferences: Codable {
     let identity: CodeStatsIdentity
@@ -68,10 +121,13 @@ struct CodeStatsUIBridge: Sendable {
                 as? Bool ?? true)
         _ = try await invoke("codeStats.ui.settings", JSONEncoder().encode(request))
     }
-    @MainActor static func execute(_ command: String, payload: Data, workflow: CodeStatsWorkflow)
-        async throws -> Data
-    {
-        guard payload.count <= 4_194_304 else { throw ExtensionPeerError.invalidRequest }
+    @MainActor static func execute(
+        _ command: String, payload: Data, workflow: CodeStatsWorkflow,
+        exportDelivery: CodeStatsExportDelivery? = nil
+    ) async throws -> Data {
+        guard payload.count <= ExtensionEngineWire.maximumPayloadBytes else {
+            throw ExtensionPeerError.invalidRequest
+        }
         switch command {
         case "codeStats.ui.status", "codeStats.ui.facts", "codeStats.ui.start",
             "codeStats.ui.cancel", "codeStats.ui.profile", "codeStats.ui.authors":
@@ -106,25 +162,8 @@ struct CodeStatsUIBridge: Sendable {
             await workflow.settingsChanged()
             return try JSONEncoder().encode(value)
         case "codeStats.ui.export":
-            guard CodeStatsExecutionEnvironment.fixtureHome == nil else {
-                throw ExtensionPeerError.invalidRequest
-            }
             let request = try JSONDecoder().decode(CodeStatsPNGDelivery.self, from: payload)
-            guard request.name.hasSuffix(".png"), request.name.utf8.count <= 128,
-                !request.name.contains("/"), !request.name.contains("\\"),
-                request.data.count <= 3_000_000,
-                request.data.prefix(8) == Data([137, 80, 78, 71, 13, 10, 26, 10])
-            else { throw ExtensionPeerError.invalidRequest }
-            if request.save {
-                guard
-                    let url = await ExportDelivery.chooseSaveURL(
-                        suggestedName: request.name, in: nil)
-                else { return try JSONEncoder().encode("Save cancelled") }
-                try ExportDelivery.write(request.data, to: url)
-                return try JSONEncoder().encode("Saved to " + url.lastPathComponent)
-            }
-            try ExportDelivery.copyPNG(request.data)
-            return try JSONEncoder().encode("Image copied")
+            return try JSONEncoder().encode(try await (exportDelivery ?? .live).deliver(request))
         case "codeStats.ui.settings":
             let request = try JSONDecoder().decode(CodeStatsUIPreferences.self, from: payload)
             switch request.schedule {

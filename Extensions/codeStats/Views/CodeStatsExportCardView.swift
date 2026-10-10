@@ -10,6 +10,13 @@ public struct CodeStatsExportDeck: ExportCardDeck {
         snapshot: CodeStatsExportSnapshot,
         delivery: (@MainActor (Data, String, Bool) async throws -> String)? = nil
     ) { self.snapshot = snapshot; self.delivery = delivery }
+    @MainActor init(snapshot: CodeStatsExportSnapshot, remote: CodeStatsUIBridge?) {
+        self.init(
+            snapshot: snapshot,
+            delivery: remote.map { bridge in
+                { try await bridge.deliver($0, name: $1, save: $2) }
+            })
+    }
     public var cards: [CodeStatsExportCard] { CodeStatsExportCard.allCases }
     public func title(for card: CodeStatsExportCard) -> String { card.title }
     public func filename(for card: CodeStatsExportCard) -> String { card.filenameStem + ".png" }
