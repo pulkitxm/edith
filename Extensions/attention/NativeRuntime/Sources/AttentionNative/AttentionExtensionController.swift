@@ -11,6 +11,10 @@ public final class AttentionExtensionController: NSObject {
     private var database: AttentionDatabase?
     private var uiClient: AttentionUIClient?
     private var uiModel: AttentionPageModel?
+    private(set) var trackingSettings: AttentionTrackingSettingsModel?
+    private var uiPresentationID: UUID?
+    private var uiLocation: String?
+    private var uiSection: String?
     private var uiConfigured = false
     private var service: AttentionBackgroundService?
     private var favicon: FaviconService?
@@ -115,19 +119,13 @@ public final class AttentionExtensionController: NSObject {
             else {
                 return ["ok": false] as NSDictionary
             }
-            stopUI()
-            let client: AttentionUIClient
-            if let engine = configuration.engineClient {
-                client = AttentionUIClient(engine: engine)
-            } else {
-                client = AttentionUIClient(
-                    send: { _, _ in throw ExtensionPeerError.unavailable }, available: false)
-            }
-            uiClient = client
-            uiModel = AttentionPageModel(
-                repository: .init(root: URL(fileURLWithPath: "/unused")), uiClient: client)
-            uiConfigured = true
+            guard !configuration.uiOnly, let engine = configuration.engineClient,
+                configurePresentation(input, engine: engine)
+            else { return ["ok": false] as NSDictionary }
         case "stopUI":
+            guard input["presentationID"] as? String == uiPresentationID?.uuidString else {
+                return ["ok": false] as NSDictionary
+            }
             stopUI()
         case "start":
             guard !uiConfigured, Bundle.main.bundleURL.pathExtension != "appex" else {
@@ -167,7 +165,20 @@ public final class AttentionExtensionController: NSObject {
                 startup = Task { await service.start() }
             } catch { return ["ok": false, "message": error.localizedDescription] as NSDictionary }
         case "view":
-            guard !stopped, let model = uiModel, let uiClient, !uiClient.stopped else {
+            guard !stopped, let uiClient, !uiClient.stopped,
+                input["presentationID"] as? String == uiPresentationID?.uuidString,
+                input["location"] as? String == uiLocation,
+                input["section"] as? String == uiSection
+            else {
+                return ["ok": false] as NSDictionary
+            }
+            if let trackingSettings {
+                return NSHostingController(
+                    rootView: ExtensionPageHost {
+                        AttentionTrackingSettings(model: trackingSettings)
+                    })
+            }
+            guard let model = uiModel else {
                 return ["ok": false] as NSDictionary
             }
             if input["location"] as? String == "home" {
@@ -200,7 +211,35 @@ public final class AttentionExtensionController: NSObject {
         }
         return ["ok": true] as NSDictionary
     }
+    func configurePresentation(_ input: NSDictionary, engine: ExtensionEngineClient) -> Bool {
+        guard !stopped, input["extensionID"] as? String == "attention",
+            input["uiOnly"] as? Bool == false,
+            input["presentationID"] as? String == engine.presentationID.uuidString,
+            let location = input["location"] as? String,
+            let section = input["section"] as? String,
+            (location == "settings" && section == "extension")
+                || (location == "main" && section == "attention")
+                || (location == "home" && section == "focus")
+        else { return false }
+        stopUI()
+        let client = AttentionUIClient(engine: engine)
+        uiClient = client
+        uiPresentationID = engine.presentationID
+        uiLocation = location
+        uiSection = section
+        if location == "settings" {
+            trackingSettings = AttentionTrackingSettingsModel(client: client)
+        } else {
+            uiModel = AttentionPageModel(
+                repository: .init(root: URL(fileURLWithPath: "/unused")), uiClient: client)
+        }
+        uiConfigured = true
+        return true
+    }
+
     private func stopUI() {
+        trackingSettings?.stop(); trackingSettings = nil
+        uiPresentationID = nil; uiLocation = nil; uiSection = nil
         uiClient?.stop(); uiClient = nil
         uiModel?.cancelLoading()
         let model = uiModel

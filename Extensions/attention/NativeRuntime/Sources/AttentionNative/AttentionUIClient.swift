@@ -46,7 +46,8 @@ struct AttentionUIBreakdownRequest: Codable, Sendable {
         guard
             [
                 "attention.ui.summary", "attention.ui.status", "attention.ui.focus.get",
-                "attention.ui.focus.start", "attention.ui.focus.stop", "attention.settings.set",
+                "attention.ui.focus.start", "attention.ui.focus.stop", "attention.settings.get",
+                "attention.settings.set",
                 "attention.ui.extension.install", "attention.ui.extension.open",
                 "attention.ui.token.copy",
                 "attention.ui.accessibility", "attention.ui.breakdown.copy",

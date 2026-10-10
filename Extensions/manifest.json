@@ -661,7 +661,8 @@
         "Extensions/appMaintenance/CLI/MaintenancePolicyCommands.swift",
         "Extensions/appMaintenance/CLI/MaintenanceCLIExecution.swift",
         "Extensions/appMaintenance/CLI/MaintenanceTerminalCommands.swift",
-        "Extensions/appMaintenance/CLI/MaintenanceCLICatalog.swift"
+        "Extensions/appMaintenance/CLI/MaintenanceCLICatalog.swift",
+        "Extensions/appMaintenance/AppMaintenanceSettings.swift"
       ]
     },
     "inputs": [
@@ -2060,7 +2061,8 @@
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionOverview.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionPage.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionSettingsView.swift",
-      "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionTimelineView.swift"
+      "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionTimelineView.swift",
+      "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionTrackingSettings.swift"
     ],
     "sameExecutableWorker": true,
     "nativeSupportProduct": "EdithExtensionCommands"
