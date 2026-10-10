@@ -17,13 +17,16 @@ final class CLIFixtureRuntime: NSObject {
                     "version": 1, "owner": "calendar", "acceptsInput": true,
                     "commands": [
                         "list", "ls", "synthetic-error", "context", "wait", "stream", "stream-wait",
+                        "stream-input", "stream-terminal", "stream-mcp",
                     ].map { command in
                         var value: [String: Any] = [
                             "route": ["calendar", command], "operation": "calendar.cli",
                             "summary": "Exercise the synthetic signed CLI protocol.",
                             "destructive": false, "timeout": 30,
-                            "readsInput": command == "context",
-                            "jsonOutput": command != "stream" && command != "stream-wait",
+                            "readsInput": command == "context"
+                                || ["stream-input", "stream-terminal", "stream-mcp"].contains(
+                                    command),
+                            "jsonOutput": !command.hasPrefix("stream"),
                         ]
                         if command.hasPrefix("stream") {
                             value["streamOperation"] = "calendar.cli.stream"
@@ -37,7 +40,8 @@ final class CLIFixtureRuntime: NSObject {
                 return try JSONEncoder().encode(
                     await ExtensionCLIExecution.run(CalendarFixtureRoot.self, request: request))
             case "calendar.cli.stream.start", "calendar.cli.stream.read",
-                "calendar.cli.stream.cancel", "calendar.cli.stream.end":
+                "calendar.cli.stream.cancel", "calendar.cli.stream.end",
+                "calendar.cli.stream.write", "calendar.cli.stream.resize":
                 return try self.streams.invoke(
                     CalendarFixtureRoot.self, operation: operation, prefix: "calendar.cli.stream",
                     payload: payload)
@@ -113,6 +117,7 @@ struct CalendarFixtureRoot: AsyncParsableCommand {
         commandName: "calendar",
         subcommands: [
             List.self, Failure.self, Context.self, Wait.self, Stream.self, StreamWait.self,
+            StreamInput.self, StreamTerminal.self, StreamMCP.self,
         ],
         defaultSubcommand: List.self)
 
@@ -164,6 +169,78 @@ struct CalendarFixtureRoot: AsyncParsableCommand {
             CLIOut.note("synthetic diagnostic")
             CLIOut.out("last")
             throw ExitCode(7)
+        }
+    }
+
+    struct StreamInput: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(commandName: "stream-input")
+        func run() async throws {
+            guard let input = ExtensionCLIContext.input else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            while let event = try await input.read() {
+                switch event {
+                case .bytes(let data): try CLIOut.raw(data)
+                case .resize(let columns, let rows): CLIOut.note("resize=\(columns)x\(rows)")
+                }
+            }
+            CLIOut.note("eof")
+        }
+    }
+
+    struct StreamTerminal: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(commandName: "stream-terminal")
+        @Option var count: Int = 0
+        func run() async throws {
+            guard let input = ExtensionCLIContext.input else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            let request = try await CLIFixtureContext.request()
+            CLIOut.note("interactive=\(request.interactive)")
+            var received = 0
+            while let event = try await input.read() {
+                switch event {
+                case .bytes(let data):
+                    try CLIOut.raw(data); received += data.count
+                    if count > 0, received >= count { return }
+                case .resize(let columns, let rows): CLIOut.note("resize=\(columns)x\(rows)")
+                }
+            }
+        }
+    }
+
+    struct StreamMCP: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(commandName: "stream-mcp")
+        func run() async throws {
+            guard let input = ExtensionCLIContext.input else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            var buffer = Data()
+            while let event = try await input.read() {
+                guard case .bytes(let bytes) = event else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                buffer.append(bytes)
+                while let newline = buffer.firstIndex(of: 10) {
+                    let frame = Data(buffer.prefix(upTo: newline))
+                    buffer.removeSubrange(...newline)
+                    guard frame.count <= 512 * 1024,
+                        let object = try JSONSerialization.jsonObject(with: frame)
+                            as? [String: Any],
+                        object["jsonrpc"] as? String == "2.0", let id = object["id"],
+                        let method = object["method"] as? String
+                    else { throw ExtensionPeerError.invalidRequest }
+                    let response: [String: Any] = [
+                        "jsonrpc": "2.0", "id": id,
+                        "result": ["method": method, "params": object["params"] ?? [:]],
+                    ]
+                    var output = try JSONSerialization.data(
+                        withJSONObject: response, options: [.sortedKeys])
+                    output.append(10); try CLIOut.raw(output)
+                }
+                guard buffer.count <= 512 * 1024 else { throw ExtensionPeerError.invalidRequest }
+            }
+            guard buffer.isEmpty else { throw ExtensionPeerError.invalidRequest }
         }
     }
 

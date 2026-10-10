@@ -10,6 +10,7 @@ import {
   readFile,
   realpath,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -97,6 +98,42 @@ async function command(args, expected = 0, input, options = {}) {
     options.plain
     ? result.stdout
     : JSON.parse(result.stdout);
+}
+async function liveCLI(args) {
+  const child = spawn(ed, args, {
+    stdio: ["pipe", "pipe", "pipe"],
+    env: environment,
+  });
+  clients.add(child);
+  const stdout = [],
+    stderr = [];
+  child.stdout.on("data", (data) => stdout.push(data));
+  child.stderr.on("data", (data) => stderr.push(data));
+  child.stdin.on("error", (error) => {
+    if (error.code !== "EPIPE") throw error;
+  });
+  const closed = new Promise((resolveClosed, reject) => {
+    child.on("error", reject);
+    child.on("close", (code) => {
+      clients.delete(child);
+      resolveClosed(code);
+    });
+  });
+  return {
+    child,
+    stdout: () => Buffer.concat(stdout),
+    stderr: () => Buffer.concat(stderr),
+    finish: async (input) => {
+      child.stdin.end(input);
+      const code = await Promise.race([
+        closed,
+        sleep(10000).then(() => {
+          throw new Error("Live CLI EOF did not finish");
+        }),
+      ]);
+      assert.equal(code, 0, Buffer.concat(stderr).toString());
+    },
+  };
 }
 async function until(predicate) {
   const deadline = Date.now() + 10000;
@@ -289,6 +326,24 @@ try {
     `${" ".repeat(512 * 1024 + 1)}\n`,
   );
   assert.equal(boundedMCP.stderr, "error: MCP input exceeds 512 KiB.\n");
+  const sdkSource = resolve(
+    process.env.EDITH_CLI_FIXTURE_SDK_ROOT ?? process.cwd(),
+  );
+  assert(
+    existsSync(
+      join(
+        sdkSource,
+        "Packages/ExtensionSupport/Sources/EdithExtensionCommands/ExtensionCLIInput.swift",
+      ),
+    ),
+    "Verified shared CLI live-input SDK is required for signed proof",
+  );
+  const sdkFixture = resolve("local/host-cli-sdk-fixture");
+  await mkdir(sdkFixture, { recursive: true });
+  await rm(join(sdkFixture, "Packages"), { force: true });
+  await rm(join(sdkFixture, "scripts"), { force: true });
+  await symlink(join(sdkSource, "Packages"), join(sdkFixture, "Packages"));
+  await symlink(resolve("scripts"), join(sdkFixture, "scripts"));
   const support = new Map();
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   await writeFile(
@@ -305,7 +360,7 @@ try {
       support.set(
         id,
         buildExtensionSupport(
-          process.cwd(),
+          sdkFixture,
           ["EdithExtensionArchive", "EdithExtensionCommands"],
           `${id}_${role}_CLIFixture`,
         ),
@@ -719,12 +774,101 @@ try {
   assert.equal(streamed.stdout, "first\0🌤\nlast\n");
   assert.equal(streamed.stderr, "synthetic diagnostic\n");
   const cliMarker = join(identityRoot, "Data/calendar/cli-wait.ready");
+  const finiteInputTool = await mcp.call("tools/call", {
+    name: "edith_calendar_stream_input",
+    arguments: { input: "finite MCP stdin\0🌤" },
+  });
+  assert.equal(finiteInputTool.result.isError, false);
+  assert.equal(finiteInputTool.result.content[0].text, "finite MCP stdin\0🌤");
+  const liveA = await liveCLI(["calendar", "stream-input"]);
+  const liveB = await liveCLI(["calendar", "stream-input"]);
+  const initialA = Buffer.from([0, 255, 13, 10, 3, 4]);
+  const initialB = Buffer.from("synthetic second stream\0🌤");
+  liveA.child.stdin.write(initialA);
+  liveB.child.stdin.write(initialB);
+  await until(
+    () =>
+      liveA.stdout().length === initialA.length &&
+      liveB.stdout().length === initialB.length,
+  );
+  assert.deepEqual(liveA.stdout(), initialA);
+  assert.deepEqual(liveB.stdout(), initialB);
+  const tailA = Buffer.alloc(32769, 255);
+  await Promise.all([liveA.finish(tailA), liveB.finish(Buffer.from([255, 0]))]);
+  assert.deepEqual(liveA.stdout(), Buffer.concat([initialA, tailA]));
+  assert.deepEqual(
+    liveB.stdout(),
+    Buffer.concat([initialB, Buffer.from([255, 0])]),
+  );
+  assert.equal(liveA.stderr().toString(), "eof\n");
+  assert.equal(liveB.stderr().toString(), "eof\n");
+  const duplex = await liveCLI(["calendar", "stream-mcp"]);
+  const firstFrame = {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "synthetic/first",
+    params: { text: "binary\0🌤" },
+  };
+  const frame = Buffer.from(`${JSON.stringify(firstFrame)}\n`);
+  duplex.child.stdin.write(frame.subarray(0, 9));
+  await sleep(100);
+  assert.equal(duplex.stdout().length, 0);
+  duplex.child.stdin.write(frame.subarray(9));
+  await until(() => duplex.stdout().includes(10));
+  assert.deepEqual(JSON.parse(duplex.stdout().toString()), {
+    jsonrpc: "2.0",
+    id: 1,
+    result: { method: firstFrame.method, params: firstFrame.params },
+  });
+  const secondFrame = {
+    jsonrpc: "2.0",
+    id: 2,
+    method: "synthetic/second",
+    params: { count: 2 },
+  };
+  await duplex.finish(Buffer.from(`${JSON.stringify(secondFrame)}\n`));
+  const replies = duplex
+    .stdout()
+    .toString()
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  assert.equal(replies.length, 2);
+  assert.deepEqual(replies[1], {
+    jsonrpc: "2.0",
+    id: 2,
+    result: { method: secondFrame.method, params: secondFrame.params },
+  });
+  assert.equal(duplex.stderr().length, 0);
+  const ptyProof = JSON.parse(
+    run(
+      "python3",
+      ["Packages/EdithHost/Tests/CLIFixture/test-caller-pty.py", ed],
+      { env: environment, timeout: 40000, encoding: "utf8" },
+    ),
+  );
+  assert.deepEqual(
+    ptyProof.ownedCallerPTY.map((value) => value.exitCode),
+    [0, 130],
+  );
+  assert(
+    ptyProof.ownedCallerPTY.every(
+      (value) => value.exactBytes && value.resize && value.termiosRestored,
+    ),
+  );
   const streamCancelled = spawn(ed, ["calendar", "stream-wait"], {
-    stdio: "ignore",
+    stdio: ["ignore", "pipe", "pipe"],
     env: environment,
   });
   clients.add(streamCancelled);
-  await until(() => existsSync(cliMarker));
+  let streamCancellationErrors = "";
+  streamCancelled.stderr.on("data", (data) => {
+    streamCancellationErrors += data;
+  });
+  await until(() => {
+    assert.equal(streamCancelled.exitCode, null, streamCancellationErrors);
+    return existsSync(cliMarker);
+  });
   streamCancelled.kill("SIGTERM");
   await until(
     () => streamCancelled.exitCode !== null && !existsSync(cliMarker),
@@ -864,7 +1008,7 @@ try {
   await until(() => !existsSync(ready.socket));
   await command(["extensions", "ls"], 4);
   process.stdout.write(
-    `${JSON.stringify({ fixtureScope: "synthetic transport and core behavior, not feature parity", shippingEntrypoint: true, reservedCoreServer: true, liveProviderCatalog: true, dynamicMCP: true, callerStdinAndDirectory: true, sdkOutputStream: true, boundedMCPInput: true, idleMCPCancellation: true, shutdownCommandExitCode: stoppingCommand.exitCode, originalPlainVersionAndErrors: true, publicLauncher: true, sameSignedExecutable: true, install: "1.0.0", update: "1.1.0", invokeJSONAndStdin: true, scopedArchiveDecoder: true, abi2Carrier: true, syntheticProviderRouting: true, exactProviderExitCodes: true, duplicateRuntimeClasses: false, timeoutAndDisconnectCancellation: true, responsiveHost: true, forgedCallerRejected: true, boundedRequests: true, offlineError: true, disabledWorkers: 0, removedPayload: true, socketCleanup: true })}\n`,
+    `${JSON.stringify({ fixtureScope: "synthetic transport and core behavior, not feature parity", shippingEntrypoint: true, reservedCoreServer: true, liveProviderCatalog: true, dynamicMCP: true, callerStdinAndDirectory: true, sdkOutputStream: true, liveStdinEOF: true, concurrentInputStreams: true, bidirectionalSyntheticFraming: true, callerPTYResizeAndRestoration: true, boundedMCPInput: true, idleMCPCancellation: true, shutdownCommandExitCode: stoppingCommand.exitCode, originalPlainVersionAndErrors: true, publicLauncher: true, sameSignedExecutable: true, install: "1.0.0", update: "1.1.0", invokeJSONAndStdin: true, scopedArchiveDecoder: true, abi2Carrier: true, syntheticProviderRouting: true, exactProviderExitCodes: true, duplicateRuntimeClasses: false, timeoutAndDisconnectCancellation: true, responsiveHost: true, forgedCallerRejected: true, boundedRequests: true, offlineError: true, disabledWorkers: 0, removedPayload: true, socketCleanup: true })}\n`,
   );
 } finally {
   for (const client of clients) {

@@ -145,6 +145,7 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
             guard (1...12).contains(command.route.count),
                 command.route.first.map(prefixes.contains) == true,
                 command.route.allSatisfy(Self.word),
+                command.readsInput != true || acceptsInput == true,
                 !command.summary.isEmpty, command.summary.utf8.count <= 4096,
                 !command.summary.utf8.contains(0), command.timeout.isFinite,
                 (1...120).contains(command.timeout)
@@ -370,13 +371,17 @@ public struct HostCLIProviderRegistry: Sendable {
             let stream = try await HostCLIStream.start(
                 owner: provider.state.id, operation: operation, request: context,
                 maximumDuration: command.streamDeadline ?? 1800, invoke: invoke)
+            let streamInput =
+                liveInput
+                ?? (command.readsInput == true
+                    ? HostCLILiveInput(interactive: false, receive: { nil }, cancel: {}) : nil)
             if let streamWrite {
-                let code = try await stream.consume(input: liveInput, write: streamWrite)
+                let code = try await stream.consume(input: streamInput, write: streamWrite)
                 return try ExtensionCLIReply(stdout: "", stderr: "", exitCode: code)
             }
             let capture = HostCLIStreamCapture()
             let code = try await stream.consume(
-                input: liveInput, write: { try await capture.append($0, stderr: $1) })
+                input: streamInput, write: { try await capture.append($0, stderr: $1) })
             return try await capture.reply(code: code)
         }
         guard liveInput == nil else {

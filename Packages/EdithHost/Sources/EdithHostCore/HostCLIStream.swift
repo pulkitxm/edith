@@ -95,6 +95,7 @@ public actor HostCLIStream {
     private var sendingInput = false
     private var inputEnded = false
     private var ended = false
+    private var cleanup: Task<Void, Never>?
     private var reading = false
     private let deadline: ContinuousClock.Instant
 
@@ -282,6 +283,7 @@ public actor HostCLIStream {
     }
 
     public func end(cancel: Bool = false) async {
+        if let cleanup { await cleanup.value; return }
         guard !ended else { return }
         ended = true
         let invoke = invoke, handle = handle, operation = operation
@@ -296,6 +298,7 @@ public actor HostCLIStream {
                 _ = try? await invoke(request)
             }
         }
+        self.cleanup = cleanup
         await cleanup.value
     }
 }
