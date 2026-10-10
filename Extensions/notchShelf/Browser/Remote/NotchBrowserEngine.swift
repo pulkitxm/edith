@@ -133,7 +133,7 @@ import Foundation
             else { throw ExtensionPeerError.invalidRequest }
             if let current = leases[request.presentationID] {
                 guard current.id == lease.id else { throw ExtensionPeerError.invalidRequest }
-                release(owner: request.presentationID)
+                release(owner: request.presentationID, commands: false)
             }
             return Data("{}".utf8)
         case .downloadStart:

@@ -25,11 +25,17 @@ import Foundation
         guard !stopped, leases[request.presentationID] != nil || leases.count < 8 else {
             throw ExtensionPeerError.unavailable
         }
+        let current = leases[request.presentationID]
+        if let current, let supplied = request.commandLease, supplied != current {
+            throw ExtensionPeerError.invalidRequest
+        }
+        let renewing = current != nil && request.commandLease == current
         let lease = NotchBrowserCommandLease(
-            id: leases[request.presentationID]?.id ?? UUID(),
+            id: renewing ? current!.id : UUID(),
             ownershipID: request.identity.ownershipID, presentationID: request.presentationID,
             displayID: request.displayID, expiresAt: now().addingTimeInterval(120))
         guard admitted(lease) else { throw ExtensionPeerError.unavailable }
+        if !renewing { release(request.presentationID) }
         leases[request.presentationID] = lease
         expiries.removeValue(forKey: request.presentationID)?.cancel()
         expiries[request.presentationID] = Task { [weak self] in

@@ -13,6 +13,7 @@ struct NotchBrowserActionError: LocalizedError, Equatable {
 
 extension NotchBrowserStore {
     func perform(_ request: NotchBrowserRequest) throws -> NotchBrowserSnapshot {
+        try request.validate()
         var link: String?
         switch request {
         case .status:
@@ -20,7 +21,9 @@ extension NotchBrowserStore {
         case .navigate(let text, let tab):
             try requireAttached()
             let target = try resolvedTab(tab)
-            guard let url = BrowserAddress.url(for: text, engine: searchEngine) else {
+            guard let url = BrowserAddress.url(for: text, engine: searchEngine),
+                Self.permittedURL(url, remote: true)
+            else {
                 throw NotchBrowserActionError("That address is empty.")
             }
             target.webView.load(URLRequest(url: url))
@@ -63,7 +66,9 @@ extension NotchBrowserStore {
         case .newTab(let text):
             try requireAttached()
             let url = try text.map { value -> URL in
-                guard let url = BrowserAddress.url(for: value, engine: searchEngine) else {
+                guard let url = BrowserAddress.url(for: value, engine: searchEngine),
+                    Self.permittedURL(url, remote: true)
+                else {
                     throw NotchBrowserActionError("That address is empty.")
                 }
                 return url
@@ -99,7 +104,7 @@ extension NotchBrowserStore {
     }
 
     private func requireAttached() throws {
-        guard profile != nil, !choosingProfile else {
+        guard permitsNativeNavigation, profile != nil, !choosingProfile else {
             throw NotchBrowserActionError(
                 "No Chrome profile is attached. Run `ed browser profile` with a profile name.")
         }

@@ -20,6 +20,7 @@ final class ExtensionRuntime: NSObject {
     private let commands = ExtensionCommandRegistry()
     private var panelEngine: NotchPanelEngine?
     private let cliStreams = try! ExtensionCLIStreams(owner: "notchShelf")
+    private let browserStreams = try! ExtensionCLIStreams(owner: "notchShelf")
 
     private let contextSource: @MainActor () -> SurfaceHostContext?
     private let connectedDisplays: @MainActor () -> [UInt32: CGSize]
@@ -62,6 +63,31 @@ final class ExtensionRuntime: NSObject {
             {
                 return try await self.executePanel(command, payload: payload)
             }
+            if command == "notchShelf.cli.catalog" {
+                return try NotchCLIProviderCatalog.encode(payload)
+            }
+            if command == "browser.cli" || command.hasPrefix("browser.cli.") {
+                let configuration = BrowserCLIExecution.configuration(request: {
+                    [weak self] request in
+                    guard let browser = self?.controller?.browserEngine else {
+                        throw ExtensionPeerError.unavailable
+                    }
+                    return try await browser.cliQueue.invoke(request)
+                })
+                return try await BrowserCLIEnvironment.$configuration.withValue(configuration) {
+                    if command == "browser.cli" {
+                        let request = try JSONDecoder().decode(
+                            ExtensionCLIRequest.self, from: payload)
+                        return try JSONEncoder().encode(
+                            try await ExtensionCLIExecution.run(
+                                BrowserCommand.self, request: request))
+                    }
+                    return try self.browserStreams.invoke(
+                        BrowserCommand.self, operation: command, prefix: "browser.cli",
+                        payload: payload)
+                }
+            }
+
             guard let controller = self.controller else { throw ExtensionPeerError.unavailable }
             if ["notch.cli.start", "notch.cli.read", "notch.cli.cancel", "notch.cli.end"].contains(
                 command)
@@ -192,6 +218,7 @@ final class ExtensionRuntime: NSObject {
     func prepareToStop(completion: @escaping () -> Void) {
         commands.shutdown()
         cliStreams.stop()
+        browserStreams.stop()
         panelEngine?.stop()
         stopUI()
         let cameraEngine = panelEngine?.cameraEngine
@@ -204,6 +231,7 @@ final class ExtensionRuntime: NSObject {
             for task in Array(uiDrains.values) { await task.value }
             await commands.shutdownAndWait()
             await cliStreams.stopAndWait()
+            await browserStreams.stopAndWait()
             await browserEngine?.stopAndWait()
             await cameraEngine?.shutdownAndWait()
             completion()

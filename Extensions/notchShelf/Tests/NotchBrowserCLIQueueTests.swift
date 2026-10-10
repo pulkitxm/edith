@@ -88,6 +88,58 @@ import Testing
         queue.stop()
     }
 
+    @Test func closingOldClientCannotRetireNewClientWithSamePresentation() throws {
+        let queue = NotchBrowserCLIQueue()
+        queue.admitted = { _ in true }
+        var old = input()
+        old.commandLease = try queue.attach(old)
+        var next = old; next.commandLease = nil
+        let replacement = try queue.attach(next)
+        #expect(replacement.id != old.commandLease?.id)
+        #expect(throws: (any Error).self) { try queue.end(old) }
+        next.commandLease = replacement
+        #expect(try queue.take(next).isEmpty)
+        let renewed = try queue.attach(next)
+        #expect(renewed.id == replacement.id)
+        queue.stop()
+    }
+
+    @Test func capacityCurrentPrivacyAndStopDrainEveryOwnedWaiter() async throws {
+        let queue = NotchBrowserCLIQueue()
+        var allowed = true
+        queue.admitted = { _ in allowed }
+        var owners: [NotchBrowserRemoteRequest] = []
+        for _ in 0..<8 {
+            var owner = input()
+            owner.commandLease = try queue.attach(owner)
+            owners.append(owner)
+        }
+        #expect(throws: (any Error).self) { try queue.attach(input()) }
+        let tasks = (0..<8).map { _ in Task { try await queue.invoke(.status) } }
+        try await eventually { queue.pendingCount == 8 }
+        await #expect(throws: (any Error).self) { try await queue.invoke(.status) }
+        var delivered: NotchBrowserRemoteRequest?
+        for var owner in owners {
+            if let command = try queue.take(owner).first {
+                owner.commandID = command.id; delivered = owner; break
+            }
+        }
+        let current = try #require(delivered)
+        try queue.validateCommand(current)
+        allowed = false
+        #expect(throws: (any Error).self) { try queue.validateCommand(current) }
+        for task in tasks { await #expect(throws: (any Error).self) { try await task.value } }
+        #expect(queue.pendingCount == 0)
+        allowed = true
+        var owner = input(); owner.commandLease = try queue.attach(owner)
+        let stopped = Task { try await queue.invoke(.status) }
+        try await eventually { queue.pendingCount == 1 }
+        queue.stop()
+        await #expect(throws: (any Error).self) { try await stopped.value }
+        #expect(queue.pendingCount == 0)
+        #expect(throws: (any Error).self) { try queue.take(owner) }
+    }
+
     private func eventually(_ predicate: () -> Bool) async throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
         while !predicate() {

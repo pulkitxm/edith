@@ -142,7 +142,7 @@ import WebKit
         }
     }
 
-    @MainActor private struct Fixture {
+    @MainActor struct Fixture {
         let chrome: SyntheticChrome
         let engine: NotchBrowserEngine
         let remote: NotchBrowserRemoteClient

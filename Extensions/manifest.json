@@ -807,7 +807,10 @@
         "Extensions/notchShelf/Shelf/Views/NotchShelfView.swift",
         "Extensions/notchShelf/TextEditingCommands.swift",
         "Extensions/notchShelf/Browser/Remote/NotchBrowserCLIContract.swift",
-        "Extensions/notchShelf/Browser/Remote/NotchBrowserCLIQueue.swift"
+        "Extensions/notchShelf/Browser/Remote/NotchBrowserCLIQueue.swift",
+        "Extensions/notchShelf/Browser/Remote/NotchBrowserCommandClient.swift",
+        "Extensions/notchShelf/CLI/BrowserCommands.swift",
+        "Extensions/notchShelf/CLI/BrowserCLIExecution.swift"
       ]
     },
     "inputs": [
