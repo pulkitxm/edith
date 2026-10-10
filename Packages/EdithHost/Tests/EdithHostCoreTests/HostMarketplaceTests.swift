@@ -76,6 +76,23 @@ import Testing
         #expect(await fixture.network.count == 0)
     }
 
+    @Test func anInstalledPackageRequiringANewerSystemIsNotOfferedOrRestored() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let future = fixture.package(
+            "1.0.0",
+            minimumSystemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion + 1)
+        try fixture.install([future])
+        let defaults = try #require(UserDefaults(suiteName: fixture.identity.defaultsSuite))
+        defaults.set(["sample"], forKey: "enabledExtensions")
+        let marketplace = try fixture.marketplace()
+        await marketplace.restoreEnabledExtensions()
+        #expect(marketplace.downloadedIDs == ["sample"])
+        #expect(marketplace.installed.isEmpty)
+        #expect(marketplace.sessions.states["sample"] == .notInstalled)
+        #expect(marketplace.sessions.processIdentifiers.isEmpty)
+    }
+
     @Test func failedDownloadsKeepThePreviouslyInstalledVersion() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
@@ -237,11 +254,15 @@ import Testing
                 ], store: store, catalogClient: client, installer: installer, sessions: sessions)
         }
 
-        func package(_ version: String, abi: String = HostContract.compatibility)
+        func package(
+            _ version: String, abi: String = HostContract.compatibility,
+            minimumSystemVersion: Int = 14
+        )
             -> ExtensionPackage
         {
             ExtensionPackage(
                 id: "sample", version: version, hostABI: abi,
+                minimumSystemVersion: minimumSystemVersion,
                 downloadURL: URL(
                     string: "https://github.com/pulkitxm/edith/releases/download/fixture/sample.zip"
                 )!, sha256: String(repeating: "a", count: 64), downloadBytes: 1, installedBytes: 1)

@@ -30,11 +30,14 @@ public struct ExtensionPackageStore: Sendable {
         return packages
     }
 
-    public func installedPackage(id: String, hostABI: String, architecture: String) throws
-        -> ExtensionPackage?
-    {
+    public func installedPackage(
+        id: String, hostABI: String, architecture: String, version: String? = nil,
+        systemVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+    ) throws -> ExtensionPackage? {
         let compatible = try installedPackages().filter {
-            $0.id == id && $0.hostABI == hostABI && $0.architecture == architecture
+            $0.id == id && (version == nil || $0.version == version)
+                && $0.isCompatible(
+                    hostABI: hostABI, architecture: architecture, systemVersion: systemVersion)
         }
         if let selected = try selections().first(where: { compatible.contains($0) }) {
             return selected
@@ -149,7 +152,10 @@ public struct ExtensionPackageStore: Sendable {
         try PackageFileLock(url: leaseURL(for: package), exclusive: false)
     }
 
-    public func prune(hostABI: String) throws {
+    public func prune(
+        hostABI: String,
+        systemVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+    ) throws {
         let operation = try PackageFileLock(
             url: root.appendingPathComponent(".operation.lock"), exclusive: true)
         defer { operation.close() }
@@ -161,7 +167,9 @@ public struct ExtensionPackageStore: Sendable {
             let ordered = group.sorted {
                 $0.version.compare($1.version, options: .numeric) == .orderedDescending
             }
-            let compatible = ordered.filter { $0.hostABI == hostABI }
+            let compatible = ordered.filter {
+                $0.hostABI == hostABI && $0.minimumSystemVersion <= systemVersion
+            }
             let keep =
                 (compatible.isEmpty ? Array(ordered.prefix(2)) : Array(compatible.prefix(2)))
                 + compatible.filter { selected.contains($0) }

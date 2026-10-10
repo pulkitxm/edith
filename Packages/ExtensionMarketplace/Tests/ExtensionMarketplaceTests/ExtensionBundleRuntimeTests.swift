@@ -94,4 +94,26 @@ import Testing
             try runtime.start(id: "keepAwake", context: [:])
         }
     }
+
+    @Test func aPinnedFutureSystemPackageIsRejectedBeforeVerificationOrLoading() throws {
+        let fixture = try PackageFixture()
+        defer { fixture.clean() }
+        let package = ExtensionPackage(
+            id: "keepAwake", version: "1.0.0", hostABI: "runtime-1",
+            minimumSystemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion + 1,
+            downloadURL: URL(
+                string: "https://github.com/example/app/releases/download/fixture/keepAwake.zip")!,
+            sha256: String(repeating: "a", count: 64), downloadBytes: 1, installedBytes: 1)
+        try FileManager.default.createDirectory(
+            at: fixture.store.root, withIntermediateDirectories: true)
+        try fixture.store.commit([package])
+        var verified = false
+        let runtime = ExtensionBundleRuntime(
+            store: fixture.store, role: .helper, hostABI: package.hostABI,
+            packageVersion: package.version, verify: { _ in verified = true })
+        #expect(throws: MarketplaceError.packageNotInstalled) {
+            try runtime.start(id: package.id, context: [:])
+        }
+        #expect(!verified)
+    }
 }
