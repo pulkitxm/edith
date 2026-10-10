@@ -9,12 +9,15 @@ public struct Machine: Codable, Identifiable, Equatable, Hashable, Sendable {
     public let host: String
     public let username: String
     public let port: Int
+    public let aliases: [String]?
     public var sshTarget: String { username.isEmpty ? host : "\(username)@\(host)" }
     public var subtitle: String { sshTarget }
     public init(
-        id: UUID = UUID(), name: String, host: String, port: Int = 22, username: String = ""
+        id: UUID = UUID(), name: String, host: String, port: Int = 22, username: String = "",
+        aliases: [String]? = nil
     ) {
-        self.id = id; self.name = name; self.host = host; self.port = port; self.username = username
+        self.id = id; self.name = name; self.host = host; self.port = port;
+        self.username = username; self.aliases = aliases
     }
 }
 
@@ -33,14 +36,25 @@ public enum MachineRegistry {
             Set(hosts.machines.map(\.id)).count == hosts.machines.count,
             hosts.machines.allSatisfy({
                 !$0.name.isEmpty && $0.name.utf8.count <= 512 && validTarget($0.sshTarget)
+                    && ($0.aliases.map { aliases in
+                        aliases.count <= 32 && Set(aliases).count == aliases.count
+                            && aliases.allSatisfy {
+                                $0.utf8.count <= 256 && validTarget($0) && !$0.contains("*")
+                                    && !$0.contains("?")
+                            }
+                    } ?? true)
             })
         else { throw ExtensionPeerError.invalidRequest }
         lock.withLock {
-            snapshot = hosts.machines.map { Machine(id: $0.id, name: $0.name, host: $0.sshTarget) }
+            snapshot = hosts.machines.map {
+                Machine(id: $0.id, name: $0.name, host: $0.sshTarget, aliases: $0.aliases)
+            }
         }
     }
     public static func shutdown() { lock.withLock { snapshot = [] } }
-    private struct Host: Decodable { let id: UUID; let name: String; let sshTarget: String }
+    private struct Host: Decodable {
+        let id: UUID; let name: String; let sshTarget: String; let aliases: [String]?
+    }
     private struct Hosts: Decodable { let machines: [Host] }
     static func validTarget(_ target: String) -> Bool {
         !target.isEmpty && target.utf8.count <= 1536 && !target.hasPrefix("-")

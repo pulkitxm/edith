@@ -42,7 +42,11 @@ struct GhosttyPane: NSViewRepresentable {
         let generation = holder.generation
         view.onDropFiles = { payload in holder.handleDropFiles(payload, generation: generation) }
         view.onFocus = onFocus
-        view.setRenderingActive(active)
+        view.onFocusChange = { focused in
+            guard holder.generation == generation, focused else { return }
+            onFocus?()
+        }
+        holder.updatePresentation(active: active, wantsFocus: wantsFocus)
         return view
     }
 
@@ -51,7 +55,11 @@ struct GhosttyPane: NSViewRepresentable {
         let generation = holder.generation
         view.onDropFiles = { payload in holder.handleDropFiles(payload, generation: generation) }
         view.onFocus = onFocus
-        view.setRenderingActive(active)
+        view.onFocusChange = { focused in
+            guard holder.generation == generation, focused else { return }
+            onFocus?()
+        }
+        holder.updatePresentation(active: active, wantsFocus: wantsFocus)
         if context.coordinator.shouldRequest(active: active, wantsFocus: wantsFocus) {
             view.requestFocus()
         } else if !(active && wantsFocus) {

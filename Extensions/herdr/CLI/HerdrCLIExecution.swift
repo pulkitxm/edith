@@ -121,9 +121,7 @@ enum HerdrCLIEnvironment {
         }
     }
     nonisolated(unsafe) static var launchTerminal:
-        @Sendable (TerminalLaunchRequest) async throws -> Int32 = { _ in
-            throw CLIFailure.unavailable(
-                "foreground terminal transport is unavailable",
-                hint: "use the embedded Herdr terminal")
+        @Sendable (TerminalLaunchRequest) async throws -> Int32 = {
+            try await OwnedTerminalCLI.run($0)
         }
 }

@@ -6,7 +6,7 @@ enum HerdrCLICatalog {
     static func data() throws -> Data {
         try JSONSerialization.data(withJSONObject: [
             "version": 1, "owner": "herdr", "commands": commands(HerdrCLICommand.self, route: []),
-            "settings": [], "acceptsInput": false,
+            "settings": [], "acceptsInput": true,
         ])
     }
 
@@ -28,7 +28,7 @@ enum HerdrCLICatalog {
                 "route": path, "operation": "herdr.cli", "summary": configuration.abstract,
                 "destructive": destructive, "timeout": 30,
                 "streamOperation": "herdr.cli", "streamDeadline": 1800,
-                "readsInput": false, "jsonOutput": name != "launch",
+                "readsInput": name == "attach", "jsonOutput": name != "launch",
             ]
         ]
     }

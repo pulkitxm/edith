@@ -66,6 +66,8 @@ final class ExtensionRuntime: NSObject {
                 location != "settings" || input["section"] as? String == "extension",
                 let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "quinjet",
+                let rawID = input["presentationID"] as? String,
+                let presentationID = UUID(uuidString: rawID),
                 location == "settings" || configuration.engineClient != nil
             else { return ["ok": false] as NSDictionary }
             settingsModel?.shutdown(); settingsModel = nil
@@ -94,12 +96,23 @@ final class ExtensionRuntime: NSObject {
                 return ["ok": false] as NSDictionary
             }
             let model = QuinjetPageModel(uiClient: .init(client: client))
+            model.terminalUI = OwnedTerminalUIPresentation(
+                id: presentationID,
+                holders: { [weak model] in model?.tabs.map(\.holder) ?? [] },
+                action: { [weak model] in model?.terminalUIAction($0) ?? false },
+                paneAction: { [weak model] action, holder in
+                    guard let model, model.selectedTab?.holder === holder else { return }
+                    model.terminalPaneAction(action)
+                }, close: { [weak model] in model?.stopRendering() })
             uiModel = model
             uiController = NSHostingController(
                 rootView: ExtensionPageHost {
                     QuinjetPage(model: model)
                         .environment(\.terminalLaunchEnabled, true)
                 })
+        case "terminalUI", "terminalUIStatus":
+            guard let binding = uiModel?.terminalUI else { return ["ok": false] as NSDictionary }
+            return binding.execute(input)
         case "stopUI":
             settingsModel?.shutdown(); settingsModel = nil
             uiLocation = nil

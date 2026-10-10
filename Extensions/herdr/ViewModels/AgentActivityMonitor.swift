@@ -8,6 +8,8 @@ private struct AgentActivityDefaults: @unchecked Sendable { let store: UserDefau
 final class AgentActivityMonitor {
     static let discoveryKey = "surfaceAgentTerminalDiscovery"
     let uiClient: HerdrUIClient?
+    var folderPresentationID: UUID?
+    private var folderChoice: Task<String?, Error>?
     var connectionsPresented = false
     private(set) var uiSettingsRevision = 0
     private(set) var now = Date()
@@ -177,7 +179,35 @@ final class AgentActivityMonitor {
         defaults.set(minutes, forKey: HerdrAttentionSettings.Keys.stuckMinutes)
     }
 
+    func chooseProjectFolder() async throws -> URL? {
+        guard !stopped, folderChoice == nil, let uiClient, let folderPresentationID else {
+            throw ExtensionPeerError.unavailable
+        }
+        let task = Task {
+            let data = try await uiClient.perform(
+                "herdr.ui.folder.choose",
+                object: ["presentationID": folderPresentationID.uuidString])
+            let reply = try JSONSerialization.jsonObject(with: data) as? NSDictionary
+            guard let reply else { throw ExtensionPeerError.invalidRequest }
+            return try HerdrHostFolderChoiceClient.path(reply)
+        }
+        folderChoice = task
+        defer { folderChoice = nil }
+        let path = try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        try Task.checkCancellation()
+        guard !stopped, !task.isCancelled else { throw CancellationError() }
+        return path.map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
+
+    func cancelFolderChoice() { folderChoice?.cancel() }
+
     func shutdown() async {
+        cancelFolderChoice()
+        _ = await folderChoice?.result
         guard !stopped else { return }
         stopped = true
         surfaceUntil = .distantPast
@@ -187,6 +217,24 @@ final class AgentActivityMonitor {
         activity = AgentActivitySnapshot()
         deciding = []
         decisionErrors = [:]
+    }
+
+    func performHook(_ payload: Data, provider: AgentActivityProvider, pane: String? = nil)
+        async throws -> Data
+    {
+        guard !stopped, payload.count <= AgentActivityParser.maximumInputBytes,
+            pane.map({ $0.utf8.count <= 4096 && !$0.utf8.contains(0) }) ?? true
+        else { throw ExtensionPeerError.invalidRequest }
+        let choice: AgentApprovalChoice?
+        if let event = try AgentActivityParser.parse(payload, provider: provider, pane: pane) {
+            choice = await AgentActivityHookRunner { [weak self] command, input in
+                guard let self else { throw ExtensionPeerError.unavailable }
+                return try await self.execute(command, payload: input)
+            }.run(event)
+        } else {
+            choice = nil
+        }
+        return try AgentActivityHookOutput.data(provider: provider, choice: choice)
     }
 
     func execute(_ command: String, payload: Data) async throws -> Data {
@@ -200,17 +248,9 @@ final class AgentActivityMonitor {
             else {
                 throw ExtensionPeerError.invalidRequest
             }
-            let choice: AgentApprovalChoice?
-            if let event = try AgentActivityParser.parse(payload, provider: provider) {
-                choice = await AgentActivityHookRunner { [weak self] command, input in
-                    guard let self else { throw ExtensionPeerError.unavailable }
-                    return try await self.execute(command, payload: input)
-                }.run(event)
-            } else {
-                choice = nil
-            }
-            return try AgentActivityHookOutput.data(provider: provider, choice: choice)
+            return try await performHook(payload, provider: provider)
         }
+
         let allowed: Set<String>
         switch command {
         case "activity.status": allowed = []

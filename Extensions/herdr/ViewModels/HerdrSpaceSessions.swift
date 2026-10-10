@@ -8,7 +8,7 @@ struct HerdrSpaceInfo: Codable, Equatable {
     let panes: Int
 }
 
-struct HerdrUIPresentation: Codable {
+struct HerdrUIPresentation: Codable, Equatable {
     let version: Int
     let owner: String
     let location: String
@@ -20,6 +20,20 @@ struct HerdrUIPresentation: Codable {
     let minimumWidth: Int
     let minimumHeight: Int
     let presented: Bool
+
+    func validate() throws {
+        guard version == 1, owner == "herdr", ["herdr.agent", "herdr.space"].contains(location),
+            !target.isEmpty, target.utf8.count <= 4096, !target.utf8.contains(0),
+            title.utf8.count <= 4096, !title.utf8.contains(0),
+            (1...4096).contains(width), (1...4096).contains(height),
+            (1...width).contains(minimumWidth), (1...height).contains(minimumHeight)
+        else { throw ExtensionPeerError.invalidRequest }
+    }
+
+    func matches(location: String, target: String, token: UUID) -> Bool {
+        self.token == token && self.target == target
+            && self.location == (location == "herdr.agent.controls" ? "herdr.agent" : location)
+    }
 }
 
 @MainActor final class HerdrSpaceSessions {

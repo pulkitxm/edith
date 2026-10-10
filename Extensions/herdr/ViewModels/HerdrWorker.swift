@@ -22,6 +22,7 @@ import Foundation
     private(set) var isStopped = false
     private var started = false
     private var cliStreams: ExtensionCLIStreams?
+    private var agentCLIStreams: ExtensionCLIStreams?
     private struct ShellSelection {
         let target: PaneTarget
         let holder: TerminalSessionHolder
@@ -43,7 +44,12 @@ import Foundation
         }
     }
 
+    let hostWindowNavigation: HerdrHostWindowNavigationClient?
+    let hostFolderChoice: HerdrHostFolderChoiceClient?
+
     init(
+        hostWindowNavigation: HerdrHostWindowNavigationClient? = nil,
+        hostFolderChoice: HerdrHostFolderChoiceClient? = nil,
         openGuide: @escaping @MainActor () throws -> Void = HerdrWorker.openOriginalGuide,
         store: HerdrStore? = nil, activity: AgentActivityMonitor? = nil,
         defaults: UserDefaults = SharedDefaults.store,
@@ -61,6 +67,8 @@ import Foundation
             await HerdrAgentPrompt.send($0, to: $1)
         }
     ) {
+        self.hostWindowNavigation = hostWindowNavigation
+        self.hostFolderChoice = hostFolderChoice
         let ownedStore = store ?? .shared
         self.defaults = defaults
         self.notifications =
@@ -206,6 +214,25 @@ import Foundation
         if command.hasPrefix("herdr.ui.") {
             return try await uiEngine.execute(command, payload: payload)
         }
+        if command == "herdr.agent.cli" {
+            return try JSONEncoder().encode(
+                await HerdrAgentCLIExecution.run(
+                    JSONDecoder().decode(ExtensionCLIRequest.self, from: payload), worker: self))
+        }
+        if command == "herdr.agent.catalog" {
+            guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
+            return try JSONSerialization.data(withJSONObject: try HerdrAgentCLIExecution.catalog())
+        }
+        if [
+            "herdr.agent.cli.start", "herdr.agent.cli.read", "herdr.agent.cli.write",
+            "herdr.agent.cli.resize", "herdr.agent.cli.cancel", "herdr.agent.cli.end",
+        ].contains(command) {
+            if agentCLIStreams == nil { agentCLIStreams = try ExtensionCLIStreams(owner: "herdr") }
+            guard let agentCLIStreams else { throw ExtensionPeerError.unavailable }
+            return try HerdrAgentCLIExecution.invokeStream(
+                command, payload: payload,
+                worker: self, streams: agentCLIStreams)
+        }
         if command == "herdr.cli.catalog" {
             guard payload.count <= 16384,
                 let value = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
@@ -213,7 +240,10 @@ import Foundation
             else { throw ExtensionPeerError.invalidRequest }
             return try HerdrCLICatalog.data()
         }
-        if ["herdr.cli.start", "herdr.cli.read", "herdr.cli.cancel", "herdr.cli.end"].contains(
+        if [
+            "herdr.cli.start", "herdr.cli.read", "herdr.cli.cancel", "herdr.cli.end",
+            "herdr.cli.write", "herdr.cli.resize",
+        ].contains(
             command)
         {
             if cliStreams == nil { cliStreams = try ExtensionCLIStreams(owner: "herdr") }
@@ -224,7 +254,7 @@ import Foundation
         }
         if [
             "herdr.terminal.read", "herdr.terminal.input", "herdr.terminal.resize",
-            "herdr.terminal.close",
+            "herdr.terminal.close", "herdr.terminal.link.resolve", "herdr.terminal.link.open",
         ].contains(command) || OwnedTerminalFiles.admits(command) {
             guard payload.count <= 32768 else { throw ExtensionPeerError.invalidRequest }
             let request = try JSONDecoder().decode(OwnedTerminalRequest.self, from: payload)
@@ -476,15 +506,20 @@ import Foundation
     }
 
     func cancelPendingWork() async {
+        hostWindowNavigation?.invalidate()
+        hostFolderChoice?.invalidate()
         await terminalSessions.stopAllAndWait()
         maintenance?.cancel()
         await catalogs.shutdown()
         await cliStreams?.stopAndWait()
+        await agentCLIStreams?.stopAndWait()
     }
 
     func shutdown() async {
         guard !isStopped else { return }
         isStopped = true
+        hostWindowNavigation?.invalidate()
+        hostFolderChoice?.invalidate()
         await terminalSessions.stopAllAndWait()
         spaces.stopAll()
         uiHookPlans.shutdown()
@@ -492,7 +527,9 @@ import Foundation
         for selection in shells.values { selection.holder.stop() }
         shells.removeAll()
         await cliStreams?.stopAndWait()
+        await agentCLIStreams?.stopAndWait()
         cliStreams = nil
+        agentCLIStreams = nil
         do { try await activity.hookFiles.suspend(activityInstaller) } catch {
             activity.hookError = error.localizedDescription
         }

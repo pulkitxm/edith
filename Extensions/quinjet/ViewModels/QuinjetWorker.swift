@@ -158,9 +158,11 @@ import Foundation
             else { throw ExtensionPeerError.invalidRequest }
             return try QuinjetCLICatalog.data()
         }
-        if ["quinjet.cli.start", "quinjet.cli.read", "quinjet.cli.cancel", "quinjet.cli.end"]
-            .contains(command)
-        {
+        if [
+            "quinjet.cli.start", "quinjet.cli.read", "quinjet.cli.cancel", "quinjet.cli.end",
+            "quinjet.cli.write", "quinjet.cli.resize",
+        ]
+        .contains(command) {
             if cliStreams == nil { cliStreams = try ExtensionCLIStreams(owner: "quinjet") }
             guard let cliStreams else { throw ExtensionPeerError.unavailable }
             return try QuinjetCLIExecution.invokeStream(
@@ -169,7 +171,7 @@ import Foundation
         }
         if [
             "quinjet.terminal.read", "quinjet.terminal.input", "quinjet.terminal.resize",
-            "quinjet.terminal.close",
+            "quinjet.terminal.close", "quinjet.terminal.link.resolve", "quinjet.terminal.link.open",
         ].contains(command) || OwnedTerminalFiles.admits(command) {
             guard payload.count <= 32768 else { throw ExtensionPeerError.invalidRequest }
             let request = try JSONDecoder().decode(OwnedTerminalRequest.self, from: payload)

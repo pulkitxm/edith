@@ -96,6 +96,7 @@ struct HerdrUIState: Codable {
                     && ["herdr.agent", "herdr.space"].contains($0.location)
             })
         else { throw ExtensionPeerError.invalidRequest }
+        for presentation in presentations { try presentation.validate() }
         let known = Set(agents.map(\.id) + openedAgents.map(\.id))
         guard
             Set(detachedViews.keys)
@@ -257,12 +258,63 @@ final class HerdrUIDefaults: UserDefaults {
         else { throw ExtensionPeerError.invalidRequest }
         let store = worker.store
         switch operation {
+        case "herdr.ui.folder.choose":
+            guard Set(object.keys) == ["presentationID"],
+                let raw = object["presentationID"] as? String,
+                let presentationID = UUID(uuidString: raw), let chooser = worker.hostFolderChoice
+            else { throw ExtensionPeerError.invalidRequest }
+            let path = try await chooser.choose(presentationID: presentationID)
+            try Task.checkCancellation()
+            guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
+            return try JSONSerialization.data(
+                withJSONObject: path.map { ["selectedPath": $0] } ?? ["cancelled": true])
+        case "herdr.ui.presentation.open":
+            guard Set(object.keys) == ["presentationID", "token"],
+                let origin = object["presentationID"] as? String,
+                let presentationID = UUID(uuidString: origin),
+                let raw = object["token"] as? String, let token = UUID(uuidString: raw),
+                let retained = worker.spaces.presentations.first(where: { $0.token == token }),
+                let navigation = worker.hostWindowNavigation
+            else { throw ExtensionPeerError.invalidRequest }
+            do {
+                try await navigation.open(retained, presentationID: presentationID)
+                try Task.checkCancellation()
+                guard !worker.isStopped,
+                    let admitted = worker.spaces.presentations.first(where: { $0.token == token }),
+                    admitted.presented,
+                    admitted.matches(
+                        location: retained.location, target: retained.target, token: retained.token)
+                else { throw ExtensionPeerError.unavailable }
+                return try JSONEncoder().encode(admitted)
+            } catch {
+                try? await worker.spaces.closeAndWait(token)
+                throw error
+            }
         case "herdr.ui.presentation.view":
             guard Set(object.keys) == ["token", "view"], let raw = object["token"] as? String,
                 let token = UUID(uuidString: raw), let value = object["view"] as? String,
                 let view = HerdrAgentView(rawValue: value)
             else { throw ExtensionPeerError.invalidRequest }
             try worker.spaces.setAgentView(view, token: token)
+        case "herdr.ui.notification.open":
+            guard Set(object.keys) == ["agentID", "hostID", "view"] else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            let request = try JSONDecoder().decode(HerdrOpenRequest.self, from: payload)
+            guard !request.agentID.isEmpty, request.agentID.utf8.count <= 4096,
+                !request.agentID.utf8.contains(0), !request.hostID.isEmpty,
+                request.hostID.utf8.count <= 4096, !request.hostID.utf8.contains(0),
+                store.agents.contains(where: {
+                    $0.id == request.agentID && $0.machineID == request.hostID
+                })
+            else { throw ExtensionPeerError.invalidRequest }
+            await store.open(request)
+            try Task.checkCancellation()
+            guard !worker.isStopped, let selected = store.session(request.agentID),
+                selected.agent.machineID == request.hostID, selected.view == request.view,
+                store.currentTab?.focused == request.agentID
+            else { throw ExtensionPeerError.unavailable }
+            return Data("{\"ok\":true}".utf8)
         case "herdr.ui.navigate":
             guard object.isEmpty else { throw ExtensionPeerError.invalidRequest }
             ExtensionPresentation.showWindow()
