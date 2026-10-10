@@ -13,6 +13,8 @@ public final class HostMarketplace {
     public let sessions: HostExtensionSessions
     public private(set) var installed: [String: ExtensionPackage] = [:]
     public private(set) var downloadedIDs: Set<String> = []
+    public private(set) var installedVersions: [String: [ExtensionPackage]] = [:]
+    public private(set) var pendingRemovalIDs: Set<String> = []
     public private(set) var available: [String: ExtensionPackage] = [:]
     public private(set) var operationID: String?
     public private(set) var error: String?
@@ -275,11 +277,17 @@ public final class HostMarketplace {
 
     private func reloadInstalled() throws {
         let pending = try store.pendingRemovals()
-        downloadedIDs = Set(try store.installedPackages().map(\.id)).subtracting(pending)
+        let packages = try store.installedPackages()
+        installedVersions = Dictionary(grouping: packages, by: \.id)
+        pendingRemovalIDs = pending
+        downloadedIDs = Set(packages.map(\.id)).subtracting(pending)
         var selected: [String: ExtensionPackage] = [:]
         for entry in entries where !pending.contains(entry.id) {
             if let package = try store.installedPackage(
-                id: entry.id, hostABI: HostContract.compatibility, architecture: "arm64")
+                id: entry.id, hostABI: HostContract.compatibility, architecture: "arm64"),
+                package.isCompatible(
+                    hostABI: HostContract.compatibility, architecture: "arm64",
+                    systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion)
             {
                 selected[entry.id] = package
             }
