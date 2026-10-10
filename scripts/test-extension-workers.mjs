@@ -454,7 +454,14 @@ async function run() {
           assert.equal(privileged[key], true);
         assert.equal(privileged.disabledProcesses, 0);
         assert.equal(privileged.productionSystemEffects, 0);
-        result.privilegedRuntimeValidated = true;
+        assert.equal(
+          privileged.lifecycleScope,
+          "synthetic-restoration-callback",
+        );
+        assert.equal(privileged.shippingPrivilegedRoleExecuted, false);
+        result.privilegedWorkerLifetimeValidated = true;
+        result.privilegedShippingPayloadValidated = true;
+        result.privilegedShippingRoleExecuted = false;
       }
       assert.equal(result.machinesDataValidated, id === "machines");
       assert.equal(result.codeStatsDataValidated, id === "codeStats");
