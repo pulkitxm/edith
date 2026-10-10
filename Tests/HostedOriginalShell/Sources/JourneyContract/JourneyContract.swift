@@ -75,6 +75,31 @@ public struct JourneyFixture: Codable, Equatable, Sendable {
         else { throw JourneyContractError.invalidMetadata }
     }
 
+    public func applicationEnvironment(from runnerEnvironment: [String: String]) throws -> [String:
+        String]
+    {
+        guard let accountHome = runnerEnvironment["EDITH_JOURNEY_ACCOUNT_HOME"] else {
+            throw JourneyContractError.invalidEnvironment
+        }
+        try validate(accountHome: accountHome, environment: runnerEnvironment)
+        guard runnerEnvironment["EDITH_APPLICATION_IDENTIFIER"] == identifier,
+            runnerEnvironment["EDITH_SHARED_DEFAULTS_SUITE"] == defaultsSuite,
+            runnerEnvironment["EDITH_EXTENSION_FIXTURE_HOME"] == home,
+            runnerEnvironment["EDITH_GUI_FIXTURE_DIRECTORY"] == directory
+        else { throw JourneyContractError.invalidEnvironment }
+        let result = [
+            "GITHUB_ACTIONS": "true", "RUNNER_OS": "macOS",
+            "RUNNER_ENVIRONMENT": "github-hosted", "EDITH_HOSTED_SHELL_JOURNEY": "1",
+            "HOME": home, "XDG_CONFIG_HOME": home + "/.config",
+            "XDG_CACHE_HOME": home + "/.cache", "XDG_DATA_HOME": home + "/.local/share",
+            "EDITH_APPLICATION_IDENTIFIER": identifier,
+            "EDITH_SHARED_DEFAULTS_SUITE": defaultsSuite,
+            "EDITH_EXTENSION_FIXTURE_HOME": home, "EDITH_GUI_FIXTURE_DIRECTORY": directory,
+        ]
+        try validateApplicationEnvironment(result)
+        return result
+    }
+
     public func validateApplicationEnvironment(_ environment: [String: String]) throws {
         guard environment["HOME"] == home,
             environment["XDG_CONFIG_HOME"] == home + "/.config",

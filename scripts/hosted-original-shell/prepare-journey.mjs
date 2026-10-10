@@ -4,6 +4,7 @@ import { createHash, createPrivateKey, sign } from "node:crypto";
 import {
   chmod,
   cp,
+  lstat,
   mkdir,
   readdir,
   readFile,
@@ -44,6 +45,37 @@ export function admitHostedJourney(
     join(accountHome, "Applications", `Edith Remote Fixture Journey ${uuid}`),
   );
   assert.equal(directory, resolve(directory));
+}
+
+export async function prepareJourneyParent({
+  environment,
+  directory,
+  identifier,
+  accountHome,
+  uid = process.getuid(),
+}) {
+  admitHostedJourney(environment, directory, identifier, accountHome);
+  const verify = async (path) => {
+    const info = await lstat(path);
+    assert(info.isDirectory() && !info.isSymbolicLink());
+    assert.equal(info.uid, uid);
+    assert.equal(info.mode & 0o022, 0);
+    assert.equal(await realpath(path), path);
+    return info;
+  };
+  const before = await verify(accountHome);
+  const applications = join(accountHome, "Applications");
+  try {
+    await lstat(applications);
+  } catch (error) {
+    assert.equal(error.code, "ENOENT");
+    await mkdir(applications, { mode: 0o700 });
+  }
+  await verify(applications);
+  const after = await verify(accountHome);
+  assert.equal(before.dev, after.dev);
+  assert.equal(before.ino, after.ino);
+  return applications;
 }
 
 export function journeyEnvelope(packages, revision) {
@@ -131,6 +163,12 @@ export async function prepareJourney({
     }
     if (/\.(framework|app|xpc)$/.test(path)) signPath(path);
   }
+  await prepareJourneyParent({
+    environment: process.env,
+    directory,
+    identifier,
+    accountHome: homedir(),
+  });
   await mkdir(directory, { recursive: false, mode: 0o700 });
   await chmod(directory, 0o700);
   assert.equal(await realpath(directory), directory);

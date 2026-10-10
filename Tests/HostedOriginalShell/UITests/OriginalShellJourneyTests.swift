@@ -20,16 +20,8 @@ final class OriginalShellJourneyTests: XCTestCase {
         )
         let accountHome = try XCTUnwrap(environment["EDITH_JOURNEY_ACCOUNT_HOME"])
         try fixture.validate(accountHome: accountHome, environment: environment)
-        try fixture.validateApplicationEnvironment(environment)
         let application = XCUIApplication(bundleIdentifier: fixture.identifier)
-        application.launchEnvironment = environment.filter {
-            [
-                "GITHUB_ACTIONS", "RUNNER_OS", "RUNNER_ENVIRONMENT", "EDITH_HOSTED_SHELL_JOURNEY",
-                "HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME",
-                "EDITH_APPLICATION_IDENTIFIER", "EDITH_SHARED_DEFAULTS_SUITE",
-                "EDITH_EXTENSION_FIXTURE_HOME", "EDITH_GUI_FIXTURE_DIRECTORY",
-            ].contains($0.key)
-        }
+        application.launchEnvironment = try fixture.applicationEnvironment(from: environment)
         defer {
             if application.state != .notRunning { application.terminate() }
             try? saveOutcome()
@@ -102,11 +94,13 @@ final class OriginalShellJourneyTests: XCTestCase {
         let notch = try canonical(customized["notch"])
         try click(application.buttons["journey.navigation.extensions"], in: application)
         try findCalendar(application)
+        try captureWindow(application, fixture: fixture, name: "marketplace-installed-calendar.png")
         try click(application.buttons["Disable"], in: application)
         try waitState("disabled-drained") {
             ($0["workers"] as? [String: Int]) == [:]
                 && ($0["presentationCounts"] as? [String: Int]) == [:]
                 && !Self.running($0, role: "engine")
+                && !Self.running($0, role: "managedUI")
         }
         try assertLayouts(home: home, notch: notch)
         XCTAssertFalse(application.buttons["journey.navigation.calendar"].exists)
@@ -146,6 +140,7 @@ final class OriginalShellJourneyTests: XCTestCase {
             ($0["workers"] as? [String: Int]) == [:]
                 && ($0["presentationCounts"] as? [String: Int]) == [:]
                 && !Self.running($0, role: "engine")
+                && !Self.running($0, role: "managedUI")
         }
         try click(application.buttons["Remove"], in: application)
         try waitState("removed-packages") { ($0["downloaded"] as? [String]) == [] }
@@ -159,8 +154,32 @@ final class OriginalShellJourneyTests: XCTestCase {
                 "Actual files on this Mac, with download sizes shown separately."
             ].exists)
         try capture("storage-after-removal")
+        try captureWindow(application, fixture: fixture, name: "storage-distribution.png")
         application.terminate()
         try verifyProtected(fixture)
+    }
+
+    private func captureWindow(
+        _ application: XCUIApplication, fixture: JourneyFixture, name: String
+    ) throws {
+        let environment = ProcessInfo.processInfo.environment
+        try fixture.validate(
+            accountHome: try XCTUnwrap(environment["EDITH_JOURNEY_ACCOUNT_HOME"]),
+            environment: environment)
+        try fixture.validateApplicationEnvironment(application.launchEnvironment)
+        XCTAssertEqual(root.resolvingSymlinksInPath().standardizedFileURL, root.standardizedFileURL)
+        XCTAssertTrue(
+            ["marketplace-installed-calendar.png", "storage-distribution.png"].contains(name))
+        let window = application.windows.firstMatch
+        XCTAssertTrue(window.exists)
+        let bytes = window.screenshot().pngRepresentation
+        XCTAssertGreaterThan(bytes.count, 0)
+        XCTAssertLessThanOrEqual(bytes.count, 8_388_608)
+        let destination = root.appendingPathComponent(name)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+        try bytes.write(to: destination, options: .withoutOverwriting)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600], ofItemAtPath: destination.path)
     }
 
     private func findCalendar(_ application: XCUIApplication) throws {
