@@ -44,7 +44,7 @@ import Testing
         #expect(!store.preventingSleep)
     }
 
-    @Test func fixtureIgnoresGlobalPreferenceAndWorkspaceBroadcasts() async throws {
+    @Test func fixtureIgnoresGlobalPreferenceBroadcasts() async throws {
         let suite = "com.pulkit.edith.tests.keep-awake-store." + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }

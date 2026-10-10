@@ -15,10 +15,18 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "KeepAwakeExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "keepAwake", exclude: ["Tests", "Runtime.swift"]),
+            dependencies: [
+                .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
+                .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
+            ],
+            path: "keepAwake", exclude: ["Tests"]),
         .testTarget(
-            name: "KeepAwakeExtensionTests", dependencies: ["KeepAwakeExtension"],
+            name: "KeepAwakeExtensionTests",
+            dependencies: [
+                .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
+                .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
+                "KeepAwakeExtension",
+            ],
             path: "keepAwake/Tests"),
         .target(
             name: "FocusDimExtension",
