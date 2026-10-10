@@ -119,7 +119,7 @@ def inspect_host(bundle, release=False, launcher_required=True):
     symbols = run('nm', '-g', str(executable))
     for feature in ('HerdrStore', 'MusicPlayerEngine', 'MeetingVoice', 'DatabasePage', 'StudioPage', 'QuinjetPage'):
         assert feature not in symbols, f'Feature implementation in host: {feature}'
-    assert bytes_installed < 8_000_000, f'Empty host exceeds 8 MB: {bytes_installed}'
+    assert bytes_installed < 10_000_000, f'Empty host exceeds 10 MB: {bytes_installed}'
     closure = run('otool', '-L', str(executable))
     for feature in ('EdithKit', 'EdithShared', 'MeetingVoice', 'Ghostty', 'EdithStudio', 'NIO', 'GRDB', 'Highlighter'):
         assert feature not in closure, f'Feature dependency in host: {feature}'

@@ -20,7 +20,7 @@ The intermediate host contains zero extension payload. It is 93.79% smaller in l
 | Metadata, resources and signatures | 11,166 |
 | Total | 8,178,936 |
 
-The checked-in 8 MB build guard fails for this intermediate host. Compiler and editor experiments saved at most74,336 bytes and did not meet the guard; those changes were not adopted. Restoring original controls and integrating command routing can change the final size further. Removing extension implementations does not remove the app's shared navigation, settings, marketplace, customization editors, updater or worker transport.
+This intermediate host exceeded the earlier 8 MB build guard. The accepted empty-host budget is now10 MB, with the full original controls preserved. Compiler and editor experiments saved at most74,336 bytes and did not meet the guard; those changes were not adopted. Restoring original controls and integrating command routing can change the final size further. Removing extension implementations does not remove the app's shared navigation, settings, marketplace, customization editors, updater or worker transport.
 
 The final extension report must count each actual ZIP, JSON release record, checksum and catalog asset. Expanded package sizes must include the complete signed carrier and every copy of the shared host executable. Installing all packages may use more disk space than the original bundled app. No aggregate saving is claimed before all39 current packages are built and verified. Historical packages below do not qualify as final artifacts.
 

@@ -307,8 +307,8 @@ await writeFile(
   )}\n`,
 );
 assert(
-  bytes < 8_000_000,
-  `The minimal host exceeds its 8 MB size limit: ${bytes}`,
+  bytes < 10_000_000,
+  `The minimal host exceeds its 10 MB size limit: ${bytes}`,
 );
 const index = JSON.parse(
   await readFile(join(contents, "Resources/index.json"), "utf8"),

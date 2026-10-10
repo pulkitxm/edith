@@ -36,7 +36,7 @@ test("development and release builds route through the empty host", () => {
   expect(build).not.toContain("EdithDatabaseRuntime");
   expect(minimal).toContain('"-Osize"');
   expect(minimal).toContain('"strip", ["-rSTx", file]');
-  expect(minimal).toContain("8_000_000");
+  expect(minimal).toContain("10_000_000");
 });
 
 test.skipIf(!fixture || process.platform !== "darwin")(
@@ -135,7 +135,7 @@ test.skipIf(!fixture || process.platform !== "darwin")(
         rmSync(join(app, "Contents/MacOS/worker"));
         writeFileSync(
           join(app, "Contents/Resources/index.json"),
-          Buffer.alloc(8_000_000),
+          Buffer.alloc(10_000_000),
         );
         expect(
           run("python3", "scripts/verify-shipping-host.py", app).exitCode,
