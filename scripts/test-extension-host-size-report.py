@@ -397,7 +397,7 @@ class HostSizeReportTests(unittest.TestCase):
             "sourceInventory": report.tree_inventory(self.app), "cloneInventory": report.tree_inventory(clone)}
         sidecar = self.packages / "virtualCamera.synthetic-host-provenance.json"
         sidecar.write_text(json.dumps(receipt))
-        camera = "virtualCamera/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/virtualCamera/CameraCarrier.app"
+        camera = "virtualCamera/CameraCarrier.app"
         entries = self.sealed_package("virtualCamera", provenance=receipt["executableAfterSigningSHA256"],
             contained_roles={"cameraCarrier": camera})
         for name in entries:
@@ -412,6 +412,20 @@ class HostSizeReportTests(unittest.TestCase):
         (self.packages / "virtualCamera.carrier-provenance.json").write_text(json.dumps(role_receipt))
         definition = {"id": "virtualCamera", "roles": ["cameraCarrier"], "systemExtensionCarrier": {"transport": "obs"}}
         return clone, receipt, role_receipt, definition
+
+    def test_camera_rejects_carrier_moved_inside_worker_payload(self):
+        _, receipt, _, definition = self.camera_fixture()
+        camera = "virtualCamera/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/virtualCamera/CameraCarrier.app"
+        entries = self.sealed_package("virtualCamera", provenance=receipt["executableAfterSigningSHA256"],
+            contained_roles={"cameraCarrier": camera})
+        for name in entries:
+            if name.endswith("Info.plist"):
+                info = plistlib.loads(entries[name])
+                info["EdithHostIdentifier"] = receipt["identifier"]
+                entries[name] = plistlib.dumps(info)
+        self.write_package_entries("virtualCamera", entries)
+        with self.assertRaisesRegex(ValueError, "Camera sealed role inventory differs"):
+            self.verify_host("virtualCamera", definition)
 
     def test_camera_clone_requires_exact_source_code_resources_and_role_binding(self):
         clone, receipt, roles, definition = self.camera_fixture()

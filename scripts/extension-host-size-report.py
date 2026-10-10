@@ -229,7 +229,7 @@ def verify_package_host(packages, metadata, definition, app, expected_commit, ho
                     or receipt.get("hostIdentifier") != carrier_infos[carrier].get("EdithHostIdentifier")
                     or sorted(role.get("role", "") for role in roles) != sorted(expected_roles)):
                 raise ValueError("Camera role provenance identity, version or roles differ")
-            if set(contained_roles) != set(expected_roles) or contained_roles.get("cameraCarrier") != f"{nested}/CameraCarrier.app":
+            if set(contained_roles) != set(expected_roles) or contained_roles.get("cameraCarrier") != f"{identifier}/CameraCarrier.app":
                 raise ValueError("Camera sealed role inventory differs")
             for role in roles:
                 bundle = contained_roles[role["role"]]
