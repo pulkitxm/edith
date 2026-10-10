@@ -1,4 +1,5 @@
 import Darwin
+import EdithExtensionSupport
 import Foundation
 import Testing
 @testable import EdithHostCore
@@ -67,6 +68,32 @@ struct HostRemoteChannelTests {
         #expect(state.completed == 0)
     }
 
+    @Test func bootstrapConnectionRejectsAReplacedSelectedGenerationBeforeReverseCalls()
+        async throws
+    {
+        let identity = try HostRemoteProcessIdentity.read(getpid())
+        let server = try endpoint(identity: identity) { _ in Data() }
+        let bootstrap = BootstrapListener(server: server)
+        defer { bootstrap.listener.invalidate(); server.invalidate() }
+        let replaced = HostRemoteProcessIdentity(
+            pid: identity.pid, generation: identity.generation + "-replaced",
+            executable: identity.executable, codeHash: identity.codeHash)
+        let rejected = NSXPCConnection(listenerEndpoint: bootstrap.listener.endpoint)
+        defer { rejected.invalidate() }
+        await #expect(throws: HostWorkerError.rejected) {
+            try await HostRemoteChannel.connect(
+                through: rejected, executable: identity.executable, expectedPeer: replaced)
+        }
+        let request = ExtensionEngineRequest(presentationID: UUID(), operation: "sample.read")
+        await #expect(throws: HostWorkerError.rejected) { try await server.invokeEngine(request) }
+        let accepted = NSXPCConnection(listenerEndpoint: bootstrap.listener.endpoint)
+        defer { accepted.invalidate() }
+        let channel = try await HostRemoteChannel.connect(
+            through: accepted, executable: identity.executable, expectedPeer: identity)
+        defer { channel.invalidate() }
+        #expect(channel.peer == identity)
+    }
+
     @Test func timeoutAndCancellationStopOwnedRequestsAndLeaveChannelUsable() async throws {
         let identity = try HostRemoteProcessIdentity.read(getpid())
         let state = RequestState()
@@ -129,5 +156,23 @@ struct HostRemoteChannelTests {
     @MainActor private final class RequestState {
         var active = 0
         var completed = 0
+    }
+
+    private final class BootstrapListener: NSObject, NSXPCListenerDelegate {
+        let listener = NSXPCListener.anonymous()
+        private let server: HostRemoteEndpoint
+
+        init(server: HostRemoteEndpoint) {
+            self.server = server
+            super.init()
+            listener.delegate = self
+            listener.resume()
+        }
+
+        func listener(
+            _ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection
+        ) -> Bool {
+            server.acceptBootstrap(connection)
+        }
     }
 }

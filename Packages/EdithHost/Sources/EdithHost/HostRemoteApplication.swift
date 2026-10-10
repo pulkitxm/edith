@@ -100,7 +100,7 @@ final class HostRemoteApplication {
             setenv("EDITH_APPLICATION_IDENTIFIER", hostIdentifier, 1)
             setenv("EDITH_EXTENSION_ID", extensionID, 1)
             setenv("EDITH_SHARED_DEFAULTS_SUITE", suite, 1)
-            let defaults = UserDefaults(suiteName: suite)!
+            let defaults = UserDefaults.standard
             defaults.set(next.worker.theme, forKey: AppStorageKeys.General.theme)
             defaults.set(next.worker.appearance, forKey: AppStorageKeys.General.appearance)
             defaults.set(next.worker.zoom, forKey: AppStorageKeys.General.mainWindowZoom)

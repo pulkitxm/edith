@@ -62,7 +62,8 @@ public final class HostRemoteSession {
             hostIdentifier: configuration.worker.identifier, extensionID: configuration.package.id,
             version: configuration.package.version)
         let lease = try store.lease(configuration.package)
-        let payload = store.directory(for: configuration.package)
+        let payload = store.directory(for: configuration.package).appendingPathComponent(
+            configuration.package.id)
         let development = try configuration.worker.identity().development
         let team = ExtensionCodeSignature.teamIdentifier()
         let carrier = try await Task.detached(priority: .userInitiated) {
@@ -252,6 +253,7 @@ public final class HostRemoteSceneHandle {
     public let sceneIdentifier: String
     public var presentationID: UUID { request.presentationID }
     public var identity: AppExtensionIdentity { session.identity }
+    public var processIdentity: HostRemoteProcessIdentity? { session.peer }
     private let session: HostRemoteSession
     private var channel: HostRemoteChannel?
     private var bootstrap: NSXPCConnection?
