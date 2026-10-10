@@ -159,6 +159,94 @@ struct HostNotchStartupTests {
         #expect(!fixture.context!.available())
     }
 
+    @Test func actualFinalExistingWorkspaceAcknowledgementPrecedesOneExactCollapse() async throws {
+        let main = window("EdithMainWindow")
+        let panel = window("EdithNotchPanel")
+        defer { main.close(); panel.close() }
+        let suite = "notch-post-ack-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let fixture = Lifecycle()
+        fixture.panel = panel
+        var selected = "home"
+        var order: [String] = []
+        let navigation = HostWindowNavigation(
+            defaults: defaults,
+            activeVersions: { ["calendar": "1.0.0"] },
+            originatingWindow: { fixture.window(for: $0) },
+            didApply: { _ in order.append("final-ack") })
+        let startup = HostNotchStartup(navigation: navigation) {
+            fixture.context = $0; return fixture
+        }
+        let token = navigation.register(
+            window: main,
+            apply: { route in
+                order.append("apply"); selected = route.page
+            }, selected: { selected })
+        await startup.settled()
+        let association = try fixture.context!.association.associate(panel)
+        let ticket = try #require(
+            startup.navigationTicket(
+                presentationID: fixture.origin.cardPresentationID,
+                providerID: "calendar", version: "1.0.0"))
+        fixture.collapsed = { captured in
+            #expect(order == ["apply", "final-ack"] && selected == "calendar")
+            #expect(captured == ticket)
+            order.append("collapse")
+        }
+        try await fixture.context!.navigate(fixture.origin, "calendar", "1.0.0")
+        #expect(fixture.collapseCalls == 0)
+        try await startup.navigationAcknowledged(ticket)
+        #expect(order == ["apply", "final-ack", "collapse"] && fixture.collapseCalls == 1)
+        fixture.context!.association.remove(association)
+        navigation.unregister(token)
+        try await startup.stop()
+        #expect(!main.isVisible && !panel.isVisible)
+    }
+
+    @Test func rejectedAcknowledgementOrLateOriginWithdrawalCannotReachCollapse() async throws {
+        let main = window("EdithMainWindow")
+        let panel = window("EdithNotchPanel")
+        defer { main.close(); panel.close() }
+        let suite = "notch-post-ack-reject-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let fixture = Lifecycle()
+        fixture.panel = panel
+        let navigation = HostWindowNavigation(
+            defaults: defaults,
+            activeVersions: { ["calendar": "1.0.0"] },
+            originatingWindow: { fixture.window(for: $0) })
+        let startup = HostNotchStartup(navigation: navigation) {
+            fixture.context = $0; return fixture
+        }
+        let token = navigation.register(
+            window: main, apply: { _ in throw HostWindowNavigationError.routeRejected },
+            selected: { "home" })
+        await startup.settled()
+        let association = try fixture.context!.association.associate(panel)
+        let ticket = try #require(
+            startup.navigationTicket(
+                presentationID: fixture.origin.cardPresentationID,
+                providerID: "calendar", version: "1.0.0"))
+        await #expect(throws: HostWindowNavigationError.routeRejected) {
+            try await fixture.context!.navigate(fixture.origin, "calendar", "1.0.0")
+        }
+        #expect(fixture.collapseCalls == 0)
+        fixture.admitted = false
+        await #expect(throws: HostWindowNavigationError.routeRejected) {
+            try await startup.navigationAcknowledged(ticket)
+        }
+        fixture.admitted = true
+        fixture.context!.association.remove(association)
+        await #expect(throws: HostWindowNavigationError.routeRejected) {
+            try await startup.navigationAcknowledged(ticket)
+        }
+        #expect(fixture.collapseCalls == 0)
+        navigation.unregister(token)
+        try await startup.stop()
+    }
+
     private func window(_ identifier: String) -> NSWindow {
         _ = NSApplication.shared
         let value = NSWindow(
@@ -176,10 +264,32 @@ struct HostNotchStartupTests {
     var availability: [Bool] = []
     var stops = 0
     var failStop = false
+    var admitted = true
+    var collapseCalls = 0
+    var collapsed: (HostNotchNavigationTicket) -> Void = { _ in }
     var panel: NSWindow?
     let origin = HostNotchCompactOrigin(
         identity: .init(ownershipID: UUID(), generation: UUID()), displayID: 1,
         panelPresentationID: UUID(), cardPresentationID: UUID(), tile: .init(.ability("calendar")))
+    func navigationTicket(presentationID: UUID, providerID: String, version: String)
+        -> HostNotchNavigationTicket?
+    {
+        guard admitted, presentationID == origin.cardPresentationID, providerID == "calendar",
+            version == "1.0.0"
+        else { return nil }
+        return .init(
+            identity: origin.identity, notchVersion: "1.0.0", displayID: origin.displayID,
+            panelPresentationID: origin.panelPresentationID, presentationID: presentationID,
+            providerID: providerID, providerVersion: version, revision: 1,
+            slot: .init(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+                providerID: providerID, providerVersion: version, kind: .card, tile: origin.tile,
+                rectangle: .init(x: 10, y: 40, width: 200, height: 200)),
+            versions: [providerID: version])
+    }
+    func collapseAfterAcknowledgement(_ ticket: HostNotchNavigationTicket) async throws {
+        collapseCalls += 1; collapsed(ticket)
+    }
     func install() { installed += 1 }
     func owningWorkspaceChanged() async throws { availability.append(context!.available()) }
     func stop() async throws {
@@ -189,6 +299,6 @@ struct HostNotchStartupTests {
         presentationID == origin.cardPresentationID ? panel : nil
     }
     func compactVersions(_ value: HostNotchCompactOrigin) -> [String: String]? {
-        value == origin ? ["calendar": "1.0.0"] : nil
+        admitted && value == origin ? ["calendar": "1.0.0"] : nil
     }
 }

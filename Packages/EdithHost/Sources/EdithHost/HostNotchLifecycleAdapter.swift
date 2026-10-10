@@ -141,6 +141,24 @@ final class HostNotchLifecycleAdapter {
         return coordinator?.window(for: presentationID)
     }
 
+    func navigationTicket(presentationID: UUID, providerID: String, version: String)
+        -> HostNotchNavigationTicket?
+    {
+        guard !stopped, environment().activeVersions["notchShelf"] == self.version else {
+            return nil
+        }
+        return coordinator?.navigationTicket(
+            presentationID: presentationID, providerID: providerID, version: version)
+    }
+
+    func collapseAfterAcknowledgement(_ ticket: HostNotchNavigationTicket) async throws {
+        guard !stopped, environment().activeVersions["notchShelf"] == version, let coordinator
+        else {
+            throw HostNotchPanelError.staleState
+        }
+        try await coordinator.collapseAfterAcknowledgement(ticket)
+    }
+
     func install() {
         guard !installed, !stopped else { return }
         installed = true
@@ -337,6 +355,7 @@ private final class HostNotchEnginePeer {
         let normal = Set([
             "notch.panel.wait", "notch.panel.pointer", "notch.panel.measure",
             "notch.panel.drop", "notch.panel.promise.prepare", "notch.panel.transfer.ack",
+            "notch.chrome.action",
         ])
         let cleanup = Set([
             "notch.panel.detach", "notch.panel.scene.stop",
@@ -361,6 +380,15 @@ private final class HostNotchEnginePeer {
                 try validate(cleanup: false)
                 attach = next
             }
+        }
+        if operation == "notch.chrome.action" {
+            let action = try JSONDecoder().decode(CollapseInvocation.self, from: payload)
+            guard action.operation == "collapse", let attach,
+                action.identity.ownershipID == attach.ownershipID,
+                attach.displays.contains(where: {
+                    $0.displayID == action.displayID && $0.presentationID == action.presentationID
+                }), action.revision > 0
+            else { throw HostWorkerError.rejected }
         }
         let allowCleanup = cleanup.contains(operation) || recovery
         try validate(cleanup: allowCleanup)
@@ -402,6 +430,14 @@ private final class HostNotchEnginePeer {
         guard record.logicalName == endpoint.name, record.process.pid == process.pid,
             record.process == ExtensionProcessIdentity.read(process.pid)
         else { throw HostWorkerError.rejected }
+    }
+
+    private struct CollapseInvocation: Decodable {
+        let identity: HostNotchPanelIdentity
+        let displayID: UInt32
+        let presentationID: UUID
+        let revision: UInt64
+        let operation: String
     }
 
     private struct Registration: Decodable {

@@ -3,6 +3,19 @@ import EdithExtensionSupport
 import EdithHostCore
 import Foundation
 
+struct HostNotchNavigationTicket: Equatable, Sendable {
+    let identity: HostNotchPanelIdentity
+    let notchVersion: String
+    let displayID: UInt32
+    let panelPresentationID: UUID
+    let presentationID: UUID
+    let providerID: String
+    let providerVersion: String
+    let revision: UInt64
+    let slot: HostNotchNativeSlot
+    let versions: [String: String]
+}
+
 @MainActor
 final class HostNotchPanelCoordinator {
     typealias Invoke = @MainActor (String, Data, Double) async throws -> Data
@@ -34,6 +47,7 @@ final class HostNotchPanelCoordinator {
     private var waiting: Task<Void, Never>?
     private var stopping: Task<Void, any Error>?
     private var writing: Task<Void, Never>?
+    private var collapsing: [UInt32: Task<Void, any Error>] = [:]
     private var pointers: [UInt32: HostNotchPanelPointer] = [:]
     private var measurements: [UUID: HostNotchPanelMeasure] = [:]
     private var retired = false
@@ -117,6 +131,112 @@ final class HostNotchPanelCoordinator {
         return current.activeVersions.filter { origin.tile.widget.providerIDs.contains($0.key) }
     }
 
+    func navigationTicket(presentationID: UUID, providerID: String, version: String)
+        -> HostNotchNavigationTicket?
+    {
+        let current = environment()
+        guard !retired, let identity, let attachRequest, let batch,
+            current.activeVersions["notchShelf"] == attachRequest.version,
+            current.activeVersions[providerID] == version
+        else { return nil }
+        for state in batch.states where state.visible && state.phase == .expanded {
+            guard let assembly = assemblies[state.displayID],
+                assembly.containsLivePresentation(presentationID)
+            else { continue }
+            for slot in state.slots {
+                guard let request = try? slot.request(presentationID: presentationID),
+                    assembly.slot(for: request) == slot,
+                    !current.hiddenWidgets.contains(slot.tile.widget)
+                else { continue }
+                let versions: [String: String]
+                if slot.section == "surface.card" {
+                    let origin = HostNotchCompactOrigin(
+                        identity: identity, displayID: state.displayID,
+                        panelPresentationID: state.presentationID,
+                        cardPresentationID: presentationID, tile: slot.tile)
+                    guard let admitted = compactVersions(origin), admitted[providerID] == version
+                    else { continue }
+                    versions = admitted
+                } else {
+                    guard slot.providerID == providerID, slot.providerVersion == version else {
+                        continue
+                    }
+                    versions = [providerID: version]
+                }
+                return .init(
+                    identity: identity, notchVersion: attachRequest.version,
+                    displayID: state.displayID, panelPresentationID: state.presentationID,
+                    presentationID: presentationID, providerID: providerID,
+                    providerVersion: version,
+                    revision: batch.revision, slot: slot, versions: versions)
+            }
+        }
+        return nil
+    }
+
+    func collapseAfterAcknowledgement(_ ticket: HostNotchNavigationTicket) async throws {
+        try Task.checkCancellation()
+        guard
+            navigationTicket(
+                presentationID: ticket.presentationID, providerID: ticket.providerID,
+                version: ticket.providerVersion) == ticket
+        else { throw HostNotchPanelError.staleState }
+        guard collapsing[ticket.displayID] == nil, collapsing.count < 8 else {
+            throw HostNotchPanelError.capacityExceeded
+        }
+        let task = Task { [self] in
+            try Task.checkCancellation()
+            guard
+                navigationTicket(
+                    presentationID: ticket.presentationID, providerID: ticket.providerID,
+                    version: ticket.providerVersion) == ticket
+            else { throw HostNotchPanelError.staleState }
+            let reply = try JSONDecoder().decode(
+                CollapseReply.self,
+                from: await request(
+                    "notch.chrome.action",
+                    CollapseAction(
+                        identity: ticket.identity, displayID: ticket.displayID,
+                        presentationID: ticket.panelPresentationID, revision: ticket.revision),
+                    timeout: 5))
+            try Task.checkCancellation()
+            let current = environment()
+            guard !retired, identity == ticket.identity,
+                attachRequest?.version == ticket.notchVersion,
+                current.activeVersions["notchShelf"] == ticket.notchVersion,
+                ticket.versions.allSatisfy({ current.activeVersions[$0.key] == $0.value }),
+                reply.identity == ticket.identity, reply.revision > ticket.revision,
+                reply.panel.contractVersion == 1, reply.panel.revision == reply.revision,
+                reply.panel.ownershipID == ticket.identity.ownershipID,
+                reply.panel.version == ticket.notchVersion,
+                reply.panel.displayID == ticket.displayID,
+                reply.panel.presentationID == ticket.panelPresentationID,
+                reply.panel.phase != .expanded
+            else { throw HostNotchPanelError.staleState }
+        }
+        collapsing[ticket.displayID] = task
+        defer { collapsing[ticket.displayID] = nil }
+        try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private struct CollapseAction: Encodable {
+        let identity: HostNotchPanelIdentity
+        let displayID: UInt32
+        let presentationID: UUID
+        let revision: UInt64
+        let operation = "collapse"
+    }
+
+    private struct CollapseReply: Decodable {
+        let identity: HostNotchPanelIdentity
+        let revision: UInt64
+        let panel: HostNotchPanelState
+    }
+
     func start(version: String, screens: [HostNotchPanelScreen]) async throws {
         guard !retired, starting == nil, attachRequest == nil,
             environment().activeVersions["notchShelf"] == version,
@@ -161,6 +281,7 @@ final class HostNotchPanelCoordinator {
         let current = environment()
         if current.activeVersions["notchShelf"] != attachRequest?.version {
             waiting?.cancel(); writing?.cancel(); pointers = [:]; measurements = [:]
+            for task in collapsing.values { task.cancel() }
             transfers.cancelPending(); drops.cancelPending()
         }
         measurements = measurements.filter { slotID, _ in
@@ -202,6 +323,7 @@ final class HostNotchPanelCoordinator {
         retired = true
         for assembly in assemblies.values { assembly.hide() }
         starting?.cancel(); waiting?.cancel(); writing?.cancel()
+        for task in collapsing.values { task.cancel() }
         let task = Task { [self] in try await stopOwned() }
         stopping = task
         defer { stopping = nil }
@@ -209,6 +331,7 @@ final class HostNotchPanelCoordinator {
     }
 
     private func stopOwned() async throws {
+        for task in Array(collapsing.values) { _ = try? await task.value }
         if let starting { _ = try? await starting.value }
         if let waiting { await waiting.value }
         if let writing { await writing.value }

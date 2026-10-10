@@ -8,6 +8,9 @@ protocol HostNotchStartupLifecycle: AnyObject {
     func owningWorkspaceChanged() async throws
     func stop() async throws
     func compactVersions(_ origin: HostNotchCompactOrigin) -> [String: String]?
+    func navigationTicket(presentationID: UUID, providerID: String, version: String)
+        -> HostNotchNavigationTicket?
+    func collapseAfterAcknowledgement(_ ticket: HostNotchNavigationTicket) async throws
     func window(for presentationID: UUID) -> NSWindow?
 }
 
@@ -80,6 +83,28 @@ final class HostNotchStartup {
     func window(for presentationID: UUID) -> NSWindow? {
         guard !stopped else { return nil }
         return lifecycle?.window(for: presentationID)
+    }
+
+    func navigationTicket(presentationID: UUID, providerID: String, version: String)
+        -> HostNotchNavigationTicket?
+    {
+        guard !stopped, let window = lifecycle?.window(for: presentationID),
+            navigation.owningWorkspace(for: window) != nil
+        else { return nil }
+        return lifecycle?.navigationTicket(
+            presentationID: presentationID, providerID: providerID, version: version)
+    }
+
+    func navigationAcknowledged(_ ticket: HostNotchNavigationTicket) async throws {
+        try Task.checkCancellation()
+        guard !stopped, let lifecycle,
+            lifecycle.navigationTicket(
+                presentationID: ticket.presentationID, providerID: ticket.providerID,
+                version: ticket.providerVersion) == ticket,
+            let window = lifecycle.window(for: ticket.presentationID),
+            navigation.owningWorkspace(for: window) != nil
+        else { throw HostWindowNavigationError.routeRejected }
+        try await lifecycle.collapseAfterAcknowledgement(ticket)
     }
 
     private func workspaceChanged() {
