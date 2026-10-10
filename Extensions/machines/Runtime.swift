@@ -19,6 +19,9 @@ final class ExtensionRuntime: NSObject {
     private var uiEngine: MachineUIEngine?
     private var windowNavigation: MachineHostWindowNavigationClient?
     private var uiClient: MachineUIClient?
+    private let ambientPolicy = ExtensionAmbientPolicy(jobs: [
+        MachineHealthLifecycle.jobID: .init(ambient: 300)
+    ])
     private var health: MachineHealthLifecycle?
     private let commands = ExtensionCommandRegistry()
 
@@ -143,11 +146,19 @@ final class ExtensionRuntime: NSObject {
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
+            do { try ambientPolicy.apply(context: input) } catch {
+                return ["ok": false] as NSDictionary
+            }
             if !running {
-                MachinesModel.shared = MachinesModel()
-                WorkspaceModel.shared = WorkspaceModel(machines: .shared)
                 let fixture =
                     ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+                if !fixture {
+                    do {
+                        try ambientPolicy.start { [weak self] in self?.health?.reschedule() }
+                    } catch { return ["ok": false] as NSDictionary }
+                }
+                MachinesModel.shared = MachinesModel()
+                WorkspaceModel.shared = WorkspaceModel(machines: .shared)
                 let transport: MachinePeerTransport
                 if fixture {
                     transport = MachinePeerTransport(
@@ -307,7 +318,10 @@ final class ExtensionRuntime: NSObject {
                 } catch { return ["ok": false] as NSDictionary }
                 MachinesCLIEnvironment.changed = { MachinesModel.shared.reloadOwnedRecords() }
                 if !fixture {
-                    let health = MachineHealthLifecycle()
+                    let policy = ambientPolicy
+                    let health = MachineHealthLifecycle(interval: {
+                        policy.interval(for: MachineHealthLifecycle.jobID)
+                    })
                     self.health = health
                     health.start()
                 }
@@ -336,6 +350,10 @@ final class ExtensionRuntime: NSObject {
                     MachinesPage().environment(\.machineConnectionsEnabled, true)
                         .environment(\.terminalLaunchEnabled, true)
                 })
+        case "synchronize":
+            do { try ambientPolicy.apply(context: input) } catch {
+                return ["ok": false] as NSDictionary
+            }
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
             commands.shutdown()
@@ -348,6 +366,7 @@ final class ExtensionRuntime: NSObject {
     }
     private func shutdown() async {
         running = false
+        ambientPolicy.stop()
         windowNavigation?.invalidate(); windowNavigation = nil
         await uiEngine?.shutdown(); uiEngine = nil
         await filesEngine?.shutdownAndWait(); filesEngine = nil
