@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -19,6 +20,20 @@ import {
 import { writeHostABI } from "./extension-host-abi.mjs";
 import { buildHostInterfaces } from "./extension-host-build.mjs";
 import { extensionFingerprint } from "./extension-release-plan.mjs";
+
+export function nativeTaskLinkerFlags(definition, role) {
+  const roles = definition.nativeTaskRoles ?? [];
+  assert(Array.isArray(roles) && new Set(roles).size === roles.length);
+  for (const value of roles) assert(Object.hasOwn(definition.roles, value));
+  return roles.includes(role)
+    ? [
+        "-Xlinker",
+        "-exported_symbol",
+        "-Xlinker",
+        "_edith_extension_native_task",
+      ]
+    : [];
+}
 
 export async function copyNativeResources(
   root,
@@ -489,6 +504,7 @@ export async function buildExtensionPackage({
             ]
           : []),
         ...nativeFlags,
+        ...nativeTaskLinkerFlags(definition, role),
         "-Xlinker",
         "-install_name",
         "-Xlinker",
