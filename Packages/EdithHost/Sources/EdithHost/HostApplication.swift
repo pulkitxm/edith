@@ -9,6 +9,22 @@ struct HostEntry {
     @MainActor static func main() {
         signal(SIGPIPE, SIG_IGN)
         let arguments = Array(CommandLine.arguments.dropFirst())
+        if ProcessInfo.processInfo.environment["EDITH_CLI"] == "1"
+            || (!arguments.isEmpty && !arguments[0].hasPrefix("--extension-")
+                && arguments[0] != "--cli-fixture")
+        {
+            exit(HostCLI.run(arguments))
+        }
+        #if EDITH_CLI_FIXTURE
+        if arguments.count == 2, arguments[0] == "--cli-fixture",
+            Bundle.main.bundleIdentifier?.hasPrefix("com.pulkit.edith.tests.cli-") == true
+        {
+            do { try HostCLIFixture.run(directory: URL(fileURLWithPath: arguments[1])) } catch {
+                exit(1)
+            }
+            return
+        }
+        #endif
         do { if try HostContainedRole.run(arguments: arguments) { return } } catch {
             FileHandle.standardError.write(
                 Data("The contained extension could not start: \(error).\n".utf8))
@@ -17,7 +33,7 @@ struct HostEntry {
         guard
             HostContract.permitsLaunching(
                 identifier: Bundle.main.bundleIdentifier, bundleURL: Bundle.main.bundleURL)
-                || arguments == ["--version"] || arguments == ["extensions", "catalog", "--json"]
+
         else {
             FileHandle.standardError.write(
                 Data("Install Edith in /Applications before starting the release app.\n".utf8))
@@ -57,23 +73,7 @@ struct HostEntry {
             } catch { exit(1) }
             return
         }
-        if arguments == ["--version"] {
-            print(
-                Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-                    ?? "development")
-            return
-        }
-        if arguments == ["extensions", "catalog", "--json"] {
-            do {
-                let data = try JSONEncoder().encode(HostIndex.bundled())
-                print(String(decoding: data, as: UTF8.self))
-            } catch {
-                FileHandle.standardError.write(
-                    Data("The extension index could not be read.\n".utf8))
-                exit(1)
-            }
-            return
-        }
+        guard arguments.isEmpty else { exit(HostCLI.run(arguments)) }
         HostApplication.main()
     }
 }
@@ -82,6 +82,7 @@ struct HostApplication: App {
     @State private var updater = HostUpdater()
     @NSApplicationDelegateAdaptor(HostApplicationDelegate.self) private var delegate
     @State private var marketplace: HostMarketplace?
+    @State private var cliServer: HostCLIServer?
     @State private var startupError = false
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var theme =
         "accent"
@@ -116,8 +117,18 @@ struct HostApplication: App {
                                 ?? "com.pulkit.edith.dev.extension-host-rebuild",
                             supportDirectory: support)
                         let loaded = try HostMarketplace.live(identity: identity)
+                        let gateway = HostCLIGateway(marketplace: loaded)
+                        let control = HostCLIServer(identity: identity) { request in
+                            try await gateway.execute(request)
+                        }
+                        try control.start()
+                        cliServer = control
                         marketplace = loaded
-                        delegate.shutdown = { await loaded.sessions.shutdown() }
+                        delegate.shutdown = {
+                            let ready = await loaded.sessions.shutdown()
+                            if ready { control.shutdown() }
+                            return ready
+                        }
                         await loaded.loadCachedCatalog()
                         await loaded.restoreEnabledExtensions()
                         await loaded.updateInstalledIfDue()
