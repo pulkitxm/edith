@@ -565,6 +565,27 @@ jobs:
         if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'
         run: spctl -a -t open --context context:primary-signature Edith.dmg
 
+      - name: Record the source-bound static host release proof
+        if: steps.release_build.outputs.superseded != 'true'
+        run: |
+          set -euo pipefail
+          notary=skipped
+          if [ "$HAS_NOTARY" = true ]; then notary=verified; fi
+          python3 scripts/test-host-release-proof.py
+          python3 scripts/host_release_proof.py dist/Edith.app Edith.dmg dist/appcast/appcast.xml local/host-release-proof \
+            --source "$BUILT_SHA" --tag "$RELEASE_TAG" --version "$RELEASE_VERSION" --build "$RELEASE_BUILD" \
+            --notarization "$notary"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: steps.release_build.outputs.superseded != 'true'
+        with:
+          name: host-release-proof
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            local/host-release-proof/host-release-proof.json
+            local/host-release-proof/build-metadata.json
+
       - name: Stage macOS release assets
         if: steps.release_build.outputs.superseded != 'true'
         run: |
