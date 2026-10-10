@@ -10,6 +10,7 @@ enum HostMarketplaceKeys {
 struct MarketplacePage: View {
     @Bindable var marketplace: HostMarketplace
     var presenter: (any HostExtensionContentPresenting)? = nil
+    var openExtension: ((String) -> Void)? = nil
     @State private var search = ""
     @State private var category = "all"
     @State private var selected: HostExtension?
@@ -18,8 +19,12 @@ struct MarketplacePage: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(marketplace: HostMarketplace, presenter: (any HostExtensionContentPresenting)? = nil) {
-        self.marketplace = marketplace; self.presenter = presenter
+    init(
+        marketplace: HostMarketplace, presenter: (any HostExtensionContentPresenting)? = nil,
+        openExtension: ((String) -> Void)? = nil
+    ) {
+        self.marketplace = marketplace; self.presenter = presenter;
+        self.openExtension = openExtension
         _suites = State(
             initialValue: HostSuiteSelection(
                 marketplace: marketplace,
@@ -146,7 +151,7 @@ struct MarketplacePage: View {
             entry: entry, dark: dark,
             active: marketplace.surfaceAvailability.activeIDs.contains(entry.id),
             subtitle: HostMarketplaceCatalog.subtitles[entry.id] ?? entry.title,
-            open: { selected = entry },
+            open: { open(entry) },
             enabled: Binding(
                 get: { marketplace.surfaceAvailability.activeIDs.contains(entry.id) },
                 set: { value in Task { await suites.select(entry, enabled: value) } }),
@@ -206,7 +211,14 @@ struct MarketplacePage: View {
                     Button("Retry disable") { Task { await suites.select(entry, enabled: false) } }
                     Button("Enable instead") { Task { await suites.select(entry, enabled: true) } }
                 } else if marketplace.sessions.states[entry.id] == .active {
-                    Button("Open") { selected = entry }
+                    if HostNavigationCatalog.route(extensionID: entry.id) != nil {
+                        Button("Open") { open(entry) }
+                        if HostExtensionSettingsPolicy.policy(for: entry.id) != .unavailable {
+                            Button("Settings") { selected = entry }
+                        }
+                    } else if HostExtensionSettingsPolicy.policy(for: entry.id) != .unavailable {
+                        Button("Settings") { selected = entry }
+                    }
                     Button("Disable") { Task { await suites.select(entry, enabled: false) } }
                 } else {
                     Button("Enable") { Task { await suites.select(entry, enabled: true) } }
@@ -216,7 +228,7 @@ struct MarketplacePage: View {
                     marketplace.installedVersions[entry.id]?.isEmpty == false
                         ? "Update" : "Download"
                 ) {
-                    Task { await marketplace.download(id: entry.id) }
+                    selected = entry
                 }
             }
             if marketplace.operationID != entry.id,
@@ -227,23 +239,21 @@ struct MarketplacePage: View {
         }.buttonStyle(.edith(.secondary))
     }
 
+    private func open(_ entry: HostExtension) {
+        HostExtensionActions.open(
+            entry, active: marketplace.surfaceAvailability.activeIDs.contains(entry.id),
+            openPage: openExtension, showDetails: { selected = $0 })
+    }
+
     private func detail(_ entry: HostExtension) -> some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(entry.title).font(.edithText(.headline)).accessibilityAddTraits(.isHeader)
-                Spacer(); controls(entry)
-            }.padding(.horizontal, UIScale.pt(28)).padding(.vertical, UIScale.pt(18))
-            Divider()
-            HostExtensionContent(
-                marketplace: marketplace, extensionID: entry.id, location: "settings",
-                section: "extension", presenter: presenter, openMarketplace: { selected = nil })
-            Divider()
-            HStack {
-                Spacer(); Button("Done") { selected = nil }.keyboardShortcut(.defaultAction)
-            }
-            .padding(.horizontal, UIScale.pt(18)).padding(.vertical, UIScale.pt(12)).background(
-                .bar)
-        }.frame(width: PresentationMetrics.width(560), height: PresentationMetrics.height(620))
+        HostExtensionReview(
+            marketplace: marketplace, suites: suites, entry: entry, presenter: presenter,
+            open: openExtension.map { callback in
+                {
+                    selected = nil; callback(entry.id)
+                }
+            },
+            done: { selected = nil })
     }
 
     private func handleDeepLink(_ proxy: ScrollViewProxy) {
