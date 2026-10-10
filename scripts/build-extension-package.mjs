@@ -164,7 +164,7 @@ export function nativeClangModuleFlags(root, definition) {
         typeof directory !== "string" ||
         !directory ||
         directory.includes("\0") ||
-        !resolve(packageRoot, directory).startsWith(packageRoot + "/"),
+        !resolve(packageRoot, directory).startsWith(`${packageRoot}/`),
     )
   )
     throw new Error("Invalid native Clang directory");
@@ -175,7 +175,7 @@ export function nativeClangModuleFlags(root, definition) {
         root,
         definition.nativePackage,
         ".build/release",
-        target + ".build",
+        `${target}.build`,
       ),
     ]),
     ...directories.flatMap((directory) => [

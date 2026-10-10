@@ -262,7 +262,7 @@ test("malformed or unrelated nonzero stdout never authorizes another upload clie
   try {
     const capacity = "release asset must be between 1 and 40000 bytes";
     for (const stdout of [
-      "not JSON: " + capacity,
+      `not JSON: ${capacity}`,
       JSON.stringify({
         ok: true,
         error: { code: "command_failed", message: capacity },
@@ -279,7 +279,7 @@ test("malformed or unrelated nonzero stdout never authorizes another upload clie
         ok: false,
         error: {
           code: "command_failed",
-          message: capacity + "; unknown failure",
+          message: `${capacity}; unknown failure`,
         },
       }),
       JSON.stringify({ ok: false, error: { message: capacity } }),
