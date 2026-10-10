@@ -127,7 +127,7 @@ enum QuinjetFixture {
         guard let object = try JSONSerialization.jsonObject(with: receipt) as? [String: Any],
             let pid = object["pid"] as? Int32, pid > 1,
             object["owner"] as? Int32 == workerPID, pid != workerPID,
-            let parent = object["parent"] as? Int32, parent > 0, parent != workerPID,
+            object["parent"] as? Int32 == workerPID,
             object["group"] as? Int32 == pid,
             object["inputTerminal"] as? Int32 == 1, kill(pid, 0) == 0,
             executablePath(pid) == executablePath(workerPID), executablePath(pid) != nil
@@ -135,7 +135,7 @@ enum QuinjetFixture {
             throw NSError(
                 domain: "NativeTerminalFixture", code: 1,
                 userInfo: [
-                    NSLocalizedDescriptionKey: "Invalid reparented native task: "
+                    NSLocalizedDescriptionKey: "Invalid owned direct-child native task: "
                         + String(decoding: receipt, as: UTF8.self)
                 ])
         }
