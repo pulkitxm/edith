@@ -28,4 +28,11 @@ import Foundation
         return try await ExtensionCLIExecution.run(
             CalendarCommand.self, arguments: request.arguments)
     }
+
+    static func encoded(_ reply: ExtensionCLIReply) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .withoutEscapingSlashes
+        return try encoder.encode(reply)
+    }
+
 }

@@ -47,7 +47,7 @@ final class ExtensionRuntime: NSObject {
                     }
                     return await store.events(query)
                 }
-                return try JSONEncoder().encode(reply)
+                return try CalendarCLIExecution.encoded(reply)
             }
             guard let surface = self?.surface else { throw ExtensionPeerError.unavailable }
             return try await surface.execute(command, payload: payload)
