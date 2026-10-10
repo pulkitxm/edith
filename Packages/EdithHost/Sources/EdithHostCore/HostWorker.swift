@@ -146,12 +146,25 @@ public final class HostWorker {
         _ = try await self.request(request, timeout: timeout)
     }
 
-    public func stop() async throws {
-        try await prepareDisable()
+    public func stop(reason: HostWorkerStopReason = .disable) async throws {
+        if ready, reason == .applicationQuit, configuration.extensionID == "lidAwake",
+            !configuration.recoveryOnly
+        {
+            guard preparationToken == nil else { throw HostWorkerError.rejected }
+            let preparation = HostWorkerRequest(
+                operation: "prepareApplicationQuit", stopReason: reason)
+            preparationToken = preparation.token
+            cancelNavigation(acknowledge: true)
+            defer { preparationToken = nil }
+            _ = try await request(preparation)
+        } else {
+            try await prepareDisable()
+        }
         ready = false
         if process.isRunning {
             _ = try? await request(
-                HostWorkerRequest(operation: "stop"), timeout: min(requestTimeout, .seconds(3)))
+                HostWorkerRequest(operation: "stop", stopReason: reason),
+                timeout: min(requestTimeout, .seconds(3)))
             try? input.fileHandleForWriting.close()
             do { try await awaitExit() } catch {
                 terminate()

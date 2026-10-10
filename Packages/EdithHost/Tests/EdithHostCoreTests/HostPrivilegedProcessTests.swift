@@ -1,4 +1,5 @@
 import Darwin
+import EdithExtensionSupport
 import Foundation
 import Testing
 
@@ -70,12 +71,60 @@ import Testing
         #expect(kill(pid, 0) == -1)
     }
 
-    private func fixture(_ mode: String) throws -> HostPrivilegedProcess {
+    @Test func confirmedQuitFreesOnlyItsExactWorkerWithoutSendingDisable() async throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let worker = try fixture("normal", recording: file)
+        try await worker.start()
+        let pid = try #require(worker.processIdentifier)
+        let host = try #require(ExtensionProcessIdentity.current)
+        try await worker.stop(
+            reason: .applicationQuit, owner: "lidAwake",
+            quitPolicy: .init(reason: .applicationQuit, restoreOnQuit: false, host: host))
+        let requests = try String(contentsOf: file, encoding: .utf8).split(separator: "\n").map {
+            try JSONDecoder().decode(HostPrivilegedRequest.self, from: Data($0.utf8))
+        }
+        #expect(requests.map(\.operation) == ["start", "stop"])
+        let stop = try #require(requests.last?.stop)
+        #expect(stop.worker.pid == pid && stop.parent == host && stop.owner == "lidAwake")
+        #expect(worker.processIdentifier == nil && kill(pid, 0) == -1)
+    }
+
+    @Test func unacknowledgedQuitCannotCountAsSuccessfulRetention() async throws {
+        let worker = try fixture("stop-without-response")
+        try await worker.start()
+        let host = try #require(ExtensionProcessIdentity.current)
+        await #expect(throws: HostWorkerError.exited) {
+            try await worker.stop(
+                reason: .applicationQuit, owner: "lidAwake",
+                quitPolicy: .init(reason: .applicationQuit, restoreOnQuit: false, host: host))
+        }
+    }
+
+    @Test(arguments: HostWorkerStopReason.allCases.filter { $0 != .applicationQuit })
+    func everyForcedReasonRejectsRetentionAndLeavesWorkerRestorable(reason: HostWorkerStopReason)
+        async throws
+    {
+        let worker = try fixture("normal")
+        try await worker.start()
+        let host = try #require(ExtensionProcessIdentity.current)
+        await #expect(throws: HostWorkerError.rejected) {
+            try await worker.stop(
+                reason: reason, owner: "lidAwake",
+                quitPolicy: .init(reason: .applicationQuit, restoreOnQuit: false, host: host))
+        }
+        #expect(worker.processIdentifier != nil)
+        try await worker.stop(reason: reason)
+        #expect(worker.processIdentifier == nil)
+    }
+
+    private func fixture(_ mode: String, recording: URL? = nil) throws -> HostPrivilegedProcess {
         let script = try #require(
             Bundle.module.url(
                 forResource: "privileged-worker", withExtension: "py", subdirectory: "Fixtures"))
         return HostPrivilegedProcess(
-            executable: URL(fileURLWithPath: "/usr/bin/python3"), arguments: [script.path, mode],
+            executable: URL(fileURLWithPath: "/usr/bin/python3"),
+            arguments: [script.path, mode] + (recording.map { [$0.path] } ?? []),
             timeout: .seconds(3))
     }
 }

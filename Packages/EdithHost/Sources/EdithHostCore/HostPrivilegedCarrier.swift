@@ -33,6 +33,9 @@ import Security
         ) { [self] box in
             let connection = box.connection
             guard sessions.count < 8 else { connection.invalidate(); return }
+            guard let callerIdentity = ExtensionProcessIdentity.read(connection.processIdentifier),
+                let hostIdentity = Self.parentIdentity(of: callerIdentity.pid)
+            else { connection.invalidate(); return }
             let id = UUID()
             let admission = HostPrivilegedAdmission(
                 root: URL(fileURLWithPath: "/Library/Application Support/Edith Extension Carrier")
@@ -44,6 +47,15 @@ import Security
                         processIdentifier: connection.processIdentifier,
                         hostIdentifier: identifier, team: team)
                     try caller.authorize(source: source, owner: owner, version: version)
+                },
+                authorizeQuit: { [team] policy in
+                    guard callerIdentity.isAlive, hostIdentity.isAlive,
+                        policy.host == hostIdentity,
+                        Self.parentIdentity(of: callerIdentity.pid) == hostIdentity
+                    else { throw MarketplaceError.invalidSignature }
+                    let host = try HostPrivilegedCaller.read(
+                        processIdentifier: hostIdentity.pid, hostIdentifier: identifier, team: team)
+                    guard host.container == nil else { throw MarketplaceError.invalidSignature }
                 },
                 reserveOwner: { [leases] in leases.reserve($0) },
                 releaseOwner: { [leases] in leases.release($0) }
@@ -66,6 +78,13 @@ import Security
         return true
     }
 
+    private static func parentIdentity(of pid: Int32) -> ExtensionProcessIdentity? {
+        var info = proc_bsdinfo()
+        let size = MemoryLayout<proc_bsdinfo>.size
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(size)) == size else { return nil }
+        return ExtensionProcessIdentity.read(Int32(info.pbi_ppid))
+    }
+
     nonisolated static func bindAcceptedConnection(
         _ connection: NSXPCConnection,
         requirement: String, bind: @escaping @MainActor (HostPrivilegedConnection) -> Void
@@ -86,7 +105,10 @@ import Security
     private var releasing = false
     private var finished = false
     private var owner: String?
+    private var source: URL?
+    private var version: String?
     private let authorize: @MainActor (URL, String, String) throws -> Void
+    private let authorizeQuit: @MainActor (HostApplicationQuitPolicy) throws -> Void
     private let reserveOwner: @MainActor (String) -> Bool
     private let releaseOwner: @MainActor (String) -> Void
     private let makeWorker: @MainActor (URL) throws -> HostPrivilegedProcess
@@ -94,6 +116,9 @@ import Security
     init(
         admission: HostPrivilegedAdmission,
         authorize: @escaping @MainActor (URL, String, String) throws -> Void = { _, _, _ in },
+        authorizeQuit: @escaping @MainActor (HostApplicationQuitPolicy) throws -> Void = { _ in
+            throw MarketplaceError.invalidSignature
+        },
         reserveOwner: @escaping @MainActor (String) -> Bool,
         releaseOwner: @escaping @MainActor (String) -> Void,
         makeWorker: @escaping @MainActor (URL) throws -> HostPrivilegedProcess = { payload in
@@ -106,6 +131,7 @@ import Security
         }, ended: @escaping @MainActor () -> Void
     ) {
         self.admission = admission; self.ended = ended; self.authorize = authorize
+        self.authorizeQuit = authorizeQuit
         self.reserveOwner = reserveOwner; self.releaseOwner = releaseOwner;
         self.makeWorker = makeWorker
     }
@@ -129,6 +155,8 @@ import Security
                 return
             }
             self.owner = owner
+            self.source = URL(fileURLWithPath: source)
+            self.version = version
             do {
                 let payload = try self.admission.admit(
                     source: URL(fileURLWithPath: source), owner: owner, version: version)
@@ -146,10 +174,46 @@ import Security
             guard !self.releasing, let worker = self.worker, !command.isEmpty,
                 command.utf8.count <= 256, !command.utf8.contains(0), payload.count <= 32_768
             else { reply(nil, MarketplaceError.invalidBundle as NSError); return }
+            if command == HostApplicationQuitPolicy.command {
+                await self.releaseForApplicationQuit(payload: payload, reply: reply)
+                return
+            }
             do { reply(try await worker.invoke(command, payload: payload), nil) } catch {
                 reply(nil, error as NSError)
             }
         }
+    }
+
+    private func releaseForApplicationQuit(
+        payload: Data, reply: @escaping @Sendable (Data?, NSError?) -> Void
+    ) async {
+        do {
+            guard owner == "lidAwake", let source, let version, let worker,
+                payload.count <= 512, !finished, restoration == nil,
+                let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
+                Set(object.keys) == ["reason", "restoreOnQuit", "host"],
+                let host = object["host"] as? [String: Any],
+                Set(host.keys) == ["pid", "generation"]
+            else { throw HostWorkerError.rejected }
+            let policy = try JSONDecoder().decode(HostApplicationQuitPolicy.self, from: payload)
+            try policy.validate()
+            try authorize(source, "lidAwake", version)
+            try authorizeQuit(policy)
+            releasing = true
+            do {
+                try await worker.stop(
+                    reason: .applicationQuit, owner: "lidAwake", quitPolicy: policy)
+                guard restoration == nil else { throw HostWorkerError.rejected }
+                try policy.validate()
+                try authorizeQuit(policy)
+                finish(notify: false)
+                reply(Data(), nil)
+                ended()
+            } catch {
+                connectionLost()
+                reply(nil, error as NSError)
+            }
+        } catch { reply(nil, error as NSError) }
     }
 
     nonisolated func release(reply: @escaping @Sendable (NSError?) -> Void) {
@@ -192,12 +256,13 @@ import Security
         try await worker?.stop()
     }
 
-    private func finish() {
+    private func finish(notify: Bool = true) {
         guard !finished else { return }; finished = true
         worker = nil
         if let owner { releaseOwner(owner); self.owner = nil }
         if let payload { try? admission.remove(payload); self.payload = nil }
-        ended()
+        source = nil; version = nil
+        if notify { ended() }
     }
 }
 
