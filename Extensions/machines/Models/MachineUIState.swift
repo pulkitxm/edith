@@ -27,6 +27,8 @@ public struct MachineUISessionState: Codable, Sendable {
     public var services: [SystemdService]
     public var facts: MachineSessionSummary
     public var activeForwards: Set<UUID>
+    public var mountsAvailable: Bool = false
+    public var defaultMountPath: String = ""
     public var mount: MachineMount?
     public var mountHealth: MountHealth?
     public var isRemounting: Bool
@@ -41,7 +43,8 @@ public struct MachineUISessionState: Codable, Sendable {
 public struct MachineUIAction: Codable, Sendable {
     public enum Operation: String, Codable, Sendable {
         case connect, disconnect, retry, observe, dockerObserve, speedObserve
-        case power, mount, unmount, forwardAdd, forwardRemove, snippetAdd, snippetRemove
+        case power, service, revealMount, mount, unmount, forwardAdd, forwardRemove, snippetAdd,
+            snippetRemove
         case command, docker, refreshDocker, refreshInventory, refreshServices
         case refreshProfile, setProfile, speedTest, restoreMount, forward, listFiles, home, mkdir
     }
@@ -50,6 +53,8 @@ public struct MachineUIAction: Codable, Sendable {
     public var text: String = ""
     public var input: Data?
     public var timeout: Double = 60
+    public var presentationID: UUID?
+    public var service: MachineServiceOperation?
     public var token: UUID?
     public var active = false
     public var forward: PortForward?
@@ -67,7 +72,9 @@ public struct MachineUIAction: Codable, Sendable {
             timeout.isFinite, timeout > 0, timeout <= 900,
             duration >= 0, duration <= 86_400
         else { throw MachineUIError.invalidRequest }
-        if operation == .observe, token == nil { throw MachineUIError.invalidRequest }
+        if [.observe, .dockerObserve, .speedObserve].contains(operation), token == nil {
+            throw MachineUIError.invalidRequest
+        }
         if operation == .forward, forward?.machineID != machineID {
             throw MachineUIError.invalidRequest
         }
@@ -112,4 +119,9 @@ struct MachineUIJobPoll: Codable, Sendable {
 struct MachineUIJobState: Codable, Sendable {
     let complete: Bool
     let reply: MachineUIReply?
+    var progress: FileOperationProgress?
+}
+
+struct MachineUIPresentation: Codable, Sendable {
+    let id: UUID
 }

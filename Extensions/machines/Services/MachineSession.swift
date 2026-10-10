@@ -37,6 +37,8 @@ public final class MachineSession {
     public private(set) var services: [SystemdService] = []
     public private(set) var facts = MachineSessionSummary()
     public private(set) var activeForwards: Set<UUID> = []
+    public private(set) var mountsAvailable = false
+    public private(set) var defaultMountPath = ""
     public private(set) var mount: MachineMount?
     public private(set) var mountHealth: MountHealth?
     public private(set) var isRemounting = false
@@ -86,6 +88,8 @@ public final class MachineSession {
     @ObservationIgnored private nonisolated(unsafe) var wakeObserver: NSObjectProtocol?
     private var reconnects = true
     private var rememberedForwards: [UUID: PortForward] = [:]
+    private var uiDockerTokens: [UUID] = []
+    private var uiSpeedTokens: [UUID] = []
     private var dockerObserverCount = 0
     private var dockerRefreshRunning = false
     private var dockerInventoryRefreshRunning = false
@@ -571,6 +575,7 @@ public final class MachineSession {
     public func beginInternetSpeedObservation() {
         if let uiClient {
             var action = MachineUIAction(operation: .speedObserve, machineID: id);
+            let token = UUID(); uiSpeedTokens.append(token); action.token = token
             action.active = true; uiClient.enqueue(action); return
         }
         guard !synthetic else { return }
@@ -582,6 +587,7 @@ public final class MachineSession {
     public func endInternetSpeedObservation() {
         if let uiClient {
             var action = MachineUIAction(operation: .speedObserve, machineID: id);
+            guard let token = uiSpeedTokens.popLast() else { return }; action.token = token
             action.active = false; uiClient.enqueue(action); return
         }
         internetSpeedObserverCount = max(0, internetSpeedObserverCount - 1)
@@ -644,6 +650,7 @@ public final class MachineSession {
     public func beginDockerObservation() {
         if let uiClient {
             var action = MachineUIAction(operation: .dockerObserve, machineID: id);
+            let token = UUID(); uiDockerTokens.append(token); action.token = token
             action.active = true; uiClient.enqueue(action); return
         }
         dockerObserverCount += 1
@@ -654,6 +661,7 @@ public final class MachineSession {
     public func endDockerObservation() {
         if let uiClient {
             var action = MachineUIAction(operation: .dockerObserve, machineID: id);
+            guard let token = uiDockerTokens.popLast() else { return }; action.token = token
             action.active = false; uiClient.enqueue(action); return
         }
         dockerObserverCount = max(0, dockerObserverCount - 1)
@@ -1166,7 +1174,10 @@ extension MachineSession {
             slow: slow, sample: sample, docker: docker, containersLoaded: containersLoaded,
             containersError: containersError, containers: containers, images: images,
             volumes: volumes, diskUsage: diskUsage, networks: networks, services: services,
-            facts: facts, activeForwards: activeForwards, mount: mount, mountHealth: mountHealth,
+            facts: facts, activeForwards: activeForwards,
+            mountsAvailable: MachineMounts.isAvailable,
+            defaultMountPath: MachineMounts.mountPoint(for: machine).path, mount: mount,
+            mountHealth: mountHealth,
             isRemounting: isRemounting, isApplyingPlatformProfile: isApplyingPlatformProfile,
             platformProfileRevertsAt: platformProfileRevertsAt, internetSpeed: internetSpeed,
             internetSpeedError: internetSpeedError, isTestingInternetSpeed: isTestingInternetSpeed,
@@ -1183,7 +1194,9 @@ extension MachineSession {
         containersError = value.containersError; containers = value.containers
         images = value.images; volumes = value.volumes; diskUsage = value.diskUsage
         networks = value.networks; services = value.services; facts = value.facts
-        activeForwards = value.activeForwards; mount = value.mount; mountHealth = value.mountHealth
+        activeForwards = value.activeForwards; mountsAvailable = value.mountsAvailable
+        defaultMountPath = value.defaultMountPath; mount = value.mount;
+        mountHealth = value.mountHealth
         isRemounting = value.isRemounting;
         isApplyingPlatformProfile = value.isApplyingPlatformProfile
         platformProfileRevertsAt = value.platformProfileRevertsAt
@@ -1227,5 +1240,35 @@ extension MachineSession {
         }
         return await MachineMountOperationExecution.perform(
             operation, machine: machine, platform: remotePlatform ?? .linux)
+    }
+}
+
+extension MachineSession {
+    func performService(_ operation: MachineServiceOperation, unit: String) async -> Result<
+        MachineServiceOperationResult, Error
+    > {
+        if let uiClient {
+            var value = MachineUIAction(operation: .service, machineID: id)
+            value.text = unit; value.service = operation
+            do { return .success(try await uiClient.action(value)) } catch {
+                return .failure(error)
+            }
+        }
+        let platform = remotePlatform ?? .linux
+        return await MachineServiceOperationExecution.perform(
+            operation, unit: unit,
+            sudoPassword: platform == .windows ? nil : SudoPassword.stdin(machineID: id),
+            platform: platform,
+            using: { command, input, timeout in
+                await self.runCommand(command, stdin: input, timeout: timeout)
+            })
+    }
+
+    func revealMount() {
+        if let uiClient {
+            uiClient.enqueue(MachineUIAction(operation: .revealMount, machineID: id)); return
+        }
+        guard let mount, mountHealth == .mounted else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: mount.mountPoint)])
     }
 }

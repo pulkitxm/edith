@@ -5,6 +5,46 @@ import Testing
 @testable import MachinesExtension
 
 @Suite(.serialized) @MainActor struct MachineUIFacadeTests {
+    @Test func presentationExpiryReleasesOnlyItsOwnRealSamplingAndDockerDemand() async throws {
+        let session = MachineSession(machine: .local, local: true, observesWakeRequests: false)
+        var time = Date(timeIntervalSince1970: 100)
+        let engine = MachineUIEngine(
+            session: { _ in session },
+            state: {
+                MachineUIState(
+                    machines: [], forwards: [], snippets: [], sessions: [], workspaces: .init())
+            }, mutation: { _ in }, workspace: { _ in }, now: { time })
+        let first = UUID(), second = UUID()
+        func observe(_ operation: MachineUIAction.Operation, _ presentation: UUID, _ token: UUID)
+            async throws
+        {
+            var action = MachineUIAction(operation: operation, machineID: session.id)
+            action.presentationID = presentation; action.token = token; action.active = true
+            let data = try await engine.execute(
+                "machines.ui.action", payload: JSONEncoder().encode(action))
+            #expect(try JSONDecoder().decode(MachineUIReply.self, from: data).error == nil)
+        }
+        try await observe(.observe, first, UUID())
+        try await observe(.observe, second, UUID())
+        let token = UUID()
+        try await observe(.dockerObserve, first, token)
+        try await observe(.dockerObserve, first, token)
+        #expect(session.isCollecting)
+        time = time.addingTimeInterval(9)
+        _ = try await engine.execute(
+            "machines.ui.heartbeat",
+            payload: JSONEncoder().encode(MachineUIPresentation(id: second)))
+        time = time.addingTimeInterval(2)
+        engine.reapPresentations()
+        #expect(session.isCollecting)
+        #expect(
+            session.currentDockerPollInterval == MachineResourcePolicy.backgroundDockerPollInterval)
+        _ = try await engine.execute(
+            "machines.ui.release", payload: JSONEncoder().encode(MachineUIPresentation(id: second)))
+        #expect(!session.isCollecting)
+        await engine.shutdown(); await session.shutdown()
+    }
+
     @Test func checkedActionsRejectMalformedParameters() throws {
         var action = MachineUIAction(operation: .observe, machineID: UUID())
         #expect(throws: MachineUIError.invalidRequest) { try action.validate() }

@@ -245,6 +245,8 @@ final class ExtensionRuntime: NSObject {
                     }, files: { value in try await files.execute(value) },
                     preview: { value in try await previews.execute(value) },
                     logs: { value in try logs.execute(value) },
+                    fileProgress: { value in try files.progress(value) },
+                    presentationRelease: { id in files.release(id) },
                     terminal: { value in try await terminals.execute(value) })
                 do {
                     cli = try MachineCLIService(runner: { machine, owner in

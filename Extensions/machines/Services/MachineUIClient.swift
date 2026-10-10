@@ -47,11 +47,15 @@ import Foundation
             })
         else { throw MachineUIError.invalidRequest }
         receive(state)
+        let _: Bool = try await request(
+            "machines.ui.heartbeat", value: MachineUIPresentation(id: client.presentationID))
         _ = try await terminal(
             MachineTerminalRequest(operation: .heartbeat, machineID: Machine.localID))
     }
 
     public func action<Value: Decodable>(_ value: MachineUIAction) async throws -> Value {
+        var value = value
+        value.presentationID = client.presentationID
         try value.validate()
         return try await job("machines.ui.action", value: value)
     }
@@ -110,9 +114,12 @@ import Foundation
         }
     }
 
-    func files(_ value: MachineFileRequest) async throws -> MachineFileState {
+    func files(
+        _ value: MachineFileRequest, progress: @escaping (FileOperationProgress?) -> Void = { _ in }
+    ) async throws -> MachineFileState {
+        var value = value; value.presentationID = client.presentationID
         try value.validate()
-        return try await job("machines.ui.files", value: value)
+        return try await job("machines.ui.files", value: value, progress: progress)
     }
 
     func logs(_ value: MachineLogRequest) async throws -> MachineLogFrame {
@@ -169,7 +176,7 @@ import Foundation
     }
 
     private func job<Request: Encodable, Reply: Decodable>(
-        _ operation: String, value: Request
+        _ operation: String, value: Request, progress: (FileOperationProgress?) -> Void = { _ in }
     ) async throws -> Reply {
         let id: UUID = try await request(
             "machines.ui.begin",
@@ -179,6 +186,12 @@ import Foundation
                 try Task.checkCancellation()
                 let state: MachineUIJobState = try await request(
                     "machines.ui.poll", value: MachineUIJobPoll(id: id, consume: true))
+                if let value = state.progress {
+                    guard value.total >= 0, value.completed >= 0, value.title.utf8.count <= 4096,
+                        value.bytesTransferred >= 0
+                    else { throw MachineUIError.invalidRequest }
+                }
+                progress(state.progress)
                 if state.complete {
                     guard let reply = state.reply else { throw MachineUIError.invalidRequest }
                     if let error = reply.error { throw MachineUIFailure(message: error) }

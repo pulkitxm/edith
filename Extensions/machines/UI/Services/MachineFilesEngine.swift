@@ -1,6 +1,7 @@
 import Foundation
 
 @MainActor final class MachineFilesEngine {
+    private var presentations: [UUID: UUID] = [:]
     private var models: [UUID: FinderModel] = [:]
     private let session: (UUID) throws -> MachineSession
     private var stopped = false
@@ -21,6 +22,12 @@ import Foundation
         } else {
             model = FinderModel(session: try session(request.machineID), path: request.path)
             models[request.viewID] = model
+        }
+        if let presentation = request.presentationID {
+            if let retained = presentations[request.viewID], retained != presentation {
+                throw MachineUIError.invalidRequest
+            }
+            presentations[request.viewID] = presentation
         }
         model.path = request.path
         model.selection = request.selection
@@ -76,10 +83,18 @@ import Foundation
             model.cancelTransfer(); model.stopLoading()
             FinderUndoBridge.forget(model)
             models.removeValue(forKey: request.viewID)
+            presentations.removeValue(forKey: request.viewID)
         }
         try Task.checkCancellation()
         guard !stopped else { throw MachineUIError.unavailable }
         return model.fileState()
+    }
+
+    func progress(_ request: MachineFileRequest) throws -> FileOperationProgress? {
+        guard !stopped else { throw MachineUIError.unavailable }
+        guard let model = models[request.viewID] else { return nil }
+        guard model.session.id == request.machineID else { throw MachineUIError.invalidRequest }
+        return model.progress
     }
 
     func undo(machineID: UUID) async throws -> [String: Any] {
@@ -90,6 +105,15 @@ import Foundation
         await model.undoLastOperation()
         if let error = model.errorMessage { throw MachineUIFailure(message: error) }
         return ["undone": true, "label": label]
+    }
+
+    func release(_ presentation: UUID) {
+        for id in presentations.keys.filter({ presentations[$0] == presentation }) {
+            if let model = models.removeValue(forKey: id) {
+                model.cancelTransfer(); model.stopLoading(); FinderUndoBridge.forget(model)
+            }
+            presentations.removeValue(forKey: id)
+        }
     }
 
     func shutdown() {

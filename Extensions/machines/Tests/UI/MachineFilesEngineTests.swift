@@ -11,6 +11,45 @@ import Testing
         return root
     }
 
+    @Test func originalTransfersExposeLiveProgressAndPresentationRelease() async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("source"),
+            target = root.appendingPathComponent("target")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        let paths = try (0..<64).map { index in
+            let path = source.appendingPathComponent("fixture-\(index).bin")
+            try Data(repeating: UInt8(index), count: 131072).write(to: path)
+            return path.path
+        }
+        let session = MachineSession(machine: .local, local: true, observesWakeRequests: false)
+        let engine = MachineFilesEngine(session: { _ in session })
+        let presentation = UUID()
+        var request = MachineFileRequest(
+            presentationID: presentation, viewID: UUID(), machineID: session.id, operation: .upload,
+            path: target.path)
+        request.paths = paths
+        let task = Task { try await engine.execute(request) }
+        var progress: FileOperationProgress?
+        for _ in 0..<10000 {
+            progress = try engine.progress(request)
+            if progress != nil { break }
+            await Task.yield()
+        }
+        #expect(progress != nil)
+        #expect(progress?.total == 64)
+        let state = try await task.value
+        #expect(state.error == nil)
+        #expect(state.entries.count == 64)
+        #expect(
+            try Data(contentsOf: target.appendingPathComponent("fixture-31.bin"))
+                == Data(repeating: 31, count: 131072))
+        engine.release(presentation)
+        #expect(try engine.progress(request) == nil)
+        engine.shutdown(); await session.shutdown()
+    }
+
     @Test func originalFileRenameAndUndoRunInOwningEngine() async throws {
         let root = try fixture()
         defer { try? FileManager.default.removeItem(at: root) }

@@ -10,6 +10,23 @@ import Foundation
     private let logs: (MachineLogRequest) throws -> MachineLogFrame
     private let terminal: (MachineTerminalRequest) async throws -> MachineTerminalFrame
     private let files: (MachineFileRequest) async throws -> MachineFileState
+    private let fileProgress: (MachineFileRequest) throws -> FileOperationProgress?
+    private let presentationHeartbeat: (UUID) -> Void
+    private let presentationRelease: (UUID) -> Void
+    private let now: () -> Date
+    private struct LeaseKey: Hashable {
+        let presentation: UUID
+        let machine: UUID
+        let operation: String
+        let token: UUID
+    }
+    private struct Lease {
+        let session: MachineSession
+        let operation: MachineUIAction.Operation
+        let token: UUID
+    }
+    private var leases: [LeaseKey: Lease] = [:]
+    private var presentations: [UUID: Date] = [:]
     private let observe: (UUID, Bool) -> Void
     private let workspace: (WorkspaceStore) throws -> Void
     private var stopped = false
@@ -17,6 +34,7 @@ import Foundation
         var task: Task<Void, Never>
         var touched: Date
         var reply: MachineUIReply?
+        var fileRequest: MachineFileRequest?
     }
     private var jobs: [UUID: Job] = [:]
     private var retired: [Task<Void, Never>] = []
@@ -36,10 +54,19 @@ import Foundation
         logs: @escaping (MachineLogRequest) throws -> MachineLogFrame = { _ in
             throw MachineUIError.unavailable
         },
+        fileProgress: @escaping (MachineFileRequest) throws -> FileOperationProgress? = { _ in nil
+        },
+        presentationHeartbeat: @escaping (UUID) -> Void = { _ in },
+        presentationRelease: @escaping (UUID) -> Void = { _ in },
+        now: @escaping () -> Date = Date.init,
         terminal: @escaping (MachineTerminalRequest) async throws -> MachineTerminalFrame = { _ in
             throw MachineUIError.unavailable
         }
     ) {
+        self.fileProgress = fileProgress
+        self.presentationHeartbeat = presentationHeartbeat
+        self.presentationRelease = presentationRelease
+        self.now = now
         self.session = session
         self.state = state
         self.mutation = mutation
@@ -56,6 +83,7 @@ import Foundation
         reaper?.cancel(); reaper = nil
         for job in jobs.values { job.task.cancel(); retired.append(job.task) }
         jobs = [:]
+        for id in Array(presentations.keys) { release(id) }
     }
 
     func shutdown() async {
@@ -71,6 +99,10 @@ import Foundation
                 .contains(value.operation),
             value.payload.count <= 2_097_152, jobs.count < 4
         else { throw MachineUIError.invalidRequest }
+        let fileRequest =
+            value.operation == "machines.ui.files"
+            ? try JSONDecoder().decode(MachineFileRequest.self, from: value.payload) : nil
+        try fileRequest?.validate()
         let id = UUID()
         let task = Task { [weak self] in
             guard let self else { return }
@@ -86,13 +118,21 @@ import Foundation
             guard !stopped, jobs[id] != nil else { return }
             jobs[id]?.reply = reply
         }
-        jobs[id] = Job(task: task, touched: Date())
+        jobs[id] = Job(
+            task: task, touched: now(),
+            fileRequest: fileRequest)
+        ensureReaper()
+        return id
+    }
+
+    private func ensureReaper() {
         if reaper == nil {
             reaper = Task { [weak self] in
                 while !Task.isCancelled {
                     do { try await Task.sleep(for: .seconds(2)) } catch { return }
                     guard let self, !stopped else { return }
-                    let expired = jobs.filter { Date().timeIntervalSince($0.value.touched) > 10 }
+                    reapPresentations()
+                    let expired = jobs.filter { now().timeIntervalSince($0.value.touched) > 10 }
                         .map(\.key)
                     for id in expired { cancelJob(id) }
                     let completed = retired
@@ -101,7 +141,42 @@ import Foundation
                 }
             }
         }
-        return id
+    }
+
+    func reapPresentations() {
+        for (id, touched) in presentations where now().timeIntervalSince(touched) > 10 {
+            release(id)
+        }
+    }
+
+    private func release(_ id: UUID) {
+        for key in leases.keys.filter({ $0.presentation == id }) {
+            guard let lease = leases.removeValue(forKey: key) else { continue }
+            change(lease, active: false)
+        }
+        presentations.removeValue(forKey: id)
+        presentationRelease(id)
+    }
+
+    private func change(_ lease: Lease, active: Bool) {
+        switch lease.operation {
+        case .observe:
+            observe(lease.session.id, active)
+            lease.session.setForegroundObservation(lease.token, active: active)
+        case .dockerObserve:
+            if active {
+                lease.session.beginDockerObservation()
+            } else {
+                lease.session.endDockerObservation()
+            }
+        case .speedObserve:
+            if active {
+                lease.session.beginInternetSpeedObservation()
+            } else {
+                lease.session.endInternetSpeedObservation()
+            }
+        default: break
+        }
     }
 
     private func cancelJob(_ id: UUID) {
@@ -123,16 +198,27 @@ import Foundation
     private func executeValidated(_ operation: String, payload: Data) async throws -> Data {
         guard !stopped, payload.count <= 2_097_152 else { throw MachineUIError.unavailable }
         switch operation {
+        case "machines.ui.heartbeat", "machines.ui.release":
+            let value = try JSONDecoder().decode(MachineUIPresentation.self, from: payload)
+            if operation == "machines.ui.release" {
+                release(value.id)
+            } else {
+                presentations[value.id] = now(); presentationHeartbeat(value.id); ensureReaper()
+            }
+            return try encode(true)
         case "machines.ui.begin":
             return try encode(begin(JSONDecoder().decode(MachineUIJobInput.self, from: payload)))
         case "machines.ui.poll":
             let value = try JSONDecoder().decode(MachineUIJobPoll.self, from: payload)
             guard var job = jobs[value.id] else { throw MachineUIError.unavailable }
-            job.touched = Date()
+            job.touched = now()
             jobs[value.id] = job
             let reply = job.reply
             if value.consume, reply != nil { jobs.removeValue(forKey: value.id) }
-            return try encode(MachineUIJobState(complete: reply != nil, reply: reply))
+            return try encode(
+                MachineUIJobState(
+                    complete: reply != nil, reply: reply,
+                    progress: try job.fileRequest.flatMap(fileProgress)))
         case "machines.ui.cancel":
             let id = try JSONDecoder().decode(UUID.self, from: payload)
             cancelJob(id)
@@ -223,24 +309,27 @@ import Foundation
             case .connect: session.start(); result = try encode(true)
             case .disconnect: await session.shutdown(); result = try encode(true)
             case .retry: session.retry(); result = try encode(true)
-            case .observe:
-                observe(session.id, value.active)
-                session.setForegroundObservation(value.token!, active: value.active)
-                result = try encode(true)
-            case .dockerObserve:
-                if value.active {
-                    session.beginDockerObservation()
-                } else {
-                    session.endDockerObservation()
+            case .observe, .dockerObserve, .speedObserve:
+                guard let presentation = value.presentationID, let token = value.token else {
+                    throw MachineUIError.invalidRequest
+                }
+                let key = LeaseKey(
+                    presentation: presentation, machine: session.id,
+                    operation: value.operation.rawValue, token: token)
+                presentations[presentation] = now(); ensureReaper()
+                if value.active, leases[key] == nil {
+                    let lease = Lease(session: session, operation: value.operation, token: token)
+                    leases[key] = lease; change(lease, active: true)
+                } else if !value.active, let lease = leases.removeValue(forKey: key) {
+                    change(lease, active: false)
                 }
                 result = try encode(true)
-            case .speedObserve:
-                if value.active {
-                    session.beginInternetSpeedObservation()
-                } else {
-                    session.endInternetSpeedObservation()
-                }
-                result = try encode(true)
+            case .service:
+                guard let operation = value.service else { throw MachineUIError.invalidRequest }
+                result = try encode(
+                    try await session.performService(operation, unit: value.text).get())
+            case .revealMount:
+                session.revealMount(); result = try encode(true)
             case .forwardAdd, .forwardRemove:
                 guard let forward = value.forward, forward.machineID == session.id else {
                     throw MachineUIError.invalidRequest

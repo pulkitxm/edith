@@ -165,7 +165,7 @@ public enum NameConflicts {
 
 }
 
-public struct FileOperationProgress: Equatable, Sendable {
+public struct FileOperationProgress: Codable, Equatable, Sendable {
     public var title: String
     public var completed: Int
     public var total: Int

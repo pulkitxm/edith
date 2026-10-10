@@ -118,25 +118,18 @@ struct MachineToolsTab: View {
                         }
                         .accessibilityLabel("Reconnecting disk")
                     }
-                    Button("Reveal") {
-                        RemoteFileOperationExecution.present(
-                            [URL(fileURLWithPath: mount.mountPoint)], action: .reveal
-                        ) { urls, _ in
-                            NSWorkspace.shared.activateFileViewerSelecting(urls)
-                            return true
-                        }
-                    }
-                    .disabled(session.mountHealth != .mounted)
+                    Button("Reveal") { session.revealMount() }
+                        .disabled(session.mountHealth != .mounted)
                     Button("Unmount") { unmountDisk() }
                         .disabled(mounting || session.isRemounting)
                 } else {
                     Text(
-                        MachineMounts.isAvailable
-                            ? MachineMounts.mountPoint(for: session.machine).path
+                        session.mountsAvailable
+                            ? session.defaultMountPath
                             : "sshfs is not installed on this Mac"
                     )
                     .font(
-                        MachineMounts.isAvailable
+                        session.mountsAvailable
                             ? DashSkin.mono(11) : .system(size: UIScale.pt(11.5))
                     )
                     .foregroundStyle(DashSkin.inkFaint(dark))
@@ -151,7 +144,7 @@ struct MachineToolsTab: View {
                     }
                     Button("Mount") { mountDisk() }
                         .disabled(
-                            mounting || !MachineMounts.isAvailable || !session.state.isConnected
+                            mounting || !session.mountsAvailable || !session.state.isConnected
                         )
                 }
             }
@@ -510,15 +503,7 @@ struct MachineToolsTab: View {
     private func runService(_ action: String, unit: String) {
         guard let operation = MachineServiceOperation(rawValue: action) else { return }
         Task {
-            let machineID = session.machine.id
-            let platform = session.remotePlatform ?? .linux
-            let stdin = platform == .windows ? nil : SudoPassword.stdin(machineID: machineID)
-            let result = await MachineServiceOperationExecution.perform(
-                operation, unit: unit, sudoPassword: stdin,
-                platform: platform,
-                using: { command, stdin, timeout in
-                    await session.runCommand(command, stdin: stdin, timeout: timeout)
-                })
+            let result = await session.performService(operation, unit: unit)
             if case let .failure(error) = result {
                 message = PowerOutcome.explain(error)
             } else {

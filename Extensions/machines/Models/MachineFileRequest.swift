@@ -5,6 +5,7 @@ struct MachineFileRequest: Codable, Sendable {
         case load, places, home, measure, open, reveal, undo, rename, mkdir, duplicate
         case trash, download, upload, search, drop, commitDrop, cancel, release
     }
+    var presentationID: UUID?
     var viewID: UUID
     var machineID: UUID
     var operation: Operation

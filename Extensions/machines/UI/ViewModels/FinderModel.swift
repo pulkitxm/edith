@@ -96,12 +96,16 @@ final class FinderModel {
     private var folderCounts: [String: Int] = [:]
     private var resolvedHome: String?
     private var undoStack: [FinderUndoStep] = []
+    private var remoteTransferTask: Task<MachineFileState, Error>?
     private var transferTask: Task<RemoteTransferOutcome, Error>?
     private var transferCommandTask: Task<Result<String, Error>, Never>?
 
-    var canCancelTransfer: Bool { transferTask != nil || transferCommandTask != nil }
+    var canCancelTransfer: Bool {
+        transferTask != nil || transferCommandTask != nil || remoteTransferTask != nil
+    }
 
     func cancelTransfer() {
+        remoteTransferTask?.cancel()
         transferTask?.cancel()
         transferCommandTask?.cancel()
     }
@@ -1422,7 +1426,22 @@ extension FinderModel {
             path: path, selection: selection, text: text, paths: paths, permanently: permanently,
             intent: intent, resolutions: resolutions)
         do {
-            let result = try await client.files(value)
+            let task = Task {
+                try await client.files(value) { [weak self] progress in
+                    guard let self, listingLoad.isCurrent(request), path == requestedPath else {
+                        return
+                    }
+                    self.progress = progress
+                }
+            }
+            let transferring = [.download, .upload, .drop, .commitDrop].contains(operation)
+            if transferring { remoteTransferTask = task }
+            defer { if transferring { remoteTransferTask = nil; progress = nil } }
+            let result = try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
             try Task.checkCancellation()
             guard listingLoad.isCurrent(request), path == requestedPath else { return }
             path = result.path; entries = result.entries; selection = result.selection
