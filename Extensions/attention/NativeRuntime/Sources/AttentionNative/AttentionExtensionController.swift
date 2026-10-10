@@ -25,6 +25,9 @@ public final class AttentionExtensionController: NSObject {
     private var stoppingTask: Task<Void, Never>?
     private var activeCalls = 0
     private let commands = ExtensionCommandRegistry()
+    private let ambientPolicy = ExtensionAmbientPolicy(jobs: [
+        "attention.ingest": ExtensionAmbientCadence(ambient: 900, live: 900)
+    ])
 
     public init(bundle: Bundle) {
         self.bundle = bundle
@@ -136,6 +139,7 @@ public final class AttentionExtensionController: NSObject {
             else { return ["ok": false] as NSDictionary }
             guard service == nil else { return ["ok": true] as NSDictionary }
             do {
+                try ambientPolicy.apply(context: input)
                 AttentionResources.directory = bundle.resourceURL
                 let database = try AttentionDatabase(
                     url: AttentionPaths.root.appendingPathComponent("attention-history.sqlite"))
@@ -148,7 +152,7 @@ public final class AttentionExtensionController: NSObject {
                         ? AttentionPaths.root.appendingPathComponent("fixture-cloud")
                         : AttentionCloudStorage.directory,
                     cloudAvailable: { !fixture && AttentionCloudStorage.available },
-                    collectsSystemActivity: !fixture)
+                    collectsSystemActivity: !fixture, ambientPolicy: ambientPolicy)
                 self.service = service
                 let repository = AttentionRepository(
                     eventSink: AttentionEventStore(store: database))
@@ -201,6 +205,9 @@ public final class AttentionExtensionController: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":
             guard !stopped else { return ["ok": false] as NSDictionary }
+            do { try ambientPolicy.apply(context: input) } catch {
+                return ["ok": false, "message": error.localizedDescription] as NSDictionary
+            }
             IPC.post(IPC.Name.settingsChanged)
         case "stop":
             stopUI()
