@@ -111,8 +111,11 @@ private struct PersistentDataSentinels {
         try expectState(
             fixture.store, installed: [first.0, second.0], selected: first.0, paths: paths)
         try sentinels.expectPreserved()
-        for item in [third, fourth] {
+        for (index, item) in [third, fourth].enumerated() {
             _ = try await installer.install([item.0], repository: "example/app")
+            try expectState(
+                fixture.store, installed: items.prefix(index + 3).map(\.0), selected: first.0,
+                paths: paths)
             try sentinels.expectPreserved()
         }
         try expectState(fixture.store, installed: items.map(\.0), selected: first.0, paths: paths)
@@ -157,13 +160,108 @@ private struct PersistentDataSentinels {
         try sentinels.expectPreserved()
     }
 
+    @Test func rejectedDependencyUpdateAndGuardedRemovalPreserveExactData() async throws {
+        let fixture = try PackageFixture()
+        defer { fixture.clean() }
+        let sentinels = try PersistentDataSentinels(
+            directory: fixture.directory.appendingPathComponent("support/Edith"),
+            packageRoot: fixture.store.root)
+        let first = try fixture.archive("1.0.0", id: "usage")
+        let second = try fixture.archive("1.1.0", id: "usage")
+        let dependent = try addingDependencies(
+            ["usage"], to: fixture.archive(id: "companion"))
+        let items = [first, second, dependent]
+        let paths = items.map { (package: $0.0, url: fixture.store.directory(for: $0.0)) }
+        _ = try await fixture.installer(archives: [first.0.downloadURL: first.1]).install(
+            [first.0], repository: "example/app")
+        try sentinels.expectPreserved()
+        try fixture.store.select(first.0)
+        try expectState(fixture.store, installed: [first.0], selected: first.0, paths: paths)
+        try sentinels.expectPreserved()
+        let metadata = try Data(
+            contentsOf: fixture.store.root.appendingPathComponent("installed.json"))
+        let selection = try Data(
+            contentsOf: fixture.store.root.appendingPathComponent("selected-packages.json"))
+        let plan = try ExtensionCatalog(revision: 1, packages: [second.0, dependent.0])
+            .installationPlan(
+                for: "companion", hostABI: "host-1", architecture: "arm64", systemVersion: 14)
+        #expect(plan == [second.0, dependent.0])
+        await #expect(throws: MarketplaceError.downloadFailed) {
+            try await fixture.installer(archives: [second.0.downloadURL: second.1]).install(
+                plan, repository: "example/app")
+        }
+        try expectState(fixture.store, installed: [first.0], selected: first.0, paths: paths)
+        try expectUnchangedMetadata(fixture.store, metadata: metadata, selection: selection)
+        try sentinels.expectPreserved()
+
+        _ = try await fixture.installer(
+            archives: Dictionary(uniqueKeysWithValues: items.map { ($0.0.downloadURL, $0.1) })
+        ).install(plan, repository: "example/app")
+        try expectState(fixture.store, installed: items.map(\.0), selected: first.0, paths: paths)
+        try sentinels.expectPreserved()
+        try fixture.store.select(second.0)
+        try expectState(fixture.store, installed: items.map(\.0), selected: second.0, paths: paths)
+        try sentinels.expectPreserved()
+        #expect(throws: MarketplaceError.dependencyInUse) {
+            try fixture.store.remove(id: "usage")
+        }
+        try expectState(fixture.store, installed: items.map(\.0), selected: second.0, paths: paths)
+        try sentinels.expectPreserved()
+        let lease = try fixture.store.lease(dependent.0)
+        defer { lease.close() }
+        #expect(try fixture.store.requestRemoval(id: "companion") == false)
+        #expect(try fixture.store.pendingRemovals() == ["companion"])
+        try expectState(fixture.store, installed: items.map(\.0), selected: second.0, paths: paths)
+        try sentinels.expectPreserved()
+        lease.close()
+        let reopened = ExtensionPackageStore(root: fixture.store.root)
+        try reopened.completePendingRemovals()
+        #expect(try reopened.pendingRemovals().isEmpty)
+        try expectState(reopened, installed: [first.0, second.0], selected: second.0, paths: paths)
+        try sentinels.expectPreserved()
+        #expect(try reopened.remove(id: "usage"))
+        try expectState(reopened, installed: [], selected: nil, paths: paths)
+        try sentinels.expectPreserved()
+    }
+
+    private func addingDependencies(
+        _ dependencies: [String], to item: (ExtensionPackage, URL)
+    ) throws -> (ExtensionPackage, URL) {
+        let original = item.0
+        let package = ExtensionPackage(
+            id: original.id, version: original.version, hostABI: original.hostABI,
+            downloadURL: original.downloadURL, sha256: original.sha256,
+            downloadBytes: original.downloadBytes, installedBytes: original.installedBytes,
+            dependencies: dependencies)
+        let previous = try JSONEncoder().encode(ExtensionPayloadManifest(package: original))
+        let manifest = try JSONEncoder().encode(ExtensionPayloadManifest(package: package))
+        let archive = try Archive(url: item.1, accessMode: .update)
+        let entry = try #require(archive["\(original.id)/package.json"])
+        try archive.remove(entry)
+        try archive.addEntry(
+            with: entry.path, type: .file, uncompressedSize: Int64(manifest.count)
+        ) { offset, count in
+            manifest.subdata(in: Int(offset)..<min(Int(offset) + count, manifest.count))
+        }
+        let bytes = try Data(contentsOf: item.1)
+        return (
+            ExtensionPackage(
+                id: package.id, version: package.version, hostABI: package.hostABI,
+                downloadURL: package.downloadURL,
+                sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined(),
+                downloadBytes: Int64(bytes.count),
+                installedBytes: original.installedBytes + Int64(manifest.count - previous.count),
+                dependencies: dependencies), item.1
+        )
+    }
+
     private func expectState(
         _ store: ExtensionPackageStore, installed: [ExtensionPackage], selected: ExtensionPackage?,
         paths: [(package: ExtensionPackage, url: URL)]
     ) throws {
         #expect(
-            try store.installedPackages().sorted { $0.version < $1.version }
-                == installed.sorted { $0.version < $1.version })
+            try store.installedPackages().sorted { ($0.id, $0.version) < ($1.id, $1.version) }
+                == installed.sorted { ($0.id, $0.version) < ($1.id, $1.version) })
         #expect(
             try store.installedPackage(
                 id: "usage", hostABI: "host-1", architecture: "arm64", systemVersion: 14)
