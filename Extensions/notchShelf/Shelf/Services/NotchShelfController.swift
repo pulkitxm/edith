@@ -146,6 +146,9 @@ final class NotchShelfController {
         startSurfaceObservation()
     }
 
+    var isRunning: Bool { !stopped }
+    var startsPanelServices: Bool { startsServices }
+
     var surfaceLayout: SurfaceLayout { layouts.notch }
     var visibleSurfaceLayout: SurfaceLayout {
         var layout = surfaceLayout
