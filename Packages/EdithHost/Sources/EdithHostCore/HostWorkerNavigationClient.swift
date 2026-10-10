@@ -100,6 +100,33 @@ public final class HostWorkerNavigationClient: NSObject {
         } catch { completion("The owning window request was rejected."); return nil }
     }
 
+    @objc(openHerdrWindow:completion:)
+    public func openHerdrWindow(_ input: NSDictionary, completion: @escaping (NSString?) -> Void)
+        -> NSString?
+    {
+        do {
+            guard
+                Set(input.allKeys.compactMap { $0 as? String }) == [
+                    "presentationID", "descriptor",
+                ],
+                input.count == 2, let data = input["descriptor"] as? Data,
+                let value = input["presentationID"] as? String,
+                let presentation = UUID(uuidString: value)
+            else { throw HostWorkerError.rejected }
+            let target = try HostHerdrWindowTarget.decode(data)
+            let request = HostWorkerNavigationRequest(
+                configuration: configuration,
+                presentationID: presentation, herdrWindow: target)
+            try begin(request, timeout: .seconds(5)) { result in
+                switch result {
+                case .success: completion(nil)
+                case .failure: completion("The owning window could not open this view.")
+                }
+            }
+            return request.token.uuidString as NSString
+        } catch { completion("The owning window request was rejected."); return nil }
+    }
+
     @objc(cancelNavigation:)
     public func cancelNavigation(_ token: NSString) {
         guard let id = UUID(uuidString: token as String) else { return }

@@ -22,11 +22,12 @@ public struct HostExtensionContentRequest: Codable, Equatable, Sendable {
     public let presentationID: UUID
     public let surface: SurfaceSnapshotRequest?
     public let machinesWindow: HostMachinesWindowTarget?
+    public let herdrWindow: HostHerdrWindowTarget?
 
     public init(
         extensionID: String, location: String, section: String? = nil,
         presentationID: UUID = UUID(), surface: SurfaceSnapshotRequest? = nil,
-        machinesWindow: HostMachinesWindowTarget? = nil
+        machinesWindow: HostMachinesWindowTarget? = nil, herdrWindow: HostHerdrWindowTarget? = nil
     ) {
         self.extensionID = extensionID
         self.location = location
@@ -34,22 +35,31 @@ public struct HostExtensionContentRequest: Codable, Equatable, Sendable {
         self.presentationID = presentationID
         self.surface = surface
         self.machinesWindow = machinesWindow
+        self.herdrWindow = herdrWindow
     }
 
     public func validate(extensionID: String) throws {
         guard self.extensionID == extensionID,
             [
                 "main", "settings", "home", "notch", "sidebar.utility", "music.footer",
-                "music.sidebar", "music.detail", "machines.window",
+                "music.sidebar", "music.detail", "machines.window", "herdr.agent", "herdr.space",
             ].contains(location),
             section.map({ !$0.isEmpty && $0.utf8.count <= 128 && !$0.utf8.contains(0) }) ?? true
         else { throw HostWorkerError.rejected }
         if let machinesWindow {
             guard extensionID == "machines", location == "machines.window", section == "machines",
-                surface == nil
+                surface == nil, herdrWindow == nil
             else { throw HostWorkerError.rejected }
             try machinesWindow.validate()
         } else if location == "machines.window" {
+            throw HostWorkerError.rejected
+        }
+        if let herdrWindow {
+            guard extensionID == "herdr", location == herdrWindow.location, section == "herdr",
+                surface == nil, machinesWindow == nil
+            else { throw HostWorkerError.rejected }
+            try herdrWindow.validate()
+        } else if location.hasPrefix("herdr.") {
             throw HostWorkerError.rejected
         }
         if let surface {

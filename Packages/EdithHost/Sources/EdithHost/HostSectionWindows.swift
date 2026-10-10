@@ -120,18 +120,36 @@ final class HostSectionWindows: NSObject, NSWindowDelegate, NSMenuItemValidation
         entries.first(where: { $0.page.id == "machines.window." + id.uuidString })?.window.close()
     }
 
+    func openHerdrOwned(
+        id: UUID, target: HostHerdrWindowTarget, controller: NSViewController,
+        didClose: @escaping () -> Void
+    ) -> NSWindow {
+        let page = HostNavigationPage(
+            id: "herdr.window." + id.uuidString,
+            title: target.title, symbol: "terminal", extensionID: "herdr")
+        return create(
+            page: page, controller: controller, mode: .alwaysNew, didClose: didClose,
+            contentSize: NSSize(width: target.width, height: target.height),
+            minimumSize: NSSize(width: target.minimumWidth, height: target.minimumHeight))
+    }
+
+    func closeHerdrOwned(id: UUID) {
+        entries.first(where: { $0.page.id == "herdr.window." + id.uuidString })?.window.close()
+    }
+
     private func create(
         page: HostNavigationPage, controller: NSViewController, mode: HostSectionOpenMode,
-        didClose: (() -> Void)?
+        didClose: (() -> Void)?, contentSize: NSSize = HostSectionWindows.baseContentSize,
+        minimumSize: NSSize = HostSectionWindows.baseMinimumSize
     ) -> NSWindow {
         let visible = visibleFrame()
-        let size = HostWindowFramePolicy.fitted(Self.baseContentSize, visible: visible.size)
+        let size = HostWindowFramePolicy.fitted(contentSize, visible: visible.size)
         let window = makeWindow(NSRect(origin: .zero, size: size))
         window.title = page.title
         window.isReleasedWhenClosed = false
         window.isRestorable = false
         window.contentMinSize = HostWindowFramePolicy.fitted(
-            Self.baseMinimumSize, visible: visible.size)
+            minimumSize, visible: visible.size)
         window.tabbingMode = .automatic
         window.tabbingIdentifier = "EdithSection"
         window.identifier = NSUserInterfaceItemIdentifier("EdithSection." + page.id)
