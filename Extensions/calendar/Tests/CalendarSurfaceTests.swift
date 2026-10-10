@@ -23,6 +23,72 @@ import Testing
         #expect(fixture.surface.snapshot(tile).rows.isEmpty)
     }
 
+    @Test func homePreservesTheEntireTodayScheduleAndTimeRangesWhileNotchShowsUpcoming()
+        async throws
+    {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let channel = ExtensionSharedState(root: root, namespace: "fixture", owner: "presenter")
+        let presentation = CalendarPresentationState(channel: channel)
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let now = calendar.date(byAdding: .hour, value: 12, to: today)!
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today)!
+        let events = [
+            CalendarEventPayload(
+                id: "past-today", title: "Finished synthetic meeting", calendar: "Synthetic",
+                calendarID: "one", start: today.addingTimeInterval(3600),
+                end: today.addingTimeInterval(7200), isAllDay: false),
+            CalendarEventPayload(
+                id: "next-today", title: "Upcoming synthetic meeting", calendar: "Synthetic",
+                calendarID: "one", start: now.addingTimeInterval(3600),
+                end: now.addingTimeInterval(7200), isAllDay: false),
+            CalendarEventPayload(
+                id: "tomorrow", title: "Tomorrow synthetic meeting", calendar: "Synthetic",
+                calendarID: "one", start: tomorrow.addingTimeInterval(3600),
+                end: tomorrow.addingTimeInterval(7200), isAllDay: false),
+            CalendarEventPayload(
+                id: "all-day", title: "Synthetic all-day event", calendar: "Synthetic",
+                calendarID: "two", start: today, end: tomorrow, isAllDay: true),
+        ]
+        let store = CalendarStore(
+            snapshotStore: .init(file: root.appendingPathComponent("agenda.json")),
+            fetch: { _ in events })
+        defer {
+            store.shutdown(); presentation.shutdown()
+            try? FileManager.default.removeItem(at: root)
+        }
+        _ = await store.refreshAndWait()
+        let surface = CalendarSurface(
+            store: store, presentation: presentation, authorized: { true })
+        var tile = SurfaceTile(.calendar)
+        tile.itemLimit = 20
+        let home = surface.snapshot(tile, target: .home, now: now)
+        #expect(Set(home.rows.map(\.id)) == ["past-today", "next-today", "all-day"])
+        let past = events.first { $0.id == "past-today" }!
+        #expect(
+            home.rows.first { $0.id == "past-today" }?.value == past.start.formatted(
+                date: .omitted, time: .shortened) + "–"
+                + past.end.formatted(date: .omitted, time: .shortened))
+        #expect(home.rows.first { $0.id == "all-day" }?.value == "All day")
+        #expect(
+            Set(surface.snapshot(tile, target: .notch, now: now).rows.map(\.id)) == [
+                "next-today", "tomorrow", "all-day",
+            ])
+        let next = events.first { $0.id == "next-today" }!
+        #expect(
+            surface.snapshot(tile, target: .notch, now: now).rows.first {
+                $0.id == "next-today"
+            }?.value == next.start.formatted(date: .omitted, time: .shortened))
+        tile.sourceIDs = ["one"]
+        #expect(
+            Set(surface.snapshot(tile, target: .home, now: now).rows.map(\.id)) == [
+                "past-today", "next-today",
+            ])
+        tile.hiddenFields = ["time"]
+        #expect(
+            surface.snapshot(tile, target: .home, now: now).rows.allSatisfy { $0.value.isEmpty })
+    }
+
     @Test func unauthorizedCachedDataNeverReachesHomeOrNotch() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
@@ -103,7 +169,7 @@ import Testing
             root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             channel = ExtensionSharedState(root: root, namespace: "fixture", owner: "presenter")
             presentation = CalendarPresentationState(channel: channel)
-            let now = Date()
+            let now = Calendar.current.startOfDay(for: Date()).addingTimeInterval(43_200)
             let events = [
                 CalendarEventPayload(
                     id: "meeting-one", title: "Synthetic meeting one",
@@ -117,8 +183,10 @@ import Testing
                     isAllDay: false),
                 CalendarEventPayload(
                     id: "expired", title: "Past synthetic meeting", calendar: "Synthetic calendar",
-                    calendarID: "calendar-one", start: now.addingTimeInterval(-1800),
-                    end: now.addingTimeInterval(-600), isAllDay: false),
+                    calendarID: "calendar-one",
+                    start: Calendar.current.date(byAdding: .day, value: -1, to: now)!,
+                    end: Calendar.current.date(byAdding: .day, value: -1, to: now)!
+                        .addingTimeInterval(600), isAllDay: false),
             ]
             store = CalendarStore(
                 snapshotStore: .init(file: root.appendingPathComponent("agenda.json")),
