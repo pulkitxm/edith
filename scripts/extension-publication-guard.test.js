@@ -1,13 +1,28 @@
 import { expect, test } from "bun:test";
 import { spawn, spawnSync } from "node:child_process";
 import { generateKeyPairSync, sign } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import {
+  finalizeDraftCatalog,
   promoteExtensionCatalog,
   publicationPlanCatalog,
+  publicationPlanningState,
   readPublicationCatalog,
   verifiedPublicationState,
 } from "./extension-publish.mjs";
+import {
+  extensionFingerprint,
+  planUnpublishedExtensions,
+} from "./extension-release-plan.mjs";
 import { downloadReleaseAsset } from "./release-asset-read.mjs";
 import { maximumEnvelopeBytes } from "./verify-extension-catalog.mjs";
 
@@ -426,4 +441,243 @@ test("catalog downloads support the signed envelope limit without the metadata m
     }),
   ).rejects.toThrow("size");
   expect(starts).toBe(0);
+});
+
+test("unchanged source retries finalize an authenticated draft once without package builds", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "catalog-draft-retry-"));
+  const definition = {
+    id: "music",
+    version: "1.0.0",
+    hostABI: "runtime-2",
+    inputs: ["Extensions/music"],
+    sharedInputs: [],
+    dependencies: [],
+  };
+  try {
+    mkdirSync(join(directory, "Extensions/music"), { recursive: true });
+    writeFileSync(
+      join(directory, "Extensions/music/Runtime.swift"),
+      "synthetic owned source",
+    );
+    const fingerprint = await extensionFingerprint(directory, definition, [
+      definition,
+    ]);
+    const catalog = {
+      schemaVersion: 1,
+      revision: 2,
+      packages: [
+        {
+          id: "music",
+          version: "1.0.0",
+          hostABI: "runtime-2",
+          architecture: "arm64",
+          sourceFingerprint: fingerprint,
+          sha256: "b".repeat(64),
+          minimumSystemVersion: 14,
+          downloadBytes: 1,
+          installedBytes: 1,
+          dependencies: [],
+          downloadURL:
+            "https://github.com/pulkitxm/edith/releases/download/synthetic/music.zip",
+        },
+      ],
+    };
+    const live = current(catalog);
+    live.release.draft = true;
+    let published = 0;
+    const readCatalog = async () => live;
+    const planning = await publicationPlanningState({
+      publicKey: rawKey,
+      readCatalog,
+    });
+    expect(planning.draft).toBe(true);
+    expect(
+      await planUnpublishedExtensions(
+        directory,
+        [definition],
+        planning.catalog.packages,
+      ),
+    ).toEqual([]);
+    const verifyState = () =>
+      verifiedPublicationState(options({ previous: catalog, readCatalog }));
+    const publish = async (id) => {
+      expect(id).toBe(live.release.id);
+      published++;
+      live.release.draft = false;
+    };
+    expect(await finalizeDraftCatalog({ verifyState, publish })).toBe(true);
+    expect(await finalizeDraftCatalog({ verifyState, publish })).toBe(false);
+    expect(published).toBe(1);
+    expect(
+      (await publicationPlanningState({ publicKey: rawKey, readCatalog }))
+        .draft,
+    ).toBe(false);
+    for (const failure of ["stale", "corrupt", "changed"]) {
+      live.release.draft = true;
+      live.data =
+        failure === "corrupt"
+          ? Buffer.from("broken")
+          : envelope(
+              failure === "changed" ? { ...catalog, revision: 3 } : catalog,
+            );
+      await expect(
+        finalizeDraftCatalog({
+          verifyState: () =>
+            verifiedPublicationState(
+              options({
+                previous: catalog,
+                readCatalog,
+                readMain: async () =>
+                  failure === "stale" ? "b".repeat(40) : target,
+              }),
+            ),
+          publish,
+        }),
+      ).rejects.toThrow();
+      expect(published).toBe(1);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("zero-matrix workflow skips macOS builds and admits only trusted draft finalization", () => {
+  const workflow = Bun.YAML.parse(
+    readFileSync(".github/workflows/extensions.yml", "utf8"),
+  );
+  const run = (
+    job,
+    needs,
+    github = { event_name: "push", ref: "refs/heads/main" },
+    cancelled = false,
+  ) =>
+    new Function(
+      "needs",
+      "github",
+      "inputs",
+      "cancelled",
+      `return (${job.if});`,
+    )(needs, github, { publish: true }, () => cancelled);
+  const needs = {
+    plan: { result: "success", outputs: { changed: "false", draft: "true" } },
+    build: { result: "skipped" },
+    tests: { result: "skipped" },
+    "frozen-host": { result: "skipped" },
+  };
+  expect(run(workflow.jobs["frozen-host"], needs)).toBe(false);
+  expect(run(workflow.jobs.tests, needs)).toBe(false);
+  expect(run(workflow.jobs.build, needs)).toBe(false);
+  expect(run(workflow.jobs.publish, needs)).toBe(true);
+  for (const change of [
+    {
+      plan: {
+        result: "success",
+        outputs: { changed: "false", draft: "false" },
+      },
+    },
+    {
+      plan: { result: "failure", outputs: { changed: "false", draft: "true" } },
+    },
+    { build: { result: "failure" } },
+    { build: { result: "cancelled" } },
+    {
+      plan: { result: "success", outputs: { changed: "true", draft: "true" } },
+    },
+  ])
+    expect(run(workflow.jobs.publish, { ...needs, ...change })).toBe(false);
+  expect(
+    run(workflow.jobs.publish, needs, {
+      event_name: "workflow_dispatch",
+      ref: "refs/heads/feature",
+    }),
+  ).toBe(false);
+  expect(run(workflow.jobs.publish, needs, undefined, true)).toBe(false);
+  expect(
+    run(workflow.jobs.publish, {
+      ...needs,
+      plan: { result: "success", outputs: { changed: "true", draft: "false" } },
+      build: { result: "success" },
+    }),
+  ).toBe(true);
+});
+
+test("the actual no-argument publisher finalizes a zero-build draft and refuses stale or corrupt retries", () => {
+  const directory = mkdtempSync(join(tmpdir(), "catalog-publisher-cli-"));
+  const binary = join(directory, "bin");
+  mkdirSync(binary);
+  const stateFile = join(directory, "state.json");
+  const live = current();
+  live.release.draft = true;
+  live.release.assets = [{ ...live.asset, size: live.data.length }];
+  const state = {
+    release: live.release,
+    data: live.data.toString("base64"),
+    target,
+    mutations: 0,
+  };
+  writeFileSync(stateFile, JSON.stringify(state));
+  const fixtureRead = `const fs = require("node:fs"); const file = process.env.FIXTURE_STATE; const state = JSON.parse(fs.readFileSync(file));`;
+  writeFileSync(
+    join(binary, "gh"),
+    `#!/usr/bin/env node\n${fixtureRead} const args = process.argv.slice(2); const path = args.at(-1); if (path.endsWith("git/ref/heads/main")) process.stdout.write(JSON.stringify({ object: { sha: state.target } })); else if (path.includes("releases/tags/")) process.stdout.write(JSON.stringify(state.release)); else if (path.endsWith("releases/assets/1")) process.stdout.write(Buffer.from(state.data, "base64")); else process.exit(2);`,
+    { mode: 0o700 },
+  );
+  writeFileSync(
+    join(binary, "pukbot"),
+    `#!/usr/bin/env node\n${fixtureRead} const args = process.argv.slice(2); if (args[0] !== "release" || args[1] !== "edit" || !args.includes("--draft")) process.exit(2); state.release.draft = false; state.mutations++; fs.writeFileSync(file, JSON.stringify(state)); process.stdout.write(JSON.stringify({ ok: true }));`,
+    { mode: 0o700 },
+  );
+  writeFileSync(join(directory, "previous.json"), JSON.stringify(previous));
+  writeFileSync(join(directory, "plan.json"), JSON.stringify({ include: [] }));
+  const environment = {
+    PATH: `${binary}:${process.env.PATH}`,
+    HOME: directory,
+    FIXTURE_STATE: stateFile,
+    GITHUB_REPOSITORY: "synthetic/fixture",
+    GITHUB_SHA: target,
+    GITHUB_REF: "refs/heads/main",
+    GH_TOKEN: "synthetic",
+    EXTENSION_CATALOG_PUBLIC_KEY: rawKey,
+    EXTENSION_CATALOG_PRIVATE_KEY: "synthetic",
+    EXTENSION_OUTPUT: directory,
+  };
+  const run = () =>
+    spawnSync("bun", [resolve("scripts/extension-publish.mjs")], {
+      env: environment,
+      encoding: "utf8",
+      timeout: 10000,
+    });
+  try {
+    const planned = spawnSync(
+      "node",
+      [
+        resolve("scripts/extension-publish.mjs"),
+        "--read-catalog",
+        join(directory, "previous.json"),
+      ],
+      { env: environment, encoding: "utf8", timeout: 10000 },
+    );
+    expect(planned.status).toBe(0);
+    expect(
+      JSON.parse(readFileSync(join(directory, "previous-state.json"))),
+    ).toEqual({ draft: true });
+    expect(planned.stdout).toBe("Verified catalog revision: 1\n");
+    for (let index = 0; index < 2; index++) {
+      const result = run();
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({ published: [], revision: 1 });
+      expect(JSON.parse(readFileSync(stateFile)).mutations).toBe(1);
+    }
+    for (const invalid of ["stale", "corrupt"]) {
+      const invalidState = JSON.parse(readFileSync(stateFile));
+      invalidState.release.draft = true;
+      if (invalid === "stale") invalidState.target = "b".repeat(40);
+      else invalidState.data = Buffer.from("broken").toString("base64");
+      writeFileSync(stateFile, JSON.stringify(invalidState));
+      expect(run().status).not.toBe(0);
+      expect(JSON.parse(readFileSync(stateFile)).mutations).toBe(1);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import {
   downloadReleaseAsset,
@@ -205,7 +205,7 @@ export async function readPublicationCatalog(
   }
 }
 
-export async function publicationPlanCatalog({
+export async function publicationPlanningState({
   repository,
   catalogTag,
   publicKey,
@@ -213,10 +213,27 @@ export async function publicationPlanCatalog({
 }) {
   const current = await readCatalog();
   if (current?.asset)
-    return JSON.parse(verifiedCatalogPayload(current.data, publicKey));
+    return {
+      catalog: JSON.parse(verifiedCatalogPayload(current.data, publicKey)),
+      draft: current.release.draft === true,
+    };
   if (current?.release && current.release.draft !== true)
     throw new Error("Published catalog pointer missing");
-  return { schemaVersion: 1, revision: 0, packages: [] };
+  return {
+    catalog: { schemaVersion: 1, revision: 0, packages: [] },
+    draft: false,
+  };
+}
+
+export async function publicationPlanCatalog(options) {
+  return (await publicationPlanningState(options)).catalog;
+}
+
+export async function finalizeDraftCatalog({ verifyState, publish }) {
+  const current = await verifyState();
+  if (current?.release?.draft !== true || !current.asset) return false;
+  await publish(current.release.id);
+  return true;
 }
 
 export async function promoteExtensionCatalog({
@@ -272,7 +289,22 @@ export async function publishExtensions({
     return current ? { ...current, catalogRevision: old.revision } : undefined;
   };
   await verifyState();
-  if (include.length === 0) return { published: [], revision: old.revision };
+  const publishDraft = async (id) =>
+    mutate(
+      "release",
+      "edit",
+      "--repo",
+      repository,
+      String(id),
+      "--draft",
+      "false",
+      "--make-latest",
+      "false",
+    );
+  if (include.length === 0) {
+    await finalizeDraftCatalog({ verifyState, publish: publishDraft });
+    return { published: [], revision: old.revision };
+  }
   for (const entry of include) {
     for (const suffix of ["zip", "json"]) {
       preflightReleaseAsset({
@@ -418,29 +450,21 @@ export async function publishExtensions({
         `name=${name}`,
       ),
   });
-  if (catalog.draft) {
-    await verifiedPublicationState({
-      ref,
-      target,
-      previous: next,
-      publicKey,
-      readMain: async () =>
-        JSON.parse(gh("api", `repos/${repository}/git/ref/heads/main`)).object
-          .sha,
-      readCatalog: () => readPublicationCatalog(repository, catalogTag),
+  if (catalog.draft)
+    await finalizeDraftCatalog({
+      verifyState: () =>
+        verifiedPublicationState({
+          ref,
+          target,
+          previous: next,
+          publicKey,
+          readMain: async () =>
+            JSON.parse(gh("api", `repos/${repository}/git/ref/heads/main`))
+              .object.sha,
+          readCatalog: () => readPublicationCatalog(repository, catalogTag),
+        }),
+      publish: publishDraft,
     });
-    mutate(
-      "release",
-      "edit",
-      "--repo",
-      repository,
-      String(catalog.id),
-      "--draft",
-      "false",
-      "--make-latest",
-      "false",
-    );
-  }
   return {
     published: records.map(({ id, version }) => ({ id, version })),
     revision: next.revision,
@@ -455,13 +479,20 @@ if (import.meta.main) {
   if (process.argv[2] === "--read-catalog") {
     if (process.argv.length !== 4)
       throw new Error("Supply the verified catalog output file");
-    const catalog = await publicationPlanCatalog({
+    const state = await publicationPlanningState({
       repository,
       catalogTag,
       publicKey,
     });
-    await writeFile(resolve(process.argv[3]), JSON.stringify(catalog));
-    process.stdout.write(`Verified catalog revision: ${catalog.revision}\n`);
+    const output = resolve(process.argv[3]);
+    await writeFile(output, JSON.stringify(state.catalog));
+    await writeFile(
+      resolve(dirname(output), "previous-state.json"),
+      JSON.stringify({ draft: state.draft }),
+    );
+    process.stdout.write(
+      `Verified catalog revision: ${state.catalog.revision}\n`,
+    );
   } else {
     if (process.argv.length !== 2)
       throw new Error("Invalid publication arguments");
