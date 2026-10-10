@@ -41,9 +41,11 @@ private enum LaTeXTool: String, CaseIterable, Identifiable {
     private(set) var busy: Set<String> = []
     private var jobs: [String: Task<Void, Never>] = [:]
     private var stopped = false
+    private let remote: LaTeXUIBridge?
     private let run: Run
 
     init(
+        remote: LaTeXUIBridge? = nil,
         run: @escaping Run = { tool, arguments in
             guard let executable = CLIToolEnvironment.executable(named: tool) else {
                 throw LaTeXError.message("\(tool) is missing from PATH.")
@@ -60,9 +62,10 @@ private enum LaTeXTool: String, CaseIterable, Identifiable {
             }
             return output.output
         }
-    ) { self.run = run }
+    ) { self.run = run; self.remote = remote }
 
     func refresh() {
+        if let remote { remoteRequest(remote, action: "tools.refresh"); return }
         guard !stopped else { return }
         for tool in LaTeXTool.allCases where jobs[tool.id] == nil {
             start(tool, installing: false)
@@ -70,6 +73,7 @@ private enum LaTeXTool: String, CaseIterable, Identifiable {
     }
 
     func install(_ id: String) {
+        if let remote { remoteRequest(remote, action: "tools.install", tool: id); return }
         guard !stopped, let tool = LaTeXTool(rawValue: id), tool.formula != nil,
             jobs[id] == nil
         else { return }
@@ -102,6 +106,24 @@ private enum LaTeXTool: String, CaseIterable, Identifiable {
         }
     }
 
+    var snapshot: LaTeXToolsSnapshot { .init(status: status, installed: installed, busy: busy) }
+    func apply(_ snapshot: LaTeXToolsSnapshot) {
+        guard !stopped else { return }
+        status = snapshot.status; installed = snapshot.installed; busy = snapshot.busy
+    }
+    private func remoteRequest(_ remote: LaTeXUIBridge, action: String, tool: String? = nil) {
+        guard !stopped, jobs[action] == nil else { return }
+        jobs[action] = Task { [weak self] in
+            defer { self?.jobs[action] = nil }
+            do {
+                let value = try await remote.perform(.init(action: action, tool: tool))
+                try Task.checkCancellation()
+                self?.apply(value.tools)
+            } catch {
+                if !Task.isCancelled { self?.status[tool ?? "tools"] = error.localizedDescription }
+            }
+        }
+    }
     func shutdown() async {
         stopped = true
         let pending = Array(jobs.values)

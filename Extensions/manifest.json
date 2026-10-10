@@ -1045,6 +1045,9 @@
     "dependencies": [],
     "roles": {
       "app": [
+        "Extensions/latex/CLI/CLIDestructivePlan.swift",
+        "Extensions/latex/CLI/LaTeXCLIExecution.swift",
+        "Extensions/latex/CLI/LaTeXCommands.swift",
         "Extensions/latex/EditorWebView.swift",
         "Extensions/latex/LaTeXAddProject.swift",
         "Extensions/latex/LaTeXEditorResources.swift",
@@ -1056,6 +1059,7 @@
         "Extensions/latex/LaTeXSourceEditor.swift",
         "Extensions/latex/LaTeXSurface.swift",
         "Extensions/latex/LaTeXTools.swift",
+        "Extensions/latex/LaTeXUIBridge.swift",
         "Extensions/latex/LaTeXWorker.swift",
         "Extensions/latex/LaTeXWrappingLayout.swift",
         "Extensions/latex/QuinjetDiffView.swift",

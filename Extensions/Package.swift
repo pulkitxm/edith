@@ -66,8 +66,8 @@ let package = Package(
             path: "herdr/Tests/Core", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "LaTeXExtension",
-            dependencies: [.product(name: "EdithExtensionArchive", package: "ExtensionSupport")],
-            path: "latex", exclude: ["Tests", "Runtime.swift"], resources: [.process("Resources")],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport"), .product(name: "EdithExtensionArchive", package: "ExtensionSupport")],
+            path: "latex", exclude: ["Tests", "Runtime.swift", "Package.swift"], resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "LaTeXExtensionTests", dependencies: ["LaTeXExtension"],

@@ -248,9 +248,7 @@ struct LaTeXPage: View {
                     Button("Reload source") { model.launch { await model.reload() } }
                     if project.location == .disk {
                         Button("Reveal source in Finder") {
-                            NSWorkspace.shared.activateFileViewerSelecting([
-                                URL(fileURLWithPath: project.sourcePath)
-                            ])
+                            model.revealSource()
                         }
                     }
                     Button("Remove from library", role: .destructive) { model.remove() }
@@ -353,7 +351,11 @@ struct LaTeXPage: View {
                         .font(.system(size: UIScale.pt(12), design: .monospaced))
                         .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                     }
-                } else if FileManager.default.fileExists(atPath: project.pdfURL.path) {
+                } else if let data = model.pdfPreview, model.remote != nil {
+                    LaTeXPDFPane(data: data, generation: model.buildGeneration)
+                } else if model.remote == nil,
+                    FileManager.default.fileExists(atPath: project.pdfURL.path)
+                {
                     LaTeXPDFPane(url: project.pdfURL, generation: model.buildGeneration)
                 } else {
                     ContentUnavailableView(
