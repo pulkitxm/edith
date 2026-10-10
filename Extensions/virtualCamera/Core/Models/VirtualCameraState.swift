@@ -94,7 +94,7 @@ public struct VirtualCameraState: Codable, Equatable, Sendable {
         activeSceneID: UUID? = nil, privacy: VirtualCameraPrivacy = .live,
         privacyMessage: String = VirtualCameraState.defaultPrivacyMessage,
         transition: VirtualCameraTransition = .smooth, sharpZoom: Bool = true,
-        mirrorPreview: Bool = false, output: VirtualCameraOutput = .automatic,
+        mirrorPreview: Bool = false, output: VirtualCameraOutput = .obs,
         media: VirtualCameraMedia = VirtualCameraMedia(), mirrorOutput: Bool = false,
         audio: MeetingAudioState = MeetingAudioState()
     ) {

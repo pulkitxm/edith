@@ -18,6 +18,33 @@ private final class CarrierBrokerProbe: CameraSystemExtensionSubmitting {
 }
 
 @Suite(.serialized) @MainActor struct CameraCarrierSessionTests {
+    @Test func microphoneOnlySessionRejectsCameraActivationAndOwnsHALCleanup() async throws {
+        let broker = CarrierBrokerProbe()
+        var replies: [CameraCarrierReply] = []
+        var microphone = false
+        var retired = false
+        let controller = CameraSystemExtensionController(
+            identifier: "synthetic.camera", broker: broker, providerExited: { true })
+        let session = CameraCarrierSession(
+            controller: controller, send: { replies.append(try decode($0)) }, microphoneOnly: true,
+            prepareMicrophone: { microphone = true },
+            prepareDisableResources: {
+                microphone = false; retired = true
+            }, releaseResources: {}, exited: {})
+        session.receive(try request(.activate))
+        session.receive(try request(.deactivate))
+        #expect(replies.filter { $0.error != nil }.count == 2)
+        #expect(broker.requests.isEmpty && !controller.ownsProvider)
+        session.receive(try request(.microphonePrepare))
+        try await wait { microphone }
+        #expect(!controller.ownsProvider && broker.requests.isEmpty)
+        session.receive(try request(.prepareDisable))
+        try await wait { retired }
+        #expect(!microphone && broker.requests.isEmpty)
+        session.disconnect()
+        try await wait { session.released }
+    }
+
     @Test func framesHandleFragmentationAndRejectOversizedOrEmptyMessages() throws {
         let request = CameraCarrierRequest(token: UUID(), operation: .status)
         let encoded = try CameraCarrierFrames.encode(request)

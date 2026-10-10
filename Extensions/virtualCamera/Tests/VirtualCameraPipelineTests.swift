@@ -203,7 +203,8 @@ final class ManualClock: @unchecked Sendable {
 
     static func engine(
         hardware: FakeCameraHardware = FakeCameraHardware(),
-        state: VirtualCameraState = VirtualCameraState(), obsRunning: Bool = false,
+        state: VirtualCameraState = VirtualCameraState(output: .automatic),
+        obsRunning: Bool = false,
         frontmost: VirtualCameraRunningApplication? = nil
     ) -> VirtualCameraEngine {
         VirtualCameraEngine(
@@ -270,7 +271,9 @@ final class ManualClock: @unchecked Sendable {
                 ).encoded()
             ]
         }
-        let engine = Self.engine(hardware: hardware, state: VirtualCameraState(privacy: .card))
+        let engine = Self.engine(
+            hardware: hardware,
+            state: VirtualCameraState(privacy: .card, output: route == .obs ? .obs : .edithCamera))
         defer { engine.shutdown() }
         engine.refreshExtension()
         #expect(engine.streamingRoute == route)

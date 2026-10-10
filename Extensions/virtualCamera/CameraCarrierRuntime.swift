@@ -72,9 +72,14 @@ import Security
                     let lease = try environment.lease(host, source, version)
                     self.lease = lease
                     let exited = try await lease.begin()
+                    let microphoneOnly =
+                        Bundle.main.object(forInfoDictionaryKey: "EdithCameraTransport") as? String
+                        == "obs"
                     let controller = CameraSystemExtensionController(
-                        identifier: host + ".camera", broker: environment.broker(),
-                        initiallyActive: !exited,
+                        identifier: host + ".camera",
+                        broker: microphoneOnly
+                            ? CameraMicrophoneOnlyBroker() : environment.broker(),
+                        initiallyActive: microphoneOnly ? false : !exited,
                         providerExited: {
                             let deadline = ContinuousClock.now.advanced(by: .seconds(30))
                             repeat {
@@ -86,6 +91,7 @@ import Security
                     session = CameraCarrierSession(
                         controller: controller,
                         send: { [environment] in try environment.output.write(contentsOf: $0) },
+                        microphoneOnly: microphoneOnly,
                         prepareMicrophone: { try await lease.prepareMicrophone() },
                         prepareDisableResources: { try await lease.retireMicrophone() },
                         releaseResources: { try await lease.release() },
@@ -202,5 +208,15 @@ enum CameraCarrierCaller {
             let values = information as? [String: Any]
         else { throw CocoaError(.fileReadNoPermission) }
         return values
+    }
+}
+
+@MainActor private final class CameraMicrophoneOnlyBroker: CameraSystemExtensionSubmitting {
+    func submit(
+        _ operation: CameraSystemExtensionOperation, identifier: String,
+        completion: @escaping @MainActor (CameraSystemExtensionEvent) -> Void
+    ) {
+        completion(
+            .failed("Video uses OBS Virtual Camera. No camera provider is installed by Edith."))
     }
 }
