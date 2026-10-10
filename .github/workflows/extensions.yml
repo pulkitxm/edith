@@ -78,7 +78,7 @@ env:
   EXTENSION_CATALOG_PUBLIC_KEY: ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=
 jobs:
   frozen-host:
-    if: "needs.plan.outputs.changed == 'true'"
+    if: "!cancelled() && needs.plan.result == 'success' && (needs.plan.outputs.changed == 'true' || (needs.plan.outputs.changed == 'false' && needs.plan.outputs.draft == 'true'))"
     needs:
       - plan
     runs-on: macos-26
@@ -229,10 +229,9 @@ jobs:
   build:
     name: "build (${{ matrix.id }})"
     needs:
-      - tests
       - plan
       - frozen-host
-    if: "!cancelled() && needs.tests.result == 'success' && needs.plan.outputs.changed == 'true'"
+    if: "!cancelled() && needs.plan.result == 'success' && needs['frozen-host'].result == 'success' && needs.plan.outputs.changed == 'true'"
     env:
       HAS_NOTARY: "${{ secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' && secrets.NOTARY_KEY != '' }}"
     strategy:
@@ -362,7 +361,8 @@ jobs:
     needs:
       - plan
       - build
-    if: "!cancelled() && github.event_name != 'pull_request' && needs.plan.result == 'success' && ((needs.plan.outputs.changed == 'true' && needs.build.result == 'success') || (needs.plan.outputs.changed == 'false' && needs.plan.outputs.draft == 'true' && needs.build.result == 'skipped')) && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish == true && github.ref == 'refs/heads/main'))"
+      - tests
+    if: "!cancelled() && github.repository == 'pulkitxm/edith' && github.event_name != 'pull_request' && needs.plan.result == 'success' && needs.tests.result == 'success' && ((needs.plan.outputs.changed == 'true' && needs.build.result == 'success') || (needs.plan.outputs.changed == 'false' && needs.plan.outputs.draft == 'true' && needs.build.result == 'skipped')) && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish == true && github.ref == 'refs/heads/main'))"
     runs-on: macos-26
     env:
       GH_TOKEN: "${{ secrets.RELEASE_PUSH_TOKEN }}"
