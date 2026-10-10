@@ -241,9 +241,15 @@ import Foundation
             ])
         case "herdr.terminal.open":
             guard Set(object.keys) == ["agentID"], let id = object["agentID"] as? String,
-                let agent = currentAgent(id)
+                !id.isEmpty, id.utf8.count <= 512
             else { throw ExtensionPeerError.invalidRequest }
             let retained = spaces.agentTab(id) ?? store.detachedTab(id: id) ?? store.session(id)
+            if let descriptor = retained?.holder.descriptor,
+                terminalSessions.find(descriptor.handle) != nil
+            {
+                return try JSONEncoder().encode(descriptor)
+            }
+            guard let agent = currentAgent(id) else { throw ExtensionPeerError.invalidRequest }
             if retained == nil { store.open(agent) }
             guard let tab = retained ?? store.session(id) else {
                 throw ExtensionPeerError.unavailable

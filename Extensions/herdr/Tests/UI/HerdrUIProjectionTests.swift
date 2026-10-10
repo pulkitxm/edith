@@ -25,6 +25,60 @@ import Testing
         return HerdrWorker(store: store, defaults: defaults, automaticActions: false)
     }
 
+    @Test func exitedRetainedPTYRebindsAfterDiscoveryRetiresTheAgentWithoutStartingAnotherProcess()
+        async throws
+    {
+        defer { HerdrWorkOwnership.enable() }
+        let worker = worker()
+        let agent = try #require(worker.store.agents.first)
+        worker.store.open(agent)
+        let holder = try #require(worker.store.session(agent.id)?.holder)
+        OwnedTerminalContext.$registry.withValue(worker.terminalSessions) {
+            holder.start(
+                executable: "/bin/sh", arguments: ["-c", "printf 'retained UTF8 ☃'; exit 7"],
+                environment: ["PATH=/usr/bin:/bin", "TERM=xterm-256color"],
+                currentDirectory: "/private/tmp")
+        }
+        let descriptor = try #require(holder.descriptor)
+        let client = try OwnedTerminalClient(descriptor: descriptor) {
+            try await worker.execute($0, payload: $1)
+        }
+        defer { client.stop() }
+        var bytes = Data()
+        var offset: UInt64 = 0
+        var exit: Int32?
+        for _ in 0..<20 where exit == nil {
+            let output = try await client.read(after: offset)
+            bytes.append(output.bytes)
+            offset = output.nextOffset
+            exit = output.exitCode
+        }
+        #expect(exit == 7 && String(decoding: bytes, as: UTF8.self) == "retained UTF8 ☃")
+        worker.store.hosts = []
+        #expect(worker.currentAgent(agent.id) == nil)
+        let reopened = try JSONDecoder().decode(
+            OwnedTerminalDescriptor.self,
+            from: await worker.execute(
+                "herdr.terminal.open",
+                payload: JSONSerialization.data(withJSONObject: ["agentID": agent.id])))
+        #expect(reopened == descriptor && worker.store.session(agent.id)?.holder === holder)
+        let retained = try await client.read(after: 0)
+        #expect(retained.bytes == bytes && retained.exitCode == 7)
+        await #expect(throws: ExtensionPeerError.self) {
+            try await worker.execute(
+                "herdr.terminal.open",
+                payload: JSONSerialization.data(withJSONObject: ["agentID": "unknown"]))
+        }
+        try await client.close()
+        #expect(worker.terminalSessions.find(descriptor.handle) == nil)
+        await #expect(throws: ExtensionPeerError.self) {
+            try await worker.execute(
+                "herdr.terminal.open",
+                payload: JSONSerialization.data(withJSONObject: ["agentID": agent.id]))
+        }
+        await worker.shutdown()
+    }
+
     @Test func notificationOpenReturnsToOriginalMainViewAndPreservesUnrelatedSpaceAgents()
         async throws
     {
