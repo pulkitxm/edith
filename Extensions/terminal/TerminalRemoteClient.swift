@@ -1,5 +1,6 @@
 import EdithExtensionSupport
 import Foundation
+import GhosttyTerminal
 import Observation
 
 @MainActor @Observable final class TerminalRemoteClient {
@@ -47,11 +48,15 @@ import Observation
         _ = try await invoke("terminal.input", payload: payload)
     }
 
-    func resize(_ session: TerminalEngine.Session, columns: UInt16, rows: UInt16) async throws {
+    func resize(
+        _ session: TerminalEngine.Session, columns: UInt16, rows: UInt16, widthPixels: UInt16 = 0,
+        heightPixels: UInt16 = 0
+    ) async throws {
         guard columns > 0, rows > 0 else { throw ExtensionEngineError.rejected }
         let payload = try JSONEncoder().encode(
             TerminalEngine.ResizeRequest(
-                session: checkedRequest(session), columns: columns, rows: rows))
+                session: checkedRequest(session), columns: columns, rows: rows,
+                widthPixels: widthPixels, heightPixels: heightPixels))
         _ = try await invoke("terminal.resize", payload: payload)
     }
 
@@ -99,6 +104,77 @@ import Observation
         return TerminalBroadcastDelivery(sent: result.sent, unavailable: result.unavailable)
     }
 
+    func importDrop(_ payload: TerminalDropPayload, to session: TerminalEngine.Session) async throws
+    {
+        let request = try checkedRequest(session)
+        if let media = payload.media {
+            guard !media.data.isEmpty, UInt64(media.data.count) <= TerminalEngineFiles.maximumBytes
+            else { throw ExtensionEngineError.rejected }
+            let data = try await invoke(
+                "terminal.drop.begin",
+                payload: JSONEncoder().encode(
+                    TerminalEngineFiles.Begin(session: request, fileExtension: media.fileExtension))
+            )
+            let handle = try JSONDecoder().decode(TerminalEngineFiles.Handle.self, from: data)
+            guard handle.session.id == request.id, handle.session.generation == request.generation
+            else { throw ExtensionEngineError.rejected }
+            do {
+                var offset = 0
+                while offset < media.data.count {
+                    _ = try checkedRequest(session)
+                    let bytes = Data(media.data.dropFirst(offset).prefix(16_384))
+                    let reply = try await invoke(
+                        "terminal.drop.write",
+                        payload: JSONEncoder().encode(
+                            TerminalEngineFiles.Chunk(
+                                handle: handle, offset: UInt64(offset), bytes: bytes)))
+                    let receipt = try JSONDecoder().decode(
+                        TerminalEngineFiles.Receipt.self, from: reply)
+                    guard receipt.offset == UInt64(offset + bytes.count) else {
+                        throw ExtensionEngineError.rejected
+                    }
+                    offset += bytes.count
+                }
+                _ = try await invoke("terminal.drop.finish", payload: JSONEncoder().encode(handle))
+            } catch {
+                _ = try? await invoke("terminal.drop.cancel", payload: JSONEncoder().encode(handle))
+                throw error
+            }
+        } else {
+            guard !payload.files.isEmpty, payload.files.count <= 32 else {
+                throw ExtensionEngineError.rejected
+            }
+            let items = payload.files.map {
+                TerminalEngineFiles.Paths.Item(
+                    path: $0.path, temporary: payload.temporaryFiles.contains($0))
+            }
+            _ = try await invoke(
+                "terminal.drop.paths",
+                payload: JSONEncoder().encode(
+                    TerminalEngineFiles.Paths(session: request, items: items)))
+        }
+    }
+
+    func resolveLink(_ value: String, untrusted: Bool, session: TerminalEngine.Session) async throws
+        -> TerminalEngineFiles.LinkReply
+    {
+        let request = TerminalEngineFiles.Link(
+            session: try checkedRequest(session), value: value, untrusted: untrusted)
+        let data = try await invoke("terminal.resolveLink", payload: JSONEncoder().encode(request))
+        _ = try checkedRequest(session)
+        let reply = try JSONDecoder().decode(TerminalEngineFiles.LinkReply.self, from: data)
+        guard reply.resolution.target.utf8.count <= 32_768,
+            reply.resolution.detail.utf8.count <= 1_024,
+            (reply.resolution.disposition == .deny) == (reply.token == nil)
+        else { throw ExtensionEngineError.rejected }
+        return reply
+    }
+
+    func openLink(_ token: UUID, session: TerminalEngine.Session) async throws {
+        let handle = TerminalEngineFiles.Handle(session: try checkedRequest(session), token: token)
+        _ = try await invoke("terminal.openLink", payload: JSONEncoder().encode(handle))
+    }
+
     func preferences() async throws -> TerminalSettings {
         let data = try await invoke("terminal.preferences", payload: Data("{}".utf8))
         let settings = try JSONDecoder().decode(TerminalSettings.self, from: data)
@@ -112,6 +188,9 @@ import Observation
             "terminal.savePreferences", payload: JSONEncoder().encode(settings))
         let saved = try JSONDecoder().decode(TerminalSettings.self, from: data)
         try saved.validate()
+        revision += 1
+        snapshot = TerminalEngine.Snapshot(
+            sessions: snapshot.sessions, broadcast: snapshot.broadcast, preferences: saved)
         return saved
     }
 
@@ -182,6 +261,7 @@ import Observation
     }
 
     private static func validate(_ snapshot: TerminalEngine.Snapshot) throws {
+        try snapshot.preferences.validate()
         guard snapshot.sessions.count <= TerminalTabsModel.maximumTabs,
             Set(snapshot.sessions.map(\.id)).count == snapshot.sessions.count,
             snapshot.sessions.filter(\.selected).count <= 1,

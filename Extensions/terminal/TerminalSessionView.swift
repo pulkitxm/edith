@@ -61,6 +61,11 @@ struct TerminalSessionView: View {
                 VStack(spacing: 0) {
                     TerminalPane(holder: holder, palette: palette, active: active)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if let actionError = holder.actionError {
+                        Text(actionError).font(.edithText(.caption)).foregroundStyle(
+                            DashSkin.danger
+                        ).padding(UIScale.pt(8))
+                    }
                     if let exitMessage = holder.exitMessage {
                         HStack {
                             Text(exitMessage).font(.edithText(.caption))

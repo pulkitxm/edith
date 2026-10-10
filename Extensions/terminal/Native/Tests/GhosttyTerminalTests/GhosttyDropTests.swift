@@ -40,7 +40,7 @@ import Testing
         #expect(GhosttyTerminalView.dropped(from: board) == nil)
     }
 
-    @Test func imageDataBecomesADurableTemporaryFile() throws {
+    @Test func imageDataProducesPNGBytesForTheOwningEngine() throws {
         let board = NSPasteboard(name: .init("edith.drop.image-data"))
         board.clearContents()
         let image = NSImage(size: NSSize(width: 2, height: 2))
@@ -53,13 +53,12 @@ import Testing
         let payload = try #require(TerminalDropPayload.files(from: board))
         defer { payload.removeTemporaryFiles() }
 
-        #expect(payload.files.count == 1)
-        #expect(payload.files[0].pathExtension == "png")
-        #expect(FileManager.default.fileExists(atPath: payload.files[0].path))
-        #expect(payload.temporaryFiles == Set(payload.files))
+        let media = try #require(payload.media)
+        #expect(media.fileExtension == "png" && !media.data.isEmpty)
+        #expect(payload.files.isEmpty && payload.temporaryFiles.isEmpty)
     }
 
-    @Test func tiffOnlyImageDataBecomesAPNGAgentsCanAttach() throws {
+    @Test func tiffOnlyImageDataProducesPNGBytes() throws {
         let board = NSPasteboard(name: .init("edith.drop.tiff-data"))
         board.clearContents()
         let item = NSPasteboardItem()
@@ -69,8 +68,8 @@ import Testing
         let payload = try #require(TerminalDropPayload.files(from: board))
         defer { payload.removeTemporaryFiles() }
 
-        #expect(payload.files[0].pathExtension == "png")
-        let written = try Data(contentsOf: payload.files[0])
+        #expect(payload.media?.fileExtension == "png")
+        let written = try #require(payload.media).data
         #expect(written.starts(with: [0x89, 0x50, 0x4E, 0x47]))
     }
 
@@ -88,8 +87,8 @@ import Testing
         let payload = try #require(TerminalDropPayload.files(from: board))
         defer { payload.removeTemporaryFiles() }
 
-        #expect(payload.files[0].pathExtension == "png")
-        #expect(try Data(contentsOf: payload.files[0]) == png)
+        #expect(payload.media?.fileExtension == "png")
+        #expect(payload.media?.data == png)
     }
 
     @Test func jpegImageDataKeepsItsFormat() throws {
@@ -105,8 +104,8 @@ import Testing
         let payload = try #require(TerminalDropPayload.files(from: board))
         defer { payload.removeTemporaryFiles() }
 
-        #expect(["jpeg", "jpg"].contains(payload.files[0].pathExtension))
-        #expect(try Data(contentsOf: payload.files[0]) == jpeg)
+        #expect(["jpeg", "jpg"].contains(payload.media?.fileExtension ?? ""))
+        #expect(payload.media?.data == jpeg)
     }
 
     private static func redSquare() -> NSImage {
@@ -118,7 +117,7 @@ import Testing
         return image
     }
 
-    @Test func pdfDataBecomesATemporaryPDF() throws {
+    @Test func pdfDataRetainsItsBytesForTheOwningEngine() throws {
         let board = NSPasteboard(name: .init("edith.drop.pdf-data"))
         board.clearContents()
         let item = NSPasteboardItem()
@@ -129,8 +128,8 @@ import Testing
         let payload = try #require(TerminalDropPayload.files(from: board))
         defer { payload.removeTemporaryFiles() }
 
-        #expect(payload.files[0].pathExtension == "pdf")
-        #expect(try Data(contentsOf: payload.files[0]) == data)
+        #expect(payload.media?.fileExtension == "pdf")
+        #expect(payload.media?.data == data)
     }
 
     @Test func videoDataKeepsItsMediaExtension() throws {
@@ -144,8 +143,8 @@ import Testing
         let payload = try #require(TerminalDropPayload.files(from: board))
         defer { payload.removeTemporaryFiles() }
 
-        #expect(payload.files[0].pathExtension == "mp4")
-        #expect(try Data(contentsOf: payload.files[0]) == data)
+        #expect(payload.media?.fileExtension == "mp4")
+        #expect(payload.media?.data == data)
     }
 
     @Test func audioDataKeepsItsMediaExtension() throws {
@@ -159,8 +158,8 @@ import Testing
         let payload = try #require(TerminalDropPayload.files(from: board))
         defer { payload.removeTemporaryFiles() }
 
-        #expect(payload.files[0].pathExtension == "mp3")
-        #expect(try Data(contentsOf: payload.files[0]) == data)
+        #expect(payload.media?.fileExtension == "mp3")
+        #expect(payload.media?.data == data)
     }
 
     @Test func browserURLDropsAreShellEscaped() {

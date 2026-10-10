@@ -50,9 +50,12 @@ final class TerminalPTY {
         try flushInput()
     }
 
-    func resize(columns: UInt16, rows: UInt16) throws {
+    func resize(columns: UInt16, rows: UInt16, widthPixels: UInt16 = 0, heightPixels: UInt16 = 0)
+        throws
+    {
         guard !closed, columns > 0, rows > 0 else { throw POSIXError(.EINVAL) }
-        var size = winsize(ws_row: rows, ws_col: columns, ws_xpixel: 0, ws_ypixel: 0)
+        var size = winsize(
+            ws_row: rows, ws_col: columns, ws_xpixel: widthPixels, ws_ypixel: heightPixels)
         guard ioctl(descriptor, TIOCSWINSZ, &size) == 0 else { throw Self.error() }
     }
 

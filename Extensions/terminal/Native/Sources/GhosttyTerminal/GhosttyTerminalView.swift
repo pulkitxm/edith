@@ -3,6 +3,7 @@ import AppKit
 
 public final class GhosttyTerminalView: NSView {
     public var onClose: ((Int32?) -> Void)?
+    public var onOpenTarget: ((String, Bool) -> Bool)?
     public var onDropFiles: ((TerminalDropPayload) -> Bool)?
     public var onFocus: (() -> Void)?
     public var onFocusChange: ((Bool) -> Void)?
@@ -51,7 +52,6 @@ public final class GhosttyTerminalView: NSView {
     var selectionMouseReportingSuspended = false
     private(set) var configuredMouseReporting = true
     private var windowObservers: [NSObjectProtocol] = []
-    var openResolvedURL: (URL) -> Void = { _ = NSWorkspace.shared.open($0) }
 
     public override var isFlipped: Bool { false }
 
@@ -74,7 +74,7 @@ public final class GhosttyTerminalView: NSView {
 
     @discardableResult
     public func insertText(_ text: String) -> Bool {
-        guard let surface, !text.isEmpty else { return false }
+        guard let surface, !closed, !externalExited, !text.isEmpty else { return false }
         text.withCString { pointer in
             ghostty_surface_text(surface, pointer, UInt(strlen(pointer)))
         }

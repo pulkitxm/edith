@@ -5,8 +5,11 @@ import Observation
 @MainActor @Observable final class TerminalSessionHolder {
     private enum Event {
         case input(Data)
-        case resize(UInt16, UInt16)
+        case resize(UInt16, UInt16, UInt16, UInt16)
         case presentation(String, String)
+        case drop(TerminalDropPayload)
+        case resolveLink(String, Bool)
+        case openLink(UUID)
     }
 
     private(set) var session: TerminalEngine.Session
@@ -15,6 +18,8 @@ import Observation
     private(set) var currentTitle: String?
     private(set) var currentWorkingDirectory: String?
     private(set) var error: String?
+    private(set) var actionError: String?
+    private var drops = 0
     private var stopped = false
     private var readTask: Task<Void, Never>?
     private var deliveryTask: Task<Void, Never>?
@@ -77,9 +82,11 @@ import Observation
                 guard let self, self.generation == generation else { return }
                 self.enqueue(.input(bytes), bytes: bytes.count)
             },
-            resize: { [weak self] columns, rows, _, _ in
+            resize: { [weak self] columns, rows, width, height in
                 guard let self, self.generation == generation else { return }
-                self.enqueue(.resize(columns, rows), bytes: 0)
+                self.enqueue(
+                    .resize(columns, rows, UInt16(clamping: width), UInt16(clamping: height)),
+                    bytes: 0)
             }, failure: { [weak self] in self?.fail("The terminal input queue is full.") })
         let view = GhosttyTerminalView(
             externalIO: io, workingDirectory: session.directory, theme: theme)
@@ -90,6 +97,21 @@ import Observation
         view.onPaneAction = { [weak self] action in
             guard let self, !self.stopped, self.generation == generation else { return }
             self.onPaneAction(action)
+        }
+        view.onDropFiles = { [weak self] payload in
+            guard let self, !self.stopped, self.generation == generation, self.drops == 0,
+                self.exitMessage == nil
+            else {
+                return false
+            }
+            self.drops += 1
+            self.enqueue(.drop(payload), bytes: 0)
+            return true
+        }
+        view.onOpenTarget = { [weak self] value, untrusted in
+            guard let self, !self.stopped, self.generation == generation else { return false }
+            self.enqueue(.resolveLink(value, untrusted), bytes: 0)
+            return true
         }
         view.onClose = { [weak self] _ in
             guard let self, !self.stopped, self.generation == generation else { return }
@@ -154,7 +176,13 @@ import Observation
     }
 
     private func enqueue(_ event: Event, bytes: Int) {
-        guard !stopped, exitMessage == nil else { return }
+        guard !stopped else { return }
+        if exitMessage != nil {
+            switch event {
+            case .resolveLink, .openLink, .presentation: break;
+            default: return
+            }
+        }
         guard events.count < 256, queuedBytes + bytes <= 262_144 else {
             fail("The terminal input queue is full.")
             return
@@ -175,8 +203,33 @@ import Observation
                     case let .input(data):
                         self.queuedBytes -= data.count
                         try await self.client.input(data, to: self.session)
-                    case let .resize(columns, rows):
-                        try await self.client.resize(self.session, columns: columns, rows: rows)
+                    case let .resize(columns, rows, width, height):
+                        try await self.client.resize(
+                            self.session, columns: columns, rows: rows, widthPixels: width,
+                            heightPixels: height)
+                    case let .drop(payload):
+                        defer { self.drops -= 1 }
+                        do {
+                            try await self.client.importDrop(payload, to: self.session);
+                            self.actionError = nil
+                        } catch { self.actionError = "The dropped content could not be imported." }
+                    case let .resolveLink(value, untrusted):
+                        do {
+                            let reply = try await self.client.resolveLink(
+                                value, untrusted: untrusted, session: self.session)
+                            guard !self.stopped, self.generation == generation else { return }
+                            self.ghosttyView?.presentLink(reply.resolution) { [weak self] in
+                                guard let self, !self.stopped, self.generation == generation,
+                                    let token = reply.token
+                                else { return }
+                                self.enqueue(.openLink(token), bytes: 0)
+                            }
+                        } catch { self.actionError = "The terminal link is unavailable." }
+                    case let .openLink(token):
+                        do {
+                            try await self.client.openLink(token, session: self.session);
+                            self.actionError = nil
+                        } catch { self.actionError = "The terminal link could not be opened." }
                     case let .presentation(title, directory):
                         try await self.client.presentation(
                             self.session, title: title, directory: directory)

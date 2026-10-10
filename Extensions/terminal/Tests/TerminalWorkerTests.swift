@@ -75,10 +75,16 @@ import Testing
         let model = TerminalTabsModel(client: remote)
         defer { model.stopAll() }
         await remote.open(); model.synchronize()
+        let second = try TerminalTestFixture.remote(engine)
+        let secondModel = TerminalTabsModel(client: second)
+        defer { secondModel.stopAll() }
+        await second.refresh(); secondModel.synchronize()
         let settings = TerminalSettings(
             fontSize: 19, shell: "/bin/sh", loginShell: false, startupCommand: "printf synthetic")
         await model.savePreferences(settings)
         #expect(TerminalSettings.load(defaults) == settings)
         #expect(model.tabs.first?.holder.fontSize == 19)
+        await second.refresh(); secondModel.synchronize()
+        #expect(secondModel.tabs.first?.holder.fontSize == 19)
     }
 }

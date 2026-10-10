@@ -1182,6 +1182,7 @@
       "app": [
         "Extensions/terminal/Runtime.swift",
         "Extensions/terminal/TerminalEngine.swift",
+        "Extensions/terminal/TerminalEngineFiles.swift",
         "Extensions/terminal/TerminalPTY.swift",
         "Extensions/terminal/TerminalRemoteClient.swift",
         "Extensions/terminal/TerminalUIEvent.swift",

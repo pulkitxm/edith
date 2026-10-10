@@ -96,6 +96,7 @@ struct TerminalBroadcastDelivery: Equatable, Sendable {
 
     func synchronize() {
         guard !stopped else { return }
+        settings = client.snapshot.preferences
         let sessions = client.snapshot.sessions
         for tab in tabs
         where !sessions.contains(where: {

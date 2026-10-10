@@ -73,7 +73,7 @@ final class ExtensionRuntime: NSObject {
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
             let id = client.presentationID
-            guard presentations[id] != nil || presentations.count < 8 else {
+            guard presentations[id] != nil || presentations.count < 16 else {
                 client.invalidate()
                 return ["ok": false] as NSDictionary
             }
@@ -116,7 +116,15 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":
             for presentation in presentations.values { presentation.model.synchronize() }
-        case "stopUI": stopUI()
+        case "stopUI":
+            if let value = input["presentationID"] as? String {
+                guard let id = UUID(uuidString: value), presentations[id] != nil else {
+                    return ["ok": false] as NSDictionary
+                }
+                stopUI(id)
+            } else {
+                stopUI()
+            }
         case "stop":
             stopUI()
             commands.shutdown()
@@ -127,12 +135,15 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
 
-    private func stopUI() {
+    private func stopUI(_ id: UUID? = nil) {
         guard !presentations.isEmpty else { return }
-        for presentation in presentations.values { presentation.model.stopAll() }
-        presentations.removeAll()
-        GhosttyRuntime.shared.shutdown()
-        TextEditingCommands.shutdown()
+        for identifier in id.map({ [$0] }) ?? Array(presentations.keys) {
+            presentations.removeValue(forKey: identifier)?.model.stopAll()
+        }
+        if presentations.isEmpty {
+            GhosttyRuntime.shared.shutdown()
+            TextEditingCommands.shutdown()
+        }
     }
 
     private func stopEngine() {

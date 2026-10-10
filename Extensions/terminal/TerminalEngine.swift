@@ -16,6 +16,12 @@ import Foundation
     struct Snapshot: Codable, Equatable {
         let sessions: [Session]
         let broadcast: Bool
+        let preferences: TerminalSettings
+        init(
+            sessions: [Session], broadcast: Bool, preferences: TerminalSettings = TerminalSettings()
+        ) {
+            self.sessions = sessions; self.broadcast = broadcast; self.preferences = preferences
+        }
     }
 
     struct SessionRequest: Codable {
@@ -37,6 +43,15 @@ import Foundation
         let session: SessionRequest
         let columns: UInt16
         let rows: UInt16
+        let widthPixels: UInt16
+        let heightPixels: UInt16
+        init(
+            session: SessionRequest, columns: UInt16, rows: UInt16, widthPixels: UInt16 = 0,
+            heightPixels: UInt16 = 0
+        ) {
+            self.session = session; self.columns = columns; self.rows = rows
+            self.widthPixels = widthPixels; self.heightPixels = heightPixels
+        }
     }
 
     struct PresentationRequest: Codable {
@@ -67,14 +82,17 @@ import Foundation
     private var nextNumber = 1
     private let launch: @MainActor () -> TerminalLaunch
     private let defaults: UserDefaults
+    private let files: TerminalEngineFiles
     private(set) var isStopped = false
     var broadcast = false
 
     init(
         defaults: UserDefaults = SharedDefaults.store,
-        launch: (@MainActor () -> TerminalLaunch)? = nil
+        launch: (@MainActor () -> TerminalLaunch)? = nil,
+        files: TerminalEngineFiles? = nil
     ) {
         self.defaults = defaults
+        self.files = files ?? TerminalEngineFiles()
         self.launch = launch ?? { TerminalLaunchPlan.make(settings: .load(defaults)) }
     }
 
@@ -92,14 +110,36 @@ import Foundation
                 error: failures[tab.id] == nil ? nil : "The owned terminal stream failed.",
                 selected: tab.id == selected)
         }
-        return Snapshot(sessions: sessions, broadcast: broadcast)
+        return Snapshot(sessions: sessions, broadcast: broadcast, preferences: .load(defaults))
     }
 
     func execute(_ command: String, payload: Data) async throws -> Data {
-        guard !isStopped, Self.commands.contains(command), payload.count <= 32_768 else {
+        guard !isStopped,
+            (Self.commands.contains(command) || TerminalEngineFiles.commands.contains(command)),
+            payload.count <= 32_768
+        else {
             throw ExtensionPeerError.invalidRequest
         }
         try Task.checkCancellation()
+        if TerminalEngineFiles.commands.contains(command) {
+            let session: SessionRequest
+            if command == "terminal.drop.write" {
+                session = try JSONDecoder().decode(TerminalEngineFiles.Chunk.self, from: payload)
+                    .handle.session
+            } else {
+                session = try JSONDecoder().decode(
+                    TerminalEngineFiles.SessionEnvelope.self, from: payload
+                ).session
+            }
+            let owned = try tab(
+                session,
+                allowFailed: command == "terminal.resolveLink" || command == "terminal.openLink")
+            return try await files.execute(
+                command, payload: payload, session: session, directory: owned.directory
+            ) { bytes in
+                try self.tab(session).terminal.send(bytes)
+            }
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
         let decoder = JSONDecoder()
@@ -121,7 +161,7 @@ import Foundation
             selected = try tab(request, allowFailed: true).id
         case "terminal.closeAll":
             try requireEmpty(payload)
-            for tab in tabs { tab.terminal.close() }
+            for tab in tabs { tab.terminal.close(); files.close(tab.id) }
             tabs.removeAll()
             failures.removeAll()
             selected = nil
@@ -129,6 +169,7 @@ import Foundation
             let request = try decoder.decode(SessionRequest.self, from: payload)
             let owned = try tab(request, allowFailed: true)
             owned.terminal.close()
+            files.close(owned.id)
             tabs.removeAll { $0.id == owned.id }
             failures[owned.id] = nil
             if selected == owned.id { selected = tabs.last?.id }
@@ -138,6 +179,7 @@ import Foundation
             let plan = launch()
             let replacement = try TerminalPTY(launch: plan)
             previous.terminal.close()
+            files.close(previous.id)
             guard let index = tabs.firstIndex(where: { $0.id == previous.id }) else {
                 replacement.close()
                 throw ExtensionPeerError.unavailable
@@ -151,7 +193,9 @@ import Foundation
             try tab(request.session).terminal.send(request.bytes)
         case "terminal.resize":
             let request = try decoder.decode(ResizeRequest.self, from: payload)
-            try tab(request.session).terminal.resize(columns: request.columns, rows: request.rows)
+            try tab(request.session).terminal.resize(
+                columns: request.columns, rows: request.rows, widthPixels: request.widthPixels,
+                heightPixels: request.heightPixels)
         case "terminal.read":
             let request = try decoder.decode(ReadRequest.self, from: payload)
             return try encoder.encode(try await read(request))
@@ -191,6 +235,7 @@ import Foundation
         polling?.cancel()
         polling = nil
         failures.removeAll()
+        files.stop()
         for tab in tabs { tab.terminal.close() }
         tabs.removeAll()
         selected = nil
@@ -227,6 +272,7 @@ import Foundation
                 do { try await Task.sleep(for: .milliseconds(20)) } catch { return }
                 guard let self, !self.isStopped else { return }
                 guard !self.tabs.isEmpty else { self.polling = nil; return }
+                self.files.expire()
                 for tab in self.tabs where self.failures[tab.id] == nil {
                     do { try tab.terminal.poll() } catch { self.failures[tab.id] = error }
                 }
