@@ -44,6 +44,75 @@ const definitions = [
 ];
 
 describe("independent extension releases", () => {
+  test("Finder metadata does not rebuild extensions or their dependents", async () => {
+    const root = await mkdtemp(join(tmpdir(), "extension-finder-inputs-"));
+    const entries = [
+      {
+        id: "music",
+        version: "1.0.0",
+        hostABI: "host-1",
+        inputs: ["Extensions/music"],
+        sharedInputs: ["Packages/Shared"],
+        dependencies: [],
+      },
+      {
+        id: "shelf",
+        version: "1.0.0",
+        hostABI: "host-1",
+        inputs: ["Extensions/shelf"],
+        sharedInputs: [],
+        dependencies: ["music"],
+      },
+    ];
+    const metadata = [
+      "Extensions/music/.DS_Store",
+      "Extensions/music/Native/.DS_Store",
+      "Packages/Shared/.DS_Store",
+    ];
+    try {
+      for (const directory of [
+        "Extensions/music/Native",
+        "Extensions/shelf",
+        "Packages/Shared",
+      ])
+        await mkdir(join(root, directory), { recursive: true });
+      await writeFile(join(root, "Extensions/music/Runtime.swift"), "runtime");
+      await writeFile(join(root, "Extensions/shelf/Runtime.swift"), "shelf");
+      await writeFile(join(root, "Packages/Shared/Source.swift"), "shared");
+      const initial = await Promise.all(
+        entries.map((entry) => extensionFingerprint(root, entry, entries)),
+      );
+      for (const path of metadata)
+        await writeFile(join(root, path), "synthetic Finder metadata");
+      expect(
+        await Promise.all(
+          entries.map((entry) => extensionFingerprint(root, entry, entries)),
+        ),
+      ).toEqual(initial);
+      expect(planExtensionBuilds(entries, metadata)).toEqual([]);
+      expect(planPullRequestBuilds(entries, metadata, entries)).toEqual([]);
+      const published = entries.map((entry, index) => ({
+        id: entry.id,
+        version: entry.version,
+        hostABI: entry.hostABI,
+        architecture: "arm64",
+        sourceFingerprint: initial[index],
+      }));
+      expect(await planUnpublishedExtensions(root, entries, published)).toEqual(
+        [],
+      );
+      await writeFile(
+        join(root, "Extensions/music/Runtime.swift"),
+        "changed runtime",
+      );
+      const changed = await planUnpublishedExtensions(root, entries, published);
+      expect(changed.map(({ id }) => id)).toEqual(["music", "shelf"]);
+      for (const [index, row] of changed.entries())
+        expect(row.fingerprint).not.toBe(initial[index]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   test("immutable release identities include the version and exact source", () => {
     const identity = {
       id: "music",

@@ -59,6 +59,7 @@ const excludedProductionDirectories = new Set([
 
 function excludedProductionInput(path) {
   return (
+    path.split("/").at(-1) === ".DS_Store" ||
     path.split("/").some((part) => excludedProductionDirectories.has(part)) ||
     path ===
       "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift" ||
@@ -126,10 +127,12 @@ export function planExtensionBuilds(definitions, changes, changedIDs = []) {
   const selected = new Set(changedIDs);
   for (const definition of definitions) {
     if (
-      changes.some((path) =>
-        definitionInputs(definition).some(
-          (input) => path === input || path.startsWith(`${input}/`),
-        ),
+      changes.some(
+        (path) =>
+          path.split("/").at(-1) !== ".DS_Store" &&
+          definitionInputs(definition).some(
+            (input) => path === input || path.startsWith(`${input}/`),
+          ),
       )
     ) {
       selected.add(definition.id);
