@@ -117,6 +117,12 @@ class WatchdogTests(unittest.TestCase):
             self.assertIn('bug_type', (output / retained[0]).read_text())
             self.assertEqual(watchdog.owned_crash_reports(directory, output, [identity], time.time() + 1), [])
 
+    def test_sampling_names_include_actual_swiftpm_helper_and_package_executable(self):
+        for name in ['swiftpm-testing', 'swiftpm-testing-helper', 'EdithHostPackageTests']:
+            self.assertTrue(watchdog.is_testing_process('/owned/' + name))
+        for name in ['swift', 'swift-frontend', 'foreign.xctest', 'other']:
+            self.assertFalse(watchdog.is_testing_process('/owned/' + name))
+
     def test_actual_testing_summaries_require_nonzero_completed_tests(self):
         for text in ['Test run with 644 tests in 92 suites passed after 42 seconds.',
                      'Test run with 1 test in 1 suite passed after 1 second.',

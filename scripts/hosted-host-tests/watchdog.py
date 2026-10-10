@@ -121,6 +121,10 @@ def owned_crash_reports(report_directory, output, identities, started):
     return retained
 
 
+def is_testing_process(path):
+    return Path(path).name in {'swiftpm-testing', 'swiftpm-testing-helper', 'EdithHostPackageTests'}
+
+
 def completed_tests(batch, text):
     return batch == 'build' or bool(re.search(
         r'Test run with [1-9][0-9]* tests? (?:in [1-9][0-9]* suites? )?passed|Executed [1-9][0-9]* tests?',
@@ -141,8 +145,7 @@ def run_batch(batch, arguments, directory, deadline, process_factory=subprocess.
                 if clock() - start >= deadline or (directory / f'{batch}.log').stat().st_size > 16_777_216:
                     timed_out = True
                     for identity in ownership.refresh():
-                        name = Path(identity[3]).name
-                        if batch != 'build' and (name.endswith('.xctest') or name == 'swiftpm-testing'):
+                        if batch != 'build' and is_testing_process(identity[3]):
                             if ownership.identity(identity[0]) == identity:
                                 subprocess.run(['/usr/bin/sample', str(identity[0]), '3', '-file',
                                                 str(directory / f'{batch}-{identity[0]}.sample')],

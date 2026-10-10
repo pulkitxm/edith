@@ -1,6 +1,6 @@
 name: Hosted host test diagnostics
 "on":
-  workflow_dispatch:
+  workflow_call:
     inputs:
       expected_sha:
         required: true
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   serial-core-and-ui:
-    if: github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' && inputs.expected_sha == github.sha
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' && inputs.expected_sha == github.sha
     runs-on: macos-26
     timeout-minutes: 50
     env:
