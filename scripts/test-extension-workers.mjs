@@ -31,6 +31,12 @@ export const inertFixtureWorkers = new Set([
   "studio",
   "keepAwake",
   "notchShelf",
+  "usage",
+  "herdr",
+  "machines",
+  "attention",
+  "companion",
+  "codeStats",
 ]);
 
 export const supportedFixtureWorkers = new Set([

@@ -52,7 +52,10 @@ public struct WorkerFixtureAdmission: Sendable {
             "focusDim", "micMute", "systemStats", "windowSweaters", "colorPicker",
             "emoji", "presenter", "keystrokeHighlight", "keepAwake", "notchShelf",
         ]
-        let appIDs: Set<String> = ["music", "plugins", "studio"]
+        let appIDs: Set<String> = [
+            "music", "plugins", "studio", "usage", "herdr", "machines", "attention", "companion",
+            "codeStats",
+        ]
         let role: WorkerFixtureRole = appIDs.contains(extensionID) ? .app : .helper
         guard (helperIDs.contains(extensionID) || appIDs.contains(extensionID)),
             let identifier = hostIdentifier,

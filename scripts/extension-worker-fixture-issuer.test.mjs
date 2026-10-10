@@ -46,8 +46,8 @@ test("all39 declared workers are admitted before any fixture build", () => {
   );
 });
 
-test("all thirteen strict inert owners and conditional owners remain selectable", () => {
-  assert.equal(inertFixtureWorkers.size, 13);
+test("all nineteen strict inert owners and conditional owners remain selectable", () => {
+  assert.equal(inertFixtureWorkers.size, 19);
   for (const worker of workers)
     assert.deepEqual(validateWorkerFixtureSelection(definitions, [worker.id]), [
       worker,
@@ -83,6 +83,11 @@ test("launcher and native harness have the same fail-closed boundary", async () 
     return [...owners.matchAll(/"([^"]+)"/g)].map((match) => match[1]);
   });
   assert.deepEqual(new Set(roleOwners), inertFixtureWorkers);
+  const appOwners = [...admission.match(/let appIDs: Set<String> = \[([\s\S]*?)\]/)[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+  const issuedAppOwners = [...source.match(/let role =\s*\[([\s\S]*?)\]\.contains\(selection.extensionID\)/)[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(new Set(issuedAppOwners), new Set(appOwners));
+  for (const owner of ["usage", "herdr", "machines", "attention", "companion", "codeStats"])
+    assert(appOwners.includes(owner));
   const supported = source.match(
     /static let supportedIDs[\s\S]*?= \[([\s\S]*?)\]/,
   )[1];
