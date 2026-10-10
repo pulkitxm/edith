@@ -49,7 +49,8 @@ public actor DatabaseEngine: DatabaseBrokerCommandSending {
         try Task.checkCancellation()
         sequence &+= 1
         let envelope = DatabaseBrokerEnvelope(
-            requestID: UUID(), sequence: sequence, kind: .request, payload: request)
+            requestID: UUID(), operationID: request.operationID, sequence: sequence,
+            kind: .request, payload: request)
         return try await resources.dispatcher.dispatch(envelope, responseSequence: 0).payload
     }
 

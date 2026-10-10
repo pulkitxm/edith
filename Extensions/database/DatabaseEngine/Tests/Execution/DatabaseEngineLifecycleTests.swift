@@ -4,6 +4,41 @@ import Testing
 @testable import DatabaseEngine
 
 @Suite struct DatabaseEngineLifecycleTests {
+    @Test func ownedRuntimeConnectsQueriesAndDisconnectsSQLite() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let engine = DatabaseEngine(
+            metadataFile: root.appendingPathComponent("metadata.sqlite"),
+            secretStore: { try InMemoryDatabaseSecretStore() }, adapters: { [SQLiteDatabaseAdapter()] })
+        let definition = try DatabaseConnectionDraft(
+            displayName: "Synthetic SQLite", product: .sqlite,
+            path: root.appendingPathComponent("synthetic.sqlite").path,
+            environmentKind: .testing, environmentLabel: "Synthetic",
+            environmentProtection: .standard, readOnlyPolicy: .disabled,
+            productionPolicy: .standard).definition()
+        _ = try await engine.send(.connectionSave(.init(connection: definition)))
+        let connected = try await engine.send(.connect(.init(connectionID: definition.id)))
+        guard case .connect(let result) = connected else {
+            Issue.record("Connect returned an unexpected result")
+            await engine.shutdown()
+            return
+        }
+        #expect(result.payload != nil)
+        let queried = try await engine.send(.query(.init(
+            target: .init(connectionID: definition.id), language: .sql,
+            command: "SELECT 'synthetic-value' AS result")))
+        #expect(String(decoding: try JSONEncoder().encode(queried), as: UTF8.self)
+            .contains("synthetic-value"))
+        let disconnected = try await engine.send(.disconnect(.init(connectionID: definition.id)))
+        guard case .disconnect(let result) = disconnected else {
+            Issue.record("Disconnect returned an unexpected result")
+            await engine.shutdown()
+            return
+        }
+        #expect(result.payload?.disconnected == true)
+        await engine.shutdown()
+    }
+
     @Test func ownedRuntimeReleasesMetadataAndRejectsStoppedCommands() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
