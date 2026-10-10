@@ -34,17 +34,19 @@ public struct HostCLIRequest: Sendable, Equatable {
     public let operation: String?
     public let payload: Data
     public let timeout: Double
+    public let raw: Bool
     public static let maximumPayload = 512 * 1024
 
     public init(
         action: Action, id: String? = nil, operation: String? = nil,
-        payload: Data = Data("{}".utf8), timeout: Double = 30
+        payload: Data = Data("{}".utf8), timeout: Double = 30, raw: Bool = false
     ) throws {
         self.action = action
         self.id = id
         self.operation = operation
         self.payload = payload
         self.timeout = timeout
+        self.raw = raw
         try validate()
     }
 
@@ -74,9 +76,12 @@ public struct HostCLIRequest: Sendable, Equatable {
     }
 
     public func validate() throws {
-        guard timeout.isFinite, (1...60).contains(timeout), payload.count <= Self.maximumPayload,
+        guard timeout.isFinite, (1...120).contains(timeout), payload.count <= Self.maximumPayload,
             (try? JSONSerialization.jsonObject(with: payload, options: .fragmentsAllowed)) != nil
         else { throw HostCLIError.usage("Invalid JSON payload or command limit.") }
+        guard !raw || action == .invoke else {
+            throw HostCLIError.usage("Only invoke supports --raw.")
+        }
         if action == .ls {
             guard id == nil, operation == nil else {
                 throw HostCLIError.usage("Invalid list command.")
@@ -109,13 +114,13 @@ public enum HostCLICommand: Equatable {
     public static let usageText = """
         usage: ed extensions ls [--json]
                ed extensions info|install|update|enable|disable|remove <id> [--json]
-               ed invoke <id> <operation> [--json <json|->] [--timeout <seconds>]
+               ed invoke <id> <operation> [--json <json|->] [--timeout <seconds>] [--raw]
                ed --help | --version
 
         Results are JSON. Use --json - to read an invoke payload from stdin.
         Edith must already be running. Invoke requires a compatible, enabled worker.
         Commands never open the app or enable a worker implicitly.
-        Timeout: 1 to 60 seconds, default 30. Payload limit: 512 KiB.
+        Timeout: 1 to 120 seconds, default 30. Payload limit: 512 KiB.
         """
 
     public static func parse(
@@ -144,10 +149,14 @@ public enum HostCLICommand: Equatable {
         }
         var payload = Data("{}".utf8)
         var timeout = 30.0
+        var raw = false
         var seen = Set<String>()
         var index = 3
         while index < arguments.count {
             let flag = arguments[index]
+            if flag == "--raw", seen.insert(flag).inserted {
+                raw = true; index += 1; continue
+            }
             guard ["--json", "--timeout"].contains(flag), seen.insert(flag).inserted,
                 index + 1 < arguments.count
             else { throw HostCLIError.usage("Invalid invoke arguments. Run ed --help.") }
@@ -165,6 +174,6 @@ public enum HostCLICommand: Equatable {
         return .request(
             try HostCLIRequest(
                 action: .invoke, id: arguments[1],
-                operation: arguments[2], payload: payload, timeout: timeout))
+                operation: arguments[2], payload: payload, timeout: timeout, raw: raw))
     }
 }

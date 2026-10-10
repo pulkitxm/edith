@@ -139,6 +139,10 @@ final class HostCLIConnection: @unchecked Sendable {
     func cancel() { lock.withLock { if !closed { _ = Darwin.shutdown(descriptor, SHUT_RDWR) } } }
     func close() { lock.withLock { if !closed { closed = true; _ = Darwin.close(descriptor) } } }
     func configure(timeout: Double) throws {
+        let flags = fcntl(descriptor, F_GETFL)
+        guard flags >= 0, fcntl(descriptor, F_SETFL, flags & ~O_NONBLOCK) == 0 else {
+            throw HostCLIError.unavailable
+        }
         _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
         var value = timeval(tv_sec: Int(timeout), tv_usec: 0)
         var noSignal: Int32 = 1

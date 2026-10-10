@@ -72,4 +72,21 @@ import Testing
         }
         #expect(!FileManager.default.fileExists(atPath: identity.root.path))
     }
+    @Test func acceptedNonblockingSocketsWaitForTheRequestBody() async throws {
+        var sockets: [Int32] = [0, 0]
+        #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &sockets) == 0)
+        let input = HostCLIConnection(sockets[0])
+        let output = HostCLIConnection(sockets[1])
+        defer { input.close(); output.close() }
+        #expect(fcntl(sockets[0], F_SETFL, O_NONBLOCK) == 0)
+        try input.configure(timeout: 2)
+        let writer = Task.detached {
+            try await Task.sleep(for: .milliseconds(100))
+            try output.write(Data("delayed".utf8), limit: 100)
+        }
+        let value = try await Task.detached { try input.read(limit: 100) }.value
+        try await writer.value
+        #expect(value == Data("delayed".utf8))
+    }
+
 }

@@ -8,9 +8,10 @@ Send an operation and a JSON payload to an already running extension worker:
 ed invoke <id> <operation> --json '{"value":"synthetic"}'
 printf '%s' '{"value":"synthetic"}' | ed invoke <id> <operation> --json -
 ed invoke <id> <operation> --timeout 120 --json '{}'
+ed invoke <id> <operation> --json - --raw
 ```
 
-The default payload is `{}`. The output is exactly the worker's JSON response. Operation names and payload schemas are defined by the downloaded extension. This gateway does not execute arbitrary paths or translate legacy command aliases.
+The default payload is `{}`. The output is exactly the worker's JSON response. `--raw` decodes a JSON string response and prints its UTF-8 text with a trailing newline. It rejects other response types. Use it for a worker-owned plain-text statusline. Operation names and payload schemas are defined by the downloaded extension. This gateway does not execute arbitrary paths or translate legacy command aliases.
 
 Install and enable the extension first. An incompatible, disabled, stopped, stale, or unknown worker returns an error. Private `extension.*` host operations are rejected. If the worker or its selected version changes during the request, the result is rejected.
 

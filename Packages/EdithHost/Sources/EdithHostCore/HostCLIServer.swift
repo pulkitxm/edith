@@ -144,9 +144,15 @@ import Foundation
                         error: HostCLIError.timedOut.localizedDescription, exitCode: 4))
             } catch {}
         }
-        let watcher = DispatchSource.makeReadSource(
-            fileDescriptor: job.connection.descriptor, queue: .main)
-        watcher.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.close(token) } }
+        let descriptor = job.connection.descriptor
+        let watcher = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: .main)
+        watcher.setEventHandler { [weak self] in
+            MainActor.assumeIsolated {
+                var byte: UInt8 = 0
+                let count = recv(descriptor, &byte, 1, MSG_PEEK | MSG_DONTWAIT)
+                if count >= 0 { self?.close(token) }
+            }
+        }
         watcher.resume()
         job.watcher = watcher
         jobs[token] = job

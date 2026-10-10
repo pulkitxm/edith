@@ -23,7 +23,7 @@ public enum HostCLI {
                     in: .userDomainMask, appropriateFor: nil, create: false)
                 let identity = try HostIdentity(identifier: identifier, supportDirectory: support)
                 let data = try HostCLITransport.invoke(request, identity: identity)
-                FileHandle.standardOutput.write(data)
+                FileHandle.standardOutput.write(try output(data, raw: request.raw))
                 FileHandle.standardOutput.write(Data([10]))
             }
             return 0
@@ -38,6 +38,17 @@ public enum HostCLI {
             FileHandle.standardError.write(Data([10]))
             return failure.exitCode
         }
+    }
+
+    public static func output(_ data: Data, raw: Bool) throws -> Data {
+        guard raw else { return data }
+        guard
+            let value = try JSONSerialization.jsonObject(with: data, options: .fragmentsAllowed)
+                as? String
+        else {
+            throw HostCLIError.rejected("--raw requires a JSON string response from the worker.")
+        }
+        return Data(value.utf8)
     }
 
     private static func readInput() throws -> Data {
