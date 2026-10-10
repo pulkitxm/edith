@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { access, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
