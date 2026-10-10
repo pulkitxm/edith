@@ -9,6 +9,7 @@ import SwiftUI
 @objc(EdithAppMaintenanceExtensionRuntime)
 final class ExtensionRuntime: NSObject {
     private var model: AppMaintenanceModel?
+    private var stopped = false
     private var uiModel: AppMaintenanceModel?
     private var uiClient: ExtensionEngineClient?
     private(set) var settingsModel: MaintenanceSettingsModel?
@@ -51,6 +52,7 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        stopped = true
         stopUI()
         Task {
             await commands.shutdownAndWait()
@@ -71,7 +73,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard let suite = input["defaultsSuite"] as? String,
+            guard !stopped, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             if model == nil { model = AppMaintenanceModel() }
@@ -104,6 +106,7 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
+            stopped = true
             stopUI()
             commands.shutdown(); cliStreams?.stop()
             model = nil
@@ -115,7 +118,7 @@ final class ExtensionRuntime: NSObject {
     }
 
     func configurePresentation(_ input: NSDictionary, client: ExtensionEngineClient) -> Bool {
-        guard input["extensionID"] as? String == "appMaintenance",
+        guard !stopped, input["extensionID"] as? String == "appMaintenance",
             input["uiOnly"] as? Bool == false,
             input["presentationID"] as? String == client.presentationID.uuidString,
             let location = input["location"] as? String, let section = input["section"] as? String,
@@ -124,6 +127,9 @@ final class ExtensionRuntime: NSObject {
                     && (section == "appMaintenance"
                         || AppMaintenanceSection(rawValue: section) != nil))
         else { return false }
+        guard location != "settings" || (input["tile"] == nil && input["target"] == nil) else {
+            return false
+        }
         stopUI()
         uiClient = client
         uiLocation = location

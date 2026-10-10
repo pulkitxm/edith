@@ -221,6 +221,9 @@ public final class AttentionExtensionController: NSObject {
                 || (location == "main" && section == "attention")
                 || (location == "home" && section == "focus")
         else { return false }
+        guard location != "settings" || (input["tile"] == nil && input["target"] == nil) else {
+            return false
+        }
         stopUI()
         let client = AttentionUIClient(engine: engine)
         uiClient = client

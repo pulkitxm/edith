@@ -62,7 +62,9 @@ struct AttentionTrackingSettings: View {
         Form {
             Section("Tracking") {
                 Toggle("Track foreground applications", isOn: $model.settings.trackingEnabled)
+                    .accessibilityLabel("Track foreground applications")
                 Toggle("Run local browser server", isOn: $model.settings.browserTrackingEnabled)
+                    .accessibilityLabel("Run local browser server")
                 HStack {
                     Button("Save tracking settings") { model.save() }
                     Button("Open Attention") { ExtensionPresentation.showWindow() }

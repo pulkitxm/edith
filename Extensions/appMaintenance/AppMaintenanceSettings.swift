@@ -139,6 +139,7 @@ struct AppMaintenanceSettings: View {
                     Text("Formulae").tag("formula")
                     Text("Casks").tag("cask")
                 }
+                .accessibilityLabel("Default package kind")
                 .disabled(!model.packageLoaded || model.stopped)
                 if let error = model.packageError {
                     Text(error).settingsCaption().foregroundStyle(.red)
@@ -158,6 +159,7 @@ struct AppMaintenanceSettings: View {
                         Text(destination.title).tag(destination.rawValue)
                     }
                 }
+                .accessibilityLabel("Disk image destination")
                 .disabled(!model.loaded || model.stopped)
                 LabeledContent("Location", value: "Main sidebar")
                 if let error = model.errorMessage {
