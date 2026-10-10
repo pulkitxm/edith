@@ -12,6 +12,7 @@ final class ExtensionRuntime: NSObject {
     private var engineClient: ExtensionEngineClient?
     private var surface: BifrostSurface?
     private let commands = ExtensionCommandRegistry()
+    private var cliStreams: ExtensionCLIStreams?
     private var stopped = false
     private var activeCalls = 0
 
@@ -23,6 +24,14 @@ final class ExtensionRuntime: NSObject {
             }
             self.activeCalls += 1
             defer { self.activeCalls -= 1 }
+            if command.hasPrefix("bifrost.cli.") {
+                if self.cliStreams == nil {
+                    self.cliStreams = try ExtensionCLIStreams(owner: "bifrost")
+                }
+                guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
+                return try await BifrostCLIExecution.stream(
+                    streams, operation: command, payload: payload, store: worker.store)
+            }
             if command == "bifrost.cli" {
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
                 return try JSONEncoder().encode(
@@ -47,12 +56,15 @@ final class ExtensionRuntime: NSObject {
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         stopped = true
+        let streams = cliStreams; cliStreams = nil; streams?.stop()
         commands.shutdown()
         let stopping = worker
         stopping?.shutdown()
         Task {
             await stopping?.drain()
             while activeCalls > 0 { await Task.yield() }
+            await streams?.stopAndWait()
+            await commands.shutdownAndWait()
             completion()
         }
     }
