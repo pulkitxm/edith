@@ -199,7 +199,7 @@ struct NotchPanelTransfer: Codable, Sendable, Identifiable {
     var cancelled = false
 }
 
-struct NotchPanelTransferFinish: Codable, Sendable {
+struct NotchPanelTransferFinish: Codable, Equatable, Sendable {
     let identity: NotchPanelIdentity
     let id: UUID
     let completed: Bool
@@ -217,7 +217,7 @@ struct NotchPanelDrop: Codable, Sendable {
     let y: Double?
 }
 
-struct NotchPanelPromise: Codable, Sendable {
+struct NotchPanelPromise: Codable, Equatable, Sendable {
     let identity: NotchPanelIdentity
     let displayID: UInt32
     let presentationID: UUID
