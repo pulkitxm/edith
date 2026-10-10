@@ -26,6 +26,7 @@ struct HostNotchPanelBatch: Codable, Equatable, Sendable {
     let identity: HostNotchPanelIdentity
     let revision: UInt64
     let states: [HostNotchPanelState]
+    var transfers: [HostNotchPanelTransfer] = []
 
     static func decode(_ data: Data) throws -> Self {
         guard !data.isEmpty, data.count <= HostNotchPanelState.maximumBytes else {

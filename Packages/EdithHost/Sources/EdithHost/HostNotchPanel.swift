@@ -4,6 +4,14 @@ import QuartzCore
 @MainActor
 final class HostNotchPanel: NSPanel {
     var acceptsKeyFocus = false
+    var transferEvent: NSEvent?
+
+    override func sendEvent(_ event: NSEvent) {
+        if [.leftMouseDown, .leftMouseDragged].contains(event.type), event.window === self {
+            transferEvent = event
+        }
+        super.sendEvent(event)
+    }
     override var canBecomeKey: Bool { acceptsKeyFocus }
     override var canBecomeMain: Bool { false }
 
