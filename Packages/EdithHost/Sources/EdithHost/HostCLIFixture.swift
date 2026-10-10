@@ -32,8 +32,14 @@ import Foundation
                 return temporary
             },
             verify: { payload in
+                let manifest = try JSONDecoder().decode(
+                    ExtensionPayloadManifest.self,
+                    from: Data(contentsOf: payload.appendingPathComponent("package.json")))
+                let carrier = try ExtensionUICarrier(
+                    payload: payload, manifest: manifest, expectedHostIdentifier: identifier)
+                try carrier.verifyDevelopment()
                 for bundle in try FileManager.default.contentsOfDirectory(
-                    at: payload, includingPropertiesForKeys: nil)
+                    at: carrier.payloadDirectory, includingPropertiesForKeys: nil)
                 where bundle.pathExtension == "bundle" {
                     try ExtensionCodeSignature.verifyDevelopment(bundle)
                 }
@@ -68,6 +74,8 @@ import Foundation
             defaults.removePersistentDomain(forName: identity.defaultsSuite)
             UserDefaults(suiteName: identity.extensionDefaultsSuite("keepAwake"))?
                 .removePersistentDomain(forName: identity.extensionDefaultsSuite("keepAwake"))
+            UserDefaults(suiteName: identity.extensionDefaultsSuite("calendar"))?
+                .removePersistentDomain(forName: identity.extensionDefaultsSuite("calendar"))
             try? await Task.sleep(for: .milliseconds(100))
             exit(0)
         }

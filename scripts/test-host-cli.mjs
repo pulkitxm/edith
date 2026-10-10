@@ -18,6 +18,7 @@ import {
   buildExtensionSupport,
   rewriteSupportImports,
 } from "./build-extension-support.mjs";
+import { buildExtensionUICarrier } from "./build-extension-ui-carrier.mjs";
 
 const fixture = await mkdtemp(join(tmpdir(), "edith-cli-fixture-"));
 const app = join(fixture, "Edith.app");
@@ -50,6 +51,7 @@ async function command(args, expected = 0, input) {
     child.stdin.end(input);
   });
   assert.equal(result.code, expected, JSON.stringify({ args, ...result }));
+  if (args[0] === "calendar") return result;
   if (expected !== 0) {
     assert.equal(result.stdout, "");
     assert.equal(JSON.parse(result.stderr).exitCode, expected);
@@ -79,7 +81,9 @@ try {
     join(app, "Contents/Resources/ed-launcher"),
   );
   run("chmod", ["755", join(app, "Contents/Resources/ed-launcher")]);
-  run("ln", ["-s", "../Resources/ed-launcher", ed]);
+  await copyFile("Resources/ed-launcher", ed);
+  run("chmod", ["755", ed]);
+  run("codesign", ["--force", "--sign", "-", ed]);
   run("python3", [
     "-c",
     "import plistlib,sys; p=sys.argv[1]; d=plistlib.load(open(p,'rb')); d['CFBundleIdentifier']=sys.argv[2]; plistlib.dump(d,open(p,'wb'))",
@@ -92,6 +96,8 @@ try {
   assert.match((await command(["--version"])).version, /^0\.\d+\.\d+$/);
   await command(["unrecognized"], 2);
   await command(["extensions", "ls"], 3);
+  const unavailable = await command(["calendar", "ls"], 4);
+  assert.match(unavailable.stderr, /^error: Edith is not running/);
   await command(["--extension-worker"], 2);
   const developer =
     process.env.DEVELOPER_DIR ?? "/Applications/Xcode.app/Contents/Developer";
@@ -151,6 +157,11 @@ try {
     "@executable_path/../Frameworks",
     binary,
   ]);
+  run("install_name_tool", [
+    "-add_rpath",
+    "@executable_path/../../../../Frameworks",
+    binary,
+  ]);
   run("strip", ["-rSTx", binary]);
   run("codesign", ["--force", "--sign", "-", app]);
   run("codesign", ["--verify", "--deep", "--strict", app]);
@@ -165,12 +176,16 @@ try {
     publicKey.export({ type: "spki", format: "der" }).subarray(-32),
   );
   const packages = [];
-  for (const version of ["1.0.0", "1.1.0"]) {
-    const payload = join(fixture, version, "keepAwake");
-    const bundle = join(payload, "helper.bundle");
+  for (const { id, version, role } of [
+    { id: "keepAwake", version: "1.0.0", role: "helper" },
+    { id: "keepAwake", version: "1.1.0", role: "helper" },
+    { id: "calendar", version: "1.0.0", role: "app" },
+  ]) {
+    const payload = join(fixture, `${id}-${version}`, id);
+    const bundle = join(payload, `${role}.bundle`);
     const contents = join(bundle, "Contents");
     await mkdir(join(contents, "MacOS"), { recursive: true });
-    const source = join(fixture, `Runtime-${version}.swift`);
+    const source = join(fixture, `Runtime-${id}-${version}.swift`);
     await writeFile(
       source,
       rewriteSupportImports(
@@ -179,7 +194,10 @@ try {
             "Packages/EdithHost/Tests/CLIFixture/Runtime.swift",
             "utf8",
           )
-        ).replace("VERSION", version),
+        )
+          .replace("VERSION", version)
+          .replaceAll("keepAwake", id)
+          .replace('"role": "helper"', `"role": "${role}"`),
         products.modules,
       ),
     );
@@ -210,11 +228,11 @@ try {
       join(contents, "MacOS/Runtime"),
     ]);
     const info = {
-      CFBundleIdentifier: "com.pulkit.edith.extensions.keepAwake.helper",
+      CFBundleIdentifier: `com.pulkit.edith.extensions.${id}.${role}`,
       CFBundleExecutable: "Runtime",
       CFBundlePackageType: "BNDL",
       CFBundleShortVersionString: version,
-      EdithHostABI: "edith-host-1",
+      EdithHostABI: "edith-host-2",
     };
     run("python3", [
       "-c",
@@ -226,14 +244,22 @@ try {
     await writeFile(
       join(payload, "package.json"),
       JSON.stringify({
-        id: "keepAwake",
+        id,
         version,
-        hostABI: "edith-host-1",
+        hostABI: "edith-host-2",
         architecture: "arm64",
         dependencies: [],
       }),
     );
-    const archive = join(fixture, `${version}.zip`);
+    await buildExtensionUICarrier({
+      hostApp: app,
+      payloadDirectory: payload,
+      id,
+      version,
+      hostABI: "edith-host-2",
+      development: true,
+    });
+    const archive = join(fixture, `${id}-${version}.zip`);
     const installedBytes = Number(
       run(
         "python3",
@@ -248,13 +274,13 @@ try {
     );
     const bytes = await readFile(archive);
     packages.push({
-      id: "keepAwake",
+      id,
       version,
-      hostABI: "edith-host-1",
+      hostABI: "edith-host-2",
       architecture: "arm64",
       minimumSystemVersion: 14,
       dependencies: [],
-      downloadURL: `https://github.com/pulkitxm/edith/releases/download/${version}/keepAwake.zip`,
+      downloadURL: `https://github.com/pulkitxm/edith/releases/download/${id}-${version}/${id}.zip`,
       sha256: createHash("sha256").update(bytes).digest("hex"),
       downloadBytes: bytes.length,
       installedBytes,
@@ -265,7 +291,9 @@ try {
       JSON.stringify({
         schemaVersion: 1,
         revision,
-        packages: packages.slice(0, count),
+        packages: packages.filter(
+          (item, index) => item.id === "calendar" || index < count,
+        ),
       }),
     );
     await writeFile(
@@ -293,6 +321,8 @@ try {
 
   assert.equal(ready.pid, host.pid);
   assert.equal(children().length, 0);
+  const disabled = await command(["calendar", "ls"], 4);
+  assert.match(disabled.stderr, /Calendar extension is off/);
   const list = await command(["extensions", "ls"]);
   assert(list.length >= 35);
   await command(["extensions", "info", "missing"], 1);
@@ -370,6 +400,19 @@ try {
   await command(["extensions", "ls"]);
   assert(Date.now() - start < 900, "Worker UI blocked host control");
   await blocking;
+  await command(["extensions", "install", "calendar"]);
+  await command(["calendar", "ls"], 4);
+  await command(["extensions", "enable", "calendar"]);
+  const terminal = await command(["calendar", "list", "--json"]);
+  assert.equal(terminal.stdout, '["list","--json"]\n');
+  assert.equal(terminal.stderr, "");
+  const failure = await command(["calendar", "synthetic-error"], 4);
+  assert.equal(failure.stdout, "");
+  assert.equal(failure.stderr, "error: synthetic unavailable\n");
+  await command(["extensions", "disable", "calendar"]);
+  await command(["calendar", "ls"], 4);
+  await command(["extensions", "remove", "calendar"]);
+  await until(() => children().length === 1);
   await catalog(2, 2);
   info = await command(["extensions", "update", "keepAwake"]);
   assert.equal(info.version, "1.1.0");
@@ -392,7 +435,7 @@ try {
     `"${"x".repeat(512 * 1024)}"`,
   );
   await rm(join(fixture, "catalog.json"));
-  await rm(join(fixture, "1.1.0.zip"));
+  await rm(join(fixture, "keepAwake-1.1.0.zip"));
   await command(["extensions", "install", "colorPicker"], 1);
   info = await command(["extensions", "info", "keepAwake"]);
   assert.equal(info.running, true);
@@ -415,7 +458,7 @@ try {
   await until(() => !existsSync(ready.socket));
   await command(["extensions", "ls"], 3);
   process.stdout.write(
-    `${JSON.stringify({ publicLauncher: true, sameSignedExecutable: true, install: "1.0.0", update: "1.1.0", invokeJSONAndStdin: true, scopedArchiveDecoder: true, duplicateRuntimeClasses: false, timeoutAndDisconnectCancellation: true, responsiveHost: true, forgedCallerRejected: true, boundedRequests: true, offlineError: true, disabledWorkers: 0, removedPayload: true, socketCleanup: true })}\n`,
+    `${JSON.stringify({ publicLauncher: true, sameSignedExecutable: true, install: "1.0.0", update: "1.1.0", invokeJSONAndStdin: true, scopedArchiveDecoder: true, abi2Carrier: true, originalTerminalRouting: true, originalTerminalExitCodes: true, duplicateRuntimeClasses: false, timeoutAndDisconnectCancellation: true, responsiveHost: true, forgedCallerRejected: true, boundedRequests: true, offlineError: true, disabledWorkers: 0, removedPayload: true, socketCleanup: true })}\n`,
   );
 } finally {
   if (host && host.exitCode === null) {
