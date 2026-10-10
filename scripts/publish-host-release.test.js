@@ -43,6 +43,7 @@ function fixture(existing = false) {
     }
     if (command === "pukbot" && args[1] === "create")
       release = { id: 7, tag_name: "v1.2.3", draft: true, assets: [] };
+    if (command === "pukbot" && args[1] === "edit") release.draft = false;
     return "{}";
   };
   return {
@@ -112,7 +113,9 @@ test("retries identical assets without uploading again", async () => {
         .map((args) => args[2]),
     ).toEqual(["edit"]);
     value.release.assets[0].bytes = Buffer.from("different");
-    await expect(publish(value)).rejects.toThrow("differs");
+    await expect(publish(value)).rejects.toThrow(
+      "Published host assets are immutable",
+    );
     expect(value.calls.some((args) => args.includes("DELETE"))).toBe(false);
   } finally {
     value.clean();
@@ -309,7 +312,11 @@ test("publication accepts only the exact intentional release child of the built 
       (args) => args[0] === "pukbot" && args[2] === "create",
     );
     expect(creation[creation.indexOf("--target") + 1]).toBe(release);
-    expect(value.calls.at(-1)).toContain("--make-latest");
+    expect(
+      value.calls.findLast(
+        (args) => args[0] === "pukbot" && args[2] === "edit",
+      ),
+    ).toContain("--make-latest");
   } finally {
     value.clean();
   }
@@ -337,7 +344,7 @@ test("duplicate remote asset names stop resumable publication before mutation", 
 });
 
 test("source advance during actual upload or immediately before promotion leaves the new release draft", async () => {
-  for (const failAt of [4, 7]) {
+  for (const failAt of [5, 8]) {
     const value = fixture();
     let reads = 0;
     try {
@@ -363,7 +370,7 @@ test("source advance during actual upload or immediately before promotion leaves
             args[2] === "upload-asset" &&
             !args.includes("--dry-run"),
         ).length,
-      ).toBe(failAt === 4 ? 1 : 2);
+      ).toBe(failAt === 5 ? 1 : 2);
     } finally {
       value.clean();
     }
@@ -461,4 +468,190 @@ test("rebuilt checksums follow successful publication and never precede immutabl
       (step) => step.name === "Mirror the cask to the tap repository",
     ),
   );
+});
+
+function delayedMutations(value, effect = () => {}) {
+  let pending;
+  const events = [];
+  const execute = (command, args, options) => {
+    if (command === "pukbot" && ["create", "edit"].includes(args[1])) {
+      expect(args.filter((argument) => argument === "--json")).toHaveLength(1);
+      expect(args[args.indexOf("--repo") + 1]).toBe("synthetic/fixture");
+      expect(options.timeout).toBeGreaterThan(0);
+      expect(options.timeout).toBeLessThanOrEqual(30 * 60_000);
+      expect(options.maxBuffer).toBe(2 * 1024 ** 2);
+      expect(options.killSignal).toBe("SIGKILL");
+      pending = args;
+      events.push(args[1]);
+      return JSON.stringify({
+        workflowUrl: "https://github.com/synthetic/control/actions/runs/123",
+      });
+    }
+    if (command === "gh" && args[0] === "run" && args[1] === "watch") {
+      expect(args).toEqual([
+        "run",
+        "watch",
+        "123",
+        "--repo",
+        "synthetic/control",
+        "--exit-status",
+      ]);
+      expect(options.timeout).toBeGreaterThan(0);
+      expect(options.timeout).toBeLessThanOrEqual(30 * 60_000);
+      expect(options.maxBuffer).toBe(2 * 1024 ** 2);
+      expect(options.killSignal).toBe("SIGKILL");
+      events.push(`completed:${pending[1]}`);
+      effect(pending[1]);
+      return value.execute("pukbot", pending, options);
+    }
+    return value.execute(command, args, options);
+  };
+  return { execute, events };
+}
+
+test("host create and promotion await completed release workflows before observing state", async () => {
+  const value = fixture();
+  try {
+    const delayed = delayedMutations(value);
+    expect(await publish(value, { execute: delayed.execute })).toEqual({
+      tag: "v1.2.3",
+      assets: ["Edith.dmg", "appcast.xml"],
+    });
+    expect(delayed.events).toEqual([
+      "create",
+      "completed:create",
+      "edit",
+      "completed:edit",
+    ]);
+    expect(value.release.draft).toBe(false);
+    expect(value.calls.at(-1)[2]).toContain("/tags/v1.2.3");
+  } finally {
+    value.clean();
+  }
+});
+
+test("failed release control workflows never report completed publication", async () => {
+  for (const operation of ["create", "edit"]) {
+    const value = fixture();
+    try {
+      const delayed = delayedMutations(value, (current) => {
+        if (current === operation)
+          throw new Error(`${operation} workflow failed`);
+      });
+      await expect(
+        publish(value, { execute: delayed.execute }),
+      ).rejects.toThrow(`${operation} workflow failed`);
+      expect(value.release?.draft ?? true).toBe(true);
+      if (operation === "create")
+        expect(
+          value.calls.some(
+            (args) =>
+              args[0] === "pukbot" &&
+              args[2] === "upload-asset" &&
+              !args.includes("--dry-run"),
+          ),
+        ).toBe(false);
+    } finally {
+      value.clean();
+    }
+  }
+});
+
+test("release control timeouts propagate for both request and workflow wait", async () => {
+  for (const stage of ["request", "watch"]) {
+    const value = fixture();
+    try {
+      const delayed = delayedMutations(value);
+      const execute = (command, args, options) => {
+        if (
+          (stage === "request" &&
+            command === "pukbot" &&
+            args[1] === "create") ||
+          (stage === "watch" && command === "gh" && args[0] === "run")
+        ) {
+          expect(options.timeout).toBeLessThanOrEqual(30 * 60_000);
+          expect(options.maxBuffer).toBe(2 * 1024 ** 2);
+          expect(options.killSignal).toBe("SIGKILL");
+          throw Object.assign(new Error("Release control timed out"), {
+            code: "ETIMEDOUT",
+          });
+        }
+        return delayed.execute(command, args, options);
+      };
+      await expect(publish(value, { execute })).rejects.toMatchObject({
+        code: "ETIMEDOUT",
+      });
+      expect(value.release).toBeUndefined();
+    } finally {
+      value.clean();
+    }
+  }
+});
+
+test("source is revalidated after delayed draft creation before any upload", async () => {
+  const value = fixture();
+  let changed = false;
+  try {
+    const delayed = delayedMutations(value, () => {
+      changed = true;
+    });
+    await expect(
+      publish(value, {
+        execute: delayed.execute,
+        verifySource: async () => {
+          if (changed) throw new Error("Source superseded");
+        },
+      }),
+    ).rejects.toThrow("superseded");
+    expect(value.release.draft).toBe(true);
+    expect(
+      value.calls.some(
+        (args) =>
+          args[0] === "pukbot" &&
+          args[2] === "upload-asset" &&
+          !args.includes("--dry-run"),
+      ),
+    ).toBe(false);
+  } finally {
+    value.clean();
+  }
+});
+
+test("successful promotion response must expose the exact public release", async () => {
+  const value = fixture();
+  try {
+    const execute = (command, args, options) =>
+      command === "pukbot" && args[1] === "edit"
+        ? "{}"
+        : value.execute(command, args, options);
+    await expect(publish(value, { execute })).rejects.toThrow(
+      "Published host release state was not confirmed",
+    );
+    expect(value.release.draft).toBe(true);
+  } finally {
+    value.clean();
+  }
+});
+
+test("draft asset deletion has bounded control output and deadline", async () => {
+  const value = fixture(true);
+  value.release.assets = [
+    { id: 9, name: "Edith.dmg", bytes: Buffer.from("old") },
+  ];
+  let deletes = 0;
+  try {
+    const execute = (command, args, options) => {
+      if (command === "gh" && args.includes("DELETE")) {
+        expect(options.timeout).toBe(60_000);
+        expect(options.maxBuffer).toBe(1024 ** 2);
+        expect(options.killSignal).toBe("SIGKILL");
+        deletes += 1;
+      }
+      return value.execute(command, args, options);
+    };
+    await publish(value, { execute, rebuild: true });
+    expect(deletes).toBe(1);
+  } finally {
+    value.clean();
+  }
 });

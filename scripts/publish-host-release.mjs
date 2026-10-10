@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { verifyCurrentMain } from "./extension-release-ready.mjs";
 import { releaseAssetMatchesFile } from "./release-asset-read.mjs";
 import {
+  executeReleaseMutation,
   preflightReleaseAsset,
   uploadReleaseAsset,
 } from "./release-asset-upload.mjs";
@@ -73,11 +74,15 @@ export async function publishHostRelease({
 }) {
   if (!/^[0-9a-f]{40}$/.test(target)) throw new Error("Invalid release target");
   const assets = preflightHostRelease({ directory, repository, tag, execute });
-  const gh = (...args) => execute("gh", args, { encoding: "utf8" });
-  const mutate = (...args) =>
-    execute("pukbot", [...args, "--repo", repository, "--json"], {
+  const gh = (...args) =>
+    execute("gh", args, {
       encoding: "utf8",
+      timeout: 60_000,
+      killSignal: "SIGKILL",
+      maxBuffer: 1024 ** 2,
     });
+  const mutate = (...args) =>
+    executeReleaseMutation([...args, "--repo", repository], { execute });
   await verifySource();
   let release = lookupRelease({ repository, tag, execute });
   if (!release) {
@@ -94,6 +99,7 @@ export async function publishHostRelease({
       "--draft",
       "--generate-notes",
     );
+    await verifySource();
     release = lookupRelease({ repository, tag, execute });
     if (!release) throw new Error("Created host release is not available");
   }
@@ -149,6 +155,10 @@ export async function publishHostRelease({
     "--make-latest",
     "true",
   );
+  await verifySource();
+  const published = lookupRelease({ repository, tag, execute });
+  if (!published || published.draft || published.id !== release.id)
+    throw new Error("Published host release state was not confirmed");
   return { tag, assets };
 }
 
