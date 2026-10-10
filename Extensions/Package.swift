@@ -36,6 +36,14 @@ let package = Package(
             name: "SEOAuditExtensionTests", dependencies: ["SEOAuditExtension"],
             path: "seoAudit/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
+            name: "CodeStatsExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "codeStats", exclude: ["Tests", "Runtime.swift"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "CodeStatsExtensionTests", dependencies: ["CodeStatsExtension"],
+            path: "codeStats/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
             name: "LaTeXExtension",
             dependencies: [.product(name: "EdithExtensionArchive", package: "ExtensionSupport")],
             path: "latex", exclude: ["Tests", "Runtime.swift"], resources: [.process("Resources")],

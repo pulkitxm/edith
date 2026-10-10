@@ -87,6 +87,12 @@ try {
         development: true, version: "1.0.0",
       });
     }
+    if (id === "machines") {
+      await buildExtensionPackage({
+        id: "usage", output: join(releases, "usage-peer", "1.0.0"),
+        development: true, version: "1.0.0",
+      });
+    }
     await mkdir(join(root, `${id}-host`));
     const fixtureHome =
       id === "virtualCamera" ? root : join(root, `${id}-home`);
@@ -162,6 +168,7 @@ try {
       result.privilegedRuntimeValidated = true;
     }
     assert.equal(result.machinesDataValidated, id === "machines");
+    assert.equal(result.codeStatsDataValidated, id === "codeStats");
     if (retainPackages) {
       const output = resolve("dist/extensions");
       await mkdir(output, { recursive: true });

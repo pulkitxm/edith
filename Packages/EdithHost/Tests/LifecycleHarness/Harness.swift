@@ -86,6 +86,7 @@ struct HostLifecycleHarness {
             terminalDefaults?.set(false, forKey: "terminalConfirmClose")
         }
         if extensionID == "usage" { try prepareUsageFixture() }
+        if extensionID == "codeStats" { try CodeStatsFixture.seed() }
         guard let defaults = UserDefaults(suiteName: suite) else { throw HostWorkerError.rejected }
         defer {
             defaults.removePersistentDomain(forName: suite)
@@ -184,6 +185,8 @@ struct HostLifecycleHarness {
                 guard cameraChildren.count == 1 else { throw HostWorkerError.invalidResponse }
             } else if extensionID == "audioMixer" {
                 try await AudioMixerFixture.verify(endpoint)
+            } else if extensionID == "codeStats" {
+                try await CodeStatsFixture.verify(endpoint, initialize: true)
             } else if extensionID == "usage" {
                 try await verifyUsage(endpoint, restored: false)
             } else if extensionID == "latex" {
@@ -244,6 +247,8 @@ struct HostLifecycleHarness {
                 guard cameraChildren.count == 1 else { throw HostWorkerError.invalidResponse }
             } else if extensionID == "audioMixer" {
                 try await AudioMixerFixture.verify(endpoint)
+            } else if extensionID == "codeStats" {
+                try await CodeStatsFixture.verify(endpoint, initialize: false)
             } else if extensionID == "usage" {
                 try await verifyUsage(endpoint, restored: true)
             } else if extensionID == "latex" {
@@ -328,6 +333,8 @@ struct HostLifecycleHarness {
                 guard cameraChildren.count == 1 else { throw HostWorkerError.invalidResponse }
             } else if extensionID == "audioMixer" {
                 try await AudioMixerFixture.verify(endpoint)
+            } else if extensionID == "codeStats" {
+                try await CodeStatsFixture.verify(endpoint, initialize: false)
             } else if extensionID == "usage" {
                 try await verifyUsage(endpoint, restored: true)
             } else if extensionID == "latex" {
@@ -406,7 +413,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"machinesDataValidated\":\(extensionID == "machines")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"machinesDataValidated\":\(extensionID == "machines")}"
             )
         } catch {
             if extensionID == "jev" {
