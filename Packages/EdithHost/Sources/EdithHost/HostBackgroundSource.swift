@@ -64,6 +64,22 @@ import Foundation
             })
     }
 
+    static func policy(_ services: HostCoreServices) -> HostBackgroundPolicyEnvironment {
+        .init(
+            owner: {
+                guard let identity = identity(services), let snapshot = services.snapshot else {
+                    return nil
+                }
+                return .init(identity: identity, processIdentifier: snapshot.pid)
+            },
+            read: { try await services.backgroundPolicy() },
+            set: { try await services.setBackgroundPolicy(pauseAmbientOnBattery: $0) },
+            receiptCurrent: { receipt in
+                services.marketplace.sessions.ambientPolicyCoordinator.current(
+                    receipt, owners: services.marketplace.sessions.ambientPolicyOwners())
+            })
+    }
+
     static func decodeCore(_ data: Data) throws -> HostBackgroundProjection {
         guard data.count <= HostCLIRequest.maximumPayload else {
             throw HostCLIError.rejected("The background projection exceeds its size limit.")
@@ -89,7 +105,7 @@ import Foundation
         let owners = marketplace.sessions.activeIDs.sorted().map { id in
             "\(id):\(marketplace.installed[id]?.version ?? ""):"
                 + "\(marketplace.sessions.versions[id] ?? ""):\(marketplace.sessions.processIdentifiers[id] ?? 0):"
-                + "\(marketplace.pendingRemovalIDs.contains(id))"
+                + "\(marketplace.pendingRemovalIDs.contains(id)):\(marketplace.sessions.pendingDisableIDs.contains(id))"
         }.joined(separator: "|")
         return "\(core.pid):\(core.startedAt.timeIntervalSince1970)|\(owners)"
     }

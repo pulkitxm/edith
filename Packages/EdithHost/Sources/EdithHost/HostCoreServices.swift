@@ -45,6 +45,13 @@ import SwiftUI
             identity: identity, cloudDirectory: HostCoreCloud.directory(identity: identity))
         self.executable = executable
         panel = HostPanelService(defaults: defaults, action: togglePanel)
+        marketplace.sessions.ambientPackageSelected = { package in
+            marketplace.installed[package.id] == package
+                && !marketplace.pendingRemovalIDs.contains(package.id)
+        }
+        marketplace.sessions.ambientPolicyCoordinator.changed = { [weak self] in
+            Task { @MainActor [weak self] in _ = try? await self?.backgroundPolicy() }
+        }
     }
 
     var online: Bool { process?.ready == true && process?.processIdentifier == snapshot?.pid }
@@ -305,17 +312,39 @@ import SwiftUI
                 return true
             })
         settingsObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
-            MainActor.assumeIsolated { self?.settingsScheduler?.preferencesChanged() }
+            MainActor.assumeIsolated {
+                self?.settingsScheduler?.preferencesChanged()
+                Task { @MainActor [weak self] in _ = try? await self?.backgroundPolicy() }
+            }
         }
         settingsScheduler?.start()
     }
 
-    func backgroundPolicy() async throws -> HostCoreBackgroundPolicy {
-        try await backgroundPolicyControl().read()
+    func backgroundPolicy() async throws -> HostBackgroundPolicyResult {
+        let core = try await backgroundPolicyControl().read()
+        return try await propagateBackgroundPolicy(core)
     }
 
-    func setBackgroundPolicy(pauseAmbientOnBattery: Bool) async throws -> HostCoreBackgroundPolicy {
-        try await backgroundPolicyControl().set(pauseAmbientOnBattery: pauseAmbientOnBattery)
+    func setBackgroundPolicy(pauseAmbientOnBattery: Bool) async throws -> HostBackgroundPolicyResult
+    {
+        let core = try await backgroundPolicyControl().set(
+            pauseAmbientOnBattery: pauseAmbientOnBattery)
+        return try await propagateBackgroundPolicy(core)
+    }
+
+    private func propagateBackgroundPolicy(_ core: HostCoreBackgroundPolicy) async throws
+        -> HostBackgroundPolicyResult
+    {
+        let kernel = try HostRemoteKernelIdentity.read(core.processIdentifier)
+        let propagation = try await marketplace.sessions.synchronizeAmbientPolicy(
+            pauseAmbientOnBattery: core.pauseAmbientOnBattery)
+        let checked = try await backgroundPolicyControl().read()
+        try Task.checkCancellation()
+        guard online, kernel.isRunning, core == checked,
+            marketplace.sessions.ambientPolicyCoordinator.current(
+                propagation, owners: marketplace.sessions.ambientPolicyOwners())
+        else { throw HostWorkerError.rejected }
+        return .init(core: checked, propagation: propagation)
     }
 
     private func backgroundPolicyControl() -> HostCoreBackgroundPolicyControl {

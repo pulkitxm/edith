@@ -11,6 +11,9 @@ public final class HostExtensionSessions {
     public private(set) var states: [String: HostActivationState] = [:] {
         didSet { didChange() }
     }
+    @ObservationIgnored public var ambientPackageSelected: @MainActor (ExtensionPackage) -> Bool = {
+        _ in true
+    }
     @ObservationIgnored public var didChange: @MainActor () -> Void = {}
     @ObservationIgnored public var didRequestNavigation:
         @MainActor (HostWorkerNavigationRequest) async throws -> Void = { _ in
@@ -248,7 +251,8 @@ public final class HostExtensionSessions {
     private func validateAmbientOwner(_ owner: HostAmbientPolicyOwner, worker: HostWorker) throws {
         guard workers[owner.id] === worker, worker.ready, !worker.configuration.recoveryOnly,
             activeIDs.contains(owner.id), versions[owner.id] == owner.version,
-            packages[owner.id]?.version == owner.version,
+            let package = packages[owner.id], package.version == owner.version,
+            ambientPackageSelected(package),
             worker.configuration.version == owner.version,
             worker.processIdentifier == owner.processIdentifier,
             try HostRemoteKernelIdentity.read(owner.processIdentifier).generation

@@ -97,6 +97,12 @@ import Testing
                 == "sessions.discover")
         #expect(
             HostAmbientPolicyCoordinator.topic(
+                owner: "herdr", location: "herdr.agent", section: "herdr") == "sessions.discover")
+        #expect(
+            HostAmbientPolicyCoordinator.topic(
+                owner: "herdr", location: "herdr.space", section: "herdr") == "sessions.discover")
+        #expect(
+            HostAmbientPolicyCoordinator.topic(
                 owner: "attention", location: "main", section: "attention") == "attention.ingest")
         #expect(
             HostAmbientPolicyCoordinator.topic(owner: "companion", location: "main", section: nil)
@@ -181,6 +187,90 @@ import Testing
         fixture.finish(1)
         do { _ = try await write.value; Issue.record("Cancelled receipt accepted") } catch {}
         #expect(coordinator.receipt == nil)
+    }
+
+    @Test func sceneAcknowledgmentPinsVisibilityAndLateShowCannotUndoHideOrClose() async throws {
+        let coordinator = HostAmbientPolicyCoordinator()
+        let fixture = Fixture()
+        let owner = identity("herdr")
+        let presentation = UUID()
+        let show = Task {
+            try await coordinator.updateScene(
+                presentation: presentation, owner: owner, job: "sessions.discover", visible: true,
+                validate: {}, validatePresented: {},
+                operation: {
+                    try await fixture.apply(.initial(owner: "herdr", pauseAmbientOnBattery: false))
+                })
+        }
+        await fixture.started(1)
+        _ = try await coordinator.synchronize(
+            pauseAmbientOnBattery: true, owners: { [owner] },
+            apply: { _, policy in
+                #expect(policy.subscribers["sessions.discover"] == 0)
+            })
+        try await coordinator.updateScene(
+            presentation: presentation, owner: owner, job: "sessions.discover", visible: false,
+            validate: {}, validatePresented: {}, operation: {})
+        fixture.finish(0)
+        do { try await show.value; Issue.record("Late visible lease accepted") } catch {}
+        _ = try await coordinator.synchronize(
+            pauseAmbientOnBattery: true, owners: { [owner] },
+            apply: { _, policy in
+                #expect(policy.subscribers["sessions.discover"] == 0)
+            })
+        try await coordinator.updateScene(
+            presentation: presentation, owner: owner, job: "sessions.discover", visible: true,
+            validate: {}, validatePresented: {}, operation: {})
+        _ = try await coordinator.synchronize(
+            pauseAmbientOnBattery: true, owners: { [owner] },
+            apply: { _, policy in
+                #expect(policy.subscribers["sessions.discover"] == 1)
+            })
+        let late = Task {
+            try await coordinator.updateScene(
+                presentation: presentation, owner: owner, job: "sessions.discover", visible: true,
+                validate: {}, validatePresented: {},
+                operation: {
+                    try await fixture.apply(.initial(owner: "herdr", pauseAmbientOnBattery: false))
+                })
+        }
+        await fixture.started(2)
+        coordinator.release(presentation: presentation)
+        fixture.finish(1)
+        do { try await late.value; Issue.record("Closed presentation lease accepted") } catch {}
+        _ = try await coordinator.synchronize(
+            pauseAmbientOnBattery: true, owners: { [owner] },
+            apply: { _, policy in
+                #expect(policy.subscribers["sessions.discover"] == 0)
+            })
+    }
+
+    @Test func sceneOwnerMustValidateBeforeAndAfterAndFailureReleasesDemand() async throws {
+        let coordinator = HostAmbientPolicyCoordinator()
+        let owner = identity("companion")
+        let presentation = UUID()
+        var calls = 0
+        do {
+            try await coordinator.updateScene(
+                presentation: presentation, owner: owner, job: "companion.health", visible: true,
+                validate: { throw HostWorkerError.rejected }, validatePresented: {},
+                operation: { calls += 1 })
+            Issue.record("Invalid current owner accepted")
+        } catch {}
+        #expect(calls == 0)
+        do {
+            try await coordinator.updateScene(
+                presentation: presentation, owner: owner, job: "companion.health", visible: true,
+                validate: {}, validatePresented: { throw HostWorkerError.rejected },
+                operation: { calls += 1 })
+            Issue.record("Retired current owner accepted")
+        } catch {}
+        #expect(calls == 1)
+        _ = try await coordinator.synchronize(
+            pauseAmbientOnBattery: true, owners: { [owner] },
+            apply: { _, policy in
+                #expect(policy.subscribers["companion.health"] == 0)
+            })
     }
 
     private func identity(

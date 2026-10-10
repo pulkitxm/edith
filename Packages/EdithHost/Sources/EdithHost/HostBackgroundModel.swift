@@ -1,4 +1,5 @@
 import EdithExtensionUI
+import EdithHostCore
 import Foundation
 import Observation
 
@@ -178,4 +179,135 @@ struct HostBackgroundEnvironment {
         events = Array(value.sorted { $0.date > $1.date }.prefix(500))
     }
     func loadMore() { visibleCount = min(matches.count, visibleCount + 50) }
+}
+
+struct HostBackgroundPolicyOwner: Hashable, Sendable {
+    let identity: String
+    let processIdentifier: Int32
+}
+
+struct HostBackgroundPolicyEnvironment {
+    let owner: @MainActor () -> HostBackgroundPolicyOwner?
+    let read: @MainActor () async throws -> HostBackgroundPolicyResult
+    let set: @MainActor (Bool) async throws -> HostBackgroundPolicyResult
+    var receiptCurrent: @MainActor (HostAmbientPolicyReceipt) -> Bool = { _ in true }
+}
+
+@MainActor @Observable final class HostBackgroundPolicyModel {
+    private(set) var failure: String?
+    private(set) var saving = false
+    let load = ContentLoad()
+    @ObservationIgnored private let environment: HostBackgroundPolicyEnvironment
+    @ObservationIgnored private var generation = UUID()
+    private var acceptedOwner: HostBackgroundPolicyOwner?
+    private var policy: HostBackgroundPolicyResult?
+
+    init(environment: HostBackgroundPolicyEnvironment) { self.environment = environment }
+
+    var owner: HostBackgroundPolicyOwner? { environment.owner() }
+    var current: Bool {
+        guard let acceptedOwner, let policy else { return false }
+        return owner == acceptedOwner && policy.processIdentifier == acceptedOwner.processIdentifier
+    }
+    var value: Bool? { current ? policy?.pauseAmbientOnBattery : nil }
+    var propagation: HostAmbientPolicyReceipt? {
+        guard current, let policy, environment.receiptCurrent(policy.propagation) else {
+            return nil
+        }
+        return policy.propagation
+    }
+    var propagationLabel: String {
+        guard let propagation else { return "Reload required" }
+        if propagation.owners.isEmpty { return "No active ambient owners" }
+        return propagation.applied ? "Applied to active owners" : "Some owners failed"
+    }
+
+    func refresh() async {
+        guard !saving, !Task.isCancelled else { return }
+        let token = UUID()
+        generation = token
+        let request = load.begin()
+        failure = nil
+        guard let owner else {
+            invalidate()
+            let message = "The background service is offline."
+            failure = message
+            load.fail(request, message: message, offline: true)
+            return
+        }
+        do {
+            try Task.checkCancellation()
+            let returned = try await environment.read()
+            try Task.checkCancellation()
+            guard generation == token, self.owner == owner else {
+                if generation == token { invalidate(); load.cancel(request) }
+                return
+            }
+            try accept(returned, owner: owner)
+            load.complete(request)
+        } catch is CancellationError {
+            if generation == token { load.cancel(request) }
+        } catch {
+            guard generation == token, self.owner == owner else {
+                if generation == token { invalidate(); load.cancel(request) }
+                return
+            }
+            invalidate()
+            failure = error.localizedDescription
+            load.fail(request, error: error)
+        }
+    }
+
+    func set(_ value: Bool) async {
+        guard !Task.isCancelled, current, !saving, !load.isRunning, let acceptedOwner else {
+            return
+        }
+        let token = UUID()
+        generation = token
+        saving = true
+        failure = nil
+        defer { if generation == token { saving = false } }
+        do {
+            try Task.checkCancellation()
+            let returned = try await environment.set(value)
+            try Task.checkCancellation()
+            guard generation == token, owner == acceptedOwner else {
+                if generation == token { invalidate() }
+                return
+            }
+            try accept(returned, owner: acceptedOwner)
+        } catch is CancellationError {} catch {
+            guard generation == token, owner == acceptedOwner else {
+                if generation == token { invalidate() }
+                return
+            }
+            failure = error.localizedDescription
+        }
+    }
+
+    func cancel() {
+        generation = UUID()
+        saving = false
+        load.cancel()
+        invalidate()
+        failure = nil
+    }
+
+    private func accept(_ returned: HostBackgroundPolicyResult, owner: HostBackgroundPolicyOwner)
+        throws
+    {
+        guard returned.processIdentifier == owner.processIdentifier,
+            returned.pauseAmbientOnBattery == returned.propagation.pauseAmbientOnBattery
+        else {
+            invalidate()
+            throw HostCLIError.rejected("The background policy came from a different process.")
+        }
+        policy = returned
+        acceptedOwner = owner
+    }
+
+    private func invalidate() {
+        acceptedOwner = nil
+        policy = nil
+    }
 }

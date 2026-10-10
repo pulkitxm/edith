@@ -64,11 +64,18 @@ public struct HostAmbientPolicyReceipt: Equatable, Sendable {
         public let policy: HostAmbientPolicy
         public let failure: String?
         public var applied: Bool { failure == nil }
+        public init(identity: HostAmbientPolicyOwner, policy: HostAmbientPolicy, failure: String?) {
+            self.identity = identity; self.policy = policy; self.failure = failure
+        }
     }
     public let generation: UUID
     public let pauseAmbientOnBattery: Bool
     public let owners: [Owner]
     public var applied: Bool { owners.allSatisfy(\.applied) }
+    public init(generation: UUID, pauseAmbientOnBattery: Bool, owners: [Owner]) {
+        self.generation = generation; self.pauseAmbientOnBattery = pauseAmbientOnBattery;
+        self.owners = owners
+    }
 }
 
 @MainActor @Observable public final class HostAmbientPolicyCoordinator {
@@ -81,6 +88,16 @@ public struct HostAmbientPolicyReceipt: Equatable, Sendable {
     @ObservationIgnored public var changed: @MainActor () -> Void = {}
     @ObservationIgnored private var leases: [UUID: Lease] = [:]
     @ObservationIgnored private var tail: Task<Void, Never>?
+    @ObservationIgnored private var flight:
+        (
+            token: UUID, scalar: Bool, owners: [HostAmbientPolicyOwner],
+            task: Task<HostAmbientPolicyReceipt, any Error>
+        )?
+    private struct SceneRequest {
+        let token: UUID
+        let owner: HostAmbientPolicyOwner
+    }
+    @ObservationIgnored private var sceneRequests: [UUID: SceneRequest] = [:]
 
     public init() {}
 
@@ -90,8 +107,10 @@ public struct HostAmbientPolicyReceipt: Equatable, Sendable {
             ("usage", "main", "dashboard"), ("usage", "home", "limits"),
             ("usage", "notch", "limits"):
             return "usage.limits"
-        case ("herdr", "main", nil), ("herdr", "main", "herdr"): return "sessions.discover"
-        case ("attention", "main", "attention"), ("attention", "main", nil):
+        case ("herdr", "main", nil), ("herdr", "main", "herdr"),
+            ("herdr", "herdr.agent", "herdr"), ("herdr", "herdr.space", "herdr"):
+            return "sessions.discover"
+        case ("attention", "main", "attention"):
             return "attention.ingest"
         case ("companion", "main", nil), ("companion", "main", "companion"):
             return "companion.health"
@@ -112,13 +131,37 @@ public struct HostAmbientPolicyReceipt: Equatable, Sendable {
     }
 
     public func release(presentation: UUID) {
+        sceneRequests[presentation] = nil
         if leases.removeValue(forKey: presentation) != nil { invalidate() }
     }
 
     public func release(owner: String) {
+        sceneRequests = sceneRequests.filter { $0.value.owner.id != owner }
         let previous = leases.count
         leases = leases.filter { $0.value.owner.id != owner }
         if previous != leases.count { invalidate() }
+    }
+
+    public func updateScene(
+        presentation: UUID, owner: HostAmbientPolicyOwner, job: String, visible: Bool,
+        validate: @escaping @MainActor () throws -> Void,
+        validatePresented: @escaping @MainActor () throws -> Void,
+        operation: @escaping @MainActor () async throws -> Void
+    ) async throws {
+        let token = UUID()
+        sceneRequests[presentation] = SceneRequest(token: token, owner: owner)
+        if !visible, leases.removeValue(forKey: presentation) != nil { invalidate() }
+        do {
+            try validate()
+            try await operation()
+            try Task.checkCancellation()
+            guard sceneRequests[presentation]?.token == token else { throw CancellationError() }
+            try validatePresented()
+            if visible { try self.visible(presentation: presentation, owner: owner, job: job) }
+        } catch {
+            if sceneRequests[presentation]?.token == token { release(presentation: presentation) }
+            throw error
+        }
     }
 
     public func invalidate() {
@@ -139,6 +182,14 @@ public struct HostAmbientPolicyReceipt: Equatable, Sendable {
         owners: @escaping @MainActor () throws -> [HostAmbientPolicyOwner],
         apply: @escaping @MainActor (HostAmbientPolicyOwner, HostAmbientPolicy) async throws -> Void
     ) async throws -> HostAmbientPolicyReceipt {
+        let requestedOwners = try owners().sorted { $0.id < $1.id }
+        if let flight, flight.token == generation, flight.scalar == pauseAmbientOnBattery,
+            flight.owners == requestedOwners
+        {
+            let result = try await flight.task.value
+            try Task.checkCancellation()
+            return result
+        }
         let token = UUID()
         generation = token
         receipt = nil
@@ -174,7 +225,9 @@ public struct HostAmbientPolicyReceipt: Equatable, Sendable {
             receipt = result
             return result
         }
+        self.flight = (token, pauseAmbientOnBattery, requestedOwners, flight)
         tail = Task { _ = try? await flight.value }
+        defer { if self.flight?.token == token { self.flight = nil } }
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
             let result = try await flight.value
@@ -198,5 +251,16 @@ public struct HostAmbientPolicyReceipt: Equatable, Sendable {
             counts[lease.job, default: 0] += 1
         }
         return .init(pauseAmbientOnBattery: pauseAmbientOnBattery, subscribers: counts)
+    }
+}
+
+public struct HostBackgroundPolicyResult: Sendable {
+    public let core: HostCoreBackgroundPolicy
+    public let propagation: HostAmbientPolicyReceipt
+    public var processIdentifier: Int32 { core.processIdentifier }
+    public var pauseAmbientOnBattery: Bool { core.pauseAmbientOnBattery }
+
+    public init(core: HostCoreBackgroundPolicy, propagation: HostAmbientPolicyReceipt) {
+        self.core = core; self.propagation = propagation
     }
 }

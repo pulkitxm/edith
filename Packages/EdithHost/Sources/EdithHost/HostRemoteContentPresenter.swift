@@ -48,14 +48,14 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
                 }) : nil
         let controller = HostRemoteViewController(
             request: request, remote: remote, terminalUI: terminalUI,
-            connect: { connection, state, receive in
-                try await handle.connect(
-                    through: connection, compact: state.compact, visible: state.visible,
+            connect: { [manager] connection, state, receive in
+                try await manager.connectScene(
+                    handle, through: connection, compact: state.compact, visible: state.visible,
                     width: state.width, receive: receive)
             },
-            update: { state in
-                try await handle.update(
-                    compact: state.compact, visible: state.visible, width: state.width)
+            update: { [manager] state in
+                try await manager.updateScene(
+                    handle, compact: state.compact, visible: state.visible, width: state.width)
             })
         controllers[request.presentationID] = controller
         return controller
