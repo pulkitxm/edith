@@ -16,7 +16,8 @@ extension NotchShelfController {
             }
         }
         return .init(
-            preferences: result, activeIDs: activeIDs, browserProfile: browser?.profile?.name,
+            preferences: result, activeIDs: activeIDs,
+            browserProfile: browser?.profile?.name ?? browserEngine?.profileName,
             bluetoothPrivacyRequired: CBManager.authorization == .denied
                 || CBManager.authorization == .restricted)
     }
@@ -46,7 +47,9 @@ extension NotchShelfController {
             }
             guard NSWorkspace.shared.open(url) else { throw ExtensionPeerError.unavailable }
         case "notch.customize": openCustomization()
-        case "notch.browser.detach": browser?.detach()
+        case "notch.browser.detach":
+            browser?.detach()
+            browserEngine?.detach()
         default: throw ExtensionPeerError.invalidRequest
         }
         return try JSONEncoder().encode(settingsSnapshot())

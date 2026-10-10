@@ -90,6 +90,7 @@ struct NotchPanelBatch: Codable, Sendable {
     let identity: NotchPanelIdentity
     let revision: UInt64
     let states: [NotchPanelState]
+    let transfers: [NotchPanelTransfer]
 }
 
 struct NotchPanelWait: Codable, Sendable {
@@ -154,12 +155,15 @@ struct NotchChromeSnapshot: Codable, Sendable {
     let shelfOperationError: String?
     let heights: [UUID: Double]
     let failures: [UUID: String]
+    let browserState: NotchBrowserClientState?
+    let privacyValues: [String: String]
 }
 
 struct NotchChromeAction: Codable, Sendable {
     enum Operation: String, Codable, Sendable {
-        case tab, collapse, editing, layout, undo, redo, customize, select, open, reveal, remove
-        case alertHover, alertTap, dismissFailure, move, endMove, homeHeight
+        case tab, glance, collapse, editing, layout, undo, redo, customize, select, open, reveal,
+            remove
+        case alertHover, alertTap, dismissFailure, move, endMove, homeHeight, share, drag
     }
     let identity: NotchPanelIdentity
     let displayID: UInt32
@@ -175,4 +179,50 @@ struct NotchChromeAction: Codable, Sendable {
     var height: Double? = nil
     var tileID: String? = nil
     var layout: SurfaceLayout? = nil
+}
+
+struct NotchPanelTransfer: Codable, Sendable, Identifiable {
+    enum Kind: String, Codable, Sendable { case share, drag }
+    let id: UUID
+    let displayID: UInt32
+    let presentationID: UUID
+    let kind: Kind
+    let items: [ShelfItem]
+    let fileURLs: [URL]
+    var cancelled = false
+}
+
+struct NotchPanelTransferFinish: Codable, Sendable {
+    let identity: NotchPanelIdentity
+    let id: UUID
+    let completed: Bool
+    let outside: Bool
+    let error: String?
+}
+
+struct NotchPanelDrop: Codable, Sendable {
+    let identity: NotchPanelIdentity
+    let displayID: UInt32
+    let presentationID: UUID
+    let fileURLs: [URL]
+    let text: String?
+    let x: Double?
+    let y: Double?
+}
+
+struct NotchPanelPromise: Codable, Sendable {
+    let identity: NotchPanelIdentity
+    let displayID: UInt32
+    let presentationID: UUID
+    let id: UUID
+    let fileURL: URL?
+    let x: Double?
+    let y: Double?
+}
+
+struct NotchPanelTransferAcknowledgement: Codable, Sendable {
+    let identity: NotchPanelIdentity
+    let id: UUID
+    let opened: Bool
+    let error: String?
 }

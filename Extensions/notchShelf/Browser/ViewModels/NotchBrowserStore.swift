@@ -26,13 +26,13 @@ final class NotchBrowserStore {
     private(set) var profile: ChromeProfile?
     private(set) var tabs: [BrowserTab] = []
     private(set) var selectedTabID: BrowserTab.ID?
-    private(set) var syncState: SyncState = .idle
+    private(set) var syncState: SyncState = .idle { didSet { remote?.held(holdsOpen) } }
     private(set) var syncSummary: String?
     private(set) var size: CGSize
-    private(set) var isResizing = false
-    private(set) var menuDepth = 0
-    private(set) var filePanelOpen = false
-    private(set) var dialog: BrowserDialog?
+    private(set) var isResizing = false { didSet { remote?.held(holdsOpen) } }
+    private(set) var menuDepth = 0 { didSet { remote?.held(holdsOpen) } }
+    private(set) var filePanelOpen = false { didSet { remote?.held(holdsOpen) } }
+    private(set) var dialog: BrowserDialog? { didSet { remote?.held(holdsOpen) } }
     private(set) var toast: String?
     private(set) var addressFocusRequest = 0
     private(set) var choosingProfile = false
@@ -43,6 +43,7 @@ final class NotchBrowserStore {
     @ObservationIgnored var onProfileChange: (() -> Void)?
     @ObservationIgnored private let sessionFile: BrowserSessionFile
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let remote: NotchBrowserRemoteClient?
     @ObservationIgnored private let keyProvider: @Sendable () throws -> ChromeCookieKey
     @ObservationIgnored private let dataStoreFactory: @MainActor (UUID) -> WKWebsiteDataStore
     @ObservationIgnored private var session: BrowserSession
@@ -75,14 +76,15 @@ final class NotchBrowserStore {
         },
         dataStoreFactory: @escaping @MainActor (UUID) -> WKWebsiteDataStore = {
             WKWebsiteDataStore(forIdentifier: $0)
-        }
+        }, remote: NotchBrowserRemoteClient? = nil
     ) {
+        self.remote = remote
         self.installation = installation
         self.sessionFile = sessionFile
         self.defaults = defaults
         self.keyProvider = keyProvider
         self.dataStoreFactory = dataStoreFactory
-        session = sessionFile.load()
+        session = remote?.state.session ?? sessionFile.load()
         size = NotchBrowserGeometry.clamp(
             session.size ?? NotchBrowserGeometry.defaultSize, screen: nil)
         refreshEnvironment()
@@ -92,10 +94,13 @@ final class NotchBrowserStore {
             profile = saved
             session.profileName = saved.name
             dataStore = dataStoreFactory(
-                ChromeProfileImporter.dataStoreIdentifier(
-                    profile: saved, userData: installation.userData))
+                remote?.state.dataStoreID
+                    ?? ChromeProfileImporter.dataStoreIdentifier(
+                        profile: saved, userData: installation.userData))
         }
         observeMenus()
+        remote?.updated = { [weak self] state in self?.applyRemoteState(state) }
+        remote?.failed = { [weak self] message in self?.syncState = .failed(message) }
     }
 
     var selectedTab: BrowserTab? { tabs.first { $0.id == selectedTabID } }
@@ -108,11 +113,13 @@ final class NotchBrowserStore {
 
     var searchEngine: BrowserSearchEngine {
         BrowserSearchEngine(
-            rawValue: defaults.string(forKey: AppStorageKeys.Notch.browserSearchEngine) ?? "")
+            rawValue: remote?.state.searchEngine ?? defaults.string(
+                forKey: AppStorageKeys.Notch.browserSearchEngine) ?? "")
             ?? .google
     }
 
     func shutdown() {
+        remote?.stop()
         syncTask?.cancel()
         toastTask?.cancel()
         dialog?.resolve(false, nil)
@@ -124,6 +131,7 @@ final class NotchBrowserStore {
     }
 
     func refreshEnvironment() {
+        if let remote { applyRemoteState(remote.state); remote.perform(.read); return }
         let inspection = installation.inspect()
         readiness = inspection.readiness
         profiles = inspection.profiles
@@ -150,14 +158,17 @@ final class NotchBrowserStore {
     }
 
     func makeChromeDefault() {
+        if let remote { remote.perform(.makeDefault); return }
         installation.makeDefaultBrowser { [weak self] _ in self?.refreshEnvironment() }
     }
 
     func downloadChrome() {
+        if let remote { remote.perform(.downloadChrome); return }
         NSWorkspace.shared.open(ChromeInstallation.downloadURL)
     }
 
     func openPrivacySettings() {
+        if let remote { remote.perform(.privacy); return }
         NSWorkspace.shared.open(ChromeInstallation.privacySettingsURL)
     }
 
@@ -171,6 +182,7 @@ final class NotchBrowserStore {
     }
 
     func detach() {
+        remote?.perform(.detach)
         syncTask?.cancel()
         syncState = .idle
         syncSummary = nil
@@ -190,7 +202,7 @@ final class NotchBrowserStore {
         session.profileName = nil
         session.tabs = []
         session.selected = 0
-        sessionFile.save(session)
+        persistSession()
         refreshEnvironment()
         onProfileChange?()
         guard let released, let identifier else { return }
@@ -202,6 +214,31 @@ final class NotchBrowserStore {
     }
 
     private func load(_ target: ChromeProfile, full: Bool) {
+        if let remote {
+            syncTask?.cancel()
+            syncState = .unlocking
+            syncTask = Task { [weak self] in
+                do {
+                    let (descriptor, snapshot) = try await remote.importProfile(target.directory)
+                    try Task.checkCancellation()
+                    guard let self else { return }
+                    if target != profile {
+                        closeAllTabs(); closedTabs = []; pendingSeeds = [:]
+                        dataStore = dataStoreFactory(descriptor.dataStoreID)
+                    }
+                    guard let dataStore else { throw ExtensionPeerError.unavailable }
+                    session = descriptor.session
+                    syncState = .importing("Importing \(snapshot.cookies.count) cookies")
+                    let applied = await ChromeProfileImporter.apply(
+                        snapshot.cookies, to: dataStore.httpCookieStore)
+                    try Task.checkCancellation()
+                    finishInstall(target, snapshot: snapshot, applied: applied, readStorage: true)
+                } catch {
+                    if !Task.isCancelled { self?.syncState = .failed(error.localizedDescription) }
+                }
+            }
+            return
+        }
         syncTask?.cancel()
         syncState = cookieKey == nil ? .unlocking : .importing("Reading \(target.name)")
         let userData = installation.userData
@@ -274,7 +311,7 @@ final class NotchBrowserStore {
         syncSummary = Self.summary(applied: applied, snapshot: snapshot)
         session.profile = target.directory
         session.profileName = target.name
-        sessionFile.save(session)
+        persistSession()
         if tabs.isEmpty { restoreTabs() }
         guard attaching else { return }
         showToast("Attached \(target.name)")
@@ -302,7 +339,7 @@ final class NotchBrowserStore {
         selectedTabID = tabs[min(max(selected, 0), tabs.count - 1)].id
         session.tabs = urls.map(\.absoluteString)
         session.selected = min(max(selected, 0), tabs.count - 1)
-        sessionFile.save(session)
+        persistSession()
     }
 
     @discardableResult
@@ -426,11 +463,18 @@ final class NotchBrowserStore {
 
     func openInChrome(_ tab: BrowserTab?) {
         guard let url = (tab ?? selectedTab)?.url else { return }
+        if let remote { remote.perform(.openInChrome) { $0.link = url.absoluteString }; return }
         installation.open(url, profile: profile)
     }
 
     func copyLink(_ tab: BrowserTab) {
         guard let url = tab.url else { return }
+        if let remote {
+            remote.perform(
+                .copyLink, configure: { $0.link = url.absoluteString },
+                completion: { [weak self] in self?.showToast("Link copied") });
+            return
+        }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(url.absoluteString, forType: .string)
         showToast("Link copied")
@@ -501,6 +545,7 @@ final class NotchBrowserStore {
         let clamped = NotchBrowserGeometry.clamp(next, screen: screenSize())
         guard clamped != size else { return }
         size = clamped
+        if remote != nil { saveSession() }
         onSizeChange?()
     }
 
@@ -713,7 +758,21 @@ final class NotchBrowserStore {
         session.selected = tabs.firstIndex { $0.id == selectedTabID } ?? 0
         session.width = Double(size.width)
         session.height = Double(size.height)
-        sessionFile.save(session)
+        persistSession()
+    }
+
+    private func persistSession() {
+        if let remote { remote.save(session) } else { sessionFile.save(session) }
+    }
+
+    func applyRemoteState(_ state: NotchBrowserClientState) {
+        readiness = state.readiness
+        profiles = state.profiles
+        ChromeProfileAvatar.installRemote(state.avatars)
+        if tabs.isEmpty, syncState == .idle {
+            session = state.session
+            profile = profiles.first { $0.directory == state.session.profile }
+        }
     }
 
     private func observeMenus() {

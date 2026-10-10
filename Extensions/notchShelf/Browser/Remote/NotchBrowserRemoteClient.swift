@@ -1,0 +1,119 @@
+import EdithExtensionSupport
+import Foundation
+import Observation
+
+@MainActor @Observable final class NotchBrowserRemoteClient {
+    typealias Invoke = @MainActor (NotchBrowserRemoteRequest) async throws -> Data
+    private(set) var state: NotchBrowserClientState
+    private let request:
+        @MainActor (NotchBrowserRemoteRequest.Operation) -> NotchBrowserRemoteRequest?
+    private let invoke: Invoke
+    private var actionTask: Task<Void, Never>?
+    private var generation = UUID()
+    private var stopped = false
+    private var lastHeld: Bool?
+    private var pending = 0
+    var updated: ((NotchBrowserClientState) -> Void)?
+    var failed: ((String) -> Void)?
+
+    init(
+        state: NotchBrowserClientState,
+        request:
+            @escaping @MainActor (NotchBrowserRemoteRequest.Operation) -> NotchBrowserRemoteRequest?,
+        invoke: @escaping Invoke
+    ) {
+        self.state = state
+        self.request = request
+        self.invoke = invoke
+    }
+
+    func apply(_ state: NotchBrowserClientState) { self.state = state; updated?(state) }
+
+    func perform(
+        _ operation: NotchBrowserRemoteRequest.Operation,
+        configure: (inout NotchBrowserRemoteRequest) -> Void = { _ in },
+        completion: (() -> Void)? = nil
+    ) {
+        guard !stopped, pending < 32, var request = request(operation) else { return }
+        configure(&request)
+        let token = generation
+        let previous = actionTask
+        pending += 1
+        actionTask = Task { [weak self] in
+            await previous?.value
+            guard let self else { return }
+            defer { pending -= 1 }
+            guard !stopped, generation == token, !Task.isCancelled else { return }
+            do {
+                let data = try await invoke(request)
+                try Task.checkCancellation()
+                guard !stopped, generation == token, data.count <= NotchPanelEngine.maximumBytes
+                else { return }
+                apply(try JSONDecoder().decode(NotchBrowserClientState.self, from: data))
+                completion?()
+            } catch {
+                if !stopped, generation == token, !Task.isCancelled {
+                    failed?(error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    func save(_ session: BrowserSession) { perform(.save) { $0.session = session } }
+    func held(_ held: Bool) {
+        guard lastHeld != held else { return }
+        lastHeld = held
+        perform(.held) { $0.held = held }
+    }
+
+    func importProfile(_ id: String) async throws -> (NotchBrowserImport, ChromeProfileSnapshot) {
+        guard !stopped, var start = request(.importStart) else {
+            throw ExtensionPeerError.unavailable
+        }
+        start.profileID = id
+        let token = generation
+        let descriptor = try JSONDecoder().decode(
+            NotchBrowserImport.self, from: await invoke(start))
+        guard descriptor.profile.directory == id, (1...33554432).contains(descriptor.byteCount)
+        else { throw ExtensionPeerError.invalidRequest }
+        do {
+            var bytes = Data()
+            var offset = 0
+            while offset < descriptor.byteCount {
+                try Task.checkCancellation()
+                guard !stopped, generation == token, var read = request(.importRead) else {
+                    throw ExtensionPeerError.unavailable
+                }
+                read.importID = descriptor.id; read.offset = offset
+                let data = try await invoke(read)
+                guard data.count <= NotchPanelEngine.maximumBytes else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                let chunk = try JSONDecoder().decode(NotchBrowserImportChunk.self, from: data)
+                guard chunk.id == descriptor.id, chunk.offset == offset, !chunk.bytes.isEmpty,
+                    chunk.bytes.count <= 65536,
+                    chunk.nextOffset == offset + chunk.bytes.count,
+                    chunk.nextOffset <= descriptor.byteCount
+                else { throw ExtensionPeerError.invalidRequest }
+                bytes.append(chunk.bytes); offset = chunk.nextOffset
+            }
+            guard !stopped, generation == token else { throw CancellationError() }
+            let snapshot = try JSONDecoder().decode(ChromeProfileSnapshot.self, from: bytes)
+            if var end = request(.importEnd) {
+                end.importID = descriptor.id; _ = try await invoke(end)
+            }
+            return (descriptor, snapshot)
+        } catch {
+            if var end = request(.importEnd) {
+                end.importID = descriptor.id; _ = try? await invoke(end)
+            }
+            throw error
+        }
+    }
+
+    func drainActions() async { await actionTask?.value }
+    func stop() {
+        stopped = true; generation = UUID(); actionTask?.cancel(); actionTask = nil; updated = nil;
+        failed = nil
+    }
+}

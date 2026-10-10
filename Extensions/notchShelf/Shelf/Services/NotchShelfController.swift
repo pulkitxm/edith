@@ -57,6 +57,7 @@ final class NotchShelfController {
     private var contextObserver: NSObjectProtocol?
     private(set) var currentAlert: NotchAlert?
     private(set) var browser: NotchBrowserStore?
+    private(set) var browserEngine: NotchBrowserEngine?
     private var alertDetectors: NotchAlertDetectors?
     private var alertWorkItem: DispatchWorkItem?
     private var alertPinned = false
@@ -87,6 +88,7 @@ final class NotchShelfController {
     static let openDwell: TimeInterval = 0.1
     private var lastDragChangeCount = -1
     private var collapseWorkItem: DispatchWorkItem?
+    private var hostDragRemoval: DispatchWorkItem?
     private var panelSettleWorkItem: DispatchWorkItem?
     private var pendingDragOutIDs: Set<UUID> = []
     private var internalDragItemIDs: Set<UUID> = []
@@ -159,6 +161,28 @@ final class NotchShelfController {
     }
 
     var ownedPanelCount: Int { panels.count }
+    func hostShelfFailure(_ error: String) { presentShelfFailure(error) }
+    func hostRemoveAfterDrag(_ ids: Set<UUID>) {
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.stopped else { return }
+            self.removeMembers(self.items.filter { ids.contains($0.id) })
+            self.onPanelStateChanged?()
+        }
+        hostDragRemoval?.cancel()
+        hostDragRemoval = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
+    }
+    func hostDrop(fileURLs: [URL], text: String?, location: CGPoint?) {
+        for url in fileURLs {
+            if let location, let existing = store.item(forFileURL: url) {
+                store.setPosition(location, for: existing)
+                items = store.items
+            } else {
+                addFile(at: url, location: location)
+            }
+        }
+        if let text { addText(text, location: location) }
+    }
     func synchronizeShelfItems() { items = store.items; onPanelStateChanged?() }
     var isRunning: Bool { !stopped }
     var startsPanelServices: Bool { startsServices }
@@ -172,7 +196,7 @@ final class NotchShelfController {
     var visibleTabs: [NotchTab] {
         SurfaceNotchTab.visible(
             layout: surfaceLayout, activeIDs: activeIDs,
-            browserEnabled: browser != nil)
+            browserEnabled: browser != nil || browserEngine != nil)
     }
 
     func synchronize() {
@@ -187,10 +211,20 @@ final class NotchShelfController {
                 && ($0.key != "music" || musicGlancesEnabled)
         }
         let browserEnabled = context.defaults.bool(forKey: AppStorageKeys.Notch.browserEnabled)
-        if browserEnabled, browser == nil {
-            attachBrowser(NotchBrowserStore(defaults: context.defaults))
+        if browserEnabled, browser == nil, browserEngine == nil {
+            if hostOwned {
+                let engine = NotchBrowserEngine(defaults: context.defaults)
+                engine.changed = { [weak self] in self?.syncFrames() }
+                browserEngine = engine
+            } else {
+                attachBrowser(NotchBrowserStore(defaults: context.defaults))
+            }
         }
-        if !browserEnabled, let browser { browser.shutdown(); attachBrowser(nil) }
+        if !browserEnabled {
+            if let browser { browser.shutdown(); attachBrowser(nil) }
+            browserEngine?.stop(); browserEngine = nil
+            if activeTab == .browser { activeTab = .home }
+        }
         if startsServices { syncAlerts(); beginGlanceRefresh() }
         updatePanelFrames()
     }
@@ -344,6 +378,7 @@ final class NotchShelfController {
 
     func shutdown() {
         stopped = true
+        hostDragRemoval?.cancel(); hostDragRemoval = nil
         context.sharedState.stopObserving(contextObserver); contextObserver = nil
         glanceTask?.cancel(); glanceTask = nil
         requests.shutdown()
@@ -374,6 +409,7 @@ final class NotchShelfController {
         gateWorkItem = nil
         browser?.shutdown()
         browser = nil
+        browserEngine?.stop()
         isSharing = false
         sharePickerDelegate = nil
         shareStagedFiles = nil
@@ -662,7 +698,8 @@ final class NotchShelfController {
 
     func browserSize(on id: CGDirectDisplayID) -> CGSize {
         NotchBrowserGeometry.clamp(
-            browser?.size ?? NotchBrowserGeometry.defaultSize, screen: browserArea(on: id))
+            browser?.size ?? browserEngine?.size ?? NotchBrowserGeometry.defaultSize,
+            screen: browserArea(on: id))
     }
 
     private func browserArea(on id: CGDirectDisplayID?) -> CGSize? {
@@ -742,11 +779,11 @@ final class NotchShelfController {
     }
 
     private var hidePolicy: NotchHidePolicy {
-        NotchHidePolicy.policy(for: browser == nil ? .home : activeTab)
+        NotchHidePolicy.policy(for: browser == nil && browserEngine == nil ? .home : activeTab)
     }
 
     private var browserHoldsOpen: Bool {
-        activeTab == .browser && browser?.holdsOpen == true
+        activeTab == .browser && (browser?.holdsOpen == true || browserEngine?.held == true)
     }
 
     private func syncFrames() {
@@ -1092,7 +1129,9 @@ final class NotchShelfController {
         }
     }
 
-    func shareCLIItems(_ ids: [UUID]) throws {
+    func hostSelect(_ ids: Set<UUID>) { selectedIDs = ids }
+    func shareCLIItems(_ ids: [UUID]) async throws {
+        if let panelEngine, panelEngine.attached { try await panelEngine.shareCLI(ids); return }
         guard !stopped, !isSharing else { throw ShelfActionSelectionError.busy }
         if let error = perform(.share, itemIDs: Set(ids)) {
             throw CLIFailure.unavailable(error)

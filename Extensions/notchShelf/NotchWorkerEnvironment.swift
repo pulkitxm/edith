@@ -73,9 +73,12 @@ final class NotchPresenterState {
     enum Scope { case browser, camera }
     static let shared = NotchPresenterState()
     var privacy: SurfacePrivacyState?
+    var remoteValues: [String: String]?
 
     func hides(_ scope: Scope) -> Bool {
-        guard let values = privacy?.values, values["active"] == "1" else { return false }
+        guard let values = remoteValues ?? privacy?.values, values["active"] == "1" else {
+            return false
+        }
         let key = scope == .browser ? "blurBrowser" : "blurCamera"
         return values[key] != "0"
     }
