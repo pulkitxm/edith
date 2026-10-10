@@ -6,6 +6,7 @@ import SwiftUI
 
 struct StudioScanButton: View {
     let onImport: ([URL]) -> Void
+    @Environment(\.studioFacade) private var facade
     @StateObject private var control = StudioScanControl()
 
     var body: some View {
@@ -19,7 +20,7 @@ struct StudioScanButton: View {
         .buttonStyle(.edith(.secondary))
         .accessibilityLabel("Import from iPhone or iPad")
         .background {
-            StudioScanAnchor(onImport: onImport, control: control)
+            StudioScanAnchor(onImport: onImport, control: control, facade: facade)
                 .allowsHitTesting(false)
         }
     }
@@ -33,15 +34,18 @@ private final class StudioScanControl: ObservableObject {
 private struct StudioScanAnchor: NSViewRepresentable {
     let onImport: ([URL]) -> Void
     let control: StudioScanControl
+    let facade: StudioUIFacade?
 
     func makeNSView(context: Context) -> StudioScanHostView {
         let view = StudioScanHostView()
+        view.facade = facade
         view.onImport = onImport
         control.host = view
         return view
     }
 
     func updateNSView(_ view: StudioScanHostView, context: Context) {
+        view.facade = facade
         view.onImport = onImport
         control.host = view
     }
@@ -49,6 +53,13 @@ private struct StudioScanAnchor: NSViewRepresentable {
 
 final class StudioScanHostView: NSView, NSServicesMenuRequestor {
     var onImport: (([URL]) -> Void)?
+    var facade: StudioUIFacade?
+    private var importTask: Task<Void, Never>?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { importTask?.cancel(); importTask = nil }
+    }
 
     static let returnTypes: [NSPasteboard.PasteboardType] = [
         .pdf, .tiff, .png, NSPasteboard.PasteboardType("public.jpeg"),
@@ -75,6 +86,23 @@ final class StudioScanHostView: NSView, NSServicesMenuRequestor {
     }
 
     func readSelection(from pasteboard: NSPasteboard) -> Bool {
+        if let facade {
+            guard let selection = StudioScanImport.selection(pasteboard),
+                selection.data.count <= 128 * 1024 * 1024
+            else { return false }
+            importTask?.cancel()
+            importTask = Task { [weak self] in
+                do {
+                    let handle = try await facade.uploadData(selection.data)
+                    let urls: [URL] = try await facade.read(
+                        "studio.ui.media.scan",
+                        object: ["resource": try facade.object(handle), "type": selection.type])
+                    guard !Task.isCancelled else { return }
+                    self?.onImport?(urls)
+                } catch { if !Task.isCancelled { facade.onFailure?(error.localizedDescription) } }
+            }
+            return true
+        }
         guard let urls = try? StudioScanImport.save(pasteboard), !urls.isEmpty else { return false }
         onImport?(urls)
         return true
@@ -86,6 +114,16 @@ final class StudioScanHostView: NSView, NSServicesMenuRequestor {
 }
 
 enum StudioScanImport {
+    static func selection(_ pasteboard: NSPasteboard) -> (data: Data, type: String)? {
+        for (type, suffix) in [
+            (NSPasteboard.PasteboardType.pdf, "pdf"), (.init("public.jpeg"), "jpg"),
+            (.init("public.heic"), "heic"), (.png, "png"), (.tiff, "tiff"),
+        ] {
+            if let data = pasteboard.data(forType: type) { return (data, suffix) }
+        }
+        return nil
+    }
+
     static func save(_ pasteboard: NSPasteboard) throws -> [URL] {
         let stamp = DateFormatter.localizedString(
             from: Date(), dateStyle: .short, timeStyle: .medium

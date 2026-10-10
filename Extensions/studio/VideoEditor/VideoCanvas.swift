@@ -74,7 +74,15 @@ struct VideoCanvas: View {
             }
         }
         .pageTask(id: cameraPath) {
-            guard model.facade == nil, let cameraPath else { return }
+            guard let cameraPath else { return }
+            if let facade = model.facade {
+                if let aspect: Double = try? await facade.read(
+                    "studio.ui.media.aspect", object: ["path": cameraPath]), !Task.isCancelled
+                {
+                    cameraAspect = aspect
+                }
+                return
+            }
             let asset = AVURLAsset(url: URL(fileURLWithPath: cameraPath))
             if let track = try? await asset.loadTracks(withMediaType: .video).first,
                 let size = try? await track.load(.naturalSize),

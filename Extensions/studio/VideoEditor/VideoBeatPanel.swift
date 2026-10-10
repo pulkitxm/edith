@@ -15,12 +15,17 @@ final class VideoBeatPanelState {
     private var worker: Task<VideoBeatAnalysis.Result, Error>?
     private var observer: Task<Void, Never>?
 
-    func analyze(_ url: URL, settings: VideoBeatAnalysis.Settings) {
+    func analyze(_ url: URL, settings: VideoBeatAnalysis.Settings, facade: StudioUIFacade? = nil) {
         clear()
         isAnalyzing = true
         let version = generation
-        worker = Task.detached(priority: .userInitiated) {
-            try await VideoBeatAnalysis.analyze(url, settings: settings)
+        worker = Task {
+            if let facade {
+                return try await facade.perform(
+                    "studio.ui.media.beats",
+                    object: ["path": url.path, "settings": try facade.object(settings)])
+            }
+            return try await VideoBeatAnalysis.analyze(url, settings: settings)
         }
         guard let task = worker else { return }
         observer = Task { [weak self] in
@@ -211,7 +216,7 @@ struct VideoBeatPanel: View {
                     var settings = VideoBeatAnalysis.Settings()
                     settings.sensitivity = sensitivity
                     settings.minimumSpacingSeconds = spacing
-                    analysis.analyze(sourceURL, settings: settings)
+                    analysis.analyze(sourceURL, settings: settings, facade: model.facade)
                 }
                 .disabled(sourceURL == nil || analysis.isAnalyzing)
                 .buttonStyle(.edith(.primary))
@@ -409,7 +414,11 @@ struct VideoBeatPanel: View {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        edit { try $0.importMarkers(Data(contentsOf: url)) }
+        if model.facade != nil {
+            model.readRemoteFile(url) { bytes in edit { try $0.importMarkers(bytes) } }
+        } else {
+            edit { try $0.importMarkers(Data(contentsOf: url)) }
+        }
     }
 
     private func exportMarkers() {
@@ -417,6 +426,14 @@ struct VideoBeatPanel: View {
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "markers.json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        if model.facade != nil {
+            do {
+                if let data = try model.project?.exportMarkers() {
+                    model.writeRemoteFile(data, to: url)
+                }
+            } catch { analysis.error = error.localizedDescription }
+            return
+        }
         do { try model.project?.exportMarkers(to: url) } catch {
             analysis.error = error.localizedDescription
         }

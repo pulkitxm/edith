@@ -23,7 +23,8 @@ struct VideoPreviewMetadata {
         }
         segments = try value.segments.map { segment in
             guard let clip = project.clips.first(where: { $0.id == segment.clipID }),
-                segment.sourceScale > 0, segment.outputScale > 0, segment.rate.isFinite,
+                segment.sourceScale > 0, segment.outputScale > 0, segment.sourceDurationScale > 0,
+                segment.outputDurationScale > 0, segment.rate.isFinite,
                 segment.rate > 0, segment.sourceDuration > 0, segment.outputDuration > 0
             else {
                 throw StudioUIOperationFailure(message: "The video preview segment is invalid.")
@@ -32,11 +33,13 @@ struct VideoPreviewMetadata {
                 clip: clip,
                 sourceRange: CMTimeRange(
                     start: CMTime(value: segment.sourceStart, timescale: segment.sourceScale),
-                    duration: CMTime(value: segment.sourceDuration, timescale: segment.sourceScale)),
+                    duration: CMTime(
+                        value: segment.sourceDuration, timescale: segment.sourceDurationScale)),
                 rate: segment.rate,
                 outputRange: CMTimeRange(
                     start: CMTime(value: segment.outputStart, timescale: segment.outputScale),
-                    duration: CMTime(value: segment.outputDuration, timescale: segment.outputScale))
+                    duration: CMTime(
+                        value: segment.outputDuration, timescale: segment.outputDurationScale))
             )
         }
     }
@@ -48,23 +51,24 @@ struct StudioUIVideoPreview: Codable, Sendable {
         let sourceStart: Int64
         let sourceDuration: Int64
         let sourceScale: Int32
+        let sourceDurationScale: Int32
         let rate: Double
         let outputStart: Int64
         let outputDuration: Int64
         let outputScale: Int32
+        let outputDurationScale: Int32
 
         init(_ segment: VideoRenderPipeline.Segment) {
             clipID = segment.clip.id
-            let source = CMTimeRange(
-                start: segment.sourceRange.start.convertScale(60_000, method: .default),
-                duration: segment.sourceRange.duration.convertScale(60_000, method: .default))
-            sourceStart = source.start.value; sourceDuration = source.duration.value;
-            sourceScale = 60_000
+            sourceStart = segment.sourceRange.start.value
+            sourceDuration = segment.sourceRange.duration.value
+            sourceScale = segment.sourceRange.start.timescale
+            sourceDurationScale = segment.sourceRange.duration.timescale
             rate = segment.rate
-            outputStart = segment.outputRange.start.convertScale(60_000, method: .default).value
-            outputDuration =
-                segment.outputRange.duration.convertScale(60_000, method: .default).value
-            outputScale = 60_000
+            outputStart = segment.outputRange.start.value
+            outputDuration = segment.outputRange.duration.value
+            outputScale = segment.outputRange.start.timescale
+            outputDurationScale = segment.outputRange.duration.timescale
         }
     }
     let segments: [Segment]

@@ -9,6 +9,10 @@ extension StudioUIFacade {
     func download<Value: Decodable>(_ handle: StudioUIResource, as: Value.Type = Value.self)
         async throws -> Value
     {
+        try JSONDecoder().decode(Value.self, from: await downloadData(handle))
+    }
+
+    func downloadData(_ handle: StudioUIResource) async throws -> Data {
         guard (0...StudioUIResources.maximumBytes).contains(handle.length) else {
             throw ExtensionEngineError.rejected
         }
@@ -27,7 +31,7 @@ extension StudioUIFacade {
             }
             let _: [String: String] = try await read(
                 "studio.ui.blob.end", object: ["handle": value])
-            return try JSONDecoder().decode(Value.self, from: data)
+            return data
         } catch {
             let value = try? object(handle)
             if let value {
@@ -41,7 +45,10 @@ extension StudioUIFacade {
     }
 
     func upload<Value: Encodable>(_ value: Value) async throws -> StudioUIResource {
-        let data = try JSONEncoder().encode(value)
+        try await uploadData(JSONEncoder().encode(value))
+    }
+
+    func uploadData(_ data: Data) async throws -> StudioUIResource {
         guard data.count <= StudioUIResources.maximumBytes else {
             throw ExtensionEngineError.rejected
         }

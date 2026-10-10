@@ -245,7 +245,8 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
 @available(macOS 15.0, *)
 struct VideoRecorderSheet: View {
     let finished: (URL) -> Void
-    @State private var recorder = VideoRecorder()
+    @State private var recorder = StudioUIRecorder()
+    @Environment(\.studioFacade) private var facade
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -267,15 +268,8 @@ struct VideoRecorderSheet: View {
             } else {
                 Picker("Source", selection: $recorder.source) {
                     Text("Choose a source").tag("")
-                    ForEach(Array(recorder.displays.enumerated()), id: \.element.displayID) {
-                        index, display in
-                        Text("Display \(index + 1)").tag("display:\(display.displayID)")
-                    }
-                    ForEach(recorder.windows, id: \.windowID) { window in
-                        Text(
-                            "\(window.owningApplication?.applicationName ?? "App"): \(window.title ?? "Window")"
-                        )
-                        .tag("window:\(window.windowID)")
+                    ForEach(recorder.sources, id: \.id) { source in
+                        Text(source.title).tag(source.id)
                     }
                 }
                 Toggle("System audio", isOn: $recorder.systemAudio)
@@ -303,7 +297,9 @@ struct VideoRecorderSheet: View {
         }
         .padding(24).frame(width: UIScale.pt(480))
         .transientPresentation(dismissible: !recorder.recording && !recorder.busy)
-        .pageTask { await recorder.loadSources() }
+        .pageTask {
+            recorder.configure(facade); await recorder.loadSources()
+        }
         .onDisappear { Task { await recorder.shutdown() } }
     }
 }

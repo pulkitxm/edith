@@ -21,6 +21,7 @@ import Foundation
     private var timer: Task<Void, Never>?
     private var stopped = false
     private static let fields: [String: Set<String>] = [
+        "studio.ui.video.loop": ["id", "enabled"],
         "studio.ui.video.reset": ["id"],
         "studio.ui.video.create": ["id"], "studio.ui.video.open": ["id", "path"],
         "studio.ui.video.snapshot": ["id"], "studio.ui.video.close": ["id"],
@@ -85,6 +86,10 @@ import Foundation
         let model = session.model
         switch operation {
         case "studio.ui.video.snapshot": return try snapshot(session, resources: resources)
+        case "studio.ui.video.loop":
+            guard let enabled = object["enabled"] as? Bool else {
+                throw ExtensionPeerError.invalidRequest
+            }; model.loopPlayback = enabled
         case "studio.ui.video.reset": model.newProject(); session.cancelFrames()
         case "studio.ui.video.close":
             sessions[id] = nil; session.cancelFrames(); await model.stopAndWait()

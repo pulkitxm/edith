@@ -326,8 +326,8 @@ struct StudioFileMenuItems: View {
             }
         }
         Divider()
-        Button("Open") { StudioFileActions.open(item.url) }
-        Button("Show in Finder") { StudioFileActions.reveal([item.url]) }
+        Button("Open") { StudioFileActions.open(item.url, facade: model.facade) }
+        Button("Show in Finder") { StudioFileActions.reveal([item.url], facade: model.facade) }
         Divider()
         Button("Remove from Studio") { model.remove([item.url]) }
     }
@@ -367,7 +367,7 @@ struct StudioSelectionBar: View {
                 .fixedSize()
             }
             Spacer(minLength: UIScale.pt(8))
-            Button("Show in Finder") { StudioFileActions.reveal(urls) }
+            Button("Show in Finder") { StudioFileActions.reveal(urls, facade: model.facade) }
                 .buttonStyle(.edith(.toolbar))
             Button("Remove") { model.remove(Set(urls)) }
                 .buttonStyle(.edith(.toolbar))

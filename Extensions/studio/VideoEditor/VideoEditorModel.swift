@@ -66,7 +66,9 @@ final class VideoEditorModel {
     var gifFPS = 15
     var gifWidth = 0
     var gifLoop = true
-    var loopPlayback = false
+    var loopPlayback = false {
+        didSet { remoteClient?.send("studio.ui.video.loop", object: ["enabled": loopPlayback]) }
+    }
     var errorMessage: String?
     var permissionSettingsURL: URL?
     var recentProjects: [VideoProject.Listing] = []
@@ -162,6 +164,12 @@ final class VideoEditorModel {
                     return
                 }
                 self.playhead = time.seconds
+                if self.loopPlayback, self.duration > 0,
+                    time.seconds >= self.duration
+                        - (self.previewMetadata?.frameDuration.seconds ?? 0.03)
+                {
+                    self.seek(to: 0); self.player.play()
+                }
             }
         }
     }
@@ -1110,9 +1118,13 @@ final class VideoEditorModel {
             guard panel.runModal() == .OK, let url = panel.url
             else { return }
             Task {
-                let data = await Task.detached(priority: .utility) {
-                    try? Data(contentsOf: url)
-                }.value
+                let data: Data?
+                if let facade {
+                    data = try? await facade.readFile(url)
+                } else {
+                    data = await Task.detached(priority: .utility) { try? Data(contentsOf: url) }
+                        .value
+                }
                 guard let data else { return }
                 let mime =
                     UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "image/png"
@@ -1432,6 +1444,15 @@ final class VideoEditorModel {
             exporter.setAudioReport(report, for: url)
         }
         return true
+    }
+
+    func runRemoteFile(_ operation: @escaping @MainActor () async throws -> Void) {
+        importTask?.cancel()
+        importTask = Task { [weak self] in
+            do { try await operation() } catch {
+                if !Task.isCancelled { self?.errorMessage = error.localizedDescription }
+            }
+        }
     }
 
     func stopAndWait() async {

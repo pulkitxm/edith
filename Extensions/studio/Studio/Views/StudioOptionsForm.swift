@@ -360,7 +360,12 @@ struct StudioSpanField: View {
                 duration = nil
                 return
             }
-            duration = await StudioMediaDuration.seconds(url)
+            if let facade = job.facade {
+                duration = try? await facade.read(
+                    "studio.ui.media.duration", object: ["path": url.path])
+            } else {
+                duration = await StudioMediaDuration.seconds(url)
+            }
         }
     }
 

@@ -21,7 +21,10 @@ enum StudioTestFiles {
 
     static func defaults() -> UserDefaults {
         let name = "test.edith.studio.\(UUID().uuidString)"
-        return UserDefaults(suiteName: name) ?? .standard
+        guard let defaults = UserDefaults(suiteName: name) else {
+            preconditionFailure("The isolated fixture defaults suite could not be created.")
+        }
+        return defaults
     }
 
     static func pdf(_ url: URL, pages: [String]) throws {

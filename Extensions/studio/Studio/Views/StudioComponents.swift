@@ -344,13 +344,21 @@ struct StudioToast: View {
 }
 
 enum StudioFileActions {
-    static func reveal(_ urls: [URL]) {
+    @MainActor static func reveal(_ urls: [URL], facade: StudioUIFacade? = nil) {
         guard !urls.isEmpty else { return }
-        Task { await StudioFinderReveal.reveal(urls) }
+        if let facade {
+            facade.action("studio.ui.reveal", object: ["paths": urls.map(\.path)])
+        } else {
+            Task { await StudioFinderReveal.reveal(urls) }
+        }
     }
 
-    static func open(_ url: URL) {
-        StudioFinderReveal.open(url)
+    @MainActor static func open(_ url: URL, facade: StudioUIFacade? = nil) {
+        if let facade {
+            facade.action("studio.ui.open", object: ["path": url.path])
+        } else {
+            StudioFinderReveal.open(url)
+        }
     }
 
     static func describe(_ facts: StudioFileFacts?, kind: StudioKind) -> String {

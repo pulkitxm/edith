@@ -373,7 +373,7 @@ struct StudioResultView: View {
                     }
                     Spacer()
                     Button {
-                        StudioFileActions.reveal(outputs)
+                        StudioFileActions.reveal(outputs, facade: model.facade)
                     } label: {
                         Label("Show in Finder", systemImage: "folder")
                     }
@@ -472,10 +472,10 @@ struct StudioOutputRow: View {
                 Button("Edit") { model.continueWith(edit, outputs: [output.url]) }
                     .buttonStyle(.edith(.toolbar))
             }
-            Button("Open") { StudioFileActions.open(output.url) }
+            Button("Open") { StudioFileActions.open(output.url, facade: model.facade) }
                 .buttonStyle(.edith(.toolbar))
             Button {
-                StudioFileActions.reveal([output.url])
+                StudioFileActions.reveal([output.url], facade: model.facade)
             } label: {
                 Image(systemName: "magnifyingglass")
             }

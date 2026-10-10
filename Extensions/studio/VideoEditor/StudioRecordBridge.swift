@@ -8,6 +8,9 @@ final class StudioRecordBridge {
     static let shared = StudioRecordBridge()
 
     private let recorder = VideoRecorder()
+    var startedAt: Date? { recorder.startedAt }
+    var busy: Bool { recorder.busy }
+    var error: String? { recorder.error }
     private var finishedURL: URL?
     private var stopWait: CheckedContinuation<Void, Never>?
     private var settled = false

@@ -12,6 +12,7 @@ final class ExtensionRuntime: NSObject {
     private var uiModel: StudioModel?
     private var privacy: SurfacePrivacyState?
     private let commands = ExtensionCommandRegistry()
+    private let recorderCommands = StudioUIRecorderCommands()
     private let videoSessions = StudioUIVideoSessions()
     private let resources = StudioUIResources()
     private let work = StudioUILongOperations()
@@ -26,6 +27,14 @@ final class ExtensionRuntime: NSObject {
             }
             if command.hasPrefix("studio.ui.") {
                 do {
+                    if command.hasPrefix("studio.ui.record.") {
+                        return try await self.recorderCommands.execute(
+                            command, payload: payload, work: self.work)
+                    }
+                    if command.hasPrefix("studio.ui.media.") {
+                        return try await StudioUIMediaCommands.execute(
+                            command, payload: payload, resources: self.resources, work: self.work)
+                    }
                     if command.hasPrefix("studio.ui.video.") {
                         return try await self.videoSessions.execute(
                             command, payload: payload, resources: self.resources, work: self.work)
@@ -78,6 +87,7 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        let hadEngine = model != nil
         commands.shutdown()
         streams.stop()
         Task {
@@ -87,7 +97,7 @@ final class ExtensionRuntime: NSObject {
             await commands.shutdownAndWait()
             await model?.stopAndWait()
             shutdown()
-            if #available(macOS 15.0, *) {
+            if hadEngine, #available(macOS 15.0, *) {
                 await StudioRecordBridge.shared.shutdown(); await VideoRecorder.shutdownAll()
             }
             completion()
@@ -153,6 +163,7 @@ final class ExtensionRuntime: NSObject {
     }
 
     private func shutdown() {
+        let hadEngine = model != nil
         streams.stop()
         resources.shutdown()
         Task {
@@ -166,7 +177,7 @@ final class ExtensionRuntime: NSObject {
         model = nil
         privacy?.shutdown()
         privacy = nil
-        VideoEditorOpenBridge.shared.shutdown()
+        if hadEngine { VideoEditorOpenBridge.shared.shutdown() }
     }
 }
 

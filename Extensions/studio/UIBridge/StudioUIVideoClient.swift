@@ -10,6 +10,7 @@ import Foundation
     private var created = false
     private var closed = false
     private var pending: StudioUIVideoProject?
+    private var pendingOutput: URL?
     private var synchronizing: Task<Void, Never>?
     private var observing: Task<Void, Never>?
     private var action: Task<Void, Never>?
@@ -108,11 +109,13 @@ import Foundation
                 try await Task.sleep(for: .milliseconds(40))
                 while let next = pending, !closed {
                     pending = nil
+                    let output = pendingOutput; pendingOutput = nil
                     let uploaded = try await facade.upload(next)
                     var object: [String: Any] = [
                         "id": id.uuidString, "project": try facade.object(uploaded),
                     ]
                     if let revision { object["revision"] = revision }
+                    if let output { object["output"] = output.path }
                     let handle: StudioUIResource = try await facade.perform(
                         "studio.ui.video.update", object: object)
                     try await receive(handle, preserveProject: pending != nil)
@@ -126,9 +129,8 @@ import Foundation
     }
 
     func save(_ project: VideoProject, to url: URL) {
-        var next = project; next.fileURL = url
-        if project.fileURL != url { revision = nil }
-        persist(next)
+        pendingOutput = url
+        persist(project)
     }
 
     func importMedia(_ urls: [URL]) async {
