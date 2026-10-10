@@ -15,9 +15,14 @@ import Foundation
     }
     static var machines: () -> [Machine] = { MachineRegistry.machines() }
     static var collectMachine: (Machine, TimeInterval, Bool) async throws -> Data = {
-        machine, timeout, _ in
+        machine, timeout, verbose in
         guard let peer = await UsageMachinesPeer.current(timeout: timeout) else {
             throw ExtensionPeerError.unavailable
+        }
+        if verbose {
+            return try await peer.collect(
+                machineID: machine.id, force: true,
+                onProgress: { data, error in try CLIOut.raw(data, error: error) })
         }
         return try await peer.collect(machineID: machine.id, force: true)
     }
