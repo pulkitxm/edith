@@ -45,6 +45,10 @@ import Testing
         }
         #expect(model.source == "synthetic source" && !model.dirty)
         _ = try await worker.execute(
+            "latex.openProject", payload: JSONEncoder().encode(project.id))
+        #expect(model.editorRequest == 1)
+        #expect(model.editorControls.webView == nil)
+        _ = try await worker.execute(
             "latex.setDraft",
             payload: JSONSerialization.data(withJSONObject: [
                 "projectID": project.id.uuidString, "revision": revision, "text": "valid draft",
@@ -54,6 +58,13 @@ import Testing
                 "latex.removeProject", payload: JSONEncoder().encode(project.id))
         }
         #expect(model.dirty && model.projects.count == 1)
+        let status = try await worker.execute("latex.editorStatus", payload: Data())
+        let editor = try #require(
+            JSONSerialization.jsonObject(with: status) as? [String: Any])
+        #expect(editor["ready"] as? Bool == false)
+        #expect(editor["dirty"] as? Bool == true)
+        #expect(editor["toolProcesses"] as? Int == 0)
+        #expect(model.editorControls.webView == nil)
         await worker.shutdown()
         #expect(try String(contentsOf: source, encoding: .utf8) == "synthetic source")
     }

@@ -692,17 +692,11 @@ struct HostLifecycleHarness {
             value["revision"] as? String != nil,
             try String(contentsOf: source, encoding: .utf8) == original
         else { throw LaTeXFixtureError.invalidData }
-        var ready = false
-        for _ in 0..<100 {
-            let status = try await endpoint.invoke("latex.editorStatus")
-            let value = try JSONSerialization.jsonObject(with: status) as? [String: Any]
-            guard value?["dirty"] as? Bool == true, value?["toolProcesses"] as? Int == 0 else {
-                throw HostWorkerError.invalidResponse
-            }
-            if value?["ready"] as? Bool == true { ready = true; break }
-            try await Task.sleep(for: .milliseconds(100))
-        }
-        guard ready else { throw LaTeXFixtureError.invalidData }
+        let status = try await endpoint.invoke("latex.editorStatus")
+        let editor = try JSONSerialization.jsonObject(with: status) as? [String: Any]
+        guard editor?["dirty"] as? Bool == true, editor?["toolProcesses"] as? Int == 0,
+            editor?["ready"] as? Bool == false
+        else { throw LaTeXFixtureError.invalidEditorState }
         var tile = SurfaceTile(.ability("latex"))
         tile.itemLimit = 1
         tile.sourceIDs = [projectID]
@@ -1007,68 +1001,10 @@ struct HostLifecycleHarness {
     @MainActor private static func verifyTerminal(
         _ endpoint: ExtensionPeerEndpoint, workerPID: Int32
     ) async throws -> [Int32] {
-        func object(_ command: String, _ input: [String: Any] = [:]) async throws -> Any {
-            let data = try await endpoint.invoke(
-                command, payload: JSONSerialization.data(withJSONObject: input), timeout: 5)
-            return try JSONSerialization.jsonObject(with: data)
-        }
-        func settled(including id: String) async throws -> (Int, [Int32]) {
-            let deadline = Date().addingTimeInterval(20)
-            while true {
-                let status = try await object("terminal.status") as? [String: Any]
-                let listed = try await object("terminal.sessions") as? [[String: Any]] ?? []
-                let children = childProcesses(of: workerPID)
-                if let count = status?["sessions"] as? Int, count == listed.count,
-                    status?["running"] as? Int == count,
-                    listed.contains(where: { $0["id"] as? String == id }),
-                    children.count >= count
-                {
-                    return (count, children)
-                }
-                guard Date() < deadline else { throw HostWorkerError.invalidResponse }
-                try await Task.sleep(for: .milliseconds(200))
-            }
-        }
-        let opened = try await object("terminal.open") as? [String: Any]
-        guard opened?["opened"] as? Bool == true, let id = opened?["id"] as? String else {
-            throw HostWorkerError.invalidResponse
-        }
-        _ = try await settled(including: id)
-        let selected = try await object("terminal.select", ["id": id]) as? [[String: Any]]
-        guard
-            selected?.contains(where: {
-                $0["id"] as? String == id && $0["selected"] as? Bool == true
-            }) == true
-        else { throw HostWorkerError.invalidResponse }
-        var tile = SurfaceTile(.ability("terminal"))
-        tile.itemLimit = 20
-        let request = SurfaceSnapshotRequest(target: .home, tile: tile)
-        let created = try SurfaceSnapshot.decode(
-            try await endpoint.invoke(
-                "surface.perform",
-                payload: SurfaceActionRequest(snapshot: request, actionID: "new").encoded(
-                    providerID: "terminal")), providerID: "terminal")
-        guard let added = created.rows.last?.id, added != id,
-            created.rows.allSatisfy({ $0.title.utf8.count <= 512 })
-        else { throw HostWorkerError.invalidResponse }
-        let (count, children) = try await settled(including: added)
-        let broadcast =
-            try await object("terminal.broadcast", ["command": "true"]) as? [String: Any]
-        guard broadcast?["sent"] as? Int == count, broadcast?["unavailable"] as? Int == 0 else {
-            throw HostWorkerError.invalidResponse
-        }
-        for (command, input) in [
-            ("terminal.broadcast", ["command": " "]), ("terminal.select", ["id": "synthetic"]),
-            ("terminal.status", ["unexpected": true]), ("terminal.unknown", [:]),
-        ] as [(String, [String: Any])] {
-            do {
-                _ = try await object(command, input)
-                throw HostWorkerError.invalidResponse
-            } catch HostWorkerError.invalidResponse {
-                throw HostWorkerError.invalidResponse
-            } catch {}
-        }
-        return children
+        try await TerminalLifecycleFixture.verify(
+            invoke: { command, payload in
+                try await endpoint.invoke(command, payload: payload, timeout: 5)
+            }, children: { childProcesses(of: workerPID) })
     }
 
     private static func childProcesses(of pid: Int32) -> [Int32] {
@@ -1152,5 +1088,5 @@ struct HostLifecycleHarness {
 
 private enum LaTeXFixtureError: Error {
     case invalidData
-    case editorNotReady
+    case invalidEditorState
 }
