@@ -2870,7 +2870,7 @@
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
-    "supportProduct": "EdithExtensionDocuments",
+    "supportProduct": "EdithExtensionCommands",
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
     "nativeResources": [
@@ -2948,7 +2948,11 @@
         "Extensions/quinjet/Views/Support/TerminalDropTransferStatus.swift",
         "Extensions/quinjet/Views/Support/TerminalLoadingSkeleton.swift",
         "Extensions/quinjet/Views/Support/TerminalPane.swift",
-        "Extensions/quinjet/Views/Support/TerminalSessionHolder.swift"
+        "Extensions/quinjet/Views/Support/TerminalSessionHolder.swift",
+        "Extensions/quinjet/CLI/CLIEnvironment.swift",
+        "Extensions/quinjet/CLI/QuinjetCLIExecution.swift",
+        "Extensions/quinjet/CLI/QuinjetCommands.swift",
+        "Extensions/quinjet/CLI/CLIDestructivePlan.swift"
       ]
     },
     "resources": {
