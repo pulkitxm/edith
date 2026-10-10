@@ -12,12 +12,17 @@ final class ExtensionRuntime: NSObject {
     private var engineClient: ExtensionEngineClient?
     private var surface: BifrostSurface?
     private let commands = ExtensionCommandRegistry()
+    private var stopped = false
+    private var activeCalls = 0
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self, let worker = self.worker, let surface = self.surface else {
+            guard let self, !self.stopped, let worker = self.worker, let surface = self.surface
+            else {
                 throw ExtensionPeerError.unavailable
             }
+            self.activeCalls += 1
+            defer { self.activeCalls -= 1 }
             if command == "bifrost.cli" {
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
                 return try JSONEncoder().encode(
@@ -36,6 +41,19 @@ final class ExtensionRuntime: NSObject {
             do { try await worker?.prepareDisable(); completion(nil) } catch {
                 completion(error as NSError)
             }
+        }
+    }
+
+    @objc(prepareToStopWithCompletion:)
+    func prepareToStop(completion: @escaping () -> Void) {
+        stopped = true
+        commands.shutdown()
+        let stopping = worker
+        stopping?.shutdown()
+        Task {
+            await stopping?.drain()
+            while activeCalls > 0 { await Task.yield() }
+            completion()
         }
     }
 
@@ -62,7 +80,7 @@ final class ExtensionRuntime: NSObject {
             engineClient?.invalidate(); engineClient = nil
             TextEditingCommands.shutdown()
         case "start":
-            guard let suite = input["defaultsSuite"] as? String,
+            guard !stopped, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
                 SurfaceHostContext.current != nil
             else { return ["ok": false] as NSDictionary }
@@ -80,9 +98,9 @@ final class ExtensionRuntime: NSObject {
         case "synchronize": worker?.configureHotKey()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
-            commands.shutdown(); worker?.shutdown(); worker = nil; surface = nil
+            prepareToStop(completion: {}); worker = nil; surface = nil
             TextEditingCommands.shutdown(); InputFocus.uninstall()
-        case "status": return ["ok": true, "running": worker != nil] as NSDictionary
+        case "status": return ["ok": true, "running": !stopped && worker != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
