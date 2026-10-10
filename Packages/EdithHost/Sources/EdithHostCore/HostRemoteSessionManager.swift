@@ -167,6 +167,7 @@ public final class HostRemoteSessionManager {
                 session.didStop = { [weak self, weak session] in
                     guard let self, let session, self.sessions[id] === session else { return }
                     self.sessions[id] = nil
+                    self.marketplace.sessions.ambientPolicyCoordinator.release(owner: id)
                     self.detach(id)
                     self.terminalClients = self.terminalClients.filter {
                         self.presentations[$0.key]?.request.extensionID != id
@@ -368,11 +369,75 @@ public final class HostRemoteSessionManager {
         return result
     }
 
+    public func connectScene(
+        _ handle: HostRemoteSceneHandle, through connection: NSXPCConnection,
+        compact: Bool, visible: Bool, width: Double,
+        receive: @escaping @MainActor (HostRemoteEvent) -> Void
+    ) async throws {
+        try await ambientScene(handle, visible: visible) {
+            try await handle.connect(
+                through: connection, compact: compact, visible: visible,
+                width: width, receive: receive)
+        }
+    }
+
+    public func updateScene(
+        _ handle: HostRemoteSceneHandle, compact: Bool, visible: Bool, width: Double
+    ) async throws {
+        try await ambientScene(handle, visible: visible) {
+            try await handle.update(compact: compact, visible: visible, width: width)
+        }
+    }
+
+    private func ambientScene(
+        _ handle: HostRemoteSceneHandle, visible: Bool,
+        operation: @escaping @MainActor () async throws -> Void
+    ) async throws {
+        let request = handle.request
+        guard
+            let topic = HostAmbientPolicyCoordinator.topic(
+                owner: request.extensionID, location: request.location, section: request.section)
+        else { try await operation(); return }
+        let owner = try ambientOwner(handle)
+        try await marketplace.sessions.ambientPolicyCoordinator.updateScene(
+            presentation: request.presentationID, owner: owner, job: topic, visible: visible,
+            validate: {
+                guard try self.ambientOwner(handle) == owner else { throw HostWorkerError.rejected }
+            },
+            validatePresented: {
+                guard handle.isPresented, handle.processIdentity?.isRunning == true,
+                    try self.ambientOwner(handle) == owner
+                else { throw HostWorkerError.rejected }
+            }, operation: operation)
+    }
+
+    private func ambientOwner(_ handle: HostRemoteSceneHandle) throws -> HostAmbientPolicyOwner {
+        let request = handle.request
+        guard presentations[request.presentationID] === handle,
+            pendingCleanup[request.presentationID] == nil, !handle.configuration.uiOnly
+        else {
+            throw HostWorkerError.rejected
+        }
+        let selected = try selectedConfiguration(for: request)
+        guard !selected.uiOnly, selected.package == handle.configuration.package else {
+            throw HostWorkerError.rejected
+        }
+        let engine = try HostRemoteEngineOwner(marketplace: marketplace, configuration: selected)
+        guard engine.process == handle.engineIdentity, engine.process.isRunning else {
+            throw HostWorkerError.rejected
+        }
+        return .init(
+            id: request.extensionID, version: selected.package.version,
+            processIdentifier: engine.process.pid, processGeneration: engine.process.generation)
+    }
+
     public func prepareToClose(id: UUID) async throws {
+        marketplace.sessions.ambientPolicyCoordinator.release(presentation: id)
         try await presentations[id]?.prepareToClose()
     }
 
     public func endPresentation(id: UUID) async throws {
+        marketplace.sessions.ambientPolicyCoordinator.release(presentation: id)
         if let extensionID = pendingCleanup[id] {
             try await stop(extensionID: extensionID)
             pendingCleanup[id] = nil
@@ -417,6 +482,7 @@ public final class HostRemoteSessionManager {
     }
 
     public func stop(extensionID: String) async throws {
+        marketplace.sessions.ambientPolicyCoordinator.release(owner: extensionID)
         starting[extensionID]?.cancel()
         if let task = starting[extensionID] { _ = try? await task.value }
         starting[extensionID] = nil

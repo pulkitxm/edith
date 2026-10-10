@@ -2,6 +2,48 @@ import AppKit
 import EdithExtensionUI
 import SwiftUI
 
+struct HostBackgroundPolicySection: View {
+    @Bindable var model: HostBackgroundPolicyModel
+
+    var body: some View {
+        Section("Behaviour") {
+            if let value = model.value {
+                Toggle(
+                    "Pause ambient jobs on battery",
+                    isOn: Binding(
+                        get: { model.value ?? value },
+                        set: { requested in Task { await model.set(requested) } })
+                )
+                .disabled(model.saving || model.load.isRunning)
+            } else {
+                LabeledContent("Pause ambient jobs on battery", value: "Unavailable")
+            }
+            if model.load.isRunning || model.saving { LoadingIndicator() }
+            Text(
+                "Applies to automatic ambient jobs. Jobs with an active page subscription continue on battery. Work already running and manual actions continue."
+            ).settingsCaption()
+            LabeledContent("Global policy", value: model.propagationLabel)
+            if let propagation = model.propagation {
+                ForEach(propagation.owners.filter { !$0.applied }, id: \.identity.id) { owner in
+                    LabeledContent(owner.identity.id, value: owner.applied ? "Applied" : "Failed")
+                    if let failure = owner.failure {
+                        Text(failure).settingsCaption().foregroundStyle(.orange)
+                    }
+                }
+            }
+            Text("Jobs with fixed battery restrictions still pause on battery.").settingsCaption()
+            if let failure = model.failure {
+                Text(failure).settingsCaption().foregroundStyle(.orange)
+            }
+            Button(model.failure == nil ? "Reload policy" : "Retry") {
+                Task { await model.refresh() }
+            }
+            .disabled(model.owner == nil || model.load.isRunning || model.saving)
+        }
+        .pageTask(id: model.owner, cancel: model.cancel) { await model.refresh() }
+    }
+}
+
 struct HostBackgroundJobsSection: View {
     @Bindable var model: HostBackgroundModel
 

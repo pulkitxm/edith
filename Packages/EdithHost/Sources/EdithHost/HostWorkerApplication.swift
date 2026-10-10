@@ -216,6 +216,7 @@ final class HostWorkerApplication {
             guard configuration == nil, let next = request.configuration,
                 next.identifier == Bundle.main.bundleIdentifier
             else { throw HostWorkerError.rejected }
+            try next.ambientPolicy.validate(owner: next.extensionID)
             let identity = try next.identity()
             guard try HostIndex.bundled().contains(where: { $0.id == next.extensionID }) else {
                 throw HostWorkerError.rejected
@@ -256,6 +257,10 @@ final class HostWorkerApplication {
             ]
             if let launcher = try next.publicLauncherContext(teamIdentifier: team) {
                 values["publicLauncher"] = launcher
+            }
+            for (key, value) in try next.ambientPolicy.context(owner: next.extensionID) {
+                guard let key = key as? String else { throw HostWorkerError.rejected }
+                values[key] = value
             }
             let context = values as NSDictionary
             for role in [ExtensionBundleRuntime.Role.helper, .agent, .app] {
@@ -338,18 +343,18 @@ final class HostWorkerApplication {
         }
         guard let configuration else { throw HostWorkerError.rejected }
         switch request.operation {
-        case "synchronize":
-            guard !configuration.recoveryOnly else { return }
-            if let next = request.configuration {
-                guard next.identifier == configuration.identifier,
-                    next.extensionID == configuration.extensionID,
-                    next.version == configuration.version
-                else { throw HostWorkerError.rejected }
-                try applyAppearance(next)
+        case "synchronize", "ambientPolicy":
+            guard let route = HostWorkerSynchronization(rawValue: request.operation) else {
+                throw HostWorkerError.rejected
             }
-            for runtime in runtimes {
-                try runtime.synchronize(id: configuration.extensionID, context: [:])
-            }
+            self.configuration = try route.apply(
+                request, current: configuration,
+                appearance: { try self.applyAppearance($0) },
+                synchronize: { id, context in
+                    for runtime in self.runtimes {
+                        try runtime.synchronize(id: id, context: context)
+                    }
+                })
         case "status":
             for runtime in runtimes {
                 guard try runtime.snapshot(id: configuration.extensionID)?.active == true else {
