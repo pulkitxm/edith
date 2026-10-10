@@ -17,6 +17,7 @@ import Testing
             pauseAmbientOnBattery: {
                 fixture.defaults.bool(forKey: HostCoreBackgroundPolicy.preferenceKey)
             },
+            power: .any,
             run: {
                 let result = try await runtime.synchronizeSettings()
                 return result.settingsBackup?.exported == true
@@ -42,6 +43,39 @@ import Testing
         #expect(fixture.process.isRunning && fixture.notifications == 2)
         await scheduler.shutdown()
         await runtime.shutdown()
+    }
+
+    @Test func perJobBatteryRestrictionRemainsAndLiveSubscribersKeepTheirAdaptiveWork() async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        _ = try await fixture.controller().set(pauseAmbientOnBattery: false)
+        var fixedRuns = 0
+        let fixed = HostSettingsScheduler(
+            signature: { Data("fixed".utf8) }, enabled: { true }, onBattery: { true },
+            pauseAmbientOnBattery: {
+                fixture.defaults.bool(forKey: HostCoreBackgroundPolicy.preferenceKey)
+            },
+            power: .pauseOnBattery,
+            run: {
+                fixedRuns += 1; return true
+            })
+        await fixed.runIfNeeded()
+        #expect(fixedRuns == 0)
+        _ = try await fixture.controller().set(pauseAmbientOnBattery: true)
+        var liveRuns = 0
+        let live = HostSettingsScheduler(
+            signature: { Data("live".utf8) }, enabled: { true }, onBattery: { true },
+            pauseAmbientOnBattery: {
+                fixture.defaults.bool(forKey: HostCoreBackgroundPolicy.preferenceKey)
+            },
+            power: .any, subscribers: { 1 },
+            run: {
+                liveRuns += 1; return true
+            })
+        await live.runIfNeeded()
+        #expect(liveRuns == 1)
+        await fixed.shutdown(); await live.shutdown()
     }
 
     @Test func staleCancelledAndOfflineChangesNeverWriteOrNotify() async throws {
@@ -82,6 +116,7 @@ import Testing
             pauseAmbientOnBattery: {
                 fixture.defaults.bool(forKey: HostCoreBackgroundPolicy.preferenceKey)
             },
+            power: .any,
             run: {
                 await started.open()
                 await release.wait()

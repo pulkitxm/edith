@@ -4,6 +4,8 @@ import Foundation
     private let signature: @MainActor () throws -> Data
     private let enabled: @MainActor () -> Bool
     private let onBattery: @MainActor () -> Bool
+    private let power: HostCoreJobPower
+    private let subscribers: @MainActor () -> Int
     private let pauseAmbientOnBattery: @MainActor () -> Bool
     private let run: @MainActor () async throws -> Bool
     private let now: @MainActor () -> Date
@@ -20,6 +22,8 @@ import Foundation
         enabled: @escaping @MainActor () -> Bool,
         onBattery: @escaping @MainActor () -> Bool,
         pauseAmbientOnBattery: @escaping @MainActor () -> Bool = { false },
+        power: HostCoreJobPower = .pauseOnBattery,
+        subscribers: @escaping @MainActor () -> Int = { 0 },
         now: @escaping @MainActor () -> Date = { Date() },
         delay: @escaping @Sendable (Duration) async throws -> Void = {
             try await Task.sleep(for: $0)
@@ -28,6 +32,7 @@ import Foundation
     ) {
         self.signature = signature; self.enabled = enabled; self.onBattery = onBattery
         self.pauseAmbientOnBattery = pauseAmbientOnBattery
+        self.power = power; self.subscribers = subscribers
         self.now = now; self.delay = delay; self.run = run
     }
 
@@ -56,7 +61,8 @@ import Foundation
 
     public func runIfNeeded() async {
         guard !stopping, flight == nil, enabled(),
-            !pauseAmbientOnBattery() || !onBattery(),
+            !onBattery()
+                || (power != .pauseOnBattery && (!pauseAmbientOnBattery() || subscribers() > 0)),
             let current = try? signature(),
             previous != current
                 || completedAt.map({ now().timeIntervalSince($0) >= 86400 }) != false

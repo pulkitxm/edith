@@ -603,6 +603,29 @@ try {
     unknownJob.stderr,
     "error: The background job is unavailable: unknown-owned-job\nhint: Choose a job from ed agent jobs.\n",
   );
+  await writeFile(join(fixture, "power-request"), "synthetic-owned-test");
+  await command(["agent", "jobs", "--json"]);
+  const powerProof = JSON.parse(
+    await readFile(join(fixture, "power-proof.json"), "utf8"),
+  );
+  assert.deepEqual(powerProof, {
+    pid: coreFixturePID,
+    initialPause: false,
+    persistedPause: true,
+    beforeRuns: 0,
+    pausedRuns: 0,
+    resumedRuns: 1,
+    pausedPID: coreFixturePID,
+    resumedPID: coreFixturePID,
+    exported: true,
+    cloudFileExists: true,
+    readyAfter: true,
+  });
+  assert.equal(
+    (await command(["config", "get", "agentPauseAmbientOnBattery", "--json"]))
+      .value,
+    false,
+  );
   process.kill(coreFixturePID, "SIGSTOP");
   try {
     assert.deepEqual(
@@ -1201,7 +1224,7 @@ try {
   await until(() => !existsSync(ready.socket));
   await command(["extensions", "ls"], 4);
   process.stdout.write(
-    `${JSON.stringify({ fixtureScope: "synthetic transport and core behavior, not feature parity", shippingEntrypoint: true, originalOwnedAgentCallbacks: true, actualCoreJournalAndRestart: true, ownedQueuedCancellation: true, unhealthyReadinessExitZero: true, reservedCoreServer: true, liveProviderCatalog: true, dynamicMCP: true, callerStdinAndDirectory: true, sdkOutputStream: true, liveStdinEOF: true, concurrentInputStreams: true, bidirectionalSyntheticFraming: true, callerPTYResizeAndRestoration: true, boundedMCPInput: true, idleMCPCancellation: true, shutdownCommandExitCode: stoppingCommand.exitCode, originalPlainVersionAndErrors: true, publicLauncher: true, sameSignedExecutable: true, install: "1.0.0", update: "1.1.0", invokeJSONAndStdin: true, scopedArchiveDecoder: true, abi2Carrier: true, syntheticProviderRouting: true, exactProviderExitCodes: true, duplicateRuntimeClasses: false, timeoutAndDisconnectCancellation: true, responsiveHost: true, forgedCallerRejected: true, boundedRequests: true, offlineError: true, disabledWorkers: 0, removedPayload: true, socketCleanup: true })}\n`,
+    `${JSON.stringify({ fixtureScope: "synthetic transport and core behavior, not feature parity", shippingEntrypoint: true, originalOwnedAgentCallbacks: true, actualAmbientBatteryPolicy: true, actualCoreJournalAndRestart: true, ownedQueuedCancellation: true, unhealthyReadinessExitZero: true, reservedCoreServer: true, liveProviderCatalog: true, dynamicMCP: true, callerStdinAndDirectory: true, sdkOutputStream: true, liveStdinEOF: true, concurrentInputStreams: true, bidirectionalSyntheticFraming: true, callerPTYResizeAndRestoration: true, boundedMCPInput: true, idleMCPCancellation: true, shutdownCommandExitCode: stoppingCommand.exitCode, originalPlainVersionAndErrors: true, publicLauncher: true, sameSignedExecutable: true, install: "1.0.0", update: "1.1.0", invokeJSONAndStdin: true, scopedArchiveDecoder: true, abi2Carrier: true, syntheticProviderRouting: true, exactProviderExitCodes: true, duplicateRuntimeClasses: false, timeoutAndDisconnectCancellation: true, responsiveHost: true, forgedCallerRejected: true, boundedRequests: true, offlineError: true, disabledWorkers: 0, removedPayload: true, socketCleanup: true })}\n`,
   );
 } finally {
   for (const client of clients) {

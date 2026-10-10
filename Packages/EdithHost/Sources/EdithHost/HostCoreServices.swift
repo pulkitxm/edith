@@ -298,6 +298,7 @@ import SwiftUI
             pauseAmbientOnBattery: { [defaults] in
                 defaults.bool(forKey: HostCoreBackgroundPolicy.preferenceKey)
             },
+            power: .pauseOnBattery,
             run: { [weak self] in
                 guard let self else { throw CancellationError() }
                 _ = try await synchronizeSettings()
