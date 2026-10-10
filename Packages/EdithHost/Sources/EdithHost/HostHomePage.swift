@@ -202,6 +202,7 @@ struct HostSurfaceCard: View {
     var presenter: (any HostExtensionContentPresenting)? = nil
     @Environment(\.surfaceFillHeight) private var fillHeight
     @Environment(\.compactLayout) private var compact
+    @Environment(\.surfacePresentation) private var presentation
 
     private var providers: [HostExtension] {
         marketplace.entries.filter {
@@ -221,7 +222,8 @@ struct HostSurfaceCard: View {
                     marketplace: marketplace, extensionID: provider.id, location: "home",
                     section: section, presenter: presenter,
                     openMarketplace: { openExtension?(provider.id) },
-                    surface: SurfaceSnapshotRequest(target: target, tile: tile))
+                    surface: HostNativeSurfaceRoute.request(
+                        target: target, tile: tile, presentation: presentation))
             } else {
                 genericCard
             }
