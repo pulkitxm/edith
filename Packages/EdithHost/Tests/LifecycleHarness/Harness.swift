@@ -28,7 +28,19 @@ struct HostLifecycleHarness {
         let releases = URL(fileURLWithPath: arguments[2])
         let app = fixture.appendingPathComponent("Fixture.app")
         try FileManager.default.copyItem(at: sourceApp, to: app)
-        let identifier = "com.pulkit.edith.tests.worker-\(UUID().uuidString)"
+        let requestedIdentifier = ProcessInfo.processInfo.environment[
+            "EDITH_EXTENSION_TEST_HOST_IDENTIFIER"]
+        if let requestedIdentifier {
+            guard extensionID == "virtualCamera",
+                requestedIdentifier.hasPrefix("com.pulkit.edith.tests.worker-"),
+                UUID(
+                    uuidString: String(
+                        requestedIdentifier.dropFirst("com.pulkit.edith.tests.worker-".count)))
+                    != nil,
+                Bundle(url: sourceApp)?.bundleIdentifier == requestedIdentifier
+            else { throw HostWorkerError.rejected }
+        }
+        let identifier = requestedIdentifier ?? "com.pulkit.edith.tests.worker-\(UUID().uuidString)"
         let info = app.appendingPathComponent("Contents/Info.plist")
         var plist =
             try PropertyListSerialization.propertyList(from: Data(contentsOf: info), format: nil)
@@ -142,6 +154,7 @@ struct HostLifecycleHarness {
         defer { for handle in logHandles { try? handle.close() } }
         var stage = "installation"
         var terminalChildren: [Int32] = []
+        var cameraChildren: [Int32] = []
         do {
             let first = try record(releases, id: extensionID, version: "1.0.0")
             let second = try record(releases, id: extensionID, version: "1.1.0")
@@ -165,7 +178,11 @@ struct HostLifecycleHarness {
             try await verifySurfaceContext(
                 endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
             stage = "initial commands"
-            if extensionID == "audioMixer" {
+            if extensionID == "virtualCamera" {
+                try await CameraFixture.verify(endpoint, fixture: fixture, seed: true)
+                cameraChildren = childProcesses(of: oldPID)
+                guard cameraChildren.count == 1 else { throw HostWorkerError.invalidResponse }
+            } else if extensionID == "audioMixer" {
                 try await AudioMixerFixture.verify(endpoint)
             } else if extensionID == "usage" {
                 try await verifyUsage(endpoint, restored: false)
@@ -220,7 +237,12 @@ struct HostLifecycleHarness {
                 kill(oldPID, 0) == -1
             else { throw HostWorkerError.rejected }
             try await requireExited(terminalChildren)
-            if extensionID == "audioMixer" {
+            try await requireExited(cameraChildren)
+            if extensionID == "virtualCamera" {
+                try await CameraFixture.verify(endpoint, fixture: fixture, seed: false)
+                cameraChildren = childProcesses(of: newPID)
+                guard cameraChildren.count == 1 else { throw HostWorkerError.invalidResponse }
+            } else if extensionID == "audioMixer" {
                 try await AudioMixerFixture.verify(endpoint)
             } else if extensionID == "usage" {
                 try await verifyUsage(endpoint, restored: true)
@@ -260,6 +282,7 @@ struct HostLifecycleHarness {
                 throw HostWorkerError.rejected
             }
             try await requireExited(terminalChildren)
+            try await requireExited(cameraChildren)
             guard surfaces.context.activeIDs.isEmpty,
                 surfaces.layouts.home == savedSurface
             else { throw HostWorkerError.invalidResponse }
@@ -299,7 +322,11 @@ struct HostLifecycleHarness {
             else {
                 throw HostWorkerError.rejected
             }
-            if extensionID == "audioMixer" {
+            if extensionID == "virtualCamera" {
+                try await CameraFixture.verify(endpoint, fixture: fixture, seed: false)
+                cameraChildren = childProcesses(of: restoredPID)
+                guard cameraChildren.count == 1 else { throw HostWorkerError.invalidResponse }
+            } else if extensionID == "audioMixer" {
                 try await AudioMixerFixture.verify(endpoint)
             } else if extensionID == "usage" {
                 try await verifyUsage(endpoint, restored: true)
@@ -363,6 +390,7 @@ struct HostLifecycleHarness {
                 }
             }
             try await requireExited(terminalChildren)
+            try await requireExited(cameraChildren)
             guard try store.requestRemoval(id: first.id), try store.installedPackages().isEmpty
             else { throw HostWorkerError.rejected }
             guard surfaces.layouts.home == savedSurface,
@@ -378,7 +406,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"machinesDataValidated\":\(extensionID == "machines")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"machinesDataValidated\":\(extensionID == "machines")}"
             )
         } catch {
             if extensionID == "jev" {

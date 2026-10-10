@@ -30,10 +30,11 @@ public enum ExtensionArchive {
         for entry in zip {
             let path = entry.path
             let parts = path.split(separator: "/", omittingEmptySubsequences: false)
-            let payloadNames = [
-                "package.json", "app.bundle", "helper.bundle", "agent.bundle", "cli.bundle",
-                "privileged.bundle",
-            ]
+            let payloadNames =
+                [
+                    "package.json", "app.bundle", "helper.bundle", "agent.bundle", "cli.bundle",
+                    "privileged.bundle",
+                ] + (package.id == "virtualCamera" ? ["CameraCarrier.app"] : [])
             guard !path.hasPrefix("/"), !path.contains("\\"), !path.contains("\0"),
                 parts.first == Substring(package.id),
                 parts.count >= 2,
@@ -118,7 +119,9 @@ public actor ExtensionPackageInstaller {
             verify: { directory in
                 for bundle in try FileManager.default.contentsOfDirectory(
                     at: directory, includingPropertiesForKeys: nil)
-                where bundle.pathExtension == "bundle" {
+                where bundle.pathExtension == "bundle"
+                    || bundle.lastPathComponent == "CameraCarrier.app"
+                {
                     try ExtensionCodeSignature.verify(bundle, teamIdentifier: teamIdentifier)
                 }
             })
