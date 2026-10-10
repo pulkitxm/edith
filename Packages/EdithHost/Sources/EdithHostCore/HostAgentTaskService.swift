@@ -26,13 +26,13 @@ public struct HostAgentTaskLimits: Sendable {
     ) {
         self.concurrency = max(1, min(Self.machineCap, concurrency))
         self.reservesInteractiveSlot = self.concurrency > 4
-        self.queued = max(1, queued)
-        self.retained = max(1, retained)
-        self.payloadBytes = max(1, payloadBytes)
-        self.queuedPayloadBytes = max(1, queuedPayloadBytes)
-        self.resultBytes = max(1, resultBytes)
-        self.retainedResultBytes = max(1, retainedResultBytes)
-        self.retention = max(0, retention)
+        self.queued = max(1, min(queued, 128))
+        self.retained = max(1, min(retained, 100))
+        self.payloadBytes = max(1, min(payloadBytes, 4 << 20))
+        self.queuedPayloadBytes = max(1, min(queuedPayloadBytes, 16 << 20))
+        self.resultBytes = max(1, min(resultBytes, 8 << 20))
+        self.retainedResultBytes = max(1, min(retainedResultBytes, 16 << 20))
+        self.retention = retention.isFinite ? max(0, min(retention, 86_400)) : 86_400
     }
 }
 
@@ -119,6 +119,12 @@ public actor HostAgentTaskService {
                     var entry = try? HostAgentPayload.decode(
                         PersistedHostAgentTask.self, from: data),
                     entry.status.snapshot.id == id,
+                    entry.status.snapshot.operation.count <= 160,
+                    entry.status.snapshot.title.count <= 160,
+                    (entry.status.snapshot.failure?.count ?? 0) <= 2000,
+                    (entry.status.snapshot.failureCode?.count ?? 0) <= 160,
+                    (entry.status.snapshot.lastActivity?.count ?? 0) <= 1000,
+                    (entry.status.result?.count ?? 0) <= limits.resultBytes,
                     entry.status.output.count <= 128,
                     entry.status.output.allSatisfy({ $0.text.count <= 1000 })
                 else { continue }
@@ -179,7 +185,7 @@ public actor HostAgentTaskService {
     public func register(
         operation: String, concurrency: Int? = nil, handler: @escaping Handler
     ) {
-        guard !stopping else { return }
+        guard !stopping, !operation.isEmpty, operation.count <= 160 else { return }
         handlers[operation] = handler
         operationConcurrency[operation] = concurrency.map { max(1, min(limits.concurrency, $0)) }
         startNext()
@@ -222,7 +228,9 @@ public actor HostAgentTaskService {
             throw HostAgentCommandError(.unavailable, "The agent is shutting down.")
         }
         prune()
-        guard request.payload.count <= limits.payloadBytes else {
+        guard !request.operation.isEmpty, request.operation.count <= 160,
+            request.payload.count <= limits.payloadBytes
+        else {
             throw HostAgentCommandError(.refused, "The background task request is too large.")
         }
         let fingerprint = Self.fingerprint(request)
@@ -311,6 +319,13 @@ public actor HostAgentTaskService {
         try persist(entry)
         entries[id] = entry
         return snapshot
+    }
+
+    public func cancelAndWait(_ id: UUID) async throws -> HostAgentTaskSnapshot {
+        _ = try cancel(id)
+        let worker = workers[id]
+        await worker?.value
+        return try status(id).snapshot
     }
 
     private func startNext() {

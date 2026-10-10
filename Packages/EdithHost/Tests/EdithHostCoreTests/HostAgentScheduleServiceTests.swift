@@ -251,6 +251,82 @@ import EdithExtensionSupport
         await second.cleanUp()
     }
 
+    private actor Sleeper {
+        var active = 0
+        var cancellations = 0
+        func wait(_ seconds: TimeInterval) async throws {
+            active += 1
+            defer { active -= 1 }
+            do { try await Task.sleep(for: .seconds(seconds)) } catch {
+                cancellations += 1; throw error
+            }
+        }
+    }
+
+    @Test func schedulerShutdownAwaitsActualTimerCancellationAndStartsNoMissedWork() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "schedule-timer-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let tasks = try HostAgentTaskService(directory: nil)
+        let sleeper = Sleeper()
+        let clock = Clock(Self.origin)
+        let service = try HostAgentScheduleService(
+            directory: directory, tasks: tasks, environment: { [:] }, now: { clock.now },
+            sleep: { try await sleeper.wait($0) })
+        _ = try await service.add(definition())
+        try await service.start()
+        try await eventually { await sleeper.active == 1 }
+        await service.shutdown()
+        #expect(await sleeper.active == 0)
+        #expect(await sleeper.cancellations == 1)
+        clock.advance(600)
+        await service.fireDue()
+        #expect(await tasks.snapshots().isEmpty)
+        await tasks.shutdown()
+    }
+
+    @Test func unsafeScheduleJournalCannotLaunchACommand() async throws {
+        let fixture = try await makeFixture()
+        _ = try await fixture.service.add(definition())
+        let file = fixture.directory.appendingPathComponent("schedules.json")
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
+        await #expect(throws: HostAgentCommandError.self) {
+            try await fixture.service.runNow("sync")
+        }
+        #expect(await fixture.launches.requests.isEmpty)
+        await fixture.cleanUp()
+    }
+
+    @Test func failureRecordingALaunchedTaskDrainsItAndStopsScheduling() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "schedule-drain-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let tasks = try HostAgentTaskService(directory: nil)
+        await tasks.register(operation: HostAgentTaskOperation.command) { _, _ in
+            try await Task.sleep(for: .seconds(30))
+            return Data()
+        }
+        let journalFile = directory.appendingPathComponent("schedules.json")
+        let service = try HostAgentScheduleService(
+            directory: directory, tasks: tasks,
+            environment: {
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: 0o644], ofItemAtPath: journalFile.path)
+                return [:]
+            })
+        _ = try await service.add(definition())
+        await #expect(throws: HostAgentCommandError.self) { try await service.runNow("sync") }
+        let values = await tasks.snapshots()
+        #expect(values.count == 1)
+        #expect(values.first?.state == .cancelled)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600], ofItemAtPath: journalFile.path)
+        await #expect(throws: HostAgentCommandError.self) { try await service.runNow("sync") }
+        #expect(await tasks.snapshots().count == 1)
+        await service.shutdown()
+        await tasks.shutdown()
+    }
+
     @Test func theNumberOfSchedulesIsBounded() async throws {
         let fixture = try await makeFixture()
         for index in 0..<HostAgentScheduleService.maximumSchedules {

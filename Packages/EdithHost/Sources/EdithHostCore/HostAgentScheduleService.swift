@@ -143,7 +143,7 @@ public actor HostAgentScheduleService {
         try requireRunning()
         guard entries.contains(where: { $0.id == entry.id }) else { throw Self.missing(name) }
         let launched = try await launch(entry.definition)
-        try recordLaunch(launched, for: entry.id, nextRunAt: nil)
+        try await finishLaunch(launched, for: entry.id, nextRunAt: nil)
         return launched
     }
 
@@ -166,7 +166,7 @@ public actor HostAgentScheduleService {
                 else { continue }
                 if running { try advance(original.id, to: next); continue }
                 let launched = try await launch(original.definition)
-                try recordLaunch(launched, for: original.id, nextRunAt: next)
+                try await finishLaunch(launched, for: original.id, nextRunAt: next)
             } catch {
                 try? advance(original.id, to: next)
                 await record(
@@ -198,6 +198,12 @@ public actor HostAgentScheduleService {
     private func launch(_ definition: HostScheduledTaskDefinition) async throws
         -> HostAgentTaskSnapshot
     {
+        do { try save(entries) } catch {
+            stopped = true
+            generation &+= 1
+            loop?.cancel()
+            throw error
+        }
         let request = CLICommandRequest(
             executableURL: URL(fileURLWithPath: definition.executablePath),
             arguments: definition.arguments,
@@ -214,6 +220,22 @@ public actor HostAgentScheduleService {
     private func isRunning(_ id: UUID?) async -> Bool {
         guard let id, let status = try? await tasks.status(id) else { return false }
         return !status.snapshot.state.isTerminal
+    }
+
+    private func finishLaunch(_ launched: HostAgentTaskSnapshot, for id: UUID, nextRunAt: Date?)
+        async throws
+    {
+        do { try recordLaunch(launched, for: id, nextRunAt: nextRunAt) } catch {
+            stopped = true
+            generation &+= 1
+            loop?.cancel()
+            _ = try? await tasks.cancelAndWait(launched.id)
+            await record(
+                HostAgentCommandEvent(
+                    level: .error, category: "schedule", name: "schedule.persistence.failed",
+                    message: error.localizedDescription, taskID: launched.id))
+            throw error
+        }
     }
 
     private func recordLaunch(_ launched: HostAgentTaskSnapshot, for id: UUID, nextRunAt: Date?)
