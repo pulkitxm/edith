@@ -189,7 +189,8 @@ Exact byte counts, package checksums, and the host executable checksum are in [t
 ```sh
 make ci-marketplace-host
 make ci-extension-workers EXTENSION=--retain-packages
-python3 -B scripts/extension-host-size-report.py --baseline local/baseline/current-main-size.json --host-build local/minimal-host/build-metadata.json --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
+make shipping-fixture HOST_FIXTURE=local/minimal-host/Edith.app
+python3 -B scripts/extension-host-size-report.py --baseline local/baseline/current-main-size.json --app local/shipping-fixture/Edith.app --host-build local/shipping-fixture/build-metadata.json --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
 ```
 
 The baseline source commit is `{report['measurement']['baselineSourceCommit']}`. Host build metadata is accepted only when its executable checksum matches the measured binary. Omit `--host-build` when provenance has not been recorded; the report will say so instead of assuming a configuration or signing identity. The empty-host limit remains enforced by the build and shipping verifier, independently of this report.

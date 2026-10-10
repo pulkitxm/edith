@@ -10,7 +10,7 @@ ZIP and JSON metadata totals describe local artifacts. They exclude detached che
 
 Use the actual baseline build metadata in `local/baseline/current-main-size.json`. The retained baseline at source commit `91d0e13de56aaf297ad4630d2c36ef124da5bf0c` records Release, arm64, ad-hoc signing, Xcode 27.0 (27A266a), SDK 27.0, and the pinned Ghostty source commit. Ad-hoc signing is distinct from production signing. Do not label a Release baseline as a Debug or production-signed app, or infer the host's build configuration from the baseline.
 
-For the freshly built host, record a local JSON file at `local/minimal-host/build-metadata.json` with `sourceCommit`, `configuration`, `optimization`, `architecture`, `signature`, `xcode`, `sdk`, and `hostExecutableSHA256`. Populate these from the build command, selected toolchain, signing operation, architecture inspection, and SHA-256 of `Contents/MacOS/Edith`. Optional `ghosttySourceCommit` and `ghosttyArchive` fields apply only when relevant to that build. The generator accepts host provenance only when the executable checksum matches the measured file. It does not independently certify the supplied configuration or verify code signatures. If provenance is missing, omit `--host-build`; the report records the missing information without assuming values.
+Measure the packaged shipping host so the application total includes the public CLI launcher, shipping metadata and worker entitlements. Record a local JSON file at `local/shipping-fixture/build-metadata.json` with `sourceCommit`, `configuration`, `optimization`, `architecture`, `signature`, `xcode`, `sdk`, and `hostExecutableSHA256`. Populate these from the build command, selected toolchain, signing operation, architecture inspection, and SHA-256 of the measured app's `Contents/MacOS/Edith`. Optional `ghosttySourceCommit` and `ghosttyArchive` fields apply only when relevant to that build. The generator accepts host provenance only when the executable checksum matches the measured file. It does not independently certify the supplied configuration or verify code signatures. If provenance is missing, omit `--host-build`; the report records the missing information without assuming values.
 
 The lightweight development host build uses Release with `-Osize`, arm64, and ad-hoc signing. Record the actual source commit and toolchain used for the final build. Run the appropriate host build or shipping verifier to check signatures, dependency boundaries, absence of feature payload, and the unchanged requirement that the empty host remain below 5,000,000 installed bytes. Size-report generation does not replace these checks.
 
@@ -23,7 +23,8 @@ After the final builds and independent checks, regenerate the reports:
 ```sh
 make ci-marketplace-host
 make ci-extension-workers EXTENSION=--retain-packages
-python3 -B scripts/extension-host-size-report.py --baseline local/baseline/current-main-size.json --host-build local/minimal-host/build-metadata.json --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
+make shipping-fixture HOST_FIXTURE=local/minimal-host/Edith.app
+python3 -B scripts/extension-host-size-report.py --baseline local/baseline/current-main-size.json --app local/shipping-fixture/Edith.app --host-build local/shipping-fixture/build-metadata.json --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
 ```
 
 Review the measured package count against the final host index, confirm the source fingerprints are current, and retain the lifecycle, visual, signing, platform-retirement, and publication results separately. Do not claim these outcomes from artifact sizes alone.
