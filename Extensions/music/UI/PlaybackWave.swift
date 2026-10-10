@@ -3,11 +3,11 @@ import AppKit
 import Combine
 import SwiftUI
 
-public enum MusicTick {
+public enum EmbeddedMusicTick {
     public static let epoch = Date(timeIntervalSinceReferenceDate: 0)
 }
 
-public enum MeterLevel {
+public enum EmbeddedMeterLevel {
     public static let floorDecibels = -46.0
     public static let ceilingDecibels = -6.0
 
@@ -24,11 +24,11 @@ public enum MeterLevel {
 }
 
 @MainActor
-public final class PlaybackLevel: ObservableObject {
-    public static let shared = PlaybackLevel()
+public final class EmbeddedPlaybackLevel: ObservableObject {
+    public static let shared = EmbeddedPlaybackLevel()
     public static let neutral = 0.5
 
-    @Published public private(set) var level = PlaybackLevel.neutral
+    @Published public private(set) var level = EmbeddedPlaybackLevel.neutral
     public private(set) var viewers = 0
     public var onViewersChange: (() -> Void)?
 
@@ -53,7 +53,7 @@ public final class PlaybackLevel: ObservableObject {
     }
 }
 
-public struct PlaybackWave: View {
+public struct EmbeddedPlaybackWave: View {
     let playing: Bool
     let color: Color
     var barCount: Int
@@ -67,34 +67,34 @@ public struct PlaybackWave: View {
     }
 
     public var body: some View {
-        WaveLayers(playing: playing, color: color, barCount: barCount, maxHeight: maxHeight)
+        EmbeddedWaveLayers(playing: playing, color: color, barCount: barCount, maxHeight: maxHeight)
             .frame(
                 width: CGFloat(barCount) * 3 + CGFloat(barCount - 1) * 2.5, height: maxHeight)
     }
 }
 
-private struct WaveLayers: NSViewRepresentable {
+private struct EmbeddedWaveLayers: NSViewRepresentable {
     let playing: Bool
     let color: Color
     let barCount: Int
     let maxHeight: CGFloat
 
-    func makeNSView(context: Context) -> WaveBarsView {
-        WaveBarsView()
+    func makeNSView(context: Context) -> EmbeddedWaveBarsView {
+        EmbeddedWaveBarsView()
     }
 
-    func updateNSView(_ view: WaveBarsView, context: Context) {
+    func updateNSView(_ view: EmbeddedWaveBarsView, context: Context) {
         view.apply(
             playing: playing, color: NSColor(color), barCount: barCount, maxHeight: maxHeight)
     }
 }
 
-private final class WaveBarsView: NSView {
+private final class EmbeddedWaveBarsView: NSView {
     private let container = CALayer()
     private var bars: [CALayer] = []
     private var animating = false
     private var barColor = NSColor.white
-    private var level = CGFloat(PlaybackLevel.neutral)
+    private var level = CGFloat(EmbeddedPlaybackLevel.neutral)
     private var levelObserver: AnyCancellable?
     private var viewing = false
 
@@ -103,7 +103,7 @@ private final class WaveBarsView: NSView {
         wantsLayer = true
         layerContentsRedrawPolicy = .never
         layer?.addSublayer(container)
-        levelObserver = PlaybackLevel.shared.$level.sink { [weak self] value in
+        levelObserver = EmbeddedPlaybackLevel.shared.$level.sink { [weak self] value in
             MainActor.assumeIsolated { self?.setLevel(CGFloat(value)) }
         }
     }
@@ -112,7 +112,7 @@ private final class WaveBarsView: NSView {
 
     deinit {
         guard viewing else { return }
-        Task { @MainActor in PlaybackLevel.shared.detachViewer() }
+        Task { @MainActor in EmbeddedPlaybackLevel.shared.detachViewer() }
     }
 
     override func viewDidMoveToWindow() {
@@ -120,7 +120,9 @@ private final class WaveBarsView: NSView {
         let visible = window != nil
         guard visible != viewing else { return }
         viewing = visible
-        visible ? PlaybackLevel.shared.attachViewer() : PlaybackLevel.shared.detachViewer()
+        visible
+            ? EmbeddedPlaybackLevel.shared.attachViewer()
+            : EmbeddedPlaybackLevel.shared.detachViewer()
     }
 
     override func viewDidChangeEffectiveAppearance() {

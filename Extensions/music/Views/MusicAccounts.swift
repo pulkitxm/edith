@@ -21,6 +21,7 @@ final class MusicSpotifySession {
     private(set) var duration = 0.0
     private(set) var volume = 0.7
     var error: String?
+    var receiveUIEvent: (([String: Any]) -> Void)?
     private var elapsedBase = 0.0
     private var updatedAt = Date()
     private var process: MusicNativePlayer?
@@ -104,6 +105,7 @@ final class MusicSpotifySession {
     }
 
     private func apply(_ event: [String: Any]) {
+        receiveUIEvent?(event)
         switch event["event"] as? String {
         case "connected":
             authorizationDeadline?.cancel()
@@ -245,6 +247,7 @@ final class MusicAccounts: NSObject, WKNavigationDelegate, WKUIDelegate {
     private(set) var youtubeView: WKWebView?
     var youtubeError: String?
     private let defaults: UserDefaults
+    var presentationOwnedYoutube = false
     private var youtubeGeneration = 0
     private let pauseLocal: @MainActor () -> Void
 
@@ -373,8 +376,14 @@ final class MusicAccounts: NSObject, WKNavigationDelegate, WKUIDelegate {
         youtubeError = nil
     }
 
+    func presentationStore() -> WKWebsiteDataStore { youtubeStore }
+
+    func presentationCookies() async -> [HTTPCookie] {
+        await youtubeStore.httpCookieStore.allCookies()
+    }
+
     func loadYoutube() {
-        guard youtubeView == nil, youtubeConnected else { return }
+        guard !presentationOwnedYoutube, youtubeView == nil, youtubeConnected else { return }
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = youtubeStore
         configuration.mediaTypesRequiringUserActionForPlayback = .all

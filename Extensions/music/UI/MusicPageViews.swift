@@ -5,30 +5,30 @@ import EdithExtensionSupport
 import Observation
 import SwiftUI
 
-private struct MusicListQuery: Equatable {
+private struct EmbeddedMusicListQuery: Equatable {
     var search: String
     var showingFavourites: Bool
-    var favourites: [Track]
-    var folders: [MusicFolder]
-    var folderTracks: [Track]
-    var searchTracks: [Track]
-    var searchFolders: [MusicFolder]
+    var favourites: [EmbeddedTrack]
+    var folders: [EmbeddedMusicFolder]
+    var folderTracks: [EmbeddedTrack]
+    var searchTracks: [EmbeddedTrack]
+    var searchFolders: [EmbeddedMusicFolder]
 }
 
-private struct MusicListSelection {
-    var folders: [MusicFolder] = []
-    var tracks: [Track] = []
+private struct EmbeddedMusicListSelection {
+    var folders: [EmbeddedMusicFolder] = []
+    var tracks: [EmbeddedTrack] = []
     var contentKey: [String] = []
 
     init() {}
 
-    init(query: MusicListQuery) {
+    init(query: EmbeddedMusicListQuery) {
         folders = Self.matchingFolders(query)
         tracks = Self.matchingTracks(query)
         contentKey = folders.map(\.relativePath) + tracks.map(\.relativePath)
     }
 
-    private static func matchingFolders(_ query: MusicListQuery) -> [MusicFolder] {
+    private static func matchingFolders(_ query: EmbeddedMusicListQuery) -> [EmbeddedMusicFolder] {
         guard !query.showingFavourites else { return [] }
         guard !query.search.isEmpty else { return query.folders }
         return query.searchFolders.filter {
@@ -36,7 +36,7 @@ private struct MusicListSelection {
         }
     }
 
-    private static func matchingTracks(_ query: MusicListQuery) -> [Track] {
+    private static func matchingTracks(_ query: EmbeddedMusicListQuery) -> [EmbeddedTrack] {
         guard !query.search.isEmpty else {
             return query.showingFavourites ? query.favourites : query.folderTracks
         }
@@ -45,34 +45,34 @@ private struct MusicListSelection {
     }
 }
 
-struct MusicPage: View {
-    @State private var accounts = MusicAccounts.shared
-    init(accounts: MusicAccounts? = nil) {
+struct EmbeddedMusicPage: View {
+    @State private var accounts = EmbeddedMusicAccounts.shared
+    init(accounts: EmbeddedMusicAccounts? = nil) {
         _accounts = State(initialValue: accounts ?? .shared)
     }
-    @State private var remote = MusicRemote.shared
+    @State private var remote = EmbeddedMusicRemote.shared
     @AppStorage(
         AppStorageKeys.General.theme,
         store: SharedDefaults.store) private var themeName =
         "accent"
     @AppStorage(
-        MusicStorage.musicFolderStaleKey, store: SharedDefaults.store)
+        EmbeddedMusicStorage.musicFolderStaleKey, store: SharedDefaults.store)
     private var musicFolderStale = false
     @AppStorage(AppStorageKeys.Music.gridView, store: SharedDefaults.store) private var gridView =
         false
-    private var presenterState = MusicPrivacyState.shared
+    private var presenterState = EmbeddedMusicPrivacyState.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var search = ""
     @State private var showDownloader = false
-    @State private var deleteTarget: Track?
+    @State private var deleteTarget: EmbeddedTrack?
     @State private var showNewFolder = false
     @State private var newFolderName = ""
-    @State private var renameFolderTarget: MusicFolder?
+    @State private var renameFolderTarget: EmbeddedMusicFolder?
     @State private var folderRenameText = ""
-    @State private var deleteFolderTarget: MusicFolder?
-    @State private var selection = MusicListSelection()
+    @State private var deleteFolderTarget: EmbeddedMusicFolder?
+    @State private var selection = EmbeddedMusicListSelection()
 
     private var dark: Bool { scheme == .dark }
     private var musicPlaceBinding: Binding<String> {
@@ -95,17 +95,17 @@ struct MusicPage: View {
     private var theme: Color { themeColor(themeName) }
     private var blurMusic: Bool { presenterState.active }
 
-    private var listQuery: MusicListQuery {
-        MusicListQuery(
+    private var listQuery: EmbeddedMusicListQuery {
+        EmbeddedMusicListQuery(
             search: search, showingFavourites: remote.showingFavourites,
             favourites: remote.favourites, folders: remote.folders,
             folderTracks: remote.folderTracks, searchTracks: remote.searchTracks,
             searchFolders: remote.searchFolders)
     }
 
-    private var filteredTracks: [Track] { selection.tracks }
+    private var filteredTracks: [EmbeddedTrack] { selection.tracks }
 
-    private var filteredFolders: [MusicFolder] { selection.folders }
+    private var filteredFolders: [EmbeddedMusicFolder] { selection.folders }
 
     private var contentKey: [String] { selection.contentKey }
 
@@ -119,14 +119,14 @@ struct MusicPage: View {
         return scoped.replacingOccurrences(of: "/", with: " / ")
     }
 
-    private var moveTargets: [MoveTarget] {
-        var targets: [MoveTarget] = []
+    private var moveTargets: [EmbeddedMoveTarget] {
+        var targets: [EmbeddedMoveTarget] = []
         if !remote.folderPath.isEmpty {
             let parent = (remote.folderPath as NSString).deletingLastPathComponent
             let name = parent.isEmpty ? "Home" : (parent as NSString).lastPathComponent
-            targets.append(MoveTarget(name: "\(name) (up)", path: parent))
+            targets.append(EmbeddedMoveTarget(name: "\(name) (up)", path: parent))
         }
-        targets += remote.folders.map { MoveTarget(name: $0.name, path: $0.relativePath) }
+        targets += remote.folders.map { EmbeddedMoveTarget(name: $0.name, path: $0.relativePath) }
         return targets
     }
 
@@ -137,14 +137,12 @@ struct MusicPage: View {
             if accounts.selected == .local {
                 trackList
             } else {
-                MusicProviderContent(accounts: accounts)
+                EmbeddedMusicProviderContent(accounts: accounts)
             }
         }
         .navigationRoute("place", selection: musicPlaceBinding, isValid: musicPlaceIsValid)
         .navigationTitle("Music")
-        .edithSheet(isPresented: $showDownloader) {
-            DownloadSheet()
-        }
+        .edithSheet(isPresented: $showDownloader) { EmbeddedDownloadSheet() }
         .alert("New folder", isPresented: $showNewFolder) {
             TextField("Folder name", text: $newFolderName)
             Button("Cancel", role: .cancel) { newFolderName = "" }
@@ -156,7 +154,7 @@ struct MusicPage: View {
             let folder =
                 remote.folderPath.isEmpty ? "your music library" : remote.folderPath
             Text(
-                MusicPrivacyState.shared.hides(.music)
+                EmbeddedMusicPrivacyState.shared.hides(.music)
                     ? "Creates a folder inside your music library."
                     : "Creates a folder inside \(folder)."
             )
@@ -182,7 +180,7 @@ struct MusicPage: View {
             }
         } message: { folder in
             Text(
-                MusicPrivacyState.shared.hides(.music)
+                EmbeddedMusicPrivacyState.shared.hides(.music)
                     ? "This folder and everything inside it will be moved to the Trash."
                     : "\"\(folder.name)\" and everything inside it will be moved to the Trash."
             )
@@ -198,7 +196,7 @@ struct MusicPage: View {
             }
         } message: { track in
             Text(
-                MusicPrivacyState.shared.hides(.music)
+                EmbeddedMusicPrivacyState.shared.hides(.music)
                     ? "This track will be moved to the Trash."
                     : "\"\(track.title)\" will be moved to the Trash."
             )
@@ -213,10 +211,13 @@ struct MusicPage: View {
         } message: {
             Text(remote.libraryError ?? "The music library operation failed.")
         }
+        .onChange(of: gridView) {
+            EmbeddedMusicRemote.shared.send(.gridView, value: gridView ? 1 : 0)
+        }
         .onChange(of: search) { remote.noteSearch(search) }
         .onChange(of: remote.folderPath) { if !search.isEmpty { remote.noteSearch(search) } }
         .onChange(of: listQuery, initial: true) { _, query in
-            selection = MusicListSelection(query: query)
+            selection = EmbeddedMusicListSelection(query: query)
         }
     }
 
@@ -232,8 +233,8 @@ struct MusicPage: View {
         Binding(get: { deleteFolderTarget != nil }, set: { if !$0 { deleteFolderTarget = nil } })
     }
 
-    private func openDetails(_ track: Track, renaming: Bool) {
-        MusicDetailPresenter.shared.show(track, renaming: renaming)
+    private func openDetails(_ track: EmbeddedTrack, renaming: Bool) {
+        EmbeddedMusicDetailPresenter.shared.show(track, renaming: renaming)
     }
 
     private var pageHeader: some View {
@@ -244,7 +245,7 @@ struct MusicPage: View {
                 EdithSegmentedPicker(
                     "Music source",
                     selection: Binding(get: { accounts.selected }, set: { accounts.select($0) }),
-                    options: MusicProvider.allCases, label: { $0.title }
+                    options: EmbeddedMusicProvider.allCases, label: { $0.title }
                 )
                 .frame(maxWidth: UIScale.pt(440))
                 if accounts.selected == .local {
@@ -301,7 +302,7 @@ struct MusicPage: View {
             .buttonStyle(.edith(.toolbar))
             .help("New folder")
             Button {
-                _ = try? MusicLibraryOperationExecution.openLibrary()
+                EmbeddedMusicRemote.shared.openLibrary()
             } label: {
                 Image(systemName: "folder")
             }
@@ -372,7 +373,7 @@ struct MusicPage: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, UIScale.pt(14))
                     .padding(.vertical, UIScale.pt(7))
-                    .liquidGlass(in: Capsule(), tint: theme, interactive: true, dark: dark)
+                    .embeddedLiquidGlass(in: Capsule(), tint: theme, interactive: true, dark: dark)
             }
             .buttonStyle(.edith(.borderless))
             .help(
@@ -382,7 +383,7 @@ struct MusicPage: View {
     }
 
     private func crumb(_ name: String, path: String, systemImage: String?) -> some View {
-        CrumbButton(
+        EmbeddedCrumbButton(
             name: name, path: path, systemImage: systemImage, theme: theme,
             isCurrent: path == remote.folderPath,
             onTap: { remote.navigate(to: path) },
@@ -401,7 +402,7 @@ struct MusicPage: View {
                 Menu {
                     ForEach(folders) { folder in
                         Button(
-                            MusicPrivacyState.shared.hides(.music) ? "Folder" : folder.name
+                            EmbeddedMusicPrivacyState.shared.hides(.music) ? "Folder" : folder.name
                         ) { remote.navigate(to: folder.relativePath) }
                     }
                 } label: {
@@ -429,7 +430,7 @@ struct MusicPage: View {
             : (search.isEmpty ? !remote.entriesLoaded : !remote.searchLoaded)
         {
             ScrollView {
-                MusicLibrarySkeleton(grid: gridView)
+                EmbeddedMusicLibrarySkeleton(grid: gridView)
                     .pageContent(compact)
             }
         } else if filteredFolders.isEmpty && filteredTracks.isEmpty {
@@ -440,11 +441,11 @@ struct MusicPage: View {
                 Text(
                     remote.showingFavourites
                         ? "Tap the heart on a track to add it here"
-                        : MusicPrivacyState.shared.hides(.music)
+                        : EmbeddedMusicPrivacyState.shared.hides(.music)
                             ? "This music folder"
-                            : TrackMeta.url(for: remote.folderPath).path
+                            : EmbeddedTrackMeta.url(for: remote.folderPath).path
                 )
-                .presenterBlur(MusicPrivacyState.shared.hides(.music))
+                .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
                 .font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(.tertiary)
             }
@@ -464,7 +465,7 @@ struct MusicPage: View {
     private var listContent: some View {
         LazyVStack(spacing: UIScale.pt(2)) {
             ForEach(filteredFolders) { folder in
-                MusicFolderRow(
+                EmbeddedMusicFolderRow(
                     folder: folder, theme: theme, location: location(of: folder.relativePath),
                     onOpen: { remote.open(folder) },
                     onPlay: { remote.playFolder(folder) },
@@ -476,7 +477,7 @@ struct MusicPage: View {
                 )
             }
             ForEach(filteredTracks) { track in
-                MusicPageRow(
+                EmbeddedMusicPageRow(
                     track: track, location: location(of: track.relativePath),
                     isCurrent: remote.currentFile == track.relativePath,
                     isPlaying: remote.isPlaying, theme: theme, blur: blurMusic,
@@ -498,13 +499,13 @@ struct MusicPage: View {
         LazyVGrid(
             columns: [
                 GridItem(
-                    .adaptive(minimum: MusicTile.width, maximum: MusicTile.width),
+                    .adaptive(minimum: EmbeddedMusicTile.width, maximum: EmbeddedMusicTile.width),
                     spacing: UIScale.pt(14))
             ],
             alignment: .leading, spacing: UIScale.pt(16)
         ) {
             ForEach(filteredFolders) { folder in
-                MusicFolderTile(
+                EmbeddedMusicFolderTile(
                     folder: folder, theme: theme, location: location(of: folder.relativePath),
                     onOpen: { remote.open(folder) },
                     onPlay: { remote.playFolder(folder) },
@@ -516,7 +517,7 @@ struct MusicPage: View {
                 )
             }
             ForEach(filteredTracks) { track in
-                MusicTrackTile(
+                EmbeddedMusicTrackTile(
                     track: track, location: location(of: track.relativePath),
                     isCurrent: remote.currentFile == track.relativePath,
                     isPlaying: remote.isPlaying, theme: theme, blur: blurMusic,
@@ -540,26 +541,17 @@ struct MusicPage: View {
             ? "No playable files in your music folder" : "This folder is empty"
     }
 
-    private func beginFolderRename(_ folder: MusicFolder) {
+    private func beginFolderRename(_ folder: EmbeddedMusicFolder) {
         folderRenameText = folder.name
         renameFolderTarget = folder
     }
 
-    private func chooseMusicFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Choose"
-        panel.message = "Choose your music folder"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        remote.chooseLibrary(url)
-    }
+    private func chooseMusicFolder() { remote.chooseLibrary() }
 
 }
 
-struct SeekBar: View {
-    @State private var remote = MusicRemote.shared
+struct EmbeddedSeekBar: View {
+    @State private var remote = EmbeddedMusicRemote.shared
     @Environment(\.windowVisible) private var visible
     let theme: Color
     var height: CGFloat = 5
@@ -571,7 +563,7 @@ struct SeekBar: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(.primary.opacity(0.1))
                 if remote.isPlaying, visible, dragFraction == nil {
-                    TimelineView(.periodic(from: MusicTick.epoch, by: 0.5)) { _ in
+                    TimelineView(.periodic(from: EmbeddedMusicTick.epoch, by: 0.5)) { _ in
                         fill(geo.size.width, knob)
                     }
                 } else {
@@ -613,7 +605,7 @@ struct SeekBar: View {
     }
 }
 
-private struct CrumbButton: View {
+private struct EmbeddedCrumbButton: View {
     let name: String
     let path: String
     let systemImage: String?
@@ -629,7 +621,8 @@ private struct CrumbButton: View {
                 if let systemImage {
                     Image(systemName: systemImage).font(.system(size: UIScale.pt(10)))
                 }
-                Text(name).lineLimit(1).presenterBlur(MusicPrivacyState.shared.hides(.music))
+                Text(name).lineLimit(1).presenterBlur(
+                    EmbeddedMusicPrivacyState.shared.hides(.music))
             }
             .font(.system(size: UIScale.pt(12), weight: isCurrent ? .semibold : .regular))
             .foregroundStyle(isCurrent ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
@@ -651,8 +644,8 @@ private struct CrumbButton: View {
     }
 }
 
-private struct MusicFolderRow: View {
-    let folder: MusicFolder
+private struct EmbeddedMusicFolderRow: View {
+    let folder: EmbeddedMusicFolder
     let theme: Color
     let location: String?
     let onOpen: () -> Void
@@ -682,11 +675,13 @@ private struct MusicFolderRow: View {
                             .font(.system(size: UIScale.pt(13), weight: .medium))
                             .lineLimit(1)
                             .foregroundStyle(.primary)
-                            .presenterBlur(MusicPrivacyState.shared.hides(.music))
+                            .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
                         Text(
                             location ?? trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " "
                         )
-                        .presenterBlur(location != nil && MusicPrivacyState.shared.hides(.music))
+                        .presenterBlur(
+                            location != nil && EmbeddedMusicPrivacyState.shared.hides(.music)
+                        )
                         .font(.system(size: UIScale.pt(10.5)))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -735,28 +730,28 @@ private struct MusicFolderRow: View {
         }
         .pageTask(id: folder.relativePath) {
             let path = folder.relativePath
-            trackCount = TrackMeta.cachedTrackCount(under: path)
-            let count = await Task.detached { TrackMeta.trackCount(under: path) }.value
+            trackCount = EmbeddedTrackMeta.cachedTrackCount(under: path)
+            let count = await EmbeddedTrackMeta.remoteTrackCount(under: path)
             guard !Task.isCancelled else { return }
             trackCount = count
         }
     }
 }
 
-struct MoveTarget: Identifiable, Equatable {
+struct EmbeddedMoveTarget: Identifiable, Equatable {
     let name: String
     let path: String
     var id: String { path }
 }
 
-private struct MusicPageRow: View {
-    let track: Track
+private struct EmbeddedMusicPageRow: View {
+    let track: EmbeddedTrack
     let location: String?
     let isCurrent: Bool
     let isPlaying: Bool
     let theme: Color
     let blur: Bool
-    let moveTargets: [MoveTarget]
+    let moveTargets: [EmbeddedMoveTarget]
     let isFavourite: Bool
     let onOpenDetails: () -> Void
     let onRename: () -> Void
@@ -772,7 +767,7 @@ private struct MusicPageRow: View {
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
             Button(action: onOpenDetails) {
-                PageArtworkThumb(track: track, size: 34)
+                EmbeddedPageArtworkThumb(track: track, size: 34)
             }
             .buttonStyle(.edith(.borderless))
             .help("Show details")
@@ -790,7 +785,7 @@ private struct MusicPageRow: View {
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .truncationMode(.head)
-                                .presenterBlur(MusicPrivacyState.shared.hides(.music))
+                                .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
                         }
                     }
                     Spacer()
@@ -836,8 +831,8 @@ private struct MusicPageRow: View {
                 onOpenFolder: onOpenFolder)
         }
         .pageTask(id: track.id) {
-            duration = TrackMeta.cachedDurationLabel(for: track)
-            let value = await TrackMeta.durationLabel(for: track)
+            duration = EmbeddedTrackMeta.cachedDurationLabel(for: track)
+            let value = await EmbeddedTrackMeta.durationLabel(for: track)
             guard !Task.isCancelled else { return }
             duration = value
         }
@@ -846,13 +841,13 @@ private struct MusicPageRow: View {
 
 @ViewBuilder
 private func folderMenu(
-    _ folder: MusicFolder, onOpen: @escaping () -> Void, onPlay: @escaping () -> Void,
+    _ folder: EmbeddedMusicFolder, onOpen: @escaping () -> Void, onPlay: @escaping () -> Void,
     onRename: @escaping () -> Void, onDelete: @escaping () -> Void
 ) -> some View {
     Button("Play", action: onPlay)
     Button("Open", action: onOpen)
     Button("Show in Finder") {
-        NSWorkspace.shared.activateFileViewerSelecting([folder.url])
+        EmbeddedMusicRemote.shared.send(.revealFolder, path: folder.relativePath)
     }
     Button("Rename", action: onRename)
     Button("Move to Trash", role: .destructive, action: onDelete)
@@ -860,7 +855,7 @@ private func folderMenu(
 
 @ViewBuilder
 private func trackMenu(
-    _ track: Track, moveTargets: [MoveTarget], isFavourite: Bool,
+    _ track: EmbeddedTrack, moveTargets: [EmbeddedMoveTarget], isFavourite: Bool,
     onOpenDetails: @escaping () -> Void, onRename: @escaping () -> Void,
     onDelete: @escaping () -> Void, onMove: @escaping (String) -> Void,
     onToggleFavourite: @escaping () -> Void, onOpenFolder: @escaping () -> Void
@@ -870,7 +865,7 @@ private func trackMenu(
     Button("Show Details", action: onOpenDetails)
     Button("Open Enclosing Folder", action: onOpenFolder)
     Button("Show in Finder") {
-        MusicLibraryOperationExecution.reveal(track.url)
+        remoteReveal(track)
     }
     Button("Rename", action: onRename)
     if !moveTargets.isEmpty {
@@ -883,23 +878,27 @@ private func trackMenu(
     Button("Move to Trash", role: .destructive, action: onDelete)
 }
 
-struct MusicLibrarySkeleton: View {
+struct EmbeddedMusicLibrarySkeleton: View {
     let grid: Bool
 
     var body: some View {
         SkeletonGroup {
             if grid {
                 LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: MusicTile.width), alignment: .top)],
+                    columns: [
+                        GridItem(.adaptive(minimum: EmbeddedMusicTile.width), alignment: .top)
+                    ],
                     alignment: .leading, spacing: UIScale.pt(16)
                 ) {
                     ForEach(0..<12, id: \.self) { index in
                         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
-                            SkeletonBlock(width: MusicTile.art, height: MusicTile.art, corner: 8)
+                            SkeletonBlock(
+                                width: EmbeddedMusicTile.art, height: EmbeddedMusicTile.art,
+                                corner: 8)
                             SkeletonBlock(width: index.isMultiple(of: 2) ? 96 : 78, height: 12)
                             SkeletonBlock(width: 64, height: 10)
                         }
-                        .padding(UIScale.pt(MusicTile.inset))
+                        .padding(UIScale.pt(EmbeddedMusicTile.inset))
                     }
                 }
             } else {
@@ -927,15 +926,15 @@ struct MusicLibrarySkeleton: View {
     }
 }
 
-private enum MusicTile {
+private enum EmbeddedMusicTile {
     static let art = 118.0
     static let inset = 6.0
     static var artSize: CGFloat { UIScale.pt(art) }
     static var width: CGFloat { UIScale.pt(art + inset * 2) }
 }
 
-private struct MusicFolderTile: View {
-    let folder: MusicFolder
+private struct EmbeddedMusicFolderTile: View {
+    let folder: EmbeddedMusicFolder
     let theme: Color
     let location: String?
     let onOpen: () -> Void
@@ -959,11 +958,12 @@ private struct MusicFolderTile: View {
                             .font(.system(size: UIScale.pt(34)))
                             .foregroundStyle(theme)
                     }
-                    .frame(width: MusicTile.artSize, height: MusicTile.artSize)
+                    .frame(width: EmbeddedMusicTile.artSize, height: EmbeddedMusicTile.artSize)
                 }
                 .buttonStyle(.edith(.borderless))
                 .accessibilityLabel(
-                    MusicPrivacyState.shared.hides(.music) ? "Open folder" : "Open \(folder.name)")
+                    EmbeddedMusicPrivacyState.shared.hides(.music)
+                        ? "Open folder" : "Open \(folder.name)")
                 Button(action: onPlay) {
                     Image(systemName: "play.circle.fill")
                         .font(.system(size: UIScale.pt(24)))
@@ -980,15 +980,16 @@ private struct MusicFolderTile: View {
                 Text(folder.name)
                     .font(.system(size: UIScale.pt(12), weight: .medium))
                     .lineLimit(1)
-                    .presenterBlur(MusicPrivacyState.shared.hides(.music))
+                    .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
                 Text(location ?? trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " ")
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.head)
-                    .presenterBlur(location != nil && MusicPrivacyState.shared.hides(.music))
+                    .presenterBlur(
+                        location != nil && EmbeddedMusicPrivacyState.shared.hides(.music))
             }
-            .frame(width: MusicTile.artSize)
+            .frame(width: EmbeddedMusicTile.artSize)
         }
         .padding(UIScale.pt(6))
         .background(
@@ -1013,22 +1014,22 @@ private struct MusicFolderTile: View {
         }
         .pageTask(id: folder.relativePath) {
             let path = folder.relativePath
-            trackCount = TrackMeta.cachedTrackCount(under: path)
-            let count = await Task.detached { TrackMeta.trackCount(under: path) }.value
+            trackCount = EmbeddedTrackMeta.cachedTrackCount(under: path)
+            let count = await EmbeddedTrackMeta.remoteTrackCount(under: path)
             guard !Task.isCancelled else { return }
             trackCount = count
         }
     }
 }
 
-private struct MusicTrackTile: View {
-    let track: Track
+private struct EmbeddedMusicTrackTile: View {
+    let track: EmbeddedTrack
     let location: String?
     let isCurrent: Bool
     let isPlaying: Bool
     let theme: Color
     let blur: Bool
-    let moveTargets: [MoveTarget]
+    let moveTargets: [EmbeddedMoveTarget]
     let isFavourite: Bool
     let onOpenDetails: () -> Void
     let onRename: () -> Void
@@ -1045,7 +1046,7 @@ private struct MusicTrackTile: View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
             ZStack(alignment: .topTrailing) {
                 Button(action: onToggle) {
-                    PageArtworkThumb(track: track, size: MusicTile.artSize)
+                    EmbeddedPageArtworkThumb(track: track, size: EmbeddedMusicTile.artSize)
                         .overlay(alignment: .bottomTrailing) {
                             Image(
                                 systemName: isCurrent && isPlaying
@@ -1085,9 +1086,10 @@ private struct MusicTrackTile: View {
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                         .truncationMode(.head)
-                        .presenterBlur(location != nil && MusicPrivacyState.shared.hides(.music))
+                        .presenterBlur(
+                            location != nil && EmbeddedMusicPrivacyState.shared.hides(.music))
                 }
-                .frame(width: MusicTile.artSize)
+                .frame(width: EmbeddedMusicTile.artSize)
             }
             .buttonStyle(.edith(.borderless))
             .help("Show details")
@@ -1108,26 +1110,23 @@ private struct MusicTrackTile: View {
                 onOpenFolder: onOpenFolder)
         }
         .pageTask(id: track.id) {
-            duration = TrackMeta.cachedDurationLabel(for: track)
-            let value = await TrackMeta.durationLabel(for: track)
+            duration = EmbeddedTrackMeta.cachedDurationLabel(for: track)
+            let value = await EmbeddedTrackMeta.durationLabel(for: track)
             guard !Task.isCancelled else { return }
             duration = value
         }
     }
 }
 
-struct MusicDetailOverlay: View {
-    @State private var presenter = MusicDetailPresenter.shared
-    @State private var remote = MusicRemote.shared
-    @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
-        var mainWindowSection =
-        "music"
+struct EmbeddedMusicDetailOverlay: View {
+    @State private var presenter = EmbeddedMusicDetailPresenter.shared
+    @State private var remote = EmbeddedMusicRemote.shared
     @AppStorage(
         AppStorageKeys.General.theme,
         store: SharedDefaults.store) private var themeName =
         "accent"
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var deleteTarget: Track?
+    @State private var deleteTarget: EmbeddedTrack?
 
     private var theme: Color { themeColor(themeName) }
 
@@ -1144,7 +1143,7 @@ struct MusicDetailOverlay: View {
                     .onTapGesture { presenter.dismiss() }
                     .transition(.opacity)
                 GeometryReader { geometry in
-                    MusicDetailSheet(
+                    EmbeddedMusicDetailSheet(
                         track: track,
                         availableSize: geometry.size,
                         theme: theme,
@@ -1155,8 +1154,7 @@ struct MusicDetailOverlay: View {
                             deleteTarget = track
                         },
                         onOpenFolder: {
-                            remote.navigate(to: $0)
-                            mainWindowSection = "music"
+                            remote.send(.openMusic, path: $0, target: "folder")
                         },
                         onClose: { presenter.dismiss() }
                     )
@@ -1192,7 +1190,7 @@ struct MusicDetailOverlay: View {
             }
         } message: { track in
             Text(
-                MusicPrivacyState.shared.hides(.music)
+                EmbeddedMusicPrivacyState.shared.hides(.music)
                     ? "This track will be moved to the Trash."
                     : "\"\(track.title)\" will be moved to the Trash."
             )
@@ -1200,8 +1198,8 @@ struct MusicDetailOverlay: View {
     }
 }
 
-private struct MusicDetailSheet: View {
-    let track: Track
+private struct EmbeddedMusicDetailSheet: View {
+    let track: EmbeddedTrack
     let availableSize: CGSize
     let theme: Color
     let beginRename: Bool
@@ -1209,8 +1207,8 @@ private struct MusicDetailSheet: View {
     let onDelete: () -> Void
     let onOpenFolder: (String) -> Void
     let onClose: () -> Void
-    @State private var remote = MusicRemote.shared
-    @State private var presenter = MusicDetailPresenter.shared
+    @State private var remote = EmbeddedMusicRemote.shared
+    @State private var presenter = EmbeddedMusicDetailPresenter.shared
     @Environment(\.colorScheme) private var scheme
     @State private var name = ""
     @State private var namedTrack: URL?
@@ -1235,13 +1233,18 @@ private struct MusicDetailSheet: View {
                 max(0, availableSize.height - UIScale.pt(48)))
         )
         .background(sheetBackground)
-        .pageTask(id: track.id) {
+        .onChange(of: track.id, initial: true) {
             name = track.url.deletingPathExtension().lastPathComponent
             namedTrack = track.id
-            sourceURL = YoutubeDownloader.shared.sourceURL(
-                forFileNamed: track.url.lastPathComponent)
-            if beginRename { nameFocused = true }
             presenter.armRename(false)
+        }
+        .pageTask(id: track.id) {
+            if let data = try? await remote.request(
+                "music.ui.source", action: .init(kind: .startTrack, path: track.relativePath))
+            {
+                sourceURL = try? JSONDecoder().decode(URL.self, from: data)
+            }
+            if beginRename { nameFocused = true }
         }
     }
 
@@ -1306,9 +1309,9 @@ private struct MusicDetailSheet: View {
 
     @ViewBuilder private var stage: some View {
         if track.isVideo {
-            VideoStage(track: track, startAt: isCurrent ? remote.elapsed : 0)
+            EmbeddedMusicVideoArtwork(track: track)
                 .id(track.id)
-                .presenterCover(MusicPrivacyState.shared.hides(.music))
+                .presenterCover(EmbeddedMusicPrivacyState.shared.hides(.music))
                 .transition(.opacity)
         } else {
             artwork
@@ -1327,7 +1330,7 @@ private struct MusicDetailSheet: View {
                 Text(parent.isEmpty ? "Music" : parent.replacingOccurrences(of: "/", with: " / "))
                     .lineLimit(1)
                     .truncationMode(.head)
-                    .presenterBlur(MusicPrivacyState.shared.hides(.music))
+                    .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
                 Image(systemName: "arrow.right")
                     .font(.system(size: UIScale.pt(8), weight: .semibold))
             }
@@ -1343,7 +1346,7 @@ private struct MusicDetailSheet: View {
     }
 
     private var artwork: some View {
-        PageArtworkThumb(track: track, size: 196)
+        EmbeddedPageArtworkThumb(track: track, size: 196)
             .shadow(color: .black.opacity(0.3), radius: UIScale.pt(16), y: UIScale.pt(8))
             .overlay(alignment: .bottomTrailing) {
                 Button {
@@ -1356,7 +1359,7 @@ private struct MusicDetailSheet: View {
                         .contentShape(Circle())
                 }
                 .buttonStyle(.edith(.borderless))
-                .liquidGlass(in: Circle(), tint: theme, interactive: true, dark: dark)
+                .embeddedLiquidGlass(in: Circle(), tint: theme, interactive: true, dark: dark)
                 .shadow(color: .black.opacity(0.28), radius: UIScale.pt(8), y: UIScale.pt(3))
                 .help(isPlaying ? "Pause" : "Play")
                 .offset(x: UIScale.pt(10), y: UIScale.pt(10))
@@ -1369,7 +1372,7 @@ private struct MusicDetailSheet: View {
             .font(.system(size: UIScale.pt(17), weight: .semibold))
             .multilineTextAlignment(.center)
             .foregroundStyle(DashSkin.ink(dark))
-            .presenterBlur(MusicPrivacyState.shared.hides(.music))
+            .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
             .focused($nameFocused)
             .padding(.horizontal, UIScale.pt(14))
             .padding(.vertical, UIScale.pt(10))
@@ -1387,16 +1390,17 @@ private struct MusicDetailSheet: View {
 
     private var playerBlock: some View {
         VStack(spacing: UIScale.pt(8)) {
-            SeekBar(theme: theme, height: UIScale.pt(5))
+            EmbeddedSeekBar(theme: theme, height: UIScale.pt(5))
             HStack {
-                ticker { Text(TrackMeta.timeLabel(remote.elapsed)) }
+                ticker { Text(EmbeddedTrackMeta.timeLabel(remote.elapsed)) }
                 Spacer()
                 Label(isPlaying ? "Now Playing" : "Paused", systemImage: "waveform")
                     .font(.system(size: UIScale.pt(10.5), weight: .medium))
                     .foregroundStyle(theme)
                 Spacer()
                 ticker {
-                    Text("-" + TrackMeta.timeLabel(max(remote.duration - remote.elapsed, 0)))
+                    Text(
+                        "-" + EmbeddedTrackMeta.timeLabel(max(remote.duration - remote.elapsed, 0)))
                 }
             }
             .font(.system(size: UIScale.pt(10.5)))
@@ -1409,14 +1413,16 @@ private struct MusicDetailSheet: View {
     private func ticker<Content: View>(@ViewBuilder _ content: @escaping () -> Content) -> some View
     {
         if isPlaying {
-            TimelineView(.periodic(from: MusicTick.epoch, by: 1)) { _ in content() }
+            TimelineView(.periodic(from: EmbeddedMusicTick.epoch, by: 1)) { _ in content() }
         } else {
             content()
         }
     }
 
     private func youtubeLink(_ url: URL) -> some View {
-        Link(destination: url) {
+        Button {
+            remote.send(.openSource, path: track.relativePath)
+        } label: {
             HStack(spacing: UIScale.pt(6)) {
                 Image(systemName: "play.rectangle.fill")
                 Text("Open original on YouTube")
@@ -1477,7 +1483,7 @@ private struct MusicDetailSheet: View {
 }
 
 @available(macOS 26, *)
-private enum GlassStyle {
+private enum EmbeddedGlassStyle {
     static func make(tint: Color?, interactive: Bool) -> Glass {
         var glass = Glass.regular
         if let tint { glass = glass.tint(tint) }
@@ -1488,11 +1494,12 @@ private enum GlassStyle {
 
 extension View {
     @ViewBuilder
-    func liquidGlass<S: InsettableShape>(
+    func embeddedLiquidGlass<S: InsettableShape>(
         in shape: S, tint: Color? = nil, interactive: Bool = false, dark: Bool = false
     ) -> some View {
         if #available(macOS 26, *) {
-            self.glassEffect(GlassStyle.make(tint: tint, interactive: interactive), in: shape)
+            self.glassEffect(
+                EmbeddedGlassStyle.make(tint: tint, interactive: interactive), in: shape)
         } else {
             self
                 .background((tint ?? .clear).opacity(tint == nil ? 0 : 0.28), in: shape)
@@ -1502,24 +1509,21 @@ extension View {
     }
 }
 
-struct MusicFooter: View {
-    @State private var accounts = MusicAccounts.shared
-    init(accounts: MusicAccounts? = nil) {
+struct EmbeddedMusicFooter: View {
+    @State private var accounts = EmbeddedMusicAccounts.shared
+    init(accounts: EmbeddedMusicAccounts? = nil) {
         _accounts = State(initialValue: accounts ?? .shared)
     }
     @State private var playerOptionsPresented = false
-    @State private var remote = MusicRemote.shared
+    @State private var remote = EmbeddedMusicRemote.shared
     @Environment(\.windowVisible) private var visible
-    @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
-        var mainWindowSection =
-        "music"
     @AppStorage(
         AppStorageKeys.General.theme,
         store: SharedDefaults.store) private var themeName =
         "accent"
     @AppStorage(AppStorageKeys.Music.barCollapsed, store: SharedDefaults.store) private
         var collapsed = false
-    private var presenterState = MusicPrivacyState.shared
+    private var presenterState = EmbeddedMusicPrivacyState.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -1542,14 +1546,14 @@ struct MusicFooter: View {
             } else {
                 Group {
                     if accounts.selected == .spotify {
-                        MusicStreamingControls(accounts: accounts).padding(
+                        EmbeddedMusicStreamingControls(accounts: accounts).padding(
                             .horizontal, UIScale.pt(22))
                     } else if accounts.selected == .youtubeMusic {
                         HStack {
                             Label("YouTube Music", systemImage: "play.circle")
                             Spacer()
                             Button("Open player") {
-                                mainWindowSection = "music"
+                                EmbeddedMusicRemote.shared.send(.openMusic)
                             }
                         }
                         .font(Font.edithText(.body))
@@ -1599,6 +1603,7 @@ struct MusicFooter: View {
     private var collapseToggle: some View {
         Button {
             collapsed.toggle()
+            EmbeddedMusicRemote.shared.send(.barCollapsed, value: collapsed ? 1 : 0)
         } label: {
             Image(systemName: "chevron.up")
                 .font(.system(size: UIScale.pt(10), weight: .semibold))
@@ -1614,14 +1619,14 @@ struct MusicFooter: View {
         .accessibilityLabel(collapsed ? "Show the player bar" : "Collapse the player bar")
     }
 
-    private func playing(_ track: Track) -> some View {
+    private func playing(_ track: EmbeddedTrack) -> some View {
         ViewThatFits(in: .horizontal) {
             playingControls(track, compact: false).frame(minWidth: UIScale.pt(820))
             playingControls(track, compact: true)
         }
     }
 
-    private func playingControls(_ track: Track, compact: Bool) -> some View {
+    private func playingControls(_ track: EmbeddedTrack, compact: Bool) -> some View {
         HStack(spacing: UIScale.pt(14)) {
             trackInfo(track)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1652,12 +1657,12 @@ struct MusicFooter: View {
         .padding(.horizontal, UIScale.pt(22))
     }
 
-    private func trackInfo(_ track: Track) -> some View {
+    private func trackInfo(_ track: EmbeddedTrack) -> some View {
         HStack(spacing: UIScale.pt(11)) {
             Button {
-                MusicDetailPresenter.shared.show(track)
+                EmbeddedMusicDetailPresenter.shared.show(track)
             } label: {
-                PageArtworkThumb(track: track, size: 44)
+                EmbeddedPageArtworkThumb(track: track, size: 44)
             }
             .buttonStyle(.edith(.borderless))
             .help(track.isVideo ? "Watch this video" : "Show details")
@@ -1675,7 +1680,7 @@ struct MusicFooter: View {
                             .foregroundStyle(.secondary)
                             .frame(width: UIScale.pt(78), alignment: .leading)
                     }
-                    PlaybackWave(
+                    EmbeddedPlaybackWave(
                         playing: remote.isPlaying && visible, color: theme.opacity(0.9),
                         maxHeight: UIScale.pt(13))
                 }
@@ -1717,18 +1722,18 @@ struct MusicFooter: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.edith(.borderless))
-        .liquidGlass(in: Circle(), tint: tint, interactive: true, dark: dark)
+        .embeddedLiquidGlass(in: Circle(), tint: tint, interactive: true, dark: dark)
     }
 
     private var scrubber: some View {
         HStack(spacing: UIScale.pt(10)) {
             timeTicker {
-                Text(TrackMeta.timeLabel(remote.elapsed))
+                Text(EmbeddedTrackMeta.timeLabel(remote.elapsed))
                     .frame(width: UIScale.pt(42), alignment: .trailing)
             }
-            SeekBar(theme: theme, height: UIScale.pt(4))
+            EmbeddedSeekBar(theme: theme, height: UIScale.pt(4))
             timeTicker {
-                Text("-" + TrackMeta.timeLabel(max(remote.duration - remote.elapsed, 0)))
+                Text("-" + EmbeddedTrackMeta.timeLabel(max(remote.duration - remote.elapsed, 0)))
                     .frame(width: UIScale.pt(46), alignment: .leading)
             }
         }
@@ -1742,7 +1747,7 @@ struct MusicFooter: View {
         -> some View
     {
         if remote.isPlaying, visible {
-            TimelineView(.periodic(from: MusicTick.epoch, by: 1)) { _ in content() }
+            TimelineView(.periodic(from: EmbeddedMusicTick.epoch, by: 1)) { _ in content() }
         } else {
             content()
         }
@@ -1790,7 +1795,7 @@ struct MusicFooter: View {
             }
             .padding(.horizontal, UIScale.pt(12))
             .padding(.vertical, UIScale.pt(7))
-            .liquidGlass(in: Capsule(), dark: dark)
+            .embeddedLiquidGlass(in: Capsule(), dark: dark)
         }
     }
 
@@ -1804,7 +1809,7 @@ struct MusicFooter: View {
                 .foregroundStyle(.secondary)
             Spacer()
             Button {
-                mainWindowSection = "music"
+                remote.send(.openMusic)
             } label: {
                 Text("Browse music")
                     .font(.system(size: UIScale.pt(11), weight: .medium))
@@ -1816,15 +1821,15 @@ struct MusicFooter: View {
     }
 }
 
-private struct PageArtworkThumb: View {
-    let track: Track
+private struct EmbeddedPageArtworkThumb: View {
+    let track: EmbeddedTrack
     let size: CGFloat
     @State private var artwork: NSImage?
 
-    init(track: Track, size: CGFloat = 36) {
+    init(track: EmbeddedTrack, size: CGFloat = 36) {
         self.track = track
         self.size = size
-        _artwork = State(initialValue: TrackMeta.artworkCached(for: track))
+        _artwork = State(initialValue: EmbeddedTrackMeta.artworkCached(for: track))
     }
 
     var body: some View {
@@ -1849,31 +1854,31 @@ private struct PageArtworkThumb: View {
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: size * 0.22))
-        .presenterCover(MusicPrivacyState.shared.hides(.music))
+        .presenterCover(EmbeddedMusicPrivacyState.shared.hides(.music))
         .pageTask(id: track.id) {
-            if track.isVideo, TrackMeta.artworkCached(for: track) == nil {
+            if track.isVideo, EmbeddedTrackMeta.artworkCached(for: track) == nil {
                 try? await Task.sleep(for: .milliseconds(250))
                 guard !Task.isCancelled else { return }
             }
-            let loaded = await TrackMeta.artwork(for: track)
+            let loaded = await EmbeddedTrackMeta.artwork(for: track)
             guard !Task.isCancelled else { return }
             artwork = loaded
         }
     }
 }
 
-enum MusicBarProgress {
+enum EmbeddedMusicBarProgress {
     static func fraction(elapsed: Double, duration: Double) -> Double {
         guard duration > 0 else { return 0 }
         return min(1, max(0, elapsed / duration))
     }
 }
 
-struct MusicSidebarPill: View {
+struct EmbeddedMusicSidebarPill: View {
     let theme: Color
     let expand: () -> Void
-    @State private var remote = MusicRemote.shared
-    @State private var accounts = MusicAccounts.shared
+    @State private var remote = EmbeddedMusicRemote.shared
+    @State private var accounts = EmbeddedMusicAccounts.shared
     @Environment(\.windowVisible) private var visible
 
     private var progress: Double {
@@ -1891,10 +1896,10 @@ struct MusicSidebarPill: View {
                         .font(.system(size: UIScale.pt(11.5), weight: .medium))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                        .presenterBlur(MusicPrivacyState.shared.hides(.music))
+                        .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
                     Spacer(minLength: 0)
                     if accounts.playerTitle != nil {
-                        PlaybackWave(
+                        EmbeddedPlaybackWave(
                             playing: accounts.isPlaying && visible,
                             color: theme.opacity(0.9), maxHeight: UIScale.pt(9))
                     }

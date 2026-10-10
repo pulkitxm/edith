@@ -15,26 +15,34 @@ final class MusicWorker {
     private var artwork: [URL: SurfaceThumbnail] = [:]
     private var stopped = false
     private let tasks = MusicTaskOwner()
+    var browserPresentation: MusicBrowserPresentation?
+    var videoPresentation: MusicVideoPlayback?
 
     init(
         player: LocalMusicPlayer? = nil, external: ExternalMusic? = nil,
-        accounts: MusicAccounts? = nil
+        accounts: MusicAccounts? = nil, startImmediately: Bool = true
     ) {
         self.player = player ?? LocalMusicPlayer()
         self.external = external ?? ExternalMusic()
         self.accounts = accounts ?? .shared
-        self.external.start()
-        tasks.start { try? await DownloadWorker.shared.start() }
+        self.accounts.presentationOwnedYoutube = true
+        if startImmediately {
+            self.accounts.activate()
+            self.external.start()
+            tasks.start { try? await DownloadWorker.shared.start() }
+        }
     }
 
     func read(_ tile: SurfaceTile) async throws -> [MusicSurfacePlayback] {
         guard !stopped else { throw ExtensionPeerError.unavailable }
         var result: [MusicSurfacePlayback] = []
-        let track = player.current
+        let track = videoPresentation?.track ?? player.current
         var local = MusicSurfacePlayback(
             sourceID: "local", sourceTitle: "Local library", trackKey: track?.relativePath ?? "",
-            title: track?.title ?? "", playing: player.isPlaying, elapsed: player.elapsed,
-            duration: player.trackDuration, volume: player.volume, shuffle: player.isShuffling,
+            title: track?.title ?? "", playing: videoPresentation?.playing ?? player.isPlaying,
+            elapsed: videoPresentation?.elapsed ?? player.elapsed,
+            duration: videoPresentation?.duration ?? player.trackDuration,
+            volume: videoPresentation?.volume ?? player.volume, shuffle: player.isShuffling,
             repeating: player.isLooping)
         if tile.shows("queue") {
             local.queue = await player.upcoming(limit: 10).map {
@@ -57,36 +65,11 @@ final class MusicWorker {
             if tile.shows("artwork"), tile.sourceIDs?.contains("spotify") ?? true,
                 let url = spotify.artworkURL
             {
-                value.thumbnail = try await thumbnail(url)
+                value.thumbnail = try await streamingThumbnail(url)
             }
             result.append(value)
         }
-        if accounts.youtubeConnected, let view = accounts.youtubeView {
-            let metadata =
-                try? await view.evaluateJavaScript(
-                    """
-                    (() => { const video = document.querySelector('video');
-                        if (!video) return null;
-                        return { key: video.currentSrc || location.href,
-                            title: document.querySelector('ytmusic-player-bar .title')?.textContent || document.title,
-                            artist: document.querySelector('ytmusic-player-bar .byline')?.textContent || '',
-                            playing: !video.paused, elapsed: video.currentTime,
-                            duration: Number.isFinite(video.duration) ? video.duration : 0,
-                            volume: video.volume }; })()
-                    """) as? [String: Any]
-            if let metadata {
-                result.append(
-                    .init(
-                        sourceID: "youtubeMusic", sourceTitle: "YouTube Music",
-                        trackKey: metadata["key"] as? String ?? "",
-                        title: metadata["title"] as? String ?? "YouTube Music",
-                        artist: metadata["artist"] as? String ?? "",
-                        playing: metadata["playing"] as? Bool ?? false,
-                        elapsed: metadata["elapsed"] as? Double ?? 0,
-                        duration: metadata["duration"] as? Double ?? 0,
-                        volume: metadata["volume"] as? Double ?? 0.7))
-            }
-        }
+        if let metadata = browserPresentation?.metadata { result.append(metadata) }
         if let track = external.current {
             let playback = external.playback
             result.append(
@@ -96,17 +79,70 @@ final class MusicWorker {
                     artist: track.artist,
                     playing: track.isPlaying, elapsed: playback?.elapsed() ?? 0,
                     duration: track.duration,
-                    volume: playback?.volume ?? 0.7, shuffle: playback?.shuffling,
-                    repeating: playback?.repeating))
+                    volume: playback?.volume ?? 0.7, seekable: playback != nil,
+                    volumeAvailable: playback != nil,
+                    shuffle: playback?.canShuffle == true ? playback?.shuffling : nil,
+                    repeating: playback?.canRepeat == true ? playback?.repeating : nil))
         }
         try Task.checkCancellation()
         guard !stopped else { throw ExtensionPeerError.unavailable }
         return result
     }
 
+    func readNotch(_ tile: SurfaceTile) async throws -> [MusicSurfacePlayback] {
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        await external.refreshPresentationPlayback()
+        try Task.checkCancellation()
+        return try await read(tile)
+    }
+
+    func retryNotch(_ tile: SurfaceTile) async throws -> [MusicSurfacePlayback] {
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        await external.refreshPresentationPlayback(force: true)
+        try Task.checkCancellation()
+        return try await read(tile)
+    }
+
+    func notchAppIcon(_ sourceID: String) -> SurfaceThumbnail? {
+        guard
+            let app = ExternalApp.allCases.first(where: {
+                sourceID == "external." + $0.rawValue || sourceID == $0.rawValue
+            })
+        else { return nil }
+        if let icon = NSRunningApplication.runningApplications(
+            withBundleIdentifier: app.bundleID
+        ).first?.icon {
+            return Self.thumbnail(icon)
+        }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleID)
+        else { return nil }
+        return Self.thumbnail(NSWorkspace.shared.icon(forFile: url.path))
+    }
+
     func perform(_ command: MusicSurfaceCommand) async throws {
         guard !stopped else { throw ExtensionPeerError.unavailable }
-        if command.action == "open" { ExtensionPresentation.showWindow(); return }
+        if ["open", "openPlayer"].contains(command.action) {
+            if let app = ExternalApp.allCases.first(where: {
+                command.sourceID == "external." + $0.rawValue
+            }) {
+                guard
+                    let url = NSWorkspace.shared.urlForApplication(
+                        withBundleIdentifier: app.bundleID)
+                else {
+                    throw ExtensionPeerError.unavailable
+                }
+                _ = try await NSWorkspace.shared.openApplication(
+                    at: url, configuration: NSWorkspace.OpenConfiguration())
+            } else {
+                let path =
+                    command.sourceID == "local" && command.action == "open"
+                    ? (command.trackKey as NSString).deletingLastPathComponent : nil
+                try await MusicHostNavigation.open(
+                    path: path, presentationID: command.presentationID,
+                    location: command.presentationID == nil ? nil : "notch")
+            }
+            return
+        }
         if command.sourceID == "local" {
             if command.action == "playQueue" {
                 guard
@@ -114,14 +150,17 @@ final class MusicWorker {
                         $0.relativePath == command.trackKey
                     })
                 else { throw ExtensionPeerError.invalidRequest }
-                try Task.checkCancellation(); player.toggle(track); return
+                try Task.checkCancellation(); player.perform(.startTrack(track.relativePath));
+                return
             }
-            guard player.current?.relativePath == command.trackKey else {
+            guard (videoPresentation?.track ?? player.current)?.relativePath == command.trackKey
+            else {
                 throw ExtensionPeerError.invalidRequest
             }
             player.perform(
                 try transport(
-                    command, elapsed: player.elapsed, duration: player.trackDuration,
+                    command, elapsed: videoPresentation?.elapsed ?? player.elapsed,
+                    duration: videoPresentation?.duration ?? player.trackDuration,
                     shuffle: player.isShuffling, repeating: player.isLooping))
         } else if command.sourceID == "spotify" {
             let spotify = accounts.spotify
@@ -147,26 +186,10 @@ final class MusicWorker {
                 ])
             default: throw ExtensionPeerError.invalidRequest
             }
-        } else if command.sourceID == "youtubeMusic", let view = accounts.youtubeView {
-            let script: String
-            switch command.action {
-            case "toggle": script = "video.paused ? video.play() : video.pause()"
-            case "next":
-                script = "document.querySelector('ytmusic-player-bar #next-button')?.click()"
-            case "previous":
-                script = "document.querySelector('ytmusic-player-bar #previous-button')?.click()"
-            case "backward": script = "video.currentTime = Math.max(0, video.currentTime - 15)"
-            case "forward":
-                script = "video.currentTime = Math.min(video.duration, video.currentTime + 15)"
-            case "seek":
-                script =
-                    "video.currentTime = video.duration * \(UnitInterval.clamp(command.value ?? 0))"
-            case "volume": script = "video.volume = \(UnitInterval.clamp(command.value ?? 0))"
-            default: throw ExtensionPeerError.invalidRequest
-            }
-            _ = try await view.evaluateJavaScript(
-                "(() => { const video = document.querySelector('video'); if (video) { \(script); } })()"
-            )
+        } else if command.sourceID == "youtubeMusic", let browserPresentation,
+            browserPresentation.metadata?.trackKey == command.trackKey
+        {
+            try browserPresentation.send(command.action, value: command.value)
         } else if let track = external.current,
             command.sourceID == "external." + track.app.rawValue,
             command.trackKey == track.title + "\0" + track.artist
@@ -190,6 +213,8 @@ final class MusicWorker {
     func stop() {
         guard !stopped else { return }
         stopped = true
+        videoPresentation?.stop(); videoPresentation = nil
+        browserPresentation?.stop(); browserPresentation = nil
         tasks.shutdown()
         session.invalidateAndCancel(); artwork.removeAll()
         player.shutdown(); external.stop(); accounts.shutdown()
@@ -216,7 +241,7 @@ final class MusicWorker {
         }
     }
 
-    private func thumbnail(_ url: URL) async throws -> SurfaceThumbnail? {
+    func streamingThumbnail(_ url: URL) async throws -> SurfaceThumbnail? {
         if let cached = artwork[url] { return cached }
         let (bytes, response) = try await session.bytes(from: url)
         guard let response = response as? HTTPURLResponse, response.statusCode == 200,
@@ -251,7 +276,7 @@ final class MusicWorker {
         return value
     }
 
-    private static func thumbnail(_ image: NSImage) -> SurfaceThumbnail? {
+    static func thumbnail(_ image: NSImage) -> SurfaceThumbnail? {
         guard
             let bitmap = NSBitmapImageRep(
                 bitmapDataPlanes: nil, pixelsWide: 160, pixelsHigh: 160,

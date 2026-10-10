@@ -82,6 +82,9 @@ final class ExternalMusic {
     private var pollingTask: Task<Void, Never>?
     private var commandTask: Task<Void, Never>?
     private var observingPlayback = false
+    private var generation: UInt64 = 0
+    private var presentationSample = Date.distantPast
+    private var presentationTask: Task<Void, Never>?
 
     private var observers: [(ExternalApp, NSObjectProtocol)] = []
 
@@ -113,6 +116,8 @@ final class ExternalMusic {
     }
 
     func stop() {
+        generation &+= 1; presentationSample = .distantPast
+        presentationTask?.cancel(); presentationTask = nil
         let center = DistributedNotificationCenter.default()
         for (_, observer) in observers { center.removeObserver(observer) }
         observers.removeAll()
@@ -172,7 +177,26 @@ final class ExternalMusic {
         commandTask = Task { [weak self] in await self?.refreshPlayback(app: app) }
     }
 
+    func refreshPresentationPlayback(force: Bool = false) async {
+        if force { presentationSample = .distantPast; lastError = nil }
+        if let task = presentationTask { await task.value; return }
+        guard let app = current?.app, Date().timeIntervalSince(presentationSample) >= 2 else {
+            return
+        }
+        presentationSample = .now
+        let token = generation
+        let task = Task<Void, Never> { [weak self] in
+            guard let self else { return }
+            await self.refreshPlayback(app: app)
+        }
+        presentationTask = task
+        await withTaskCancellationHandler(
+            operation: { await task.value }, onCancel: { task.cancel() })
+        if generation == token { presentationTask = nil }
+    }
+
     private func refreshPlayback(app: ExternalApp, command: String? = nil) async {
+        let token = generation
         guard !NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleID).isEmpty
         else {
             if current?.app == app { current = nil; playback = nil }
@@ -180,13 +204,14 @@ final class ExternalMusic {
         }
         do {
             let next = try await runner.run(app: app, command: command)
-            guard !Task.isCancelled,
+            guard !Task.isCancelled, generation == token,
                 ExternalNowPlaying.accepts(app: app, existing: current, incoming: next?.track)
             else { return }
             playback = next; current = next?.track; lastError = nil
             broadcast()
         } catch {
-            guard (current == nil || current?.app == app), !Task.isCancelled else { return }
+            guard generation == token, (current == nil || current?.app == app), !Task.isCancelled
+            else { return }
             lastError = error.localizedDescription
         }
     }

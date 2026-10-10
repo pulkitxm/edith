@@ -69,19 +69,19 @@ extension MusicExtensionTests {
                         let window = TestWindowHost.window(contentRect: host.frame)
                         window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
                         host.appearance = window.appearance
-                        window.contentView = host; window.orderBack(nil)
+                        window.contentView = host
                         for _ in 0..<8 {
                             window.layoutIfNeeded(); host.layoutSubtreeIfNeeded();
                             window.displayIfNeeded(); host.display()
                             try await Task.sleep(for: .milliseconds(25))
                         }
                         #expect(abs(host.bounds.width - width) < 1)
+                        #expect(!window.isVisible)
                         #expect(!TestWindowHost.isExposedOnDesktop(window))
                         try capture(
                             host,
                             name: "music-" + section.rawValue.lowercased() + "-" + name + "-"
                                 + (scheme == .dark ? "dark" : "light"))
-                        window.orderOut(nil)
                     }
                 }
             }

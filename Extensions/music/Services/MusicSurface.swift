@@ -17,6 +17,8 @@ struct MusicSurfacePlayback: Equatable, Sendable {
     var elapsed = 0.0
     var duration = 0.0
     var volume = 0.7
+    var seekable = true
+    var volumeAvailable = true
     var shuffle: Bool?
     var repeating: Bool?
     var thumbnail: SurfaceThumbnail?
@@ -37,59 +39,135 @@ struct MusicSurfaceCommand: Equatable, Sendable {
     var trackKey: String
     var action: String
     var value: Double?
+    var presentationID: UUID? = nil
 }
 
 @MainActor
 final class MusicSurface {
     typealias Read = @MainActor (SurfaceTile) async throws -> [MusicSurfacePlayback]
     typealias Perform = @MainActor (MusicSurfaceCommand) async throws -> Void
+    private let version: String
+    private let appIcon: @MainActor (String) -> SurfaceThumbnail?
+    private let readRetry: Read
+    private let controlError: @MainActor () -> String?
+    private let readNotch: Read
     private let read: Read
     private let perform: Perform
     private let privacyValues: @MainActor () -> [String: String]
 
     init(
-        read: @escaping Read, perform: @escaping Perform,
+        read: @escaping Read, perform: @escaping Perform, readNotch: Read? = nil,
+        readRetry: Read? = nil, controlError: @escaping @MainActor () -> String? = { nil },
+        version: String = "1.0.0",
+        appIcon: @escaping @MainActor (String) -> SurfaceThumbnail? = { _ in nil },
         privacyValues: @escaping @MainActor () -> [String: String] = {
             ExtensionSharedState.current?.values(for: "presenter") ?? [:]
         }
     ) {
         self.read = read; self.perform = perform; self.privacyValues = privacyValues
+        self.version = version; self.appIcon = appIcon; self.readNotch = readNotch ?? read;
+        self.readRetry = readRetry ?? readNotch ?? read
+        self.controlError = controlError
     }
 
     func execute(_ command: String, payload: Data) async throws -> Data {
-        let request: SurfaceSnapshotRequest
-        if command == "surface.perform" {
-            request = try SurfaceActionRequest.decode(payload, providerID: "music").snapshot
+        let operation: String
+        let body: Data
+        let presentationID: UUID?
+        if command == "music.notch.perform" {
+            let action = try MusicNotchActionRequest.decode(payload)
+            operation = "surface.perform"; body = try action.action.encoded(providerID: "music")
+            presentationID = action.presentationID
         } else {
-            request = try SurfaceSnapshotRequest.decode(payload, providerID: "music")
+            operation = command; body = payload; presentationID = nil
+        }
+        let request: SurfaceSnapshotRequest
+        if operation == "surface.perform" {
+            request = try SurfaceActionRequest.decode(body, providerID: "music").snapshot
+        } else {
+            request = try SurfaceSnapshotRequest.decode(body, providerID: "music")
+        }
+        if ["music.notch.snapshot", "music.notch.glance", "music.notch.retry"].contains(command) {
+            guard request.target == .notch, request.tile.widget == .music else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            if SurfacePrivacyState.hides(.music, values: privacyValues()) {
+                return try MusicNotchState(
+                    version: version,
+                    snapshot: .init(providerID: "music", message: "Hidden while presenting."),
+                    playback: []
+                ).encoded()
+            }
+            let states: [MusicSurfacePlayback]
+            switch command {
+            case "music.notch.glance": states = try await read(request.tile)
+            case "music.notch.retry": states = try await readRetry(request.tile)
+            default: states = try await readNotch(request.tile)
+            }
+            try Task.checkCancellation()
+            guard !SurfacePrivacyState.hides(.music, values: privacyValues()) else {
+                return try MusicNotchState(
+                    version: version,
+                    snapshot: .init(providerID: "music", message: "Hidden while presenting."),
+                    playback: []
+                ).encoded()
+            }
+            let snapshot = SurfaceCommandService.project(
+                Self.snapshot(states, tile: request.tile, target: .notch), tile: request.tile)
+            let playback = states.compactMap { state -> MusicNotchPlayback? in
+                let rowID = state.sourceID + ":" + state.token
+                guard !state.trackKey.isEmpty, snapshot.rows.contains(where: { $0.id == rowID })
+                else { return nil }
+                return .init(
+                    rowID: rowID,
+                    sourceName: state.sourceID == "local" ? "Music" : state.sourceTitle,
+                    playing: state.playing,
+                    elapsed: request.tile.shows("progress")
+                        ? max(0, min(state.elapsed, 86_400)) : 0,
+                    duration: request.tile.shows("progress")
+                        ? max(0, min(state.duration, 86_400)) : 0,
+                    shuffle: request.tile.shows("shuffle") ? state.shuffle : nil,
+                    repeating: request.tile.shows("repeat") ? state.repeating : nil,
+                    appIcon: appIcon(state.sourceID))
+            }
+            return try MusicNotchState(
+                version: version, snapshot: snapshot, playback: playback,
+                controlError: controlError()
+            )
+            .encoded()
         }
         return try await SurfaceCommandService.execute(
-            providerID: "music", command: command, payload: payload,
+            providerID: "music", command: operation, payload: body,
             snapshot: { [self] tile in
                 Self.snapshot(try await read(tile), tile: tile, target: request.target)
             },
             perform: { [self] identifier in
-                try await dispatch(identifier, value: nil, tile: request.tile)
+                try await dispatch(
+                    identifier, value: nil, tile: request.tile, presentationID: presentationID)
             },
             adjust: { [self] identifier, value in
-                try await dispatch(identifier, value: value, tile: request.tile)
+                try await dispatch(
+                    identifier, value: value, tile: request.tile, presentationID: presentationID)
             },
             privacyValues: privacyValues)
     }
 
-    private func dispatch(_ identifier: String, value: Double?, tile: SurfaceTile) async throws {
+    private func dispatch(
+        _ identifier: String, value: Double?, tile: SurfaceTile, presentationID: UUID?
+    ) async throws {
         let states = try await read(tile)
         try Task.checkCancellation()
         for state in states {
             let commands = [
-                "open", "toggle", "previous", "next", "shuffle", "repeat", "backward", "forward",
+                "open", "openPlayer", "toggle", "previous", "next", "shuffle", "repeat", "backward",
+                "forward",
                 "seek", "volume",
             ]
             if let action = commands.first(where: { state.identifier($0) == identifier }) {
                 try await perform(
                     .init(
                         sourceID: state.sourceID, trackKey: state.trackKey, action: action,
-                        value: value))
+                        value: value, presentationID: presentationID))
                 return
             }
             if let track = state.queue.first(where: { state.queuedIdentifier($0) == identifier }) {
@@ -147,17 +225,19 @@ final class MusicSurface {
             }
             var sliders: [SurfaceSlider] = []
             if playing, target == .notch {
-                if state.duration > 0 {
+                if state.duration > 0, state.seekable {
                     sliders.append(
                         .init(
                             state.identifier("seek"), "Playback position", "clock",
                             value: UnitInterval.clamp(state.elapsed / state.duration),
                             field: "progress"))
                 }
-                sliders.append(
-                    .init(
-                        state.identifier("volume"), "Volume", "speaker.wave.2.fill",
-                        value: UnitInterval.clamp(state.volume), field: "volume"))
+                if state.volumeAvailable {
+                    sliders.append(
+                        .init(
+                            state.identifier("volume"), "Volume", "speaker.wave.2.fill",
+                            value: UnitInterval.clamp(state.volume), field: "volume"))
+                }
             }
             rows.append(
                 .init(
@@ -190,6 +270,10 @@ final class MusicSurface {
         }
         return .init(
             providerID: "music", rows: rows,
+            actions: target == .notch
+                ? Array(ordered.prefix(8)).map {
+                    .init($0.identifier("openPlayer"), "Open player", "arrow.up.forward.app")
+                } : [],
             sources: states.map { .init($0.sourceID, $0.sourceTitle) },
             message: rows.isEmpty ? "No available player in this selection." : nil, updatedAt: .now)
     }

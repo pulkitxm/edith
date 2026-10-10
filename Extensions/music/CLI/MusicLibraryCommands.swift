@@ -1,0 +1,720 @@
+import ArgumentParser
+import EdithExtensionCommands
+import EdithExtensionSupport
+import Foundation
+
+@MainActor enum LibraryBridge {
+    static func requireFolder() throws {
+        guard
+            MusicStorage.selectedMusicDirectory(
+                defaults: MusicCLIEnvironment.sharedDefaults,
+                homeDirectory: MusicCLIEnvironment.homeDirectory) != nil
+        else {
+            throw CLIFailure.unavailable(
+                "no music folder is set",
+                hint: "choose one in Edith under Music, or run `ed music library ~/Music`")
+        }
+    }
+
+    static func track(_ query: String) throws -> Track {
+        try requireFolder()
+        if let exact = try? MusicLibrary.track(at: query) { return exact }
+        let needle = query.lowercased()
+        let all = TrackMeta.scanMusicFolder()
+        let matches = all.filter {
+            $0.relativePath.lowercased().contains(needle)
+                || $0.title.lowercased().contains(needle)
+        }
+        if matches.count == 1, let only = matches.first { return only }
+        if matches.count > 1 {
+            throw CLIFailure.notFound(
+                "\(query) matches \(matches.count) tracks",
+                hint: matches.prefix(5).map(\.relativePath).joined(separator: ", "))
+        }
+        throw CLIFailure.notFound(
+            "no track matching \(query)", hint: "run `ed music ls` to see what is there")
+    }
+
+    static func folder(_ path: String) throws -> MusicFolder {
+        try requireFolder()
+        do {
+            return try MusicLibrary.folder(at: path)
+        } catch {
+            throw CLIFailure.notFound(
+                "no folder called \(path)", hint: "run `ed music ls --folders` to see them")
+        }
+    }
+
+    static func fail(_ error: Error) -> CLIFailure {
+        guard let library = error as? MusicLibraryError else {
+            return CLIFailure(error.localizedDescription)
+        }
+        switch library {
+        case .emptyName: return CLIFailure("a name cannot be blank")
+        case let .alreadyThere(path): return CLIFailure("\(path) is already there")
+        case let .noSuchTrack(path): return CLIFailure.notFound("no track at \(path)")
+        case let .noSuchFolder(path): return CLIFailure.notFound("no folder at \(path)")
+        case let .failed(message): return CLIFailure(message)
+        }
+    }
+
+    static func announce() {
+        MusicCLIEnvironment.refreshLibrary()
+    }
+
+    static func send(_ request: MusicTransportRequest) {
+        MusicCLIEnvironment.sendBuiltin(request)
+    }
+
+    static func json(_ track: Track) -> JSONValue {
+        .object([
+            "path": .string(track.relativePath),
+            "title": .string(track.title),
+            "file": .string(track.url.lastPathComponent),
+        ])
+    }
+}
+
+@MainActor struct MusicLibraryFolderCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "library", abstract: "Choose the folder Edith uses as its music library.",
+        discussion: """
+            Chooses the folder Edith uses as its local music library.
+
+            Changes the state this command names.
+
+            ed music library /etc/os-release
+            ed music library /etc/os-release --json
+            """, )
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Folder to use. A leading tilde expands to your home folder.")
+    var path: String
+
+    func run() async throws {
+        try await execute {
+            let result: MusicFolderSelectionResult
+            do {
+                result = try MusicFolderSelectionOperationExecution.select(
+                    path, defaults: MusicCLIEnvironment.sharedDefaults,
+                    homeDirectory: MusicCLIEnvironment.homeDirectory,
+                    announce: { MusicCLIEnvironment.refreshLibrary() })
+            } catch let error as MusicFolderSelectionError {
+                throw CLIFailure.notFound(error.localizedDescription)
+            }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "path": .string(result.path), "changed": .bool(result.changed),
+                        "external": .bool(result.confirmsExternalStorage),
+                    ]))
+                return
+            }
+            CLIOut.out(
+                result.changed
+                    ? "music library set to \(result.path)"
+                    : "music library already uses \(result.path)")
+        }
+    }
+}
+
+@MainActor struct MusicListCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "ls",
+        abstract: "List the music library, a folder at a time.",
+        discussion: """
+            Lists Edith's library one folder at a time.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed music ls
+            ed music ls --json
+            """,
+        aliases: ["list"])
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Flag(help: "Only folders.")
+    var folders = false
+
+    @Flag(help: "Every track underneath, not just this folder.")
+    var recursive = false
+
+    @Option(help: "Only entries whose path or title contains this text.")
+    var search: String?
+
+    @Argument(help: "Folder to list, relative to the library root.")
+    var folder: String = ""
+
+    func run() async throws {
+        try await execute {
+            let target = try LibraryBridge.folder(folder)
+            let listing = MusicLibraryContentOperationExecution.list(
+                target, recursive: recursive)
+            let needle = (search ?? "").lowercased()
+            let shown =
+                needle.isEmpty
+                ? listing.tracks
+                : listing.tracks.filter {
+                    $0.relativePath.lowercased().contains(needle)
+                        || $0.title.lowercased().contains(needle)
+                }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "folder": .string(target.relativePath),
+                        "folders": .array(
+                            listing.folders.map {
+                                .object([
+                                    "path": .string($0.relativePath),
+                                    "name": .string($0.name),
+                                    "tracks": .int(
+                                        TrackMeta.trackCount(under: $0.relativePath)),
+                                ])
+                            }),
+                        "tracks": .array(folders ? [] : shown.map(LibraryBridge.json)),
+                    ]))
+                return
+            }
+            if !listing.folders.isEmpty {
+                CLIOut.out(
+                    TextTable.render(
+                        headers: ["FOLDER", "TRACKS"],
+                        rows: listing.folders.map {
+                            [$0.relativePath, String(TrackMeta.trackCount(under: $0.relativePath))]
+                        }))
+            }
+            guard !folders else { return }
+            guard !shown.isEmpty else {
+                if listing.folders.isEmpty { CLIOut.note("nothing here") }
+                return
+            }
+            if !listing.folders.isEmpty { CLIOut.out("") }
+            CLIOut.out(
+                TextTable.render(
+                    headers: ["TITLE", "PATH"],
+                    rows: shown.map { [$0.title, $0.relativePath] }))
+        }
+    }
+}
+
+@MainActor struct MusicNewFolderCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "mkdir", abstract: "Make a folder in the library.",
+        discussion: """
+            Makes a folder in the library.
+
+            Changes the machine by creating a directory.
+
+            ed music mkdir notes
+            ed music mkdir notes --json
+            """, aliases: ["newfolder"])
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Option(help: "Folder to make it inside, relative to the library root.")
+    var under: String = ""
+
+    @Argument(help: "What to call it.")
+    var name: String
+
+    func run() async throws {
+        try await execute {
+            _ = try LibraryBridge.folder(under)
+            let made: MusicFolder
+            do {
+                made = try MusicLibraryContentOperationExecution.createFolder(
+                    named: name, under: under)
+            } catch {
+                throw LibraryBridge.fail(error)
+            }
+            LibraryBridge.announce()
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "path": .string(made.relativePath), "name": .string(made.name),
+                    ]))
+                return
+            }
+            CLIOut.out("made \(made.relativePath)")
+        }
+    }
+}
+
+@MainActor struct MusicMoveCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "mv", abstract: "Move a track into a folder.",
+        discussion: """
+            Moves a track into a folder.
+
+            Changes the machine by moving files into a directory.
+
+            ed music mv track folder
+            ed music mv track folder --json
+            """, aliases: ["move"])
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Track path, or enough of its name to be unambiguous.")
+    var track: String
+
+    @Argument(help: "Destination folder, relative to the library root.")
+    var folder: String
+
+    func run() async throws {
+        try await execute {
+            let found = try LibraryBridge.track(track)
+            _ = try LibraryBridge.folder(folder)
+            let move: MusicLibrary.Move
+            do {
+                move = try MusicLibraryContentOperationExecution.move(found, to: folder)
+            } catch {
+                throw LibraryBridge.fail(error)
+            }
+            MusicCLIEnvironment.renamed(move.from, move.to)
+            LibraryBridge.announce()
+            guard !json else {
+                CLIOut.json(.object(["from": .string(move.from), "to": .string(move.to)]))
+                return
+            }
+            CLIOut.out("moved to \(move.to)")
+        }
+    }
+}
+
+@MainActor struct MusicRenameCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "rename", abstract: "Rename a track or a folder.",
+        discussion: """
+            Renames a track or a folder in place.
+
+            Changes the machine by renaming one file.
+
+            ed music rename shed notes
+            ed music rename shed notes --json
+            """, )
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Flag(help: "Rename a folder rather than a track.")
+    var folder = false
+
+    @Argument(help: "Track path or folder path.")
+    var target: String
+
+    @Argument(help: "The new name, without the extension.")
+    var name: String
+
+    func run() async throws {
+        try await execute {
+            let move: MusicLibrary.Move
+            do {
+                let target: MusicLibraryRenameTarget =
+                    folder
+                    ? .folder(try LibraryBridge.folder(target))
+                    : .track(try LibraryBridge.track(target))
+                move = try MusicLibraryContentOperationExecution.rename(target, to: name)
+            } catch let failure as CLIFailure {
+                throw failure
+            } catch {
+                throw LibraryBridge.fail(error)
+            }
+            MusicCLIEnvironment.renamed(move.from, move.to)
+            LibraryBridge.announce()
+            guard !json else {
+                CLIOut.json(.object(["from": .string(move.from), "to": .string(move.to)]))
+                return
+            }
+            CLIOut.out("renamed to \(move.to)")
+        }
+    }
+}
+
+@MainActor struct MusicRemoveCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "rm",
+        abstract: "Move a track or folder to the Trash.",
+        discussion: """
+            Nothing is deleted outright: this puts the file in the Trash, the same as the
+            UI does, so it can be put back from Finder.
+            Changes the saved list by removing one record.
+
+            ed music rm shed
+            ed music rm shed --json
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Flag(help: "Remove a folder and everything in it.")
+    var folder = false
+
+    @Flag(help: "Actually do it. Without this nothing is moved.")
+    var yes = false
+
+    @Argument(help: "Track path or folder path.")
+    var target: String
+
+    func run() async throws {
+        try await execute {
+            let target: MusicLibraryRemovalTarget =
+                folder
+                ? .folder(try LibraryBridge.folder(target))
+                : .track(try LibraryBridge.track(target))
+            let plan = MusicLibraryContentOperationExecution.removalPlan(target)
+            guard yes else { return preview(plan.path, count: plan.trackCount) }
+            do {
+                try MusicLibraryContentOperationExecution.remove(plan)
+            } catch {
+                throw LibraryBridge.fail(error)
+            }
+            LibraryBridge.announce()
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "path": .string(plan.path), "tracks": .int(plan.trackCount),
+                        "trashed": .bool(true),
+                    ]))
+                return
+            }
+            CLIOut.out("moved \(plan.path) to the Trash")
+        }
+    }
+
+    private func preview(_ path: String, count: Int) {
+        guard !json else {
+            CLIOut.json(
+                .object(["path": .string(path), "tracks": .int(count), "trashed": .bool(false)]))
+            return
+        }
+        CLIOut.out("would move \(path) to the Trash (\(count) track(s))")
+        CLIOut.note("nothing was moved; pass --yes to go ahead")
+    }
+}
+
+@MainActor struct MusicPlayTrackCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "start",
+        abstract: "Play one track, or everything in a folder.",
+        discussion: """
+            This drives Edith's own library player, so it needs the app running. `ed music
+            play` without a track resumes whatever player is already going, including
+            Spotify and Apple Music.
+            Changes the target by starting it.
+
+            ed music start shed
+            ed music start shed --json
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Flag(help: "Treat the argument as a folder and play everything under it.")
+    var folder = false
+
+    @Argument(help: "Track path or title, or a folder path with --folder.")
+    var target: String
+
+    func run() async throws {
+        try await execute {
+            try MusicCLIEnvironment.requirePlayer()
+            guard !folder else {
+                let found = try LibraryBridge.folder(target)
+                LibraryBridge.send(.startSource(.folder(found.relativePath)))
+                guard !json else {
+                    CLIOut.json(
+                        .object([
+                            "playing": .string(found.relativePath), "folder": .bool(true),
+                        ]))
+                    return
+                }
+                CLIOut.out("playing \(found.relativePath)")
+                return
+            }
+            let track = try LibraryBridge.track(target)
+            LibraryBridge.send(.startTrack(track.relativePath))
+            guard !json else {
+                CLIOut.json(LibraryBridge.json(track))
+                return
+            }
+            CLIOut.out("playing \(track.title)")
+        }
+    }
+}
+
+@MainActor struct MusicSeekCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "seek", abstract: "Jump to a point in the current track, from 0 to 1.",
+        discussion: """
+            Jumps to a point in the current track, as a fraction of its length.
+
+            Changes the state this command names.
+
+            ed music seek 0.5
+            ed music seek 0.5 --json
+            """, )
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Where to jump to, as a fraction of the track from 0 to 1.")
+    var position: Double
+
+    func run() async throws {
+        try await execute {
+            let fraction = try ArgumentChecks.fraction(position, "position")
+            try MusicCLIEnvironment.requirePlayer()
+            LibraryBridge.send(.seek(fraction))
+            guard !json else {
+                CLIOut.json(.object(["position": .double(fraction)]))
+                return
+            }
+            CLIOut.out("seeked to \(Int(fraction * 100))%")
+        }
+    }
+}
+
+@MainActor struct MusicShuffleCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "shuffle", abstract: "Turn shuffle on or off.",
+        discussion: """
+            Turns shuffle on or off for Edith's own player, or reports it.
+
+            Changes the state this command names.
+
+            ed music shuffle
+            ed music shuffle --json
+            """, )
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "on or off. Leave it out to report what it is.")
+    var state: String?
+
+    func run() async throws {
+        try await MusicToggleState.apply(
+            key: AppStorageKeys.Music.shuffling, label: "shuffle", state: state, json: json,
+            request: MusicTransportRequest.shuffle)
+    }
+}
+
+@MainActor struct MusicRepeatCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "repeat", abstract: "Turn repeat on or off.",
+        discussion: """
+            Turns repeat on or off for Edith's own player, or reports it.
+
+            Changes the state this command names.
+
+            ed music repeat
+            ed music repeat --json
+            """, aliases: ["loop"])
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "on or off. Leave it out to report what it is.")
+    var state: String?
+
+    func run() async throws {
+        try await MusicToggleState.apply(
+            key: AppStorageKeys.Music.looping, label: "repeat", state: state, json: json,
+            request: MusicTransportRequest.repeat)
+    }
+}
+
+@MainActor enum MusicToggleState {
+    static func apply(
+        key: String, label: String, state: String?, json: Bool,
+        request: (Bool) -> MusicTransportRequest
+    ) async throws {
+        try await execute {
+            let defaults = MusicCLIEnvironment.standardDefaults
+            guard let state else {
+                let on = defaults.bool(forKey: key)
+                guard !json else {
+                    CLIOut.json(.object([label: .bool(on)]))
+                    return
+                }
+                CLIOut.out(on ? "on" : "off")
+                return
+            }
+            guard let wanted = BooleanWord.parse(state) else {
+                throw CLIFailure(
+                    "\(state) is not on or off", hint: "pass on, off, true or false")
+            }
+            defaults.set(wanted, forKey: key)
+            LibraryBridge.send(request(wanted))
+            guard !json else {
+                CLIOut.json(.object([label: .bool(wanted)]))
+                return
+            }
+            CLIOut.out("\(label) \(wanted ? "on" : "off")")
+        }
+    }
+}
+
+@MainActor enum BooleanWord {
+    static func parse(_ raw: String) -> Bool? {
+        switch raw.lowercased() {
+        case "on", "true", "yes", "1", "enabled": return true
+        case "off", "false", "no", "0", "disabled": return false
+        default: return nil
+        }
+    }
+}
+
+@MainActor enum MusicFavouriteBridge {
+    static func run(_ operation: MusicLibraryOperation, query: String, json: Bool) throws {
+        let track = try LibraryBridge.track(query)
+        let result = MusicLibraryOperationExecution.setFavourite(
+            operation, path: track.relativePath)
+        guard !json else {
+            CLIOut.json(
+                .object([
+                    "action": .string(operation.rawValue), "path": .string(result.path),
+                    "title": .string(track.title), "favourite": .bool(result.isFavourite),
+                    "changed": .bool(result.changed),
+                ]))
+            return
+        }
+        CLIOut.out(
+            result.changed
+                ? "\(result.isFavourite ? "favourited" : "unfavourited") \(track.title)"
+                : "\(track.title) is already \(result.isFavourite ? "a favourite" : "not a favourite")"
+        )
+    }
+}
+
+@MainActor struct MusicFavoriteCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "favorite", abstract: "Add a track to favourites.",
+        discussion: """
+            Adds a resolved library track to favourites.
+
+            Changes the state this command names.
+
+            ed music favorite track
+            ed music favorite track --json
+            """, aliases: ["favourite"])
+    @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
+    @Argument(help: "Track path, or enough of its name to be unambiguous.") var track: String
+    func run() async throws {
+        try await execute { try MusicFavouriteBridge.run(.favorite, query: track, json: json) }
+    }
+}
+
+@MainActor struct MusicUnfavoriteCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "unfavorite", abstract: "Remove a track from favourites.",
+        discussion: """
+            Removes a resolved library track from favourites.
+
+            Changes the state this command names.
+
+            ed music unfavorite track
+            ed music unfavorite track --json
+            """,
+        aliases: ["unfavourite"])
+    @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
+    @Argument(help: "Track path, or enough of its name to be unambiguous.") var track: String
+    func run() async throws {
+        try await execute { try MusicFavouriteBridge.run(.unfavorite, query: track, json: json) }
+    }
+}
+
+@MainActor struct MusicRevealCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "reveal", abstract: "Reveal a track in Finder.",
+        discussion: """
+            Resolves a library track and reveals that exact file in Finder.
+
+            Changes Finder by revealing a file that was already downloaded.
+
+            ed music reveal track
+            ed music reveal track --json
+            """, )
+    @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
+    @Argument(help: "Track path, or enough of its name to be unambiguous.") var track: String
+    func run() async throws {
+        try await execute {
+            let found = try LibraryBridge.track(track)
+            let url = await MusicLibraryOperationExecution.reveal(found.url)
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "action": .string("reveal"), "path": .string(found.relativePath),
+                        "file": .string(url.path), "opened": .bool(true),
+                    ]))
+                return
+            }
+            CLIOut.out("revealed \(found.title)")
+        }
+    }
+}
+
+@MainActor struct MusicOpenLibraryCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "open", abstract: "Open the music library in Finder.",
+        discussion: """
+            Creates the configured library directory when needed and opens it in Finder.
+
+            Changes this Mac by opening the target in an app or a browser.
+
+            ed music open
+            ed music open --json
+            """, )
+    @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
+    func run() async throws {
+        try await execute {
+            let url = try await MusicLibraryOperationExecution.openLibrary()
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "action": .string("open"), "path": .string(url.path),
+                        "opened": .bool(true),
+                    ]))
+                return
+            }
+            CLIOut.out("opened \(url.path)")
+        }
+    }
+}
+
+@MainActor struct MusicRescanCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "rescan",
+        abstract: "Read the music folder again after changing it outside Edith.",
+        discussion: """
+            Reads the music folder again, which is what to run after adding or removing
+            files behind Edith's back.
+
+            Reads the current state. Does not change it.
+
+            ed music rescan
+            ed music rescan --json
+            """, )
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            try LibraryBridge.requireFolder()
+            let tracks = MusicLibraryContentOperationExecution.rescan().count
+            LibraryBridge.announce()
+            guard !json else {
+                CLIOut.json(.object(["tracks": .int(tracks)]))
+                return
+            }
+            CLIOut.out("\(tracks) track(s) in the library")
+        }
+    }
+}

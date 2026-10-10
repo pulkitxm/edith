@@ -9,6 +9,10 @@ import MediaPlayer
 final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
     @ObservationIgnored private let tasks = MusicTaskOwner()
     @ObservationIgnored private var stopped = false
+    @ObservationIgnored var presentationTransport: ((MusicTransportRequest) -> Bool)?
+    @ObservationIgnored var presentationSnapshot: (() -> PlayerSnapshot?)?
+    @ObservationIgnored private var remoteTargets: [(MPRemoteCommand, Any)] = []
+    private let mediaControlsEnabled: Bool
     private(set) var tracks: [Track] = []
     private(set) var current: Track?
     private(set) var isPlaying = false
@@ -75,7 +79,14 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
     private var commandObserver: NSObjectProtocol?
     private var stateRequestObserver: NSObjectProtocol?
 
-    override init() {
+    override convenience init() {
+        self.init(
+            mediaControlsEnabled: ProcessInfo.processInfo.environment[
+                "EDITH_EXTENSION_FIXTURE_HOME"] == nil)
+    }
+
+    init(mediaControlsEnabled: Bool) {
+        self.mediaControlsEnabled = mediaControlsEnabled
         let saved = SharedDefaults.store.object(forKey: AppStorageKeys.Music.volume) as? Double
         volume = saved ?? 0.7
         isLooping = SharedDefaults.store.bool(forKey: AppStorageKeys.Music.looping)
@@ -83,7 +94,7 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         super.init()
         rescan()
         restoreLastPlayback()
-        setupRemoteCommands()
+        if mediaControlsEnabled { setupRemoteCommands() }
         folderChangedObserver = NotificationCenter.default.addObserver(
             forName: .musicFolderChangedLocally, object: nil, queue: .main
         ) { [weak self] _ in
@@ -111,8 +122,7 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         levelRequestObserver = MusicEvents.observe(MusicEvents.Name.requestMusicLevels) {
             [weak self] in
             MainActor.assumeIsolated {
-                self?.levelSubscriberUntil = Date().addingTimeInterval(2.5)
-                self?.resumeLevelTimer()
+                _ = self?.readLevel()
             }
         }
         PlaybackLevel.shared.onViewersChange = { [weak self] in self?.resumeLevelTimer() }
@@ -181,7 +191,7 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             }
         case "renamed":
             if let from = info["from"] as? String, let to = info["to"] as? String {
-                handleRenamed(from: from, to: to)
+                renameCurrent(from, to)
             }
         case "seek":
             if let fraction = info["value"] as? Double { seek(to: fraction) }
@@ -196,6 +206,8 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
     }
 
     func perform(_ request: MusicTransportRequest) {
+        guard !stopped else { return }
+        if presentationTransport?(request) == true { return }
         MusicTransportExecution.perform(
             request, sendCommand: { handleCommand($0) },
             requestStatus: {
@@ -210,7 +222,7 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         return Array(order.dropFirst(index + 1).prefix(max(0, min(limit, 10))))
     }
 
-    private func handleRenamed(from: String, to: String) {
+    func renameCurrent(_ from: String, _ to: String) {
         guard current?.relativePath == from else { return }
         current = track(for: to)
         updateNowPlaying()
@@ -283,6 +295,12 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         saveTimer = nil
     }
 
+    func readLevel() -> Double {
+        levelSubscriberUntil = Date().addingTimeInterval(2.5)
+        resumeLevelTimer()
+        return PlaybackLevel.shared.level
+    }
+
     private var levelDemanded: Bool {
         PlaybackLevel.shared.viewers > 0 || Date() < levelSubscriberUntil
     }
@@ -336,53 +354,58 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
 
     private func setupRemoteCommands() {
         let center = MPRemoteCommandCenter.shared()
-        center.playCommand.addTarget { [weak self] _ in
-            Task { @MainActor in
-                guard let self, !self.isPlaying else { return }
-                self.perform(.play)
+        for (command, request) in [
+            (center.playCommand, MusicTransportRequest.play), (center.pauseCommand, .pause),
+            (center.togglePlayPauseCommand, .toggle), (center.nextTrackCommand, .next),
+            (center.previousTrackCommand, .previous),
+        ] {
+            let target = command.addTarget { [weak self] _ in
+                Task { @MainActor in self?.perform(request) }
+                return .success
             }
-            return .success
-        }
-        center.pauseCommand.addTarget { [weak self] _ in
-            Task { @MainActor in
-                guard let self, self.isPlaying else { return }
-                self.perform(.pause)
-            }
-            return .success
-        }
-        center.togglePlayPauseCommand.addTarget { [weak self] _ in
-            Task { @MainActor in self?.perform(.toggle) }
-            return .success
-        }
-        center.nextTrackCommand.addTarget { [weak self] _ in
-            Task { @MainActor in self?.perform(.next) }
-            return .success
-        }
-        center.previousTrackCommand.addTarget { [weak self] _ in
-            Task { @MainActor in self?.perform(.previous) }
-            return .success
+            remoteTargets.append((command, target))
         }
     }
 
+    var nowPlayingSnapshot: PlayerSnapshot {
+        presentationSnapshot?()
+            ?? PlayerSnapshot(
+                player: .builtin, isRunning: !stopped, isPlaying: isPlaying,
+                title: current?.title ?? "",
+                elapsedSeconds: elapsed, durationSeconds: trackDuration, volume: volume,
+                trackPath: current?.relativePath)
+    }
+
+    func presentationDidChange() { updateNowPlaying() }
+
     private func updateNowPlaying() {
+        guard mediaControlsEnabled else { return }
         let center = MPNowPlayingInfoCenter.default()
-        guard let current else {
+        let snapshot = nowPlayingSnapshot
+        guard snapshot.hasTrack else {
             nowPlayingArtwork = nil
             center.nowPlayingInfo = nil
             center.playbackState = .stopped
             return
         }
         var info: [String: Any] = [
-            MPMediaItemPropertyTitle: current.title,
-            MPMediaItemPropertyPlaybackDuration: trackDuration,
-            MPNowPlayingInfoPropertyElapsedPlaybackTime: elapsed,
-            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
+            MPMediaItemPropertyTitle: snapshot.title,
+            MPMediaItemPropertyPlaybackDuration: snapshot.durationSeconds,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: snapshot.elapsedSeconds,
+            MPNowPlayingInfoPropertyPlaybackRate: snapshot.isPlaying ? 1.0 : 0.0,
         ]
-        if let artwork = nowPlayingArtwork, artworkTrack == current {
-            info[MPMediaItemPropertyArtwork] = artwork
+        if let path = snapshot.trackPath {
+            let track = track(for: path)
+            if let art = TrackMeta.artworkCached(for: track), art.size.width > 0 {
+                info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: art.size) { _ in
+                    art
+                }
+            } else if let artwork = nowPlayingArtwork, artworkTrack?.relativePath == path {
+                info[MPMediaItemPropertyArtwork] = artwork
+            }
         }
         center.nowPlayingInfo = info
-        center.playbackState = isPlaying ? .playing : .paused
+        center.playbackState = snapshot.isPlaying ? .playing : .paused
     }
 
     private func attachArtwork(_ image: NSImage, for track: Track) {
@@ -589,13 +612,9 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         }
         flushVolumePersist()
         tracks = []
-        let center = MPRemoteCommandCenter.shared()
-        [
-            center.playCommand, center.pauseCommand, center.togglePlayPauseCommand,
-            center.nextTrackCommand, center.previousTrackCommand,
-        ]
-        .forEach { $0.removeTarget(nil) }
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        for (command, target) in remoteTargets { command.removeTarget(target) }
+        remoteTargets.removeAll(); presentationSnapshot = nil; presentationTransport = nil
+        if mediaControlsEnabled { MPNowPlayingInfoCenter.default().nowPlayingInfo = nil }
         if let folderChangedObserver {
             NotificationCenter.default.removeObserver(folderChangedObserver)
             self.folderChangedObserver = nil
