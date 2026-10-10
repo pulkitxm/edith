@@ -1153,7 +1153,9 @@ public final class MachineSession {
                 name: url.lastPathComponent,
                 path: FileListing.join(parent: path, name: url.lastPathComponent), kind: kind,
                 sizeBytes: Int64(values?.fileSize ?? 0),
-                modified: values?.contentModificationDate)
+                modified: values?.contentModificationDate,
+                linkTarget: kind == .symlink
+                    ? try? fm.destinationOfSymbolicLink(atPath: url.path) : nil)
         }
         return FileListing.sorted(entries)
     }

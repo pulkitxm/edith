@@ -45,6 +45,7 @@ import Foundation
             let id = UUID()
             previews[id] = Preview(
                 machineID: session.id, file: file, count: count, offset: 0, touched: Date())
+            startReaper()
             return try JSONEncoder().encode(
                 MachinePreviewHandle(id: id, count: count, name: entry.name))
         case .read:
@@ -69,6 +70,21 @@ import Foundation
                 try preview.file.close(); previews.removeValue(forKey: id)
             }
             return try JSONEncoder().encode(true)
+        }
+    }
+
+    private func startReaper() {
+        guard reaper == nil else { return }
+        reaper = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(2)) } catch { return }
+                guard let self, !stopped else { return }
+                for id in previews.keys.filter({
+                    Date().timeIntervalSince(self.previews[$0]!.touched) > 10
+                }) {
+                    if let value = previews.removeValue(forKey: id) { try? value.file.close() }
+                }
+            }
         }
     }
 

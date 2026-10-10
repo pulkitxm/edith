@@ -12,6 +12,7 @@ final class ExtensionRuntime: NSObject {
     private var transport: MachinePeerTransport?
     private var cli: MachineCLIService?
     private var previewEngine: MachinePreviewEngine?
+    private var directoryExport: MachineDirectoryExport?
     private var filesEngine: MachineFilesEngine?
     private var logEngine: MachineLogEngine?
     private var terminalEngine: MachineTerminalEngine?
@@ -192,6 +193,13 @@ final class ExtensionRuntime: NSObject {
                     return MachinesModel.shared.session(for: id)
                 })
                 previewEngine = previews
+                let directoryExport = MachineDirectoryExport(session: { id in
+                    guard MachinesModel.shared.knows(id) else {
+                        throw MachineUIError.invalidRequest
+                    }
+                    return MachinesModel.shared.session(for: id)
+                })
+                self.directoryExport = directoryExport
                 let logs = MachineLogEngine(session: { id in
                     guard MachinesModel.shared.knows(id) else {
                         throw MachineUIError.invalidRequest
@@ -251,6 +259,7 @@ final class ExtensionRuntime: NSObject {
                     observe: { _, active in
                         if active, !fixture { MachinesModel.shared.reconcileSSHClipboards() }
                     }, files: { value in try await files.execute(value) },
+                    directoryExport: { value in try await directoryExport.execute(value) },
                     preview: { value in try await previews.execute(value) },
                     logs: { value in try logs.execute(value) },
                     fileProgress: { value in try files.progress(value) },
@@ -297,6 +306,7 @@ final class ExtensionRuntime: NSObject {
         await uiEngine?.shutdown(); uiEngine = nil
         filesEngine?.shutdown(); filesEngine = nil
         previewEngine?.shutdown(); previewEngine = nil
+        directoryExport?.shutdown(); directoryExport = nil
         await logEngine?.shutdown(); logEngine = nil
         await terminalEngine?.shutdown(); terminalEngine = nil
         MachinesCLIEnvironment.broadcast = { _, _, _ in throw MachineUIError.unavailable }

@@ -1279,10 +1279,12 @@ final class FinderModel {
     }
 
     func itemProvider(for entry: RemoteFileEntry) -> NSItemProvider {
-        if let client = session.uiClient, !entry.isDirectory {
+        if let client = session.uiClient {
             let provider = NSItemProvider()
             provider.suggestedName = entry.name
-            let type = UTType(filenameExtension: entry.fileExtension) ?? .data
+            let type =
+                entry.isDirectory
+                ? .folder : UTType(filenameExtension: entry.fileExtension) ?? .data
             let machineID = session.id
             provider.registerFileRepresentation(
                 forTypeIdentifier: type.identifier, fileOptions: [], visibility: .all
@@ -1290,9 +1292,13 @@ final class FinderModel {
                 let progress = Progress(totalUnitCount: max(1, entry.sizeBytes))
                 let task = Task { @MainActor in
                     do {
-                        let url = try await client.materialize(
-                            entry: entry, machineID: machineID,
-                            maximumBytes: RemoteFileOperationExecution.cacheLimitBytes)
+                        let url =
+                            entry.isDirectory
+                            ? try await client.materializeDirectory(
+                                entry: entry, machineID: machineID)
+                            : try await client.materialize(
+                                entry: entry, machineID: machineID,
+                                maximumBytes: RemoteFileOperationExecution.cacheLimitBytes)
                         completion(url, false, nil)
                         progress.completedUnitCount = progress.totalUnitCount
                     } catch { completion(nil, false, error) }

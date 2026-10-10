@@ -114,6 +114,84 @@ import Foundation
         }
     }
 
+    func materializeDirectory(entry: RemoteFileEntry, machineID: UUID) async throws -> URL {
+        let handle: MachineDirectoryExportHandle = try await job(
+            "machines.ui.export",
+            value: MachineDirectoryExportRequest(
+                operation: .prepare, machineID: machineID, entry: entry))
+        guard MachineDirectoryExportRequest.validPath(handle.name), !handle.name.contains("/"),
+            handle.items.count <= 8192, Set(handle.items.map(\.path)).count == handle.items.count,
+            handle.items.allSatisfy({
+                MachineDirectoryExportRequest.validPath($0.path)
+                    && ($0.path == handle.name || $0.path.hasPrefix(handle.name + "/"))
+            }),
+            handle.count <= UInt64(RemoteFileOperationExecution.cacheLimitBytes),
+            handle.items.reduce(
+                UInt64(0),
+                { $0 + min($1.count, UInt64(RemoteFileOperationExecution.cacheLimitBytes) + 1) })
+                == handle.count
+        else { throw MachineUIError.invalidRequest }
+        let root = ExtensionData.root.appendingPathComponent("ui-previews").appendingPathComponent(
+            UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let close = MachineDirectoryExportRequest(
+            operation: .close, machineID: machineID, id: handle.id)
+        do {
+            for item in handle.items where item.kind != .symlink {
+                try Task.checkCancellation()
+                let url = root.appendingPathComponent(item.path)
+                if item.kind == .directory {
+                    try FileManager.default.createDirectory(
+                        at: url, withIntermediateDirectories: false);
+                    continue
+                }
+                guard item.kind == .file else { throw MachineUIError.invalidRequest }
+                FileManager.default.createFile(atPath: url.path, contents: Data())
+                let file = try FileHandle(forWritingTo: url)
+                do {
+                    var offset: UInt64 = 0
+                    while true {
+                        let chunk: MachinePreviewChunk = try await request(
+                            "machines.ui.export",
+                            value: MachineDirectoryExportRequest(
+                                operation: .read, machineID: machineID, id: handle.id,
+                                path: item.path, offset: offset))
+                        guard chunk.offset == offset, chunk.bytes.count <= 65536,
+                            UInt64(chunk.bytes.count) <= item.count - offset,
+                            !chunk.bytes.isEmpty || chunk.complete
+                        else { throw MachineUIError.stale }
+                        try file.write(contentsOf: chunk.bytes); offset += UInt64(chunk.bytes.count)
+                        if chunk.complete {
+                            guard offset == item.count else { throw MachineUIError.stale }; break
+                        }
+                    }
+                    try file.close()
+                    if let modified = item.modified {
+                        try FileManager.default.setAttributes(
+                            [.modificationDate: modified], ofItemAtPath: url.path)
+                    }
+                } catch { try? file.close(); throw error }
+            }
+            for item in handle.items where item.kind == .symlink {
+                guard let target = item.linkTarget, target.utf8.count <= 4096,
+                    !target.utf8.contains(0)
+                else { throw MachineUIError.invalidRequest }
+                try FileManager.default.createSymbolicLink(
+                    atPath: root.appendingPathComponent(item.path).path, withDestinationPath: target
+                )
+            }
+            let _: Bool = try await request("machines.ui.export", value: close)
+            return root.appendingPathComponent(handle.name)
+        } catch {
+            try? FileManager.default.removeItem(at: root)
+            let cleanup = Task {
+                let _: Bool? = try? await self.request("machines.ui.export", value: close)
+            }
+            await cleanup.value
+            throw error
+        }
+    }
+
     func files(
         _ value: MachineFileRequest, progress: @escaping (FileOperationProgress?) -> Void = { _ in }
     ) async throws -> MachineFileState {

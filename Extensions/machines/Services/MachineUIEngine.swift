@@ -6,6 +6,7 @@ import Foundation
     private let session: Session
     private let state: () -> MachineUIState
     private let mutation: (MachineUIMutation) async throws -> Void
+    private let directoryExport: (MachineDirectoryExportRequest) async throws -> Data
     private let preview: (MachinePreviewRequest) async throws -> Data
     private let logs: (MachineLogRequest) throws -> MachineLogFrame
     private let terminal: (MachineTerminalRequest) async throws -> MachineTerminalFrame
@@ -48,6 +49,9 @@ import Foundation
         files: @escaping (MachineFileRequest) async throws -> MachineFileState = { _ in
             throw MachineUIError.unavailable
         },
+        directoryExport: @escaping (MachineDirectoryExportRequest) async throws -> Data = { _ in
+            throw MachineUIError.unavailable
+        },
         preview: @escaping (MachinePreviewRequest) async throws -> Data = { _ in
             throw MachineUIError.unavailable
         },
@@ -73,6 +77,7 @@ import Foundation
         self.workspace = workspace
         self.observe = observe
         self.files = files
+        self.directoryExport = directoryExport
         self.preview = preview
         self.logs = logs
         self.terminal = terminal
@@ -95,8 +100,11 @@ import Foundation
 
     private func begin(_ value: MachineUIJobInput) throws -> UUID {
         guard
-            ["machines.ui.action", "machines.ui.probe", "machines.ui.files", "machines.ui.preview"]
-                .contains(value.operation),
+            [
+                "machines.ui.action", "machines.ui.probe", "machines.ui.files",
+                "machines.ui.preview", "machines.ui.export",
+            ]
+            .contains(value.operation),
             value.payload.count <= 2_097_152, jobs.count < 4
         else { throw MachineUIError.invalidRequest }
         let fileRequest =
@@ -132,8 +140,10 @@ import Foundation
                     do { try await Task.sleep(for: .seconds(2)) } catch { return }
                     guard let self, !stopped else { return }
                     reapPresentations()
-                    let expired = jobs.filter { now().timeIntervalSince($0.value.touched) > 10 }
-                        .map(\.key)
+                    let expired = jobs.filter {
+                        self.now().timeIntervalSince($0.value.touched) > 10
+                    }
+                    .map(\.key)
                     for id in expired { cancelJob(id) }
                     let completed = retired
                     retired = []
@@ -223,6 +233,10 @@ import Foundation
             let id = try JSONDecoder().decode(UUID.self, from: payload)
             cancelJob(id)
             return try encode(true)
+        case "machines.ui.export":
+            let value = try JSONDecoder().decode(MachineDirectoryExportRequest.self, from: payload)
+            _ = try session(value.machineID)
+            return try await directoryExport(value)
         case "machines.ui.preview":
             let value = try JSONDecoder().decode(MachinePreviewRequest.self, from: payload)
             _ = try session(value.machineID)
