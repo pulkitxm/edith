@@ -11,6 +11,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, resolve } from "node:path";
+import { buildCameraCarrier } from "./build-camera-carrier.mjs";
 import {
   buildExtensionSupport,
   rewriteSupportImports,
@@ -66,7 +67,7 @@ export async function copyNativeFrameworks(root, definition, contents) {
     if (
       !name.endsWith(".framework") ||
       names.has(name) ||
-      !origin.startsWith(packageRoot + "/")
+      !origin.startsWith(`${packageRoot}/`)
     )
       throw new Error("Duplicate or invalid native framework");
     names.add(name);
@@ -78,7 +79,7 @@ export async function copyNativeFrameworks(root, definition, contents) {
       force: true,
     });
     const binary = await realpath(resolve(destination, name.slice(0, -10)));
-    if (!binary.startsWith((await realpath(destination)) + "/"))
+    if (!binary.startsWith(`${await realpath(destination)}/`))
       throw new Error("Native framework executable escapes its bundle");
     binaries.push({
       binary,
@@ -102,7 +103,7 @@ export function nativeClangModuleFlags(root, definition) {
       root,
       definition.nativePackage,
       ".build/release",
-      target + ".build",
+      `${target}.build`,
     ),
   ]);
 }
@@ -131,6 +132,49 @@ export function nativeSwiftPackageArguments(root, definition, developer) {
   ];
 }
 
+export function nativeRolePolicy(definition) {
+  const native = !!(definition.nativePackage || definition.nativeCargo);
+  const roles = Object.keys(definition.roles ?? {});
+  const selected = definition.nativeRoles ?? roles;
+  if (
+    (definition.nativeRoles !== undefined &&
+      (!native || !Array.isArray(definition.nativeRoles))) ||
+    (native &&
+      (!Array.isArray(selected) ||
+        selected.length === 0 ||
+        new Set(selected).size !== selected.length ||
+        selected.some(
+          (role) => typeof role !== "string" || !roles.includes(role),
+        ))) ||
+    (definition.nativeLink !== undefined &&
+      (typeof definition.nativeLink !== "boolean" || !definition.nativePackage))
+  )
+    throw new Error("Invalid native role or linking policy");
+  return {
+    roles: native ? selected : [],
+    link: definition.nativeLink !== false,
+  };
+}
+
+export function nativePackageLinkFlags(root, definition, contents) {
+  if (definition.nativeLink === false) return [];
+  const frameworks = resolve(contents, "Frameworks");
+  return [
+    ...nativeClangModuleFlags(root, definition),
+    "-F",
+    frameworks,
+    "-I",
+    resolve(root, definition.nativePackage, ".build/release/Modules"),
+    "-L",
+    frameworks,
+    `-l${definition.nativeProduct}`,
+    "-Xlinker",
+    "-rpath",
+    "-Xlinker",
+    "@loader_path/../Frameworks",
+  ];
+}
+
 export async function buildExtensionPackage({
   root = process.cwd(),
   id,
@@ -138,6 +182,7 @@ export async function buildExtensionPackage({
   development = false,
   version,
   tagOverride,
+  containedHostApp = process.env.EXTENSION_CONTAINING_HOST_APP,
 }) {
   await writeHostABI(root);
   const definitions = JSON.parse(
@@ -145,6 +190,7 @@ export async function buildExtensionPackage({
   );
   const definition = definitions.find((entry) => entry.id === id);
   if (!definition) throw new Error(`Unknown extension ${id}`);
+  const nativePolicy = nativeRolePolicy(definition);
   if (definition.contractVersion === 1 && definition.usesHostFramework)
     throw new Error(
       "Worker extensions must not depend on the legacy host framework",
@@ -205,9 +251,23 @@ export async function buildExtensionPackage({
     );
   }
   for (const [role, sources] of Object.entries(definition.roles)) {
-    if (!["app", "helper", "agent", "cli", "privileged"].includes(role))
+    if (
+      ![
+        "app",
+        "helper",
+        "agent",
+        "cli",
+        "privileged",
+        "cameraCarrier",
+        "cameraProvider",
+      ].includes(role)
+    )
       throw new Error(`Unknown host role ${role}`);
-    const supportProduct = definition.supportProducts && Object.hasOwn(definition.supportProducts, role) ? definition.supportProducts[role] : definition.supportProduct;
+    const supportProduct =
+      definition.supportProducts &&
+      Object.hasOwn(definition.supportProducts, role)
+        ? definition.supportProducts[role]
+        : definition.supportProduct;
     const support = supportProduct
       ? buildExtensionSupport(root, supportProduct, `${id}_${role}`)
       : undefined;
@@ -264,7 +324,7 @@ export async function buildExtensionPackage({
       }
     }
     const nativeFlags = [];
-    if (cargoLibrary) {
+    if (cargoLibrary && nativePolicy.roles.includes(role)) {
       const frameworks = resolve(contents, "Frameworks");
       await mkdir(frameworks, { recursive: true });
       const library = resolve(frameworks, definition.nativeCargo.library);
@@ -287,7 +347,7 @@ export async function buildExtensionPackage({
         { stdio: "inherit" },
       );
     }
-    if (definition.nativePackage) {
+    if (definition.nativePackage && nativePolicy.roles.includes(role)) {
       const libraryName = `lib${definition.nativeProduct}.dylib`;
       const frameworks = resolve(contents, "Frameworks");
       await mkdir(frameworks, { recursive: true });
@@ -306,7 +366,7 @@ export async function buildExtensionPackage({
         if (!architectures.includes("arm64"))
           throw new Error("A native framework lacks arm64");
         if (architectures.length > 1) {
-          const temporary = binary + ".arm64";
+          const temporary = `${binary}.arm64`;
           execFileSync("lipo", [
             binary,
             "-thin",
@@ -384,20 +444,7 @@ export async function buildExtensionPackage({
         ],
         { stdio: "inherit" },
       );
-      nativeFlags.push(...nativeClangModuleFlags(root, definition));
-      nativeFlags.push(
-        "-F",
-        frameworks,
-        "-I",
-        resolve(root, definition.nativePackage, ".build/release/Modules"),
-        "-L",
-        frameworks,
-        `-l${definition.nativeProduct}`,
-        "-Xlinker",
-        "-rpath",
-        "-Xlinker",
-        "@loader_path/../Frameworks",
-      );
+      nativeFlags.push(...nativePackageLinkFlags(root, definition, contents));
     }
     execFileSync(
       "xcrun",
@@ -531,6 +578,43 @@ export async function buildExtensionPackage({
     execFileSync("codesign", ["--verify", "--strict", bundle], {
       stdio: "inherit",
     });
+  }
+  if (definition.systemExtensionCarrier) {
+    if (!containedHostApp)
+      throw new Error(
+        "A frozen signed host app is required for a system extension carrier",
+      );
+    const hostIdentifier = execFileSync(
+      "/usr/libexec/PlistBuddy",
+      [
+        "-c",
+        "Print :CFBundleIdentifier",
+        resolve(containedHostApp, "Contents/Info.plist"),
+      ],
+      { encoding: "utf8" },
+    ).trim();
+    const metadata = {
+      ...definition.systemExtensionCarrier,
+      applicationIdentifier: `${hostIdentifier}.cameraCarrier`,
+      extensionIdentifier: `${hostIdentifier}.camera`,
+    };
+    await buildCameraCarrier({
+      root,
+      hostApp: containedHostApp,
+      payloadDirectory: payload,
+      output: payload,
+      version: releaseVersion,
+      hostABI: definition.hostABI,
+      definition: metadata,
+      development,
+    });
+    await copyFile(
+      resolve(payload, "camera-carrier-provenance.json"),
+      resolve(target, `${id}.carrier-provenance.json`),
+    );
+    await rm(resolve(payload, "camera-carrier-provenance.json"));
+    await rm(resolve(payload, "cameraCarrier.bundle"), { recursive: true });
+    await rm(resolve(payload, "cameraProvider.bundle"), { recursive: true });
   }
   const payloadManifest = {
     id,

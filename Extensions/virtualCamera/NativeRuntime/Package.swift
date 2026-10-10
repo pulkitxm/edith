@@ -20,7 +20,11 @@ let package = Package(
                 .linkedLibrary("c++"), .linkedLibrary("objc"),
                 .linkedFramework("Foundation"), .linkedFramework("CoreML"),
                 .linkedFramework("Accelerate"),
-            ])
+            ]
+        ),
+        .testTarget(
+            name: "MeetingVoiceRuntimeTests", dependencies: ["MeetingVoiceRuntime"],
+            resources: [.copy("Fixtures")], swiftSettings: [.swiftLanguageMode(.v5)]),
     ],
     cxxLanguageStandard: .cxx17
 )

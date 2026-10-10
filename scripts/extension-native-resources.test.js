@@ -15,6 +15,8 @@ import {
   copyNativeFrameworks,
   copyNativeResources,
   nativeClangModuleFlags,
+  nativePackageLinkFlags,
+  nativeRolePolicy,
 } from "./build-extension-package.mjs";
 
 test("native Swift resources and explicit licenses retain their bundle structure", async () => {
@@ -179,4 +181,82 @@ test("native Clang modules admit only owned target names", () => {
         nativeClangTargets,
       }),
     ).toThrow("Invalid native Clang target");
+});
+
+test("native payloads can be limited to selected roles without eager dynamic linking", () => {
+  const definition = {
+    roles: {
+      app: ["app.swift"],
+      helper: ["helper.swift"],
+      cameraCarrier: ["carrier.swift"],
+    },
+    nativePackage: "Extensions/mock/Native",
+    nativeProduct: "MeetingVoice",
+    nativeRoles: ["app"],
+    nativeLink: false,
+  };
+  expect(nativeRolePolicy(definition)).toEqual({ roles: ["app"], link: false });
+  expect(
+    nativePackageLinkFlags(
+      "/workspace",
+      definition,
+      "/payload/app.bundle/Contents",
+    ),
+  ).toEqual([]);
+  const existing = {
+    ...definition,
+    nativeRoles: undefined,
+    nativeLink: undefined,
+  };
+  expect(nativeRolePolicy(existing)).toEqual({
+    roles: ["app", "helper", "cameraCarrier"],
+    link: true,
+  });
+  expect(
+    nativePackageLinkFlags(
+      "/workspace",
+      existing,
+      "/payload/app.bundle/Contents",
+    ),
+  ).toContain("-lMeetingVoice");
+  expect(nativeRolePolicy({ roles: { app: [] } })).toEqual({
+    roles: [],
+    link: true,
+  });
+});
+
+test("native role policy rejects empty, duplicated, unknown and mistyped declarations", () => {
+  const definition = {
+    roles: { app: [], helper: [] },
+    nativePackage: "Extensions/mock/Native",
+    nativeProduct: "MeetingVoice",
+  };
+  for (const nativeRoles of [
+    [],
+    ["app", "app"],
+    ["provider"],
+    "app",
+    null,
+    [1],
+  ])
+    expect(() => nativeRolePolicy({ ...definition, nativeRoles })).toThrow(
+      "Invalid native role",
+    );
+  for (const nativeLink of [null, "false", 0, []])
+    expect(() => nativeRolePolicy({ ...definition, nativeLink })).toThrow(
+      "Invalid native role",
+    );
+  expect(() =>
+    nativeRolePolicy({ roles: { app: [] }, nativeRoles: ["app"] }),
+  ).toThrow("Invalid native role");
+  expect(() =>
+    nativeRolePolicy({ roles: { app: [] }, nativeLink: false }),
+  ).toThrow("Invalid native role");
+  expect(
+    nativeRolePolicy({
+      roles: { app: [], helper: [] },
+      nativeCargo: { library: "libMusic.dylib" },
+      nativeRoles: ["helper"],
+    }).roles,
+  ).toEqual(["helper"]);
 });

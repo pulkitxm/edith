@@ -1283,7 +1283,9 @@
       "Extensions/studio/NativeRuntime/Sources/EdithStudio/PDF/StudioPDF.swift",
       "Extensions/studio/NativeRuntime/Sources/EdithStudio/PDF/StudioPDFRasterizer.swift",
       "Extensions/studio/NativeRuntime/Sources/EdithStudio/Web/WebCapture.swift",
-      "Extensions/studio/NativeRuntime/Sources/EdithStudio/Web/WebTools.swift"
+      "Extensions/studio/NativeRuntime/Sources/EdithStudio/Web/WebTools.swift",
+      "Extensions/studio/NativeRuntime/Sources/CPDFium/CPDFium.c",
+      "Extensions/studio/NativeRuntime/Sources/CPDFium/include/CPDFium.h"
     ],
     "inputs": [
       "Extensions/studio"
@@ -1912,5 +1914,187 @@
       "Packages/ExtensionSupport"
     ],
     "dependencies": []
+  },
+  {
+    "id": "virtualCamera",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 14,
+    "contractVersion": 1,
+    "surfaceContractVersion": 1,
+    "supportProduct": "EdithExtensionUI",
+    "supportProducts": {
+      "app": "EdithExtensionUI",
+      "cameraCarrier": "EdithExtensionSupport",
+      "cameraProvider": null,
+      "privileged": null
+    },
+    "roles": {
+      "app": [
+        "Extensions/virtualCamera/CameraCarrierClient.swift",
+        "Extensions/virtualCamera/CameraCarrierLease.swift",
+        "Extensions/virtualCamera/CameraCarrierProtocol.swift",
+        "Extensions/virtualCamera/CameraCarrierRuntime.swift",
+        "Extensions/virtualCamera/CameraCarrierSession.swift",
+        "Extensions/virtualCamera/CameraContext.swift",
+        "Extensions/virtualCamera/CameraJSONValue.swift",
+        "Extensions/virtualCamera/CameraNativeLibrary.swift",
+        "Extensions/virtualCamera/CameraReadiness.swift",
+        "Extensions/virtualCamera/CameraSurface.swift",
+        "Extensions/virtualCamera/CameraSystemExtensionController.swift",
+        "Extensions/virtualCamera/Core/Models/CameraExtensionCommand.swift",
+        "Extensions/virtualCamera/Core/Models/VirtualCameraAutoFramer.swift",
+        "Extensions/virtualCamera/Core/Models/VirtualCameraClients.swift",
+        "Extensions/virtualCamera/Core/Models/VirtualCameraColor.swift",
+        "Extensions/virtualCamera/Core/Models/VirtualCameraComposition.swift",
+        "Extensions/virtualCamera/Core/Models/VirtualCameraDemand.swift",
+        "Extensions/virtualCamera/Core/Models/VirtualCameraGeometry.swift",
+        "Extensions/virtualCamera/Core/Models/VirtualCameraJSON.swift",
+        "Extensions/virtualCamera/Core/Models/VirtualCameraMedia.swift",
+        "Extensions/virtualCamera/Core/Models/VirtualCameraOperations.swift",
+        "Extensions/virtualCamera/Core/Models/VirtualCameraRequest.swift",
+        "Extensions/virtualCamera/Core/Models/VirtualCameraRoute.swift",
+        "Extensions/virtualCamera/Core/Models/VirtualCameraSceneLibrary.swift",
+        "Extensions/virtualCamera/Core/Models/VirtualCameraState.swift",
+        "Extensions/virtualCamera/Core/Models/VirtualCameraStore.swift",
+        "Extensions/virtualCamera/Core/Rendering/VirtualCameraLooks.swift",
+        "Extensions/virtualCamera/Core/Rendering/VirtualCameraOverlayArt.swift",
+        "Extensions/virtualCamera/Core/Rendering/VirtualCameraRenderer.swift",
+        "Extensions/virtualCamera/Core/Services/VirtualCameraAnalyzer.swift",
+        "Extensions/virtualCamera/Core/Services/VirtualCameraCapture.swift",
+        "Extensions/virtualCamera/Core/Services/VirtualCameraDevices.swift",
+        "Extensions/virtualCamera/Core/Services/VirtualCameraPipeline.swift",
+        "Extensions/virtualCamera/Core/Services/VirtualCameraPreviewBus.swift",
+        "Extensions/virtualCamera/Core/Services/VirtualCameraRecorder.swift",
+        "Extensions/virtualCamera/Core/Services/VirtualCameraScreenCapture.swift",
+        "Extensions/virtualCamera/Core/Services/VirtualCameraSink.swift",
+        "Extensions/virtualCamera/Core/Services/VirtualCameraVideoSource.swift",
+        "Extensions/virtualCamera/Helper/Services/VirtualCameraActionBridge.swift",
+        "Extensions/virtualCamera/Helper/Services/VirtualCameraEngine.swift",
+        "Extensions/virtualCamera/MeetingAudio/MeetingAudioCapture.swift",
+        "Extensions/virtualCamera/MeetingAudio/MeetingAudioDevices.swift",
+        "Extensions/virtualCamera/MeetingAudio/MeetingAudioJSON.swift",
+        "Extensions/virtualCamera/MeetingAudio/MeetingAudioMixer.swift",
+        "Extensions/virtualCamera/MeetingAudio/MeetingAudioState.swift",
+        "Extensions/virtualCamera/MeetingAudio/MeetingMediaAudio.swift",
+        "Extensions/virtualCamera/MeetingAudio/MeetingMicrophone.swift",
+        "Extensions/virtualCamera/MeetingAudio/MeetingSoundboard.swift",
+        "Extensions/virtualCamera/MeetingAudio/MeetingVoiceEffects.swift",
+        "Extensions/virtualCamera/MeetingAudio/MeetingVoiceModel.swift",
+        "Extensions/virtualCamera/MeetingAudio/MeetingVoiceStream.swift",
+        "Extensions/virtualCamera/Runtime.swift",
+        "Extensions/virtualCamera/Support/VirtualCameraExtensionStatus.swift",
+        "Extensions/virtualCamera/Support/VirtualCameraFormat.swift",
+        "Extensions/virtualCamera/Support/VirtualCameraIdentity.swift",
+        "Extensions/virtualCamera/Support/VirtualCameraPlaceholder.swift",
+        "Extensions/virtualCamera/Support/VirtualCameraRelay.swift",
+        "Extensions/virtualCamera/Support/VirtualCameraSampleBuffer.swift",
+        "Extensions/virtualCamera/Views/CameraAssetThumbnail.swift",
+        "Extensions/virtualCamera/Views/CameraExtensionBridge.swift",
+        "Extensions/virtualCamera/Views/CameraPrivacy.swift",
+        "Extensions/virtualCamera/Views/ScreenCaptureSourceCatalog.swift",
+        "Extensions/virtualCamera/Views/TimeLapseSourcePicker.swift",
+        "Extensions/virtualCamera/Views/TimeLapseSources.swift",
+        "Extensions/virtualCamera/Views/VirtualCameraAudioPanel.swift",
+        "Extensions/virtualCamera/Views/VirtualCameraExtensionManager.swift",
+        "Extensions/virtualCamera/Views/VirtualCameraInspector.swift",
+        "Extensions/virtualCamera/Views/VirtualCameraMeetingControls.swift",
+        "Extensions/virtualCamera/Views/VirtualCameraPage.swift",
+        "Extensions/virtualCamera/Views/VirtualCameraPageModel.swift",
+        "Extensions/virtualCamera/Views/VirtualCameraPreviewView.swift"
+      ],
+      "cameraCarrier": [
+        "Extensions/virtualCamera/CameraCarrierRuntime.swift",
+        "Extensions/virtualCamera/CameraCarrierLease.swift",
+        "Extensions/virtualCamera/CameraCarrierProtocol.swift",
+        "Extensions/virtualCamera/CameraCarrierSession.swift",
+        "Extensions/virtualCamera/CameraSystemExtensionController.swift",
+        "Extensions/virtualCamera/Carrier/Factory.swift"
+      ],
+      "cameraProvider": [
+        "Extensions/virtualCamera/Provider/Sources/CameraProvider/CameraDeviceSource.swift",
+        "Extensions/virtualCamera/Provider/Sources/CameraProvider/CameraProviderSource.swift",
+        "Extensions/virtualCamera/Provider/Sources/CameraProvider/CameraStreamSource.swift",
+        "Extensions/virtualCamera/Provider/Sources/CameraProvider/Runtime.swift",
+        "Extensions/virtualCamera/Provider/Sources/CameraProvider/VirtualCameraExtensionStatus.swift",
+        "Extensions/virtualCamera/Provider/Sources/CameraProvider/VirtualCameraFormat.swift",
+        "Extensions/virtualCamera/Provider/Sources/CameraProvider/VirtualCameraIdentity.swift",
+        "Extensions/virtualCamera/Provider/Sources/CameraProvider/VirtualCameraPlaceholder.swift",
+        "Extensions/virtualCamera/Provider/Sources/CameraProvider/VirtualCameraRelay.swift",
+        "Extensions/virtualCamera/Provider/Sources/CameraProvider/VirtualCameraSampleBuffer.swift"
+      ],
+      "privileged": [
+        "Extensions/virtualCamera/Privileged/Sources/CameraDeployment/CameraMicrophoneRetirement.swift",
+        "Extensions/virtualCamera/Privileged/Sources/CameraDeployment/CameraPrivilegedRuntime.swift",
+        "Extensions/virtualCamera/Privileged/Sources/CameraDeployment/CameraProviderProcessReader.swift",
+        "Extensions/virtualCamera/Privileged/Sources/CameraDeployment/CameraSealedInstallation.swift"
+      ]
+    },
+    "resources": {
+      "app": [
+        "Extensions/virtualCamera/Resources/soundboard-airhorn.wav",
+        "Extensions/virtualCamera/Resources/soundboard-applause.wav",
+        "Extensions/virtualCamera/Resources/soundboard-chime.wav",
+        "Extensions/virtualCamera/Resources/soundboard-countdown.wav",
+        "Extensions/virtualCamera/Resources/soundboard-credits.txt",
+        "Extensions/virtualCamera/Resources/soundboard-drumroll.wav",
+        "Extensions/virtualCamera/Resources/soundboard-error.wav",
+        "Extensions/virtualCamera/Resources/soundboard-pop.wav",
+        "Extensions/virtualCamera/Resources/soundboard-rimshot.wav",
+        "Extensions/virtualCamera/Resources/soundboard-scratch.wav",
+        "Extensions/virtualCamera/Resources/soundboard-success.wav",
+        "Extensions/virtualCamera/Resources/soundboard-thunder.wav",
+        "Extensions/virtualCamera/Resources/soundboard-whoosh.wav"
+      ]
+    },
+    "nativePackage": "Extensions/virtualCamera/NativeRuntime",
+    "nativeProduct": "MeetingVoice",
+    "nativeRoles": [
+      "app"
+    ],
+    "nativeLink": false,
+    "nativeLicenses": [
+      {
+        "source": "Extensions/virtualCamera/NativeRuntime/LICENSES.txt",
+        "destination": "meeting-voice-licenses.txt"
+      }
+    ],
+    "nativeSources": [
+      "Extensions/virtualCamera/NativeRuntime/Sources/MeetingMicrophone/EdithMicrophone.cpp",
+      "Extensions/virtualCamera/NativeRuntime/Sources/MeetingVoiceRuntime/MeetingVoiceRuntime.cpp",
+      "Extensions/virtualCamera/NativeRuntime/Sources/MeetingVoiceRuntime/include/MeetingVoiceRuntime.h"
+    ],
+    "inputs": [
+      "Extensions/virtualCamera"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "scripts/build-camera-carrier.mjs",
+      "scripts/build-camera-microphone.py",
+      "scripts/camera_extension.py",
+      "Packages/ExtensionSupport",
+      "Packages/EdithHost/Sources",
+      "Packages/EdithHost/Package.swift",
+      "Packages/EdithHost/Package.resolved",
+      "Packages/ExtensionMarketplace/Sources",
+      "scripts/build-minimal-host.mjs",
+      "scripts/package-shipping-host.py"
+    ],
+    "dependencies": [],
+    "testTargets": [
+      "ci-extension-camera",
+      "ci-extension-camera-carrier",
+      "ci-extension-camera-provider",
+      "ci-extension-camera-voice"
+    ],
+    "systemExtensionCarrier": {
+      "role": "cameraCarrier",
+      "providerRole": "cameraProvider",
+      "applicationIdentifier": "com.pulkit.edith.cameraCarrier",
+      "extensionIdentifier": "com.pulkit.edith.camera",
+      "minimumSystemVersion": 14,
+      "installEntitlement": "com.apple.developer.system-extension.install"
+    }
   }
 ]

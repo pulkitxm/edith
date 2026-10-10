@@ -9,6 +9,11 @@ struct HostEntry {
     @MainActor static func main() {
         signal(SIGPIPE, SIG_IGN)
         let arguments = Array(CommandLine.arguments.dropFirst())
+        do { if try HostContainedRole.run(arguments: arguments) { return } } catch {
+            FileHandle.standardError.write(
+                Data("The contained extension could not start: \(error).\n".utf8))
+            exit(1)
+        }
         guard
             HostContract.permitsLaunching(
                 identifier: Bundle.main.bundleIdentifier, bundleURL: Bundle.main.bundleURL)
