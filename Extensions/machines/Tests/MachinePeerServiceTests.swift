@@ -68,6 +68,56 @@ import Testing
         }
     }
 
+    @Test func companionProjectsOnlyConcreteSavedSourceAliasesAcrossRenameAndReload() async throws {
+        let (files, root, manual) = fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        var imported = Machine(
+            name: "Renamed build machine", host: "resolved.invalid",
+            username: "fixture", source: .sshConfigAlias("original-build-alias"),
+            createdAt: Date(timeIntervalSince1970: 1))
+        MachineRegistry.add(imported, files)
+        let wildcard = Machine(
+            name: "Unsupported saved pattern", host: "pattern.invalid",
+            source: .sshConfigAlias("build-*"), createdAt: Date(timeIntervalSince1970: 1))
+        MachineRegistry.add(wildcard, files)
+        let usage = MachineUsageCollectionService(files: files) { _, _ in self.document }
+        let peer = MachinePeerService(
+            files: files, usage: usage,
+            run: { _, _, _, _ in throw ExtensionPeerError.unavailable },
+            forward: { _, _ in throw ExtensionPeerError.unavailable })
+        func hosts() async throws -> [[String: Any]] {
+            let value = try object(
+                await peer.execute("machines.companion.hosts", payload: payload([:])))
+            return try #require(value["machines"] as? [[String: Any]])
+        }
+        let first = try await hosts()
+        let saved = try #require(first.first { $0["id"] as? String == imported.id.uuidString })
+        #expect(saved["aliases"] as? [String] == ["original-build-alias"])
+        #expect(saved["name"] as? String == "Renamed build machine")
+        #expect(saved["sshTarget"] as? String == "original-build-alias")
+        #expect(first.first { $0["id"] as? String == manual.id.uuidString }?["aliases"] == nil)
+        #expect(first.first { $0["id"] as? String == wildcard.id.uuidString }?["aliases"] == nil)
+        imported.name = "Second saved name"
+        MachineRegistry.update(imported, files)
+        let updated = try await hosts()
+        #expect(
+            updated.first { $0["id"] as? String == imported.id.uuidString }?["aliases"] as? [String]
+                == ["original-build-alias"])
+        imported.source = .manual
+        MachineRegistry.update(imported, files)
+        let converted = try await hosts()
+        #expect(
+            converted.first { $0["id"] as? String == imported.id.uuidString }?["aliases"] == nil)
+        await #expect(throws: ExtensionPeerError.self) {
+            try await peer.execute(
+                "machines.companion.hosts", payload: payload(["aliases": ["raw.invalid"]]))
+        }
+        peer.shutdown()
+        await #expect(throws: ExtensionPeerError.self) {
+            try await peer.execute("machines.companion.hosts", payload: payload([:]))
+        }
+    }
+
     @Test func databaseRequiresUniqueSavedLoopbackForwardsAndOneMachine() async throws {
         let (files, root, machine) = fixture()
         defer { try? FileManager.default.removeItem(at: root) }
