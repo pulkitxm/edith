@@ -42,7 +42,7 @@ import Testing
         state.enabled = false
         let scheduler = state.scheduler()
         await scheduler.runIfNeeded()
-        state.enabled = true; state.battery = true
+        state.enabled = true; state.battery = true; state.pauseAmbient = true
         await scheduler.runIfNeeded()
         #expect(state.runs == 0)
         state.battery = false
@@ -107,6 +107,7 @@ import Testing
         var runs = 0
         var enabled = true
         var battery = false
+        var pauseAmbient = false
         var captured: [Data] = []
         var started = false
         var drained = false
@@ -118,7 +119,8 @@ import Testing
         ) -> HostSettingsScheduler {
             HostSettingsScheduler(
                 signature: { self.signature }, enabled: { self.enabled },
-                onBattery: { self.battery }, now: { self.date },
+                onBattery: { self.battery }, pauseAmbientOnBattery: { self.pauseAmbient },
+                now: { self.date },
                 delay: delay,
                 run: run ?? {
                     self.runs += 1; return true

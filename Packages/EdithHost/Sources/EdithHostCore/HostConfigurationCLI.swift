@@ -169,6 +169,9 @@ import Foundation
     public nonisolated static let applicationSettings: [HostCLISetting] =
         [
             .init(
+                HostCoreBackgroundPolicy.preferenceKey, .bool, group: "agent",
+                summary: "Pause ambient background jobs while on battery.", fallback: .bool(false)),
+            .init(
                 AppStorageKeys.General.appearance, .string, group: "appearance",
                 summary: "Window and panel appearance.", allowed: ["system", "light", "dark"],
                 fallback: .string("system")),

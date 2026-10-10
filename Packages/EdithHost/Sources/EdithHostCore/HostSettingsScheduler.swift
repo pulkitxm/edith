@@ -4,6 +4,7 @@ import Foundation
     private let signature: @MainActor () throws -> Data
     private let enabled: @MainActor () -> Bool
     private let onBattery: @MainActor () -> Bool
+    private let pauseAmbientOnBattery: @MainActor () -> Bool
     private let run: @MainActor () async throws -> Bool
     private let now: @MainActor () -> Date
     private let delay: @Sendable (Duration) async throws -> Void
@@ -18,6 +19,7 @@ import Foundation
         signature: @escaping @MainActor () throws -> Data,
         enabled: @escaping @MainActor () -> Bool,
         onBattery: @escaping @MainActor () -> Bool,
+        pauseAmbientOnBattery: @escaping @MainActor () -> Bool = { false },
         now: @escaping @MainActor () -> Date = { Date() },
         delay: @escaping @Sendable (Duration) async throws -> Void = {
             try await Task.sleep(for: $0)
@@ -25,6 +27,7 @@ import Foundation
         run: @escaping @MainActor () async throws -> Bool
     ) {
         self.signature = signature; self.enabled = enabled; self.onBattery = onBattery
+        self.pauseAmbientOnBattery = pauseAmbientOnBattery
         self.now = now; self.delay = delay; self.run = run
     }
 
@@ -52,7 +55,8 @@ import Foundation
     }
 
     public func runIfNeeded() async {
-        guard !stopping, flight == nil, enabled(), !onBattery(),
+        guard !stopping, flight == nil, enabled(),
+            !pauseAmbientOnBattery() || !onBattery(),
             let current = try? signature(),
             previous != current
                 || completedAt.map({ now().timeIntervalSince($0) >= 86400 }) != false

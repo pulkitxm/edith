@@ -295,6 +295,9 @@ import SwiftUI
                 return IOPSGetProvidingPowerSourceType(snapshot).takeUnretainedValue() as String
                     == kIOPMBatteryPowerKey
             },
+            pauseAmbientOnBattery: { [defaults] in
+                defaults.bool(forKey: HostCoreBackgroundPolicy.preferenceKey)
+            },
             run: { [weak self] in
                 guard let self else { throw CancellationError() }
                 _ = try await synchronizeSettings()
@@ -304,6 +307,31 @@ import SwiftUI
             MainActor.assumeIsolated { self?.settingsScheduler?.preferencesChanged() }
         }
         settingsScheduler?.start()
+    }
+
+    func backgroundPolicy() async throws -> HostCoreBackgroundPolicy {
+        try await backgroundPolicyControl().read()
+    }
+
+    func setBackgroundPolicy(pauseAmbientOnBattery: Bool) async throws -> HostCoreBackgroundPolicy {
+        try await backgroundPolicyControl().set(pauseAmbientOnBattery: pauseAmbientOnBattery)
+    }
+
+    private func backgroundPolicyControl() -> HostCoreBackgroundPolicyControl {
+        HostCoreBackgroundPolicyControl(
+            defaults: defaults,
+            processIdentifier: { [weak self] in
+                guard let self, online, !cliStopping else { return nil }
+                return process?.processIdentifier
+            },
+            refresh: { [weak self] in
+                guard let self else { throw CancellationError() }
+                return try await cliSnapshot().pid
+            },
+            changed: { [weak self] in
+                IPC.post(IPC.Name.settingsChanged)
+                self?.settingsScheduler?.preferencesChanged()
+            })
     }
 
     var cliOwnedJobIDs: Set<String> {
