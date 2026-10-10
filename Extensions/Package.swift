@@ -278,9 +278,10 @@ let package = Package(
         .target(
             name: "DocsExtension",
             dependencies: [
+                .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionDocuments", package: "ExtensionSupport"),
                 .product(name: "EdithDocsWorker", package: "EdithDocsWorker"),
-            ], path: "docs", exclude: ["Tests", "Runtime.swift"],
+            ], path: "docs", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "DocsExtensionTests", dependencies: ["DocsExtension"],

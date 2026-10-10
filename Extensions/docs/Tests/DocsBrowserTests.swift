@@ -146,3 +146,64 @@ private actor SlowDocsPeer: JevDeciding {
         throw ExtensionPeerError.invalidRequest
     }
 }
+
+@Suite(.serialized) @MainActor
+struct DocsRemoteTests {
+    @Test func originalNavigationUsesOwnedEngineSourcesAndAsk() async throws {
+        let engine = DocsBrowser(library: DocsBrowserTests.library)
+        let remote = DocsBrowser(
+            remote: DocsUIBridge(invoke: { command, payload in
+                try await DocsUIBridge.execute(command, payload: payload, browser: engine)
+            }))
+        await remote.load()
+        remote.open(.init(path: "herdr/ls.md", anchor: "options"))
+        remote.noteFilter("ls")
+        await remote.settleFilter()
+        #expect(remote.sidebarGroups.flatMap { $0.1 }.map(\.path) == ["herdr/ls.md"])
+        remote.question = "list sessions"
+        await remote.submit()
+        #expect(remote.answer?.picks.first?.command.route == "herdr ls")
+        remote.openSelection()
+        #expect(remote.location.path == "herdr/ls.md")
+        remote.shutdown()
+        #expect(engine.library != nil)
+        #expect(remote.library == nil)
+    }
+
+    @Test func shutdownRejectsLateEngineLibrary() async throws {
+        let remote = DocsBrowser(
+            remote: DocsUIBridge(invoke: { _, _ in
+                try? await Task.sleep(for: .milliseconds(20))
+                return try JSONEncoder().encode(
+                    DocsBrowserTests.library.pages.map {
+                        DocsSource(path: $0.path, markdown: $0.markdown)
+                    })
+            }))
+        let loading = Task { await remote.load() }
+        await Task.yield()
+        remote.shutdown()
+        await loading.value
+        #expect(remote.library == nil)
+        #expect(remote.sidebarGroups.isEmpty)
+    }
+
+    @Test func originalCLIReturnsMarkdownErrorsAndSearch() async throws {
+        let engine = DocsBrowser(library: DocsBrowserTests.library)
+        let shown = try await DocsCLIExecution.run(
+            .init(arguments: ["show", "herdr", "ls"]), browser: engine)
+        #expect(shown.stdout == DocsBrowserTests.library.page("herdr/ls.md")!.markdown)
+        #expect(shown.stderr.isEmpty && shown.exitCode == 0)
+        let missing = try await DocsCLIExecution.run(
+            .init(arguments: ["show", "missing"]), browser: engine)
+        #expect(missing.exitCode == 3)
+        #expect(missing.stdout.isEmpty && missing.stderr.contains("no page documents missing"))
+        let answer = try await DocsCLIExecution.run(
+            .init(arguments: ["ask", "list sessions", "--json"]), browser: engine)
+        let value = try #require(
+            JSONSerialization.jsonObject(with: Data(answer.stdout.utf8)) as? [String: Any])
+        #expect(value["engine"] as? String == "search")
+        #expect((value["picks"] as? [[String: Any]])?.first?["command"] as? String == "ed herdr ls")
+        let help = try await DocsCLIExecution.run(.init(arguments: ["--help"]), browser: engine)
+        #expect(help.exitCode == 0 && help.stdout.contains("show"))
+    }
+}

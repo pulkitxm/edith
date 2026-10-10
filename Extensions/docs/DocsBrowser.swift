@@ -18,7 +18,7 @@ final class DocsBrowser {
     private(set) var scroll = DocsScrollRequest(anchor: nil, serial: 0)
     private(set) var revealSerial = 0
     private(set) var flashAnchor: String?
-    private(set) var answer: DocsAnswer?
+    private(set) var answer: DocsPresentationAnswer?
     private(set) var asking = false
     private(set) var resultsVisible = false
     private var askSerial = 0
@@ -38,21 +38,24 @@ final class DocsBrowser {
     private var filterTask: Task<Void, Never>?
     private var suppliedLibrary = false
     private var loadTask: Task<Void, Never>?
-    private var askTask: Task<DocsAnswer, Never>?
+    private var askTask: Task<DocsPresentationAnswer, Never>?
     private var stopped = false
     private let defaults: UserDefaults
+    private let remote: DocsUIBridge?
 
     init(
         library: DocsLibrary? = nil,
         matchPages: (@Sendable ([DocsGroup], String) -> [(DocsGroup, [DocsPage])])? = nil,
         filterDelay: Duration = .milliseconds(200),
-        defaults: UserDefaults = SharedDefaults.store
+        defaults: UserDefaults = SharedDefaults.store,
+        remote: DocsUIBridge? = nil
     ) {
         self.defaults = defaults
+        self.remote = remote
         if let library {
             self.library = library
             suppliedLibrary = true
-        } else if let ready = DocsLibrary.cached() {
+        } else if remote == nil, let ready = DocsLibrary.cached() {
             self.library = ready
             suppliedLibrary = true
         }
@@ -76,6 +79,15 @@ final class DocsBrowser {
     }
 
     private func loadFresh() async {
+        if let remote {
+            do {
+                let next = try await remote.library()
+                guard !stopped, !Task.isCancelled else { return }
+                adopt(next)
+                suppliedLibrary = true
+            } catch {}
+            return
+        }
         if let ready = DocsLibrary.cached() {
             adopt(ready)
             suppliedLibrary = true
@@ -150,7 +162,12 @@ final class DocsBrowser {
     func follow(_ link: DocsLink) {
         switch link {
         case .page(let path, let anchor): open(DocsLocation(path: path, anchor: anchor))
-        case .external(let url): NSWorkspace.shared.open(url)
+        case .external(let url):
+            if let remote {
+                Task { try? await remote.follow(url) }
+            } else {
+                NSWorkspace.shared.open(url)
+            }
         }
     }
 
@@ -191,8 +208,14 @@ final class DocsBrowser {
         let serial = askSerial
         asking = true
         let task = Task {
-            await DocsAsk.answer(
-                request, in: library, decider: decider, defaults: defaults)
+            if let remote = self.remote {
+                return (try? await remote.answer(request, library: library))
+                    ?? DocsPresentationAnswer(
+                        request: request, engine: .search, picks: [], milliseconds: 0)
+            }
+            return DocsPresentationAnswer(
+                await DocsAsk.answer(
+                    request, in: library, decider: decider, defaults: defaults))
         }
         askTask = task
         let answered = await withTaskCancellationHandler {
@@ -228,7 +251,7 @@ final class DocsBrowser {
         resultsVisible = false
     }
 
-    func openPick(_ pick: DocsPick) {
+    func openPick(_ pick: DocsPresentationPick) {
         if let index = answer?.picks.firstIndex(of: pick) { selection = index }
         openSelection()
     }

@@ -258,7 +258,7 @@ struct DocsScreen: View {
 
 private struct DocsAskResults: View {
     let browser: DocsBrowser
-    let answer: DocsAnswer
+    let answer: DocsPresentationAnswer
     let dark: Bool
 
     var body: some View {
@@ -316,7 +316,7 @@ private struct DocsAskResults: View {
         .shadow(color: .black.opacity(dark ? 0.45 : 0.14), radius: UIScale.pt(18), y: UIScale.pt(8))
     }
 
-    private func row(_ pick: DocsPick, selected: Bool) -> some View {
+    private func row(_ pick: DocsPresentationPick, selected: Bool) -> some View {
         HStack(alignment: .center, spacing: UIScale.pt(12)) {
             VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                 Text(pick.command.path)

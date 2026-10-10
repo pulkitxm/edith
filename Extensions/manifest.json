@@ -983,10 +983,13 @@
     ],
     "roles": {
       "app": [
+        "Extensions/docs/CLI/DocsCLIExecution.swift",
+        "Extensions/docs/CLI/DocsCommands.swift",
         "Extensions/docs/DocsBrowser.swift",
         "Extensions/docs/DocsDocumentView.swift",
         "Extensions/docs/DocsPeerDecider.swift",
         "Extensions/docs/DocsScreen.swift",
+        "Extensions/docs/DocsUIBridge.swift",
         "Extensions/docs/Runtime.swift",
         "Extensions/docs/Surface.swift"
       ]
