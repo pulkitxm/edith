@@ -183,7 +183,9 @@ import Testing
         let other = try #require(group.agents.last)
         let preserved = try #require(worker.spaces.agentTab(other.id)?.holder)
         let request = HerdrOpenRequest(agentID: agent.id, hostID: agent.machineID, view: .diff)
-        await worker.store.open(request)
+        let acknowledgement = try await client.perform(
+            "herdr.ui.notification.open", payload: JSONEncoder().encode(request))
+        #expect(acknowledgement == Data("{\"ok\":true}".utf8))
         #expect(worker.spaces.agentTab(agent.id) == nil)
         #expect(worker.store.session(agent.id)?.view == .diff)
         #expect(worker.spaces.agentTab(other.id)?.holder === preserved)
@@ -205,7 +207,22 @@ import Testing
             from: await client.perform(
                 "herdr.ui.present", object: ["kind": "agent", "id": agent.id]))
         let holder = try #require(worker.store.detachedTab(id: agent.id)?.holder)
-        await worker.store.open(request)
+        _ = try await client.perform(
+            "herdr.ui.notification.open", payload: JSONEncoder().encode(request))
+        await #expect(throws: ExtensionPeerError.self) {
+            try await client.perform(
+                "herdr.ui.notification.open",
+                payload: JSONEncoder().encode(
+                    HerdrOpenRequest(agentID: agent.id, hostID: "foreign", view: .diff)))
+        }
+        await #expect(throws: ExtensionPeerError.self) {
+            try await client.perform(
+                "herdr.ui.notification.open",
+                object: [
+                    "agentID": agent.id, "hostID": agent.machineID, "view": "diff",
+                    "target": "foreign",
+                ])
+        }
         #expect(worker.store.detachedTab(id: agent.id) == nil)
         #expect(worker.store.session(agent.id)?.view == .diff)
         #expect(worker.store.session(agent.id)?.holder !== holder)

@@ -296,6 +296,25 @@ final class HerdrUIDefaults: UserDefaults {
                 let view = HerdrAgentView(rawValue: value)
             else { throw ExtensionPeerError.invalidRequest }
             try worker.spaces.setAgentView(view, token: token)
+        case "herdr.ui.notification.open":
+            guard Set(object.keys) == ["agentID", "hostID", "view"] else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            let request = try JSONDecoder().decode(HerdrOpenRequest.self, from: payload)
+            guard !request.agentID.isEmpty, request.agentID.utf8.count <= 4096,
+                !request.agentID.utf8.contains(0), !request.hostID.isEmpty,
+                request.hostID.utf8.count <= 4096, !request.hostID.utf8.contains(0),
+                store.agents.contains(where: {
+                    $0.id == request.agentID && $0.machineID == request.hostID
+                })
+            else { throw ExtensionPeerError.invalidRequest }
+            await store.open(request)
+            try Task.checkCancellation()
+            guard !worker.isStopped, let selected = store.session(request.agentID),
+                selected.agent.machineID == request.hostID, selected.view == request.view,
+                store.currentTab?.focused == request.agentID
+            else { throw ExtensionPeerError.unavailable }
+            return Data("{\"ok\":true}".utf8)
         case "herdr.ui.navigate":
             guard object.isEmpty else { throw ExtensionPeerError.invalidRequest }
             ExtensionPresentation.showWindow()
