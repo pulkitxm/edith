@@ -32,7 +32,8 @@ struct HostLifecycleHarness {
                 at: launcher.deletingLastPathComponent(), withIntermediateDirectories: true)
             try FileManager.default.copyItem(
                 at: URL(fileURLWithPath: "Resources/ed-launcher"), to: launcher)
-            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: launcher.path)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: launcher.path)
             try FileManager.default.createSymbolicLink(
                 atPath: app.appendingPathComponent("Contents/MacOS/ed").path,
                 withDestinationPath: "../Resources/ed-launcher")
