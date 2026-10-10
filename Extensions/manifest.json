@@ -1610,9 +1610,12 @@
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "app": [
+        "Extensions/bifrost/BifrostUIContext.swift",
+        "Extensions/bifrost/CLI/BifrostCLIExecution.swift",
+        "Extensions/bifrost/CLI/BifrostOriginalCommands.swift",
         "Extensions/bifrost/Models/BifrostApplication.swift",
         "Extensions/bifrost/Models/BifrostCommand.swift",
         "Extensions/bifrost/Models/BifrostCurrency.swift",

@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionCommands
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -7,12 +8,24 @@ import SwiftUI
 @MainActor @objc(EdithBifrostExtensionRuntime)
 final class ExtensionRuntime: NSObject {
     private var worker: BifrostWorker?
+    private var uiContext: BifrostUIContext?
+    private var engineClient: ExtensionEngineClient?
     private var surface: BifrostSurface?
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let surface = self?.surface else { throw ExtensionPeerError.unavailable }
+            guard let self, let worker = self.worker, let surface = self.surface else {
+                throw ExtensionPeerError.unavailable
+            }
+            if command == "bifrost.cli" {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                return try JSONEncoder().encode(
+                    try await BifrostCLIExecution.run(request, store: worker.store))
+            }
+            if command.hasPrefix("bifrost.ui.") {
+                return try BifrostUIContext.execute(command, payload: payload, worker: worker)
+            }
             return try await surface.execute(command, payload: payload)
         }
     }
@@ -36,6 +49,18 @@ final class ExtensionRuntime: NSObject {
                     as? String ?? "",
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
+        case "configureUI":
+            guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "bifrost", let client = configuration.engineClient
+            else { return ["ok": false] as NSDictionary }
+            engineClient = client
+            let context = BifrostUIContext(client: client)
+            uiContext = context; BifrostUIContext.current = context
+            TextEditingCommands.install()
+        case "stopUI":
+            uiContext?.shutdown(); uiContext = nil; BifrostUIContext.current = nil
+            engineClient?.invalidate(); engineClient = nil
+            TextEditingCommands.shutdown()
         case "start":
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
@@ -49,8 +74,9 @@ final class ExtensionRuntime: NSObject {
                 TextEditingCommands.install()
             }
         case "view":
-            guard worker != nil else { return ["ok": false] as NSDictionary }
-            return NSHostingController(rootView: ExtensionPageHost { BifrostSettings() })
+            guard let context = uiContext else { return ["ok": false] as NSDictionary }
+            return NSHostingController(
+                rootView: ExtensionPageHost { BifrostSettings(context: context) })
         case "synchronize": worker?.configureHotKey()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
