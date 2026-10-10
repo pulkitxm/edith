@@ -1867,5 +1867,50 @@
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "supportProduct": "EdithExtensionUI"
+  },
+  {
+    "id": "seoAudit",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 14,
+    "contractVersion": 1,
+    "surfaceContractVersion": 1,
+    "supportProduct": "EdithExtensionUI",
+    "roles": {
+      "app": [
+        "Extensions/seoAudit/Models/SEOAuditModels.swift",
+        "Extensions/seoAudit/Models/SEOAuditSelection.swift",
+        "Extensions/seoAudit/Runtime.swift",
+        "Extensions/seoAudit/Services/LighthouseAuditor.swift",
+        "Extensions/seoAudit/Services/SEOAuditCommands.swift",
+        "Extensions/seoAudit/Services/SEOAuditHTTPClient.swift",
+        "Extensions/seoAudit/Services/SEOAuditImageStore.swift",
+        "Extensions/seoAudit/Services/SEOAuditOwnedIO.swift",
+        "Extensions/seoAudit/Services/SEOAuditRepository.swift",
+        "Extensions/seoAudit/Services/SEOAuditService.swift",
+        "Extensions/seoAudit/Services/SEOAuditSurface.swift",
+        "Extensions/seoAudit/Services/SEOAuditWorkerOperations.swift",
+        "Extensions/seoAudit/Services/SEOAuditWorkflow.swift",
+        "Extensions/seoAudit/Services/SEOPageAuditor.swift",
+        "Extensions/seoAudit/Services/SitemapCrawler.swift",
+        "Extensions/seoAudit/ViewModels/SEOAuditModel.swift",
+        "Extensions/seoAudit/ViewModels/SEOAuditPrivacyState.swift",
+        "Extensions/seoAudit/ViewModels/SEOPageIndex.swift",
+        "Extensions/seoAudit/ViewModels/SEOSnapshotCache.swift",
+        "Extensions/seoAudit/Views/SEOAuditLoadingSkeletons.swift",
+        "Extensions/seoAudit/Views/SEOAuditPage.swift",
+        "Extensions/seoAudit/Views/SEOAuditPageAccordion.swift",
+        "Extensions/seoAudit/Views/SEOAuditProjectView.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/seoAudit"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport"
+    ],
+    "dependencies": []
   }
 ]
