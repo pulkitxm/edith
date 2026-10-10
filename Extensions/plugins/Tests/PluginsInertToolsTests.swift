@@ -18,13 +18,16 @@ import Testing
         let documents = SkillDocumentStore(cacheDirectory: root) { _ in
             throw SkillsError.message("Fixture download unavailable")
         }
-        let installer = SkillInstaller(recordInstalled: { _, _ in
-            Issue.record("Unavailable installation must not record success")
-        }, unavailableReason: "Fixture installation unavailable", run: { _, _ in
-            Issue.record("Unavailable installation must not construct a tool process")
-            throw SkillsError.message("Unexpected process")
-        })
-        let model = SkillsModel(defaults: defaults, documents: documents, installer: installer,
+        let installer = SkillInstaller(
+            recordInstalled: { _, _ in
+                Issue.record("Unavailable installation must not record success")
+            }, unavailableReason: "Fixture installation unavailable",
+            run: { _, _ in
+                Issue.record("Unavailable installation must not construct a tool process")
+                throw SkillsError.message("Unexpected process")
+            })
+        let model = SkillsModel(
+            defaults: defaults, documents: documents, installer: installer,
             detectAgents: { [] }, discoverInstaller: { false })
         await model.discoverAgents()
         #expect(model.agentsLoaded)
@@ -37,14 +40,17 @@ import Testing
     }
 
     @Test func unavailableInstallRejectsBeforeSanitizingEnvironmentOrRunningTools() async throws {
-        let installer = SkillInstaller(recordInstalled: { _, _ in
-            Issue.record("Unavailable installation must not record success")
-        }, unavailableReason: "Fixture installation unavailable", run: { _, _ in
-            Issue.record("Unavailable installation must not run a process")
-            throw SkillsError.message("Unexpected process")
-        })
+        let installer = SkillInstaller(
+            recordInstalled: { _, _ in
+                Issue.record("Unavailable installation must not record success")
+            }, unavailableReason: "Fixture installation unavailable",
+            run: { _, _ in
+                Issue.record("Unavailable installation must not run a process")
+                throw SkillsError.message("Unexpected process")
+            })
         await #expect(throws: (any Error).self) {
-            try await installer.install(skill: EdithSkillLibrary.skills[0], agentIDs: ["unsupported"],
+            try await installer.install(
+                skill: EdithSkillLibrary.skills[0], agentIDs: ["unsupported"],
                 home: URL(fileURLWithPath: "/nonexistent-fixture"), environment: [:])
         }
     }
