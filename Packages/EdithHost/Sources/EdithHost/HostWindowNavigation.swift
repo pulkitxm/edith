@@ -51,6 +51,31 @@ final class HostWindowNavigation {
         return token
     }
 
+    private var relationships: [UUID: WindowRelationship] = [:]
+
+    func owningWorkspace(for window: NSWindow) -> NSWindow? {
+        let owner =
+            window.identifier?.rawValue == "EdithMainWindow"
+            ? window : relationships.values.first(where: { $0.window === window })?.owner
+        guard let owner, registrations.values.contains(where: { $0.window === owner }) else {
+            return nil
+        }
+        return owner
+    }
+
+    func associate(window: NSWindow, with owner: NSWindow) throws -> UUID {
+        guard relationships.values.allSatisfy({ $0.window !== window }), window !== owner,
+            registrations.values.contains(where: { $0.window === owner }),
+            owner.identifier?.rawValue == "EdithMainWindow"
+        else { throw HostWindowNavigationError.unavailable }
+        let token = UUID()
+        relationships = relationships.filter { $0.value.window != nil && $0.value.owner != nil }
+        relationships[token] = WindowRelationship(window: window, owner: owner)
+        return token
+    }
+
+    func removeAssociation(_ token: UUID) { relationships[token] = nil }
+
     func unregister(_ token: UUID) { registrations[token] = nil }
 
     func navigate(
@@ -73,7 +98,7 @@ final class HostWindowNavigation {
             location.map({
                 [
                     "main", "settings", "home", "notch", "sidebar.utility", "music.footer",
-                    "music.sidebar", "music.detail",
+                    "music.sidebar", "music.detail", "machines.window",
                 ]
                 .contains($0)
             }) ?? true,
@@ -97,15 +122,21 @@ final class HostWindowNavigation {
         let candidates = registrations.filter {
             $0.value.window?.identifier?.rawValue == "EdithMainWindow"
         }
-        if let origin, origin.identifier?.rawValue == "EdithMainWindow",
-            !candidates.contains(where: { $0.value.window === origin })
-        {
-            throw HostWindowNavigationError.unavailable
+        let relationship = origin.flatMap { source in
+            relationships.values.first(where: { $0.window === source })
         }
-        let chosen =
-            candidates.first(where: { $0.value.window === origin })
-            ?? candidates.first(where: { $0.value.window?.isKeyWindow == true })
-            ?? candidates.max(by: { $0.value.order < $1.value.order })
+        let owner = origin.flatMap { source in
+            source.identifier?.rawValue == "EdithMainWindow" ? source : relationship?.owner
+        }
+        guard origin == nil || owner != nil else { throw HostWindowNavigationError.unavailable }
+        let chosen: (key: UUID, value: Registration)?
+        if let owner {
+            chosen = candidates.first(where: { $0.value.window === owner })
+        } else {
+            chosen =
+                candidates.first(where: { $0.value.window?.isKeyWindow == true })
+                ?? candidates.max(by: { $0.value.order < $1.value.order })
+        }
         guard let (token, registration) = chosen else {
             throw HostWindowNavigationError.unavailable
         }
@@ -118,7 +149,8 @@ final class HostWindowNavigation {
         guard activeVersions()[extensionID] == version else {
             throw HostWindowNavigationError.inactiveOwner
         }
-        guard registrations[token] === registration, registration.window != nil,
+        guard currentOrigin(presentationID, window: origin, relationship: relationship),
+            registrations[token] === registration, registration.window != nil,
             registration.selected() == route.page
         else { throw HostWindowNavigationError.routeRejected }
         try await didApply(route)
@@ -126,11 +158,29 @@ final class HostWindowNavigation {
         guard activeVersions()[extensionID] == version else {
             throw HostWindowNavigationError.inactiveOwner
         }
-        guard registrations[token] === registration, registration.selected() == route.page,
+        guard currentOrigin(presentationID, window: origin, relationship: relationship),
+            registrations[token] === registration, registration.selected() == route.page,
             HostNavigationCatalog.visible(
                 HostNavigationCatalog.page(page), active: Set(activeVersions().keys),
                 defaults: defaults)
         else { throw HostWindowNavigationError.routeRejected }
+    }
+
+    private func currentOrigin(_ id: UUID?, window: NSWindow?, relationship: WindowRelationship?)
+        -> Bool
+    {
+        guard let id else { return true }
+        guard let window, originatingWindow(id) === window else { return false }
+        if window.identifier?.rawValue == "EdithMainWindow" { return true }
+        guard let relationship else { return false }
+        return relationships.values.contains { $0 === relationship }
+            && relationship.window === window && relationship.owner != nil
+    }
+
+    private final class WindowRelationship {
+        weak var window: NSWindow?
+        weak var owner: NSWindow?
+        init(window: NSWindow, owner: NSWindow) { self.window = window; self.owner = owner }
     }
 
     private final class Registration {

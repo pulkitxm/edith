@@ -137,6 +137,36 @@ struct HostWindowNavigationTests {
         #expect(!second.isVisible)
     }
 
+    @Test func panelOriginRequiresExactExplicitWorkspaceRelationship() async throws {
+        let fixture = NavigationFixture()
+        defer { fixture.finish() }
+        let panel = TestWindowHost.window(contentRect: .zero)
+        defer { panel.close() }
+        let presentation = UUID()
+        let navigation = fixture.navigation(originatingWindow: { $0 == presentation ? panel : nil })
+        fixture.register(navigation)
+        await #expect(throws: HostWindowNavigationError.unavailable) {
+            try await navigation.navigate(
+                extensionID: "calendar", version: "1.0.0", presentationID: presentation,
+                location: "notch")
+        }
+        #expect(fixture.selected == "home")
+        let relationship = try navigation.associate(window: panel, with: fixture.window)
+        try await navigation.navigate(
+            extensionID: "calendar", version: "1.0.0", presentationID: presentation,
+            location: "notch")
+        #expect(fixture.selected == "calendar")
+        fixture.selected = "home"
+        navigation.removeAssociation(relationship)
+        await #expect(throws: HostWindowNavigationError.unavailable) {
+            try await navigation.navigate(
+                extensionID: "calendar", version: "1.0.0", presentationID: presentation,
+                location: "notch")
+        }
+        #expect(fixture.selected == "home")
+        #expect(!panel.isVisible && !fixture.window.isVisible)
+    }
+
     @Test func cancellationOwnerReplacementAndDetachedRegistrationNeverAcknowledge() async throws {
         for change in ["cancel", "replace", "detach"] {
             let fixture = NavigationFixture()

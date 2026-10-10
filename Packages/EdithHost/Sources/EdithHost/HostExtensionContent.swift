@@ -126,7 +126,7 @@ struct HostExtensionContent: View {
     }
 }
 
-private struct HostEmbeddedController: NSViewControllerRepresentable {
+struct HostEmbeddedController: NSViewControllerRepresentable {
     let controller: NSViewController
     let compact: Bool
     let visible: Bool
