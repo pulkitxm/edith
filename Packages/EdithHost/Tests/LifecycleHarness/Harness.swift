@@ -87,6 +87,8 @@ struct HostLifecycleHarness {
         }
         if extensionID == "usage" { try prepareUsageFixture() }
         if extensionID == "codeStats" { try CodeStatsFixture.seed() }
+        if extensionID == "herdr" { try HerdrFixture.prepare() }
+        if extensionID == "quinjet" { try QuinjetFixture.prepare() }
         guard let defaults = UserDefaults(suiteName: suite) else { throw HostWorkerError.rejected }
         defer {
             defaults.removePersistentDomain(forName: suite)
@@ -193,6 +195,10 @@ struct HostLifecycleHarness {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: true)
             } else if let companionServer {
                 try await verifyCompanion(endpoint, server: companionServer)
+            } else if extensionID == "quinjet" {
+                terminalChildren = try await QuinjetFixture.verify(endpoint, workerPID: oldPID)
+            } else if extensionID == "herdr" {
+                terminalChildren = try await HerdrFixture.verify(endpoint, workerPID: oldPID)
             } else if extensionID == "terminal" {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: oldPID)
             } else if extensionID == "machines" {
@@ -255,6 +261,10 @@ struct HostLifecycleHarness {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: false)
             } else if let companionServer {
                 try await verifyCompanion(endpoint, server: companionServer)
+            } else if extensionID == "quinjet" {
+                terminalChildren = try await QuinjetFixture.verify(endpoint, workerPID: newPID)
+            } else if extensionID == "herdr" {
+                terminalChildren = try await HerdrFixture.verify(endpoint, workerPID: newPID)
             } else if extensionID == "terminal" {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: newPID)
             } else if extensionID == "machines" {
@@ -341,6 +351,10 @@ struct HostLifecycleHarness {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: false)
             } else if let companionServer {
                 try await verifyCompanion(endpoint, server: companionServer)
+            } else if extensionID == "quinjet" {
+                terminalChildren = try await QuinjetFixture.verify(endpoint, workerPID: restoredPID)
+            } else if extensionID == "herdr" {
+                terminalChildren = try await HerdrFixture.verify(endpoint, workerPID: restoredPID)
             } else if extensionID == "terminal" {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: restoredPID)
             } else if extensionID == "machines" {
