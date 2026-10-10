@@ -57,8 +57,19 @@ final class HostWindowNavigation {
         registrations = registrations.filter { $0.value.window != nil }
         sequence &+= 1
         let token = UUID()
-        registrations[token] = Registration(
+        let registration = Registration(
             window: window, order: sequence, apply: apply, selected: selected)
+        registrations[token] = registration
+        registration.closeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: window, queue: .main
+        ) { [weak self, weak window] notice in
+            guard notice.object as? NSWindow === window else { return }
+            MainActor.assumeIsolated {
+                guard let self, let window, self.registrations[token]?.window === window
+                else { return }
+                self.unregister(token)
+            }
+        }
         publishWorkspaceChange()
         return token
     }
@@ -210,6 +221,10 @@ final class HostWindowNavigation {
         let order: UInt64
         let apply: Apply
         let selected: @MainActor () -> String
+        var closeObserver: NSObjectProtocol?
+        deinit {
+            if let closeObserver { NotificationCenter.default.removeObserver(closeObserver) }
+        }
         init(
             window: NSWindow, order: UInt64, apply: @escaping Apply,
             selected: @escaping @MainActor () -> String

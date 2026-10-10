@@ -71,6 +71,33 @@ struct HostNotchStartupTests {
         #expect(!main.isVisible && !panel.isVisible)
     }
 
+    @Test func actualUnshownMainWindowCloseWithdrawsItsWorkspaceAndPanelRelationship() async throws
+    {
+        let main = window("EdithMainWindow")
+        let panel = window("EdithNotchPanel")
+        defer { main.close(); panel.close() }
+        let navigation = HostWindowNavigation(activeVersions: { [:] })
+        let fixture = Lifecycle()
+        let startup = HostNotchStartup(navigation: navigation) {
+            fixture.context = $0; return fixture
+        }
+        await startup.settled()
+        let token = navigation.register(window: main, apply: { _ in }, selected: { "home" })
+        await startup.settled()
+        let association = try fixture.context!.association.associate(panel)
+        main.close()
+        await startup.settled()
+        #expect(navigation.registeredMainWorkspace == nil)
+        #expect(navigation.owningWorkspace(for: panel) == nil)
+        #expect(fixture.availability == [false, true, false])
+        navigation.unregister(token)
+        await startup.settled()
+        #expect(fixture.availability == [false, true, false])
+        fixture.context!.association.remove(association)
+        try await startup.stop()
+        #expect(!main.isVisible && !panel.isVisible)
+    }
+
     @Test func compactNavigationRejectsForeignGenerationAndRemovedOwnerBeforeAcknowledgement()
         async throws
     {
