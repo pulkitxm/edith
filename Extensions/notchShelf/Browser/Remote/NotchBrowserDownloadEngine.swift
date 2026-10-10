@@ -8,6 +8,7 @@ struct NotchBrowserDownloadDescriptor: Codable, Sendable {
 
 @MainActor final class NotchBrowserDownloadEngine {
     private struct Download {
+        let owner: UUID
         let descriptor: NotchBrowserDownloadDescriptor
         let directory: URL
         let file: URL
@@ -38,7 +39,7 @@ struct NotchBrowserDownloadDescriptor: Codable, Sendable {
         self.staging = staging
         self.completed = completed
     }
-    func start(_ name: String) throws -> NotchBrowserDownloadDescriptor {
+    func start(_ name: String, owner: UUID) throws -> NotchBrowserDownloadDescriptor {
         expire()
         guard downloads.count < 8, !name.isEmpty, name != ".", name != "..",
             name.utf8.count <= 1024, !name.utf8.contains(0)
@@ -56,15 +57,16 @@ struct NotchBrowserDownloadDescriptor: Codable, Sendable {
         let descriptor = NotchBrowserDownloadDescriptor(
             id: id, name: name.replacingOccurrences(of: "/", with: "-"))
         downloads[id] = Download(
-            descriptor: descriptor, directory: directory, file: file,
+            owner: owner, descriptor: descriptor, directory: directory, file: file,
             writer: try FileHandle(forWritingTo: file), expiry: now().addingTimeInterval(1800),
             offset: 0)
         scheduleExpiry()
         return descriptor
     }
-    func write(id: UUID, offset: UInt64, bytes: Data) throws {
+    func write(id: UUID, owner: UUID, offset: UInt64, bytes: Data) throws {
         expire()
-        guard var download = downloads[id], download.offset == offset, !bytes.isEmpty,
+        guard var download = downloads[id], download.owner == owner, download.offset == offset,
+            !bytes.isEmpty,
             bytes.count <= 65536, offset <= 137438953472 - UInt64(bytes.count)
         else { throw ExtensionPeerError.invalidRequest }
         try download.writer.write(contentsOf: bytes)
@@ -73,9 +75,11 @@ struct NotchBrowserDownloadDescriptor: Codable, Sendable {
         downloads[id] = download
         scheduleExpiry()
     }
-    func commit(id: UUID) throws -> NotchBrowserDownloadDescriptor {
+    func commit(id: UUID, owner: UUID) throws -> NotchBrowserDownloadDescriptor {
         expire()
-        guard let download = downloads[id] else { throw ExtensionPeerError.invalidRequest }
+        guard let download = downloads[id], download.owner == owner else {
+            throw ExtensionPeerError.invalidRequest
+        }
         try download.writer.synchronize(); try download.writer.close()
         let folder = destination()
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -91,7 +95,14 @@ struct NotchBrowserDownloadDescriptor: Codable, Sendable {
         completed(url)
         return .init(id: id, name: url.lastPathComponent)
     }
-    func cancel(id: UUID) {
+    func cancel(id: UUID, owner: UUID) throws {
+        guard downloads[id]?.owner == owner else { throw ExtensionPeerError.invalidRequest }
+        cancel(id: id)
+    }
+    func release(owner: UUID) {
+        for (id, download) in downloads where download.owner == owner { cancel(id: id) }
+    }
+    private func cancel(id: UUID) {
         guard let download = downloads.removeValue(forKey: id) else { return }
         try? download.writer.close()
         try? FileManager.default.removeItem(at: download.directory)

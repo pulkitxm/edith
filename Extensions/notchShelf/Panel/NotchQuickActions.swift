@@ -104,7 +104,6 @@ struct NotchQuickActionsView: View {
     @State private var task: Task<Void, Never>?
     @State private var error: String?
     @Environment(\.surfacePresentation) private var presentation
-    @Environment(\.automaticViewActionsEnabled) private var automaticActions
     private var activeAwake: Bool {
         state.snapshots["keepAwake"]?.actions.contains { $0.id == "disable" } == true
     }

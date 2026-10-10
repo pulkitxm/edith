@@ -60,6 +60,61 @@ import Testing
         #expect(controller.ownedPanelCount == 0)
     }
 
+    @Test func stableCapacityRetainsOriginalBrowserUnionAndSceneCleanupAfterDisable() async throws {
+        let fixture = try NotchPanelFixture()
+        defer { fixture.clean() }
+        _ = try fixture.attach()
+        let storage = NotchBrowserDownloadEngine(
+            destination: { fixture.root.appendingPathComponent("Downloads") },
+            staging: fixture.root.appendingPathComponent("Download staging"), completed: { _ in })
+        let file = BrowserSessionFile(
+            url: fixture.root.appendingPathComponent("Browser/session.json"))
+        file.save(
+            .init(profile: nil, profileName: nil, tabs: [], selected: 0, width: 1200, height: 780))
+        let browser = NotchBrowserEngine(
+            installation: .init(
+                applicationURL: { nil }, defaultBrowser: { nil },
+                userData: .init(root: fixture.root.appendingPathComponent("Chrome"))),
+            sessionFile: file,
+            defaults: fixture.defaults, keyProvider: { SyntheticChrome.key },
+            open: { _, _ in Issue.record("No app may open") }, downloads: storage)
+        fixture.defaults.set(true, forKey: AppStorageKeys.Notch.browserEnabled)
+        let controller = fixture.bind(createBrowserEngine: { _ in browser })
+        controller.synchronize()
+        controller.expand(on: 42, preferredTab: .browser)
+        let expanded = try fixture.engine.batch().states[0]
+        #expect(expanded.shapeWidth == 1200)
+        #expect(expanded.shapeHeight == 808)
+        #expect(expanded.capacityHeight == 808)
+        #expect(expanded.capacityWidth == expanded.shapeWidth)
+        let chrome = NotchChromeClient(
+            displayID: 42, presentationID: fixture.presentation, namespace: fixture.id
+        ) { operation, payload in
+            guard operation == "notch.chrome.read" else { throw ExtensionPeerError.invalidRequest }
+            return try JSONEncoder().encode(
+                fixture.engine.chrome(JSONDecoder().decode(NotchChromeRead.self, from: payload)))
+        }
+        defer { chrome.stop() }
+        await chrome.refresh()
+        #expect(chrome.snapshot != nil)
+        #expect(chrome.error == nil)
+        controller.collapseNow()
+        let collapsed = try fixture.engine.batch().states[0]
+        #expect(collapsed.shapeWidth < expanded.shapeWidth)
+        #expect(collapsed.capacityWidth == expanded.capacityWidth)
+        #expect(collapsed.capacityHeight == expanded.capacityHeight)
+        #expect(collapsed.bounds.height == 818)
+        let pending = try storage.start("owned.bin", owner: fixture.presentation)
+        try fixture.publish([:])
+        try fixture.engine.stopScene(
+            .init(
+                identity: try #require(fixture.engine.identity), displayID: 42,
+                presentationID: fixture.presentation))
+        #expect(throws: (any Error).self) {
+            try storage.commit(id: pending.id, owner: fixture.presentation)
+        }
+    }
+
     @Test func geometryAdmitsExactSavedTilesAndRejectsStaleDisabledAndOutOfBoundsSlots() throws {
         let fixture = try NotchPanelFixture()
         defer { fixture.clean() }
@@ -257,10 +312,15 @@ import Testing
                         collapsedWidth: 150, collapsedHeight: 28, isBuiltin: true)
                 ]))
     }
-    func bind() -> NotchShelfController {
+    func bind(
+        createBrowserEngine: @escaping @MainActor (UserDefaults) -> NotchBrowserEngine = {
+            NotchBrowserEngine(defaults: $0)
+        }
+    ) -> NotchShelfController {
         let controller = NotchShelfController(
             context: context, startsServices: false, root: root.appendingPathComponent("Shelf"),
-            hostDisplays: Array(engine.displays.values), bluetoothPrivacyRequired: { false })
+            hostDisplays: Array(engine.displays.values), createBrowserEngine: createBrowserEngine,
+            bluetoothPrivacyRequired: { false })
         self.controller = controller
         engine.bind(controller)
         return controller

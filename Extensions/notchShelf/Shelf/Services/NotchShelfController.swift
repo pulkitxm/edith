@@ -61,6 +61,7 @@ final class NotchShelfController {
     private(set) var currentAlert: NotchAlert?
     private(set) var browser: NotchBrowserStore?
     private(set) var browserEngine: NotchBrowserEngine?
+    private let createBrowserEngine: @MainActor (UserDefaults) -> NotchBrowserEngine
     private var alertDetectors: NotchAlertDetectors?
     private var alertWorkItem: DispatchWorkItem?
     private var alertPinned = false
@@ -105,10 +106,14 @@ final class NotchShelfController {
     init(
         context: SurfaceHostContext, startsServices: Bool = true, root: URL = ShelfIndex.root,
         hostDisplays: [NotchPanelDisplay]? = nil,
+        createBrowserEngine: @escaping @MainActor (UserDefaults) -> NotchBrowserEngine = {
+            NotchBrowserEngine(defaults: $0)
+        },
         bluetoothPrivacyRequired: @escaping () -> Bool = {
             CBManager.authorization == .denied || CBManager.authorization == .restricted
         }
     ) {
+        self.createBrowserEngine = createBrowserEngine
         hostOwned = hostDisplays != nil
         self.bluetoothPrivacyRequired = bluetoothPrivacyRequired
         self.context = context
@@ -220,7 +225,7 @@ final class NotchShelfController {
         let browserEnabled = context.defaults.bool(forKey: AppStorageKeys.Notch.browserEnabled)
         if browserEnabled, browser == nil, browserEngine == nil {
             if hostOwned {
-                let engine = NotchBrowserEngine(defaults: context.defaults)
+                let engine = createBrowserEngine(context.defaults)
                 engine.changed = { [weak self] in self?.syncFrames() }
                 browserEngine = engine
             } else {

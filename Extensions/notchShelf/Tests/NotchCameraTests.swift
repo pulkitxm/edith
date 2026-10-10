@@ -70,9 +70,26 @@ import Testing
         command = .init(
             identity: command.identity, displayID: 42, presentationID: UUID(), operation: .start)
         await #expect(throws: (any Error).self) { try await fixture.engine.camera(command) }
+        let presenter = ExtensionSharedState(
+            root: fixture.root, namespace: fixture.id, owner: "presenter")
+        try presenter.publish(["active": "1", "blurCamera": "1"])
+        controller.synchronize()
+        #expect(try fixture.engine.cameraEngine?.state().frame == nil)
+        let valid = NotchCameraRequest(
+            identity: try #require(fixture.engine.identity), displayID: 42,
+            presentationID: fixture.presentation, operation: .start)
+        await #expect(throws: (any Error).self) { try await fixture.engine.camera(valid) }
+        try presenter.publish(["active": "0"])
+        controller.synchronize()
+        _ = try await fixture.engine.camera(valid)
+        try fixture.engine.stopScene(
+            .init(
+                identity: try #require(fixture.engine.identity), displayID: 42,
+                presentationID: fixture.presentation))
+        #expect(try fixture.engine.cameraEngine?.state().frame == nil)
         controller.collapseNow()
         await fixture.engine.cameraEngine?.shutdownAndWait()
-        #expect(hardware.stops == 1)
+        #expect(hardware.stops == 2)
     }
 
     @Test func originalPromptRendersOffscreenAndLateCancelledReadCannotReturn() async throws {

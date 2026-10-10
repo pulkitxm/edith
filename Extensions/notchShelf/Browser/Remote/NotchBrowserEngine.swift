@@ -12,10 +12,13 @@ import Foundation
     private(set) var session: BrowserSession
     private var cookieKey: ChromeCookieKey?
     private var importTask: Task<Result<(ChromeCookieKey, ChromeProfileSnapshot), Error>, Never>?
+    private var importOwner: UUID?
+    private var importGeneration = UUID()
     private var imported: (NotchBrowserImport, Data)?
     private var stopped = false
     private let downloads: NotchBrowserDownloadEngine
     private var importExpiry: Task<Void, Never>?
+    private var heldOwner: UUID?
     var held = false
     var changed: (() -> Void)?
 
@@ -83,24 +86,27 @@ import Foundation
         switch request.operation {
         case .downloadStart:
             guard let name = request.fileName else { throw ExtensionPeerError.invalidRequest }
-            return try encoder.encode(downloads.start(name))
+            return try encoder.encode(downloads.start(name, owner: request.presentationID))
         case .downloadWrite:
             guard let id = request.downloadID, let offset = request.byteOffset,
                 let bytes = request.bytes
             else { throw ExtensionPeerError.invalidRequest }
-            try downloads.write(id: id, offset: offset, bytes: bytes)
+            try downloads.write(id: id, owner: request.presentationID, offset: offset, bytes: bytes)
             return Data("{}".utf8)
         case .downloadCommit:
             guard let id = request.downloadID else { throw ExtensionPeerError.invalidRequest }
-            return try encoder.encode(downloads.commit(id: id))
+            return try encoder.encode(downloads.commit(id: id, owner: request.presentationID))
         case .downloadCancel:
             guard let id = request.downloadID else { throw ExtensionPeerError.invalidRequest }
-            downloads.cancel(id: id)
+            try downloads.cancel(id: id, owner: request.presentationID)
             return Data("{}".utf8)
         case .read: break
-        case .importStart: return try encoder.encode(await beginImport(request.profileID))
+        case .importStart:
+            return try encoder.encode(
+                await beginImport(request.profileID, owner: request.presentationID))
         case .importRead:
-            guard let imported, request.importID == imported.0.id, let offset = request.offset,
+            guard importOwner == request.presentationID, let imported,
+                request.importID == imported.0.id, let offset = request.offset,
                 offset >= 0, offset < imported.1.count
             else { throw ExtensionPeerError.invalidRequest }
             let end = min(offset + 65536, imported.1.count)
@@ -109,7 +115,9 @@ import Foundation
                     id: imported.0.id, offset: offset, nextOffset: end,
                     bytes: imported.1.subdata(in: offset..<end)))
         case .importEnd:
-            guard let imported, request.importID == imported.0.id else {
+            guard importOwner == request.presentationID, let imported,
+                request.importID == imported.0.id
+            else {
                 throw ExtensionPeerError.invalidRequest
             }
             self.imported = nil
@@ -138,8 +146,10 @@ import Foundation
             changed?()
         case .held:
             guard let held = request.held else { throw ExtensionPeerError.invalidRequest }
-            self.held = held
-            changed?()
+            if held || heldOwner == request.presentationID {
+                self.held = held; heldOwner = held ? request.presentationID : nil
+                changed?()
+            }
         case .openInChrome:
             guard let link = request.link, link.utf8.count <= 16384, let url = URL(string: link),
                 ["http", "https"].contains(url.scheme?.lowercased() ?? "")
@@ -175,11 +185,13 @@ import Foundation
         return try encoder.encode(state())
     }
 
-    private func beginImport(_ profileID: String?) async throws -> NotchBrowserImport {
+    private func beginImport(_ profileID: String?, owner: UUID) async throws -> NotchBrowserImport {
         guard importTask == nil, imported == nil, let profileID,
             let profile = installation.inspect().profiles.first(where: { $0.directory == profileID }
             )
         else { throw ExtensionPeerError.invalidRequest }
+        importOwner = owner
+        let generation = importGeneration
         let userData = installation.userData
         let cached = cookieKey
         let provider = keyProvider
@@ -202,7 +214,9 @@ import Foundation
             task.cancel()
         }
         try Task.checkCancellation()
-        guard !stopped else { throw ExtensionPeerError.unavailable }
+        guard !stopped, generation == importGeneration, importOwner == owner else {
+            throw ExtensionPeerError.unavailable
+        }
         let (key, snapshot) = try outcome.get()
         let data = try JSONEncoder().encode(snapshot)
         guard data.count <= 33554432 else {
@@ -231,6 +245,15 @@ import Foundation
         imported = nil; cookieKey = nil
         session.profile = nil; session.profileName = nil; session.tabs = []; session.selected = 0
         sessionFile.save(session); changed?()
+    }
+
+    func release(owner: UUID) {
+        downloads.release(owner: owner)
+        if heldOwner == owner { held = false; heldOwner = nil; changed?() }
+        if importOwner == owner {
+            importGeneration = UUID(); importTask?.cancel(); imported = nil; importOwner = nil
+            importExpiry?.cancel(); importExpiry = nil
+        }
     }
 
     func stop() {
