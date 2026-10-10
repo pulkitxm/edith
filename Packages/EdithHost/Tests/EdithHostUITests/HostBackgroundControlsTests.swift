@@ -1,6 +1,6 @@
 import AppKit
 import EdithExtensionUI
-import EdithHostCore
+@testable import EdithHostCore
 import Foundation
 import SwiftUI
 import Testing
@@ -127,6 +127,7 @@ import Testing
                             HostBackgroundEventTimeline(model: model)
                         }.environment(\.compactLayout, width == 520)
                             .environment(\.colorScheme, scheme)
+                            .environment(\.windowVisible, false)
                             .environment(\.automaticViewActionsEnabled, false)
                             .transaction { $0.animation = nil })
                     view.frame = NSRect(x: 0, y: 0, width: width, height: 900)
@@ -251,6 +252,162 @@ import Testing
         #expect(model.failure == nil)
         #expect(model.action == nil)
         #expect(!model.current)
+    }
+
+    @Test func actualCurrentCoreJournalDrivesRunCancelAndRetainedTimeline() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try HostCoreAgentStore(directory: root)
+        var execution: UUID?
+        func projection() throws -> HostBackgroundProjection {
+            let snapshot = HostCoreSnapshot(
+                pid: getpid(), startedAt: Date(), collectedAt: Date(), residentBytes: 0,
+                cpuSeconds: 0, storage: nil, tasks: [], cloudDirectory: root,
+                cloudAvailable: false, agent: store.snapshot())
+            return try HostBackgroundSource.decodeCore(JSONEncoder().encode(snapshot))
+        }
+        let agent = HostCoreAgentCLIFactory.make(
+            local: .init(
+                ownedJobs: { Set(store.snapshot().jobs.map(\.id)) },
+                status: { throw HostCLIError.unavailable }, jobs: { store.snapshot().jobs },
+                restart: { throw HostCLIError.unavailable }, logs: { _ in [] },
+                events: { store.snapshot().events },
+                run: { job in
+                    let token = UUID()
+                    try store.begin(job: job, execution: token)
+                    execution = token
+                },
+                cancel: { _ in
+                    try store.finish(
+                        execution: try #require(execution), phase: .cancelled,
+                        message: "Synthetic cancellation")
+                    execution = nil
+                }),
+            invoke: { request in
+                guard request.action == .ls else { throw HostCLIError.unavailable }
+                return Data("[]".utf8)
+            })
+        let model = HostBackgroundModel(
+            environment: .init(
+                identity: { "synthetic-current-core" }, read: { try projection() },
+                control: { job, cancel in
+                    let reply = try await agent.execute([cancel ? "cancel" : "run", job, "--json"])
+                    #expect(reply.exitCode == 0)
+                    let result = try JSONDecoder().decode(
+                        [String: String].self, from: Data(reply.stdout.utf8))
+                    #expect(result[cancel ? "cancelled" : "queued"] == job)
+                }))
+        await model.refresh()
+        let job = try #require(model.jobs.first { $0.id == "backup.sync" })
+        #expect(job.interval == 86400)
+        await model.control(job)
+        let running = try #require(model.jobs.first { $0.id == job.id })
+        #expect(running.phase == "running" && running.runCount == 1)
+        #expect(running.lastRun != nil)
+        await model.control(running)
+        let cancelled = try #require(model.jobs.first { $0.id == job.id })
+        #expect(cancelled.phase == "idle" && cancelled.lastDuration != nil)
+        #expect(model.lastStatus(for: cancelled) == "Synthetic cancellation")
+        #expect(
+            model.events.first { $0.message == "Synthetic cancellation" }?.level == "warning")
+        let restored = try HostCoreAgentStore(directory: root).snapshot()
+        #expect(restored.jobs.first { $0.id == job.id }?.runCount == 1)
+        #expect(restored.events.contains { $0.message == "Synthetic cancellation" })
+    }
+
+    @Test func originalNotificationFactoryPinsExactRouteAndRejectsLateReplacedOwner() async throws {
+        let presenter = NotificationPresenter()
+        var states = [try notificationState()]
+        let model = HostBackgroundNotifications(presenter: presenter, states: { states })
+        let first = Task { await model.refresh() }
+        await presenter.started(1)
+        let request = try #require(presenter.requests.first)
+        #expect(request.extensionID == "herdr")
+        #expect(request.location == "settings" && request.section == "backgroundAgent")
+        states = [try notificationState(version: "3")]
+        presenter.finish(0)
+        await first.value
+        #expect(model.controller == nil && model.failure == nil)
+        #expect(presenter.ended.contains(request.presentationID))
+        states = [try notificationState()]
+        let second = Task { await model.refresh() }
+        await presenter.started(2)
+        let third = Task { await model.refresh() }
+        await presenter.started(3)
+        presenter.finish(2)
+        await third.value
+        let current = model.controller
+        #expect(current != nil && current?.view.window == nil)
+        #expect(model.current(version: "2", runtimeVersion: "2", pid: getpid(), active: true))
+        #expect(!model.current(version: "3", runtimeVersion: "2", pid: getpid(), active: true))
+        #expect(!model.current(version: "2", runtimeVersion: "3", pid: getpid(), active: true))
+        #expect(!model.current(version: "2", runtimeVersion: "2", pid: getpid() + 1, active: true))
+        #expect(!model.current(version: "2", runtimeVersion: "2", pid: getpid(), active: false))
+        presenter.finish(1)
+        await second.value
+        #expect(model.controller === current)
+        model.cancel()
+        #expect(model.controller == nil)
+        let fourth = Task { await model.refresh() }
+        await presenter.started(4)
+        fourth.cancel()
+        presenter.finish(3)
+        await fourth.value
+        #expect(model.controller == nil && model.failure == nil)
+    }
+
+    @Test(arguments: ["compatible", "enabled", "running", "disablePending", "removalPending"])
+    func inactiveOrIncompatibleNotificationOwnerNeverReachesFactory(field: String) async throws {
+        let presenter = NotificationPresenter()
+        let state = try notificationState(changed: field)
+        let model = HostBackgroundNotifications(presenter: presenter, states: { [state] })
+        await model.refresh()
+        #expect(presenter.requests.isEmpty)
+        #expect(model.controller == nil)
+    }
+
+    private func notificationState(version: String = "2", changed: String? = nil) throws
+        -> HostCLIProviderState
+    {
+        var value: [String: Any] = [
+            "id": "herdr", "installed": true, "compatible": true, "enabled": true,
+            "running": true, "version": version, "disablePending": false,
+            "removalPending": false, "processIdentifier": getpid(),
+        ]
+        if let changed { value[changed] = changed.hasSuffix("Pending") }
+        return try JSONDecoder().decode(
+            HostCLIProviderState.self, from: JSONSerialization.data(withJSONObject: value))
+    }
+
+    @MainActor private final class NotificationPresenter: HostExtensionContentPresenting {
+        var requests: [HostExtensionContentRequest] = []
+        var ended: [UUID] = []
+        var flights: [CheckedContinuation<NSViewController, Never>] = []
+        var signals: [(Int, CheckedContinuation<Void, Never>)] = []
+
+        func controller(for request: HostExtensionContentRequest) async throws -> NSViewController {
+            requests.append(request)
+            return await withCheckedContinuation { continuation in
+                flights.append(continuation)
+                let ready = signals.filter { $0.0 <= flights.count }
+                signals.removeAll { $0.0 <= flights.count }
+                ready.forEach { $0.1.resume() }
+            }
+        }
+
+        func started(_ count: Int) async {
+            if flights.count >= count { return }
+            await withCheckedContinuation { signals.append((count, $0)) }
+        }
+
+        func finish(_ index: Int) {
+            let controller = NSViewController()
+            controller.view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 120))
+            flights[index].resume(returning: controller)
+        }
+
+        func endPresentation(id: UUID) { ended.append(id) }
     }
 
     private func fixture(id: String = "sessions.discover", phase: String = "failed") throws

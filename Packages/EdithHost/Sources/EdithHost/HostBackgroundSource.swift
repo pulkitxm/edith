@@ -12,30 +12,12 @@ import Foundation
         }
         let agent: Agent?
     }
-    private struct Hooks: Decodable {
-        struct Catalog: Decodable {
-            struct Agent: Decodable {
-                let jobs: String
-                let run: String?
-                let cancel: String?
-                let events: String?
-            }
-            let version: Int
-            let owner: String
-            let agent: Agent?
-        }
-        let coreOwner: Catalog?
-    }
-    private struct Jobs: Decodable { let owner: String; let jobs: [HostBackgroundJob] }
-    private struct Events: Decodable { let owner: String; let events: [HostBackgroundEvent] }
-    private struct Envelope: Encodable {
-        let arguments: [String]
-        let input = Data()
-        let workingDirectory = "/"
-    }
-
     static func live(_ services: HostCoreServices) -> HostBackgroundEnvironment {
         let gateway = HostCLIGateway(marketplace: services.marketplace)
+        let invoke: HostCLIProviderRegistry.Invoke = { try await gateway.execute($0) }
+        let hooks = HostCoreOwnerHooks(invoke: invoke)
+        let agent = HostCoreAgentCLIFactory.make(
+            local: HostCoreAgentCLIAdapter.backend(core: { services }), invoke: invoke)
         return HostBackgroundEnvironment(
             identity: { identity(services) },
             read: {
@@ -46,73 +28,30 @@ import Foundation
                 guard core.unavailable == nil else { return core }
                 var jobs = core.jobs
                 var events = core.events
-                var missing: [String] = []
-                let states = try await HostCLIProviderRegistry.states { request in
-                    try await gateway.execute(request)
-                }
-                for state in states
-                where state.available && HostCLIProviderCatalog.prefixes[state.id] != nil {
-                    let catalog: Hooks
-                    do {
-                        catalog = try await call(
-                            Hooks.self, gateway: gateway, state: state,
-                            operation: state.id + ".cli.catalog")
-                    } catch is CancellationError { throw CancellationError() } catch {
-                        missing.append(state.id + ": background capabilities are unavailable.")
-                        continue
-                    }
-                    guard let owner = catalog.coreOwner else {
-                        if [
-                            "herdr", "usage", "machines", "appMaintenance", "cleaner", "downloads",
-                            "attention", "companion", "codeStats",
-                        ].contains(state.id) {
-                            missing.append(state.id + ": background capabilities are unavailable.")
-                        }
-                        continue
-                    }
-                    guard owner.version == 1, owner.owner == state.id, let hooks = owner.agent
-                    else { continue }
-                    guard hooks.jobs == state.id + ".agent.jobs",
-                        hooks.run == state.id + ".agent.run",
-                        hooks.cancel == state.id + ".agent.cancel",
-                        hooks.events == state.id + ".agent.events"
-                    else {
-                        missing.append(state.id + ": update the background capabilities.")
-                        continue
-                    }
-                    do {
-                        let inventory = try await call(
-                            Jobs.self, gateway: gateway, state: state, operation: hooks.jobs)
-                        let timeline = try await call(
-                            Events.self, gateway: gateway, state: state, operation: hooks.events!)
-                        guard inventory.owner == state.id, timeline.owner == state.id,
-                            inventory.jobs.count <= 128, timeline.events.count <= 500,
-                            inventory.jobs.allSatisfy({ owned($0, by: state.id) })
-                        else {
-                            throw HostCLIError.rejected("Invalid background owner projection.")
-                        }
-                        jobs += inventory.jobs; events += timeline.events
-                    } catch is CancellationError { throw CancellationError() } catch {
-                        missing.append(state.id + ": " + error.localizedDescription)
+                var unavailable: String?
+                do {
+                    let ownedJobs = try await hooks.jobs()
+                    let ownedEvents = try await hooks.events()
+                    let decoder = JSONDecoder()
+                    jobs += try decoder.decode(
+                        [HostBackgroundJob].self, from: JSONEncoder().encode(ownedJobs))
+                    events += try decoder.decode(
+                        [HostBackgroundEvent].self, from: JSONEncoder().encode(ownedEvents))
+                } catch is CancellationError { throw CancellationError() } catch {
+                    if let command = error as? HostCoreCommandFailure {
+                        unavailable = command.message + (command.hint.map { "\n" + $0 } ?? "")
+                    } else {
+                        unavailable = error.localizedDescription
                     }
                 }
                 try validate(jobs: jobs, events: events)
                 return .init(
                     jobs: jobs, events: Array(events.sorted { $0.date < $1.date }.suffix(500)),
-                    unavailable: missing.isEmpty ? nil : missing.joined(separator: "\n"))
+                    unavailable: unavailable)
             },
             control: { job, cancel in
-                let request = try HostCLIRequest(
-                    action: .invoke, id: "host", operation: "host.cli",
-                    payload: JSONEncoder().encode(
-                        Envelope(arguments: ["agent", cancel ? "cancel" : "run", job, "--json"])))
-                let identity = services.identity
-                let flight = Task.detached {
-                    try HostCLITransport.invoke(request, identity: identity)
-                }
-                let data = try await flight.value
+                let reply = try await agent.execute([cancel ? "cancel" : "run", job, "--json"])
                 try Task.checkCancellation()
-                let reply = try JSONDecoder().decode(ExtensionCLIReply.self, from: data)
                 try reply.validate()
                 guard reply.exitCode == 0 else { throw HostCLIError.rejected(reply.stderr) }
                 let result = try JSONDecoder().decode(
@@ -153,39 +92,6 @@ import Foundation
                 + "\(marketplace.pendingRemovalIDs.contains(id))"
         }.joined(separator: "|")
         return "\(core.pid):\(core.startedAt.timeIntervalSince1970)|\(owners)"
-    }
-
-    private static func call<T: Decodable>(
-        _ type: T.Type, gateway: HostCLIGateway,
-        state: HostCLIProviderState, operation: String
-    ) async throws -> T {
-        let invoke: HostCLIProviderRegistry.Invoke = { try await gateway.execute($0) }
-        let pin = try HostBackgroundOwnerPin(state: state)
-        guard pin.accepts(try await HostCLIProviderRegistry.states(invoke: invoke)) else {
-            throw HostCLIError.rejected("The background owner changed.")
-        }
-        let data = try await gateway.execute(
-            HostCLIRequest(action: .invoke, id: state.id, operation: operation))
-        try Task.checkCancellation()
-        guard data.count <= HostCLIRequest.maximumPayload,
-            pin.accepts(try await HostCLIProviderRegistry.states(invoke: invoke))
-        else {
-            throw HostCLIError.rejected("The background owner changed before its result arrived.")
-        }
-        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(type, from: data)
-    }
-
-    private static func owned(_ job: HostBackgroundJob, by owner: String) -> Bool {
-        let prefixes = [
-            "herdr": "sessions.", "usage": "usage.", "machines": "machines.",
-            "appMaintenance": "updates.", "cleaner": "cleaner.", "downloads": "downloads.",
-            "attention": "attention.", "companion": "companion.", "codeStats": "codestats.",
-        ]
-        return
-            (job.id.hasPrefix(owner + ".") || prefixes[owner].map { job.id.hasPrefix($0) } == true)
-            && (job.descriptor.abilityID == nil || job.descriptor.abilityID == owner)
-            && !["backup.sync", "backup.restore", "storage.inspect"].contains(job.id)
     }
 
     static func validate(jobs: [HostBackgroundJob], events: [HostBackgroundEvent]) throws {

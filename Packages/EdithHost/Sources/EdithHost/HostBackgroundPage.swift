@@ -4,11 +4,16 @@ import SwiftUI
 
 struct HostBackgroundPage: View {
     @Bindable var services: HostCoreServices
+    private let presenter: (any HostExtensionContentPresenting)?
     @State private var showingEvents = false
     @State private var model: HostBackgroundModel
 
-    init(services: HostCoreServices, model: HostBackgroundModel? = nil) {
+    init(
+        services: HostCoreServices, model: HostBackgroundModel? = nil,
+        presenter: (any HostExtensionContentPresenting)? = nil
+    ) {
         self.services = services
+        self.presenter = presenter
         _model = State(
             initialValue: model
                 ?? HostBackgroundModel(environment: HostBackgroundSource.live(services)))
@@ -58,6 +63,10 @@ struct HostBackgroundPage: View {
                     .settingsCaption()
                 Text("The scheduler must support this policy before it can be changed.")
                     .settingsCaption()
+            }
+            if let presenter {
+                HostBackgroundNotificationSection(
+                    marketplace: services.marketplace, presenter: presenter)
             }
             HostBackgroundJobsSection(model: model)
             Section("Background tasks") {
