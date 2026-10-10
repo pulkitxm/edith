@@ -10,8 +10,13 @@ public struct HostWorkerConfiguration: Codable, Sendable {
     public let appearance: String
     public let zoom: Double
     public var recoveryOnly: Bool = false
+    public let publicLauncher: HostPublicLauncher?
 
-    public init(identity: HostIdentity, extensionID: String, version: String) {
+    public init(
+        identity: HostIdentity, extensionID: String, version: String,
+        publicLauncher: HostPublicLauncher? = nil
+    ) {
+        self.publicLauncher = publicLauncher
         identifier = identity.identifier
         supportDirectory =
             identity.development
