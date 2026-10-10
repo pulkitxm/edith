@@ -192,10 +192,14 @@ struct HostLifecycleHarness {
                 let handle = try! FileHandle(forWritingTo: log)
                 workerLogs.append(log)
                 logHandles.append(handle)
+                let publicLauncher = try UsageLauncherFixture.capture(
+                    extensionID: package.id, executable: executable,
+                    hostIdentifier: identity.identifier)
                 return
                     HostWorker(
                         configuration: HostWorkerConfiguration(
-                            identity: identity, extensionID: package.id, version: package.version),
+                            identity: identity, extensionID: package.id, version: package.version,
+                            publicLauncher: publicLauncher),
                         executable: executable, errorOutput: handle)
             }
         }
