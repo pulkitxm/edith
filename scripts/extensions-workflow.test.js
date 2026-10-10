@@ -44,6 +44,27 @@ test("downloaded Docs source and reference changes run independent package check
   ).toEqual(["docs"]);
 });
 
+test("maintained terminal native inputs trigger selective extension checks", () => {
+  const definitions = JSON.parse(
+    readFileSync("Extensions/manifest.json", "utf8"),
+  );
+  const inputs = [
+    "scripts/build-ghostty.sh",
+    "scripts/patches/ghostty-external-io.patch",
+    "scripts/extension-ghostty-native.mjs",
+  ];
+  for (const path of inputs) {
+    for (const event of [workflow.on.pull_request, workflow.on.push]) {
+      expect(
+        event.paths.some((pattern) => new Bun.Glob(pattern).match(path)),
+      ).toBe(true);
+    }
+    expect(
+      planExtensionBuilds(definitions, [path]).map(({ id }) => id),
+    ).toEqual(["terminal", "machines", "herdr", "quinjet"]);
+  }
+});
+
 test("all extension releases reuse one signed host without Camera provisioning", () => {
   const signing = frozen.steps.findIndex(
     (step) => step.name === "Import the release signing certificate",

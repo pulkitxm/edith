@@ -19,6 +19,8 @@ name: Extensions
       - scripts/*extension*
       - scripts/release-asset-*
       - scripts/build-minimal-host.mjs
+      - scripts/build-ghostty.sh
+      - scripts/patches/ghostty-external-io.patch
       - apps/music-player/**
       - .github/actions/cache-host/**
       - .github/workflows/extensions.yml
@@ -45,6 +47,8 @@ name: Extensions
       - scripts/*extension*
       - scripts/release-asset-*
       - scripts/build-minimal-host.mjs
+      - scripts/build-ghostty.sh
+      - scripts/patches/ghostty-external-io.patch
       - apps/music-player/**
       - .github/actions/cache-host/**
       - .github/workflows/extensions.yml
