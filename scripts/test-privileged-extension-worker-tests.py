@@ -41,20 +41,69 @@ class PrivilegedWrapperTests(unittest.TestCase):
             "parentExitWithOpenInputRestoredCallback": True, "operatingSystemActions": 0, "visibleWindows": 0}
 
     def test_payload_checks_all_signatures_and_same_code_without_executing_role(self):
-        with patch.object(wrapper, "signed") as signed, patch.object(wrapper, "unsigned_digest", return_value="same") as digest, patch.object(wrapper, "checked") as execute:
-            self.assertEqual(wrapper.verify_payload(self.app, self.extracted), "same")
+        with patch.object(wrapper, "signed") as signed, patch.object(wrapper, "code_identity", return_value={"normalizedUnsignedSHA256": "same"}) as digest, patch.object(wrapper, "checked") as execute:
+            self.assertEqual(wrapper.verify_payload(self.app, self.extracted), {key: {"normalizedUnsignedSHA256": "same"} for key in ("host", "carrier", "worker")})
             self.assertEqual(signed.call_count, 4)
             self.assertEqual(digest.call_count, 3)
             execute.assert_not_called()
             self.assertNotIn(self.role / "Contents/MacOS/Runtime", [call.args[0] for call in digest.call_args_list])
 
     def test_mismatched_code_and_wrong_role_metadata_fail_closed(self):
-        with patch.object(wrapper, "signed"), patch.object(wrapper, "unsigned_digest", side_effect=["original", "different"]):
+        with patch.object(wrapper, "signed"), patch.object(wrapper, "code_identity", side_effect=[{"normalizedUnsignedSHA256": "original"}, ValueError("Executable code differs from the pinned source")]):
             with self.assertRaises(ValueError):
                 wrapper.verify_payload(self.app, self.extracted)
         self.bundle(self.role, {"CFBundleIdentifier": "com.pulkit.edith.tests.lifetime-runtime", "CFBundleExecutable": "Runtime", "EdithHostABI": "edith-host-2"})
-        with patch.object(wrapper, "signed"), patch.object(wrapper, "unsigned_digest", return_value="same"):
+        with patch.object(wrapper, "signed"), patch.object(wrapper, "code_identity", return_value={"normalizedUnsignedSHA256": "same"}):
             with self.assertRaises(ValueError):
+                wrapper.verify_payload(self.app, self.extracted)
+
+    def test_malformed_executable_rejected_before_signature_removal_or_preparation(self):
+        with patch.object(wrapper, "signed"), patch.object(wrapper, "prepare_synthetic") as prepare, patch.object(wrapper, "checked") as execute, patch("macho_code_identity.subprocess.run") as remove:
+            with self.assertRaisesRegex(ValueError, "Truncated Mach-O"):
+                wrapper.verify_payload(self.app, self.extracted)
+            remove.assert_not_called()
+            prepare.assert_not_called()
+            execute.assert_not_called()
+
+    def test_tampered_sealed_resource_rejected_before_contained_code_admission(self):
+        resource = self.extracted.joinpath(*wrapper.WORKER.parts) / "Contents/Resources/fixture.json"
+        resource.parent.mkdir(parents=True, exist_ok=True)
+        resource.write_bytes(b"changed synthetic resource")
+        admitted = []
+        def verify(bundle):
+            admitted.append(bundle)
+            if bundle == self.extracted.joinpath(*wrapper.WORKER.parts):
+                self.assertNotEqual(resource.read_bytes(), b"sealed synthetic resource")
+                raise ValueError("Invalid sealed resource")
+        with patch.object(wrapper, "signed", side_effect=verify), patch.object(wrapper, "code_identity", return_value={"normalizedUnsignedSHA256": "same"}) as identity, patch.object(wrapper, "prepare_synthetic") as prepare:
+            with self.assertRaisesRegex(ValueError, "sealed resource"):
+                wrapper.verify_payload(self.app, self.extracted)
+            self.assertEqual(identity.call_count, 2)
+            self.assertEqual(admitted[-1], self.extracted.joinpath(*wrapper.WORKER.parts))
+            prepare.assert_not_called()
+
+    def test_page_rounding_preserves_raw_identities_and_rejects_actual_code_tamper(self):
+        fixture_spec = importlib.util.spec_from_file_location("macho_fixture", Path(__file__).with_name("test-macho-code-identity.py"))
+        fixture = importlib.util.module_from_spec(fixture_spec)
+        fixture_spec.loader.exec_module(fixture)
+        pairs = [fixture.pair(), fixture.pair(), fixture.pair(512)]
+        binaries = [self.app / "Contents/MacOS/Edith"] + [self.extracted.joinpath(*relative.parts) / "Contents/MacOS/Edith" for relative in (wrapper.CARRIER, wrapper.WORKER)]
+        for binary, (signed, _) in zip(binaries, pairs):
+            binary.write_bytes(signed)
+        def remove(command, **options):
+            target = Path(command[-1])
+            data = target.read_bytes()
+            matching = next(unsigned for signed, unsigned in pairs if data == signed)
+            target.write_bytes(matching)
+        with patch.object(wrapper, "signed"), patch("macho_code_identity.subprocess.run", side_effect=remove):
+            identities = wrapper.verify_payload(self.app, self.extracted)
+            self.assertEqual(identities["host"]["normalizedUnsignedSHA256"], identities["worker"]["normalizedUnsignedSHA256"])
+            self.assertNotEqual(identities["host"]["rawUnsignedSHA256"], identities["worker"]["rawUnsignedSHA256"])
+            self.assertNotEqual(identities["host"]["signedSHA256"], identities["worker"]["signedSHA256"])
+            pairs[2][0][4100] ^= 1
+            pairs[2][1][4100] ^= 1
+            binaries[2].write_bytes(pairs[2][0])
+            with self.assertRaisesRegex(ValueError, "pinned source"):
                 wrapper.verify_payload(self.app, self.extracted)
 
     def test_archive_rejects_traversal_symlinks_normalized_duplicates_and_foreign_roots(self):
@@ -88,7 +137,7 @@ class PrivilegedWrapperTests(unittest.TestCase):
             wrapper.extract_package(archive, self.root / "flat")
 
     def test_preparation_compiles_only_tracked_callback_and_does_not_launch_host(self):
-        with patch.object(wrapper, "checked") as execute, patch.object(wrapper, "unsigned_digest", return_value="same"):
+        with patch.object(wrapper, "checked") as execute, patch.object(wrapper, "code_identity", return_value={"normalizedUnsignedSHA256": "same"}):
             cloned, callback = wrapper.prepare_synthetic(self.app, self.root / "synthetic", "same")
         self.assertTrue(wrapper.info(cloned)["CFBundleIdentifier"].startswith("com.pulkit.edith.dev.lifetime-"))
         self.assertEqual(wrapper.info(callback)["CFBundleIdentifier"], "com.pulkit.edith.tests.lifetime-runtime")
@@ -103,7 +152,7 @@ class PrivilegedWrapperTests(unittest.TestCase):
         cloned = self.root / "Synthetic.app"
         callback = self.root / "Synthetic.bundle"
         response = subprocess.CompletedProcess([], 0, json.dumps(self.lifetime()).encode(), b"")
-        with patch.object(wrapper.os, "geteuid", return_value=501), patch.object(wrapper, "extract_package"), patch.object(wrapper, "verify_payload", return_value="same"), patch.object(wrapper, "prepare_synthetic", return_value=(cloned, callback)), patch.object(wrapper, "checked", return_value=response) as execute:
+        with patch.object(wrapper.os, "geteuid", return_value=501), patch.object(wrapper, "extract_package"), patch.object(wrapper, "verify_payload", return_value={"host": {"normalizedUnsignedSHA256": "same"}}), patch.object(wrapper, "code_identity", return_value={"normalizedUnsignedSHA256": "same"}), patch.object(wrapper, "prepare_synthetic", return_value=(cloned, callback)), patch.object(wrapper, "checked", return_value=response) as execute:
             result = wrapper.run(self.app, self.root / "package.zip")
         command = execute.call_args.args[0]
         self.assertEqual(command[-4:], ["--app", str(cloned), "--bundle", str(callback)])

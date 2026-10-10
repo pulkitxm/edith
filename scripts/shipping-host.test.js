@@ -21,6 +21,7 @@ test("packaging provenance and size accounting pass isolated Python contracts", 
   for (const script of [
     "scripts/test-host-build-metadata.py",
     "scripts/test-extension-host-size-report.py",
+    "scripts/test-macho-code-identity.py",
   ]) {
     const result = run("python3", "-B", script);
     expect(result.exitCode, result.stderr.toString()).toBe(0);

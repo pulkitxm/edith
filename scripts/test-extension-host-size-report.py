@@ -12,7 +12,6 @@ import zipfile
 spec = importlib.util.spec_from_file_location("host_size_report", Path(__file__).with_name("extension-host-size-report.py"))
 report = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(report)
-normalize_executable = report.unsigned_executable_digest
 
 
 class HostSizeReportTests(unittest.TestCase):
@@ -41,6 +40,15 @@ class HostSizeReportTests(unittest.TestCase):
             hashlib.sha256(path.read_bytes().split(b"|signature:")[0]).hexdigest())
         normalization.start()
         self.addCleanup(normalization.stop)
+        def code_identity(path):
+            data = path.read_bytes()
+            unsigned = data.split(b"|signature:")[0]
+            return {"signedBytes": len(data), "signedSHA256": hashlib.sha256(data).hexdigest(),
+                "rawUnsignedBytes": len(unsigned), "rawUnsignedSHA256": hashlib.sha256(unsigned).hexdigest(),
+                "normalizedUnsignedSHA256": report.unsigned_executable_digest(path), "normalization": "synthetic-fixture"}
+        identity = patch.object(report, "executable_identity", side_effect=code_identity)
+        identity.start()
+        self.addCleanup(identity.stop)
         self.baseline = {
             "installedBytes": 1000, "zipBytes": 500, "sourceCommit": "baseline-fixture",
             "configuration": "Release", "architecture": "arm64", "signature": "ad-hoc",
@@ -310,6 +318,10 @@ class HostSizeReportTests(unittest.TestCase):
         for executable in provenance["executables"]:
             self.assertNotEqual(executable["sha256"], report.digest_file(self.executable))
             self.assertGreater(executable["installedBytes"], self.executable.stat().st_size)
+            self.assertEqual(executable["codeIdentity"]["signedSHA256"], executable["sha256"])
+            self.assertEqual(executable["codeIdentity"]["signedBytes"], executable["installedBytes"])
+            self.assertEqual(executable["codeIdentity"]["normalizedUnsignedSHA256"], provenance["normalizedUnsignedSHA256"])
+            self.assertIn("rawUnsignedSHA256", executable["codeIdentity"])
         self.assertEqual(result["appWithMigratedExtensions"]["installedBytes"],
             result["appWithoutExtensions"]["installedBytes"] + sum(entry["installedBytes"] for entry in result["packages"]))
 
@@ -363,20 +375,6 @@ class HostSizeReportTests(unittest.TestCase):
                 zipped.writestr(next(iter(entries)), b"duplicate")
         with self.assertRaisesRegex(ValueError, "duplicate members"):
             self.verify_host()
-
-    def test_signature_removal_operates_only_on_private_copy_with_timeout(self):
-        source = self.root / "signed-executable"
-        source.write_bytes(b"code|signature:actual")
-        def strip(arguments, **keywords):
-            copied = Path(arguments[-1])
-            self.assertNotEqual(copied, source)
-            self.assertEqual(copied.read_bytes(), source.read_bytes())
-            copied.write_bytes(b"code")
-            self.assertEqual(keywords["timeout"], 30)
-        with patch.object(report.subprocess, "run", side_effect=strip):
-            actual = normalize_executable(source)
-        self.assertEqual(actual, hashlib.sha256(b"code").hexdigest())
-        self.assertEqual(source.read_bytes(), b"code|signature:actual")
 
     def camera_fixture(self):
         self.final_fixture()

@@ -1,5 +1,4 @@
 import argparse
-import importlib.util
 import json
 import os
 import plistlib
@@ -10,6 +9,7 @@ import tempfile
 import uuid
 import zipfile
 from pathlib import Path, PurePosixPath
+from macho_code_identity import executable_identity
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "Packages/EdithHost/Tests/EdithHostCoreTests/Fixtures"
@@ -40,11 +40,8 @@ def signed(bundle):
     checked(["codesign", "--verify", "--deep", "--strict", str(bundle)])
 
 
-def unsigned_digest(path):
-    spec = importlib.util.spec_from_file_location("privileged_code_report", ROOT / "scripts/extension-host-size-report.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.unsigned_executable_digest(regular(path))
+def code_identity(path, expected=None):
+    return executable_identity(regular(path), expected)
 
 
 def extract_package(archive, destination):
@@ -72,7 +69,8 @@ def verify_payload(app, extracted):
     app_info = info(app)
     if app_info.get("CFBundleExecutable") != "Edith" or not isinstance(app_info.get("CFBundleIdentifier"), str) or not app_info["CFBundleIdentifier"]:
         raise ValueError("Expected the current same-executable host")
-    original = unsigned_digest(app / "Contents/MacOS/Edith")
+    original = code_identity(app / "Contents/MacOS/Edith")
+    identities = {"host": original}
     carrier = extracted.joinpath(*CARRIER.parts)
     worker = extracted.joinpath(*WORKER.parts)
     role = extracted.joinpath(*ROLE.parts)
@@ -81,14 +79,14 @@ def verify_payload(app, extracted):
         value = info(bundle)
         if value.get("CFBundleExecutable") != "Edith" or value.get("EdithExtensionID") != "lidAwake" or value.get("EdithHostABI") != "edith-host-2":
             raise ValueError("Invalid contained worker metadata")
-        if unsigned_digest(bundle / "Contents/MacOS/Edith") != original:
-            raise ValueError("Contained executable differs from the supplied host")
+        identities["carrier" if bundle == carrier else "worker"] = code_identity(
+            bundle / "Contents/MacOS/Edith", original["normalizedUnsignedSHA256"])
     signed(role)
     value = info(role)
     if value.get("CFBundleIdentifier") != "com.pulkit.edith.extensions.lidAwake.privileged" or value.get("CFBundleExecutable") != "Runtime" or value.get("EdithHostABI") != "edith-host-2":
         raise ValueError("Expected the shipping privileged role")
     regular(role / "Contents/MacOS/Runtime")
-    return original
+    return identities
 
 
 def prepare_synthetic(app, destination, expected_digest):
@@ -100,8 +98,7 @@ def prepare_synthetic(app, destination, expected_digest):
         plistlib.dump(value, stream)
     checked(["codesign", "--force", "--deep", "--sign", "-", str(cloned)])
     signed(cloned)
-    if unsigned_digest(cloned / "Contents/MacOS/Edith") != expected_digest:
-        raise ValueError("Synthetic clone changed executable code")
+    code_identity(cloned / "Contents/MacOS/Edith", expected_digest)
     callback = destination / "Callback.bundle"
     binary = callback / "Contents/MacOS/Runtime"
     binary.parent.mkdir(parents=True)
@@ -137,12 +134,16 @@ def run(app, archive):
         extracted = root / "shipping"
         extracted.mkdir()
         extract_package(archive, extracted)
-        digest = verify_payload(app, extracted)
-        cloned, callback = prepare_synthetic(app, root, digest)
+        identities = verify_payload(app, extracted)
+        cloned, callback = prepare_synthetic(app, root, identities["host"]["normalizedUnsignedSHA256"])
         response = checked(["/usr/bin/python3", "-B", str(FIXTURES / "privileged-lifecycle.py"), "--app", str(cloned), "--bundle", str(callback)], timeout=45)
         if len(response.stdout) > 65536:
             raise ValueError("Synthetic lifecycle response exceeds bounds")
-        return result_from_lifetime(json.loads(response.stdout))
+        result = result_from_lifetime(json.loads(response.stdout))
+        result["executableCodeIdentities"] = identities
+        result["syntheticHostCodeIdentity"] = code_identity(
+            cloned / "Contents/MacOS/Edith", identities["host"]["normalizedUnsignedSHA256"])
+        return result
 
 
 def main():
