@@ -139,8 +139,9 @@ final class HostUpdater: NSObject,
         canCheckObservation = updater.observe(
             \.canCheckForUpdates, options: [.initial, .new]
         ) { [weak self] updater, change in
-            let canCheckForUpdates = change.newValue ?? updater.canCheckForUpdates
-            let lastUpdateCheckDate = updater.lastUpdateCheckDate
+            let (canCheckForUpdates, lastUpdateCheckDate) = MainActor.assumeIsolated {
+                (change.newValue ?? updater.canCheckForUpdates, updater.lastUpdateCheckDate)
+            }
             Task { @MainActor [weak self] in
                 self?.canCheckForUpdates = canCheckForUpdates
                 self?.lastUpdateCheckDate = lastUpdateCheckDate

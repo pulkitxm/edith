@@ -248,7 +248,7 @@ private struct SurfaceGridDrop: DropDelegate {
         let token = UUID()
         identity = token
         point = info.location
-        SurfaceDrag.accept(info.itemProviders(for: [SurfaceDrag.type])) { value in
+        _ = SurfaceDrag.accept(info.itemProviders(for: [SurfaceDrag.type])) { value in
             guard identity == token else { return }
             widget = value
         }

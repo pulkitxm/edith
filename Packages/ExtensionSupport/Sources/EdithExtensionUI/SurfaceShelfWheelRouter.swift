@@ -18,7 +18,9 @@ struct SurfaceShelfWheelRouter: NSViewRepresentable {
 
     func start() {
         monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            MainActor.assumeIsolated { self?.route(event) ?? event }
+            guard Thread.isMainThread else { return event }
+            MainActor.assumeIsolated { _ = self?.route(event) }
+            return event
         }
     }
     func stop() {
