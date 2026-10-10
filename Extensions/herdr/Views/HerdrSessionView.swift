@@ -426,23 +426,9 @@ struct HerdrSessionView: View {
     }
 
     private func prepareDiff(restarting: Bool) async {
-        let configuration = diffConfiguration
-        let remote: QuinjetRemote?
-        do {
-            remote = try await store.quinjetRemote(for: tab)
-        } catch {
-            tab.quinjet.errorMessage = error.localizedDescription
-            return
-        }
-        if restarting {
-            await tab.quinjet.restart(
-                directory: agent.cwd, remote: remote, configuration: configuration,
-                launchEnabled: launchEnabled)
-        } else {
-            await tab.quinjet.prepare(
-                directory: agent.cwd, remote: remote, configuration: configuration,
-                launchEnabled: launchEnabled)
-        }
+        await store.prepareDiff(
+            for: tab, appearance: dark ? .dark : .light,
+            restarting: restarting, launchEnabled: launchEnabled)
     }
 
     private func startIfNeeded() async {
@@ -455,13 +441,7 @@ struct HerdrSessionView: View {
         starting = true
         defer { starting = false }
         do {
-            let request = try await store.attachRequest(
-                for: tab,
-                environment: QuinjetOperationExecution.terminalEnvironment())
-            tab.holder.start(
-                executable: request.executable, arguments: request.arguments,
-                environment: request.environment,
-                allowsLocalFileLinks: tab.agent.machineIsLocal)
+            try await store.connectTerminal(for: tab)
             startedMouse = mouse
         } catch {
             connectError = error.localizedDescription

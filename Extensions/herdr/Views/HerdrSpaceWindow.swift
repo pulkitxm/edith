@@ -595,7 +595,8 @@ private struct HerdrSpacePaneView: View {
                     .herdrAgentContextMenu(agent.agent, store: store)
                 case let .terminal(holder):
                     HerdrSpaceTerminalView(
-                        target: target, holder: holder, machines: machines,
+                        store: store, paneID: pane.id, target: target, holder: holder,
+                        machines: machines,
                         active: active, wantsFocus: focused,
                         launchEnabled: launchEnabled,
                         onFocus: { tab.focus(pane.id) })
@@ -621,6 +622,8 @@ private struct HerdrSpacePaneView: View {
 }
 
 private struct HerdrSpaceTerminalView: View {
+    let store: HerdrStore
+    let paneID: UUID
     let target: PaneTarget
     let holder: TerminalSessionHolder
     let machines: HerdrTerminalMachines
@@ -638,7 +641,8 @@ private struct HerdrSpaceTerminalView: View {
         Group {
             if known {
                 HerdrShellTerminal(
-                    target: target, holder: holder, active: active, wantsFocus: wantsFocus,
+                    store: store, paneID: paneID, target: target, holder: holder, active: active,
+                    wantsFocus: wantsFocus,
                     launchEnabled: launchEnabled, onFocus: onFocus)
             } else {
                 VStack(spacing: UIScale.pt(9)) {

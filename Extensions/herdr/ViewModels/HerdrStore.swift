@@ -92,6 +92,7 @@ final class HerdrStore {
 
     static let shared = HerdrStore(workspacePresenter: { ExtensionPresentation.showWindow() })
     static let boardID = "board"
+    var terminalClient: OwnedTerminalClient.Invoke?
 
     var hosts: [HerdrHostSnapshot] = [] {
         didSet { rememberSidebarOrder() }

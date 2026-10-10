@@ -411,14 +411,7 @@ struct HerdrPanelTerminalView: View {
         starting = true
         defer { starting = false }
         do {
-            let request = try await store.attachRequest(
-                for: terminal,
-                environment: QuinjetOperationExecution.terminalEnvironment())
-            guard !terminal.holder.started else { return }
-            terminal.holder.start(
-                executable: request.executable, arguments: request.arguments,
-                environment: request.environment,
-                allowsLocalFileLinks: terminal.host.isLocal)
+            try await store.connectTerminal(for: terminal)
             startedMouse = mouse
         } catch {
             store.terminalPanels.fail(terminal.id, error.localizedDescription)

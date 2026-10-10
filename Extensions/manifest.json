@@ -2835,6 +2835,7 @@
         "Extensions/herdr/CLI/HerdrMessageCommands.swift",
         "Extensions/herdr/CLI/HerdrSpaceCommands.swift",
         "Extensions/herdr/ViewModels/HerdrSettingsModel.swift",
+        "Extensions/herdr/ViewModels/HerdrTerminalConnections.swift",
         "Extensions/herdr/Views/HerdrSettingsPage.swift",
         "Extensions/herdr/Transport/OwnedTerminalPTY.swift",
         "Extensions/herdr/Transport/OwnedTerminalSession.swift"
