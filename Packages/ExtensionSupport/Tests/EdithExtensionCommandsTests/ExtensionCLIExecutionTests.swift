@@ -39,14 +39,14 @@ import Testing
         #expect(next.stdout == "next\n")
     }
 
-    @Test func cancellationDrainsBeforeAnotherCommandCanStart() async throws {
+    @Test func cancellationDoesNotBlockOrCancelAnotherCommand() async throws {
         let task = Task {
             try await ExtensionCLIExecution.run(FixtureCommand.self, arguments: ["wait"])
         }
         while !FixtureCommand.waiting { await Task.yield() }
-        await #expect(throws: ExtensionPeerError.self) {
-            try await ExtensionCLIExecution.run(FixtureCommand.self, arguments: ["second"])
-        }
+        let second = try await ExtensionCLIExecution.run(FixtureCommand.self, arguments: ["second"])
+        #expect(second.stdout == "second\n")
+        #expect(FixtureCommand.waiting)
         task.cancel()
         await #expect(throws: CancellationError.self) { try await task.value }
         let next = try await ExtensionCLIExecution.run(FixtureCommand.self, arguments: ["after"])

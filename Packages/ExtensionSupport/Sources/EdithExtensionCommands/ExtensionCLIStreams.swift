@@ -45,9 +45,9 @@ import Foundation
         let buffer = CLIStreamBuffer()
         let task = Task { [weak self] in
             do {
-                let code = try await ExtensionCLIExecution.run(root, request: request.request) {
-                    text, error in buffer.append(text, error: error)
-                }
+                let code = try await ExtensionCLIExecution.run(
+                    root, request: request.request,
+                    rawSink: { data, error in buffer.append(data, error: error) })
                 if (0...255).contains(code) {
                     buffer.finish(state: .completed, exitCode: code)
                 } else {
@@ -193,10 +193,10 @@ private final class CLIStreamBuffer: @unchecked Sendable {
         lock.withLock { self.cancellation = cancellation }
     }
 
-    func append(_ text: String, error: Bool) {
+    func append(_ data: Data, error: Bool) {
         let cancel = lock.withLock { () -> (@Sendable () -> Void)? in
-            guard !discarded, state == .running, !text.isEmpty else { return nil }
-            let count = text.utf8.count
+            guard !discarded, state == .running, !data.isEmpty else { return nil }
+            let count = data.count
             let requiredChunks = count / 65_536 + (count % 65_536 == 0 ? 0 : 1)
             guard count <= ExtensionCLIStreams.maximumBufferedBytes - byteCount,
                 requiredChunks <= 4_096 - chunks.count,
@@ -205,7 +205,6 @@ private final class CLIStreamBuffer: @unchecked Sendable {
                 state = .overflow
                 return cancellation
             }
-            let data = Data(text.utf8)
             for offset in stride(from: 0, to: data.count, by: 65_536) {
                 let bytes = data.subdata(in: offset..<min(offset + 65_536, data.count))
                 chunks.append(

@@ -3,7 +3,8 @@ import EdithExtensionSupport
 import Foundation
 
 @MainActor public enum ExtensionCLIExecution {
-    private static var running = false
+    nonisolated public static let maximumConcurrentExecutions = 8
+    private static var activeExecutions = 0
 
     public static func run<Command: AsyncParsableCommand>(
         _ root: Command.Type, arguments: [String]
@@ -15,9 +16,8 @@ import Foundation
         _ root: Command.Type, request: ExtensionCLIRequest
     ) async throws -> ExtensionCLIReply {
         let buffer = CLIOutputBuffer()
-        let code = try await run(root, request: request) { text, error in
-            buffer.append(text, error: error)
-        }
+        let code = try await run(
+            root, request: request, rawSink: { data, error in buffer.append(data, error: error) })
         return try buffer.reply(exitCode: code)
     }
 
@@ -25,16 +25,36 @@ import Foundation
         _ root: Command.Type, request: ExtensionCLIRequest,
         sink: @escaping @Sendable (String, Bool) -> Void
     ) async throws -> Int32 {
+        try await run(root, request: request, textSink: sink, rawSink: nil)
+    }
+
+    public static func run<Command: AsyncParsableCommand>(
+        _ root: Command.Type, request: ExtensionCLIRequest,
+        rawSink: @escaping @Sendable (Data, Bool) -> Void
+    ) async throws -> Int32 {
+        try await run(
+            root, request: request,
+            textSink: { text, error in rawSink(Data(text.utf8), error) }, rawSink: rawSink)
+    }
+
+    private static func run<Command: AsyncParsableCommand>(
+        _ root: Command.Type, request: ExtensionCLIRequest,
+        textSink: @escaping @Sendable (String, Bool) -> Void,
+        rawSink: (@Sendable (Data, Bool) -> Void)?
+    ) async throws -> Int32 {
         try request.validate()
-        guard !running else {
-            throw ExtensionPeerError.rejected("Another terminal command is running.")
+        guard activeExecutions < maximumConcurrentExecutions else {
+            throw ExtensionPeerError.rejected(
+                "At most eight terminal commands may run concurrently.")
         }
         try Task.checkCancellation()
-        running = true
-        defer { running = false }
+        activeExecutions += 1
+        defer { activeExecutions -= 1 }
         return try await ExtensionCLIContext.$request.withValue(request) {
-            try await ExtensionCLIContext.$outputSink.withValue(sink) {
-                try await execute(root, arguments: request.arguments)
+            try await ExtensionCLIContext.$outputSink.withValue(textSink) {
+                try await ExtensionCLIContext.$rawOutputSink.withValue(rawSink) {
+                    try await execute(root, arguments: request.arguments)
+                }
             }
         }
     }
@@ -72,21 +92,21 @@ import Foundation
 
 private final class CLIOutputBuffer: @unchecked Sendable {
     private let lock = NSLock()
-    private var stdout = ""
-    private var stderr = ""
+    private var stdout = Data()
+    private var stderr = Data()
     private var exceeded = false
     private var byteCount = 0
 
-    func append(_ text: String, error: Bool) {
+    func append(_ data: Data, error: Bool) {
         lock.withLock {
             guard !exceeded else { return }
-            let count = text.utf8.count
+            let count = data.count
             guard count <= ExtensionCLIReply.maximumOutputBytes - byteCount
             else {
                 exceeded = true; return
             }
             byteCount += count
-            if error { stderr += text } else { stdout += text }
+            if error { stderr.append(data) } else { stdout.append(data) }
         }
     }
 
@@ -94,6 +114,12 @@ private final class CLIOutputBuffer: @unchecked Sendable {
         try lock.withLock {
             guard !exceeded else {
                 throw ExtensionPeerError.rejected("The terminal output exceeds 4 MiB.")
+            }
+            guard let stdout = String(data: stdout, encoding: .utf8),
+                let stderr = String(data: stderr, encoding: .utf8)
+            else {
+                throw ExtensionPeerError.rejected(
+                    "The terminal output is not UTF-8. Use a raw output stream.")
             }
             return try ExtensionCLIReply(stdout: stdout, stderr: stderr, exitCode: exitCode)
         }
