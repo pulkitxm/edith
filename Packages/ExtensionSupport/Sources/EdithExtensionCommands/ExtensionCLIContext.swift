@@ -2,6 +2,7 @@ import EdithExtensionSupport
 import Foundation
 
 public enum ExtensionCLIContext {
+    @TaskLocal public static var input: ExtensionCLIInput?
     @TaskLocal public static var rawOutputSink: (@Sendable (Data, Bool) -> Void)?
     @TaskLocal public static var request: ExtensionCLIRequest?
     @TaskLocal public static var outputSink: (@Sendable (String, Bool) -> Void)?
