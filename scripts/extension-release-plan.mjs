@@ -30,15 +30,24 @@ export const workerRuntimeInputs = [
   "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace",
 ];
 
+export function definitionSupportInputs(definition) {
+  const products = [
+    definition.supportProduct,
+    ...Object.values(definition.supportProducts ?? {}),
+  ].filter(Boolean);
+  return [...new Set(products.flatMap(supportSourceInputs))];
+}
+
 export function definitionInputs(definition) {
-  const shared = definition.supportProduct
+  const supportInputs = definitionSupportInputs(definition);
+  const shared = supportInputs.length
     ? [
         ...definition.sharedInputs.filter(
           (path) =>
             path !== "Packages/ExtensionSupport" &&
             !path.startsWith("Packages/ExtensionSupport/"),
         ),
-        ...supportSourceInputs(definition.supportProduct),
+        ...supportInputs,
       ]
     : definition.sharedInputs;
   return [
@@ -50,14 +59,13 @@ export function definitionInputs(definition) {
 }
 
 export async function supportCacheFingerprint(root, definition) {
-  if (!definition.supportProduct) return "none";
+  const supportInputs = definitionSupportInputs(definition);
+  if (!supportInputs.length) return "none";
   const support = {
     supportProduct: definition.supportProduct,
+    supportProducts: definition.supportProducts,
     id: "support",
-    inputs: [
-      "scripts/build-extension-support.mjs",
-      ...supportSourceInputs(definition.supportProduct),
-    ],
+    inputs: ["scripts/build-extension-support.mjs", ...supportInputs],
     sharedInputs: [],
     dependencies: [],
   };

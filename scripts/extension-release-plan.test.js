@@ -483,3 +483,89 @@ test("shared runtime fingerprints include code fixes and exclude generated legac
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("role overrides fingerprint the complete selected SDK without changing unrelated consumers", async () => {
+  const root = await mkdtemp(join(tmpdir(), "extension-role-support-"));
+  const definition = {
+    id: "documentsCLI",
+    supportProduct: "EdithExtensionDocuments",
+    supportProducts: {
+      app: ["EdithExtensionDocuments", "EdithExtensionCommands"],
+      helper: null,
+    },
+    inputs: [],
+    sharedInputs: ["Packages/ExtensionSupport"],
+    dependencies: [],
+  };
+  const coreOnly = {
+    ...definition,
+    id: "coreOnly",
+    supportProduct: "EdithExtensionSupport",
+    supportProducts: {},
+  };
+  const definitions = [definition, coreOnly];
+  try {
+    for (const product of [
+      "EdithExtensionSupport",
+      "EdithExtensionUI",
+      "EdithExtensionDocuments",
+      "EdithExtensionCommands",
+      "EdithExtensionArchive",
+    ]) {
+      const directory = join(
+        root,
+        "Packages/ExtensionSupport/Sources",
+        product,
+      );
+      await mkdir(directory, { recursive: true });
+      await writeFile(join(directory, "Source.swift"), product);
+    }
+    await mkdir(join(root, "Packages/ExtensionSupport/Licenses"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(
+        root,
+        "Packages/ExtensionSupport/Licenses/swift-argument-parser-license.txt",
+      ),
+      "license",
+    );
+    await mkdir(join(root, "scripts"), { recursive: true });
+    await writeFile(
+      join(root, "scripts/build-extension-support.mjs"),
+      "builder",
+    );
+    const before = await extensionFingerprint(root, definition, definitions);
+    const cache = await supportCacheFingerprint(root, definition);
+    const core = await extensionFingerprint(root, coreOnly, definitions);
+    expect(await supportCacheFingerprint(root, definition)).toBe(cache);
+    const commandPath =
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands/Source.swift";
+    expect(
+      planExtensionBuilds(definitions, [commandPath]).map(({ id }) => id),
+    ).toEqual([definition.id]);
+    await writeFile(join(root, commandPath), "updated command SDK");
+    expect(await extensionFingerprint(root, definition, definitions)).not.toBe(
+      before,
+    );
+    expect(await supportCacheFingerprint(root, definition)).not.toBe(cache);
+    expect(await extensionFingerprint(root, coreOnly, definitions)).toBe(core);
+    const updated = await extensionFingerprint(root, definition, definitions);
+    const updatedCache = await supportCacheFingerprint(root, definition);
+    await writeFile(
+      join(
+        root,
+        "Packages/ExtensionSupport/Sources/EdithExtensionArchive/Source.swift",
+      ),
+      "unselected archive SDK",
+    );
+    expect(await extensionFingerprint(root, definition, definitions)).toBe(
+      updated,
+    );
+    expect(await supportCacheFingerprint(root, definition)).toBe(updatedCache);
+    const onlyOverride = { ...definition, supportProduct: null };
+    expect(await supportCacheFingerprint(root, onlyOverride)).not.toBe("none");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

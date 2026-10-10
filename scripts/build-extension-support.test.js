@@ -109,8 +109,46 @@ test("terminal parser code belongs only to explicitly selected command products"
     "import ArgumentParser_calendar_app\nimport EdithExtensionCommands_calendar_app\n",
   );
   expect(
-    rewriteSupportImports("import ArgumentParser\n", first, {
-      packageAliases: true,
-    }),
-  ).toBe("import ArgumentParser\n");
+    rewriteSupportImports(
+      "@_implementationOnly import ArgumentParserToolInfo\n",
+      first,
+    ),
+  ).toBe("@_implementationOnly import ArgumentParserToolInfo_calendar_app\n");
+});
+
+test("composed products share one deterministic dependency closure", () => {
+  const selection = ["EdithExtensionDocuments", "EdithExtensionCommands"];
+  expect(supportProducts(selection)).toEqual([
+    "EdithExtensionSupport",
+    "EdithExtensionUI",
+    "EdithExtensionCommands",
+    "EdithExtensionDocuments",
+  ]);
+  expect(supportProducts(selection.toReversed())).toEqual(
+    supportProducts(selection),
+  );
+  expect(supportProducts([...selection, ...selection])).toEqual(
+    supportProducts(selection),
+  );
+  expect(supportSourceInputs(selection)).toContain(
+    "Packages/ExtensionSupport/Licenses/swift-argument-parser-license.txt",
+  );
+  expect(supportSourceInputs(selection)).not.toContain(
+    "Packages/ExtensionSupport/Sources/EdithExtensionArchive",
+  );
+  expect(
+    supportProducts(["EdithExtensionArchive", "EdithExtensionCommands"]),
+  ).not.toContain("EdithExtensionDocuments");
+  expect(() => supportProducts([])).toThrow();
+  expect(() => supportProducts([["EdithExtensionUI"]])).toThrow();
+  expect(() => supportProducts(["EdithExtensionUI", null])).toThrow();
+});
+
+test("private parser targets rewrite Swift 6 internal imports without alias flags", () => {
+  expect(
+    rewriteSupportImports(
+      "internal import ArgumentParserToolInfo\n",
+      supportModules("latex_app"),
+    ),
+  ).toBe("internal import ArgumentParserToolInfo_latex_app\n");
 });
