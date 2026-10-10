@@ -294,6 +294,30 @@ describe("extension UI carriers", () => {
         execFileSync("codesign", ["--verify", "--deep", "--strict", carrier], {
           stdio: "pipe",
         });
+        if (process.env.EDITH_UI_CARRIER_VERIFIER) {
+          await writeFile(
+            join(payload, "package.json"),
+            JSON.stringify({
+              id: "calendar",
+              version: "1.0.0",
+              hostABI: "edith-host-1",
+              architecture: "arm64",
+              dependencies: [],
+            }),
+          );
+          const verified = JSON.parse(
+            execFileSync(
+              process.env.EDITH_UI_CARRIER_VERIFIER,
+              ["verify-ui-carrier", payload, fixture.hostIdentifier],
+              { encoding: "utf8", stdio: "pipe" },
+            ),
+          );
+          expect(verified).toEqual({
+            identityValidated: true,
+            signatureVerified: true,
+            sandboxVerified: true,
+          });
+        }
         await expect(
           buildExtensionUICarrier({
             hostApp: host,

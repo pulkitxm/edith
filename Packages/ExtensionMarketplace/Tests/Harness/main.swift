@@ -6,6 +6,19 @@ struct MarketplaceHarness {
     @MainActor
     static func main() async throws {
         let arguments = Array(CommandLine.arguments.dropFirst())
+        if arguments.first == "verify-ui-carrier" {
+            guard arguments.count == 3 else { throw MarketplaceError.invalidCatalog }
+            let payload = URL(fileURLWithPath: arguments[1])
+            let manifest = try JSONDecoder().decode(
+                ExtensionPayloadManifest.self,
+                from: Data(contentsOf: payload.appendingPathComponent("package.json")))
+            let carrier = try ExtensionUICarrier(
+                payload: payload, manifest: manifest, expectedHostIdentifier: arguments[2])
+            try carrier.verifyDevelopment()
+            print(
+                "{\"identityValidated\":true,\"signatureVerified\":true,\"sandboxVerified\":true}")
+            return
+        }
         guard arguments.count >= 4 else { throw MarketplaceError.invalidCatalog }
         let operation = arguments[0]
         guard

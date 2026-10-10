@@ -39,7 +39,8 @@ public struct ExtensionUICarrier: Sendable {
             executablePath.count <= 4096, executablePath.hasPrefix("/"),
             !executablePath.contains("\0"), !executablePath.contains("\n"),
             !executablePath.contains("\r"),
-            URL(fileURLWithPath: executablePath).standardizedFileURL.path == executablePath,
+            executablePath.split(separator: "/", omittingEmptySubsequences: false).dropFirst()
+                .allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }),
             host != "com.pulkit.edith"
                 || executablePath == "/Applications/Edith.app/Contents/MacOS/Edith",
             let requirement = carrier["EdithHostCodeRequirement"] as? String,
