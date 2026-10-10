@@ -7,6 +7,26 @@ import Testing
 
 extension MusicExtensionTests {
     @MainActor @Suite(.serialized) struct MusicCLITests {
+        @Test func originalCommandsReceiveTheCompleteHostCLIContext() async throws {
+            let request = try ExtensionCLIRequest(
+                arguments: ["status", "--player", "builtin", "--json"],
+                standardInput: Data("mock-input".utf8),
+                workingDirectory: "/tmp/mock-music-context", interactive: true)
+            var observed: ExtensionCLIRequest?
+            let reply = try await MusicCLIExecution.run(
+                request,
+                read: {
+                    observed = ExtensionCLIContext.request
+                    return PlayerSnapshot(player: .builtin, isRunning: true)
+                }, send: { _ in }, refresh: {}, renamed: { _, _ in })
+            #expect(reply.exitCode == 0)
+            #expect(observed?.workingDirectory == request.workingDirectory)
+            #expect(observed?.arguments == request.arguments)
+            #expect(observed?.standardInput == request.standardInput)
+            #expect(observed?.interactive == request.interactive)
+            #expect(ExtensionCLIContext.request == nil)
+        }
+
         private func run(
             _ arguments: [String], send: @escaping (MusicTransportRequest) -> Void = { _ in }
         ) async throws -> ExtensionCLIReply {

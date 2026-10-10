@@ -6,6 +6,56 @@ import Testing
 
 extension MusicExtensionTests {
     @MainActor @Suite(.serialized) struct MusicUIServiceTests {
+        @Test func hostSlotsPreserveOriginalPlaybackAndCollapseGates() async throws {
+            let defaults = SharedDefaults.store
+            let keys = [
+                AppStorageKeys.Music.barAutoHide, AppStorageKeys.Music.barCollapsed,
+                "musicSelectedProvider", "musicYoutubeAccountSaved",
+            ]
+            let prior = keys.map { defaults.object(forKey: $0) }
+            defer { for (key, value) in zip(keys, prior) { defaults.set(value, forKey: key) } }
+            for provider in ["local", "spotify", "youtubeMusic"] {
+                for saved in [false, true] where provider == "youtubeMusic" || !saved {
+                    defaults.set(provider, forKey: "musicSelectedProvider")
+                    defaults.set(saved, forKey: "musicYoutubeAccountSaved")
+                    let accounts = MusicAccounts(
+                        defaults: defaults,
+                        spotify: MusicSpotifySession(libraryURL: nil, defaults: defaults),
+                        pauseLocal: {})
+                    let worker = MusicWorker(accounts: accounts, startImmediately: false)
+                    let service = MusicUIService(worker: worker, version: "1.2.3")
+                    for autoHide in [false, true] {
+                        for collapsed in [false, true] {
+                            defaults.set(autoHide, forKey: AppStorageKeys.Music.barAutoHide)
+                            defaults.set(collapsed, forKey: AppStorageKeys.Music.barCollapsed)
+                            let bytes = try await service.execute(
+                                "music.ui.hostSlots", payload: Data("{}".utf8))
+                            let slots = try JSONDecoder().decode(MusicHostSlots.self, from: bytes)
+                            let visible = provider == "local" ? !autoHide : saved
+                            #expect(slots.version == "1.2.3")
+                            #expect(slots.footer == (visible && !collapsed))
+                            #expect(slots.sidebar == (visible && collapsed))
+                            #expect(!(slots.footer && slots.sidebar))
+                            #expect(bytes.count < 256)
+                        }
+                    }
+                    for invalid in [
+                        "[]", "{\"path\":\"Mock\"}", String(repeating: " ", count: 257),
+                    ] {
+                        await #expect(throws: (any Error).self) {
+                            try await service.execute(
+                                "music.ui.hostSlots", payload: Data(invalid.utf8))
+                        }
+                    }
+                    service.stop()
+                    await #expect(throws: (any Error).self) {
+                        try await service.execute("music.ui.hostSlots", payload: Data("{}".utf8))
+                    }
+                    worker.stop()
+                }
+            }
+        }
+
         @Test func downloadsUseOwnedQueueAndRejectRequestsAfterDisable() async throws {
             let root = FileManager.default.temporaryDirectory.appendingPathComponent(
                 "music-downloads-" + UUID().uuidString)

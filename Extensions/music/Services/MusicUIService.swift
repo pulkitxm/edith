@@ -6,6 +6,7 @@ import WebKit
 
 @MainActor final class MusicUIService {
     private let worker: MusicWorker
+    private let version: String
     private var downloads: MusicDownloadsService?
     private var libraryPanel: NSOpenPanel?
 
@@ -14,8 +15,9 @@ import WebKit
     private var video: MusicVideoPlayback?
     private var resumeAudio = false
     private var stopped = false
-    init(worker: MusicWorker) {
+    init(worker: MusicWorker, version: String = "") {
         self.worker = worker
+        self.version = version
         worker.accounts.spotify.receiveUIEvent = { [weak self] event in
             guard let self, let data = try? JSONSerialization.data(withJSONObject: event),
                 data.count <= 262_144
@@ -34,6 +36,27 @@ import WebKit
             return try await downloads!.execute(operation, payload: payload)
         }
         switch operation {
+        case "music.ui.hostSlots":
+            guard payload.count <= 256,
+                let request = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
+                request.isEmpty, !version.isEmpty, version.utf8.count <= 128,
+                !version.utf8.contains(0)
+            else { throw ExtensionPeerError.invalidRequest }
+            let accounts = worker.accounts
+            let title: String?
+            switch accounts.selected {
+            case .local: title = worker.player.current?.title
+            case .spotify: title = accounts.spotify.title.isEmpty ? nil : accounts.spotify.title
+            case .youtubeMusic: title = accounts.youtubeConnected ? "YouTube Music" : nil
+            }
+            let defaults = SharedDefaults.store
+            let visible =
+                accounts.playerReady
+                && (!defaults.bool(forKey: AppStorageKeys.Music.barAutoHide) || title != nil)
+            let collapsed = defaults.bool(forKey: AppStorageKeys.Music.barCollapsed)
+            return try JSONEncoder().encode(
+                MusicHostSlots(
+                    version: version, footer: visible && !collapsed, sidebar: visible && collapsed))
         case "music.ui.level":
             return try JSONEncoder().encode(worker.player.readLevel())
         case "music.ui.read":

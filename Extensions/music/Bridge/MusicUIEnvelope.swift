@@ -1,5 +1,11 @@
 import Foundation
 
+struct MusicHostSlots: Codable, Equatable, Sendable {
+    var version: String
+    var footer: Bool
+    var sidebar: Bool
+}
+
 struct MusicUIQuery: Codable, Equatable, Sendable {
     var path = ""
     var search = ""

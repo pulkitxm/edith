@@ -68,7 +68,10 @@ final class ExtensionRuntime: NSObject {
             }
             if let worker, surface == nil {
                 surface = MusicSurface(read: worker.read, perform: worker.perform)
-                uiService = MusicUIService(worker: worker)
+                uiService = MusicUIService(
+                    worker: worker,
+                    version: Bundle(for: ExtensionRuntime.self).object(
+                        forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")
             }
             TextEditingCommands.install()
         case "configureUI": return embeddedUI.configure(input)

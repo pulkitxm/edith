@@ -60,6 +60,6 @@ import Foundation
             MusicCLIEnvironment.renamed = priorRename
             MusicCLIEnvironment.available = priorAvailable
         }
-        return try await ExtensionCLIExecution.run(MusicCommand.self, arguments: request.arguments)
+        return try await ExtensionCLIExecution.run(MusicCommand.self, request: request)
     }
 }
