@@ -157,3 +157,20 @@ test("managed chunks retain every gate and only always aggregate can claim compl
   expect(aggregate).not.toContain("MACOS_CERT");
   expect(aggregate).not.toContain("run-managed.mjs");
 });
+
+test("fixture Host receipt retention follows the actual builder output and runtime reader", async () => {
+  const builder = await readFile(
+    "scripts/hosted-managed-views/build-host.mjs",
+    "utf8",
+  );
+  const runner = await readFile(
+    "scripts/hosted-managed-views/run-managed.mjs",
+    "utf8",
+  );
+  const directory = builder.match(/const output = join\(root, "([^"]+)"\);/)[1];
+  expect(builder).toContain('join(output, "host-build-receipt.json")');
+  const receipt = `${directory}/host-build-receipt.json`;
+  expect(runner).toContain(`join(root, "${receipt}")`);
+  expect(workflow).toContain(`path: ${receipt}`);
+  expect(workflow).not.toContain("local/hosted-managed-build");
+});

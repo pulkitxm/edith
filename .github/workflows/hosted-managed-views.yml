@@ -118,7 +118,7 @@ jobs:
         with:
           name: "hosted-managed-fixture-host-chunk-${{ matrix.chunk }}"
           retention-days: 3
-          path: local/hosted-managed-build/host-build-receipt.json
+          path: local/hosted-managed-views/host-build-receipt.json
           if-no-files-found: warn
       - name: Remove the owned disposable signing keychain
         if: always()
