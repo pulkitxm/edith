@@ -8,7 +8,9 @@ public enum DownloadsStorage {
 
     public static var audioDirectory: URL {
         selectedAudioDirectory()
-            ?? ExtensionData.root.appendingPathComponent("library", isDirectory: true)
+            ?? ExtensionData.productionDirectory(
+                "music",
+                fallback: ExtensionData.root.appendingPathComponent("library", isDirectory: true))
     }
 
     public static var dataDir: URL { ExtensionData.root }

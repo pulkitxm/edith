@@ -58,7 +58,7 @@ import IOKit.ps
         let cloud = try cloudDirectory(identifier: identifier, root: root)
         return MusicBackupProvider(
             directory: { MusicStorage.musicDir },
-            ownedDirectory: root.appendingPathComponent("library"), cloud: cloud,
+            ownedDirectory: localDirectory(environment: environment, root: root), cloud: cloud,
             applicationDefaults: applicationDefaults, defaults: SharedDefaults.store,
             cloudAvailable: {
                 identifier != "com.pulkit.edith"
@@ -68,6 +68,11 @@ import IOKit.ps
             onBattery: {
                 environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil && Self.isOnBattery()
             })
+    }
+
+    nonisolated static func localDirectory(environment: [String: String], root: URL) -> URL {
+        ExtensionData.productionDirectory(
+            "music", fallback: root.appendingPathComponent("library"), environment: environment)
     }
 
     nonisolated static func cloudDirectory(

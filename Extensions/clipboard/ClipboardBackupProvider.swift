@@ -55,7 +55,7 @@ import IOKit.ps
         let root = URL(fileURLWithPath: path, isDirectory: true)
         let cloud = try cloudDirectory(identifier: identifier, root: root)
         return ClipboardBackupProvider(
-            archive: ClipboardArchive(root: root.appendingPathComponent("clipboard")),
+            archive: ClipboardArchive(root: localDirectory(environment: environment, root: root)),
             cloud: cloud,
             applicationDefaults: applicationDefaults, defaults: SharedDefaults.store,
             cloudAvailable: {
@@ -66,6 +66,12 @@ import IOKit.ps
             onBattery: {
                 environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil && Self.isOnBattery()
             })
+    }
+
+    nonisolated static func localDirectory(environment: [String: String], root: URL) -> URL {
+        ExtensionData.productionDirectory(
+            "clipboard", fallback: root.appendingPathComponent("clipboard"),
+            environment: environment)
     }
 
     nonisolated static func cloudDirectory(

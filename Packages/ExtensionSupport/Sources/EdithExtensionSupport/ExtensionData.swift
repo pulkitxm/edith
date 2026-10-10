@@ -34,6 +34,14 @@ public enum ExtensionData {
         "downloads": ["data/downloads.json"],
     ]
 
+    public static func selectedMusicDirectory(defaults: UserDefaults, homeDirectory: URL) -> URL? {
+        guard let path = defaults.string(forKey: AppStorageKeys.Music.folderPath), !path.isEmpty,
+            RestoredPathValidation.verdict(for: path, homeDirectory: homeDirectory) == .keep
+                || defaults.string(forKey: AppStorageKeys.Music.folderConfirmation) == path
+        else { return nil }
+        return URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath()
+    }
+
     public static func productionDirectory(
         _ relative: String, fallback: URL,
         environment: [String: String] = ProcessInfo.processInfo.environment

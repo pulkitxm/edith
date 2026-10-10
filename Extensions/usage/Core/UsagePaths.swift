@@ -9,9 +9,19 @@ public enum Repo {
 }
 
 public enum MachineRegistry {
+    public static var machinesFile: URL {
+        let root = ExtensionData.root
+        if root.lastPathComponent == "Edith",
+            ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"]
+                == "com.pulkit.edith"
+        {
+            return root.appendingPathComponent("machines/machines.json")
+        }
+        return root.deletingLastPathComponent().appendingPathComponent("machines/machines.json")
+    }
+
     public static func machines(
-        file: URL = ExtensionData.root.deletingLastPathComponent().appendingPathComponent(
-            "machines/machines.json")
+        file: URL = machinesFile
     ) -> [Machine] {
         guard file.isFileURL else { return [] }
         let descriptor = open(file.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
