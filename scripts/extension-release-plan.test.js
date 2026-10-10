@@ -541,6 +541,30 @@ test("same-executable worker inputs rebuild consumers while host presentation ch
   ).toEqual(["music", "shelf"]);
 });
 
+test("all39 workers rebuild for launcher and navigation code changes", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const current = JSON.parse(
+    await readFile("Extensions/manifest.json", "utf8"),
+  );
+  expect(current).toHaveLength(39);
+  for (const path of [
+    "Packages/EdithHost/Sources/EdithHost/HostPublicLauncher.swift",
+    "Packages/EdithHost/Sources/EdithHost/HostFolderChoiceNavigationClient.swift",
+    "Packages/EdithHost/Sources/EdithHost/HostWorkerNavigationClient.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceResult.swift",
+  ]) {
+    expect(workerRuntimeInputs).toContain(path);
+    expect(planPullRequestBuilds(current, [path], current)).toEqual(current);
+  }
+  expect(
+    planPullRequestBuilds(
+      current.filter(({ id }) => id !== "virtualCamera"),
+      ["Packages/EdithHost/Sources/EdithHost/HostSidebar.swift"],
+      current.filter(({ id }) => id !== "virtualCamera"),
+    ),
+  ).toEqual([]);
+});
+
 test("shared runtime fingerprints include code fixes and exclude generated legacy compatibility hashes", async () => {
   const root = await mkdtemp(join(tmpdir(), "extension-worker-inputs-"));
   const definition = {
@@ -582,6 +606,10 @@ test("shared runtime fingerprints include code fixes and exclude generated legac
     for (const path of [
       "Packages/EdithHost/Sources/EdithHostCore/HostAmbientPolicyCoordinator.swift",
       "Packages/EdithHost/Sources/EdithHostCore/HostCoreBackgroundPolicy.swift",
+      "Packages/EdithHost/Sources/EdithHost/HostPublicLauncher.swift",
+      "Packages/EdithHost/Sources/EdithHost/HostFolderChoiceNavigationClient.swift",
+      "Packages/EdithHost/Sources/EdithHost/HostWorkerNavigationClient.swift",
+      "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceResult.swift",
     ]) {
       await writeFile(join(root, path), "changed ambient worker admission");
       expect(
@@ -908,6 +936,52 @@ describe("pull request candidate planning", () => {
       planPullRequestBuilds(
         pullRequestDefinitions,
         ["Extensions/music/Player.swift"],
+        pullRequestDefinitions,
+      ).map(({ id }) => id),
+    ).toEqual(["music", "shelf"]);
+  });
+  test("test and generated inputs do not rebuild production packages", () => {
+    for (const path of [
+      "Extensions/music/Tests/PlayerTests.swift",
+      "Extensions/music/tests/PlayerTests.swift",
+      "Extensions/music/EmbeddedTests/PlayerTests.swift",
+      "Extensions/music/.build/Player.swift",
+      "Extensions/music/vendor/Player.swift",
+      "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift",
+    ])
+      expect(
+        planPullRequestBuilds(
+          pullRequestDefinitions,
+          [path],
+          pullRequestDefinitions,
+        ),
+      ).toEqual([]);
+    const database = [
+      {
+        id: "database",
+        inputs: ["Extensions/database"],
+        sharedInputs: [],
+        dependencies: [],
+      },
+    ];
+    expect(
+      planPullRequestBuilds(
+        database,
+        ["Extensions/database/DatabaseEngine/MCPTests/ServerTests.swift"],
+        database,
+      ),
+    ).toEqual([]);
+    expect(
+      planPullRequestBuilds(
+        database,
+        ["Extensions/database/MCPTests/Production.swift"],
+        database,
+      ),
+    ).toEqual(database);
+    expect(
+      planPullRequestBuilds(
+        pullRequestDefinitions,
+        ["Extensions/music/Package.swift"],
         pullRequestDefinitions,
       ).map(({ id }) => id),
     ).toEqual(["music", "shelf"]);

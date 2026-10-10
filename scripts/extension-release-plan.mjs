@@ -13,11 +13,15 @@ export const workerRuntimeInputs = [
   "scripts/package-shipping-host.py",
   "Packages/EdithHost/Sources/HostBootstrap",
   "Packages/EdithHost/Sources/EdithHost/HostEntry.swift",
+  "Packages/EdithHost/Sources/EdithHost/HostPublicLauncher.swift",
+  "Packages/EdithHost/Sources/EdithHost/HostFolderChoiceNavigationClient.swift",
+  "Packages/EdithHost/Sources/EdithHost/HostWorkerNavigationClient.swift",
   "Packages/EdithHost/Sources/EdithHost/HostWorkerApplication.swift",
   "Packages/EdithHost/Sources/EdithHost/HostWorkerControl.swift",
   "Packages/EdithHost/Sources/EdithHost/HostNativeTask.swift",
   "Packages/EdithHost/Sources/EdithHost/HostRemoteApplication.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostWorkerProtocol.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceResult.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostAmbientPolicyCoordinator.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostCoreBackgroundPolicy.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostWorkerProcessGroups.swift",
@@ -32,6 +36,30 @@ export const workerRuntimeInputs = [
   "Packages/EdithHost/Sources/EdithHostCore/HostRemoteConfiguration.swift",
   "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace",
 ];
+
+const excludedProductionDirectories = new Set([
+  ".build",
+  ".git",
+  ".swiftpm",
+  "node_modules",
+  "dist",
+  "build",
+  "target",
+  "Tests",
+  "tests",
+  "EmbeddedTests",
+  "vendor",
+]);
+
+function excludedProductionInput(path) {
+  return (
+    path.split("/").some((part) => excludedProductionDirectories.has(part)) ||
+    path ===
+      "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift" ||
+    path === "Extensions/database/DatabaseEngine/MCPTests" ||
+    path.startsWith("Extensions/database/DatabaseEngine/MCPTests/")
+  );
+}
 
 export function definitionSupportInputs(definition) {
   const products = [
@@ -143,7 +171,10 @@ export function planPullRequestBuilds(definitions, changes, priorDefinitions) {
     .map(({ id }) => id);
   return planExtensionBuilds(
     definitions,
-    changes.filter((path) => path !== "Extensions/manifest.json"),
+    changes.filter(
+      (path) =>
+        path !== "Extensions/manifest.json" && !excludedProductionInput(path),
+    ),
     changedIDs,
   );
 }
@@ -238,6 +269,7 @@ export async function extensionFingerprint(root, definition, definitions) {
   await visit(definition.id);
   const files = new Map();
   async function collect(path) {
+    if (excludedProductionInput(path)) return;
     const absolute = resolve(root, path);
     if (!absolute.startsWith(`${resolve(root)}/`))
       throw new Error("Input outside repository");
@@ -250,29 +282,7 @@ export async function extensionFingerprint(root, definition, definitions) {
       return;
     }
     for (const entry of entries) {
-      if (
-        [
-          ".build",
-          ".git",
-          ".swiftpm",
-          "node_modules",
-          "dist",
-          "build",
-          "target",
-          "Tests",
-          "tests",
-          "EmbeddedTests",
-          "vendor",
-        ].includes(entry.name)
-      )
-        continue;
-      if (
-        [
-          "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift",
-          "Extensions/database/DatabaseEngine/MCPTests",
-        ].includes(`${path}/${entry.name}`)
-      )
-        continue;
+      if (excludedProductionInput(`${path}/${entry.name}`)) continue;
       if (entry.isSymbolicLink()) throw new Error("Symlink in extension input");
       await collect(`${path}/${entry.name}`);
     }
