@@ -9,6 +9,7 @@ import Testing
 @MainActor @Suite(.serialized) struct HostSettingsRoutingTests {
     @Test(arguments: [
         "usage", "music", "jev", "downloads", "clipboard", "bifrost", "codeStats", "lidAwake",
+        "attention", "appMaintenance", "studio",
     ])
     func activeFormsRequireTheSelectedEngineVersionAndUseTheirExactExport(id: String) throws {
         let package = package(id)
@@ -45,7 +46,7 @@ import Testing
     }
 
     @Test func absentIncompatibleForeignAndRetiringPackagesCannotCreateAnySettingsRequest() {
-        for id in ["emoji", "usage", "music"] {
+        for id in ["emoji", "usage", "music", "attention", "appMaintenance", "studio"] {
             #expect(request(id, installed: nil, state: .active, version: "1.0.0") == nil)
             for installed in [
                 package(id, hostABI: "obsolete"), package(id, architecture: "x86_64"),
@@ -66,7 +67,7 @@ import Testing
     }
 
     @Test(arguments: [
-        "herdr", "machines", "database", "docs", "studio", "attention", "appMaintenance", "quinjet",
+        "herdr", "machines", "database", "docs", "quinjet",
         "notchShelf", "unknown",
     ])
     func unverifiedFormsNeverSubstituteAMainPageOrNotificationPane(id: String) {
