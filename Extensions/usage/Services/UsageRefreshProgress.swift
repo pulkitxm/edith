@@ -9,7 +9,9 @@ final class UsageRefreshProgress: @unchecked Sendable {
     init(directory: URL, now: Date = Date()) {
         url = directory.appendingPathComponent("refresh.log")
         bytes = Data((UsageRefreshTranscript.header(at: now).joined(separator: "\n") + "\n").utf8)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
         try? UsageDataFiles.write(bytes, to: url)
     }
 

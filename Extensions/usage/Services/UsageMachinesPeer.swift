@@ -128,7 +128,8 @@ struct UsageMachinesPeer: Sendable {
                     let canonical = try canonicalized(collected, machine: machine)
                     try Task.checkCancellation()
                     try FileManager.default.createDirectory(
-                        at: cacheDirectory, withIntermediateDirectories: true)
+                        at: cacheDirectory, withIntermediateDirectories: true,
+                        attributes: [.posixPermissions: 0o700])
                     try UsageDataFiles.write(canonical, to: file)
                     data = canonical
                 } catch {

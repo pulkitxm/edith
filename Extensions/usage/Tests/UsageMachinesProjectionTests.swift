@@ -112,6 +112,59 @@ import Testing
         await service.shutdown()
     }
 
+    @Test func ownedFirstWritesKeepRemoteProjectionRootPrivate() async throws {
+        for writer in ["lock", "transaction", "write", "append", "progress", "home"] {
+            let directory = temporary()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let file = directory.appendingPathComponent("synthetic-history.jsonl")
+            switch writer {
+            case "lock": try UsageDataLock.withLock(dataDirectory: directory) {}
+            case "transaction":
+                try UsageDataTransaction.withExclusiveAccess(dataDirectory: directory) {}
+            case "write": try UsageDataFiles.write(Data(), to: file)
+            case "append": try UsageDurableFile.append(Data(), to: file)
+            case "progress": UsageRefreshProgress(directory: directory).close()
+            default:
+                await HomeUsageSnapshotStore(file: file).store(HomeUsageSnapshot())
+            }
+            #expect(
+                (try FileManager.default.attributesOfItem(atPath: directory.path)[.posixPermissions]
+                    as? NSNumber)?.intValue == 0o700)
+            let machine = sampleMachine()
+            let snapshot = try fixture(machine)
+            let transport = Transport(data: snapshot, machine: machine)
+            let projection = service(directory, transport: transport)
+            let receipt = try JSONDecoder().decode(
+                UsageMachinesPeer.Receipt.self,
+                from: await projection.execute(
+                    "usage.machines.project", payload: request(machine, snapshot)))
+            #expect(receipt.byteCount > 0)
+            #expect(receipt.sha256.count == 64)
+            await projection.shutdown()
+        }
+    }
+
+    @Test func existingPublicStorageRemainsRejectedByRemoteProjection() async throws {
+        let directory = temporary()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o755])
+        try UsageDataLock.withLock(dataDirectory: directory) {}
+        let machine = sampleMachine()
+        let snapshot = try fixture(machine)
+        let transport = Transport(data: snapshot, machine: machine)
+        let projection = service(directory, transport: transport)
+        await #expect(throws: UsageNativeFailure.self) {
+            _ = try await projection.execute(
+                "usage.machines.project", payload: request(machine, snapshot))
+        }
+        #expect(
+            (try FileManager.default.attributesOfItem(atPath: directory.path)[.posixPermissions]
+                as? NSNumber)?.intValue == 0o755)
+        await projection.shutdown()
+    }
+
     @Test func malformedChecksumAndOffsetsNeverReachTheCollector() async throws {
         let directory = temporary()
         defer { try? FileManager.default.removeItem(at: directory) }

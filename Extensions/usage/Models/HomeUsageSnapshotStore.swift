@@ -36,7 +36,8 @@ actor HomeUsageSnapshotStore {
     func store(_ snapshot: HomeUsageSnapshot) {
         memory = snapshot
         try? FileManager.default.createDirectory(
-            at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            at: file.deletingLastPathComponent(), withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         try? data.write(to: file, options: .atomic)
     }
