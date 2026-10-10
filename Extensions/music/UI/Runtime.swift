@@ -86,6 +86,7 @@ import SwiftUI
     private let target: String?
     private let notch: EmbeddedMusicNotchRoute?
     private let notchModel: EmbeddedMusicNotchModel?
+    let settingsModel: EmbeddedMusicSettingsModel?
     private var pending = true
     private weak var presentedController: NSViewController?
     private var closed = false
@@ -124,6 +125,14 @@ import SwiftUI
         }
         self.location = location; self.section = section; self.tile = tile; self.target = target
         self.uiOnly = uiOnly; self.client = client; self.notch = notch
+        if location == "settings", let client {
+            settingsModel = EmbeddedMusicSettingsModel(expectedVersion: version) {
+                operation, payload in
+                try await client.invoke(operation, payload: payload)
+            }
+        } else {
+            settingsModel = nil
+        }
         if let notch, let client {
             notchModel = EmbeddedMusicNotchModel(
                 request: notch.request, expectedVersion: version,
@@ -155,6 +164,15 @@ import SwiftUI
         if uiOnly {
             controller = NSHostingController(
                 rootView: ExtensionPageHost { EmbeddedMusicDisabledSettings() })
+        } else if let settingsModel {
+            controller = NSHostingController(
+                rootView: ExtensionPageHost {
+                    EmbeddedMusicSceneLoad {
+                        EmbeddedMusicSettings(model: settingsModel) {
+                            EmbeddedMusicRemote.shared.send(.openMusic)
+                        }
+                    }
+                })
         } else if let notch, let notchModel {
             controller = NSHostingController(
                 rootView: ExtensionPageHost {
@@ -177,7 +195,7 @@ import SwiftUI
     }
 
     func beginShutdown() {
-        closed = true; pending = false; notchModel?.shutdown()
+        closed = true; pending = false; notchModel?.shutdown(); settingsModel?.stop()
     }
 
     func shutdown() {

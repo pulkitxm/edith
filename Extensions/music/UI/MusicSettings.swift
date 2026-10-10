@@ -6,12 +6,17 @@ import SwiftUI
 struct EmbeddedMusicSettings: View {
     var openLibrary: () -> Void = {}
     @State private var tools = EmbeddedMusicTools.shared
-    @AppStorage(EmbeddedMusicFade.enabledKey, store: SharedDefaults.store) private var crossfade =
-        true
-    @AppStorage(EmbeddedMusicFade.secondsKey, store: SharedDefaults.store) private
-        var crossfadeSeconds =
-        EmbeddedMusicFade.defaultSeconds
+    @State private var model: EmbeddedMusicSettingsModel
     @State private var openError: String?
+
+    init(model: EmbeddedMusicSettingsModel? = nil, openLibrary: @escaping () -> Void = {}) {
+        self.openLibrary = openLibrary
+        _model = State(
+            initialValue: model
+                ?? EmbeddedMusicSettingsModel { operation, payload in
+                    try await EmbeddedMusicRemote.shared.dataRequest(operation, payload: payload)
+                })
+    }
 
     var body: some View {
         PageWorkspace {
@@ -36,16 +41,26 @@ struct EmbeddedMusicSettings: View {
                         }
                     }
                     if let openError { Text(openError).foregroundStyle(.red) }
-                    Toggle("Fade between tracks", isOn: $crossfade)
-                    if crossfade {
+                    Toggle("Fade between tracks", isOn: model.boolean(.crossfade, \.crossfade))
+                    if model.boolean(.crossfade, \.crossfade).wrappedValue {
                         LabeledContent("Fade length") {
-                            Text(String(format: "%.1fs", crossfadeSeconds)).monospacedDigit()
+                            Text(String(format: "%.1fs", model.fadeLength.wrappedValue))
+                                .monospacedDigit()
                         }
-                        Slider(value: $crossfadeSeconds, in: EmbeddedMusicFade.secondsRange)
+                        Slider(value: model.fadeLength, in: EmbeddedMusicFade.secondsRange)
                         Text("How long the old track fades out while the next one fades in.").font(
                             .edithText(.caption)
                         ).foregroundStyle(.secondary)
                     }
+                }
+                .disabled(!model.loaded || model.closed)
+                .opacity(model.loaded && !model.closed ? 1 : 0.5)
+                EmbeddedMusicBarRows(model: model)
+                if let error = model.error {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                        .font(.edithText(.caption))
+                    Button("Try again") { Task { await model.refresh() } }
                 }
                 Section("Download tools") {
                     Text(
@@ -71,14 +86,31 @@ struct EmbeddedMusicSettings: View {
                 }
             }.edithForm()
         }
-        .onChange(of: crossfade) {
-            EmbeddedMusicRemote.shared.send(.crossfade, value: crossfade ? 1 : 0)
+        .pageTask {
+            await model.refresh(); tools.refresh()
         }
-        .onChange(of: crossfadeSeconds) {
-            EmbeddedMusicRemote.shared.send(.fadeLength, value: crossfadeSeconds)
-        }
-        .pageTask { tools.refresh() }
+        .pageRefresh(interval: { .seconds(1) }) { await model.refresh() }
     }
 
     private func chooseLibrary() { EmbeddedMusicRemote.shared.chooseLibrary() }
+}
+
+struct EmbeddedMusicBarRows: View {
+    @Bindable var model: EmbeddedMusicSettingsModel
+
+    var body: some View {
+        Section("Player bar") {
+            Toggle(
+                "Collapse to a progress line",
+                isOn: model.boolean(.barCollapsed, \.barCollapsed))
+            Toggle(
+                "Hide when nothing is playing",
+                isOn: model.boolean(.barAutoHide, \.barAutoHide))
+            Text("The chevron at the right end of the bar toggles the collapsed state too.")
+                .font(.edithText(.caption))
+                .foregroundStyle(.secondary)
+        }
+        .disabled(!model.loaded || model.closed)
+        .opacity(model.loaded && !model.closed ? 1 : 0.5)
+    }
 }
