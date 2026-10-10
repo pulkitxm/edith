@@ -35,6 +35,8 @@ enum MachineResolver {
         let exact = values.filter {
             $0.name.caseInsensitiveCompare(query) == .orderedSame
                 || $0.sshTarget.caseInsensitiveCompare(query) == .orderedSame
+                || ($0.aliases?.contains { $0.caseInsensitiveCompare(query) == .orderedSame }
+                    ?? false)
         }
         if exact.count == 1 { return exact[0] }
         let matches =
@@ -43,6 +45,8 @@ enum MachineResolver {
                 $0.id.uuidString.lowercased().hasPrefix(query.lowercased())
                     || $0.name.lowercased().hasPrefix(query.lowercased())
                     || $0.sshTarget.lowercased().hasPrefix(query.lowercased())
+                    || ($0.aliases?.contains { $0.lowercased().hasPrefix(query.lowercased()) }
+                        ?? false)
             } : exact
         guard !query.isEmpty, matches.count == 1 else {
             throw CLIFailure.notFound(

@@ -100,6 +100,7 @@ final class HerdrStore {
     private var uiBaseline = HerdrUILayoutState(
         tabs: [], selected: HerdrStore.boardID, views: [:], arrangements: [])
     private(set) var uiSpaces: [String: HerdrSpaceWindowModel] = [:]
+    var uiPresentationID: UUID?
     private(set) var uiPresentations: [HerdrUIPresentation] = []
     private var uiSpaceBaselines: [String: HerdrUISpace] = [:]
     private var uiSpaceTasks: [String: Task<Void, Never>] = [:]
@@ -2456,7 +2457,8 @@ final class HerdrStore {
     }
 
     func requestPresentation(kind: String, id: String, agents: [String]? = nil) {
-        guard let client = uiClient, uiPresentationTasks.count < 8 else { return }
+        guard let client = uiClient, let origin = uiPresentationID, uiPresentationTasks.count < 8
+        else { return }
         let taskID = UUID()
         uiPresentationTasks[taskID] = Task { [weak self] in
             guard let self else { return }
@@ -2468,10 +2470,21 @@ final class HerdrStore {
                 let data = try await client.perform("herdr.ui.present", object: object)
                 let reply = try JSONDecoder().decode(HerdrUIPresentation.self, from: data)
                 guard reply.owner == "herdr", reply.version == 1, reply.target == id,
-                    reply.location == "herdr." + kind, reply.presented
+                    reply.location == "herdr." + kind
                 else {
                     throw ExtensionPeerError.rejected("Could not open the window.")
                 }
+                try reply.validate()
+                let opened = try JSONDecoder().decode(
+                    HerdrUIPresentation.self,
+                    from: await client.perform(
+                        "herdr.ui.presentation.open",
+                        object: [
+                            "presentationID": origin.uuidString, "token": reply.token.uuidString,
+                        ]))
+                guard opened.matches(location: reply.location, target: id, token: reply.token),
+                    opened.presented
+                else { throw ExtensionPeerError.unavailable }
                 try await self.performUI("herdr.ui.read")
             } catch { self.uiError = error.localizedDescription }
         }

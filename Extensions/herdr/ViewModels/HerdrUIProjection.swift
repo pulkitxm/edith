@@ -96,6 +96,7 @@ struct HerdrUIState: Codable {
                     && ["herdr.agent", "herdr.space"].contains($0.location)
             })
         else { throw ExtensionPeerError.invalidRequest }
+        for presentation in presentations { try presentation.validate() }
         let known = Set(agents.map(\.id) + openedAgents.map(\.id))
         guard
             Set(detachedViews.keys)
@@ -257,6 +258,28 @@ final class HerdrUIDefaults: UserDefaults {
         else { throw ExtensionPeerError.invalidRequest }
         let store = worker.store
         switch operation {
+        case "herdr.ui.presentation.open":
+            guard Set(object.keys) == ["presentationID", "token"],
+                let origin = object["presentationID"] as? String,
+                let presentationID = UUID(uuidString: origin),
+                let raw = object["token"] as? String, let token = UUID(uuidString: raw),
+                let retained = worker.spaces.presentations.first(where: { $0.token == token }),
+                let navigation = worker.hostWindowNavigation
+            else { throw ExtensionPeerError.invalidRequest }
+            do {
+                try await navigation.open(retained, presentationID: presentationID)
+                try Task.checkCancellation()
+                guard !worker.isStopped,
+                    let admitted = worker.spaces.presentations.first(where: { $0.token == token }),
+                    admitted.presented,
+                    admitted.matches(
+                        location: retained.location, target: retained.target, token: retained.token)
+                else { throw ExtensionPeerError.unavailable }
+                return try JSONEncoder().encode(admitted)
+            } catch {
+                try? await worker.spaces.closeAndWait(token)
+                throw error
+            }
         case "herdr.ui.presentation.view":
             guard Set(object.keys) == ["token", "view"], let raw = object["token"] as? String,
                 let token = UUID(uuidString: raw), let value = object["view"] as? String,

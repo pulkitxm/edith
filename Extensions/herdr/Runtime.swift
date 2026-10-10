@@ -81,6 +81,8 @@ final class ExtensionRuntime: NSObject {
                 ["main", "settings", "herdr.agent", "herdr.agent.controls", "herdr.space"].contains(
                     location),
                 let configuration = ExtensionUIConfiguration(context: input),
+                let origin = input["presentationID"] as? String,
+                let presentationID = UUID(uuidString: origin),
                 configuration.extensionID == "herdr",
                 location == "settings" || configuration.engineClient != nil
             else { return ["ok": false] as NSDictionary }
@@ -90,7 +92,9 @@ final class ExtensionRuntime: NSObject {
             }
             if location.hasPrefix("herdr.") {
                 guard let target = input["target"] as? String, !target.isEmpty,
-                    target.utf8.count <= 4096, !target.utf8.contains(0)
+                    target.utf8.count <= 4096, !target.utf8.contains(0),
+                    let raw = input["herdrPresentationToken"] as? String,
+                    UUID(uuidString: raw) != nil
                 else { return ["ok": false] as NSDictionary }
             }
             stopUI()
@@ -99,6 +103,7 @@ final class ExtensionRuntime: NSObject {
             if location != "settings", let client = configuration.engineClient {
                 let facade = HerdrUIClient(client: client)
                 let store = HerdrStore(uiClient: facade)
+                store.uiPresentationID = presentationID
                 let activity = AgentActivityMonitor(defaults: store.uiDefaults, uiClient: facade)
                 store.uiActivity = activity
                 uiStore = store
@@ -111,7 +116,9 @@ final class ExtensionRuntime: NSObject {
                         } else {
                             HerdrRemoteScene(
                                 store: store, location: location,
-                                target: input["target"] as? String ?? ""
+                                target: input["target"] as? String ?? "",
+                                token: UUID(
+                                    uuidString: input["herdrPresentationToken"] as? String ?? "")!
                             )
                             .environment(\.terminalLaunchEnabled, true)
                         }
@@ -125,6 +132,7 @@ final class ExtensionRuntime: NSObject {
                     facade = HerdrUIClient { _, _ in throw ExtensionPeerError.unavailable }
                 }
                 let store = HerdrStore(uiClient: facade)
+                store.uiPresentationID = presentationID
                 let activity = AgentActivityMonitor(defaults: store.uiDefaults, uiClient: facade)
                 store.uiActivity = activity
                 uiStore = store
@@ -162,7 +170,10 @@ final class ExtensionRuntime: NSObject {
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             guard worker == nil else { return ["ok": true] as NSDictionary }
-            let created = HerdrWorker()
+            let navigation = (input["hostNavigation"] as? NSObject).flatMap {
+                HerdrHostWindowNavigationClient(bridge: $0)
+            }
+            let created = HerdrWorker(hostWindowNavigation: navigation)
             worker = created
             surface = HerdrSurface(worker: created)
             let recovery =
