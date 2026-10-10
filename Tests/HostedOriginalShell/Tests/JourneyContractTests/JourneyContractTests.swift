@@ -20,7 +20,10 @@ private func fixture(identifier: String = identifier, directory: String = direct
     return JourneyFixture(
         identifier: identifier, directory: directory,
         sourceCommit: String(repeating: "a", count: 40),
-        executableSHA256: String(repeating: "b", count: 64), versions: ["1.0.0", "1.1.0"],
+        executableSHA256: [
+            "1.0.0": String(repeating: "b", count: 64),
+            "2.0.0": String(repeating: "e", count: 64),
+        ], versions: ["1.0.0", "1.1.0"],
         appVersions: ["1.0.0", "2.0.0"],
         protectedSHA256: [
             "production-sentinel/usage.json": String(repeating: "c", count: 64),
@@ -84,4 +87,47 @@ private func fixture(identifier: String = identifier, directory: String = direct
             try fixture.verifyProtectedDigests(actual)
         }
     }
+}
+
+@Test func ownedProcessMetricsRejectPIDReuseAndNeverReadForeignPID() throws {
+    var registry = JourneyProcessRegistry()
+    let host = JourneyProcessRegistry.Identity(
+        pid: 44, generation: "1:2", executable: "/fixture/Host.app/Edith")
+    try registry.register(role: "host", identity: host, expectedExecutable: host.executable)
+    var reads: [Int32] = []
+    let live = registry.observations(
+        identity: { _ in host },
+        residentBytes: {
+            reads.append($0); return 4_096
+        })
+    #expect(live.first?.residentBytes == 4_096)
+    #expect(reads == [44])
+    reads = []
+    let replaced = registry.observations(
+        identity: { pid in .init(pid: pid, generation: "3:4", executable: host.executable) },
+        residentBytes: {
+            reads.append($0); return 8_192
+        })
+    #expect(replaced.first?.running == false)
+    #expect(replaced.first?.residentBytes == nil)
+    #expect(reads.isEmpty)
+    #expect(throws: JourneyContractError.invalidMetadata) {
+        try registry.register(role: "engine", identity: host, expectedExecutable: "/foreign/Edith")
+    }
+}
+
+@Test func processExitDuringMeasurementDoesNotBecomeZeroMemory() throws {
+    var registry = JourneyProcessRegistry()
+    let process = JourneyProcessRegistry.Identity(
+        pid: 55, generation: "5:6", executable: "/fixture/Worker")
+    try registry.register(
+        role: "managedUI", identity: process, expectedExecutable: process.executable)
+    var queries = 0
+    let observations = registry.observations(
+        identity: { _ in
+            queries += 1
+            return queries == 1 ? process : nil
+        }, residentBytes: { _ in 16_384 })
+    #expect(observations.first?.running == false)
+    #expect(observations.first?.residentBytes == nil)
 }

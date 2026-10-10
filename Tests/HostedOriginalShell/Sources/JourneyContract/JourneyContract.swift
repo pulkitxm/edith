@@ -14,7 +14,7 @@ public struct JourneyFixture: Codable, Equatable, Sendable {
     public let identifier: String
     public let directory: String
     public let sourceCommit: String
-    public let executableSHA256: String
+    public let executableSHA256: [String: String]
     public let versions: [String]
     public let appVersions: [String]
     public let protectedSHA256: [String: String]
@@ -23,7 +23,8 @@ public struct JourneyFixture: Codable, Equatable, Sendable {
     public var executable: String { application + "/Contents/MacOS/Edith" }
     public var home: String { directory + "/synthetic-data" }
     public var support: String { directory + "/support" }
-    public var defaultsSuite: String { identifier + ".host" }
+    public var defaultsSuite: String { identifier }
+    public var sessionDefaultsSuite: String { identifier + ".host" }
     public var identityRoot: String {
         support + "/Edith Tests/" + identifier.dropFirst("com.pulkit.edith.tests.".count)
     }
@@ -38,7 +39,7 @@ public struct JourneyFixture: Codable, Equatable, Sendable {
 
     public init(
         schema: Int = 1, identifier: String, directory: String, sourceCommit: String,
-        executableSHA256: String, versions: [String], appVersions: [String],
+        executableSHA256: [String: String], versions: [String], appVersions: [String],
         protectedSHA256: [String: String]
     ) {
         self.schema = schema
@@ -65,7 +66,9 @@ public struct JourneyFixture: Codable, Equatable, Sendable {
         guard directory == accountHome + "/Applications/Edith Remote Fixture Journey " + suffix,
             canonical(directory), canonical(accountHome)
         else { throw JourneyContractError.invalidPaths }
-        guard schema == 1, hex(sourceCommit, length: 40), hex(executableSHA256, length: 64),
+        guard schema == 1, hex(sourceCommit, length: 40),
+            Set(executableSHA256.keys) == Set(appVersions),
+            executableSHA256.values.allSatisfy({ hex($0, length: 64) }),
             versions == ["1.0.0", "1.1.0"], appVersions == ["1.0.0", "2.0.0"],
             Set(protectedSHA256.keys) == protectedRelativePaths,
             protectedSHA256.values.allSatisfy({ hex($0, length: 64) })
@@ -97,5 +100,67 @@ public struct JourneyFixture: Codable, Equatable, Sendable {
 
     private func hex(_ value: String, length: Int) -> Bool {
         value.utf8.count == length && value.allSatisfy { $0.isHexDigit && !$0.isUppercase }
+    }
+}
+
+public struct JourneyProcessObservation: Codable, Equatable, Sendable {
+    public let role: String
+    public let pid: Int32
+    public let generation: String
+    public let running: Bool
+    public let residentBytes: UInt64?
+
+    public init(role: String, pid: Int32, generation: String, running: Bool, residentBytes: UInt64?)
+    {
+        self.role = role
+        self.pid = pid
+        self.generation = generation
+        self.running = running
+        self.residentBytes = running ? residentBytes : nil
+    }
+}
+
+public struct JourneyProcessRegistry: Sendable {
+    public struct Identity: Equatable, Sendable {
+        public let pid: Int32
+        public let generation: String
+        public let executable: String
+
+        public init(pid: Int32, generation: String, executable: String) {
+            self.pid = pid
+            self.generation = generation
+            self.executable = executable
+        }
+    }
+
+    private var owned: [String: Identity] = [:]
+
+    public init() {}
+
+    public mutating func register(role: String, identity: Identity, expectedExecutable: String)
+        throws
+    {
+        guard ["host", "engine", "managedUI"].contains(role), identity.pid > 1,
+            !identity.generation.isEmpty, identity.generation.utf8.count <= 64,
+            identity.executable == expectedExecutable, expectedExecutable.hasPrefix("/"),
+            owned.count < 64 || owned.values.contains(identity)
+        else { throw JourneyContractError.invalidMetadata }
+        owned[role + ":" + String(identity.pid) + ":" + identity.generation] = identity
+    }
+
+    public func observations(
+        identity: (Int32) -> Identity?, residentBytes: (Int32) -> UInt64?
+    ) -> [JourneyProcessObservation] {
+        owned.keys.sorted().compactMap { key in
+            guard let expected = owned[key], let role = key.split(separator: ":").first else {
+                return nil
+            }
+            let running = identity(expected.pid) == expected
+            let bytes = running ? residentBytes(expected.pid) : nil
+            let stillRunning = running && identity(expected.pid) == expected
+            return JourneyProcessObservation(
+                role: String(role), pid: expected.pid, generation: expected.generation,
+                running: stillRunning, residentBytes: stillRunning ? bytes : nil)
+        }
     }
 }
