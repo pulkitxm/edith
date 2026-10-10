@@ -66,6 +66,25 @@ export function managedFixtureOverlay(source) {
   );
   result = replaceExact(
     result,
+    `                let handle = try await manager.scene(
+                    for: EdithHostCore.HostExtensionContentRequest(
+                        extensionID: package.id, location: route.location, section: route.section))`,
+    `                let request = EdithHostCore.HostExtensionContentRequest(
+                    extensionID: package.id, location: route.location, section: route.section)
+                let handle: HostRemoteSceneHandle
+                do {
+                    handle = try await manager.scene(for: request)
+                } catch HostRemoteAvailabilityError.approvalRequired {
+                    guard uiProcesses.isEmpty else { throw HostWorkerError.rejected }
+                    _ = try await awaitHostedManagedApproval(
+                        directory: directory, hostIdentifier: identity.identifier,
+                        extensionID: package.id,
+                        workerIdentifier: identity.identifier + ".extension." + package.id + ".worker")
+                    handle = try await manager.scene(for: request)
+                }`,
+  );
+  result = replaceExact(
+    result,
     '                "originalDownloadedRole": true, "readonlyControlVerified": true,',
     `                "schema": 1, "location": route.location, "section": route.section,
                 "factoryOverlay": route.factoryOverlay, "functionalActionsValidated": false,
