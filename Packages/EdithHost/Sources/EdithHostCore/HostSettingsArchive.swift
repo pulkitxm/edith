@@ -27,8 +27,8 @@ public struct HostSettingsBackupResult: Codable, Sendable {
         guard let application = SharedDefaults.applicationStore(identifier: identity.identifier)
         else { throw HostWorkerError.rejected }
         self.application = application
-        var domains = ["application": (identity.identifier, application)]
-        for id in extensionIDs {
+        var domains = ["application": (identity.applicationDefaultsSuite, application)]
+        for id in extensionIDs where identity.development {
             let name = identity.extensionDefaultsSuite(id)
             guard let defaults = UserDefaults(suiteName: name) else {
                 throw HostWorkerError.rejected

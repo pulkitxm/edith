@@ -1,4 +1,5 @@
 import Darwin
+import EdithExtensionSupport
 import Foundation
 
 public struct HostStorageTarget: Sendable {
@@ -12,16 +13,29 @@ public struct HostStorageTarget: Sendable {
         self.url = url
     }
 
-    public static func defaults(identity: HostIdentity) -> [HostStorageTarget] {
+    public static func defaults(
+        identity: HostIdentity, defaults: UserDefaults = SharedDefaults.store,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> [HostStorageTarget] {
         [
             Self(id: "data", title: "Application data", url: identity.root),
-            Self(id: "machines", title: "Machines", url: identity.extensionDirectory("machines")),
             Self(
-                id: "clipboard", title: "Clipboard", url: identity.extensionDirectory("clipboard")),
+                id: "machines", title: "Machines",
+                url: identity.persistentExtensionLocations("machines")[0]),
             Self(
-                id: "seoAudit", title: "Site audits", url: identity.extensionDirectory("seoAudit")),
-            Self(id: "usage", title: "Usage files", url: identity.extensionDirectory("usage")),
-            Self(id: "music", title: "Music", url: identity.extensionDirectory("music")),
+                id: "clipboard", title: "Clipboard",
+                url: identity.persistentExtensionLocations("clipboard")[0]),
+            Self(
+                id: "seoAudit", title: "Site audits",
+                url: identity.persistentExtensionLocations("seoAudit")[0]),
+            Self(
+                id: "usage", title: "Usage files",
+                url: identity.persistentExtensionLocations("usage")[0]),
+            Self(
+                id: "music", title: "Music",
+                url: ExtensionData.selectedMusicDirectory(
+                    defaults: defaults, homeDirectory: homeDirectory)
+                    ?? identity.persistentExtensionLocations("music")[0]),
             Self(
                 id: "caches", title: "Caches", url: identity.root.appendingPathComponent("Caches")),
             Self(id: "logs", title: "Logs", url: identity.root.appendingPathComponent("Logs")),

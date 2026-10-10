@@ -150,7 +150,9 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     }
 
     static var libraryURL: URL {
-        ExtensionData.root.appendingPathComponent("Recordings", isDirectory: true)
+        ExtensionData.productionDirectory(
+            "video-projects/TimeLapses",
+            fallback: ExtensionData.root.appendingPathComponent("Recordings", isDirectory: true))
     }
 
     func loadSources(

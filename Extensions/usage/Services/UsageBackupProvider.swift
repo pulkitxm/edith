@@ -53,7 +53,8 @@ import IOKit.ps
         let root = URL(fileURLWithPath: path, isDirectory: true)
         let cloud = try cloudDirectory(identifier: identifier, root: root)
         return UsageBackupProvider(
-            directory: root.appendingPathComponent("data"), cloud: cloud, defaults: defaults,
+            directory: localDirectory(environment: environment, root: root), cloud: cloud,
+            defaults: defaults,
             cloudAvailable: {
                 identifier != "com.pulkit.edith"
                     || FileManager.default.fileExists(
@@ -62,6 +63,11 @@ import IOKit.ps
             onBattery: {
                 environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil && Self.isOnBattery()
             })
+    }
+
+    nonisolated static func localDirectory(environment: [String: String], root: URL) -> URL {
+        ExtensionData.productionDirectory(
+            "data", fallback: root.appendingPathComponent("data"), environment: environment)
     }
 
     static func cloudDirectory(

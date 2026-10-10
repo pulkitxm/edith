@@ -39,7 +39,7 @@ import Foundation
             "EDITH_EXTENSION_STATE_ROOT",
             identity.root.appendingPathComponent("ExtensionState").path, 1)
         setenv("EDITH_SHARED_DEFAULTS_SUITE", identity.extensionDefaultsSuite(next.extensionID), 1)
-        setenv("EDITH_SURFACE_DEFAULTS_SUITE", identity.identifier, 1)
+        setenv("EDITH_SURFACE_DEFAULTS_SUITE", identity.applicationDefaultsSuite, 1)
         let team = ExtensionCodeSignature.teamIdentifier()
         guard identity.development || team != nil else { throw MarketplaceError.invalidSignature }
         let runtime = ExtensionBundleRuntime(

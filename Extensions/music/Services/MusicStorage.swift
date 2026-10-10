@@ -2,13 +2,15 @@ import EdithExtensionSupport
 import Foundation
 
 public enum MusicStorage {
-    public static let musicFolderPathKey = "musicFolderPath"
+    public static let musicFolderPathKey = AppStorageKeys.Music.folderPath
     public static let musicFolderStaleKey = "musicFolderStale"
-    private static let confirmationKey = "musicFolderExternalConfirmation"
+    private static let confirmationKey = AppStorageKeys.Music.folderConfirmation
 
     public static var musicDir: URL {
         selectedMusicDirectory()
-            ?? ExtensionData.root.appendingPathComponent("library", isDirectory: true)
+            ?? ExtensionData.productionDirectory(
+                "music",
+                fallback: ExtensionData.root.appendingPathComponent("library", isDirectory: true))
     }
 
     public static var dataDir: URL { ExtensionData.root }
@@ -17,11 +19,7 @@ public enum MusicStorage {
         defaults: UserDefaults = SharedDefaults.store,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> URL? {
-        guard let path = defaults.string(forKey: musicFolderPathKey), !path.isEmpty,
-            RestoredPathValidation.verdict(for: path, homeDirectory: homeDirectory) == .keep
-                || defaults.string(forKey: confirmationKey) == path
-        else { return nil }
-        return URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath()
+        ExtensionData.selectedMusicDirectory(defaults: defaults, homeDirectory: homeDirectory)
     }
 
     public static func prepareStoredPaths(

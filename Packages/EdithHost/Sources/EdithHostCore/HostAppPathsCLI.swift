@@ -1,25 +1,45 @@
+import EdithExtensionSupport
 import Foundation
 
 public enum HostAppPathsCLI {
-    public static func entries(identity: HostIdentity) -> [(id: String, label: String, url: URL)] {
+    private static func usageDirectory(_ identity: HostIdentity) -> URL {
+        identity.effectiveExtensionDirectory("usage").appendingPathComponent("data")
+    }
+
+    public static func entries(
+        identity: HostIdentity, defaults: UserDefaults = SharedDefaults.store,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> [(id: String, label: String, url: URL)] {
         [
             ("app-data", "App data", identity.root),
             ("icloud", "iCloud", HostCoreCloud.directory(identity: identity)),
-            ("data", "Usage data", identity.extensionDirectory("usage")),
+            ("data", "Usage data", usageDirectory(identity)),
             (
                 "refresh-log", "Refresh log",
-                identity.extensionDirectory("usage").appendingPathComponent("refresh.log")
+                usageDirectory(identity).appendingPathComponent("refresh.log")
             ),
-            ("music", "Music", identity.extensionDirectory("music")),
+            (
+                "music", "Music",
+                ExtensionData.selectedMusicDirectory(
+                    defaults: defaults, homeDirectory: homeDirectory)
+                    ?? identity.persistentExtensionLocations("music")[0]
+            ),
             ("caches", "Caches", identity.root.appendingPathComponent("Caches")),
             ("logs", "Logs", identity.root.appendingPathComponent("Logs")),
         ]
     }
 
-    public static func prepareOpen(_ id: String, identity: HostIdentity) throws -> (
+    public static func prepareOpen(
+        _ id: String, identity: HostIdentity, defaults: UserDefaults = SharedDefaults.store,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) throws -> (
         url: URL, reveal: Bool
     ) {
-        guard let entry = entries(identity: identity).first(where: { $0.id == id }) else {
+        guard
+            let entry = entries(
+                identity: identity, defaults: defaults, homeDirectory: homeDirectory
+            ).first(where: { $0.id == id })
+        else {
             throw HostCLIError.usage("Unknown app path.")
         }
         let manager = FileManager.default
@@ -28,7 +48,7 @@ public enum HostAppPathsCLI {
         }
         if id == "refresh-log" {
             if manager.fileExists(atPath: entry.url.path) { return (entry.url, true) }
-            return (identity.extensionDirectory("usage"), false)
+            return (usageDirectory(identity), false)
         }
         return (entry.url, false)
     }

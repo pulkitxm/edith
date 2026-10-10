@@ -270,6 +270,8 @@ public enum AppStorageKeys {
     }
 
     public enum Music {
+        public static let folderPath = "musicFolderPath"
+        public static let folderConfirmation = "musicFolderExternalConfirmation"
         public static let barAutoHide = "musicBarAutoHide"
         public static let barCollapsed = "musicBarCollapsed"
         public static let lastBackupAt = "lastMusicBackupAt"
