@@ -57,7 +57,11 @@ public struct HostRemoteProcessIdentity: Equatable, Sendable {
         guard connection.effectiveUserIdentifier == getuid() else {
             throw HostWorkerError.rejected
         }
-        let peer = try read(connection.processIdentifier)
+        return try verify(connection.processIdentifier, executable: executable)
+    }
+
+    static func verify(_ pid: Int32, executable: URL) throws -> Self {
+        let peer = try read(pid)
         let expected = executable.resolvingSymlinksInPath()
         var code: SecStaticCode?
         guard peer.executable == expected,

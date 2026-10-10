@@ -43,6 +43,13 @@ struct HostEntry: AppExtension {
             exit(HostCLI.run(arguments))
         }
         #if EDITH_CLI_FIXTURE
+        if arguments.count == 2, arguments[0] == "--extension-remote-registration-fixture" {
+            do {
+                try HostRemoteFixture.run(
+                    directory: URL(fileURLWithPath: arguments[1]), registrationOnly: true)
+            } catch { exit(1) }
+            return
+        }
         if arguments.count == 2, arguments[0] == "--extension-remote-fixture" {
             do { try HostRemoteFixture.run(directory: URL(fileURLWithPath: arguments[1])) } catch {
                 exit(1)
@@ -141,6 +148,8 @@ struct HostEntry: AppExtension {
 
 private final class HostUICarrierDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        DispatchQueue.main.async { NSApplication.shared.terminate(nil) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            NSApplication.shared.terminate(nil)
+        }
     }
 }

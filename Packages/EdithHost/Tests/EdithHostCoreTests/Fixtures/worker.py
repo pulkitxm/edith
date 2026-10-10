@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import time
+import uuid
 
 class ProcessInfo(ctypes.Structure):
     _fields_ = [(name, ctypes.c_uint32) for name in ["flags", "status", "xstatus", "pid", "ppid", "uid", "gid", "ruid", "rgid", "svuid", "svgid", "reserved"]] + [("comm", ctypes.c_char * 16), ("name", ctypes.c_char * 32)] + [(name, ctypes.c_uint32) for name in ["files", "group", "job", "device", "terminal", "nice"]] + [("seconds", ctypes.c_uint64), ("microseconds", ctypes.c_uint64)]
@@ -29,9 +30,26 @@ if mode in ["child", "child-group", "child-reserved", "child-group-crash", "chil
     with open(sys.argv[2], "w") as stream:
         stream.write(str(child.pid))
 prepare_count = 0
+configuration = None
+navigation_requests = {}
+
+def navigate():
+    event = {"kind": "navigation", "token": str(uuid.uuid4()).upper(), "extensionID": configuration["extensionID"], "version": configuration["version"]}
+    if mode == "navigation-wrong-id":
+        event["extensionID"] = "other"
+    if mode == "navigation-wrong-version":
+        event["version"] = "99.0.0"
+    print(json.dumps(event), flush=True)
+    return event
+
 for line in sys.stdin:
     request = json.loads(line)
     operation = request["operation"]
+    if operation == "navigationReply":
+        original = navigation_requests.pop(request["token"], None)
+        if original is not None:
+            print(json.dumps({"token": original, "ok": request["navigation"]["ok"]}), flush=True)
+        continue
     if mode in ["crash", "child-group-crash"]:
         sys.exit(4)
     if mode == "timeout":
@@ -42,6 +60,19 @@ for line in sys.stdin:
     if mode in ["ignore-stop", "child-group-ignore-stop"] and operation == "stop":
         time.sleep(30)
     response = {"token": request["token"], "ok": mode != "reject"}
+    if operation == "show" and mode.startswith("navigation"):
+        event = navigate()
+        if mode in ["navigation-ack", "navigation-rejected", "navigation-cancel", "navigation-disconnect"]:
+            if mode == "navigation-disconnect":
+                sys.exit(0)
+            if mode == "navigation-cancel":
+                event["kind"] = "navigationCancel"
+                print(json.dumps(event), flush=True)
+            else:
+                navigation_requests[event["token"]] = request["token"]
+                continue
+    if operation == "prepareDisable" and mode == "navigation-disable":
+        navigate()
     if operation == "prepareDisable":
         prepare_count += 1
         if mode == "reject-disable-always" or (mode == "reject-disable-once" and prepare_count == 1):
@@ -50,6 +81,9 @@ for line in sys.stdin:
         if mode == "late-disable" and prepare_count == 1:
             time.sleep(0.3)
     if operation == "start":
+        configuration = request["configuration"]
+        if mode == "navigation-early":
+            navigate()
         recovery = request["configuration"]["recoveryOnly"]
         if mode == "require-recovery" and not recovery:
             response["ok"] = False

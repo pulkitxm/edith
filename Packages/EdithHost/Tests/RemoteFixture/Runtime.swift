@@ -6,21 +6,29 @@ import SwiftUI
 
 @MainActor final class FixtureRuntime: NSObject {
     private var client: ExtensionEngineClient?
+    private var uiOnly = false
     @objc func execute(_ input: NSDictionary) -> AnyObject? {
         guard let operation = input["operation"] as? String else { return nil }
         switch operation {
         case "describe":
-            return ["id": "sample", "version": "1.0.0", "hostABI": "HOST_ABI", "role": "app"]
+            return [
+                "id": "sample", "version": "FIXTURE_VERSION", "hostABI": "HOST_ABI", "role": "app",
+            ]
                 as NSDictionary
         case "configureUI":
             guard let configuration = ExtensionUIConfiguration(context: input),
-                let client = configuration.engineClient
+                configuration.uiOnly || configuration.engineClient != nil
             else {
                 return ["ok": false] as NSDictionary
             }
-            self.client = client
+            self.client = configuration.engineClient
+            uiOnly = configuration.uiOnly
             return ["ok": true] as NSDictionary
         case "view":
+            if uiOnly {
+                return NSHostingController(
+                    rootView: ExtensionPageHost { Text("Synthetic readonly settings") })
+            }
             guard let client else { return nil }
             return NSHostingController(rootView: ExtensionPageHost { FixturePage(client: client) })
         case "stopUI": client?.invalidate(); client = nil; return ["ok": true] as NSDictionary

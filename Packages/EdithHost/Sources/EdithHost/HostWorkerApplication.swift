@@ -12,7 +12,7 @@ final class HostWorkerApplication {
     private var frames = HostWorkerFrames()
     private var runtimes: [ExtensionBundleRuntime] = []
     private var configuration: HostWorkerConfiguration?
-    private var window: NSWindow?
+    private var navigation: HostWorkerNavigationClient?
     private var parentWatcher: DispatchSourceProcess?
     private var windowObserver: NSObjectProtocol?
     private let nativeAdmission = ExtensionNativeTaskAdmission()
@@ -62,7 +62,7 @@ final class HostWorkerApplication {
         windowObserver = NotificationCenter.default.addObserver(
             forName: ExtensionPresentation.showWindowNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { try? self?.showWindow() }
+            Task { @MainActor [weak self] in try? await self?.showWindow() }
         }
         let watcher = DispatchSource.makeProcessSource(
             identifier: getppid(), eventMask: .exit, queue: .main)
@@ -84,6 +84,28 @@ final class HostWorkerApplication {
         do {
             for frame in try frames.append(bytes) {
                 let request = try JSONDecoder().decode(HostWorkerRequest.self, from: frame)
+                if request.operation == "navigationReply" {
+                    guard let reply = request.navigation, reply.token == request.token,
+                        let navigation
+                    else { throw HostWorkerError.invalidResponse }
+                    try navigation.receive(reply)
+                    continue
+                }
+                if request.operation == "show" {
+                    Task { [weak self] in
+                        guard let self else { return }
+                        do {
+                            try await showWindow()
+                            try control.send(
+                                HostWorkerResponse(
+                                    token: request.token, ok: true, version: configuration?.version)
+                            )
+                        } catch {
+                            try? control.send(HostWorkerResponse(token: request.token, ok: false))
+                        }
+                    }
+                    continue
+                }
                 if request.operation == "prepareDisable" {
                     prepareDisable(request)
                     continue
@@ -118,6 +140,7 @@ final class HostWorkerApplication {
             return
         }
         preparingDisable = true
+        navigation?.cancelPending()
         Task { [self] in
             defer { preparingDisable = false }
             do {
@@ -159,6 +182,15 @@ final class HostWorkerApplication {
                 throw MarketplaceError.invalidSignature
             }
             configuration = next
+            let navigation = HostWorkerNavigationClient(
+                configuration: next,
+                available: { [weak self] in
+                    guard let self else { return false }
+                    return !self.stopping && !self.preparingDisable
+                },
+                send: { [control] request in try control.send(request) },
+                cancel: { [control] request in try control.send(request) })
+            self.navigation = navigation
             setenv(
                 "EDITH_EXTENSION_NATIVE_CONTEXT",
                 try JSONEncoder().encode(next).base64EncodedString(), 1)
@@ -169,7 +201,7 @@ final class HostWorkerApplication {
                 "defaultsSuite": identity.extensionDefaultsSuite(package.id),
                 "dataDirectory": identity.extensionDirectory(package.id).path,
                 "hostIdentifier": identity.identifier,
-                "recoveryOnly": next.recoveryOnly,
+                "recoveryOnly": next.recoveryOnly, "hostNavigation": navigation,
             ]
             for role in [ExtensionBundleRuntime.Role.helper, .agent, .app] {
                 guard
@@ -231,7 +263,7 @@ final class HostWorkerApplication {
                 }
                 if command == "extension.open" {
                     guard payload.isEmpty else { throw ExtensionPeerError.invalidRequest }
-                    try self.showWindow()
+                    try await self.showWindow()
                     return Data("{\"opened\":true}".utf8)
                 }
                 guard
@@ -251,7 +283,6 @@ final class HostWorkerApplication {
         }
         guard let configuration else { throw HostWorkerError.rejected }
         switch request.operation {
-        case "show": try showWindow()
         case "synchronize":
             guard !configuration.recoveryOnly else { return }
             if let next = request.configuration {
@@ -275,43 +306,18 @@ final class HostWorkerApplication {
         }
     }
 
-    private func showWindow() throws {
-        guard !stopping, let configuration, !configuration.recoveryOnly else {
+    private func showWindow() async throws {
+        guard !stopping, !preparingDisable, let configuration, !configuration.recoveryOnly else {
             throw HostWorkerError.rejected
         }
-        if let window {
-            window.makeKeyAndOrderFront(nil);
-            NSApplication.shared.activate(ignoringOtherApps: true); return
-        }
-        let identity = try configuration.identity()
-        let context: NSDictionary = [
-            "defaultsSuite": identity.extensionDefaultsSuite(configuration.extensionID),
-            "dataDirectory": identity.extensionDirectory(configuration.extensionID).path,
-        ]
-        for runtime in runtimes {
-            if let controller = try runtime.viewController(
-                id: configuration.extensionID, context: context)
-            {
-                let window = NSWindow(contentViewController: controller)
-                window.title =
-                    try HostIndex.bundled().first { $0.id == configuration.extensionID }?.title
-                    ?? "Edith"
-                window.setContentSize(NSSize(width: 900, height: 650))
-                window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-                window.isReleasedWhenClosed = false
-                window.center()
-                self.window = window
-                window.makeKeyAndOrderFront(nil)
-                NSApplication.shared.activate(ignoringOtherApps: true)
-                return
-            }
-        }
-        throw HostWorkerError.rejected
+        guard let navigation else { throw HostWorkerError.rejected }
+        try await navigation.request()
     }
 
     private func shutdown(token: UUID? = nil) {
         guard !stopping else { return }
         stopping = true
+        navigation?.invalidate()
         peerServer?.shutdown()
         peerServer = nil
         FileHandle.standardInput.readabilityHandler = nil
@@ -321,11 +327,9 @@ final class HostWorkerApplication {
         windowObserver = nil
         resourceObservers.forEach(NotificationCenter.default.removeObserver)
         resourceObservers.removeAll()
-        window?.orderOut(nil)
         shutdownTask = Task { [self] in
             for runtime in runtimes { try? await runtime.prepareToStopAll() }
             for runtime in runtimes { try? runtime.stopAll() }
-            window?.close()
             if let token {
                 try? control.send(
                     HostWorkerResponse(token: token, ok: true, version: configuration?.version))

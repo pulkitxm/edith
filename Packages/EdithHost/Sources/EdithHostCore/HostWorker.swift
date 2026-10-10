@@ -12,6 +12,8 @@ public final class HostWorker {
     public private(set) var configuration: HostWorkerConfiguration
     public private(set) var ready = false
     public var didExit: (@MainActor () -> Void)?
+    public var didRequestNavigation:
+        (@MainActor (HostWorkerNavigationRequest) async throws -> Void)?
     public var processIdentifier: Int32? { process.isRunning ? process.processIdentifier : nil }
     private let process = Process()
     private let input = Pipe()
@@ -20,6 +22,12 @@ public final class HostWorker {
     private var frames = HostWorkerFrames()
     private var pending: [UUID: Pending] = [:]
     private var abandoned = Set<UUID>()
+    private struct NavigationPending {
+        let request: HostWorkerNavigationRequest
+        let task: Task<Void, Never>
+        let deadline: Task<Void, Never>
+    }
+    private var navigation: [UUID: NavigationPending] = [:]
     private var preparationToken: UUID?
     private var launched = false
     private var exited = false
@@ -133,6 +141,7 @@ public final class HostWorker {
         guard preparationToken == nil else { throw HostWorkerError.rejected }
         let request = HostWorkerRequest(operation: "prepareDisable")
         preparationToken = request.token
+        cancelNavigation(acknowledge: true)
         defer { preparationToken = nil }
         _ = try await self.request(request, timeout: timeout)
     }
@@ -182,7 +191,7 @@ public final class HostWorker {
         guard !bytes.isEmpty else {
             readSource?.cancel()
             readSource = nil
-            if !pending.isEmpty { fail(HostWorkerError.exited) }
+            if !pending.isEmpty || !navigation.isEmpty { fail(HostWorkerError.exited) }
             return
         }
         do {
@@ -192,6 +201,20 @@ public final class HostWorker {
                     resource.kind == "processGroup"
                 {
                     try receive(resource)
+                    continue
+                }
+                if let request = try? JSONDecoder().decode(
+                    HostWorkerNavigationRequest.self, from: data), request.kind == "navigation"
+                {
+                    try request.validate(configuration: configuration)
+                    try receiveNavigation(request)
+                    continue
+                }
+                if let cancel = try? JSONDecoder().decode(
+                    HostWorkerNavigationCancel.self, from: data), cancel.kind == "navigationCancel"
+                {
+                    try cancel.validate(configuration: configuration)
+                    finishNavigation(cancel.token, request: nil, ok: false)
                     continue
                 }
                 let response = try JSONDecoder().decode(HostWorkerResponse.self, from: data)
@@ -241,6 +264,63 @@ public final class HostWorker {
         }
     }
 
+    private func receiveNavigation(_ request: HostWorkerNavigationRequest) throws {
+        guard ready, !configuration.recoveryOnly, preparationToken == nil,
+            let didRequestNavigation
+        else { try acknowledgeNavigation(request, ok: false); return }
+        guard navigation.count < 8, navigation[request.token] == nil else {
+            throw HostWorkerError.invalidResponse
+        }
+        let task = Task { [weak self] in
+            do {
+                try Task.checkCancellation()
+                try await didRequestNavigation(request)
+                try Task.checkCancellation()
+                self?.finishNavigation(request.token, request: request, ok: true)
+            } catch { self?.finishNavigation(request.token, request: request, ok: false) }
+        }
+        let deadline = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(5)) } catch { return }
+            self?.finishNavigation(request.token, request: request, ok: false)
+        }
+        navigation[request.token] = NavigationPending(
+            request: request, task: task, deadline: deadline)
+    }
+
+    private func finishNavigation(_ token: UUID, request: HostWorkerNavigationRequest?, ok: Bool) {
+        guard let pending = navigation.removeValue(forKey: token) else { return }
+        pending.task.cancel()
+        pending.deadline.cancel()
+        guard let request, ready else { return }
+        do {
+            try acknowledgeNavigation(
+                request, ok: ok && !configuration.recoveryOnly && preparationToken == nil)
+        } catch { fail(HostWorkerError.invalidResponse) }
+    }
+
+    private func acknowledgeNavigation(_ request: HostWorkerNavigationRequest, ok: Bool) throws {
+        guard process.isRunning else { throw HostWorkerError.exited }
+        let reply = HostWorkerRequest(
+            token: request.token, operation: "navigationReply",
+            navigation: HostWorkerNavigationReply(request: request, ok: ok))
+        var bytes = try JSONEncoder().encode(reply)
+        guard bytes.count <= HostWorkerFrames.maximumBytes else {
+            throw HostWorkerError.invalidResponse
+        }
+        bytes.append(10)
+        try input.fileHandleForWriting.write(contentsOf: bytes)
+    }
+
+    private func cancelNavigation(acknowledge: Bool = false) {
+        let values = Array(navigation.values)
+        navigation.removeAll()
+        for value in values {
+            value.task.cancel()
+            value.deadline.cancel()
+            if acknowledge { try? acknowledgeNavigation(value.request, ok: false) }
+        }
+    }
+
     private func receive(_ resource: HostWorkerProcessGroup) throws {
         guard resource.pid != process.processIdentifier else {
             throw HostWorkerError.invalidResponse
@@ -261,6 +341,7 @@ public final class HostWorker {
     }
 
     private func fail(_ error: any Error) {
+        cancelNavigation()
         ready = false
         let requests = pending.values
         pending.removeAll()
@@ -272,6 +353,7 @@ public final class HostWorker {
     }
 
     private func terminate() {
+        cancelNavigation()
         if process.isRunning {
             let pid = process.processIdentifier
             if getpgid(pid) == pid {
@@ -309,6 +391,7 @@ public final class HostWorker {
         drainOutput()
         exited = true
         ready = false
+        cancelNavigation()
         readSource?.cancel()
         readSource = nil
         process.terminationHandler = nil

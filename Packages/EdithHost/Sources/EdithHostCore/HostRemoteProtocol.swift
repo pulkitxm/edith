@@ -48,6 +48,26 @@ public struct HostExtensionContentRequest: Codable, Equatable, Sendable {
     }
 }
 
+public struct HostRemoteReservation: Codable, Sendable {
+    public let request: HostExtensionContentRequest
+    public let sceneIdentifier: String
+
+    public init(request: HostExtensionContentRequest, sceneIdentifier: String) {
+        self.request = request
+        self.sceneIdentifier = sceneIdentifier
+    }
+
+    public func slot(extensionID: String) throws -> Int {
+        try request.validate(extensionID: extensionID)
+        guard
+            let index = (0..<HostRemoteSceneDescriptor.maximumScenes).first(where: {
+                sceneIdentifier == "edith-ui-\($0)"
+            })
+        else { throw HostWorkerError.rejected }
+        return index
+    }
+}
+
 public struct HostRemotePresentation: Codable, Equatable, Sendable {
     public let session: UUID
     public let request: HostExtensionContentRequest

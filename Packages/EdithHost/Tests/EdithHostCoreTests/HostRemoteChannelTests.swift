@@ -42,13 +42,20 @@ struct HostRemoteChannelTests {
             try await HostRemoteChannel.connect(
                 to: listenerEndpoint(denied), executable: identity.executable)
         }
-        let server = try endpoint(identity: identity) { _ in Data() }
+        let state = RequestState()
+        let server = try endpoint(identity: identity) { _ in
+            state.completed += 1; return Data()
+        }
         defer { server.invalidate() }
+        var rejected: HostRemoteProcessIdentity?
         await #expect(throws: HostWorkerError.rejected) {
             try await HostRemoteChannel.connect(
                 to: listenerEndpoint(server),
-                executable: URL(fileURLWithPath: "/tmp/synthetic-wrong-selected-worker"))
+                executable: URL(fileURLWithPath: "/tmp/synthetic-wrong-selected-worker"),
+                rejectedPeer: { rejected = $0 })
         }
+        #expect(rejected == identity)
+        #expect(state.completed == 0)
     }
 
     @Test func aDifferentSigningRequirementRejectsBeforeExecution() async throws {

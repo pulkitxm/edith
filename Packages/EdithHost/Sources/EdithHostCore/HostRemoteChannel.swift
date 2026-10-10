@@ -40,6 +40,7 @@ public final class HostRemoteChannel {
     public static func connect(
         through bootstrap: NSXPCConnection, executable: URL,
         expectedPeer: HostRemoteProcessIdentity? = nil,
+        rejectedPeer: @escaping @MainActor (HostRemoteProcessIdentity) -> Void = { _ in },
         receive: @escaping @MainActor (HostRemoteEvent) -> Void = { _ in },
         executeEngine:
             @escaping @MainActor @Sendable (ExtensionEngineRequest) async throws -> Data = {
@@ -49,13 +50,14 @@ public final class HostRemoteChannel {
         let endpoint = try await endpoint(through: bootstrap)
         return try await connect(
             to: endpoint.value, executable: executable, expectedPeer: expectedPeer,
-            receive: receive,
+            rejectedPeer: rejectedPeer, receive: receive,
             executeEngine: executeEngine)
     }
 
     public static func connect(
         to endpoint: NSXPCListenerEndpoint, executable: URL,
         expectedPeer: HostRemoteProcessIdentity? = nil,
+        rejectedPeer: @escaping @MainActor (HostRemoteProcessIdentity) -> Void = { _ in },
         receive: @escaping @MainActor (HostRemoteEvent) -> Void = { _ in },
         executeEngine:
             @escaping @MainActor @Sendable (ExtensionEngineRequest) async throws -> Data = {
@@ -67,8 +69,15 @@ public final class HostRemoteChannel {
             executeEngine: executeEngine)
         do {
             _ = try await channel.request(HostRemoteCommand(operation: "authenticate"))
-            let peer = try HostRemoteProcessIdentity.verify(
-                channel.connection, executable: executable)
+            let actual = try HostRemoteProcessIdentity.read(channel.connection.processIdentifier)
+            let peer: HostRemoteProcessIdentity
+            do {
+                peer = try HostRemoteProcessIdentity.verify(
+                    channel.connection, executable: executable)
+            } catch {
+                rejectedPeer(actual)
+                throw error
+            }
             guard expectedPeer == nil || expectedPeer == peer else {
                 throw HostWorkerError.rejected
             }

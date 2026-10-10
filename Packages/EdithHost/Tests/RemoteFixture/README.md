@@ -20,6 +20,24 @@ uses the single configured local development signing identity without printing
 it. The host, carrier and sandboxed extension use the same compiled executable.
 All role resources are synthetic and remain inside the extension's sealed bundle.
 
+For background verification, run `bun scripts/test-host-remote-ui.mjs register-public "$fixture_dir"`.
+This fixture creates an unshown offscreen window and never orders, focuses or
+activates it. The host runs as a direct child process; its sealed carrier checks
+in through public NSWorkspace without activating or opening a window. The
+`register` operation separately exercises the fixture-only direct carrier stub.
+An unapproved fixture reports approval required without opening the system
+browser. An approved fixture checks scene activation, the authenticated read-only
+control connection, verified UI process exit and package lease release while the
+engine remains disabled. The result is written to `result-registration.json`.
+
+Preparation accepts a selected version followed by retained versions. Normal
+background verification must select the current registration without probing
+retained identities. `register-stale` separately forces a retained registration
+and requires path rejection before native loading, verified rejected-process
+exit and released leases. `register-cleanup` verifies closing, disabling and
+expiring selected scenes before connection, with no UI or engine process start.
+Each operation runs in a fresh host process.
+
 If launch reports `publicApprovalRequired`, enable this fixture's ExtensionWorker
 in its displayed public macOS extension browser, then run:
 

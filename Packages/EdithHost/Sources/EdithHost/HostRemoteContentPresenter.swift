@@ -1,5 +1,6 @@
 import AppKit
 import EdithHostCore
+@preconcurrency import ExtensionFoundation
 @preconcurrency import ExtensionKit
 import Observation
 import SwiftUI
@@ -49,12 +50,20 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
         return controller
     }
 
+    func window(for presentationID: UUID) -> NSWindow? {
+        guard let controller = controllers[presentationID], controller.isViewLoaded else {
+            return nil
+        }
+        return controller.view.window
+    }
+
     func endPresentation(id: UUID) {
-        controllers.removeValue(forKey: id)?.detach()
         guard closing[id] == nil else { return }
         closing[id] = Task { [weak self] in
             guard let self else { return }
             do {
+                try await manager.prepareToClose(id: id)
+                controllers.removeValue(forKey: id)?.detach()
                 try await manager.endPresentation(id: id)
                 failedClosures.remove(id)
             } catch {
@@ -88,7 +97,7 @@ struct HostRemoteViewState: Equatable {
 @MainActor
 final class HostRemoteViewController: NSViewController, EXHostViewControllerDelegate {
     let request: HostExtensionContentRequest
-    private let remote: EXHostViewController
+    private var remote: EXHostViewController
     private let connect:
         @MainActor (
             NSXPCConnection, HostRemoteViewState, @escaping @MainActor (HostRemoteEvent) -> Void
@@ -127,6 +136,9 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
         let view = HostRemoteContainerView()
         view.contentHeight = contentHeight
         self.view = view
+        mountRemote()
+    }
+    private func mountRemote() {
         addChild(remote)
         remote.view.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(remote.view)
@@ -159,7 +171,7 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
         let token = revision
         activation = Task { [weak self] in
             guard let self else { return }
-            defer { activation = nil }
+            defer { if revision == token { activation = nil } }
             do {
                 try await connect(connection, state) { [weak self] event in self?.receive(event) }
                 guard !Task.isCancelled, revision == token, !detached else { return }

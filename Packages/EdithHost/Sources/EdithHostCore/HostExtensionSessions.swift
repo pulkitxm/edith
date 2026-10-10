@@ -11,7 +11,12 @@ public final class HostExtensionSessions {
         didSet { didChange() }
     }
     @ObservationIgnored public var didChange: @MainActor () -> Void = {}
+    @ObservationIgnored public var didRequestNavigation:
+        @MainActor (HostWorkerNavigationRequest) async throws -> Void = { _ in
+            throw HostWorkerError.rejected
+        }
     @ObservationIgnored public var willDisable: @MainActor (String) async throws -> Void = { id in
+        try await HostRemoteCarrierCheckIn.stop(extensionID: id)
         try await HostRemoteSession.stopAll(extensionID: id)
     }
     public private(set) var versions: [String: String] = [:]
@@ -98,6 +103,17 @@ public final class HostExtensionSessions {
                     self.failures.insert(id)
                 }
             }
+            worker.didRequestNavigation = { [weak self, weak worker] request in
+                guard let self, let worker, self.workers[id] === worker,
+                    worker.ready, !worker.configuration.recoveryOnly,
+                    self.activeIDs.contains(id), self.versions[id] == worker.configuration.version
+                else { throw HostWorkerError.rejected }
+                try await self.didRequestNavigation(request)
+                try Task.checkCancellation()
+                guard self.workers[id] === worker, worker.ready,
+                    self.activeIDs.contains(id), self.versions[id] == worker.configuration.version
+                else { throw HostWorkerError.rejected }
+            }
             try await worker.start()
             guard workers[id] === worker, worker.ready else { throw HostWorkerError.exited }
             versions[id] = package.version
@@ -171,10 +187,13 @@ public final class HostExtensionSessions {
     }
 
     @discardableResult public func shutdown() async -> Bool {
-        for id in Set(workers.keys).union(HostRemoteSession.extensionIDs) {
+        for id in Set(workers.keys).union(HostRemoteSession.extensionIDs).union(
+            HostRemoteCarrierCheckIn.extensionIDs)
+        {
             do { try await disable(id: id, remember: false) } catch { failures.insert(id) }
         }
         return workers.isEmpty && HostRemoteSession.extensionIDs.isEmpty
+            && HostRemoteCarrierCheckIn.extensionIDs.isEmpty
     }
 
     private func save(_ ids: Set<String>) {

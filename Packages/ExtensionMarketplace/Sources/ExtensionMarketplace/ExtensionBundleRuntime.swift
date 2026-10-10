@@ -173,11 +173,42 @@ public final class ExtensionBundleRuntime {
     public func response(id: String, operation: String, context: NSDictionary = [:]) throws
         -> NSDictionary
     {
-        guard readOnlyPackage == nil || ["describe", "configureUI", "stopUI"].contains(operation)
+        guard
+            readOnlyPackage == nil
+                || ["describe", "configureUI", "releaseUI", "stopUI"].contains(operation)
         else {
             throw MarketplaceError.invalidBundle
         }
         return try execute(load(id: id), operation: operation, context: context)
+    }
+
+    public func preparePresentationToClose(id: String, presentationID: UUID) async throws {
+        guard readOnlyPackage != nil, let instance = loaded[id] else { return }
+        try await Self.preparePresentationToClose(
+            object: instance.object, presentationID: presentationID)
+    }
+
+    static func preparePresentationToClose(object: NSObject, presentationID: UUID) async throws {
+        let selector = NSSelectorFromString("prepareUIToClose:completion:")
+        guard object.responds(to: selector) else { return }
+        let completion = BundleCommandCompletion()
+        try await withTaskCancellationHandler {
+            _ = try await withCheckedThrowingContinuation { continuation in
+                guard completion.begin(continuation) else { return }
+                typealias Prepare =
+                    @convention(c) (
+                        AnyObject, Selector, NSString, @convention(block) (NSString?) -> Void
+                    ) -> Void
+                let prepare = unsafeBitCast(object.method(for: selector), to: Prepare.self)
+                let callback: @convention(block) (NSString?) -> Void = { error in
+                    completion.finish(
+                        error == nil ? .success(Data()) : .failure(MarketplaceError.invalidBundle))
+                }
+                prepare(object, selector, presentationID.uuidString as NSString, callback)
+            }
+        } onCancel: {
+            completion.finish(.failure(CancellationError()))
+        }
     }
 
     public func supportsCommands(id: String) -> Bool {
