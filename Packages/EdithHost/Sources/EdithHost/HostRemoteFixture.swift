@@ -16,6 +16,7 @@ final class HostRemoteFixture: NSObject, NSApplicationDelegate, EXHostViewContro
     private let manager: HostRemoteSessionManager
     private let package: ExtensionPackage
     private let registrationOnly: Bool
+    private let managedShipping: Bool
     private let retainedPackages: [ExtensionPackage]
     private var window: NSWindow!
     private var root: NSViewController!
@@ -45,13 +46,22 @@ final class HostRemoteFixture: NSObject, NSApplicationDelegate, EXHostViewContro
     private init(directory: URL, registrationOnly: Bool) throws {
         self.directory = directory
         self.registrationOnly = registrationOnly
+        managedShipping = FileManager.default.fileExists(
+            atPath: directory.appendingPathComponent("managed-shipping-fixture.json").path)
+        guard
+            !managedShipping
+                || (registrationOnly
+                    && ProcessInfo.processInfo.environment["EDITH_REMOTE_OFFSCREEN_FIXTURE"] != "1")
+        else { throw HostWorkerError.rejected }
         identity = try HostIdentity(
             identifier: Bundle.main.bundleIdentifier!,
             supportDirectory: directory.appendingPathComponent("support"))
         package = try JSONDecoder().decode(
             ExtensionPackage.self,
             from: Data(contentsOf: directory.appendingPathComponent("selected-package.json")))
-        guard package.id == "sample", package.hostABI == HostContract.compatibility else {
+        guard package.hostABI == HostContract.compatibility,
+            managedShipping ? package.id != "sample" : package.id == "sample"
+        else {
             throw HostWorkerError.rejected
         }
         let store = ExtensionPackageStore(root: identity.root.appendingPathComponent("Extensions"))
@@ -74,11 +84,14 @@ final class HostRemoteFixture: NSObject, NSApplicationDelegate, EXHostViewContro
         defaults.removePersistentDomain(forName: identity.defaultsSuite)
         let executable = Bundle.main.executableURL!
         let fixtureIdentity = identity
+        let shipping = managedShipping
         let sessions = HostExtensionSessions(defaults: defaults) { package in
             HostWorker(
                 configuration: HostWorkerConfiguration(
                     identity: fixtureIdentity, extensionID: package.id, version: package.version),
-                executable: executable, arguments: ["--extension-remote-fixture-engine"])
+                executable: executable,
+                arguments: shipping ? ["--extension-worker"] : ["--extension-remote-fixture-engine"]
+            )
         }
         let client = ExtensionCatalogClient(
             url: URL(string: "https://github.com/pulkitxm/edith/catalog")!,
@@ -86,13 +99,27 @@ final class HostRemoteFixture: NSObject, NSApplicationDelegate, EXHostViewContro
             repository: MarketplaceConfiguration.repository,
             cache: identity.root.appendingPathComponent("catalog.json"),
             fetch: { _ in throw MarketplaceError.downloadFailed })
+        let entries: [HostExtension]
+        if managedShipping {
+            entries = try HostIndex.load(
+                data: Data(
+                    contentsOf:
+                        directory.appendingPathComponent("managed-shipping-fixture.json")))
+            guard entries.count == 1, entries[0].id == package.id,
+                try HostIndex.bundled().contains(entries[0])
+            else {
+                throw HostWorkerError.rejected
+            }
+        } else {
+            entries = [
+                HostExtension(
+                    id: "sample", title: "Synthetic owned scene",
+                    symbolName: "square", category: "Tools")
+            ]
+        }
         marketplace = try HostMarketplace(
             identity: identity,
-            entries: [
-                HostExtension(
-                    id: "sample", title: "Synthetic owned scene", symbolName: "square",
-                    category: "Tools")
-            ],
+            entries: entries,
             store: store, catalogClient: client,
             installer: ExtensionPackageInstaller(
                 store: store,
@@ -105,7 +132,13 @@ final class HostRemoteFixture: NSObject, NSApplicationDelegate, EXHostViewContro
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if registrationOnly {
-            Task { await verifyRegistration() }
+            Task {
+                if managedShipping {
+                    await verifyManagedShipping()
+                } else {
+                    await verifyRegistration()
+                }
+            }
             return
         }
         window = NSWindow(
@@ -129,6 +162,100 @@ final class HostRemoteFixture: NSObject, NSApplicationDelegate, EXHostViewContro
                 try await marketplace.sessions.enable(package)
                 try await open()
             } catch { report(error) }
+        }
+    }
+
+    private func verifyManagedShipping() async {
+        root = NSViewController()
+        root.view = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 650))
+        window = NSWindow(contentViewController: root)
+        window.isReleasedWhenClosed = false
+        let resultURL = directory.appendingPathComponent("result-managed-shipping.json")
+        do {
+            try await marketplace.sessions.enable(package)
+            guard let enginePID = marketplace.sessions.processIdentifiers[package.id],
+                marketplace.sessions.versions[package.id] == package.version
+            else { throw HostWorkerError.invalidResponse }
+            var uiProcesses: [HostRemoteProcessIdentity] = []
+            for _ in 0..<2 {
+                let handle = try await manager.scene(
+                    for: EdithHostCore.HostExtensionContentRequest(
+                        extensionID: package.id, location: "main", section: package.id))
+                self.handle = handle
+                attachRegistration(handle)
+                let deadline = ContinuousClock.now + .seconds(15)
+                while phase == "attaching", ContinuousClock.now < deadline {
+                    try await Task.sleep(for: .milliseconds(20))
+                }
+                guard phase == "active", handle.isPresented,
+                    let peer = handle.processIdentity, peer.isRunning,
+                    peer.pid != enginePID, peer.pid != getpid(),
+                    marketplace.sessions.processIdentifiers[package.id] == enginePID,
+                    marketplace.sessions.versions[package.id] == package.version,
+                    !window.isVisible, !window.isKeyWindow, !window.isMainWindow
+                else { throw HostWorkerError.invalidResponse }
+                if let previous = uiProcesses.last {
+                    guard !previous.isRunning, previous != peer else {
+                        throw HostWorkerError.invalidResponse
+                    }
+                }
+                uiProcesses.append(peer)
+                let heldLease = try? PackageFileLock(
+                    url: marketplace.packageStore.leaseURL(for: package), exclusive: true)
+                guard heldLease == nil else {
+                    heldLease?.close()
+                    throw HostWorkerError.invalidResponse
+                }
+                try await manager.prepareToClose(id: handle.presentationID)
+                remote?.configuration = nil
+                if let remote { root.dismiss(remote) }
+                try await manager.endPresentation(id: handle.presentationID)
+                self.handle = nil
+                remote = nil
+                guard !peer.isRunning, manager.presentationCounts().isEmpty,
+                    marketplace.sessions.processIdentifiers[package.id] == enginePID
+                else { throw HostWorkerError.stillRunning }
+            }
+            try await marketplace.sessions.disable(id: package.id)
+            guard marketplace.sessions.processIdentifiers.isEmpty,
+                uiProcesses.allSatisfy({ !$0.isRunning }),
+                manager.presentationCounts().isEmpty,
+                !window.isVisible, !window.isKeyWindow, !window.isMainWindow
+            else { throw HostWorkerError.stillRunning }
+            window.close()
+            window = nil
+            guard await marketplace.sessions.shutdown() else { throw HostWorkerError.stillRunning }
+            let lease = try PackageFileLock(
+                url: marketplace.packageStore.leaseURL(for: package), exclusive: true)
+            lease.close()
+            let result: [String: Any] = [
+                "outcome": "passed", "extensionID": package.id,
+                "selectedVersion": package.version, "hostABI": package.hostABI,
+                "managedNativeViewValidated": true, "nativeWindow": false,
+                "originalDownloadedRole": true, "readonlyControlVerified": true,
+                "publicCarrierCheckIn": true, "freshSceneGeneration": true,
+                "lastCloseExited": true, "disableExitedBothRoles": true,
+                "packageLeaseReleased": true, "noVisibleWindows": true,
+                "disabledProcesses": 0,
+            ]
+            try JSONSerialization.data(withJSONObject: result, options: .sortedKeys).write(
+                to: resultURL, options: .atomic)
+            NSApp.terminate(nil)
+        } catch {
+            remote?.configuration = nil
+            if let remote { root.dismiss(remote) }
+            remote = nil
+            window?.close()
+            window = nil
+            let stopped = await marketplace.sessions.shutdown()
+            let result: [String: Any] = [
+                "outcome": "failed", "extensionID": package.id,
+                "managedNativeViewValidated": false, "nativeWindow": false,
+                "error": String(describing: error), "cleanupVerified": stopped,
+            ]
+            try? JSONSerialization.data(withJSONObject: result, options: .sortedKeys).write(
+                to: resultURL, options: .atomic)
+            NSApp.terminate(nil)
         }
     }
 

@@ -12,6 +12,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildExtensionPackage } from "./build-extension-package.mjs";
 import {
   buildExtensionSupport,
   rewriteSupportImports,
@@ -42,7 +43,9 @@ export async function prepareHostRemoteFixture({
   identifier,
   version = "1.0.0",
   retainedVersions = [],
+  extensionID,
 }) {
+  if (extensionID) assert.equal(retainedVersions.length, 0);
   assert.match(version, /^\d{1,8}\.\d{1,8}\.\d{1,8}$/);
   assert(retainedVersions.length < 8);
   assert.equal(
@@ -177,6 +180,88 @@ export async function prepareHostRemoteFixture({
   assert(hostABI);
   const slot = identifier.slice("com.pulkit.edith.tests.".length);
   const identityRoot = join(directory, "support/Edith Tests", slot);
+  if (extensionID) {
+    const index = JSON.parse(
+      await readFile(join(app, "Contents/Resources/index.json"), "utf8"),
+    );
+    const entry = index.find((candidate) => candidate.id === extensionID);
+    assert(
+      entry,
+      "The frozen host must advertise the selected shipping extension",
+    );
+    const previousIdentity = process.env.EXTENSION_SIGN_IDENTITY;
+    const output = join(directory, "shipping-package");
+    try {
+      process.env.EXTENSION_SIGN_IDENTITY = signingIdentity;
+      await buildExtensionPackage({
+        root,
+        id: extensionID,
+        output,
+        development: false,
+        version,
+        containedHostApp: app,
+      });
+    } finally {
+      if (previousIdentity === undefined)
+        delete process.env.EXTENSION_SIGN_IDENTITY;
+      else process.env.EXTENSION_SIGN_IDENTITY = previousIdentity;
+    }
+    const package_ = JSON.parse(
+      await readFile(join(output, `${extensionID}.json`), "utf8"),
+    );
+    assert.equal(package_.id, extensionID);
+    assert.equal(package_.hostABI, hostABI);
+    assert.equal(package_.version, version);
+    assert.equal(package_.architecture, "arm64");
+    assert.match(package_.sha256, /^[a-f0-9]{64}$/);
+    assert(
+      Number.isSafeInteger(package_.downloadBytes) &&
+        package_.downloadBytes > 0,
+    );
+    const versionDirectory = join(
+      identityRoot,
+      "Extensions",
+      extensionID,
+      hostABI,
+      package_.architecture,
+      version,
+    );
+    await mkdir(versionDirectory, { recursive: true });
+    run("python3", [
+      "-c",
+      "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); bad=z.testzip(); assert bad is None; z.extractall(sys.argv[2])",
+      join(output, `${extensionID}.zip`),
+      versionDirectory,
+    ]);
+    const carrier = join(versionDirectory, extensionID, "ExtensionCarrier.app");
+    const worker = join(carrier, "Contents/Extensions/ExtensionWorker.appex");
+    run("codesign", ["--verify", "--deep", "--strict", carrier]);
+    await writeFile(
+      join(directory, "selected-package.json"),
+      JSON.stringify(package_),
+    );
+    await writeFile(
+      join(directory, "managed-shipping-fixture.json"),
+      JSON.stringify([entry]),
+    );
+    const result = {
+      directory: await realpath(directory),
+      app,
+      executable,
+      carrier,
+      worker,
+      identifier,
+      hostABI,
+      extensionID,
+      version,
+      archive: join(output, `${extensionID}.zip`),
+      sha256: package_.sha256,
+      sourceFingerprint: package_.sourceFingerprint,
+      backgroundOnly: true,
+    };
+    await writeFile(join(directory, "fixture.json"), JSON.stringify(result));
+    return result;
+  }
   let carrier;
   let worker;
   const packages = [];
