@@ -1,5 +1,6 @@
 import EdithExtensionSupport
 import Foundation
+import WorkerFixtureSupport
 import Testing
 @testable import MachinesExtension
 
@@ -15,6 +16,25 @@ import Testing
             },
             notify: { _ in }, load: { [:] }, save: { _ in })
     }
+    #if MACHINE_RUNTIME_TESTS
+    @Test func invalidFixtureAdmissionRejectsRuntimeBeforeServices() {
+        var admissions = 0
+        let runtime = ExtensionRuntime(fixtureAdmission: { _ in
+            admissions += 1
+            throw WorkerFixtureSupport.WorkerFixtureError.invalid
+        })
+        for operation in ["start", "synchronize"] {
+            #expect(
+                (runtime.execute(["operation": operation]) as? NSDictionary)?["ok"] as? Bool
+                    == false)
+        }
+        #expect(admissions == 2)
+        #expect(
+            (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
+                == false)
+    }
+    #endif
+
     @Test func batteryPauseBlocksPeriodicButManualRefreshAndNoLiveExceptionArePreserved()
         async throws
     {

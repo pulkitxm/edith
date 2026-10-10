@@ -1,5 +1,7 @@
 import EdithExtensionSupport
 import Foundation
+import WorkerFixtureSupport
+import WorkerFixtureTestSupport
 import Testing
 @testable import CompanionExtension
 
@@ -66,7 +68,8 @@ import Testing
 
     @Test func policyOnlySynchronizationDoesNotWakeSettingsWork() {
         var wakes = 0
-        let runtime = ExtensionRuntime(settingsChanged: { wakes += 1 })
+        let runtime = ExtensionRuntime(
+            settingsChanged: { wakes += 1 }, fixtureAdmission: { _ in nil })
         for paused in [false, true, true, false] {
             let input =
                 context(CompanionMonitor.jobID, paused: paused).mutableCopy()
@@ -103,6 +106,37 @@ import Testing
         model.shutdown()
         #expect(allocations == 0)
         #expect(model.phase == .idle)
+    }
+
+    @Test func invalidFixtureAdmissionRejectsStartAndSynchronizeBeforeServices() {
+        var admissions = 0
+        let runtime = ExtensionRuntime(fixtureAdmission: { _ in
+            admissions += 1
+            throw WorkerFixtureError.invalid
+        })
+        for operation in ["start", "synchronize"] {
+            #expect(
+                (runtime.execute(["operation": operation]) as? NSDictionary)?["ok"] as? Bool
+                    == false)
+        }
+        #expect(admissions == 2)
+        #expect(
+            (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
+                == false)
+    }
+
+    @Test func admittedFixturePolicySynchronizationRemainsObserverFree() throws {
+        let fixture = try EngineFixture(owner: "companion")
+        defer { fixture.remove() }
+        #expect(try fixture.admit()?.role == .app)
+        let runtime = ExtensionRuntime(fixtureAdmission: { _ in try fixture.admit() })
+        let input = context(job, paused: true).mutableCopy() as! NSMutableDictionary
+        input["operation"] = "synchronize"
+        input["ambientPolicyOnly"] = true
+        #expect((runtime.execute(input) as? NSDictionary)?["ok"] as? Bool == true)
+        #expect(
+            (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
+                == false)
     }
 
     private func policy(

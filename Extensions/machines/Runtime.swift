@@ -1,4 +1,7 @@
 import AppKit
+#if SWIFT_PACKAGE
+import WorkerFixtureSupport
+#endif
 import EdithExtensionSupport
 import EdithExtensionUI
 import EdithExtensionCommands
@@ -6,6 +9,7 @@ import SwiftUI
 
 @MainActor @objc(EdithMachinesExtensionRuntime)
 final class ExtensionRuntime: NSObject {
+    private let fixtureAdmission: (NSDictionary) throws -> WorkerFixtureAdmission?
     private var running = false
     private var peer: MachinePeerService?
     private var surface: MachineSurface?
@@ -24,6 +28,17 @@ final class ExtensionRuntime: NSObject {
     ])
     private var health: MachineHealthLifecycle?
     private let commands = ExtensionCommandRegistry()
+
+    init(
+        fixtureAdmission: @escaping (NSDictionary) throws -> WorkerFixtureAdmission? = {
+            try WorkerFixtureAdmission.current(
+                extensionID: "machines", context: $0,
+                roleBundle: Bundle(for: ExtensionRuntime.self))
+        }
+    ) {
+        self.fixtureAdmission = fixtureAdmission
+        super.init()
+    }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -140,6 +155,10 @@ final class ExtensionRuntime: NSObject {
             PaneViewStore.shared.shutdown()
             return ["ok": true] as NSDictionary
         case "start":
+            let fixture: Bool
+            do { fixture = try fixtureAdmission(input) != nil } catch {
+                return ["ok": false] as NSDictionary
+            }
             guard uiClient == nil, Bundle.main.bundleURL.pathExtension != "appex" else {
                 return ["ok": false] as NSDictionary
             }
@@ -150,8 +169,6 @@ final class ExtensionRuntime: NSObject {
                 return ["ok": false] as NSDictionary
             }
             if !running {
-                let fixture =
-                    ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
                 if !fixture {
                     do {
                         try ambientPolicy.start { [weak self] in self?.health?.reschedule() }
@@ -351,6 +368,7 @@ final class ExtensionRuntime: NSObject {
                         .environment(\.terminalLaunchEnabled, true)
                 })
         case "synchronize":
+            do { _ = try fixtureAdmission(input) } catch { return ["ok": false] as NSDictionary }
             do { try ambientPolicy.apply(context: input) } catch {
                 return ["ok": false] as NSDictionary
             }

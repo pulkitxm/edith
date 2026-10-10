@@ -1,4 +1,7 @@
 import AppKit
+#if SWIFT_PACKAGE
+import WorkerFixtureSupport
+#endif
 import EdithExtensionSupport
 import EdithExtensionCommands
 import EdithExtensionUI
@@ -6,6 +9,7 @@ import SwiftUI
 
 @MainActor @objc(EdithCompanionExtensionRuntime)
 final class ExtensionRuntime: NSObject {
+    private let fixtureAdmission: (NSDictionary) throws -> WorkerFixtureAdmission?
     private let ambientPolicy = ExtensionAmbientPolicy(jobs: [
         CompanionMonitor.jobID: .init(ambient: 60, live: 20)
     ])
@@ -18,8 +22,15 @@ final class ExtensionRuntime: NSObject {
     private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
 
-    init(settingsChanged: @escaping @MainActor () -> Void = { IPC.post(IPC.Name.settingsChanged) })
-    {
+    init(
+        settingsChanged: @escaping @MainActor () -> Void = { IPC.post(IPC.Name.settingsChanged) },
+        fixtureAdmission: @escaping (NSDictionary) throws -> WorkerFixtureAdmission? = {
+            try WorkerFixtureAdmission.current(
+                extensionID: "companion", context: $0,
+                roleBundle: Bundle(for: ExtensionRuntime.self))
+        }
+    ) {
+        self.fixtureAdmission = fixtureAdmission
         self.settingsChanged = settingsChanged
         super.init()
     }
@@ -93,6 +104,10 @@ final class ExtensionRuntime: NSObject {
             engineClient?.invalidate(); engineClient = nil
             TextEditingCommands.shutdown()
         case "start":
+            let fixture: Bool
+            do { fixture = try fixtureAdmission(input) != nil } catch {
+                return ["ok": false] as NSDictionary
+            }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -100,7 +115,7 @@ final class ExtensionRuntime: NSObject {
                 return ["ok": false] as NSDictionary
             }
             guard worker == nil else { return ["ok": true] as NSDictionary }
-            if ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil {
+            if !fixture {
                 do {
                     try ambientPolicy.start { [weak self] in self?.worker?.monitor.reschedule() }
                 } catch { return ["ok": false] as NSDictionary }
@@ -140,6 +155,7 @@ final class ExtensionRuntime: NSObject {
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":
+            do { _ = try fixtureAdmission(input) } catch { return ["ok": false] as NSDictionary }
             do { try ambientPolicy.apply(context: input) } catch {
                 return ["ok": false] as NSDictionary
             }
