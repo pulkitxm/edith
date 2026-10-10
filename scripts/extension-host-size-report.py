@@ -417,11 +417,10 @@ Exact byte counts, package checksums, and the host executable checksum are in [t
 ```sh
 make ci-marketplace-host
 make ci-extension-workers EXTENSION=--retain-packages
-make shipping-fixture HOST_FIXTURE=local/minimal-host/Edith.app
-python3 -B scripts/extension-host-size-report.py --source-mode final --expected-source-commit "$(git rev-parse HEAD)" --packages "$FINAL_PACKAGE_DIRECTORY" --baseline local/baseline/current-main-size.json --app local/shipping-fixture/Edith.app --host-build local/shipping-fixture/build-metadata.json --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
+python3 -B scripts/extension-host-size-report.py --source-mode final --expected-source-commit "$(git rev-parse HEAD)" --packages "$FINAL_PACKAGE_DIRECTORY" --baseline local/baseline/current-main-size.json --app "$FINAL_HOST_APP" --host-build "$FINAL_HOST_BUILD_METADATA" --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
 ```
 
-The baseline source commit is `{report['measurement']['baselineSourceCommit']}`. Final reports require an explicit expected source commit, a matching clean checkout and matching clean host build metadata. Host metadata must match the actual executable checksum. Use `--source-mode interim` for partial or historical measurements; missing build provenance remains explicitly unrecorded. The baseline retains its own recorded source commit and configuration. The empty-host limit remains enforced by the build and shipping verifier, independently of this report.
+The baseline source commit is `{report['measurement']['baselineSourceCommit']}`. Use the runner's exact frozen host app, its matching build metadata and its canonical package directory for `FINAL_HOST_APP`, `FINAL_HOST_BUILD_METADATA` and `FINAL_PACKAGE_DIRECTORY`. An independently re-signed shipping clone is a different provenance input. Final reports require an explicit expected source commit, a matching clean checkout and matching clean host build metadata. Host metadata must match the actual executable checksum. Use `--source-mode interim` for partial or historical measurements; missing build provenance remains explicitly unrecorded. The baseline retains its own recorded source commit and configuration. The empty-host limit remains enforced by the build and shipping verifier, independently of this report.
 """
 
 

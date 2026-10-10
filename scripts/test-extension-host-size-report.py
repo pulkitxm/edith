@@ -139,6 +139,10 @@ class HostSizeReportTests(unittest.TestCase):
         self.assertNotIn("remaining Home card data", rendered)
         self.assertIn("neither publishes them nor proves", rendered)
         self.assertIn("not shipping installer sizes", rendered)
+        self.assertIn('--app "$FINAL_HOST_APP" --host-build "$FINAL_HOST_BUILD_METADATA"', rendered)
+        self.assertIn('--packages "$FINAL_PACKAGE_DIRECTORY"', rendered)
+        self.assertNotIn("local/shipping-fixture", rendered)
+        self.assertNotIn("make shipping-fixture", rendered)
         self.assertIn("size calculation does not verify code signatures", rendered)
 
     def test_build_provenance_uses_recorded_values_and_is_bound_to_the_executable(self):
