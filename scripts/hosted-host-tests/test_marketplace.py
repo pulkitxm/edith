@@ -15,6 +15,56 @@ spec.loader.exec_module(marketplace)
 
 
 class MarketplaceDiagnosticsTests(unittest.TestCase):
+    def test_timeout_retains_unbuffered_stage_marker_in_the_owned_bounded_log(self):
+        class Child:
+            pid = 123
+            returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def wait(self, timeout):
+                self.returncode = -15
+                return self.returncode
+
+        class Ownership:
+            def __init__(self, leader, uid):
+                self.known = {}
+                self.signals = []
+                owners.append(self)
+
+            def refresh(self):
+                return []
+
+            def terminate(self, value):
+                self.signals.append(value)
+
+        marker = b'[marketplace-fixture] stage=host-build status=running pid=123\n'
+        for overflow in [False, True]:
+            owners = []
+
+            def create(arguments, stdout, stderr, **options):
+                self.assertEqual(stderr, marketplace.subprocess.STDOUT)
+                stdout.write(marker)
+                if overflow:
+                    stdout.write(b'x' * 16_777_216)
+                stdout.flush()
+                return Child()
+
+            with tempfile.TemporaryDirectory() as directory, patch.object(
+                    marketplace.watchdog, 'owned_crash_reports', return_value=[]):
+                result = marketplace.watchdog.run_batch(
+                    'marketplace', ['synthetic'], Path(directory), 900 if overflow else 0,
+                    process_factory=create, ownership_factory=Ownership,
+                    sleep=lambda _: None, testing_process=marketplace.is_testing_process)
+                log = (Path(directory) / 'marketplace.log').read_bytes()
+                self.assertTrue(log.startswith(marker))
+                self.assertLessEqual(len(log), 16_777_216)
+            self.assertTrue(result['timedOut'])
+            self.assertEqual(result['exitCode'], -15)
+            self.assertFalse(marketplace.passed(result))
+            self.assertEqual(owners[0].signals, [marketplace.watchdog.signal.SIGTERM])
+
     def test_batch_exception_retains_failure_receipt_without_claiming_execution_or_exit(self):
         original = Path.cwd()
         with tempfile.TemporaryDirectory() as directory:
