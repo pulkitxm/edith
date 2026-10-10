@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import hashlib
 import importlib.util
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -43,14 +44,43 @@ def measure_scenarios(host, packages):
     ]
 
 
-def build_report(baseline, app, packages, definitions, index, expected_fingerprints=None, host_build=None):
+def read_source_state(root):
+    commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+    changes = subprocess.run(["git", "status", "--porcelain", "--untracked-files=normal"], cwd=root, check=True, capture_output=True, text=True).stdout
+    return {"sourceCommit": commit, "sourceTreeDirty": bool(changes)}
+
+
+def validate_final_source(expected_commit, source_state, host_build):
+    if not re.fullmatch(r"[0-9a-f]{40}", expected_commit or ""):
+        raise ValueError("Final reports require an explicit full expected source commit")
+    for name, metadata in [("Current source", source_state), ("Host build", host_build)]:
+        if not metadata or metadata.get("sourceCommit") != expected_commit or metadata.get("sourceTreeDirty") is not False:
+            raise ValueError(f"{name} must match the expected source commit and be clean")
+
+
+def build_report(baseline, app, packages, definitions, index, expected_fingerprints=None, host_build=None,
+                 *, source_mode="final", expected_source_commit=None, source_state=None):
     migrated = [entry["id"] for entry in definitions if entry.get("contractVersion") == 1]
     known = {entry["id"] for entry in index}
     if not index or len(known) != len(index) or len(set(migrated)) != len(migrated) or not set(migrated).issubset(known):
         raise ValueError("Migrated extensions must belong to the host index")
+    if source_mode not in {"final", "interim"}:
+        raise ValueError("Unknown measurement source mode")
+    if source_mode == "final":
+        validate_final_source(expected_source_commit, source_state, host_build)
+        if len(known) != 39 or set(migrated) != known or set(expected_fingerprints or {}) != known:
+            raise ValueError("Final reports require exactly 39 indexed packages and current source fingerprints")
+        if any(not re.fullmatch(r"[0-9a-f]{64}", value) for value in expected_fingerprints.values()):
+            raise ValueError("Final source fingerprints must be SHA-256 digests")
+    metadata_by_id = {}
+    for identifier in migrated:
+        metadata = json.loads((packages / f"{identifier}.json").read_text())
+        if metadata.get("id") != identifier:
+            raise ValueError(f"Package metadata identity differs from its filename: {identifier}")
+        metadata_by_id[identifier] = metadata
     if expected_fingerprints is not None:
         for identifier in migrated:
-            metadata = json.loads((packages / f"{identifier}.json").read_text())
+            metadata = metadata_by_id[identifier]
             if not expected_fingerprints.get(identifier) or metadata.get("sourceFingerprint") != expected_fingerprints[identifier]:
                 raise ValueError(f"Rebuild {identifier} before measuring: its source fingerprint is stale")
     specification = importlib.util.spec_from_file_location("size_measurements", Path(__file__).with_name("extension-size-report.py"))
@@ -61,6 +91,9 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
     if host_build is not None and host_build.get("hostExecutableSHA256") != executable_hash:
         raise ValueError("Host build metadata must match the measured executable checksum")
     result = measurements.compare(baseline, measured, measurements.measure_packages(packages, migrated))
+    result["sourceFingerprints"] = {identifier: metadata_by_id[identifier].get("sourceFingerprint") for identifier in sorted(migrated)}
+    for package in result["packages"]:
+        package["sourceFingerprint"] = result["sourceFingerprints"][package["id"]]
     result["hostComponents"] = measure_host_components(app)
     result["selectedExtensionScenarios"] = measure_scenarios(measured, result["packages"])
     result["migratedExtensionPackages"] = result.pop("allExtensionPackages")
@@ -73,6 +106,9 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
     result["unmeasuredExtensions"] = remaining
     result["hostExecutableSHA256"] = executable_hash
     result["measurement"] = {
+        "sourceMode": source_mode,
+        "expectedSourceCommit": expected_source_commit,
+        "currentSource": source_state or {},
         "baselineSourceCommit": baseline["sourceCommit"],
         "baselineBuild": {key: baseline[key] for key in BUILD_FIELDS if key in baseline},
         "hostBuild": {key: host_build[key] for key in BUILD_FIELDS if key in (host_build or {})},
@@ -190,10 +226,10 @@ Exact byte counts, package checksums, and the host executable checksum are in [t
 make ci-marketplace-host
 make ci-extension-workers EXTENSION=--retain-packages
 make shipping-fixture HOST_FIXTURE=local/minimal-host/Edith.app
-python3 -B scripts/extension-host-size-report.py --baseline local/baseline/current-main-size.json --app local/shipping-fixture/Edith.app --host-build local/shipping-fixture/build-metadata.json --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
+python3 -B scripts/extension-host-size-report.py --source-mode final --expected-source-commit "$(git rev-parse HEAD)" --packages "$FINAL_PACKAGE_DIRECTORY" --baseline local/baseline/current-main-size.json --app local/shipping-fixture/Edith.app --host-build local/shipping-fixture/build-metadata.json --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
 ```
 
-The baseline source commit is `{report['measurement']['baselineSourceCommit']}`. Host build metadata is accepted only when its executable checksum matches the measured binary. Omit `--host-build` when provenance has not been recorded; the report will say so instead of assuming a configuration or signing identity. The empty-host limit remains enforced by the build and shipping verifier, independently of this report.
+The baseline source commit is `{report['measurement']['baselineSourceCommit']}`. Final reports require an explicit expected source commit, a matching clean checkout and matching clean host build metadata. Host metadata must match the actual executable checksum. Use `--source-mode interim` for partial or historical measurements; missing build provenance remains explicitly unrecorded. The baseline retains its own recorded source commit and configuration. The empty-host limit remains enforced by the build and shipping verifier, independently of this report.
 """
 
 
@@ -203,13 +239,19 @@ def main():
     parser.add_argument("--app", type=Path, default=Path("local/minimal-host/Edith.app"))
     parser.add_argument("--packages", type=Path, default=Path("dist/extensions"))
     parser.add_argument("--host-build", type=Path)
+    parser.add_argument("--source-mode", choices=("final", "interim"), default="final")
+    parser.add_argument("--expected-source-commit")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--markdown-output", type=Path)
     arguments = parser.parse_args()
+    source_state = read_source_state(Path.cwd())
+    if arguments.source_mode == "final":
+        validate_final_source(arguments.expected_source_commit, source_state, json.loads(arguments.host_build.read_text()) if arguments.host_build else None)
     fingerprints = json.loads(subprocess.run(["bun", str(Path(__file__).with_name("extension-artifact-fingerprints.mjs"))], check=True, capture_output=True, text=True).stdout)
     index = json.loads(Path("Packages/EdithHost/Sources/EdithHostCore/Resources/index.json").read_text())
     host_build = json.loads(arguments.host_build.read_text()) if arguments.host_build else None
-    report = build_report(json.loads(arguments.baseline.read_text()), arguments.app, arguments.packages, json.loads(Path("Extensions/manifest.json").read_text()), index, fingerprints, host_build)
+    report = build_report(json.loads(arguments.baseline.read_text()), arguments.app, arguments.packages, json.loads(Path("Extensions/manifest.json").read_text()), index, fingerprints, host_build,
+        source_mode=arguments.source_mode, expected_source_commit=arguments.expected_source_commit, source_state=source_state)
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_text(json.dumps(report, indent=2) + "\n")
     if arguments.markdown_output:
