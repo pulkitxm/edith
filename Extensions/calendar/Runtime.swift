@@ -39,6 +39,17 @@ final class ExtensionRuntime: NSObject {
             }
         case "view":
             guard let store, let presentation else { return ["ok": false] as NSDictionary }
+            if input["location"] as? String == "home" {
+                guard input["section"] as? String == "calendar",
+                    let data = input["tile"] as? Data, data.count <= 65_536,
+                    let tile = try? JSONDecoder().decode(SurfaceTile.self, from: data),
+                    tile.widget == .calendar
+                else { return ["ok": false] as NSDictionary }
+                return NSHostingController(
+                    rootView: ExtensionPageHost {
+                        CalendarHomeScene(tile: tile, store: store, presentation: presentation)
+                    })
+            }
             return NSHostingController(
                 rootView: ExtensionPageHost {
                     CalendarPage(store: store, presentation: presentation)

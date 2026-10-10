@@ -364,7 +364,8 @@
         "Extensions/calendar/ViewModels/CalendarAgendaSnapshotStore.swift",
         "Extensions/calendar/ViewModels/CalendarPresentationState.swift",
         "Extensions/calendar/ViewModels/CalendarStore.swift",
-        "Extensions/calendar/Views/CalendarPage.swift"
+        "Extensions/calendar/Views/CalendarPage.swift",
+        "Extensions/calendar/Views/HomeMeetingsCard.swift"
       ]
     },
     "inputs": [
@@ -788,6 +789,7 @@
         "Extensions/music/Models/MusicSourceRequest.swift",
         "Extensions/music/Models/TrackMeta.swift",
         "Extensions/music/Models/UnitInterval.swift",
+        "Extensions/music/Runtime.swift",
         "Extensions/music/Services/ChromeCookieReader.swift",
         "Extensions/music/Services/ChromeProfile.swift",
         "Extensions/music/Services/ChromeSafeStorage.swift",
@@ -816,6 +818,7 @@
         "Extensions/music/Services/SystemVolume.swift",
         "Extensions/music/Services/YoutubeDownloader.swift",
         "Extensions/music/Views/DownloadSheetView.swift",
+        "Extensions/music/Views/HomeMusicCard.swift",
         "Extensions/music/Views/MusicAccounts.swift",
         "Extensions/music/Views/MusicPageView.swift",
         "Extensions/music/Views/MusicProviderView.swift",
@@ -825,8 +828,7 @@
         "Extensions/music/Views/MusicSpotifyLibrary.swift",
         "Extensions/music/Views/MusicSpotifyWorkspace.swift",
         "Extensions/music/Views/PlaybackWave.swift",
-        "Extensions/music/Views/VideoPreview.swift",
-        "Extensions/music/Runtime.swift"
+        "Extensions/music/Views/VideoPreview.swift"
       ]
     },
     "nativeCargo": {
@@ -1667,6 +1669,7 @@
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionCharts.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionComponents.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionFocusView.swift",
+      "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionHomeFocusCard.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionOverview.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionPage.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionSettingsView.swift",
