@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdtempSync,
@@ -306,6 +307,159 @@ test("malformed or unrelated nonzero stdout never authorizes another upload clie
       ).rejects.toThrow("Command failed");
       expect(calls).toEqual(["pukbot", "pukbot"]);
     }
+  } finally {
+    value.clean();
+  }
+});
+
+test("upload and completion watch share one bounded thirty minute total deadline", async () => {
+  const value = fixture();
+  const timeouts = [];
+  let elapsed = 0;
+  try {
+    const execute = (command, _args, options) => {
+      timeouts.push(options.timeout);
+      elapsed += 180_000;
+      return command === "pukbot"
+        ? JSON.stringify({
+            workflowUrl:
+              "https://github.com/synthetic/transport/actions/runs/9",
+          })
+        : "{}";
+    };
+    expect(
+      await uploadReleaseAsset({
+        repository: "synthetic/fixture",
+        releaseID: 7,
+        tag: "v1.2.3",
+        file: value.file,
+        execute,
+        now: () => elapsed,
+      }),
+    ).toBe("pukbot");
+    expect(timeouts).toEqual([1_800_000, 1_620_000]);
+  } finally {
+    value.clean();
+  }
+});
+
+test("capacity fallback inherits the remaining deadline and cleans its owned file on timeout", async () => {
+  const value = fixture();
+  let elapsed = 0;
+  let path;
+  const timeouts = [];
+  try {
+    const execute = (command, args, options) => {
+      timeouts.push(options.timeout);
+      if (command === "pukbot") {
+        elapsed = 300_000;
+        return value.execute(command, args, options);
+      }
+      path = args[3];
+      throw Object.assign(new Error("Synthetic timeout"), {
+        code: "ETIMEDOUT",
+      });
+    };
+    await expect(
+      uploadReleaseAsset({
+        repository: "synthetic/fixture",
+        releaseID: 7,
+        tag: "v1.2.3",
+        name: "catalog-123.json",
+        file: value.file,
+        execute,
+        now: () => elapsed,
+      }),
+    ).rejects.toThrow("Synthetic timeout");
+    expect(timeouts).toEqual([1_800_000, 1_500_000]);
+    expect(existsSync(path)).toBe(false);
+  } finally {
+    value.clean();
+  }
+});
+
+test("actual owned process upload and watch timeouts never trigger another upload client", async () => {
+  for (const stage of ["upload", "watch"]) {
+    const value = fixture();
+    const calls = [];
+    try {
+      const execute = (command, args, options) => {
+        calls.push([command, ...args]);
+        if (command === "pukbot" && stage === "watch")
+          return JSON.stringify({
+            workflowUrl:
+              "https://github.com/synthetic/transport/actions/runs/9",
+          });
+        return execFileSync(
+          "node",
+          ["-e", "process.on('SIGTERM', () => {}); setTimeout(() => {}, 1000)"],
+          options,
+        );
+      };
+      let failure;
+      try {
+        await uploadReleaseAsset({
+          repository: "synthetic/fixture",
+          releaseID: 7,
+          tag: "v1.2.3",
+          file: value.file,
+          execute,
+          totalTimeoutMs: 30,
+        });
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure?.code).toBe("ETIMEDOUT");
+      expect(failure?.signal).toBe("SIGKILL");
+      expect(calls.map((call) => call[0])).toEqual(
+        stage === "upload" ? ["pukbot"] : ["pukbot", "gh"],
+      );
+      expect(
+        calls.some((call) => call[0] === "gh" && call[1] === "release"),
+      ).toBe(false);
+    } finally {
+      value.clean();
+    }
+  }
+});
+
+test("expired or invalid total deadline refuses subsequent remote operations", async () => {
+  const value = fixture();
+  try {
+    for (const totalTimeoutMs of [0, -1, 1.5, 1_800_001]) {
+      await expect(
+        uploadReleaseAsset({
+          repository: "synthetic/fixture",
+          releaseID: 7,
+          tag: "v1.2.3",
+          file: value.file,
+          execute: value.execute,
+          totalTimeoutMs,
+        }),
+      ).rejects.toThrow("Invalid release asset upload deadline");
+    }
+    expect(value.calls).toEqual([]);
+    let elapsed = 0;
+    const calls = [];
+    await expect(
+      uploadReleaseAsset({
+        repository: "synthetic/fixture",
+        releaseID: 7,
+        tag: "v1.2.3",
+        file: value.file,
+        totalTimeoutMs: 100,
+        now: () => elapsed,
+        execute: (command) => {
+          calls.push(command);
+          elapsed = 100;
+          return JSON.stringify({
+            workflowUrl:
+              "https://github.com/synthetic/transport/actions/runs/9",
+          });
+        },
+      }),
+    ).rejects.toThrow("total deadline exceeded");
+    expect(calls).toEqual(["pukbot"]);
   } finally {
     value.clean();
   }

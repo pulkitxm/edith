@@ -28,11 +28,12 @@ function assetArguments({ repository, releaseID, file, name }) {
   ];
 }
 
-function runAssetRequest(args, execute) {
+function runAssetRequest(args, execute, timeout = 120_000) {
   const result = JSON.parse(
     execute("pukbot", [...args, "--json"], {
       encoding: "utf8",
-      timeout: 120_000,
+      timeout,
+      killSignal: "SIGKILL",
       maxBuffer: 2 * 1024 ** 2,
     }),
   );
@@ -93,10 +94,31 @@ export async function uploadReleaseAsset({
   file,
   name = basename(file),
   execute = execFileSync,
+  totalTimeoutMs = 30 * 60_000,
+  now = () => performance.now(),
 }) {
+  if (
+    !Number.isSafeInteger(totalTimeoutMs) ||
+    totalTimeoutMs < 1 ||
+    totalTimeoutMs > 30 * 60_000
+  )
+    throw new Error("Invalid release asset upload deadline");
+  const started = now();
+  if (!Number.isFinite(started))
+    throw new Error("Invalid release asset upload clock");
+  const deadline = started + totalTimeoutMs;
+  const remaining = () => {
+    const current = now();
+    if (!Number.isFinite(current) || current < started)
+      throw new Error("Invalid release asset upload clock");
+    const duration = Math.floor(deadline - current);
+    if (duration < 1)
+      throw new Error("Release asset upload total deadline exceeded");
+    return duration;
+  };
   const args = assetArguments({ repository, releaseID, file, name });
   try {
-    const result = runAssetRequest(args, execute);
+    const result = runAssetRequest(args, execute, remaining());
     if (result.workflowUrl) {
       const url = new URL(result.workflowUrl);
       const parts = url.pathname.split("/").filter(Boolean);
@@ -112,10 +134,12 @@ export async function uploadReleaseAsset({
         ],
         {
           encoding: "utf8",
-          timeout: 120_000,
+          timeout: remaining(),
+          killSignal: "SIGKILL",
         },
       );
     }
+    remaining();
     return "pukbot";
   } catch (error) {
     if (!isAssetCapacityError(error, file)) throw error;
@@ -127,8 +151,10 @@ export async function uploadReleaseAsset({
       await copyFile(file, upload);
       execute("gh", ["release", "upload", tag, upload, "--repo", repository], {
         encoding: "utf8",
-        timeout: 120_000,
+        timeout: remaining(),
+        killSignal: "SIGKILL",
       });
+      remaining();
       return "gh";
     } finally {
       await rm(temporary, { recursive: true, force: true });
