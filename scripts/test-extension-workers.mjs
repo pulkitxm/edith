@@ -22,9 +22,18 @@ try {
     await readFile("Extensions/manifest.json", "utf8"),
   );
   const retainPackages = process.argv.includes("--retain-packages");
+  const headlessCLI = process.argv.includes("--headless-cli");
   const requested = process.argv
     .slice(2)
-    .filter((value) => value !== "--retain-packages");
+    .filter(
+      (value) => !["--retain-packages", "--headless-cli"].includes(value),
+    );
+  if (headlessCLI)
+    assert.deepEqual(
+      requested,
+      ["database"],
+      "Headless CLI proof is Database-only",
+    );
   const workers = definitions.filter((entry) => entry.contractVersion === 1);
   for (const id of requested)
     assert(
@@ -111,6 +120,7 @@ try {
           releases,
           id,
           surfaceContractVersion === 1 ? "1" : "0",
+          ...(headlessCLI ? ["--headless-cli"] : []),
         ],
         {
           encoding: "utf8",
@@ -129,7 +139,6 @@ try {
     );
     for (const key of [
       "downloadedBundle",
-      "nativeWindow",
       "updateWithoutAppRestart",
       "restoreAfterAppUpdate",
       "freshHostSessionRestored",
@@ -139,6 +148,9 @@ try {
       "surfaceLayoutRestored",
     ])
       assert.equal(result[key], true);
+    assert.equal(result.nativeWindow, !headlessCLI);
+    assert.equal(result.headlessCLI, headlessCLI);
+    assert.equal(result.headlessLifecycle, headlessCLI);
     assert.equal(result.disabledProcesses, 0);
     assert.equal(result.surfaceDataValidated, surfaceContractVersion === 1);
     assert.equal(result.clipboardDataValidated, id === "clipboard");
