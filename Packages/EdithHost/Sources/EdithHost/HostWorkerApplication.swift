@@ -48,7 +48,13 @@ final class HostWorkerApplication {
                         return
                     }
                     do {
-                        try control.send(HostWorkerProcessGroup(pid: pid, registered: registered))
+                        guard let identity = ExtensionProcessIdentity.read(pid) else {
+                            accept?(false)
+                            return
+                        }
+                        try control.send(
+                            HostWorkerProcessGroup(
+                                pid: pid, generation: identity.generation, registered: registered))
                         accept?(true)
                     } catch { accept?(false) }
                 })

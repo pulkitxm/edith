@@ -23,8 +23,8 @@ public final class HostWorker {
     private var preparationToken: UUID?
     private var launched = false
     private var exited = false
-    private var processGroup: Int32?
-    private var ownedProcessGroups: Set<Int32> = []
+    private var ownedProcessGroups = HostWorkerProcessGroups()
+    private var groupRefresh: Task<Void, Never>?
     private var readSource: DispatchSourceRead?
     private var outputIsNonblocking = false
 
@@ -76,7 +76,6 @@ public final class HostWorker {
         do {
             try sharedState()?.clear(configuration.extensionID)
             try process.run()
-            processGroup = process.processIdentifier
             try input.fileHandleForReading.close()
             try output.fileHandleForWriting.close()
             let response = try await request(
@@ -86,6 +85,20 @@ public final class HostWorker {
             }
             guard getpgid(process.processIdentifier) == process.processIdentifier else {
                 throw HostWorkerError.invalidResponse
+            }
+            guard let identity = ExtensionProcessIdentity.read(process.processIdentifier) else {
+                throw HostWorkerError.invalidResponse
+            }
+            try ownedProcessGroups.register(
+                HostWorkerProcessGroup(
+                    pid: identity.pid, generation: identity.generation, registered: true),
+                owner: process.processIdentifier)
+            groupRefresh = Task { @MainActor [weak self] in
+                while !Task.isCancelled {
+                    guard let owner = self?.process.processIdentifier else { return }
+                    self?.ownedProcessGroups.refresh(owner: owner)
+                    do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+                }
             }
             ready = true
         } catch {
@@ -225,32 +238,14 @@ public final class HostWorker {
     }
 
     private func receive(_ resource: HostWorkerProcessGroup) throws {
-        guard resource.pid > 1, resource.pid != process.processIdentifier, resource.pid != getpid()
-        else {
+        guard resource.pid != process.processIdentifier else {
             throw HostWorkerError.invalidResponse
         }
         if resource.registered {
-            let group = getpgid(resource.pid)
-            guard
-                group == resource.pid || group == process.processIdentifier
-                    || (group == -1 && kill(-resource.pid, 0) == 0)
-            else { return }
-            guard ownedProcessGroups.count < 128 || ownedProcessGroups.contains(resource.pid) else {
-                terminateResource(resource.pid)
-                throw HostWorkerError.invalidResponse
-            }
-            ownedProcessGroups.insert(resource.pid)
-        } else if getpgid(resource.pid) == -1, errno == ESRCH,
-            kill(-resource.pid, 0) == -1, errno == ESRCH
-        {
-            ownedProcessGroups.remove(resource.pid)
+            try ownedProcessGroups.register(resource, owner: process.processIdentifier)
+        } else {
+            ownedProcessGroups.release(resource, owner: process.processIdentifier)
         }
-    }
-
-    private func terminateResource(_ pid: Int32) {
-        let group = getpgid(pid)
-        if group == process.processIdentifier || group == pid { kill(pid, SIGKILL) }
-        kill(-pid, SIGKILL)
     }
 
     private func cancelRequest(_ token: UUID, error: any Error) {
@@ -276,7 +271,7 @@ public final class HostWorker {
         if process.isRunning {
             let pid = process.processIdentifier
             if getpgid(pid) == pid {
-                processGroup = pid; kill(-pid, SIGKILL)
+                kill(-pid, SIGKILL)
             } else {
                 kill(pid, SIGKILL)
             }
@@ -285,10 +280,9 @@ public final class HostWorker {
     }
 
     private func terminateGroup() {
-        for pid in ownedProcessGroups { terminateResource(pid) }
-        ownedProcessGroups.removeAll()
-        if let processGroup { kill(-processGroup, SIGKILL) }
-        processGroup = nil
+        groupRefresh?.cancel()
+        groupRefresh = nil
+        ownedProcessGroups.terminate(owner: process.processIdentifier)
     }
 
     private func awaitExit() async throws {

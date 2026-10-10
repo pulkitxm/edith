@@ -60,11 +60,13 @@ public struct HostWorkerProcessGroup: Codable, Sendable {
     public let kind: String
     public let pid: Int32
     public let registered: Bool
+    public let generation: String
 
-    public init(pid: Int32, registered: Bool) {
+    public init(pid: Int32, generation: String, registered: Bool) {
         kind = "processGroup"
         self.pid = pid
         self.registered = registered
+        self.generation = generation
     }
 }
 
