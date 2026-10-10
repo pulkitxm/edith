@@ -279,7 +279,8 @@ enum StudioEngineText {
 
 struct StudioDestinationPicker: View {
     let model: StudioModel
-    private var mode: Binding<String> {
+    var chooseFolder: @MainActor () -> URL? = StudioDestinationPicker.selectFolder
+    var mode: Binding<String> {
         Binding(
             get: {
                 model.facade == nil
@@ -288,7 +289,7 @@ struct StudioDestinationPicker: View {
             },
             set: { model.setDestination(mode: $0, folder: folder.wrappedValue) })
     }
-    private var folder: Binding<String> {
+    var folder: Binding<String> {
         Binding(
             get: {
                 model.facade == nil
@@ -312,20 +313,28 @@ struct StudioDestinationPicker: View {
                         ? "Choose folder…"
                         : URL(fileURLWithPath: folder.wrappedValue).lastPathComponent
                 ) {
-                    let panel = NSOpenPanel()
-                    panel.canChooseDirectories = true
-                    panel.canChooseFiles = false
-                    panel.canCreateDirectories = true
-                    panel.prompt = "Use folder"
-                    if panel.runModal() == .OK, let url = panel.url {
-                        folder.wrappedValue = url.path
-                    }
+                    selectDestinationFolder()
                 }
                 .buttonStyle(.edith(.secondary))
                 .help(folder.wrappedValue.isEmpty ? "Pick where results go" : folder.wrappedValue)
             }
         }
     }
+
+    @MainActor func selectDestinationFolder() {
+        guard !model.isStopped, let url = chooseFolder() else { return }
+        folder.wrappedValue = url.path
+    }
+
+    @MainActor private static func selectFolder() -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Use folder"
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
 }
 
 struct StudioToast: View {

@@ -9,7 +9,9 @@ import SwiftUI
 @objc(EdithStudioExtensionRuntime)
 final class ExtensionRuntime: NSObject {
     private var model: StudioModel?
-    private var uiModel: StudioModel?
+    private var uiScenes: [UUID: StudioUIScene] = [:]
+    private var navigation: StudioSettingsNavigation?
+    private let uiConfiguration: (NSDictionary) -> ExtensionUIConfiguration?
     private var privacy: SurfacePrivacyState?
     private let commands = ExtensionCommandRegistry()
     private let recorderCommands = StudioUIRecorderCommands()
@@ -18,7 +20,12 @@ final class ExtensionRuntime: NSObject {
     private let work = StudioUILongOperations()
     private let streams = try! ExtensionCLIStreams(owner: "studio")
 
-    override init() {
+    override convenience init() {
+        self.init(uiConfiguration: { ExtensionUIConfiguration(context: $0) })
+    }
+
+    init(uiConfiguration: @escaping (NSDictionary) -> ExtensionUIConfiguration?) {
+        self.uiConfiguration = uiConfiguration
         super.init()
         work.onChange = { [weak self] state in self?.videoSessions.recordExport(state) }
         videoSessions.onExport = { [weak self] state in self?.model?.exportState = state }
@@ -33,6 +40,12 @@ final class ExtensionRuntime: NSObject {
             }
             if command.hasPrefix("studio.ui.") {
                 do {
+                    if command == "studio.ui.settings.open" {
+                        guard let navigation = self.navigation else {
+                            throw ExtensionPeerError.unavailable
+                        }
+                        return try await navigation.execute(payload)
+                    }
                     if command.hasPrefix("studio.ui.record.") {
                         return try await self.recorderCommands.execute(
                             command, payload: payload, work: self.work)
@@ -133,35 +146,46 @@ final class ExtensionRuntime: NSObject {
                     privacy = SurfacePrivacyState(channel: channel)
                 }
             }
+            if navigation == nil {
+                navigation = StudioSettingsNavigation(bridge: input["hostNavigation"] as? NSObject)
+            }
             model?.start()
             TextEditingCommands.install()
         case "configureUI":
-            guard let configuration = ExtensionUIConfiguration(context: input),
-                configuration.extensionID == "studio", let client = configuration.engineClient,
-                model == nil
+            guard let configuration = uiConfiguration(input),
+                configuration.extensionID == "studio", !configuration.uiOnly,
+                configuration.defaultsSuite
+                    == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
+                let client = configuration.engineClient, model == nil,
+                let route = StudioUIScene.Route(context: input),
+                uiScenes.count < 16 || uiScenes[client.presentationID] != nil
             else { return ["ok": false] as NSDictionary }
-            uiModel?.shutdown()
-            let facade = StudioUIFacade(client: client)
-            uiModel = StudioModel(loadsState: false, facade: facade)
-            TextEditingCommands.install()
-            if let channel = ExtensionSharedState.current {
-                privacy = SurfacePrivacyState(channel: channel)
-            }
+            uiScenes[client.presentationID]?.stop()
+            uiScenes[client.presentationID] = StudioUIScene(client: client, route: route)
         case "stopUI":
-            TextEditingCommands.shutdown()
-            uiModel?.shutdown()
-            uiModel = nil
-            privacy?.shutdown()
-            privacy = nil
+            if input["presentationID"] == nil {
+                for scene in uiScenes.values { scene.stop() }
+                uiScenes.removeAll()
+                TextEditingCommands.shutdown()
+                return ["ok": true] as NSDictionary
+            }
+            guard let value = input["presentationID"] as? String,
+                let id = UUID(uuidString: value), let scene = uiScenes.removeValue(forKey: id)
+            else { return ["ok": false] as NSDictionary }
+            scene.stop()
+            if !uiScenes.values.contains(where: { $0.route == .main }) {
+                TextEditingCommands.shutdown()
+            }
         case "view":
-            guard let model = uiModel else { return ["ok": false] as NSDictionary }
-            return NSHostingController(
-                rootView: ExtensionPageHost {
-                    StudioPage(model: model).environment(\.studioPrivacy, self.privacy)
-                        .environment(\.studioFacade, model.facade)
-                })
+            guard let value = input["presentationID"] as? String,
+                let id = UUID(uuidString: value), let scene = uiScenes[id],
+                scene.route == StudioUIScene.Route(context: input)
+            else { return ["ok": false] as NSDictionary }
+            return scene.controller()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": privacy?.refresh()
+        case "synchronize":
+            privacy?.refresh()
+            for scene in uiScenes.values { scene.synchronize() }
         case "stop": shutdown()
         case "status":
             return [
@@ -182,8 +206,10 @@ final class ExtensionRuntime: NSObject {
         }
         commands.shutdown()
         TextEditingCommands.shutdown()
-        uiModel?.shutdown()
-        uiModel = nil
+        for scene in uiScenes.values { scene.stop() }
+        uiScenes.removeAll()
+        navigation?.invalidate()
+        navigation = nil
         model?.shutdown()
         model = nil
         privacy?.shutdown()

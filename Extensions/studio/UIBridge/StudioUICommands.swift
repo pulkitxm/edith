@@ -6,6 +6,8 @@ import Foundation
 @MainActor enum StudioUICommands {
     private static let fields: [String: Set<String>] = [
         "studio.ui.state": [],
+        "studio.ui.settings": [],
+        "studio.ui.settings.preferences": ["mode", "folder"],
         "studio.ui.facts": ["path"],
         "studio.ui.clearMissing": [],
         "studio.ui.thumbnail": ["path", "side"],
@@ -35,6 +37,8 @@ import Foundation
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         switch operation {
+        case "studio.ui.settings":
+            return try encoder.encode(settings(model))
         case "studio.ui.state":
             return try await snapshot(model)
         case "studio.ui.facts":
@@ -90,7 +94,7 @@ import Foundation
             else { throw ExtensionPeerError.invalidRequest }
             model.install(engine)
         case "studio.ui.paste": model.paste()
-        case "studio.ui.preferences":
+        case "studio.ui.preferences", "studio.ui.settings.preferences":
             guard let mode = object["mode"] as? String,
                 StudioDestinationMode(rawValue: mode) != nil,
                 let folder = object["folder"] as? String
@@ -98,6 +102,9 @@ import Foundation
             if !folder.isEmpty { _ = try StudioCommands.localPath(folder) }
             model.defaults.set(mode, forKey: AppStorageKeys.Studio.destination)
             model.defaults.set(folder, forKey: AppStorageKeys.Studio.folder)
+            if operation == "studio.ui.settings.preferences" {
+                return try encoder.encode(settings(model))
+            }
         case "studio.ui.reveal":
             guard let paths = object["paths"] as? [String], !paths.isEmpty,
                 paths.count <= StudioCommands.maximumPaths
@@ -162,6 +169,17 @@ import Foundation
     private static func path(_ object: [String: Any]) throws -> URL {
         guard let path = object["path"] as? String else { throw ExtensionPeerError.invalidRequest }
         return try StudioCommands.localPath(path)
+    }
+
+    private static func settings(_ model: StudioModel) -> StudioUIState {
+        var value = StudioUIState(
+            files: [], projects: [], recent: [], workflows: [],
+            environment: StudioUIState.Environment(StudioEnvironment()))
+        value.destinationMode =
+            model.defaults.string(forKey: AppStorageKeys.Studio.destination)
+            ?? StudioDestinationMode.original.rawValue
+        value.destinationFolder = model.defaults.string(forKey: AppStorageKeys.Studio.folder) ?? ""
+        return value
     }
 
     private static func snapshot(_ model: StudioModel) async throws -> Data {
