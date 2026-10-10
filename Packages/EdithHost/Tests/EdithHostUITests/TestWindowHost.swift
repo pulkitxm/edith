@@ -15,6 +15,7 @@ enum TestWindowHost {
         _ = application
         let window = OffscreenTestWindow(
             contentRect: contentRect, styleMask: styleMask, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
         window.isExcludedFromWindowsMenu = true
         window.collectionBehavior = [.transient, .ignoresCycle, .stationary]
         window.setFrameOrigin(offscreenOrigin(for: contentRect.size))

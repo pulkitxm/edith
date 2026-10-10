@@ -493,7 +493,7 @@ import Testing
                     contentRect: $0, styleMask: [.titled, .closable, .resizable, .miniaturizable])
             },
             present: {
-                focused.append($0); $0.orderBack(nil)
+                focused.append($0)
             }
         ) { AnyView(Text("Synthetic " + $0.title)) }
         defer { sections.closeAll() }
@@ -508,8 +508,8 @@ import Testing
             .environment(\.surfaceSampleContent, true))
         host.frame = NSRect(x: 0, y: 0, width: 1240, height: 850)
         let window = TestWindowHost.window(contentRect: host.frame)
-        window.contentView = host; window.orderBack(nil)
-        defer { window.orderOut(nil) }
+        window.contentView = host
+        defer { window.close() }
         await settle(window, host: host)
         let home = try #require(find(host, label: "Home"))
         #expect((home as AnyObject).accessibilityPerformPress?() == true)
@@ -517,13 +517,15 @@ import Testing
         #expect(focused.last === detached)
         #expect(defaults.string(forKey: AppStorageKeys.General.mainWindowSection) == "extensions")
         #expect(sections.openDestinations == ["home"])
+        #expect(detached.delegate === sections)
+        #expect(!detached.isVisible && !window.isVisible)
         detached.close()
-        let windows = Set(NSApp.windows.map(\.windowNumber))
+        let presentations = focused.count
         #expect((home as AnyObject).accessibilityPerformPress?() == true)
         await settle(window, host: host)
         #expect(defaults.string(forKey: AppStorageKeys.General.mainWindowSection) == "home")
         #expect(sections.openDestinations.isEmpty)
-        #expect(Set(NSApp.windows.map(\.windowNumber)) == windows)
+        #expect(focused.count == presentations)
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.requests.count == 0)
         #expect(!TestWindowHost.isExposedOnDesktop(window))
