@@ -21,7 +21,7 @@ let package = Package(
         .target(
             name: "DownloadsExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "downloads", exclude: ["Tests", "Runtime.swift"],
+            path: "downloads", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "DownloadsExtensionTests", dependencies: ["DownloadsExtension"],
