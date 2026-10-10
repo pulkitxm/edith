@@ -45,6 +45,9 @@ import Foundation
         signaturePolicy: HostRequirementPackageInspection.SignaturePolicy? = nil,
         herdrInventory: @escaping () async throws -> [HostRequirementHerdrHost]? = { nil }
     ) throws -> HostCoreReadinessCLIBackend {
+        guard expectedRoles == packagedRoles else {
+            throw HostCLIError.rejected("Expected roles must match every packaged extension.")
+        }
         guard toolDirectories.count <= 64,
             toolDirectories.allSatisfy({
                 $0.isFileURL && $0.path.hasPrefix("/") && !$0.path.contains(":")
@@ -168,6 +171,9 @@ import Foundation
     {
         try Task.checkCancellation()
         _ = try HostExtensionRequirementCatalog.entry(id: id)
+        guard let roles = environment.expectedRoles[id], roles == packagedRoles[id] else {
+            return .invalid("Expected package roles are unavailable or do not match " + id + ".")
+        }
         let activation = environment.activation(id)
         if activation.disablePending {
             return .invalid("The extension is pending disable; readonly requirements still run.")
@@ -180,7 +186,7 @@ import Foundation
             architecture: environment.architecture,
             systemVersion: environment.systemVersion.majorVersion,
             hostIdentifier: environment.identity.identifier,
-            requiredRoles: environment.expectedRoles[id] ?? [], policy: environment.signaturePolicy)
+            requiredRoles: roles, policy: environment.signaturePolicy)
         let result = try environment.inspectPackage(
             inspector, id, activation.enabled, activation.available)
         if case let .installed(version, enabled, active) = result {

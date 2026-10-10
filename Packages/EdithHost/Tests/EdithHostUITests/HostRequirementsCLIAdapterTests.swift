@@ -265,6 +265,22 @@ import Testing
                 marketplace: fixture.marketplace, permissions: fixture.permissions,
                 hooks: fixture.hooks, toolDirectories: [URL(string: "https://synthetic.invalid")!])
         }
+        for replacement in [Set<String>(), Set(["helper"])] {
+            var roles = HostRequirementsCLIAdapter.packagedRoles
+            roles["studio"] = replacement
+            #expect(throws: HostCLIError.self) {
+                try HostRequirementsCLIAdapter.make(
+                    marketplace: fixture.marketplace, permissions: fixture.permissions,
+                    hooks: fixture.hooks, toolDirectories: [], expectedRoles: roles)
+            }
+        }
+        var missing = HostRequirementsCLIAdapter.packagedRoles
+        missing.removeValue(forKey: "studio")
+        #expect(throws: HostCLIError.self) {
+            try HostRequirementsCLIAdapter.make(
+                marketplace: fixture.marketplace, permissions: fixture.permissions,
+                hooks: fixture.hooks, toolDirectories: [], expectedRoles: missing)
+        }
     }
 }
 
