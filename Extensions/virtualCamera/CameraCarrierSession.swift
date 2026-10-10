@@ -3,6 +3,7 @@ import Foundation
 @MainActor
 final class CameraCarrierSession {
     private let controller: CameraSystemExtensionController
+    private let microphoneOnly: Bool
     private let send: (Data) throws -> Void
     private let prepareMicrophone: @MainActor () async throws -> Void
     private let prepareDisableResources: @MainActor () async throws -> Void
@@ -18,10 +19,12 @@ final class CameraCarrierSession {
 
     init(
         controller: CameraSystemExtensionController, send: @escaping (Data) throws -> Void,
+        microphoneOnly: Bool = false,
         prepareMicrophone: @escaping @MainActor () async throws -> Void,
         prepareDisableResources: @escaping @MainActor () async throws -> Void = {},
         releaseResources: @escaping @MainActor () async throws -> Void, exited: @escaping () -> Void
     ) {
+        self.microphoneOnly = microphoneOnly
         self.controller = controller
         self.send = send
         self.prepareMicrophone = prepareMicrophone
@@ -42,6 +45,16 @@ final class CameraCarrierSession {
                         || requests.count < 8),
                     (request.operation == .cancel) == (request.cancelledToken != nil)
                 else { throw CocoaError(.fileReadCorruptFile) }
+                if microphoneOnly
+                    && (request.operation == .activate || request.operation == .deactivate)
+                {
+                    publish(
+                        token: request.token,
+                        error:
+                            "Video uses OBS Virtual Camera. No camera provider is installed by Edith."
+                    )
+                    continue
+                }
                 switch request.operation {
                 case .cancel:
                     if let token = request.cancelledToken { requests[token]?.cancel() }

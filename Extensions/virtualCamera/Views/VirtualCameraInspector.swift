@@ -597,47 +597,25 @@ struct VirtualCameraOutputPanel: View {
     }
 
     private var routeDetail: String {
-        switch model.snapshot?.route {
-        case .obs:
-            "Pick OBS Virtual Camera in Zoom, Meet, FaceTime or any other app. Edith starts when an app opens it and stops when that app quits. Keep the OBS app closed while you use it."
-        case .edithCamera:
-            "Pick Edith Camera in any video app. Edith turns your camera on only while an app shows it."
-        case nil:
-            model.snapshot?.obsAvailable == true
-                ? "Edith Camera is not installed. Choose Automatic or OBS Virtual Camera to send through OBS instead."
-                : "Install Edith Camera below, or install OBS Studio and Edith can send through its virtual camera."
-        }
+        model.snapshot?.obsAvailable == true
+            ? "Pick OBS Virtual Camera in your meeting app. Keep OBS Studio closed. Edith starts output when an app opens the camera and stops when that app quits."
+            : "Install OBS Studio and its Virtual Camera, then close OBS. Choose OBS Virtual Camera in your meeting app."
     }
 
     var body: some View {
         VStack(spacing: UIScale.pt(12)) {
-            VirtualCameraPanelSection(title: routeTitle, detail: routeDetail, dark: dark) {
-                EdithSegmentedPicker(
-                    "Output", selection: model.stateBinding(\.output),
-                    options: VirtualCameraOutput.allCases, label: { $0.title }
-                )
-                .labelsHidden()
-            }
-            VirtualCameraPanelSection(
-                title: "Edith Camera: \(extensionManager.phase.title)",
-                detail: extensionManager.phase.detail, dark: dark
-            ) {
+            VirtualCameraPanelSection(title: "OBS Virtual Camera", detail: routeDetail, dark: dark)
+            {
                 HStack {
-                    switch extensionManager.phase {
-                    case .notInstalled, .failed:
-                        Button("Install Edith Camera") { extensionManager.install() }
-                            .buttonStyle(.edith(.primary))
-                    case .awaitingApproval:
-                        Button("Open System Settings") { extensionManager.openSystemSettings() }
-                            .buttonStyle(.edith(.primary))
-                    case .installed:
-                        Button("Remove", role: .destructive) { extensionManager.uninstall() }
-                            .buttonStyle(.edith(.secondary))
-                    default:
-                        EmptyView()
+                    if model.snapshot?.obsAvailable != true {
+                        Link(
+                            "Get OBS Studio",
+                            destination: URL(string: "https://obsproject.com/download")!
+                        )
+                        .buttonStyle(.edith(.primary))
                     }
                     Spacer()
-                    Button("Check again") { extensionManager.refreshDetached() }
+                    Button("Check again") { model.retryPreview() }
                         .buttonStyle(.edith(.borderless))
                 }
             }
@@ -645,7 +623,7 @@ struct VirtualCameraOutputPanel: View {
                 let clients = model.snapshot?.clients ?? []
                 if clients.isEmpty {
                     Text(
-                        "No app is using Edith Camera. Edith keeps your camera off until one does."
+                        "No app is using OBS Virtual Camera. Edith keeps your camera off until one does."
                     )
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(DashSkin.inkFaint(dark))

@@ -40,6 +40,36 @@ import Testing
         return (model, defaults, name)
     }
 
+    @Test func OBSOutputSetupShowsTheExistingRouteWithoutSigningOrCameraInstallation() throws {
+        let (model, defaults, name) = Self.model()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let scale = UIScale.current
+        defer { UIScale.apply(scale) }
+        for available in [false, true] {
+            model.receive(
+                VirtualCameraSnapshot(
+                    enabled: true, helperRunning: true, extensionInstalled: false,
+                    obsAvailable: available, route: available ? .obs : nil, live: false,
+                    state: model.state))
+            for width in [340.0, 780.0] {
+                for zoom in [1.0, 1.5] {
+                    UIScale.apply(zoom)
+                    let host = try auditHost(
+                        VirtualCameraOutputPanel(model: model, dark: true),
+                        size: CGSize(width: width, height: 900))
+                    let text = try auditText(host).split(whereSeparator: \.isWhitespace).joined(
+                        separator: " ")
+                    #expect(text.contains("OBS Virtual Camera"))
+                    #expect(
+                        text.contains(available ? "Keep OBS Studio closed" : "Install OBS Studio"),
+                        "available=\(available) width=\(width) zoom=\(zoom): \(text)")
+                    #expect(!text.contains("Install Edith Camera"))
+                    #expect(!text.contains("signed build") && !text.contains("signing profile"))
+                }
+            }
+        }
+    }
+
     @Test func missingCameraExplainsThePreviewAndRefreshRecovers() throws {
         var available: [VirtualCameraSource] = []
         let (model, defaults, name) = Self.model(access: .authorized, sourceProvider: { available })

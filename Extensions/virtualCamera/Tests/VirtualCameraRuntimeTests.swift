@@ -377,12 +377,13 @@ import Testing
                 triggerQuit: false) == .stop)
     }
 
-    @Test func outputDecodesWithAnAutomaticFallback() throws {
+    @Test func outputDefaultsToOBSWithoutCameraProviderSetup() throws {
         let decoded = try JSONDecoder().decode(
             VirtualCameraState.self, from: Data("{\"output\":\"obs\"}".utf8))
         #expect(decoded.output == .obs)
         let legacy = try JSONDecoder().decode(VirtualCameraState.self, from: Data("{}".utf8))
-        #expect(legacy.output == .automatic)
+        #expect(legacy.output == .obs)
+        #expect(VirtualCameraState().output == .obs)
     }
 
     @Test func sinksReportWhetherAnyAppRunsTheirDevice() {

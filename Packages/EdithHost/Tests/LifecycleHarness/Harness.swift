@@ -180,6 +180,9 @@ struct HostLifecycleHarness {
                 endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
             stage = "initial commands"
             if extensionID == "virtualCamera" {
+                guard childProcesses(of: oldPID).isEmpty else {
+                    throw HostWorkerError.invalidResponse
+                }
                 try await CameraFixture.verify(endpoint, fixture: fixture, seed: true)
                 cameraChildren = childProcesses(of: oldPID)
                 guard cameraChildren.count == 1 else { throw HostWorkerError.invalidResponse }
@@ -251,6 +254,9 @@ struct HostLifecycleHarness {
             try await requireExited(terminalChildren)
             try await requireExited(cameraChildren)
             if extensionID == "virtualCamera" {
+                guard childProcesses(of: newPID).isEmpty else {
+                    throw HostWorkerError.invalidResponse
+                }
                 try await CameraFixture.verify(endpoint, fixture: fixture, seed: false)
                 cameraChildren = childProcesses(of: newPID)
                 guard cameraChildren.count == 1 else { throw HostWorkerError.invalidResponse }
@@ -350,6 +356,9 @@ struct HostLifecycleHarness {
             }
             stage = "restored commands"
             if extensionID == "virtualCamera" {
+                guard childProcesses(of: restoredPID).isEmpty else {
+                    throw HostWorkerError.invalidResponse
+                }
                 try await CameraFixture.verify(endpoint, fixture: fixture, seed: false)
                 cameraChildren = childProcesses(of: restoredPID)
                 guard cameraChildren.count == 1 else { throw HostWorkerError.invalidResponse }

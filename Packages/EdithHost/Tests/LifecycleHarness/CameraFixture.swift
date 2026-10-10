@@ -58,13 +58,45 @@ enum CameraFixture {
         let frame = try AVAssetImageGenerator(asset: video).copyCGImage(at: .zero, actualTime: nil)
         guard frame.width >= 320, frame.height >= 180 else { throw HostWorkerError.invalidResponse }
         _ = try await request(endpoint, ["pause": ["_0": "stopped"]])
-        let active = try await carrier(endpoint, "activate")
-        guard active["phase"] as? String == "active", active["ownsProvider"] as? Bool == true
+        let waiting = try await hardware(endpoint, [:])
+        guard waiting["route"] as? String == "obs", waiting["live"] as? Bool == false,
+            waiting["obsAvailable"] as? Bool == true,
+            waiting["extensionInstalled"] as? Bool == false
         else { throw HostWorkerError.invalidResponse }
-        _ = try await carrier(endpoint, "microphone")
-        let stopped = try await carrier(endpoint, "deactivate")
-        guard stopped["phase"] as? String == "stopped", stopped["ownsProvider"] as? Bool == false
-        else { throw HostWorkerError.invalidResponse }
+        _ = try await request(endpoint, ["pause": ["_0": "blank"]])
+        let watching = try await hardware(endpoint, ["watching": true])
+        guard watching["live"] as? Bool == true, watching["route"] as? String == "obs" else {
+            throw HostWorkerError.invalidResponse
+        }
+        let busy = try await hardware(endpoint, ["obsRunning": true])
+        guard busy["live"] as? Bool == false else { throw HostWorkerError.invalidResponse }
+        _ = try await hardware(endpoint, ["obsRunning": false])
+        try await Task.sleep(for: .seconds(2))
+        let resumed = try await hardware(endpoint, ["watching": true])
+        guard resumed["live"] as? Bool == true else { throw HostWorkerError.invalidResponse }
+        let quit = try await hardware(endpoint, ["applicationQuit": true, "watching": false])
+        guard quit["live"] as? Bool == false else { throw HostWorkerError.invalidResponse }
+        _ = try await request(endpoint, ["pause": ["_0": "stopped"]])
+        let microphone = try await carrier(endpoint, "microphone")
+        guard microphone["ownsProvider"] as? Bool == false else {
+            throw HostWorkerError.invalidResponse
+        }
+        for operation in ["activate", "deactivate"] {
+            var rejected = false
+            do { _ = try await carrier(endpoint, operation) } catch { rejected = true }
+            guard rejected else { throw HostWorkerError.invalidResponse }
+        }
+    }
+
+    @MainActor private static func hardware(
+        _ endpoint: ExtensionPeerEndpoint, _ values: [String: Bool]
+    ) async throws -> [String: Any] {
+        let data = try await endpoint.invoke(
+            "camera.fixture", payload: JSONSerialization.data(withJSONObject: values))
+        guard let value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw HostWorkerError.invalidResponse
+        }
+        return value
     }
 
     @MainActor private static func request(

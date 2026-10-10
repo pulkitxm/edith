@@ -3,7 +3,8 @@ import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
-import Security
+import CoreMedia
+import CoreMediaIO
 import SwiftUI
 
 @MainActor @objc(EdithCameraExtensionRuntime)
@@ -24,6 +25,7 @@ final class ExtensionRuntime: NSObject {
             {
                 throw ExtensionPeerError.rejected("Camera is hidden while presenting.")
             }
+            if command == "camera.fixture" { return try worker.fixtureRequest(payload) }
             if command == "camera.snapshot" {
                 guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
                 return try JSONEncoder().encode(worker.engine.snapshot())
@@ -42,12 +44,11 @@ final class ExtensionRuntime: NSObject {
                         as? [String: String],
                     values.count == 1
                 else { throw ExtensionPeerError.invalidRequest }
-                switch values["operation"] {
-                case "activate": try await worker.client.activate()
-                case "deactivate": try await worker.client.deactivate()
-                case "microphone": try await worker.client.prepareMicrophone()
-                default: throw ExtensionPeerError.invalidRequest
+                guard values["operation"] == "microphone" else {
+                    throw ExtensionPeerError.rejected(
+                        "Camera video uses OBS Virtual Camera. Keep OBS Studio closed.")
                 }
+                try await worker.client.prepareMicrophone()
                 return try JSONEncoder().encode(worker.client.currentStatus)
             }
             return try await worker.surface.execute(command, payload: payload)
@@ -76,7 +77,7 @@ final class ExtensionRuntime: NSObject {
         worker?.markDraining()
         Task { [weak self] in
             await self?.commands.shutdownAndWait()
-            await self?.worker?.drain(); completion()
+            try? await self?.worker?.prepareDisable(); completion()
         }
     }
 
@@ -108,7 +109,7 @@ final class ExtensionRuntime: NSObject {
                             PageHeader("Camera")
                         } content: {
                             Text(
-                                "Camera is waiting for its system resources to be released. Restart macOS if requested, then finish disabling it in Extensions."
+                                "Camera is releasing its capture and meeting audio resources. Restart macOS if its microphone removal requests it, then finish disabling it in Extensions."
                             )
                         }
                     } else {
@@ -142,6 +143,7 @@ final class ExtensionRuntime: NSObject {
     private let source: URL
     private let installed: URL
     private let fixture: Bool
+    private let fixtureHardware: CameraOBSFixtureHardware?
     private let actions = VirtualCameraActionBridge()
     private let manager: VirtualCameraExtensionManager
     private var drainTask: Task<Void, Never>?
@@ -159,6 +161,8 @@ final class ExtensionRuntime: NSObject {
             host.hasPrefix("com.pulkit.edith.tests.")
             && ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
         let source = self.source, fixture = self.fixture
+        fixtureHardware = fixture ? CameraOBSFixtureHardware() : nil
+        let hardware = fixtureHardware
         let version =
             bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         client = CameraCarrierClient(
@@ -202,24 +206,31 @@ final class ExtensionRuntime: NSObject {
         let client = self.client
         var environment = VirtualCameraEngineEnvironment.live
         if fixture {
-            environment.authorization = { .denied }; environment.obsRunning = { false }
-            environment.frontmostApplication = { nil }; environment.sources = { [] }
+            environment.authorization = { .denied };
+            environment.obsRunning = { hardware?.obsRunning == true }
+            environment.frontmostApplication = {
+                VirtualCameraRunningApplication(pid: 303303, bundleIdentifier: "synthetic.meeting")
+            }; environment.sources = { [] }
         }
         environment.prepareMicrophone = { try await client.prepareMicrophone() }
         let bus = VirtualCameraPreviewBus()
-        engine = VirtualCameraEngine(
-            state: VirtualCameraStore.load(defaults), environment: environment, previewBus: bus)
+        var state = VirtualCameraStore.load(defaults)
+        state.output = .obs
+        VirtualCameraStore.save(state, to: defaults)
+        if let hardware {
+            engine = VirtualCameraEngine(
+                edithSink: VirtualCameraSink(
+                    deviceUID: "synthetic-no-custom-provider", hardware: hardware),
+                obsSink: VirtualCameraSink(
+                    deviceUID: VirtualCameraOBS.deviceUID, hardware: hardware),
+                state: state, environment: environment, previewBus: bus)
+        } else {
+            engine = VirtualCameraEngine(state: state, environment: environment, previewBus: bus)
+        }
         surface = CameraSurface(engine: engine)
         manager = VirtualCameraExtensionManager(
             environment: .init(
-                bundleURL: source,
-                hasInstallEntitlement: { fixture || Self.entitledCarrier(source) },
-                deviceVisible: {
-                    fixture
-                        ? false
-                        : VirtualCameraSink(extensionIdentifier: host + ".camera").isInstalled
-                },
-                canPrepareLocation: true), client: client)
+                bundleURL: directory, hasInstallEntitlement: { false }, deviceVisible: { false }))
         model = VirtualCameraPageModel(
             defaults: defaults, extensionManager: manager,
             accessProvider: environment.authorization, sourceProvider: environment.sources,
@@ -229,7 +240,7 @@ final class ExtensionRuntime: NSObject {
             || ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"] == "1"
         if !draining {
             engine.start(); actions.install(engine: engine)
-            CameraExtensionBridge.install(manager: manager)
+
         }
     }
 
@@ -259,16 +270,18 @@ final class ExtensionRuntime: NSObject {
         defaults.removeObject(forKey: Self.pendingKey)
     }
 
-    private static func entitledCarrier(_ source: URL) -> Bool {
-        var code: SecStaticCode?, info: CFDictionary?
-        guard SecStaticCodeCreateWithPath(source as CFURL, [], &code) == errSecSuccess, let code,
-            SecCodeCopySigningInformation(
-                code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
-            let values = info as? [String: Any],
-            let entitlements = values[kSecCodeInfoEntitlementsDict as String] as? [String: Any]
-        else { return false }
-        return entitlements[VirtualCameraExtensionManager.installEntitlement] as? Bool == true
+    func fixtureRequest(_ payload: Data) throws -> Data {
+        guard fixture, let hardware = fixtureHardware, payload.count <= 1024,
+            let values = try JSONSerialization.jsonObject(with: payload) as? [String: Bool],
+            Set(values.keys).isSubset(of: ["watching", "obsRunning", "applicationQuit"])
+        else { throw ExtensionPeerError.invalidRequest }
+        if let watching = values["watching"] { hardware.watching = watching }
+        if let running = values["obsRunning"] { hardware.obsRunning = running }
+        engine.refreshExtension()
+        if values["applicationQuit"] == true { engine.applicationQuit(303303) }
+        return try JSONEncoder().encode(engine.snapshot())
     }
+
 }
 
 @_cdecl("edith_extension_create")
@@ -277,4 +290,40 @@ public func createExtension() -> UnsafeMutableRawPointer? {
         bitPattern: MainActor.assumeIsolated {
             UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
         })
+}
+
+private final class CameraOBSFixtureHardware: VirtualCameraHardware, @unchecked Sendable {
+    var watching = false
+    var obsRunning = false
+    private var queues: [CMIOStreamID: CMSimpleQueue] = [:]
+    func deviceIDs() -> [CMIOObjectID] { [40] }
+    func string(_ object: CMIOObjectID, selector: CMIOObjectPropertySelector) -> String? {
+        object == 40 && selector == CMIOObjectPropertySelector(kCMIODevicePropertyDeviceUID)
+            ? VirtualCameraOBS.deviceUID : nil
+    }
+    func streamIDs(_ device: CMIOObjectID) -> [CMIOStreamID] { device == 40 ? [41, 42] : [] }
+    func direction(_ stream: CMIOStreamID) -> UInt32? {
+        stream == 41 ? 1 : (stream == 42 ? 0 : nil)
+    }
+    func flag(_ object: CMIOObjectID, selector: CMIOObjectPropertySelector) -> Bool? {
+        object == 40
+            && selector == CMIOObjectPropertySelector(kCMIODevicePropertyDeviceIsRunningSomewhere)
+            ? watching : nil
+    }
+    func startSink(device: CMIOObjectID, stream: CMIOStreamID) -> CMSimpleQueue? {
+        var queue: CMSimpleQueue?
+        CMSimpleQueueCreate(allocator: kCFAllocatorDefault, capacity: 4, queueOut: &queue)
+        queues[stream] = queue
+        return queue
+    }
+    func stopSink(device: CMIOObjectID, stream: CMIOStreamID) {
+        guard let queue = queues.removeValue(forKey: stream) else { return }
+        while let sample = CMSimpleQueueDequeue(queue) {
+            Unmanaged<CMSampleBuffer>.fromOpaque(sample).release()
+        }
+    }
+    func listen(
+        _ object: CMIOObjectID, selector: CMIOObjectPropertySelector, queue: DispatchQueue,
+        handler: @escaping @Sendable () -> Void
+    ) -> VirtualCameraListener? { VirtualCameraListener(remove: {}) }
 }
