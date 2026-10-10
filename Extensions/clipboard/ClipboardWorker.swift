@@ -62,7 +62,7 @@ import Foundation
         if command == "clipboard.ui.preferences.set" {
             guard payload.count <= 16_384 else { throw ExtensionPeerError.invalidRequest }
             try ClipboardMessage.decode(ClipboardPreferences.self, from: payload).save(
-                SharedDefaults.store)
+                defaults)
             return try ClipboardMessage.encode(ClipboardPreferences.read(defaults))
         }
         if command == "clipboard.ui.copy" {

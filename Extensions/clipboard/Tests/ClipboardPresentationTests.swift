@@ -122,6 +122,16 @@ import Testing
         let worker = ClipboardWorker(
             service: service, defaults: defaults, capturesPasteboard: false,
             allowsSystemActions: false, copyRecord: { copied.append($0) })
+        var preferences = ClipboardPreferences.read(defaults)
+        preferences.maxItems = 37
+        preferences.ignoredApps = "example.private"
+        let savedPreferences = try ClipboardMessage.decode(
+            ClipboardPreferences.self,
+            from: await worker.execute(
+                "clipboard.ui.preferences.set", payload: ClipboardMessage.encode(preferences)))
+        #expect(savedPreferences.maxItems == 37)
+        #expect(savedPreferences.ignoredApps == "example.private")
+        #expect(defaults.integer(forKey: AppStorageKeys.Clipboard.maxItems) == 37)
         let clip = ClipboardCapture(
             payload: .init(
                 data: Data("mock owned record".utf8), types: ["public.text"], ext: "txt",
