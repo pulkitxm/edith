@@ -43,3 +43,18 @@ test("UI support products export their scoped presentation factory", () => {
     expect(presentationLinkerFlags(product)).toEqual([]);
   expect(() => presentationLinkerFlags("foreign")).toThrow();
 });
+
+test("combined role SDK selections retain the presentation factory", () => {
+  expect(
+    presentationLinkerFlags([
+      "EdithExtensionDocuments",
+      "EdithExtensionCommands",
+    ]),
+  ).toEqual(presentationLinkerFlags("EdithExtensionUI"));
+  expect(
+    presentationLinkerFlags([
+      "EdithExtensionArchive",
+      "EdithExtensionCommands",
+    ]),
+  ).toEqual(presentationLinkerFlags("EdithExtensionUI"));
+});

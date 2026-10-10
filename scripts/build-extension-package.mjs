@@ -383,7 +383,10 @@ export async function buildExtensionPackage({
         resolve(contents, "Resources", name),
       );
     }
-    if (definition.supportProduct === "EdithExtensionDocuments") {
+    if (
+      supportProduct &&
+      supportProducts(supportProduct).includes("EdithExtensionDocuments")
+    ) {
       const resources = resolve(
         root,
         "Packages/ExtensionSupport/Sources/EdithExtensionDocuments/Resources",
