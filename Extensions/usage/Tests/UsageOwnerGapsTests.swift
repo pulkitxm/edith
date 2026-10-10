@@ -114,6 +114,7 @@ import Testing
                 $0.element.s == Double($0.offset % 101) && $0.element.w == 18
             })
         #expect(encoded.count > ExtensionPeerEndpoint.maximumPayloadBytes)
+        #expect(begin.duration(to: end) < .seconds(30))
         print(
             "usage-history-profile records=\(count) inputBytes=\(raw.count) outputBytes=\(encoded.count) load=\(begin.duration(to: loaded)) encode=\(loaded.duration(to: end))"
         )
