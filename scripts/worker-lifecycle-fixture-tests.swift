@@ -47,9 +47,42 @@ struct WorkerLifecycleFixtureTests {
         let marker = home.appendingPathComponent("worker-fixture.json")
         try issuer.issue(first, hostApp: app, defaultsSuite: suite)
         try issuer.validateExact(first, hostApp: app, defaultsSuite: suite)
+        #if WORKER_ADMISSION_CONTRACT
+        let context: NSDictionary = [
+            "hostIdentifier": identifier, "defaultsSuite": suite,
+            "dataDirectory": data.path,
+        ]
+        let environment = [
+            "EDITH_APPLICATION_IDENTIFIER": identifier,
+            "EDITH_EXTENSION_ID": "focusDim", "EDITH_SHARED_DEFAULTS_SUITE": suite,
+            "EDITH_EXTENSION_DATA_ROOT": data.path, "EDITH_EXTENSION_FIXTURE_HOME": home.path,
+        ]
+        let admitted = try WorkerFixtureAdmission.admit(
+            extensionID: "focusDim",
+            context: context, environment: environment, hostIdentifier: identifier,
+            hostBundle: app, roleDirectory: first.roleDirectory,
+            roleIdentifier: "com.pulkit.edith.extensions.focusDim.helper",
+            version: first.version, hostABI: first.hostABI)
+        guard admitted?.dataDirectory.path == data.path else {
+            throw WorkerLifecycleFixtureError.marker
+        }
+        try rejected {
+            _ = try WorkerFixtureAdmission.admit(
+                extensionID: "focusDim",
+                context: context, environment: environment, hostIdentifier: identifier,
+                hostBundle: app, roleDirectory: second.roleDirectory,
+                roleIdentifier: "com.pulkit.edith.extensions.focusDim.helper",
+                version: second.version, hostABI: second.hostABI)
+        }
+        print(
+            "utility owner strict admission parser accepted current marker and rejected stale version"
+        )
+        #endif
+
         try rejected { try issuer.validateExact(second, hostApp: app, defaultsSuite: suite) }
         try issuer.issue(second, hostApp: app, defaultsSuite: suite)
         try rejected { try issuer.validateExact(first, hostApp: app, defaultsSuite: suite) }
+        try rejected { try issuer.remove(first) }
         let original = try Data(contentsOf: marker)
         let originalValues = try JSONSerialization.jsonObject(with: original) as! [String: Any]
         for (key, value) in [
@@ -64,9 +97,7 @@ struct WorkerLifecycleFixtureTests {
             values[key] = value
             try JSONSerialization.data(withJSONObject: values).write(to: marker)
             try rejected { try issuer.validateExact(second, hostApp: app, defaultsSuite: suite) }
-            if key != "version" && key != "roleDirectory" {
-                try rejected { try issuer.issue(second, hostApp: app, defaultsSuite: suite) }
-            }
+            try rejected { try issuer.issue(second, hostApp: app, defaultsSuite: suite) }
             try original.write(to: marker)
         }
         for bytes in [Data(), Data(repeating: 65, count: 16_385), Data("[]".utf8), Data("{".utf8)] {
@@ -78,6 +109,9 @@ struct WorkerLifecycleFixtureTests {
         try rejected { try issuer.issue(second, hostApp: app, defaultsSuite: suite) }
         try rejected { try issuer.remove(second) }
         try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: marker.path)
+        try manager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: home.path)
+        try rejected { try issuer.issue(second, hostApp: app, defaultsSuite: suite) }
+        try manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: home.path)
         try issuer.remove(second)
         let foreign = root.appendingPathComponent("foreign.json")
         try original.write(to: foreign)
@@ -132,6 +166,32 @@ struct WorkerLifecycleFixtureTests {
         for id in WorkerLifecycleFixture.supportedIDs {
             try WorkerLifecycleFixture.requireSupported(id)
         }
+        let allIDs = WorkerLifecycleFixture.supportedIDs.union(WorkerLifecycleFixture.blockedIDs)
+        guard allIDs.count == 39 else { throw WorkerLifecycleFixtureError.identity }
+        for id in allIDs.subtracting(["calendar"]) {
+            let selectedData = base.appendingPathComponent("Data").appendingPathComponent(id)
+            let role = base.appendingPathComponent(
+                "Extensions/" + id + "/1/arm64/1.1.0/" + id
+                    + "/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/"
+                    + id + "/app.bundle")
+            try manager.createDirectory(
+                at: selectedData, withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700])
+            try manager.createDirectory(
+                at: role, withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700])
+            let selected = WorkerLifecycleFixture.Selection(
+                extensionID: id,
+                dataDirectory: selectedData, roleDirectory: role, version: "1.1.0", hostABI: "1")
+            try issuer.issue(
+                selected, hostApp: app, defaultsSuite: identifier + ".extensions." + id)
+            try issuer.validateExact(
+                selected, hostApp: app, defaultsSuite: identifier + ".extensions." + id)
+            try issuer.remove(selected)
+        }
+        print(
+            "all39 inventory marker coverage: 38 generic IDs, Calendar covered by its unchanged strict issuer tests"
+        )
         print(
             "worker fixture marker tests passed: issuance, exact version, schema, UUID, foreign paths, permissions, symlink, hardlink, FIFO, bounds, cancellation, cleanup, fail-closed startup"
         )

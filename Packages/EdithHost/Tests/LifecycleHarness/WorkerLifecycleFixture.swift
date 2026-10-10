@@ -102,7 +102,20 @@ struct WorkerLifecycleFixture {
         guard renameat(directory, name, directory, "worker-fixture.json") == 0 else {
             throw WorkerLifecycleFixtureError.marker
         }
-        try validateExact(selection, hostApp: hostApp, defaultsSuite: defaultsSuite)
+        do {
+            try Task.checkCancellation()
+            try validateExact(selection, hostApp: hostApp, defaultsSuite: defaultsSuite)
+        } catch {
+            var created = stat()
+            var published = stat()
+            if fstat(descriptor, &created) == 0,
+                fstatat(directory, "worker-fixture.json", &published, AT_SYMLINK_NOFOLLOW) == 0,
+                created.st_dev == published.st_dev, created.st_ino == published.st_ino
+            {
+                unlinkat(directory, "worker-fixture.json", 0)
+            }
+            throw error
+        }
     }
 
     func validateExact(_ selection: Selection, hostApp: URL, defaultsSuite: String) throws {
