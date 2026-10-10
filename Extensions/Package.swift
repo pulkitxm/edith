@@ -9,14 +9,6 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "ClipboardExtension",
-            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
-            path: "clipboard", exclude: ["Tests", "Package.swift"],
-            swiftSettings: [.swiftLanguageMode(.v5)]),
-        .testTarget(
-            name: "ClipboardExtensionTests", dependencies: ["ClipboardExtension"],
-            path: "clipboard/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
-        .target(
             name: "KeepAwakeExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
             path: "keepAwake", exclude: ["Tests", "Runtime.swift"]),

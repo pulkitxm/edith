@@ -287,8 +287,9 @@ final class ExtensionRuntime: NSObject {
                     })
                 let backup = self.backup
                 backupRestoreTask = Task { [weak self, weak controller] in
-                    _ = await backup?.restoreOnEnable()
+                    let restored = await backup?.restoreOnEnable()
                     guard !Task.isCancelled, self?.controller === controller else { return }
+                    backup?.startScheduling(restorePending: restored == false)
                     controller?.startBackgroundCollection()
                 }
             }
@@ -298,7 +299,9 @@ final class ExtensionRuntime: NSObject {
             else { return ["ok": false] as NSDictionary }
             return scene.controller() ?? (["ok": false] as NSDictionary)
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": usageStore?.syncStatusItem(); usageStore?.refreshMenuBarItem()
+        case "synchronize":
+            usageStore?.syncStatusItem(); usageStore?.refreshMenuBarItem()
+            backup?.preferencesChanged()
         case "stop": prepareToStop(completion: {})
         case "status": return ["ok": true, "running": controller != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary

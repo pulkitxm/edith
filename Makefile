@@ -526,6 +526,11 @@ ci-extension-music:
 ci-extension-notch-native:
 	@fixture=$$(mktemp -d /tmp/edith-notch-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_BACKGROUND_TESTING=1 EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/data" EDITH_SHARED_DEFAULTS_SUITE="com.pulkit.edith.tests.notch.$$(basename "$$fixture")" swift test --package-path Extensions/notchShelf --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
+.PHONY: ci-extension-clipboard-native
+ci-extension-clipboard-native:
+	swift format lint --strict --parallel --recursive Extensions/clipboard
+	fixture=$$(mktemp -d /tmp/edith-clipboard-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; identity="com.pulkit.edith.tests.clipboard.$$(basename "$$fixture")"; EDITH_BACKUP_RUNTIME_FIXTURE=1 EDITH_APPLICATION_IDENTIFIER="$$identity" EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/Data/clipboard" EDITH_SHARED_DEFAULTS_SUITE="$$identity" swift test --package-path Extensions/clipboard --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" $(if $(FILTER),--filter '$(FILTER)') $(if $(SKIP),--skip '$(SKIP)')
+
 .PHONY: ci-extension-presenter
 ci-extension-presenter:
 	swift format lint --strict --parallel --recursive Extensions/presenter

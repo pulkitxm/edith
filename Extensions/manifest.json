@@ -892,6 +892,7 @@
   },
   {
     "id": "clipboard",
+    "testTargets": ["ci-extension-clipboard-native"],
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
