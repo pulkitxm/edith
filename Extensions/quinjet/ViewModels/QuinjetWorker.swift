@@ -129,6 +129,21 @@ import Foundation
     func execute(_ command: String, payload: Data) async throws -> Data {
         guard !isStopped else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
+        if [
+            "quinjet.terminal.read", "quinjet.terminal.input", "quinjet.terminal.resize",
+            "quinjet.terminal.close",
+        ].contains(command) {
+            guard payload.count <= 32768 else { throw ExtensionPeerError.invalidRequest }
+            let request = try JSONDecoder().decode(OwnedTerminalRequest.self, from: payload)
+            guard
+                let holder = model.tabs.map(\.holder).first(where: {
+                    $0.descriptor?.handle == request.session
+                })
+            else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            return try await holder.executeTerminal(command, payload: payload)
+        }
         guard payload.count <= 16_384,
             let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
         else { throw ExtensionPeerError.invalidRequest }

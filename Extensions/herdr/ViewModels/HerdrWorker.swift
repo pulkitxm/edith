@@ -98,6 +98,21 @@ import Foundation
     func execute(_ command: String, payload: Data) async throws -> Data {
         guard !isStopped else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
+        if [
+            "herdr.terminal.read", "herdr.terminal.input", "herdr.terminal.resize",
+            "herdr.terminal.close",
+        ].contains(command) {
+            guard payload.count <= 32768 else { throw ExtensionPeerError.invalidRequest }
+            let request = try JSONDecoder().decode(OwnedTerminalRequest.self, from: payload)
+            guard
+                let holder = store.terminalHolders.first(where: {
+                    $0.descriptor?.handle == request.session
+                })
+            else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            return try await holder.executeTerminal(command, payload: payload)
+        }
         if command == "herdr.settings.read" || command == "herdr.settings.save" {
             guard payload.count <= 4096,
                 let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
@@ -167,8 +182,10 @@ import Foundation
             tab.holder.start(
                 executable: request.executable, arguments: request.arguments,
                 environment: request.environment, allowsLocalFileLinks: agent.machineIsLocal)
-            ExtensionPresentation.showWindow()
-            return Data("{\"opened\":true}".utf8)
+            guard let descriptor = tab.holder.descriptor else {
+                throw ExtensionPeerError.unavailable
+            }
+            return try JSONEncoder().encode(descriptor)
         case "herdr.open":
             guard Set(object.keys).isSubset(of: ["agentID", "view"]),
                 let id = object["agentID"] as? String, let agent = currentAgent(id)

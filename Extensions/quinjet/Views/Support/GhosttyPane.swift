@@ -20,7 +20,6 @@ extension GhosttyTheme {
 
 struct GhosttyPane: NSViewRepresentable {
     let holder: TerminalSessionHolder
-    let launch: GhosttyLaunch
     let theme: GhosttyTheme
     var active = true
     var wantsFocus = true
@@ -40,7 +39,7 @@ struct GhosttyPane: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> GhosttyTerminalView {
-        let view = holder.retainedGhosttyView(launch: launch, theme: theme)
+        let view = holder.retainedGhosttyView(theme: theme)
         view.onDropFiles = onDropFiles
         view.onFocus = onFocus
         view.setRenderingActive(active)

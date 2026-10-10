@@ -120,8 +120,8 @@ import Testing
                     let window = TestWindowHost.window(contentRect: host.frame)
                     window.isReleasedWhenClosed = false
                     window.contentView = host
-                    window.orderBack(nil)
-                    defer { window.orderOut(nil); window.contentView = nil; window.close() }
+
+                    defer { window.contentView = nil; window.close() }
                     for _ in 0..<4 {
                         window.layoutIfNeeded()
                         host.layoutSubtreeIfNeeded()

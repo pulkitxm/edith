@@ -546,6 +546,11 @@ final class HerdrStore {
         }
     }
 
+    var terminalHolders: [TerminalSessionHolder] {
+        (sessions + Array(detachedTabs.values)).flatMap { [$0.holder, $0.quinjet.holder] }
+            + terminalPanels.terminals.values.map(\.holder)
+    }
+
     func shutdown() async {
         let watcher = watchTask
         let settlingTask = settleTask

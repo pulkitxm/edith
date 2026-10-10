@@ -22,9 +22,9 @@ struct TerminalPane: View {
     }
 
     var body: some View {
-        if let launch = holder.ghosttyLaunch {
+        if holder.descriptor != nil {
             GhosttyPane(
-                holder: holder, launch: launch,
+                holder: holder,
                 theme: GhosttyTheme(palette: palette, fontSize: resolvedFontSize),
                 active: active, wantsFocus: wantsFocus, onDropFiles: onDropFiles,
                 onFocus: onFocus

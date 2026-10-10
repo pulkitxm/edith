@@ -2835,7 +2835,9 @@
         "Extensions/herdr/CLI/HerdrSpaceCommands.swift",
         "Extensions/herdr/ViewModels/HerdrSettingsModel.swift",
         "Extensions/herdr/Views/HerdrSettingsPage.swift",
-        "Extensions/herdr/CLI/CLIDestructivePlan.swift"
+        "Extensions/herdr/CLI/CLIDestructivePlan.swift",
+        "Extensions/herdr/Transport/OwnedTerminalPTY.swift",
+        "Extensions/herdr/Transport/OwnedTerminalSession.swift"
       ]
     },
     "resources": {
@@ -2946,7 +2948,9 @@
         "Extensions/quinjet/CLI/CLIEnvironment.swift",
         "Extensions/quinjet/CLI/QuinjetCLIExecution.swift",
         "Extensions/quinjet/CLI/QuinjetCommands.swift",
-        "Extensions/quinjet/CLI/CLIDestructivePlan.swift"
+        "Extensions/quinjet/CLI/CLIDestructivePlan.swift",
+        "Extensions/quinjet/Transport/OwnedTerminalPTY.swift",
+        "Extensions/quinjet/Transport/OwnedTerminalSession.swift"
       ]
     },
     "resources": {

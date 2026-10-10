@@ -21,7 +21,16 @@ final class TerminalSessionHolder {
     private(set) var exitMessage: String?
     private(set) var currentTitle: String?
     private(set) var currentWorkingDirectory: String?
-    private(set) var ghosttyLaunch: GhosttyLaunch?
+    private(set) var terminalLaunch: OwnedTerminalLaunch?
+    private(set) var descriptor: OwnedTerminalDescriptor?
+    private var engineSession: OwnedTerminalSession?
+    private var client: OwnedTerminalClient?
+    private var readTask: Task<Void, Never>?
+    private var deliveryTask: Task<Void, Never>?
+    private var offset: UInt64 = 0
+    private enum Event { case input(Data); case resize(UInt16, UInt16) }
+    private var events: [Event] = []
+    private var queuedBytes = 0
     private(set) var ghosttyView: GhosttyTerminalView?
 
     private var queuedGhosttyInput = ""
@@ -65,10 +74,22 @@ final class TerminalSessionHolder {
         exitMessage = nil
         currentTitle = nil
         currentWorkingDirectory = currentDirectory
-        ghosttyLaunch = GhosttyLaunch(
+        let launch = OwnedTerminalLaunch(
             executable: executable, arguments: arguments, environment: environment,
-            workingDirectory: currentDirectory, allowsLocalFileLinks: allowsLocalFileLinks,
+            currentDirectory: currentDirectory ?? "/", allowsLocalFileLinks: allowsLocalFileLinks,
             resetTerminalAfterInterrupt: resetTerminalAfterInterrupt)
+        do {
+            let session = try OwnedTerminalSession(launch: launch)
+            engineSession = session
+            terminalLaunch = launch
+            bind(
+                try OwnedTerminalClient(descriptor: session.descriptor) { operation, payload in
+                    try await session.execute(operation, payload: payload)
+                })
+        } catch {
+            started = false
+            exitMessage = error.localizedDescription
+        }
     }
     func insertText(_ text: String) { sendInput(text) }
     func applyTheme(
@@ -100,6 +121,18 @@ final class TerminalSessionHolder {
 
     func reset() {
         managedOSC = QuinjetManagedOSC()
+        readTask?.cancel()
+        readTask = nil
+        deliveryTask?.cancel()
+        deliveryTask = nil
+        events.removeAll()
+        queuedBytes = 0
+        client?.stop()
+        client = nil
+        engineSession?.stop()
+        engineSession = nil
+        descriptor = nil
+        offset = 0
         pendingUserClose = nil
         queuedGhosttyInput = ""
         appliedTheme = nil
@@ -112,7 +145,7 @@ final class TerminalSessionHolder {
         currentWorkingDirectory = nil
         ghosttyView?.shutdown()
         ghosttyView = nil
-        ghosttyLaunch = nil
+        terminalLaunch = nil
     }
 
     func stop() {
@@ -141,7 +174,7 @@ final class TerminalSessionHolder {
     }
 
     func sendInput(_ text: String) {
-        guard !text.isEmpty, ghosttyLaunch != nil else { return }
+        guard !text.isEmpty, descriptor != nil else { return }
         if let ghosttyView, queuedGhosttyInput.isEmpty, deliverGhosttyInput(ghosttyView, text) {
             return
         }
@@ -151,14 +184,27 @@ final class TerminalSessionHolder {
 
     var hasQueuedInput: Bool { !queuedGhosttyInput.isEmpty }
 
-    func retainedGhosttyView(launch: GhosttyLaunch, theme: GhosttyTheme) -> GhosttyTerminalView {
+    func retainedGhosttyView(theme: GhosttyTheme) -> GhosttyTerminalView {
         if let ghosttyView {
             ghosttyView.apply(theme: theme)
             flushQueuedInput(to: ghosttyView)
             return ghosttyView
         }
-        let view = GhosttyTerminalView(launch: launch, theme: theme)
         let viewGeneration = generation
+        let io = GhosttyExternalIO(
+            write: { [weak self] bytes in
+                guard let self, self.generation == viewGeneration else { return }
+                self.enqueue(.input(bytes), bytes: bytes.count)
+            },
+            resize: { [weak self] columns, rows, _, _ in
+                guard let self, self.generation == viewGeneration else { return }
+                self.enqueue(.resize(columns, rows), bytes: 0)
+            }, failure: { [weak self] in self?.failStream("The terminal input queue is full.") })
+        let view = GhosttyTerminalView(
+            externalIO: io, workingDirectory: descriptor?.directory,
+            allowsLocalFileLinks: descriptor?.allowsLocalFileLinks ?? false,
+            resetTerminalAfterInterrupt: descriptor?.resetTerminalAfterInterrupt ?? false,
+            theme: theme)
         view.onClose = { [weak self, weak view] exitCode in
             QuinjetWorkOwnership.start { @MainActor in
                 guard let self, let view, self.generation == viewGeneration,
@@ -180,6 +226,7 @@ final class TerminalSessionHolder {
         view.onReady = { [weak self, weak view] in
             guard let self, let view, self.generation == viewGeneration else { return }
             self.flushQueuedInput(to: view)
+            self.startReading(generation: viewGeneration)
         }
         ghosttyView = view
         flushQueuedInput(to: view)
@@ -187,17 +234,110 @@ final class TerminalSessionHolder {
     }
 
     func finishSession(_ view: GhosttyTerminalView, exitCode: Int32?) {
-        let closeCompletion = takeUserCloseCompletion(for: view)
+        guard ghosttyView === view else { return }
+        let completion = takeUserCloseCompletion(for: view)
+        if let completion { reset(); completion(true); return }
         queuedGhosttyInput = ""
-        view.shutdown()
-        ghosttyView = nil
-        ghosttyLaunch = nil
-        generation += 1
-        started = false
-        currentTitle = nil
-        currentWorkingDirectory = nil
+        _ = view.processExited(exitCode ?? 0)
         exitMessage = Self.exitMessage(exitCode)
-        closeCompletion?(true)
+    }
+
+    func bind(_ client: OwnedTerminalClient) {
+        self.client?.stop()
+        self.client = client
+        descriptor = client.descriptor
+        currentWorkingDirectory = client.descriptor.directory
+        started = true
+        exitMessage = nil
+    }
+
+    func executeTerminal(_ operation: String, payload: Data) async throws -> Data {
+        guard let engineSession else { throw ExtensionPeerError.unavailable }
+        return try await engineSession.execute(operation, payload: payload)
+    }
+
+    func stopRendering() {
+        readTask?.cancel()
+        deliveryTask?.cancel()
+        readTask = nil
+        deliveryTask = nil
+        events.removeAll()
+        queuedBytes = 0
+        client?.stop()
+        ghosttyView?.shutdown()
+        ghosttyView = nil
+    }
+
+    private func startReading(generation: Int) {
+        guard readTask == nil, let client else { return }
+        readTask = Task { [weak self] in
+            var cursor: UInt64 = 0
+            while !Task.isCancelled {
+                do {
+                    let output = try await client.read(after: cursor)
+                    guard let self, !Task.isCancelled, self.generation == generation,
+                        let view = self.ghosttyView
+                    else { return }
+                    guard view.setTermios(canonical: output.canonical, echo: output.echo),
+                        output.bytes.isEmpty || view.receiveOutput(output.bytes)
+                    else {
+                        throw ExtensionPeerError.unavailable
+                    }
+                    self.consumeOutput(output.bytes)
+                    cursor = output.nextOffset
+                    self.offset = cursor
+                    if let exit = output.exitCode {
+                        self.finishSession(view, exitCode: exit)
+                        return
+                    }
+                } catch is CancellationError { return } catch {
+                    guard let self, !Task.isCancelled, self.generation == generation else { return }
+                    self.failStream("The owned terminal stream is unavailable.")
+                    return
+                }
+            }
+        }
+    }
+
+    private func enqueue(_ event: Event, bytes: Int) {
+        guard started, exitMessage == nil, client != nil else { return }
+        guard events.count < 256, queuedBytes + bytes <= 262144 else {
+            failStream("The terminal input queue is full."); return
+        }
+        events.append(event)
+        queuedBytes += bytes
+        guard deliveryTask == nil else { return }
+        let generation = generation
+        deliveryTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.deliveryTask = nil }
+            while !Task.isCancelled, self.generation == generation, !self.events.isEmpty {
+                guard let client = self.client else { return }
+                let event = self.events.removeFirst()
+                do {
+                    switch event {
+                    case .input(let data):
+                        self.queuedBytes -= data.count
+                        try await client.input(data)
+                    case .resize(let columns, let rows):
+                        try await client.resize(columns: columns, rows: rows)
+                    }
+                } catch is CancellationError { return } catch {
+                    guard !Task.isCancelled, self.generation == generation else { return }
+                    self.failStream("The owned terminal input is unavailable."); return
+                }
+            }
+        }
+    }
+
+    private func failStream(_ message: String) {
+        stopRendering()
+        exitMessage = message
+        started = false
+    }
+
+    private func consumeOutput(_ bytes: Data) {
+        consumeManagedOSC(bytes)
     }
 
     static func exitMessage(_ exitCode: Int32?) -> String {

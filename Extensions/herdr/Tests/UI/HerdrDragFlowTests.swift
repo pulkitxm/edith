@@ -309,7 +309,7 @@ final class RenderedHerdrPage {
         host.frame = CGRect(x: 0, y: 0, width: 1280, height: 820)
         window = TestWindowHost.window(contentRect: host.frame)
         window.contentView = host
-        window.orderBack(nil)
+
         await settle()
     }
 
@@ -376,7 +376,7 @@ final class RenderedHerdrPage {
 
     func close() {
         store.closeAll()
-        window.orderOut(nil)
+
         UserDefaults().removePersistentDomain(forName: suite)
     }
 }
