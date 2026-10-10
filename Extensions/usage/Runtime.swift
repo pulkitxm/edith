@@ -224,9 +224,10 @@ final class ExtensionRuntime: NSObject {
             else { return ["ok": false] as NSDictionary }
             guard controller == nil, !recovering else { return ["ok": true] as NSDictionary }
             let fixture = UsageExecutionEnvironment.fixtureHome != nil
-            let statusLine = UsageStatusLineCommands()
+            let launcher = ClaudeStatusLine.publicExecutable(fromVerifiedContext: input)
+            let statusLine = UsageStatusLineCommands(executable: launcher)
             self.statusLine = statusLine
-            let cliHooks = UsageCLIHookOwner()
+            let cliHooks = UsageCLIHookOwner(executable: launcher)
             self.cliHooks = cliHooks
             if input["recoveryOnly"] as? Bool == true {
                 recovering = true
