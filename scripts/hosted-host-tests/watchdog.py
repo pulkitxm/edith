@@ -96,6 +96,7 @@ def admit(environment, source):
                 'GITHUB_REPOSITORY': 'pulkitxm/edith', 'EDITH_HOSTED_RELEASE': 'false',
                 'EDITH_HOSTED_REBUILD': ''}
     allowed_refs = {'refs/heads/feat/hosted-host-test-diagnostics',
+                    'refs/heads/feat/hosted-journey-registration',
                     'refs/heads/feat/extension-marketplace', 'refs/heads/main'}
     if (any(environment.get(key) != value for key, value in required.items())
             or environment.get('GITHUB_REF') not in allowed_refs

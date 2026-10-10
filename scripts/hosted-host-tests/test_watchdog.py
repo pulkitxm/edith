@@ -22,7 +22,8 @@ class WatchdogTests(unittest.TestCase):
                        'EDITH_HOSTED_REBUILD': '', 'EXPECTED_SOURCE_SHA': 'a' * 40}
         watchdog.admit(environment, 'a' * 40)
         for ref in ['refs/heads/main', 'refs/heads/feat/extension-marketplace',
-                    'refs/heads/feat/hosted-host-test-diagnostics']:
+                    'refs/heads/feat/hosted-host-test-diagnostics',
+                    'refs/heads/feat/hosted-journey-registration']:
             for actor in ['65671483', '320458784']:
                 watchdog.admit({**environment, 'GITHUB_REF': ref, 'GITHUB_ACTOR_ID': actor}, 'a' * 40)
         for ref in ['refs/heads/feature', 'refs/tags/main', 'refs/pull/1220/merge']:
