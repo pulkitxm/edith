@@ -16,7 +16,7 @@ final class HostedManagedApprovalProbe: NSObject, NSApplicationDelegate {
         guard data.count <= 16_384 else { throw ProbeContractError.invalidFixture }
         let fixture = try JSONDecoder().decode(ProbeFixture.self, from: data)
         try fixture.validate(
-            home: FileManager.default.homeDirectoryForCurrentUser,
+            home: ProbeRunner.accountHome(),
             environment: ProcessInfo.processInfo.environment)
         guard directory.path == fixture.directory,
             directory.resolvingSymlinksInPath().path == directory.path,

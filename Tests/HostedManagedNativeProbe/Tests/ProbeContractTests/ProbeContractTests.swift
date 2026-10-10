@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import ProbeContract
 import Testing
@@ -27,6 +28,50 @@ private func fixture(_ changes: [String: Any] = [:]) throws -> ProbeFixture {
 
 @Test func exactOwnedUUIDFixtureIsAdmitted() throws {
     try fixture().validate(home: URL(fileURLWithPath: "/synthetic/home"), environment: environment)
+}
+
+@Test func sandboxContainerCannotReplaceAccountHome() throws {
+    let selected = try fixture()
+    let account = URL(fileURLWithPath: "/synthetic/home")
+    let container = account.appendingPathComponent(
+        "Library/Containers/com.pulkit.edith.tests.hosted-managed-ui.xctrunner/Data")
+    #expect(throws: ProbeContractError.invalidFixtureField("directoryOutsideAccountHome")) {
+        try selected.validate(home: container, environment: environment)
+    }
+    try selected.validate(home: account, environment: environment)
+    #expect(throws: ProbeContractError.invalidFixtureField("directoryOutsideAccountHome")) {
+        try selected.validate(
+            home: URL(fileURLWithPath: "/synthetic/other"), environment: environment)
+    }
+}
+
+@Test func accountHomeResolvesCurrentAccountWithoutEnvironmentMutation() throws {
+    let home = try ProbeRunner.accountHome()
+    let account = try #require(getpwuid(getuid()))
+    #expect(home.path == String(cString: account.pointee.pw_dir))
+    #expect(home.path.hasPrefix("/"))
+    #expect(home.standardizedFileURL.path == home.path)
+}
+
+@Test func hostedProducerNestedCalendarShapeIsAdmitted() throws {
+    let uuid = "01873b63-4a37-46d7-95fc-5de23a79afca"
+    let directory = "/synthetic/runner/Applications/Edith Remote Fixture Hosted " + uuid
+    let carrier =
+        directory + "/support/Edith Tests/remote-" + uuid
+        + "/Extensions/calendar/edith-host-2/arm64/1.0.0/calendar/ExtensionCarrier.app"
+    let selected = try fixture([
+        "identifier": "com.pulkit.edith.tests.remote-" + uuid, "directory": directory,
+        "app": directory + "/Host.app", "executable": directory + "/Host.app/Contents/MacOS/Edith",
+        "carrier": carrier, "worker": carrier + "/Contents/Extensions/ExtensionWorker.appex",
+    ])
+    try selected.validate(home: URL(fileURLWithPath: "/synthetic/runner"), environment: environment)
+    #expect(
+        selected.workerIdentifier == "com.pulkit.edith.tests.remote-" + uuid
+            + ".extension.calendar.worker")
+    #expect(throws: ProbeContractError.invalidFixtureField("nestedRolePaths")) {
+        try fixture(["carrier": directory + "/ExtensionCarrier.app"]).validate(
+            home: URL(fileURLWithPath: "/synthetic/home"), environment: environment)
+    }
 }
 
 @Test(arguments: [

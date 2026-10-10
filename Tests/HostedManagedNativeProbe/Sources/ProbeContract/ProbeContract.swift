@@ -1,12 +1,34 @@
+import Darwin
 import Foundation
 
 public enum ProbeContractError: Error, Equatable {
     case untrustedRunner
     case invalidIdentity
     case invalidFixture
+    case invalidFixtureField(String)
     case ambiguousControl
     case unsupportedControl
     case incompleteProof
+}
+
+public enum ProbeRunner {
+    public static func accountHome() throws -> URL {
+        var record = passwd()
+        var result: UnsafeMutablePointer<passwd>?
+        var buffer = [CChar](repeating: 0, count: 16_384)
+        let home = try buffer.withUnsafeMutableBufferPointer {
+            let status = getpwuid_r(getuid(), &record, $0.baseAddress, $0.count, &result)
+            guard status == 0, result != nil, record.pw_uid == getuid(), let path = record.pw_dir
+            else {
+                throw ProbeContractError.invalidFixtureField("accountHome")
+            }
+            return String(cString: path)
+        }
+        guard home.hasPrefix("/"), home.utf8.count <= 4096,
+            URL(fileURLWithPath: home).standardizedFileURL.path == home
+        else { throw ProbeContractError.invalidFixtureField("accountHome") }
+        return URL(fileURLWithPath: home)
+    }
 }
 
 public struct ProbeFixture: Codable, Sendable {
@@ -34,21 +56,24 @@ public struct ProbeFixture: Codable, Sendable {
             UUID(uuidString: suffix)?.uuidString.lowercased() == suffix
         else { throw ProbeContractError.invalidIdentity }
         let base = home.appendingPathComponent("Applications").path + "/Edith Remote Fixture "
-        guard directory.hasPrefix(base), directory.count > base.count,
-            extensionID == "calendar", backgroundOnly,
+        guard directory.hasPrefix(base), directory.count > base.count else {
+            throw ProbeContractError.invalidFixtureField("directoryOutsideAccountHome")
+        }
+        guard extensionID == "calendar", backgroundOnly,
             version.range(of: #"^\d{1,8}\.\d{1,8}\.\d{1,8}$"#, options: .regularExpression) != nil,
             hostABI.range(of: #"^[A-Za-z0-9.-]{1,100}$"#, options: .regularExpression) != nil,
-            hostExecutableSHA256.range(of: #"^[a-f0-9]{64}$"#, options: .regularExpression) != nil,
-            app == directory + "/Host.app", executable == app + "/Contents/MacOS/Edith",
+            hostExecutableSHA256.range(of: #"^[a-f0-9]{64}$"#, options: .regularExpression) != nil
+        else { throw ProbeContractError.invalidFixtureField("metadata") }
+        guard app == directory + "/Host.app", executable == app + "/Contents/MacOS/Edith",
             carrier == directory + "/support/Edith Tests/remote-" + suffix
                 + "/Extensions/calendar/" + hostABI + "/arm64/" + version
                 + "/calendar/ExtensionCarrier.app",
             worker == carrier + "/Contents/Extensions/ExtensionWorker.appex"
-        else { throw ProbeContractError.invalidFixture }
+        else { throw ProbeContractError.invalidFixtureField("nestedRolePaths") }
         for path in [directory, app, executable, carrier, worker] {
             guard !path.utf8.contains(0), !path.contains("\n"), path.utf8.count <= 4096,
                 URL(fileURLWithPath: path).standardizedFileURL.path == path
-            else { throw ProbeContractError.invalidFixture }
+            else { throw ProbeContractError.invalidFixtureField("noncanonicalPath") }
         }
     }
 }

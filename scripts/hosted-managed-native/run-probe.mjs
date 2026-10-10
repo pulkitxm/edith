@@ -108,20 +108,36 @@ try {
     ],
     { stdio: "inherit", timeout: 300_000 },
   );
-  result = JSON.parse(
-    await readFile(join(directory, "hosted-probe-result.json"), "utf8"),
+  const identityData = await readFile(join(directory, "public-identity.json"));
+  assert(identityData.byteLength <= 16_384);
+  const identity = JSON.parse(identityData.toString("utf8"));
+  assert.equal(identity.publicDiscovery, true);
+  assert.equal(
+    identity.workerIdentifier,
+    `${identifier}.extension.calendar.worker`,
   );
-  assert.equal(result.outcome, "passed");
-  assert.equal(result.hostIdentifier, identifier);
-  assert.equal(result.publicBrowserApproval, true);
-  assert.equal(result.publicIdentityDiscovered, true);
-  assert.equal(result.managedNativeViewValidated, true);
-  const proof = JSON.parse(
-    await readFile(join(directory, "result-managed-shipping.json"), "utf8"),
+  assert.equal(identity.extensionPointIdentifier, `${identifier}.ExtensionUI`);
+  execFileSync(
+    process.execPath,
+    ["scripts/test-managed-shipping-ui.mjs", directory],
+    { cwd: root, stdio: "inherit", timeout: 120_000 },
   );
+  const proofData = await readFile(
+    join(directory, "result-managed-shipping.json"),
+  );
+  assert(proofData.byteLength <= 16_384);
+  const proof = JSON.parse(proofData.toString("utf8"));
   validateManagedNativeProof(proof, package_);
   result = {
-    ...result,
+    outcome: "passed",
+    publicBrowserApproval: true,
+    publicIdentityDiscovered: true,
+    managedNativeViewValidated: true,
+    extensionID: fixture.extensionID,
+    hostIdentifier: identifier,
+    version: fixture.version,
+    installerUpdateRemovalValidated: false,
+    visibleOriginalUXValidated: false,
     sourceCommit: receipt.sourceCommit,
     fixtureExecutableSHA256: fixture.hostExecutableSHA256,
     archiveSHA256: package_.sha256,

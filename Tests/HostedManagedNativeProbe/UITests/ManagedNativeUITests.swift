@@ -11,7 +11,7 @@ final class ManagedNativeUITests: XCTestCase {
         let fixture = try JSONDecoder().decode(
             ProbeFixture.self, from: Data(contentsOf: root.appendingPathComponent("fixture.json")))
         try fixture.validate(
-            home: FileManager.default.homeDirectoryForCurrentUser, environment: environment)
+            home: ProbeRunner.accountHome(), environment: environment)
         let application = XCUIApplication(url: URL(fileURLWithPath: fixture.app))
         application.launchArguments = ["--extension-hosted-approval-probe", directory]
         application.launchEnvironment = environment.filter {
@@ -52,37 +52,7 @@ final class ManagedNativeUITests: XCTestCase {
         XCTAssertEqual(
             identity["extensionPointIdentifier"] as? String, fixture.identifier + ".ExtensionUI")
         application.terminate()
-        let command = Process()
-        command.executableURL = URL(fileURLWithPath: try XCTUnwrap(environment["EDITH_PROBE_BUN"]))
-        command.arguments = ["scripts/test-managed-shipping-ui.mjs", directory]
-        command.currentDirectoryURL = URL(
-            fileURLWithPath: try XCTUnwrap(environment["EDITH_PROBE_ROOT"]))
-        command.environment = environment
-        let logURL = root.appendingPathComponent("managed-view.log")
-        FileManager.default.createFile(atPath: logURL.path, contents: nil)
-        let log = try FileHandle(forWritingTo: logURL)
-        defer { try? log.close() }
-        command.standardOutput = log
-        command.standardError = log
-        try command.run()
-        defer { if command.isRunning { command.terminate() } }
-        XCTAssertTrue(
-            wait(110) { !command.isRunning },
-            "Actual managed view did not finish within its deadline")
-        XCTAssertEqual(
-            command.terminationStatus, 0, "Actual managed fixture failed; inspect managed-view.log")
-        let proof = try Data(
-            contentsOf: root.appendingPathComponent("result-managed-shipping.json"))
-        try ProbeApproval.validateManagedProof(proof, fixture: fixture)
-        try JSONSerialization.data(
-            withJSONObject: [
-                "outcome": "passed", "publicBrowserApproval": true,
-                "publicIdentityDiscovered": true,
-                "managedNativeViewValidated": true, "extensionID": fixture.extensionID,
-                "hostIdentifier": fixture.identifier, "version": fixture.version,
-                "installerUpdateRemovalValidated": false, "visibleOriginalUXValidated": false,
-            ], options: [.sortedKeys]
-        ).write(to: root.appendingPathComponent("hosted-probe-result.json"), options: .atomic)
+
     }
 
     private func exactControl(scope: XCUIElement, label: String) throws -> XCUIElement {

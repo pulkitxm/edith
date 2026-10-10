@@ -24,6 +24,11 @@ identity discovery for the exact UUID worker, followed by the existing managed
 view smoke with authenticated readonly connection, fresh view generations,
 last-close exit, both-role disable, released leases and zero owned processes.
 
+The sandboxed XCTest runner validates the real account home through public POSIX
+account lookup. It reads the fixture and drives only public approval. After
+XCTest succeeds, the hosted launcher runs and validates the managed view smoke
+outside the XCTest sandbox without changing its entitlements.
+
 The approval window is visible only on the disposable hosted runner. The
 managed smoke uses an unshown window. Neither offscreen attachment nor public
 approval proves visible original layout, keyboard behavior or feature parity.
