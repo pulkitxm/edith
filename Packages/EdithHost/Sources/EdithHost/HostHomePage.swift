@@ -9,6 +9,7 @@ struct HostHomePage: View {
     let marketplace: HostMarketplace
     let customize: () -> Void
     let extensions: () -> Void
+    var openExtension: ((String) -> Void)? = nil
     @Environment(\.compactLayout) private var compact
 
     @State private var editing = false
@@ -67,7 +68,9 @@ struct HostHomePage: View {
                         Button("Open Extensions", action: extensions)
                     }
                 } else {
-                    HostSurfaceCard(marketplace: marketplace, target: .home, tile: tile)
+                    HostSurfaceCard(
+                        marketplace: marketplace, target: .home, tile: tile,
+                        openExtension: openExtension)
                 }
             }
             if layout.visible.isEmpty, !editing {
@@ -192,6 +195,7 @@ struct HostSurfaceCard: View {
     let marketplace: HostMarketplace
     let target: SurfaceTarget
     let tile: SurfaceTile
+    var openExtension: ((String) -> Void)? = nil
     @Environment(\.surfaceFillHeight) private var fillHeight
     @Environment(\.compactLayout) private var compact
 
@@ -214,7 +218,8 @@ struct HostSurfaceCard: View {
                 ForEach(providers) { provider in
                     HostSurfaceProviderCard(
                         marketplace: marketplace, provider: provider,
-                        target: target, tile: tile, showProvider: providers.count > 1)
+                        target: target, tile: tile, showProvider: providers.count > 1,
+                        openExtension: openExtension)
                 }
             }
         }
@@ -238,6 +243,7 @@ private struct HostSurfaceProviderCard: View {
     let target: SurfaceTarget
     let tile: SurfaceTile
     let showProvider: Bool
+    var openExtension: ((String) -> Void)? = nil
     @State private var snapshot: SurfaceSnapshot?
     @State private var load = ContentLoad()
     @State private var retry = 0
@@ -267,8 +273,10 @@ private struct HostSurfaceProviderCard: View {
                         Image(systemName: "arrow.clockwise")
                     }
                     .accessibilityLabel("Refresh " + provider.title)
-                    Button("Open") { Task { await marketplace.show(id: provider.id) } }
-                        .accessibilityLabel("Open " + provider.title)
+                    if let openExtension {
+                        Button("Open") { openExtension(provider.id) }
+                            .accessibilityLabel("Open " + provider.title)
+                    }
                 }
             }.buttonStyle(.edith(.borderless))
             if hidden {

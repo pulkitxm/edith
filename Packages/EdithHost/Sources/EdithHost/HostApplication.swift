@@ -9,6 +9,8 @@ struct HostApplication: App {
     @NSApplicationDelegateAdaptor(HostApplicationDelegate.self) private var delegate
     @State private var marketplace: HostMarketplace?
     @State private var cliServer: HostCLIServer?
+    @State private var coreServices: HostCoreServices?
+    @Environment(\.openWindow) private var openWindow
     @State private var startupError = false
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var theme =
         "accent"
@@ -21,7 +23,12 @@ struct HostApplication: App {
             GeometryReader { geometry in
                 Group {
                     if let marketplace {
-                        HostWorkspace(marketplace: marketplace, updater: updater)
+                        HostWorkspace(
+                            marketplace: marketplace, updater: updater,
+                            panelShortcutChanged: { coreServices?.panelShortcutChanged() },
+                            additionalSettings: { coreServices?.settings($0) },
+                            coreOnline: coreServices?.online ?? false,
+                            coreSummary: coreServices?.activityLabel ?? "Starting")
                     } else if startupError {
                         ContentUnavailableView(
                             "Edith could not start", systemImage: "exclamationmark.triangle")
@@ -57,11 +64,17 @@ struct HostApplication: App {
                         try control.start()
                         cliServer = control
                         marketplace = loaded
+                        delegate.openMainWindow = { openWindow(id: "main") }
+                        let services = try HostCoreServices(
+                            identity: identity, marketplace: loaded,
+                            togglePanel: { delegate.showMainWindow() })
+                        coreServices = services
                         delegate.shutdown = {
                             let ready = await loaded.sessions.shutdown()
-                            if ready { control.shutdown() }
+                            if ready { await services.shutdown(); control.shutdown() }
                             return ready
                         }
+                        await services.start()
                         await loaded.loadCachedCatalog()
                         await loaded.restoreEnabledExtensions()
                         await loaded.updateInstalledIfDue()

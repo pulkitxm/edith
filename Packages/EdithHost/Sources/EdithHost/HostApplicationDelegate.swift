@@ -3,7 +3,22 @@ import AppKit
 @MainActor
 final class HostApplicationDelegate: NSObject, NSApplicationDelegate {
     var shutdown: (@MainActor () async -> Bool)?
+    var openMainWindow: (@MainActor () -> Void)?
+    var activate: @MainActor () -> Void = { NSApp.activate(ignoringOtherApps: true) }
+    var mainWindow: @MainActor () -> NSWindow? = {
+        NSApp.windows.first { $0.identifier?.rawValue == "EdithMainWindow" }
+    }
     private var terminating = false
+
+    func showMainWindow() {
+        if let window = mainWindow() {
+            if window.isMiniaturized { window.deminiaturize(nil) }
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            openMainWindow?()
+        }
+        activate()
+    }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !terminating else { return .terminateLater }
