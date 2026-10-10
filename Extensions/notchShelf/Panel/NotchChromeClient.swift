@@ -102,8 +102,18 @@ import Observation
             next.panel.contractVersion == 1,
             next.activeVersions["notchShelf"] == next.panel.version,
             next.panel.shapeWidth.isFinite, next.panel.shapeHeight.isFinite,
-            (1...min(1200, next.display.width - 48)).contains(next.panel.shapeWidth),
-            (1...min(1024, next.display.height - 48)).contains(next.panel.shapeHeight),
+            (1...(next.panel.activeTab == "browser"
+                ? next.display.width - 48 : min(1200, next.display.width - 48))).contains(
+                    next.panel.shapeWidth),
+            (1...(next.panel.activeTab == "browser"
+                ? next.display.height - 12 : min(1024, next.display.height - 48))).contains(
+                    next.panel.shapeHeight),
+            next.panel.capacityWidth.map({
+                $0.isFinite && $0 >= next.panel.shapeWidth && $0 <= next.display.width - 48
+            }) ?? true,
+            next.panel.capacityHeight.map({
+                $0.isFinite && $0 >= next.panel.shapeHeight && $0 <= next.display.height - 12
+            }) ?? true,
             next.items.count <= 512, Set(next.items.map(\.id)).count == next.items.count,
             next.panel.slots.count <= 32,
             Set(next.panel.slots.map(\.id)).count == next.panel.slots.count,

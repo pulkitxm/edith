@@ -232,3 +232,9 @@ struct NotchPanelTransferAcknowledgement: Codable, Sendable {
     let opened: Bool
     let error: String?
 }
+
+struct NotchPanelSceneStop: Codable, Sendable {
+    let identity: NotchPanelIdentity
+    let displayID: UInt32
+    let presentationID: UUID
+}

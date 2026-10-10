@@ -20,6 +20,37 @@ final class ExtensionRuntime: NSObject {
     private var panelEngine: NotchPanelEngine?
     private let cliStreams = try! ExtensionCLIStreams(owner: "notchShelf")
 
+    private let contextSource: @MainActor () -> SurfaceHostContext?
+    private let connectedDisplays: @MainActor () -> [UInt32: CGSize]
+    private let createController:
+        @MainActor (SurfaceHostContext, [NotchPanelDisplay]) -> NotchShelfController
+
+    init(
+        contextSource: @escaping @MainActor () -> SurfaceHostContext? = {
+            SurfaceHostContext.current
+        },
+        connectedDisplays: @escaping @MainActor () -> [UInt32: CGSize] = {
+            Dictionary(
+                uniqueKeysWithValues: NSScreen.screens.compactMap { screen in
+                    guard
+                        let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+                            as? UInt32
+                    else { return nil }
+                    return (id, screen.frame.size)
+                })
+        },
+        createController:
+            @escaping @MainActor (SurfaceHostContext, [NotchPanelDisplay]) -> NotchShelfController =
+            {
+                NotchShelfController(context: $0, hostDisplays: $1)
+            }
+    ) {
+        self.contextSource = contextSource
+        self.connectedDisplays = connectedDisplays
+        self.createController = createController
+        super.init()
+    }
+
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self else { throw ExtensionPeerError.unavailable }
@@ -61,7 +92,7 @@ final class ExtensionRuntime: NSObject {
     private func executePanel(_ command: String, payload: Data) async throws -> Data {
         guard Bundle.main.bundleURL.pathExtension != "appex",
             payload.count <= NotchPanelEngine.maximumBytes,
-            let context = SurfaceHostContext.current
+            let context = contextSource()
         else { throw ExtensionPeerError.invalidRequest }
         let decoder = JSONDecoder()
         let encoder = JSONEncoder()
@@ -73,16 +104,7 @@ final class ExtensionRuntime: NSObject {
             guard controller == nil else { throw ExtensionPeerError.invalidRequest }
             let engine = NotchPanelEngine(
                 context: context,
-                connectedDisplays: {
-                    Dictionary(
-                        uniqueKeysWithValues: NSScreen.screens.compactMap { screen in
-                            guard
-                                let id = screen.deviceDescription[
-                                    NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32
-                            else { return nil }
-                            return (id, screen.frame.size)
-                        })
-                },
+                connectedDisplays: connectedDisplays,
                 invalidate: { presentation in
                     DistributedNotificationCenter.default().postNotificationName(
                         Notification.Name(
@@ -97,6 +119,8 @@ final class ExtensionRuntime: NSObject {
         }
         guard let engine = panelEngine else { throw ExtensionPeerError.unavailable }
         switch command {
+        case "notch.panel.scene.stop":
+            try engine.stopScene(decoder.decode(NotchPanelSceneStop.self, from: payload))
         case "notch.panel.wait":
             return try encoder.encode(
                 await engine.wait(decoder.decode(NotchPanelWait.self, from: payload)))
@@ -156,8 +180,7 @@ final class ExtensionRuntime: NSObject {
         guard startRequested, controller == nil, let engine = panelEngine, engine.attached else {
             return
         }
-        let owned = NotchShelfController(
-            context: context, hostDisplays: Array(engine.displays.values))
+        let owned = createController(context, Array(engine.displays.values))
         controller = owned
         engine.bind(owned)
         NotchPresenterState.shared.privacy = owned.privacy
@@ -249,7 +272,7 @@ final class ExtensionRuntime: NSObject {
             guard Bundle.main.bundleURL.pathExtension != "appex",
                 let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
-                let context = SurfaceHostContext.current
+                let context = contextSource()
             else { return ["ok": false] as NSDictionary }
             startRequested = true
             startAttachedController(context)

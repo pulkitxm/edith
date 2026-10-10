@@ -25,6 +25,7 @@ import Foundation
     private let invalidate: (UUID) -> Void
     private let cameraFactory: @MainActor () -> NotchCameraEngine
     private(set) var cameraEngine: NotchCameraEngine?
+    private var cameraPresentation: UUID?
 
     init(
         context: SurfaceHostContext, connectedDisplays: @escaping () -> [UInt32: CGSize],
@@ -79,7 +80,7 @@ import Foundation
     func changed() {
         guard attached, revision < UInt64.max else { return }
         revision += 1
-        if controller?.activeTab != .camera || controller?.isExpanded != true {
+        if !displays.keys.contains(where: { cameraAllowed(on: $0) }) {
             cameraEngine?.stopCapture()
         }
         pruneSlots()
@@ -481,17 +482,18 @@ import Foundation
             throw ExtensionPeerError.invalidRequest
         }
         let point = try dropPoint(x: request.x, y: request.y)
-        promises.remove(request.id)
         if let url = request.fileURL, context.activeVersions["notchShelf"] == version {
             guard url.isFileURL, url.path.utf8.count <= 4096 else {
                 throw ExtensionPeerError.invalidRequest
             }
+            promises.remove(request.id)
             controller.store.adoptWhenAvailable(fileAt: url, id: request.id) {
                 [weak controller] item in
                 if let item, let point { controller?.store.setPosition(point, for: item) }
                 controller?.synchronizeShelfItems()
             }
         } else {
+            promises.remove(request.id)
             controller.store.discardPromiseDestination(id: request.id)
         }
         changed()
@@ -506,19 +508,20 @@ import Foundation
     }
 
     func camera(_ request: NotchCameraRequest) async throws -> Data {
+        if request.operation == .stop {
+            try validateOwnership(
+                request.identity, display: request.displayID, presentation: request.presentationID)
+            if cameraPresentation == request.presentationID { cameraEngine?.stopCapture() }
+            return Data("{}".utf8)
+        }
         try validate(
             request.identity, display: request.displayID, presentation: request.presentationID)
-        if request.operation == .stop { cameraEngine?.stopCapture(); return Data("{}".utf8) }
-        guard controller?.activeTab == .camera,
-            controller?.isExpanded(on: request.displayID) == true,
-            (try state(for: request.displayID)).visible
-        else { throw ExtensionPeerError.unavailable }
-        let privacy = controller?.privacy.values ?? [:]
-        guard privacy["active"] != "1" || privacy["blurCamera"] == "0" else {
+        guard cameraAllowed(on: request.displayID) else {
             cameraEngine?.stopCapture(); throw ExtensionPeerError.unavailable
         }
         if cameraEngine == nil { cameraEngine = cameraFactory() }
         guard let cameraEngine else { throw ExtensionPeerError.unavailable }
+        cameraPresentation = request.presentationID
         let namespace = context.sharedState.namespace
         cameraEngine.changed = {
             DistributedNotificationCenter.default().postNotificationName(
@@ -526,9 +529,30 @@ import Foundation
                 object: nil, userInfo: nil, deliverImmediately: true)
         }
         let data = try await cameraEngine.execute(request)
+        guard cameraAllowed(on: request.displayID) else {
+            cameraEngine.stopCapture(); throw ExtensionPeerError.unavailable
+        }
         try validate(
             request.identity, display: request.displayID, presentation: request.presentationID)
         return data
+    }
+
+    private func cameraAllowed(on displayID: UInt32) -> Bool {
+        let privacy = controller?.privacy.values ?? [:]
+        return context.activeVersions["notchShelf"] == version
+            && controller?.activeTab == .camera
+            && controller?.isExpanded(on: displayID) == true
+            && (try? state(for: displayID).visible) == true
+            && (privacy["active"] != "1" || privacy["blurCamera"] == "0")
+    }
+
+    func stopScene(_ request: NotchPanelSceneStop) throws {
+        try validateOwnership(
+            request.identity, display: request.displayID, presentation: request.presentationID)
+        if cameraPresentation == request.presentationID {
+            cameraEngine?.stopCapture(); cameraPresentation = nil
+        }
+        controller?.browserEngine?.release(owner: request.presentationID)
     }
 
     func browser(_ request: NotchBrowserRemoteRequest) async throws -> Data {
@@ -601,8 +625,8 @@ import Foundation
                 max(1, size.height), browser ? display.height - 12 : min(1024, display.height - 48)),
             visible: visible, acceptsPointer: accepts,
             acceptsKeyFocus: expanded && controller?.activeTab == .browser, slots: [],
-            capacityWidth: max(size.width, capacity.width),
-            capacityHeight: max(size.height, capacity.height))
+            capacityWidth: min(display.width - 48, max(size.width, capacity.width)),
+            capacityHeight: min(display.height - 12, max(size.height, capacity.height)))
         result.slots =
             visible
             ? (slots[id] ?? []).filter {
