@@ -112,3 +112,46 @@ test("managed request excludes ordinary builds and other hosted fixtures rather 
   expect(change).toContain("inputs.hosted_managed_artifacts_run != ''");
   expect(change).toContain("inputs.hosted_managed_artifacts_sha != ''");
 });
+
+test("managed chunks retain every gate and only always aggregate can claim complete39", () => {
+  expect(workflow).toContain("fail-fast: false");
+  expect(workflow).toContain("max-parallel: 3");
+  expect(workflow).toContain("chunk: [0, 1, 2]");
+  expect(workflow).toContain('--chunk "$MANAGED_CHUNK"');
+  expect(workflow).toContain(
+    `hosted-managed-original-view-chunk-\${{ matrix.chunk }}`,
+  );
+  expect(workflow).toContain(
+    "path: local/hosted-managed-execution/result.json",
+  );
+  const aggregate = workflow.split("  aggregate:\n")[1];
+  expect(aggregate).toContain("needs: original-views");
+  const expression = aggregate.match(/ {4}if: ([^\n]+)/)[1];
+  expect(expression.startsWith("always() && ")).toBe(true);
+  const allows = new Function(
+    "github",
+    "inputs",
+    "always",
+    `return Boolean(${expression})`,
+  );
+  expect(allows(github, inputs, () => true)).toBe(true);
+  for (const changed of [
+    { actor_id: "foreign" },
+    { repository: "foreign/repository" },
+    { event_name: "pull_request" },
+    { ref: "refs/heads/other" },
+    { sha: "c".repeat(40) },
+  ])
+    expect(allows({ ...github, ...changed }, inputs, () => true)).toBe(false);
+  for (const changed of [
+    { release: true },
+    { rebuild: "all" },
+    { expected_sha: "c".repeat(40) },
+    { artifact_run: "" },
+    { artifact_source: "" },
+  ])
+    expect(allows(github, { ...inputs, ...changed }, () => true)).toBe(false);
+  expect(aggregate).toContain("hosted-managed-views/aggregate-managed.mjs");
+  expect(aggregate).not.toContain("MACOS_CERT");
+  expect(aggregate).not.toContain("run-managed.mjs");
+});

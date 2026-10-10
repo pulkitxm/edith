@@ -31,10 +31,30 @@ test("hosted execution admits only reviewed exact nonpublishing source and close
       "12345",
       "--artifact-source",
       source,
+      "--chunk",
+      "0",
     ]),
-  ).toEqual({ runID: 12345, artifactSource: source });
+  ).toEqual({ runID: 12345, artifactSource: source, chunk: 0 });
   for (const args of [
     [],
+    ["--artifact-run", "123", "--artifact-source", source],
+    ...["-1", "3", "0.5", "00", "unknown"].map((chunk) => [
+      "--artifact-run",
+      "123",
+      "--artifact-source",
+      source,
+      "--chunk",
+      chunk,
+    ]),
+    [
+      "--artifact-run",
+      "123",
+      "--artifact-source",
+      source,
+      "--chunk",
+      "0",
+      "--skip",
+    ],
     ["--artifact-run", "../123", "--artifact-source", source],
     ["--artifact-source", source, "--artifact-run", "123"],
     ["--artifact-run", "123", "--artifact-source", "bad"],

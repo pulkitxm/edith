@@ -84,6 +84,7 @@ export function validateManagedChunkBindings(bindings) {
       "fingerprintMapSHA256",
       "frozenHostArtifactSHA256",
       "frozenHostExecutableSHA256",
+      "originalArtifactSetSHA256",
     ].sort(),
   );
   for (const key of ["fixtureSourceCommit", "originalSourceCommit"])
@@ -95,6 +96,7 @@ export function validateManagedChunkBindings(bindings) {
     "fingerprintMapSHA256",
     "frozenHostArtifactSHA256",
     "frozenHostExecutableSHA256",
+    "originalArtifactSetSHA256",
   ])
     assert.match(bindings[key], /^[a-f0-9]{64}$/);
 }

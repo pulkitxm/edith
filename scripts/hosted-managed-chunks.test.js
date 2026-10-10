@@ -19,6 +19,7 @@ const bindings = {
   fingerprintMapSHA256: "d".repeat(64),
   frozenHostArtifactSHA256: "e".repeat(64),
   frozenHostExecutableSHA256: "f".repeat(64),
+  originalArtifactSetSHA256: "0".repeat(64),
 };
 function rows(chunk) {
   const owners = managedChunkOwners(review.owners, chunk);

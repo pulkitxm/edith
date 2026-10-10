@@ -30,6 +30,12 @@ concurrency:
   cancel-in-progress: false
 jobs:
   original-views:
+    name: "managed views (${{ matrix.chunk }})"
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        chunk: [0, 1, 2]
     if: github.repository == 'pulkitxm/edith' && github.event_name == 'workflow_dispatch' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-managed-view-execution' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.expected_sha == github.sha && !inputs.release && inputs.rebuild == '' && inputs.artifact_run != '' && inputs.artifact_source != ''
     runs-on: macos-26
     timeout-minutes: 360
@@ -40,6 +46,7 @@ jobs:
       PUBLISH: "${{ inputs.release }}"
       REBUILD: "${{ inputs.rebuild }}"
       ARTIFACT_RUN: "${{ inputs.artifact_run }}"
+      MANAGED_CHUNK: "${{ matrix.chunk }}"
       ARTIFACT_SOURCE: "${{ inputs.artifact_source }}"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -95,16 +102,23 @@ jobs:
       - name: Verify original package provenance and managed ready, close, reopen and disable
         env:
           GITHUB_TOKEN: "${{ github.token }}"
-        run: bun scripts/hosted-managed-views/run-managed.mjs --artifact-run "$ARTIFACT_RUN" --artifact-source "$ARTIFACT_SOURCE"
+        run: bun scripts/hosted-managed-views/run-managed.mjs --artifact-run "$ARTIFACT_RUN" --artifact-source "$ARTIFACT_SOURCE" --chunk "$MANAGED_CHUNK"
       - name: Retain only bounded synthetic smoke outcomes
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: hosted-managed-original-view-outcomes
+          name: "hosted-managed-original-view-chunk-${{ matrix.chunk }}"
           retention-days: 3
-          path: |
-            local/hosted-managed-views/host-build-receipt.json
-            local/hosted-managed-execution/result.json
+          path: local/hosted-managed-execution/result.json
+          if-no-files-found: error
+      - name: Retain the source-bound fixture Host build receipt
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: "hosted-managed-fixture-host-chunk-${{ matrix.chunk }}"
+          retention-days: 3
+          path: local/hosted-managed-build/host-build-receipt.json
+          if-no-files-found: warn
       - name: Remove the owned disposable signing keychain
         if: always()
         run: |
@@ -113,3 +127,38 @@ jobs:
           if [ -e "$keychain" ]; then
             security delete-keychain "$keychain"
           fi
+
+  aggregate:
+    needs: original-views
+    if: always() && github.repository == 'pulkitxm/edith' && github.event_name == 'workflow_dispatch' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-managed-view-execution' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.expected_sha == github.sha && !inputs.release && inputs.rebuild == '' && inputs.artifact_run != '' && inputs.artifact_source != ''
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      EDITH_HOSTED_MANAGED_VIEWS: "1"
+      EXPECTED_SOURCE_SHA: "${{ inputs.expected_sha }}"
+      PUBLISH: "${{ inputs.release }}"
+      REBUILD: "${{ inputs.rebuild }}"
+      ARTIFACT_RUN: "${{ inputs.artifact_run }}"
+      ARTIFACT_SOURCE: "${{ inputs.artifact_source }}"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: "${{ github.sha }}"
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - name: Require all39 actual original managed views and owned drains
+        env:
+          GITHUB_TOKEN: "${{ github.token }}"
+        run: bun scripts/hosted-managed-views/aggregate-managed.mjs --artifact-run "$ARTIFACT_RUN" --artifact-source "$ARTIFACT_SOURCE"
+      - name: Retain bounded complete aggregate outcome
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hosted-managed-original-view-outcomes
+          retention-days: 3
+          path: local/hosted-managed-aggregate/result.json
+          if-no-files-found: error

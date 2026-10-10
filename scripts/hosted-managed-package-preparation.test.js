@@ -11,6 +11,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  managedNativeBuildSteps,
+  managedNativeTestSteps,
+} from "./hosted-managed-views/native-ci-contract.mjs";
+import {
   downloadCIArtifact,
   prepareCIArtifacts,
   proveFixturePayload,
@@ -43,13 +47,35 @@ function input() {
     fingerprints: Object.fromEntries(
       definitions.map(({ id }) => [id, fingerprint]),
     ),
-    jobs: definitions.map(({ id }, index) => ({
-      id: 1000 + index,
-      name: `build (${id})`,
-      run_id: 123,
-      status: "completed",
-      conclusion: "success",
-    })),
+    jobs: [
+      ...definitions.map(({ id }, index) => ({
+        id: 1000 + index,
+        name: `build (${id})`,
+        run_id: 123,
+        status: "completed",
+        conclusion: "success",
+        steps: managedNativeBuildSteps.map((name) => ({
+          name,
+          status: "completed",
+          conclusion: "success",
+        })),
+      })),
+      ...["plan", "frozen-host", "tests", "publish"].map((name, index) => ({
+        id: 3000 + index,
+        name,
+        run_id: 123,
+        status: "completed",
+        conclusion: name === "publish" ? "skipped" : "success",
+        steps:
+          name === "tests"
+            ? managedNativeTestSteps.map((name) => ({
+                name,
+                status: "completed",
+                conclusion: "success",
+              }))
+            : [],
+      })),
+    ],
     artifacts: definitions.map(({ id }, index) => ({
       id: 2000 + index,
       name: `extension-${id}`,
@@ -167,7 +193,7 @@ describe("closed successful CI39 intake", () => {
       fetch: async (url) => {
         urls.push(url);
         const data = url.includes("/jobs?")
-          ? { total_count: 39, jobs: value.jobs }
+          ? { total_count: value.jobs.length, jobs: value.jobs }
           : url.includes("/artifacts?")
             ? { total_count: 39, artifacts: value.artifacts }
             : value.run;
@@ -421,7 +447,7 @@ describe("atomic complete preparation receipts", () => {
         return new Response(
           JSON.stringify(
             url.includes("/jobs?")
-              ? { total_count: 39, jobs: value.jobs }
+              ? { total_count: value.jobs.length, jobs: value.jobs }
               : url.includes("/artifacts?")
                 ? { total_count: 39, artifacts: value.artifacts }
                 : value.run,
@@ -455,6 +481,40 @@ describe("atomic complete preparation receipts", () => {
       expect(result.originals).toHaveLength(39);
       expect(visited).toHaveLength(39);
       expect(result.packageCodeExecuted).toBe(false);
+      const selected = await prepareCIArtifacts({
+        ...common,
+        chunk: 0,
+        output: join(directory, "chunk"),
+        verifyPackage: async ({ row }) => ({
+          ...receipt(row.extensionID),
+          sourceHostExecutableSHA256: hostSHA256,
+        }),
+      });
+      expect(selected.originals).toHaveLength(13);
+      expect(selected.allOriginalArtifacts).toHaveLength(39);
+      const unselected = value.jobs.find(
+        (job) =>
+          job.name.startsWith("build (") &&
+          !selected.originals.some(
+            ({ extensionID }) => job.name === `build (${extensionID})`,
+          ),
+      );
+      unselected.steps[0].conclusion = "skipped";
+      let unsafeVisits = 0;
+      await expect(
+        prepareCIArtifacts({
+          ...common,
+          chunk: 0,
+          output: join(directory, "unsafe-unselected"),
+          verifyPackage: async () => {
+            unsafeVisits++;
+            return receipt();
+          },
+        }),
+      ).rejects.toThrow();
+      expect(unsafeVisits).toBe(0);
+      unselected.steps[0].conclusion = "success";
+
       expect(
         JSON.parse(
           await readFile(join(directory, "complete/receipt.json"), "utf8"),

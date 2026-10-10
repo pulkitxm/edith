@@ -22,7 +22,7 @@ export function managedAuthenticatedFetch(environment, fetch_) {
   };
 }
 
-export function parseManagedExecutionArguments(args) {
+export function parseManagedArtifactArguments(args) {
   assert.equal(args.length, 4);
   assert.equal(args[0], "--artifact-run");
   assert.equal(args[2], "--artifact-source");
@@ -31,6 +31,16 @@ export function parseManagedExecutionArguments(args) {
   assert(Number.isSafeInteger(runID));
   assert.match(args[3], sha);
   return { runID, artifactSource: args[3] };
+}
+
+export function parseManagedExecutionArguments(args) {
+  assert.equal(args.length, 6);
+  assert.equal(args[4], "--chunk");
+  assert.match(args[5], /^[012]$/);
+  return {
+    ...parseManagedArtifactArguments(args.slice(0, 4)),
+    chunk: Number(args[5]),
+  };
 }
 
 export function admitManagedExecution(environment, sourceCommit) {

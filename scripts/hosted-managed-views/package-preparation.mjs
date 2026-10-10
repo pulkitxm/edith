@@ -14,6 +14,8 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { selectManagedArtifactRows } from "./chunks.mjs";
+import { validateNonpublishingNativeJobs } from "./native-ci-contract.mjs";
 
 const execute = promisify(execFile);
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
@@ -87,6 +89,7 @@ export function validateCIArtifactSet({
   assert.equal(new Set(ids).size, 39);
   assert.deepEqual(Object.keys(fingerprints).sort(), ids);
   assert(jobs.length <= 1000 && artifacts.length <= 1000);
+  validateNonpublishingNativeJobs(jobs, definitions, run.id);
   const rows = [];
   for (const id of ids) {
     assert.match(id, identifier);
@@ -522,6 +525,7 @@ export async function prepareCIArtifacts({
   fetch: fetch_ = fetch,
   verifyPackage,
   signal,
+  chunk,
 }) {
   assert.equal(hostBuildMetadata.sourceCommit, sourceCommit);
   assert.equal(hostBuildMetadata.sourceTreeDirty, false);
@@ -555,7 +559,11 @@ export async function prepareCIArtifacts({
     dirname(fileURLToPath(import.meta.url)),
     "verify-package.py",
   );
-  for (const row of intake.originals) {
+  const selected =
+    chunk === undefined
+      ? intake.originals
+      : selectManagedArtifactRows(intake, definitions, chunk);
+  for (const row of selected) {
     signal?.throwIfAborted();
     const directory = join(resolved, row.extensionID);
     await mkdir(directory, { mode: 0o700 });
@@ -614,6 +622,7 @@ export async function prepareCIArtifacts({
   );
   const result = {
     ...intake,
+    allOriginalArtifacts: intake.originals,
     sourceHostExecutableSHA256: hostSHA256,
     sourceHostBuildMetadata: hostBuildMetadata,
     originals,
