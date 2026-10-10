@@ -103,7 +103,8 @@ final class UsageStatusLineConnection: @unchecked Sendable {
 
     private func withLock<T>(_ body: () throws -> T) throws -> T {
         try FileManager.default.createDirectory(
-            at: marker.deletingLastPathComponent(), withIntermediateDirectories: true)
+            at: marker.deletingLastPathComponent(), withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
         let lock = try UsageDataLock.acquire(at: marker.appendingPathExtension("lock"))
         defer { lock.release() }
         return try body()
