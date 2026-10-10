@@ -377,7 +377,7 @@ struct HostWorkspace: View {
             }
             selection = route.page
         } else {
-            defaults.set(id, forKey: "extensionsExpand")
+            defaults.set(id, forKey: HostMarketplaceKeys.expandedExtension)
             selection = "extensions"
         }
     }

@@ -3,6 +3,10 @@ import EdithExtensionUI
 import EdithHostCore
 import SwiftUI
 
+enum HostMarketplaceKeys {
+    static let expandedExtension = "extensionsExpand"
+}
+
 struct MarketplacePage: View {
     @Bindable var marketplace: HostMarketplace
     var presenter: (any HostExtensionContentPresenting)? = nil
@@ -242,10 +246,11 @@ struct MarketplacePage: View {
 
     private func handleDeepLink(_ proxy: ScrollViewProxy) {
         let defaults = UserDefaults(suiteName: marketplace.identity.defaultsSuite)!
-        guard let id = defaults.string(forKey: "extensionsExpand"),
+        guard let id = defaults.string(forKey: HostMarketplaceKeys.expandedExtension),
             let entry = marketplace.entries.first(where: { $0.id == id })
         else { return }
-        defaults.removeObject(forKey: "extensionsExpand"); search = ""; category = "all"
+        defaults.removeObject(forKey: HostMarketplaceKeys.expandedExtension); search = "";
+        category = "all"
         DispatchQueue.main.async {
             proxy.scrollTo(entry.id, anchor: .center); selected = entry
         }
