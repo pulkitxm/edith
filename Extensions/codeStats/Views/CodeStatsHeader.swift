@@ -24,7 +24,11 @@ struct CodeStatsHeader: View {
                 ) {
                     guard let shareSnapshot else { return }
                     sharePresentation = ExportCardPresentation(
-                        deck: CodeStatsExportDeck(snapshot: shareSnapshot),
+                        deck: CodeStatsExportDeck(
+                            snapshot: shareSnapshot,
+                            delivery: model.remote.map { bridge in
+                                { try await bridge.deliver($0, name: $1, save: $2) }
+                            }),
                         title: "Share code stats")
                 }
                 if model.isRunning {

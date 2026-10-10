@@ -37,8 +37,8 @@ let package = Package(
             path: "seoAudit/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "CodeStatsExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "codeStats", exclude: ["Tests", "Runtime.swift"],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
+            path: "codeStats", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "CodeStatsExtensionTests", dependencies: ["CodeStatsExtension"],

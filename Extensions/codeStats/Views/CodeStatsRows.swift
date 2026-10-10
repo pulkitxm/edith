@@ -4,6 +4,7 @@ import EdithExtensionUI
 import SwiftUI
 
 struct CodeStatsRows: View {
+    var model: CodeStatsModel = .shared
     @AppStorage(AppStorageKeys.CodeStats.folder, store: SharedDefaults.store) private
         var folder = ""
     @AppStorage(AppStorageKeys.CodeStats.scheduleKind, store: SharedDefaults.store) private
@@ -116,7 +117,7 @@ struct CodeStatsRows: View {
             id:
                 "\(folder):\(includeForks):\(includeArchived):\(scheduleKind):\(hour):\(weekday):\(identity.labels)"
         ) {
-            await CodeStatsWorkerOperations.workflow?.settingsChanged()
+            await model.settingsChanged()
         }
         .onDisappear {
             refreshTask?.cancel(); refreshTask = nil
@@ -124,6 +125,10 @@ struct CodeStatsRows: View {
     }
 
     private func toolAvailable(_ name: String) -> Bool {
+        if model.remote != nil {
+            return name == "git"
+                ? model.status?.gitAvailable == true : model.status?.githubAvailable == true
+        }
         if CodeStatsExecutionEnvironment.fixtureHome != nil {
             return name == "git" && FileManager.default.isExecutableFile(atPath: "/usr/bin/git")
         }
@@ -141,6 +146,11 @@ struct CodeStatsRows: View {
         guard CodeStatsExecutionEnvironment.fixtureHome == nil else { return }
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
+            if model.remote != nil {
+                Task {
+                    await model.chooseFolder(url.path); folder = url.path
+                }; return
+            }
             folder = try CodeStatsPreferences.selectFolder(
                 url.path, homeDirectory: CodeStatsExecutionEnvironment.home
             ).path
@@ -151,14 +161,14 @@ struct CodeStatsRows: View {
     }
 
     private func add() {
-        CodeStatsPreferences.addIdentity(newIdentity, in: SharedDefaults.store)
+        model.addIdentity(newIdentity)
         newIdentity = ""
         identity = CodeStatsPreferences.identity(in: SharedDefaults.store)
     }
 
     private func remove(_ label: String) {
         let value = label.hasPrefix("*") ? String(label.dropFirst().dropLast()) : label
-        CodeStatsPreferences.removeIdentity(value, in: SharedDefaults.store)
+        model.removeIdentity(value)
         identity = CodeStatsPreferences.identity(in: SharedDefaults.store)
     }
 
@@ -167,10 +177,7 @@ struct CodeStatsRows: View {
         refreshTask?.cancel()
         refreshTask = Task {
             do {
-                guard let workflow = CodeStatsWorkerOperations.workflow else {
-                    throw ExtensionPeerError.unavailable
-                }
-                _ = try await workflow.start(.manual)
+                await model.start()
                 try Task.checkCancellation()
                 message = "Refreshing in the background."
             } catch {

@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionCommands
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -7,6 +8,8 @@ import SwiftUI
 @MainActor @objc(EdithCodeStatsExtensionRuntime)
 final class ExtensionRuntime: NSObject {
     private var workflow: CodeStatsWorkflow?
+    private var uiModel: CodeStatsModel?
+    private var engineClient: ExtensionEngineClient?
     private var surface: CodeStatsSurface?
     private var operations: CodeStatsCommands?
     private var startup: Task<Void, Never>?
@@ -21,6 +24,14 @@ final class ExtensionRuntime: NSObject {
             guard let self, self.workflow != nil else { throw ExtensionPeerError.unavailable }
             await self.startup?.value
             try Task.checkCancellation()
+            if command == "codeStats.cli" {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                return try JSONEncoder().encode(try await CodeStatsCLIExecution.run(request))
+            }
+            if command.hasPrefix("codeStats.ui."), let workflow = self.workflow {
+                return try await CodeStatsUIBridge.execute(
+                    command, payload: payload, workflow: workflow)
+            }
             if command.hasPrefix("surface."), let surface = self.surface {
                 return try await surface.execute(command, payload: payload)
             }
@@ -60,6 +71,16 @@ final class ExtensionRuntime: NSObject {
                     as? String ?? "",
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
+        case "configureUI":
+            guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "codeStats", let client = configuration.engineClient
+            else { return ["ok": false] as NSDictionary }
+            engineClient = client
+            let bridge = CodeStatsUIBridge(client: client)
+            uiModel = CodeStatsModel(service: bridge.service, remote: bridge)
+        case "stopUI":
+            uiModel?.cancelLoading(); uiModel = nil
+            engineClient?.invalidate(); engineClient = nil
         case "start":
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
@@ -95,12 +116,15 @@ final class ExtensionRuntime: NSObject {
                 }
             }
         case "view":
-            guard workflow != nil else { return ["ok": false] as NSDictionary }
+            guard let model = uiModel else { return ["ok": false] as NSDictionary }
+            let settings = input["location"] as? String == "settings"
             return NSHostingController(
                 rootView: ExtensionPageHost {
-                    CodeStatsWorkerPage().environment(
-                        \.automaticViewActionsEnabled,
-                        CodeStatsExecutionEnvironment.fixtureHome == nil)
+                    if settings {
+                        Form { CodeStatsRows(model: model) }.formStyle(.grouped)
+                    } else {
+                        CodeStatsPage(model: model)
+                    }
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": wakeSchedule()
@@ -120,24 +144,6 @@ final class ExtensionRuntime: NSObject {
             await workflow.settingsChanged()
             guard !Task.isCancelled else { return }
             _ = await workflow.scheduledCheck()
-        }
-    }
-}
-
-private struct CodeStatsWorkerPage: View {
-    @State private var settings = false
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Button("Statistics") { settings = false }
-                Button("Settings") { settings = true }
-                Spacer()
-            }.padding(UIScale.pt(12))
-            if settings {
-                Form { CodeStatsRows() }.formStyle(.grouped)
-            } else {
-                CodeStatsPage(model: CodeStatsModel.shared)
-            }
         }
     }
 }

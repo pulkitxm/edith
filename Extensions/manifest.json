@@ -2295,6 +2295,12 @@
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
+        "Extensions/codeStats/CLI/CLIDestructivePlan.swift",
+        "Extensions/codeStats/CLI/CodeStatsCLIExecution.swift",
+        "Extensions/codeStats/CLI/CodeStatsExportCommand.swift",
+        "Extensions/codeStats/CLI/CodeStatsOriginalCommands.swift",
+        "Extensions/codeStats/CLI/ExportPlan.swift",
+        "Extensions/codeStats/CodeStatsUIBridge.swift",
         "Extensions/codeStats/Models/CodeStatsAttribution.swift",
         "Extensions/codeStats/Models/CodeStatsCommit.swift",
         "Extensions/codeStats/Models/CodeStatsDay.swift",
@@ -2363,7 +2369,7 @@
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "surfaceContractVersion": 1,
     "sameExecutableWorker": true
   },
