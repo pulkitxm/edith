@@ -7,6 +7,7 @@ import SwiftUI
 
 @MainActor
 final class ExtensionRuntime: NSObject {
+    private var stopping = false
     private var store: CalendarStore?
     private var presentation: CalendarPresentationState?
     private var surface: CalendarSurface?
@@ -14,7 +15,21 @@ final class ExtensionRuntime: NSObject {
     private let commands = ExtensionCommandRegistry()
     private var uiPresentations: [UUID: CalendarUIPresentation] = [:]
 
+    override init() { super.init() }
+
+    init(store: CalendarStore, presentation: CalendarPresentationState, uiEngine: CalendarUIEngine)
+    {
+        self.store = store
+        self.presentation = presentation
+        self.uiEngine = uiEngine
+        super.init()
+    }
+
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
+        guard !stopping else {
+            completion(nil, "The Calendar extension is stopping.")
+            return
+        }
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             if command == "calendar.cli.catalog" {
                 guard self?.store != nil, payload == Data("{}".utf8) else {
@@ -47,10 +62,17 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        stopping = true
+        commands.shutdown()
         uiEngine?.shutdown()
         store?.shutdown()
+        CalendarPermission.shutdown()
         Task {
             await commands.shutdownAndWait()
+            await uiEngine?.stopAndWait()
+            await store?.stopAndWait()
+            await CalendarPermission.stopAndWait()
+            presentation?.shutdown()
             completion()
         }
     }
@@ -66,7 +88,8 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard Bundle.main.bundleURL.pathExtension != "appex", uiPresentations.isEmpty,
+            guard !stopping, Bundle.main.bundleURL.pathExtension != "appex",
+                uiPresentations.isEmpty,
                 let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -98,6 +121,7 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": store?.refreshAuthStatus()
         case "stop":
+            stopping = true
             for scene in uiPresentations.values { scene.shutdown() }
             uiPresentations.removeAll()
             commands.shutdown()

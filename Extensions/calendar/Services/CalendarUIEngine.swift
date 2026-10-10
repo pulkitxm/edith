@@ -125,6 +125,11 @@ final class CalendarUIEngine {
         permissionTask?.cancel()
     }
 
+    func stopAndWait() async {
+        shutdown()
+        if let permissionTask { _ = await permissionTask.result }
+    }
+
     private func requestPermission() async throws {
         if let permissionTask {
             try await permissionTask.value

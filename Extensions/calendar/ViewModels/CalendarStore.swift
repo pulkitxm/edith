@@ -23,6 +23,7 @@ public final class CalendarStore: FeatureModule {
     @ObservationIgnored private nonisolated(unsafe) var refreshDebounce: Task<Void, Never>?
     @ObservationIgnored private nonisolated(unsafe) var fetchTask: Task<Void, Never>?
     @ObservationIgnored private nonisolated(unsafe) var snapshotTask: Task<Void, Never>?
+    @ObservationIgnored private nonisolated(unsafe) var ownedTasks: [UUID: Task<Void, Never>] = [:]
 
     public convenience init() {
         self.init(startImmediately: true)
@@ -46,6 +47,7 @@ public final class CalendarStore: FeatureModule {
         refreshDebounce?.cancel()
         fetchTask?.cancel()
         snapshotTask?.cancel()
+        for task in ownedTasks.values { task.cancel() }
         if let changeObserver { NotificationCenter.default.removeObserver(changeObserver) }
         if let wakeObserver { wakeCenter?.removeObserver(wakeObserver) }
     }
@@ -58,7 +60,7 @@ public final class CalendarStore: FeatureModule {
             if authStatus == .fullAccess {
                 refresh()
             } else {
-                fetchTask = Task { [weak self] in await self?.restoreCachedAgenda() }
+                fetchTask = launch { [weak self] in await self?.restoreCachedAgenda() }
             }
         }
         changeObserver = NotificationCenter.default.addObserver(
@@ -77,7 +79,7 @@ public final class CalendarStore: FeatureModule {
     private func scheduleRefresh() {
         guard changeObserver != nil else { return }
         refreshDebounce?.cancel()
-        refreshDebounce = Task { @MainActor [weak self] in
+        refreshDebounce = launch { [weak self] in
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
             guard let self, self.changeObserver != nil else { return }
@@ -94,11 +96,30 @@ public final class CalendarStore: FeatureModule {
         fetchTask = nil
         snapshotTask?.cancel()
         snapshotTask = nil
+        for task in ownedTasks.values { task.cancel() }
         if let changeObserver { NotificationCenter.default.removeObserver(changeObserver) }
         if let wakeObserver { wakeCenter?.removeObserver(wakeObserver) }
         changeObserver = nil
         wakeObserver = nil
         wakeCenter = nil
+    }
+
+    public func stopAndWait() async {
+        shutdown()
+        while !ownedTasks.isEmpty {
+            for task in Array(ownedTasks.values) { await task.value }
+        }
+    }
+
+    private func launch(_ work: @escaping @MainActor () async -> Void) -> Task<Void, Never>? {
+        guard !stopped else { return nil }
+        let id = UUID()
+        let task = Task { [weak self] in
+            defer { self?.ownedTasks.removeValue(forKey: id) }
+            await work()
+        }
+        ownedTasks[id] = task
+        return task
     }
 
     public func refreshAuthStatus() {
@@ -120,7 +141,7 @@ public final class CalendarStore: FeatureModule {
     public func refresh() {
         guard !stopped else { return }
         let request = beginFetch()
-        fetchTask = Task { [weak self] in
+        fetchTask = launch { [weak self] in
             await self?.restoreCachedAgenda()
             guard let self, self.authStatus == .fullAccess || self.fetchOverride != nil else {
                 return
@@ -156,12 +177,19 @@ public final class CalendarStore: FeatureModule {
         guard authStatus == .fullAccess else { return nil }
         let eventStore = Self.eventStore
         return await CalendarEventOperationExecution.events(query) { query in
-            await Task.detached(priority: .userInitiated) {
+            let read = Task.detached(priority: .userInitiated) {
+                guard !Task.isCancelled else { return [CalendarEventPayload]() }
                 let predicate = eventStore.predicateForEvents(
                     withStart: query.start, end: query.end,
                     calendars: eventStore.calendars(for: .event))
+                guard !Task.isCancelled else { return [CalendarEventPayload]() }
                 return eventStore.events(matching: predicate).map(CalendarEventPayload.init(event:))
-            }.value
+            }
+            return await withTaskCancellationHandler {
+                await read.value
+            } onCancel: {
+                read.cancel()
+            }
         }
     }
 
@@ -179,7 +207,7 @@ public final class CalendarStore: FeatureModule {
         let request = beginFetch()
         let baseline = events
         let query = pagination.query()
-        fetchTask = Task { [weak self] in
+        fetchTask = launch { [weak self] in
             guard let self, let fetched = await self.fetchEvents(query) else { return }
             guard self.owns(request) else { return }
             self.publish(self.appended(baseline, fetched), persist: true)
@@ -225,7 +253,7 @@ public final class CalendarStore: FeatureModule {
         guard persist else { return }
         snapshotTask?.cancel()
         let store = snapshotStore
-        snapshotTask = Task {
+        snapshotTask = launch {
             await store.save(next)
         }
     }
