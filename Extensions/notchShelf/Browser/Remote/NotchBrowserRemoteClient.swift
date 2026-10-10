@@ -111,6 +111,52 @@ import Observation
         }
     }
 
+    func beginDownload(_ name: String) async throws -> NotchBrowserDownloadDescriptor {
+        guard !stopped, var input = request(.downloadStart) else {
+            throw ExtensionPeerError.unavailable
+        }
+        input.fileName = name
+        return try JSONDecoder().decode(
+            NotchBrowserDownloadDescriptor.self, from: await invoke(input))
+    }
+    func publishDownload(_ descriptor: NotchBrowserDownloadDescriptor, file: URL) async throws
+        -> String
+    {
+        guard !stopped, let handle = try? FileHandle(forReadingFrom: file) else {
+            throw ExtensionPeerError.unavailable
+        }
+        defer { try? handle.close() }
+        do {
+            var offset: UInt64 = 0
+            while let bytes = try handle.read(upToCount: 65536), !bytes.isEmpty {
+                try Task.checkCancellation()
+                guard !stopped, var input = request(.downloadWrite) else {
+                    throw ExtensionPeerError.unavailable
+                }
+                input.downloadID = descriptor.id; input.byteOffset = offset; input.bytes = bytes
+                _ = try await invoke(input)
+                offset += UInt64(bytes.count)
+            }
+            guard !stopped, var commit = request(.downloadCommit) else {
+                throw ExtensionPeerError.unavailable
+            }
+            commit.downloadID = descriptor.id
+            return try JSONDecoder().decode(
+                NotchBrowserDownloadDescriptor.self, from: await invoke(commit)
+            ).name
+        } catch {
+            if var cancel = request(.downloadCancel) {
+                cancel.downloadID = descriptor.id; _ = try? await invoke(cancel)
+            }
+            throw error
+        }
+    }
+    func cancelDownload(_ descriptor: NotchBrowserDownloadDescriptor) async {
+        if var input = request(.downloadCancel) {
+            input.downloadID = descriptor.id; _ = try? await invoke(input)
+        }
+    }
+
     func drainActions() async { await actionTask?.value }
     func stop() {
         stopped = true; generation = UUID(); actionTask?.cancel(); actionTask = nil; updated = nil;

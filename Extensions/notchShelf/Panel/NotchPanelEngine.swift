@@ -23,11 +23,17 @@ import Foundation
     private let context: SurfaceHostContext
     private let connectedDisplays: () -> [UInt32: CGSize]
     private let invalidate: (UUID) -> Void
+    private let cameraFactory: @MainActor () -> NotchCameraEngine
+    private(set) var cameraEngine: NotchCameraEngine?
 
     init(
         context: SurfaceHostContext, connectedDisplays: @escaping () -> [UInt32: CGSize],
-        invalidate: @escaping (UUID) -> Void = { _ in }
+        invalidate: @escaping (UUID) -> Void = { _ in },
+        cameraFactory: @escaping @MainActor () -> NotchCameraEngine = {
+            NotchCameraEngine(hardware: NativeNotchCameraHardware())
+        }
     ) {
+        self.cameraFactory = cameraFactory
         self.context = context
         self.connectedDisplays = connectedDisplays
         self.invalidate = invalidate
@@ -36,9 +42,16 @@ import Foundation
     var attached: Bool { identity != nil && !stopped }
 
     func attach(_ request: NotchPanelAttach) throws -> NotchPanelBatch {
+        if let identity, !stopped {
+            guard identity.ownershipID == request.ownershipID, version == request.version,
+                request.displays.count == displays.count,
+                request.displays.allSatisfy({ displays[$0.displayID] == $0 })
+            else { throw ExtensionPeerError.rejected("Notch panel ownership cannot attach.") }
+            return try batch()
+        }
         guard !stopped, identity == nil, controller == nil,
             context.activeVersions["notchShelf"] == request.version,
-            !request.displays.isEmpty, request.displays.count <= 4,
+            !request.displays.isEmpty, request.displays.count <= 8,
             Set(request.displays.map(\.displayID)).count == request.displays.count,
             Set(request.displays.map(\.presentationID)).count == request.displays.count,
             request.displays.filter(\.isBuiltin).count <= 1
@@ -66,6 +79,9 @@ import Foundation
     func changed() {
         guard attached, revision < UInt64.max else { return }
         revision += 1
+        if controller?.activeTab != .camera || controller?.isExpanded != true {
+            cameraEngine?.stopCapture()
+        }
         pruneSlots()
         if let waiter {
             self.waiter = nil
@@ -118,6 +134,12 @@ import Foundation
         else { throw ExtensionPeerError.invalidRequest }
         let state = try state(for: request.displayID)
         var counts: [String: Int] = [:]
+        for (id, existing) in slots where id != request.displayID {
+            guard let state = try? self.state(for: id) else { continue }
+            for slot in existing where admissible(slot, state: state) {
+                counts[slot.providerID, default: 0] += 1
+            }
+        }
         var cards = Set<String>()
         var kinds = Set<NotchPanelSlot.Kind>()
         for slot in request.slots {
@@ -164,17 +186,28 @@ import Foundation
             (-128...display.width + 128).contains(request.x),
             (-128...display.height + 128).contains(request.y), request.buttons <= 31
         else { throw ExtensionPeerError.invalidRequest }
+        let previous = try state(for: request.displayID)
+        let previousHover = controller?.isHovering(on: request.displayID)
+        let previousRevision = revision
         pointers[request.displayID] = request
         controller?.hostPointer(request, display: display)
+        if revision == previousRevision,
+            previous != (try state(for: request.displayID))
+                || previousHover != controller?.isHovering(on: request.displayID)
+        {
+            changed()
+        }
     }
 
     func detach(_ expected: NotchPanelIdentity) throws {
-        try validate(expected)
+        guard identity == expected else { throw ExtensionPeerError.invalidRequest }
+        if stopped { return }
         stop()
     }
 
     func stop() {
         stopped = true
+        cameraEngine?.shutdown()
         if let waiter { cancelWait(waiter.0) }
         slots = [:]; heights = [:]; failures = [:]; pointers = [:]
         transferTimer?.cancel(); transferTimer = nil
@@ -391,7 +424,7 @@ import Foundation
     }
 
     func finishTransfer(_ request: NotchPanelTransferFinish) throws {
-        try validate(request.identity)
+        try validateOwnership(request.identity)
         guard let transfer, transfer.0.id == request.id, let controller,
             request.error.map({ $0.utf8.count <= 512 && !$0.utf8.contains(0) }) ?? true
         else { throw ExtensionPeerError.invalidRequest }
@@ -442,14 +475,14 @@ import Foundation
     }
 
     func finishPromise(_ request: NotchPanelPromise) throws {
-        try validate(
+        try validateOwnership(
             request.identity, display: request.displayID, presentation: request.presentationID)
         guard promises.contains(request.id), let controller else {
             throw ExtensionPeerError.invalidRequest
         }
         let point = try dropPoint(x: request.x, y: request.y)
         promises.remove(request.id)
-        if let url = request.fileURL {
+        if let url = request.fileURL, context.activeVersions["notchShelf"] == version {
             guard url.isFileURL, url.path.utf8.count <= 4096 else {
                 throw ExtensionPeerError.invalidRequest
             }
@@ -472,6 +505,32 @@ import Foundation
         return CGPoint(x: x, y: y)
     }
 
+    func camera(_ request: NotchCameraRequest) async throws -> Data {
+        try validate(
+            request.identity, display: request.displayID, presentation: request.presentationID)
+        if request.operation == .stop { cameraEngine?.stopCapture(); return Data("{}".utf8) }
+        guard controller?.activeTab == .camera,
+            controller?.isExpanded(on: request.displayID) == true,
+            (try state(for: request.displayID)).visible
+        else { throw ExtensionPeerError.unavailable }
+        let privacy = controller?.privacy.values ?? [:]
+        guard privacy["active"] != "1" || privacy["blurCamera"] == "0" else {
+            cameraEngine?.stopCapture(); throw ExtensionPeerError.unavailable
+        }
+        if cameraEngine == nil { cameraEngine = cameraFactory() }
+        guard let cameraEngine else { throw ExtensionPeerError.unavailable }
+        let namespace = context.sharedState.namespace
+        cameraEngine.changed = {
+            DistributedNotificationCenter.default().postNotificationName(
+                Notification.Name(namespace + ".notchCamera." + request.presentationID.uuidString),
+                object: nil, userInfo: nil, deliverImmediately: true)
+        }
+        let data = try await cameraEngine.execute(request)
+        try validate(
+            request.identity, display: request.displayID, presentation: request.presentationID)
+        return data
+    }
+
     func browser(_ request: NotchBrowserRemoteRequest) async throws -> Data {
         try validate(
             request.identity, display: request.displayID, presentation: request.presentationID)
@@ -480,6 +539,20 @@ import Foundation
         try validate(
             request.identity, display: request.displayID, presentation: request.presentationID)
         return data
+    }
+
+    func validateChromeIdentity(
+        _ identity: NotchPanelIdentity, displayID: UInt32, presentationID: UUID
+    ) throws {
+        try validate(identity, display: displayID, presentation: presentationID)
+    }
+
+    private func validateOwnership(
+        _ expected: NotchPanelIdentity, display: UInt32? = nil, presentation: UUID? = nil
+    ) throws {
+        guard attached, identity == expected,
+            display == nil || displays[display!]?.presentationID == presentation
+        else { throw ExtensionPeerError.rejected("The Notch panel ownership is stale.") }
     }
 
     private func validate(
@@ -499,6 +572,12 @@ import Foundation
         let phase: NotchPanelState.Phase = expanded ? .expanded : alert ? .alert : .collapsed
         let size = controller?.hostShapeSize(display) ?? display.collapsedSize
         let visible = controller?.hostPanelVisible(display) ?? true
+        let capacity =
+            controller?.hostCapacity(display)
+            ?? CGSize(
+                width: min(1200, display.width - 48),
+                height: min(display.collapsedHeight + 760, display.height - 48))
+        let browser = controller?.activeTab == .browser
         let pointer = pointers[id]
         let localShape = CGRect(
             x: (display.width - size.width) / 2, y: 0, width: size.width, height: size.height)
@@ -516,10 +595,14 @@ import Foundation
             revision: revision,
             displayID: id, presentationID: display.presentationID, phase: phase,
             activeTab: controller?.activeTab.rawValue ?? "home",
-            shapeWidth: min(max(1, size.width), min(1200, display.width - 48)),
-            shapeHeight: min(max(1, size.height), min(1024, display.height - 48)),
+            shapeWidth: min(
+                max(1, size.width), browser ? display.width - 48 : min(1200, display.width - 48)),
+            shapeHeight: min(
+                max(1, size.height), browser ? display.height - 12 : min(1024, display.height - 48)),
             visible: visible, acceptsPointer: accepts,
-            acceptsKeyFocus: expanded && controller?.activeTab == .browser, slots: [])
+            acceptsKeyFocus: expanded && controller?.activeTab == .browser, slots: [],
+            capacityWidth: max(size.width, capacity.width),
+            capacityHeight: max(size.height, capacity.height))
         result.slots =
             visible
             ? (slots[id] ?? []).filter {
@@ -554,7 +637,7 @@ import Foundation
 
     private func pruneSlots() {
         for id in displays.keys {
-            guard let state = try? state(for: id) else { slots[id] = []; continue }
+            guard let state = try? self.state(for: id) else { slots[id] = []; continue }
             slots[id] = state.slots
         }
         let active = Set(slots.values.flatMap { $0.map(\.id) })

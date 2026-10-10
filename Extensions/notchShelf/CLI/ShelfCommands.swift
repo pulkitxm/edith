@@ -83,6 +83,7 @@ struct ShelfOpenCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Item numbers, counting from 1.") var indices: [Int] = []
     func run() async throws {
+        try await ShelfCLIEnvironment.requireAccess()
         try await execute { try await ShelfActionBridge.run(.open, indices: indices, json: json) }
     }
 }
@@ -100,6 +101,7 @@ struct ShelfRevealCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Item numbers, counting from 1.") var indices: [Int] = []
     func run() async throws {
+        try await ShelfCLIEnvironment.requireAccess()
         try await execute { try await ShelfActionBridge.run(.reveal, indices: indices, json: json) }
     }
 }
@@ -117,6 +119,7 @@ struct ShelfShareCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Item numbers, counting from 1.") var indices: [Int] = []
     func run() async throws {
+        try await ShelfCLIEnvironment.requireAccess()
         try await execute { try await ShelfActionBridge.run(.share, indices: indices, json: json) }
     }
 }
@@ -249,6 +252,7 @@ struct ShelfListCommand: AsyncParsableCommand {
     var json = false
 
     func run() async throws {
+        try await ShelfCLIEnvironment.requireAccess()
         try await execute {
             let items = try ShelfBridge.items()
             guard !json else {
@@ -293,6 +297,7 @@ struct ShelfPathCommand: AsyncParsableCommand {
     var index: Int
 
     func run() async throws {
+        try await ShelfCLIEnvironment.requireAccess()
         try await execute {
             let found = try ShelfBridge.item(at: index)
             guard !json else {
@@ -322,6 +327,7 @@ struct ShelfAddCommand: AsyncParsableCommand {
     var file: String
 
     func run() async throws {
+        try await ShelfCLIEnvironment.requireAccess()
         try await execute {
             let source = try ExtensionCLIContext.resolvePath(file)
             guard FileManager.default.fileExists(atPath: source.path) else {
@@ -368,6 +374,7 @@ struct ShelfAddTextCommand: AsyncParsableCommand {
     var words: [String] = []
 
     func run() async throws {
+        try await ShelfCLIEnvironment.requireAccess()
         try await execute {
             let text = words.joined(separator: " ")
             guard !text.isEmpty else { throw CLIFailure.usage("text is required") }
@@ -417,6 +424,7 @@ struct ShelfUpdateCommand: AsyncParsableCommand {
     var index: Int
 
     func run() async throws {
+        try await ShelfCLIEnvironment.requireAccess()
         try await execute {
             let position = CGPoint(x: CGFloat(x), y: CGFloat(y))
             let result = try ShelfBridge.update(at: index, position: position)
@@ -458,6 +466,7 @@ struct ShelfRemoveCommand: AsyncParsableCommand {
     var indices: [Int] = []
 
     func run() async throws {
+        try await ShelfCLIEnvironment.requireAccess()
         try await execute {
             let selected = try ShelfBridge.selection(at: indices)
             let plan = CLIDestructivePlan(
@@ -505,6 +514,7 @@ struct ShelfClearCommand: AsyncParsableCommand {
     var yes = false
 
     func run() async throws {
+        try await ShelfCLIEnvironment.requireAccess()
         try await execute {
             let all = try ShelfBridge.items()
             let plan = CLIDestructivePlan(
@@ -548,6 +558,7 @@ struct ShelfPurgeCommand: AsyncParsableCommand {
     var keep: String?
 
     func run() async throws {
+        try await ShelfCLIEnvironment.requireAccess()
         try await execute {
             let stored = ShelfCLIEnvironment.defaults?.string(
                 forKey: AppStorageKeys.Notch.shelfKeepDuration)

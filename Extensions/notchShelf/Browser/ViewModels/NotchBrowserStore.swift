@@ -54,6 +54,9 @@ final class NotchBrowserStore {
     @ObservationIgnored private(set) var pendingSeeds: [String: [String: String]] = [:]
     @ObservationIgnored private var closedTabs: [URL] = []
     @ObservationIgnored private var restoring = false
+    @ObservationIgnored private var remoteDownloads:
+        [ObjectIdentifier: (NotchBrowserDownloadDescriptor, URL)] = [:]
+    @ObservationIgnored private var deliveries: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var downloads: [ObjectIdentifier: URL] = [:]
     @ObservationIgnored private var faviconCache: [String: NSImage] = [:]
     @ObservationIgnored private var faviconTasks: [BrowserTab.ID: Task<Void, Never>] = [:]
@@ -119,6 +122,12 @@ final class NotchBrowserStore {
     }
 
     func shutdown() {
+        for task in deliveries.values { task.cancel() }
+        deliveries = [:]
+        for (_, url) in remoteDownloads.values {
+            try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+        }
+        remoteDownloads = [:]
         remote?.stop()
         syncTask?.cancel()
         toastTask?.cancel()
@@ -647,7 +656,24 @@ final class NotchBrowserStore {
         return response == .OK ? panel.urls : nil
     }
 
-    func downloadDestination(for download: WKDownload, suggestedFilename: String) -> URL? {
+    func downloadDestination(for download: WKDownload, suggestedFilename: String) async -> URL? {
+        if let remote {
+            guard remoteDownloads.count + deliveries.count < 8 else {
+                showToast("The download capacity has been reached."); return nil
+            }
+            do {
+                let descriptor = try await remote.beginDownload(suggestedFilename)
+                let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
+                    "notch-download-" + descriptor.id.uuidString, isDirectory: true)
+                try FileManager.default.createDirectory(
+                    at: folder, withIntermediateDirectories: true,
+                    attributes: [.posixPermissions: 0o700])
+                let url = folder.appendingPathComponent("payload")
+                remoteDownloads[ObjectIdentifier(download)] = (descriptor, url)
+                showToast("Downloading \(descriptor.name)")
+                return url
+            } catch { showToast(error.localizedDescription); return nil }
+        }
         let folder =
             FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads")
@@ -677,6 +703,21 @@ final class NotchBrowserStore {
     }
 
     func downloadFinished(_ download: WKDownload) {
+        if let remote,
+            let (descriptor, url) = remoteDownloads.removeValue(forKey: ObjectIdentifier(download))
+        {
+            deliveries[descriptor.id] = Task { [weak self] in
+                defer {
+                    self?.deliveries[descriptor.id] = nil;
+                    try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+                }
+                do {
+                    let name = try await remote.publishDownload(descriptor, file: url);
+                    self?.showToast("Downloaded \(name)")
+                } catch { if !Task.isCancelled { self?.showToast(error.localizedDescription) } }
+            }
+            return
+        }
         guard let url = downloads.removeValue(forKey: ObjectIdentifier(download)) else { return }
         DistributedNotificationCenter.default().post(
             name: Notification.Name("com.apple.DownloadFileFinished"), object: url.path)
@@ -684,6 +725,15 @@ final class NotchBrowserStore {
     }
 
     func downloadFailed(_ download: WKDownload) {
+        if let remote,
+            let (descriptor, url) = remoteDownloads.removeValue(forKey: ObjectIdentifier(download))
+        {
+            deliveries[descriptor.id] = Task { [weak self] in
+                await remote.cancelDownload(descriptor)
+                try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+                self?.deliveries[descriptor.id] = nil
+            }
+        }
         downloads[ObjectIdentifier(download)] = nil
         showToast("Download failed")
     }

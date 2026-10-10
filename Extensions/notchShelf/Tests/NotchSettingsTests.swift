@@ -168,7 +168,7 @@ import Testing
             ])
             controller = NotchShelfController(
                 context: .init(defaults: defaults, sharedState: state), startsServices: false,
-                root: root.appendingPathComponent("Shelf"))
+                root: root.appendingPathComponent("Shelf"), bluetoothPrivacyRequired: { false })
         }
         func clean() {
             controller.shutdown()

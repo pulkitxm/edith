@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
@@ -164,6 +165,80 @@ import Testing
         fixture.engine.stop()
         #expect(controller.store.addText("stopped transfer") != nil)
         #expect(!FileManager.default.fileExists(atPath: drag.fileURLs[0].path))
+    }
+
+    @Test func shelfCLIReportsOpenedOnlyAfterNativeAcknowledgementAndRetainsCancelledCleanup()
+        async throws
+    {
+        let fixture = try NotchPanelFixture()
+        defer { fixture.clean() }
+        _ = try fixture.attach()
+        let controller = fixture.bind()
+        _ = controller.store.addText("native CLI share fixture")
+        controller.synchronizeShelfItems()
+        let item = try #require(controller.items.first)
+        let identity = try #require(fixture.engine.identity)
+        var replied = false
+        let cli = Task {
+            let reply = try await ShelfCLIExecution.run(
+                .init(arguments: ["share", "1", "--json"]), root: controller.store.root,
+                defaults: fixture.defaults, checkAccess: controller.requireShelfCLIAccess
+            ) { try await controller.shareCLIItems($0) }
+            replied = true
+            return reply
+        }
+        for _ in 0..<100 where (try fixture.engine.batch()).transfers.isEmpty { await Task.yield() }
+        let transfer = try #require(try fixture.engine.batch().transfers.first)
+        #expect(!replied)
+        await #expect(throws: (any Error).self) {
+            try await ShelfCLIExecution.run(
+                .init(arguments: ["clear", "--yes"]), root: controller.store.root,
+                defaults: fixture.defaults, checkAccess: controller.requireShelfCLIAccess
+            ) { _ in Issue.record("Busy commands must not share") }
+        }
+        #expect(throws: CLIFailure.self) { try controller.requireShelfCLIAccess() }
+        try fixture.engine.acknowledgeTransfer(
+            .init(identity: identity, id: transfer.id, opened: true, error: nil))
+        let reply = try await cli.value
+        #expect(reply.exitCode == 0)
+        #expect(reply.stdout.contains("\"opened\": true"))
+        #expect(controller.store.actionSelectionRetained)
+        try fixture.engine.finishTransfer(
+            .init(identity: identity, id: transfer.id, completed: true, outside: false, error: nil))
+        let cancelled = Task { try await controller.shareCLIItems([item.id]) }
+        for _ in 0..<100 where (try fixture.engine.batch()).transfers.isEmpty { await Task.yield() }
+        cancelled.cancel()
+        await #expect(throws: CancellationError.self) { try await cancelled.value }
+        let cleanup = try #require(try fixture.engine.batch().transfers.first)
+        #expect(cleanup.cancelled)
+        #expect(controller.store.actionSelectionRetained)
+        try fixture.engine.finishTransfer(
+            .init(identity: identity, id: cleanup.id, completed: false, outside: false, error: nil))
+        #expect(!controller.store.actionSelectionRetained)
+    }
+
+    @Test func quickActionsRequireCurrentOriginalSavedTileAndFixedOperations() async throws {
+        let fixture = try NotchPanelFixture()
+        defer { fixture.clean() }
+        _ = try fixture.attach()
+        let controller = fixture.bind()
+        try fixture.publish(["notchShelf": "1", "keepAwake": "1"])
+        controller.synchronize()
+        let tile = SurfaceTile(.actions)
+        controller.layouts.update(.notch) { $0.tiles = [tile] }
+        let identity = try #require(fixture.engine.identity)
+        let request = NotchQuickActionRequest(
+            identity: identity, displayID: 42, presentationID: fixture.presentation, tile: tile)
+        let state = try JSONDecoder().decode(
+            NotchQuickActionState.self, from: await fixture.engine.quickActions(request))
+        #expect(state.snapshots.isEmpty)
+        #expect(state.errors["keepAwake"] != nil)
+        var arbitrary = request
+        arbitrary.providerID = "system"
+        arbitrary.actionID = "quit"
+        await #expect(throws: (any Error).self) { try await fixture.engine.quickActions(arbitrary) }
+        controller.layouts.update(.notch) { $0.tiles = [] }
+        await #expect(throws: (any Error).self) { try await fixture.engine.quickActions(request) }
     }
 
     private func client(_ fixture: NotchPanelFixture) -> NotchChromeClient {

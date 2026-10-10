@@ -100,7 +100,7 @@ final class NotchBrowserWebDelegate: NSObject, WKNavigationDelegate, WKUIDelegat
         _ download: WKDownload, decideDestinationUsing response: URLResponse,
         suggestedFilename: String
     ) async -> URL? {
-        store?.downloadDestination(for: download, suggestedFilename: suggestedFilename)
+        await store?.downloadDestination(for: download, suggestedFilename: suggestedFilename)
     }
 
     func downloadDidFinish(_ download: WKDownload) {

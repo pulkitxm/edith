@@ -7,6 +7,7 @@ import SwiftUI
 
 @MainActor
 final class ExtensionRuntime: NSObject {
+    private var startRequested = false
     private var controller: NotchShelfController?
     private struct UIScene {
         let client: ExtensionEngineClient?
@@ -24,7 +25,8 @@ final class ExtensionRuntime: NSObject {
             guard let self else { throw ExtensionPeerError.unavailable }
             if command.hasPrefix("notch.panel.") || command == "notch.chrome.read"
                 || command == "notch.chrome.action" || command == "notch.chrome.thumbnail"
-                || command == "notch.chrome.browser"
+                || command == "notch.chrome.browser" || command == "notch.chrome.quick"
+                || command == "notch.chrome.camera"
             {
                 return try await self.executePanel(command, payload: payload)
             }
@@ -36,7 +38,8 @@ final class ExtensionRuntime: NSObject {
                     root: controller.store.root, defaults: controller.context.defaults,
                     open: { NSWorkspace.shared.open($0) },
                     reveal: { NSWorkspace.shared.activateFileViewerSelecting($0) },
-                    share: { try await controller.shareCLIItems($0) })
+                    share: { try await controller.shareCLIItems($0) },
+                    checkAccess: controller.requireShelfCLIAccess)
                 return try ShelfCLIEnvironment.$configuration.withValue(configuration) {
                     try self.cliStreams.invoke(
                         ShelfCommand.self, operation: command, prefix: "notch.cli", payload: payload
@@ -46,7 +49,8 @@ final class ExtensionRuntime: NSObject {
             if command == "notch.cli" {
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
                 let reply = try await ShelfCLIExecution.run(
-                    request, root: controller.store.root, defaults: controller.context.defaults
+                    request, root: controller.store.root, defaults: controller.context.defaults,
+                    checkAccess: controller.requireShelfCLIAccess
                 ) { ids in try await controller.shareCLIItems(ids) }
                 return try JSONEncoder().encode(reply)
             }
@@ -62,9 +66,11 @@ final class ExtensionRuntime: NSObject {
         let decoder = JSONDecoder()
         let encoder = JSONEncoder()
         if command == "notch.panel.attach" {
-            guard controller == nil, panelEngine == nil else {
-                throw ExtensionPeerError.invalidRequest
+            if let engine = panelEngine {
+                return try encoder.encode(
+                    engine.attach(decoder.decode(NotchPanelAttach.self, from: payload)))
             }
+            guard controller == nil else { throw ExtensionPeerError.invalidRequest }
             let engine = NotchPanelEngine(
                 context: context,
                 connectedDisplays: {
@@ -86,7 +92,8 @@ final class ExtensionRuntime: NSObject {
                 })
             let batch = try engine.attach(decoder.decode(NotchPanelAttach.self, from: payload))
             panelEngine = engine
-            return try encoder.encode(batch)
+            startAttachedController(context)
+            return try encoder.encode(startRequested ? engine.batch() : batch)
         }
         guard let engine = panelEngine else { throw ExtensionPeerError.unavailable }
         switch command {
@@ -112,6 +119,11 @@ final class ExtensionRuntime: NSObject {
             try engine.finishPromise(decoder.decode(NotchPanelPromise.self, from: payload))
         case "notch.panel.detach":
             try engine.detach(decoder.decode(NotchPanelIdentity.self, from: payload))
+        case "notch.chrome.camera":
+            return try await engine.camera(decoder.decode(NotchCameraRequest.self, from: payload))
+        case "notch.chrome.quick":
+            return try await engine.quickActions(
+                decoder.decode(NotchQuickActionRequest.self, from: payload))
         case "notch.chrome.browser":
             return try await engine.browser(
                 decoder.decode(NotchBrowserRemoteRequest.self, from: payload))
@@ -140,12 +152,25 @@ final class ExtensionRuntime: NSObject {
         return Data("{}".utf8)
     }
 
+    private func startAttachedController(_ context: SurfaceHostContext) {
+        guard startRequested, controller == nil, let engine = panelEngine, engine.attached else {
+            return
+        }
+        let owned = NotchShelfController(
+            context: context, hostDisplays: Array(engine.displays.values))
+        controller = owned
+        engine.bind(owned)
+        NotchPresenterState.shared.privacy = owned.privacy
+        owned.synchronize()
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         commands.shutdown()
         cliStreams.stop()
         panelEngine?.stop()
         stopUI()
+        let cameraEngine = panelEngine?.cameraEngine
         let browserEngine = controller?.browserEngine
         controller?.shutdown()
         controller = nil
@@ -155,6 +180,7 @@ final class ExtensionRuntime: NSObject {
             await commands.shutdownAndWait()
             await cliStreams.stopAndWait()
             await browserEngine?.stopAndWait()
+            await cameraEngine?.shutdownAndWait()
             completion()
         }
     }
@@ -225,15 +251,8 @@ final class ExtensionRuntime: NSObject {
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
                 let context = SurfaceHostContext.current
             else { return ["ok": false] as NSDictionary }
-            if controller == nil {
-                controller = NotchShelfController(
-                    context: context,
-                    hostDisplays: panelEngine?.attached == true
-                        ? Array(panelEngine!.displays.values) : nil)
-                if let controller, panelEngine?.attached == true { panelEngine?.bind(controller) }
-                NotchPresenterState.shared.privacy = controller?.privacy
-                controller?.synchronize()
-            }
+            startRequested = true
+            startAttachedController(context)
         case "view":
             guard
                 let key = (input["presentationID"] as? String).flatMap(UUID.init(uuidString:))

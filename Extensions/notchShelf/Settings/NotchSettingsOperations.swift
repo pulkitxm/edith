@@ -18,8 +18,7 @@ extension NotchShelfController {
         return .init(
             preferences: result, activeIDs: activeIDs,
             browserProfile: browser?.profile?.name ?? browserEngine?.profileName,
-            bluetoothPrivacyRequired: CBManager.authorization == .denied
-                || CBManager.authorization == .restricted)
+            bluetoothPrivacyRequired: bluetoothPrivacyRequired())
     }
 
     func executeSettings(_ command: String, payload: Data) throws -> Data {
