@@ -9,6 +9,7 @@ import Observation
 final class ColorPickerStore: FeatureModule {
     private(set) var history: [ColorSwatch] = []
     private(set) var copyError: String?
+    private var stopped = false
     @ObservationIgnored private var requestObserver: NSObjectProtocol?
 
     init() {
@@ -19,6 +20,7 @@ final class ColorPickerStore: FeatureModule {
     }
 
     func shutdown() {
+        stopped = true
         HotKeyRegistrar.clear(HotKeyCatalog.colorPicker)
         if let requestObserver { IPC.stopObserving(requestObserver) }
         requestObserver = nil
@@ -31,6 +33,7 @@ final class ColorPickerStore: FeatureModule {
     }
 
     func pick() {
+        guard !stopped else { return }
         ColorPickerOperationExecution.perform(.pick) { [weak self] color in
             guard let color else { return }
             Task { @MainActor in
@@ -44,6 +47,7 @@ final class ColorPickerStore: FeatureModule {
     }
 
     private func commit(_ color: NSColor) {
+        guard !stopped else { return }
         guard let converted = color.usingColorSpace(profile.nsColorSpace) else { return }
         let swatch = ColorSwatch(
             red: Double(converted.redComponent),
@@ -56,7 +60,7 @@ final class ColorPickerStore: FeatureModule {
         IPC.post(IPC.Name.settingsChanged)
     }
 
-    private func copy(_ swatch: ColorSwatch, as format: ColorCopyFormat) {
+    func copy(_ swatch: ColorSwatch, as format: ColorCopyFormat) {
         do {
             try ColorSwatchOperationExecution.perform(
                 .copy, swatch: swatch, format: format,

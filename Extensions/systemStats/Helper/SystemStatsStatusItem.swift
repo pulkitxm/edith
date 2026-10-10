@@ -185,12 +185,26 @@ final class SystemMenuSnapshot {
 }
 
 struct SystemMenuReadings: View {
-    let snapshot: SystemMenuSnapshot
+    private let snapshot: SystemMenuSnapshot?
+    private let cpu: Double
+    private let memory: Double
+
+    init(snapshot: SystemMenuSnapshot) {
+        self.snapshot = snapshot
+        cpu = 0
+        memory = 0
+    }
+
+    init(cpu: Double, memory: Double) {
+        snapshot = nil
+        self.cpu = cpu
+        self.memory = memory
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            StatusProgressRow(title: "CPU", percent: snapshot.cpu)
-            StatusProgressRow(title: "Memory", percent: snapshot.memory)
+            StatusProgressRow(title: "CPU", percent: snapshot?.cpu ?? cpu)
+            StatusProgressRow(title: "Memory", percent: snapshot?.memory ?? memory)
         }
     }
 }

@@ -10,10 +10,51 @@ final class ExtensionRuntime: NSObject {
     private var service: ColorPickerStore?
     private var observer: NSObjectProtocol?
 
+    private var presentation: ControlPresentation?
+
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
+            if command.hasPrefix("colorPicker.ui.") {
+                guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
+                let defaults = SharedDefaults.store
+                switch command {
+                case "colorPicker.ui.read":
+                    guard payload == Data("{}".utf8) else {
+                        throw ExtensionPeerError.invalidRequest
+                    }
+                case "colorPicker.ui.update":
+                    try ControlPresentationContract.update(payload, defaults: defaults)
+                    self.service?.registerHotKey()
+                case "colorPicker.ui.action":
+                    let action = try JSONDecoder().decode(
+                        ControlPresentationAction.self, from: payload)
+                    guard let service = self.service else { throw ExtensionPeerError.unavailable }
+                    if action.action == "pick", action.value.isEmpty {
+                        service.pick()
+                    } else if action.action == "copy",
+                        let pair = action.value.split(separator: ":").first,
+                        let swatch = service.history.first(where: {
+                            $0.id.uuidString == String(pair)
+                        }),
+                        let format = action.value.split(separator: ":").last.flatMap({
+                            ColorCopyFormat(rawValue: String($0))
+                        }),
+                        action.value == swatch.id.uuidString + ":" + format.rawValue
+                    {
+                        service.copy(swatch, as: format)
+                        if let error = service.copyError {
+                            throw ExtensionPeerError.rejected(error)
+                        }
+                    } else {
+                        throw ExtensionPeerError.invalidRequest
+                    }
+                default: throw ExtensionPeerError.invalidRequest
+                }
+                return try ControlPresentationContract.snapshot(
+                    defaults: defaults, state: ControlPresentationState())
+            }
             guard let self, let service = self.service else { throw ExtensionPeerError.unavailable }
             return try await SurfaceCommandService.execute(
                 providerID: "colorPicker", command: command, payload: payload,
@@ -34,6 +75,15 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(prepareToStopWithCompletion:)
+    func prepareToStop(completion: @escaping () -> Void) {
+        Task {
+            await commands.shutdownAndWait()
+            _ = execute(["operation": "stop"])
+            completion()
+        }
+    }
+
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
         case "describe":
@@ -44,7 +94,25 @@ final class ExtensionRuntime: NSObject {
                     as? String ?? "",
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "colorPicker",
+                configuration.defaultsSuite
+                    == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+            else { return ["ok": false] as NSDictionary }
+            presentation?.stop()
+            presentation = ControlPresentation(client: configuration.engineClient)
+            return ["ok": true] as NSDictionary
+        case "stopUI":
+            presentation?.stop()
+            presentation = nil
+            return ["ok": true] as NSDictionary
+        case "prepareToStop":
+            commands.shutdown()
+            return ["ok": true] as NSDictionary
         case "start":
+            guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
+            else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -61,17 +129,22 @@ final class ExtensionRuntime: NSObject {
                 }
             }
         case "view":
+            guard let presentation else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost {
-                    PageWorkspace {
-                        PageHeader("Color Picker")
-                    } content: {
-                        Form { ColorPickerRows() }.formStyle(.grouped)
+                    ControlSettingsHost(presentation: presentation) {
+                        PageWorkspace {
+                            PageHeader("Color Picker")
+                        } content: {
+                            Form { ColorPickerRows(presentation: presentation) }.formStyle(.grouped)
+                        }
                     }
                 })
         case "synchronize": service?.registerHotKey()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
+            presentation?.stop()
+            presentation = nil
             commands.shutdown()
             service?.shutdown()
             service = nil

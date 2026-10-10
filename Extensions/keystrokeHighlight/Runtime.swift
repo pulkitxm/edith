@@ -10,10 +10,36 @@ final class ExtensionRuntime: NSObject {
     private var service: KeystrokeHighlightRuntime?
     private var observer: NSObjectProtocol?
 
+    private var presentation: ControlPresentation?
+
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
+            if command.hasPrefix("keystrokeHighlight.ui.") {
+                guard let self, self.observer != nil else { throw ExtensionPeerError.unavailable }
+                let defaults = SharedDefaults.store
+                switch command {
+                case "keystrokeHighlight.ui.read":
+                    guard payload == Data("{}".utf8) else {
+                        throw ExtensionPeerError.invalidRequest
+                    }
+                case "keystrokeHighlight.ui.update":
+                    try ControlPresentationContract.update(payload, defaults: defaults)
+                    self.synchronize()
+                case "keystrokeHighlight.ui.action":
+                    let action = try JSONDecoder().decode(
+                        ControlPresentationAction.self, from: payload)
+                    guard action.action == "inputMonitoring", action.value.isEmpty else {
+                        throw ExtensionPeerError.invalidRequest
+                    }
+                    _ = CGRequestListenEventAccess()
+                    self.synchronize()
+                default: throw ExtensionPeerError.invalidRequest
+                }
+                return try ControlPresentationContract.snapshot(
+                    defaults: defaults, state: ControlPresentationState())
+            }
             guard let self, self.observer != nil else { throw ExtensionPeerError.unavailable }
             return try await SurfaceCommandService.execute(
                 providerID: "keystrokeHighlight", command: command,
@@ -32,6 +58,15 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(prepareToStopWithCompletion:)
+    func prepareToStop(completion: @escaping () -> Void) {
+        Task {
+            await commands.shutdownAndWait()
+            _ = execute(["operation": "stop"])
+            completion()
+        }
+    }
+
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
         case "describe":
@@ -42,7 +77,25 @@ final class ExtensionRuntime: NSObject {
                     as? String ?? "",
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "keystrokeHighlight",
+                configuration.defaultsSuite
+                    == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+            else { return ["ok": false] as NSDictionary }
+            presentation?.stop()
+            presentation = ControlPresentation(client: configuration.engineClient)
+            return ["ok": true] as NSDictionary
+        case "stopUI":
+            presentation?.stop()
+            presentation = nil
+            return ["ok": true] as NSDictionary
+        case "prepareToStop":
+            commands.shutdown()
+            return ["ok": true] as NSDictionary
         case "start":
+            guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
+            else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -63,17 +116,23 @@ final class ExtensionRuntime: NSObject {
                 }
             }
         case "view":
+            guard let presentation else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost {
-                    PageWorkspace {
-                        PageHeader("Keystroke Highlight")
-                    } content: {
-                        Form { KeystrokeHighlightRows() }.formStyle(.grouped)
+                    ControlSettingsHost(presentation: presentation) {
+                        PageWorkspace {
+                            PageHeader("Keystroke Highlight")
+                        } content: {
+                            Form { KeystrokeHighlightRows(presentation: presentation) }.formStyle(
+                                .grouped)
+                        }
                     }
                 })
         case "synchronize": synchronize()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
+            presentation?.stop()
+            presentation = nil
             commands.shutdown()
             service?.shutdown()
             service = nil

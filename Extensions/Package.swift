@@ -123,7 +123,7 @@ let package = Package(
             path: "notchShelf/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "KeepAwakeExtension",
-            dependencies: [.product(name: "EdithExtensionSupport", package: "ExtensionSupport")],
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
             path: "keepAwake", exclude: ["Tests", "Runtime.swift"]),
         .testTarget(
             name: "KeepAwakeExtensionTests", dependencies: ["KeepAwakeExtension"],

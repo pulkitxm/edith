@@ -4,16 +4,27 @@ import EdithExtensionUI
 import SwiftUI
 
 struct PresenterSidebarScene: View {
+    var presentation: ControlPresentation? = nil
     @AppStorage(AppStorageKeys.Presenter.mode, store: SharedDefaults.store) private var manual =
         false
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private var enabled =
         false
     @State private var hovering = false
 
-    @MainActor static func controller(_ input: NSDictionary) -> NSViewController? {
+    @MainActor static func controller(
+        _ input: NSDictionary, presentation: ControlPresentation? = nil
+    ) -> NSViewController? {
         guard input["location"] as? String == "sidebar.utility",
             input["section"] as? String == "privacy"
         else { return nil }
+        if let presentation {
+            return NSHostingController(
+                rootView: ExtensionPageHost {
+                    ControlSettingsHost(presentation: presentation) {
+                        PresenterSidebarScene(presentation: presentation)
+                    }
+                })
+        }
         return NSHostingController(rootView: ExtensionPageHost { PresenterSidebarScene() })
     }
 
@@ -21,7 +32,9 @@ struct PresenterSidebarScene: View {
         Binding(
             get: { manual },
             set: {
-                _ = PresenterRuntimeOperationExecution.perform($0 ? .start : .stop)
+                manual = $0
+                IPC.post(IPC.Name.settingsChanged)
+                if !$0 { presentation?.perform("stop") }
             })
     }
 

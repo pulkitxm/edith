@@ -3,7 +3,7 @@ import EdithExtensionUI
 import SwiftUI
 
 struct MicMuteRows: View {
-    @Bindable var service: MicMuteEngine
+    let presentation: ControlPresentation
     @AppStorage(AppStorageKeys.Mic.muteInMenuBar, store: SharedDefaults.store) private
         var inMenuBar = true
 
@@ -11,7 +11,11 @@ struct MicMuteRows: View {
         Section("Control") {
             Toggle(
                 "Mute microphones",
-                isOn: Binding(get: { service.muted }, set: { service.setMuted($0) }))
+                isOn: Binding(
+                    get: { presentation.state.muted },
+                    set: { presentation.perform($0 ? "mute" : "unmute") })
+            )
+            .disabled(!presentation.active)
             LabeledContent("Shortcut") {
                 HotKeyRecorderControl(keyPrefix: "micHotKey", defaultLabel: "⌘⇧M")
             }
@@ -20,10 +24,10 @@ struct MicMuteRows: View {
                 "The shortcut and menu bar control mute every microphone. Disabling the extension restores the previous microphone controls."
             )
             .settingsCaption()
-            if let error = service.error {
+            if let error = presentation.state.error {
                 Label(error, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.orange)
-                Button("Retry") { service.retry() }
+                Button("Retry") { presentation.perform("retry") }
             }
         }
     }

@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionUI
 import Foundation
 import SwiftUI
 
@@ -9,15 +10,46 @@ final class KeepAwakeRuntime: NSObject {
     private var store: KeepAwakeStore?
     private var defaults: UserDefaults?
 
+    private var presentation: ControlPresentation?
+
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
+            if command.hasPrefix("keepAwake.ui.") {
+                guard let self, self.store != nil else { throw ExtensionPeerError.unavailable }
+                let defaults = self.defaults ?? SharedDefaults.store
+                switch command {
+                case "keepAwake.ui.read":
+                    guard payload == Data("{}".utf8) else {
+                        throw ExtensionPeerError.invalidRequest
+                    }
+                case "keepAwake.ui.update":
+                    try ControlPresentationContract.update(payload, defaults: defaults)
+                    self.store?.syncPreventSleep()
+                case "keepAwake.ui.action":
+                    _ = try JSONDecoder().decode(
+                        ControlPresentationAction.self, from: payload)
+                    throw ExtensionPeerError.invalidRequest
+                default: throw ExtensionPeerError.invalidRequest
+                }
+                return try ControlPresentationContract.snapshot(
+                    defaults: defaults, state: ControlPresentationState())
+            }
             guard let self, let store = self.store, let defaults = self.defaults else {
                 throw ExtensionPeerError.unavailable
             }
             return try await KeepAwakeSurface.execute(
                 command, payload: payload, store: store, defaults: defaults)
+        }
+    }
+
+    @objc(prepareToStopWithCompletion:)
+    func prepareToStop(completion: @escaping () -> Void) {
+        Task {
+            await commands.shutdownAndWait()
+            _ = execute(["operation": "stop"])
+            completion()
         }
     }
 
@@ -32,7 +64,25 @@ final class KeepAwakeRuntime: NSObject {
                     forInfoDictionaryKey: "EdithHostABI") as? String ?? "runtime-1",
                 "role": "helper",
             ] as NSDictionary
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "keepAwake",
+                configuration.defaultsSuite
+                    == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+            else { return ["ok": false] as NSDictionary }
+            presentation?.stop()
+            presentation = ControlPresentation(client: configuration.engineClient)
+            return ["ok": true] as NSDictionary
+        case "stopUI":
+            presentation?.stop()
+            presentation = nil
+            return ["ok": true] as NSDictionary
+        case "prepareToStop":
+            commands.shutdown()
+            return ["ok": true] as NSDictionary
         case "start":
+            guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
+            else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 let defaults = UserDefaults(suiteName: suite)
             else {
@@ -44,14 +94,14 @@ final class KeepAwakeRuntime: NSObject {
             store?.syncPreventSleep()
             return ["ok": true] as NSDictionary
         case "view":
-            guard let suite = input["defaultsSuite"] as? String,
-                let defaults = UserDefaults(suiteName: suite), let store
-            else {
-                return ["ok": false] as NSDictionary
-            }
+            guard let presentation else { return ["ok": false] as NSDictionary }
             return NSHostingController(
-                rootView: KeepAwakeSettings(
-                    defaults: defaults, synchronize: { [weak store] in store?.syncPreventSleep() }))
+                rootView: ExtensionPageHost {
+                    ControlSettingsHost(presentation: presentation) {
+                        KeepAwakeSettings(
+                            defaults: SharedDefaults.store, synchronize: { presentation.changed() })
+                    }
+                })
         case "synchronize":
             store?.syncPreventSleep()
             return ["ok": true] as NSDictionary
@@ -59,6 +109,8 @@ final class KeepAwakeRuntime: NSObject {
             commands.cancel(input["token"] as? String ?? "")
             return ["ok": true] as NSDictionary
         case "stop":
+            presentation?.stop()
+            presentation = nil
             commands.shutdown()
             store?.shutdown()
             store = nil

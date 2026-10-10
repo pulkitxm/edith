@@ -10,13 +10,52 @@ final class ExtensionRuntime: NSObject {
     private var service: EmojiStore?
     private var observers: [NSObjectProtocol] = []
 
+    private var presentation: ControlPresentation?
+
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
+            if command.hasPrefix("emoji.ui.") {
+                guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
+                let defaults = SharedDefaults.store
+                switch command {
+                case "emoji.ui.read":
+                    guard payload == Data("{}".utf8) else {
+                        throw ExtensionPeerError.invalidRequest
+                    }
+                case "emoji.ui.update":
+                    try ControlPresentationContract.update(payload, defaults: defaults)
+                    self.registerHotKey()
+                    IPC.post(IPC.Name.settingsChanged)
+                case "emoji.ui.action":
+                    let action = try JSONDecoder().decode(
+                        ControlPresentationAction.self, from: payload)
+                    guard action.value.isEmpty, let service = self.service else {
+                        throw ExtensionPeerError.invalidRequest
+                    }
+                    switch action.action {
+                    case "pick": EmojiPanel.shared.show()
+                    case "clear": service.clearFrequent()
+                    default: throw ExtensionPeerError.invalidRequest
+                    }
+                default: throw ExtensionPeerError.invalidRequest
+                }
+                return try ControlPresentationContract.snapshot(
+                    defaults: defaults, state: ControlPresentationState())
+            }
             guard let self, let service = self.service else { throw ExtensionPeerError.unavailable }
             return try await EmojiSurface.execute(
                 command, payload: payload, store: service, pick: { EmojiPanel.shared.show() })
+        }
+    }
+
+    @objc(prepareToStopWithCompletion:)
+    func prepareToStop(completion: @escaping () -> Void) {
+        Task {
+            await commands.shutdownAndWait()
+            _ = execute(["operation": "stop"])
+            completion()
         }
     }
 
@@ -30,7 +69,25 @@ final class ExtensionRuntime: NSObject {
                     as? String ?? "",
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "emoji",
+                configuration.defaultsSuite
+                    == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+            else { return ["ok": false] as NSDictionary }
+            presentation?.stop()
+            presentation = ControlPresentation(client: configuration.engineClient)
+            return ["ok": true] as NSDictionary
+        case "stopUI":
+            presentation?.stop()
+            presentation = nil
+            return ["ok": true] as NSDictionary
+        case "prepareToStop":
+            commands.shutdown()
+            return ["ok": true] as NSDictionary
         case "start":
+            guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
+            else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -73,12 +130,16 @@ final class ExtensionRuntime: NSObject {
                     }
                 })
         case "view":
+            guard let presentation else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost {
-                    PageWorkspace {
-                        PageHeader("Emoji")
-                    } content: {
-                        Form { EmojiSettingsRows() }.formStyle(.grouped)
+                    ControlSettingsHost(presentation: presentation) {
+                        PageWorkspace {
+                            PageHeader("Emoji")
+                        } content: {
+                            Form { EmojiSettingsRows(presentation: presentation) }.formStyle(
+                                .grouped)
+                        }
                     }
                 })
         case "pick": EmojiPanel.shared.show()
@@ -87,6 +148,8 @@ final class ExtensionRuntime: NSObject {
             IPC.post(IPC.Name.settingsChanged)
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
+            presentation?.stop()
+            presentation = nil
             commands.shutdown()
             EmojiPanel.shared.hide()
             EmojiPanel.shared.store = nil

@@ -4,6 +4,7 @@ import AppKit
 import SwiftUI
 
 struct KeystrokeHighlightRows: View {
+    let presentation: ControlPresentation
     @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
         var enabled = false
     @AppStorage(AppStorageKeys.KeystrokeHighlight.active, store: SharedDefaults.store) private
@@ -95,13 +96,11 @@ struct KeystrokeHighlightRows: View {
                     Label(runtimeError, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
                     Button("Allow Input Monitoring") {
-                        _ = CGRequestListenEventAccess()
-                        IPC.post(IPC.Name.settingsChanged)
+                        presentation.perform("inputMonitoring")
                     }
                 }
             }
         }
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
+
     }
 }
