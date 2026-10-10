@@ -6,9 +6,14 @@ public protocol ExportCardDeck {
     associatedtype Card: Identifiable & Hashable
     associatedtype Content: View
     var cards: [Card] { get }
+    var delivery: (@MainActor (Data, String, Bool) async throws -> String)? { get }
     func title(for card: Card) -> String
     func filename(for card: Card) -> String
     @ViewBuilder func content(for card: Card) -> Content
+}
+
+extension ExportCardDeck {
+    public var delivery: (@MainActor (Data, String, Bool) async throws -> String)? { nil }
 }
 
 public enum ExportCardRenderingError: LocalizedError {

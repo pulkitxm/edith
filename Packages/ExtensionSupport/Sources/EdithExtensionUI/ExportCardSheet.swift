@@ -74,7 +74,7 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
     @State private var previewErrors: [Deck.Card: String] = [:]
     @State private var previewAttempt = 0
     @State private var status: ExportCardStatus?
-    @State private var actionTask: Task<Void, Never>?
+    @State private var action = ExportCardAction()
 
     private var dark: Bool { scheme == .dark }
     private var theme: AppTheme { AppTheme(storedName: themeName) }
@@ -176,7 +176,7 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
             }
         }
         .onDisappear {
-            actionTask?.cancel(); busy = false
+            action.cancel(); busy = false
         }
     }
 
@@ -293,39 +293,25 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
 
     private func deliver(save: Bool) {
         guard !busy else { return }
-        actionTask?.cancel()
         let selected = card
-        let window = NSApp.keyWindow
         busy = true
-        actionTask = Task { @MainActor in
-            defer { busy = false }
-            do {
-                let url: URL?
-                if save {
-                    url = await ExportDelivery.chooseSaveURL(
-                        suggestedName: deck.filename(for: selected), in: window)
-                    guard url != nil else { return }
-                } else {
-                    url = nil
+        action.start {
+            try await ExportCardDelivery.perform(
+                deck: deck, card: selected, save: save,
+                chooseSaveURL: { name in
+                    await ExportDelivery.chooseSaveURL(suggestedName: name, in: NSApp.keyWindow)
+                },
+                copy: { try ExportDelivery.copyPNG($0, to: pasteboard) })
+        } completion: { result in
+            busy = false
+            guard let result else { return }
+            if result.copied {
+                withAnimation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion)) {
+                    copied = true
+                    copyCount += 1
                 }
-                await Task.yield()
-                try Task.checkCancellation()
-                let data = try ExportCardRenderer.pngData(deck.content(for: selected))
-                if let url {
-                    try ExportDelivery.write(data, to: url)
-                    showStatus(ExportCardStatus(message: "Saved to \(url.lastPathComponent)"))
-                } else {
-                    try ExportDelivery.copyPNG(data, to: pasteboard)
-                    withAnimation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion)) {
-                        copied = true
-                        copyCount += 1
-                    }
-                    showStatus(ExportCardStatus(message: "Image copied"))
-                }
-            } catch is CancellationError {
-            } catch {
-                showStatus(ExportCardStatus(message: error.localizedDescription, failed: true))
             }
+            showStatus(result.status)
         }
     }
 
@@ -337,8 +323,92 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
     }
 }
 
-private struct ExportCardStatus {
+struct ExportCardStatus {
     let id = UUID()
     let message: String
     var failed = false
+}
+
+struct ExportCardDeliveryResult {
+    let status: ExportCardStatus
+    var copied = false
+}
+
+@MainActor
+enum ExportCardDelivery {
+    static func perform<Deck: ExportCardDeck>(
+        deck: Deck, card: Deck.Card, save: Bool,
+        chooseSaveURL: (String) async -> URL?,
+        write: (Data, URL) throws -> Void = ExportDelivery.write,
+        copy: (Data) throws -> Void,
+        render: @MainActor (Deck.Content) throws -> Data = { try ExportCardRenderer.pngData($0) }
+    ) async throws -> ExportCardDeliveryResult? {
+        try Task.checkCancellation()
+        if let delivery = deck.delivery {
+            await Task.yield()
+            try Task.checkCancellation()
+            let data = try render(deck.content(for: card))
+            let message = try await delivery(data, deck.filename(for: card), save)
+            try Task.checkCancellation()
+            return ExportCardDeliveryResult(
+                status: ExportCardStatus(message: message), copied: !save)
+        }
+        let url: URL?
+        if save {
+            url = await chooseSaveURL(deck.filename(for: card))
+            try Task.checkCancellation()
+            guard url != nil else { return nil }
+        } else {
+            url = nil
+        }
+        await Task.yield()
+        try Task.checkCancellation()
+        let data = try render(deck.content(for: card))
+        if let url {
+            try write(data, url)
+            return ExportCardDeliveryResult(
+                status: ExportCardStatus(message: "Saved to \(url.lastPathComponent)"))
+        }
+        try copy(data)
+        return ExportCardDeliveryResult(
+            status: ExportCardStatus(message: "Image copied"), copied: true)
+    }
+}
+
+@MainActor
+final class ExportCardAction {
+    private var task: Task<Void, Never>?
+    private var generation: UUID?
+
+    func start(
+        operation: @escaping @MainActor () async throws -> ExportCardDeliveryResult?,
+        completion: @escaping @MainActor (ExportCardDeliveryResult?) -> Void
+    ) {
+        cancel()
+        let current = UUID()
+        generation = current
+        task = Task { @MainActor [weak self] in
+            let result: ExportCardDeliveryResult?
+            do {
+                result = try await operation()
+            } catch is CancellationError {
+                result = nil
+            } catch {
+                result = ExportCardDeliveryResult(
+                    status: ExportCardStatus(message: error.localizedDescription, failed: true))
+            }
+            guard let self, self.generation == current, !Task.isCancelled else { return }
+            self.task = nil
+            self.generation = nil
+            completion(result)
+        }
+    }
+
+    func cancel() {
+        generation = nil
+        task?.cancel()
+        task = nil
+    }
+
+    deinit { task?.cancel() }
 }
