@@ -140,6 +140,26 @@ import Testing
         #expect(downloader.items.isEmpty)
     }
 
+    @Test func waveformUsesCheckedEngineLevelsAndDropsLateFramesOnStop() async throws {
+        let remote = EmbeddedMusicRemote.shared
+        let levels = EmbeddedPlaybackLevel.shared
+        remote.configure { operation, _ in
+            #expect(operation == "music.ui.level")
+            return try JSONEncoder().encode(0.25)
+        }
+        levels.attachViewer()
+        defer { levels.detachViewer(); remote.stop() }
+        for _ in 0..<20 where levels.level != 0.25 { await Task.yield() }
+        #expect(levels.level == 0.25)
+        var pending: CheckedContinuation<Data, Error>?
+        remote.configure { _, _ in try await withCheckedThrowingContinuation { pending = $0 } }
+        for _ in 0..<20 where pending == nil { await Task.yield() }
+        remote.stop()
+        pending?.resume(returning: try JSONEncoder().encode(0.9))
+        for _ in 0..<20 { await Task.yield() }
+        #expect(levels.level == EmbeddedPlaybackLevel.neutral)
+    }
+
     @Test func originalEmbeddedControllersRenderAtBothWidthsThemesAndZoom() async throws {
         let application = NSApplication.shared
         application.setActivationPolicy(.prohibited)

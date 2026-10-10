@@ -29,6 +29,8 @@ import Observation
     private var sampledAt = Date()
     @ObservationIgnored private var clients: [ObjectIdentifier: ExtensionEngineClient] = [:]
     @ObservationIgnored private var invoke: ((String, Data) async throws -> Data)?
+    @ObservationIgnored private var levelTask: Task<Void, Never>?
+    @ObservationIgnored private var levelGeneration: UInt64 = 0
     @ObservationIgnored private var readTask: Task<Void, Never>?
     @ObservationIgnored private var tasks: [UUID: Task<Void, Never>] = [:]
     private var generation: UInt64 = 0
@@ -52,6 +54,7 @@ import Observation
             }
             return try await client.invoke(operation, payload: payload)
         }
+        installLevelDemand()
     }
 
     func detach(_ client: ExtensionEngineClient) {
@@ -61,7 +64,7 @@ import Observation
     }
 
     func configure(invoke: @escaping (String, Data) async throws -> Data) {
-        stop(); self.invoke = invoke
+        stop(); self.invoke = invoke; installLevelDemand()
     }
 
     func start() { rescan() }
@@ -69,6 +72,9 @@ import Observation
     func stop() {
         generation &+= 1; lifecycle &+= 1; cursor = 0
         readTask?.cancel(); readTask = nil
+        levelGeneration &+= 1; levelTask?.cancel(); levelTask = nil
+        EmbeddedPlaybackLevel.shared.onViewersChange = nil
+        EmbeddedPlaybackLevel.shared.reset()
         for task in tasks.values { task.cancel() }
         tasks.removeAll()
         for client in clients.values { client.invalidate() }
@@ -80,6 +86,42 @@ import Observation
         EmbeddedMusicAccounts.shared.reset()
         EmbeddedMusicDetailPresenter.shared.dismiss()
         EmbeddedYoutubeDownloader.shared.stop()
+    }
+
+    private func installLevelDemand() {
+        EmbeddedPlaybackLevel.shared.onViewersChange = { [weak self] in self?.refreshLevels() }
+        refreshLevels()
+    }
+
+    private func refreshLevels() {
+        guard invoke != nil, EmbeddedPlaybackLevel.shared.viewers > 0 else {
+            levelGeneration &+= 1; levelTask?.cancel(); levelTask = nil
+            return
+        }
+        guard levelTask == nil else { return }
+        levelGeneration &+= 1
+        let token = levelGeneration
+        levelTask = Task { [weak self] in
+            defer { if self?.levelGeneration == token { self?.levelTask = nil } }
+            while !Task.isCancelled, let self, self.levelGeneration == token,
+                EmbeddedPlaybackLevel.shared.viewers > 0
+            {
+                do {
+                    let data = try await self.dataRequest("music.ui.level")
+                    let level = try JSONDecoder().decode(Double.self, from: data)
+                    guard level.isFinite, (0...1).contains(level) else {
+                        throw ExtensionPeerError.invalidRequest
+                    }
+                    try Task.checkCancellation()
+                    guard self.levelGeneration == token else { return }
+                    EmbeddedPlaybackLevel.shared.update(level)
+                } catch {
+                    guard !Task.isCancelled, self.levelGeneration == token else { return }
+                    self.libraryError = error.localizedDescription
+                }
+                do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+            }
+        }
     }
 
     func rescan() {

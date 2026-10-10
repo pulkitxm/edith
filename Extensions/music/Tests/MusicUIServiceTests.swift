@@ -96,6 +96,10 @@ extension MusicExtensionTests {
             let worker = MusicWorker(player: player, accounts: accounts, startImmediately: false)
             let service = MusicUIService(worker: worker)
             defer { worker.stop() }
+            let levelData = try await service.execute("music.ui.level", payload: Data("{}".utf8))
+            #expect(
+                try JSONDecoder().decode(Double.self, from: levelData) == PlaybackLevel.shared.level
+            )
             let bytes = try await service.execute(
                 "music.ui.read", payload: JSONEncoder().encode(MusicUIQuery()))
             let state = try JSONDecoder().decode(MusicUIState.self, from: bytes)

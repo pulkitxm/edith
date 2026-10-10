@@ -34,6 +34,8 @@ import WebKit
             return try await downloads!.execute(operation, payload: payload)
         }
         switch operation {
+        case "music.ui.level":
+            return try JSONEncoder().encode(worker.player.readLevel())
         case "music.ui.read":
             let query = try JSONDecoder().decode(MusicUIQuery.self, from: payload)
             try MusicUIAction(kind: .startFolder, path: query.path, target: query.search).validate()

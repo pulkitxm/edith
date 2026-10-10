@@ -111,8 +111,7 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         levelRequestObserver = MusicEvents.observe(MusicEvents.Name.requestMusicLevels) {
             [weak self] in
             MainActor.assumeIsolated {
-                self?.levelSubscriberUntil = Date().addingTimeInterval(2.5)
-                self?.resumeLevelTimer()
+                _ = self?.readLevel()
             }
         }
         PlaybackLevel.shared.onViewersChange = { [weak self] in self?.resumeLevelTimer() }
@@ -281,6 +280,12 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         stopLevelTimer()
         saveTimer?.invalidate()
         saveTimer = nil
+    }
+
+    func readLevel() -> Double {
+        levelSubscriberUntil = Date().addingTimeInterval(2.5)
+        resumeLevelTimer()
+        return PlaybackLevel.shared.level
     }
 
     private var levelDemanded: Bool {
