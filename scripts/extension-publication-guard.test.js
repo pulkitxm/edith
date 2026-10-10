@@ -54,6 +54,7 @@ function current(catalog = previous) {
   return {
     release: {
       id: 10,
+      tag_name: "extension-catalog-v1",
       draft: false,
       body: JSON.stringify(pointer),
       assets: [asset, { id: 2, name: candidate, size: nextData.length }],
@@ -227,6 +228,7 @@ test("only true initial absence or an owned draft permits bootstrap and failed s
   const draft = {
     release: {
       id: 10,
+      tag_name: "extension-catalog-v1",
       draft: true,
       assets: [
         { id: 3, name: "catalog-1.json" },
@@ -669,12 +671,17 @@ test("the actual no-argument publisher finalizes a zero-build draft and refuses 
   const fixtureRead = `const fs = require("node:fs"); const file = process.env.FIXTURE_STATE; const state = JSON.parse(fs.readFileSync(file));`;
   writeFileSync(
     join(binary, "gh"),
-    `#!/usr/bin/env node\n${fixtureRead} const args = process.argv.slice(2); const path = args.at(-1); if (path.endsWith("git/ref/heads/main")) process.stdout.write(JSON.stringify({ object: { sha: state.target } })); else if (path.includes("releases/tags/")) process.stdout.write(JSON.stringify(state.release)); else if (path.endsWith("releases/assets/1")) process.stdout.write(Buffer.from(state.data, "base64")); else process.exit(2);`,
+    `#!/usr/bin/env node\n${fixtureRead} const args = process.argv.slice(2); const path = args.at(-1); if (path.endsWith("git/ref/heads/main")) process.stdout.write(JSON.stringify({ object: { sha: state.target } })); else if (path.includes("releases/tags/")) { if (state.release.draft) { process.stderr.write("gh: Not Found (HTTP 404)"); process.exit(1); } process.stdout.write(JSON.stringify(state.release)); } else if (path.includes("releases?")) process.stdout.write(JSON.stringify([state.release])); else if (path.endsWith("releases/assets/1")) process.stdout.write(Buffer.from(state.data, "base64")); else process.exit(2);`,
     { mode: 0o700 },
   );
   writeFileSync(
     join(binary, "pukbot"),
     `#!/usr/bin/env node\n${fixtureRead} const args = process.argv.slice(2); if (args[0] !== "release" || args[1] !== "edit" || !args.includes("--draft")) process.exit(2); state.release.draft = false; state.mutations++; fs.writeFileSync(file, JSON.stringify(state)); process.stdout.write(JSON.stringify({ ok: true }));`,
+    { mode: 0o700 },
+  );
+  writeFileSync(
+    join(binary, "swift"),
+    `#!/usr/bin/env node\nconst fs = require("node:fs"); const state = JSON.parse(fs.readFileSync(process.env.FIXTURE_STATE)); if (process.argv[3] !== "check-key" || state.invalidKey) process.exit(1);`,
     { mode: 0o700 },
   );
   writeFileSync(join(directory, "previous.json"), JSON.stringify(previous));
@@ -712,6 +719,10 @@ test("the actual no-argument publisher finalizes a zero-build draft and refuses 
       JSON.parse(readFileSync(join(directory, "previous-state.json"))),
     ).toEqual({ draft: true });
     expect(planned.stdout).toBe("Verified catalog revision: 1\n");
+    writeFileSync(stateFile, JSON.stringify({ ...state, invalidKey: true }));
+    expect(run().status).not.toBe(0);
+    expect(JSON.parse(readFileSync(stateFile)).mutations).toBe(0);
+    writeFileSync(stateFile, JSON.stringify(state));
     for (let index = 0; index < 2; index++) {
       const result = run();
       expect(result.status).toBe(0);

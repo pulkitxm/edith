@@ -141,3 +141,97 @@ test("metadata collection is bounded and small assets retain their exact bytes",
   });
   expect(result.data).toEqual(Buffer.alloc(17, 42));
 });
+
+test("loopback downloads preserve slow progress beyond inactivity but bound stalled and trickling transfers", async () => {
+  const { createServer } = await import("node:http");
+  const connections = new Set();
+  const server = createServer((request, response) => {
+    response.writeHead(200);
+    let sent = 0;
+    const timer = setInterval(
+      () => {
+        if (request.url === "/stalled") return;
+        response.write(Buffer.alloc(1, 42));
+        if (++sent === 12 && request.url === "/progress") {
+          clearInterval(timer);
+          response.end();
+        }
+      },
+      request.url === "/trickle" ? 250 : 100,
+    );
+    response.on("close", () => clearInterval(timer));
+  });
+  server.on("connection", (socket) => {
+    connections.add(socket);
+    socket.on("close", () => connections.delete(socket));
+  });
+  await new Promise((done) => server.listen(0, "127.0.0.1", done));
+  try {
+    for (const route of ["progress", "stalled", "trickle"]) {
+      const value = fixture();
+      const url = `http://127.0.0.1:${server.address().port}/${route}`;
+      let child;
+      const options = {
+        ...value.options,
+        asset: { id: 1, size: 12 },
+        expectedBytes: 12,
+        expectedSHA256: createHash("sha256")
+          .update(Buffer.alloc(12, 42))
+          .digest("hex"),
+        timeoutMs: 1000,
+        totalTimeoutMs: route === "trickle" ? 1500 : 5000,
+        spawnProcess: (_command, _args, processOptions) => {
+          child = spawn(
+            "node",
+            [
+              "-e",
+              `require("node:http").get(${JSON.stringify(url)}, response => response.pipe(process.stdout)).on("error", () => process.exit(1));`,
+            ],
+            processOptions,
+          );
+          return child;
+        },
+      };
+      try {
+        if (route === "progress") {
+          const result = await downloadReleaseAsset(options);
+          expect(result.size).toBe(12);
+          expect(readFileSync(options.destination)).toEqual(
+            Buffer.alloc(12, 42),
+          );
+        } else {
+          await expect(downloadReleaseAsset(options)).rejects.toThrow(
+            route === "stalled" ? "inactivity" : "total deadline",
+          );
+          expect(existsSync(options.destination)).toBe(false);
+        }
+        expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
+      } finally {
+        value.clean();
+      }
+    }
+  } finally {
+    for (const socket of connections) socket.destroy();
+    await new Promise((done) => server.close(done));
+  }
+}, 10000);
+
+test("invalid transfer deadlines fail before process creation", async () => {
+  for (const change of [
+    { timeoutMs: 0 },
+    { timeoutMs: 60_001 },
+    { totalTimeoutMs: 30 * 60_000 + 1 },
+    { totalTimeoutMs: 59_999 },
+    { totalTimeoutMs: NaN },
+  ])
+    await expect(
+      downloadReleaseAsset({
+        repository: "synthetic/fixture",
+        asset: { id: 1, size: 1 },
+        ...change,
+        spawnProcess: () => {
+          throw new Error("Must not start");
+        },
+      }),
+    ).rejects.toThrow("identity");
+});

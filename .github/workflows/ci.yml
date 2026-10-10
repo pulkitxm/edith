@@ -574,6 +574,7 @@ jobs:
       && contains(fromJSON('["success","skipped"]'), needs.promo-video.result)
       && contains(fromJSON('["success","skipped"]'), needs.swift-build.result)
     runs-on: ubuntu-latest
+    timeout-minutes: 150
     concurrency:
       group: release-publication
       cancel-in-progress: false

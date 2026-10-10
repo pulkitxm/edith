@@ -21,19 +21,23 @@ function fixture(existing = false) {
     '<rss><enclosure url="https://github.com/synthetic/fixture/releases/download/v1.2.3/Edith.dmg" sparkle:edSignature="synthetic-signature" /></rss>',
   );
   const calls = [];
-  let release = existing ? { id: 7, assets: [] } : undefined;
+  let release = existing
+    ? { id: 7, tag_name: "v1.2.3", draft: true, assets: [] }
+    : undefined;
   const execute = (command, args) => {
     calls.push([command, ...args]);
     if (command === "gh" && args[1].includes("/tags/")) {
-      if (release) return JSON.stringify(release);
+      if (release && !release.draft) return JSON.stringify(release);
       throw Object.assign(new Error("Missing release"), { stderr: "HTTP 404" });
     }
+    if (command === "gh" && args[1].includes("/releases?"))
+      return JSON.stringify(release ? [release] : []);
     if (command === "gh" && args.includes("Accept: application/octet-stream")) {
       const id = Number(args.at(-1).split("/").at(-1));
       return release.assets.find((asset) => asset.id === id).bytes;
     }
     if (command === "pukbot" && args[1] === "create")
-      release = { id: 7, assets: [] };
+      release = { id: 7, tag_name: "v1.2.3", draft: true, assets: [] };
     return "{}";
   };
   return {

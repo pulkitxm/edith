@@ -18,6 +18,7 @@ import {
   preflightReleaseAsset,
   uploadReleaseAsset,
 } from "./release-asset-upload.mjs";
+import { lookupRelease } from "./release-lookup.mjs";
 import {
   maximumCatalogPackages,
   maximumEnvelopeBytes,
@@ -95,14 +96,7 @@ function mutate(...args) {
 }
 
 function release(repository, tag) {
-  try {
-    return JSON.parse(
-      gh("api", `repos/${repository}/releases/tags/${encodeURIComponent(tag)}`),
-    );
-  } catch (error) {
-    if (String(error.stderr).includes("404")) return undefined;
-    throw error;
-  }
+  return lookupRelease({ repository, tag });
 }
 
 async function upload(repository, releaseID, tag, file, name) {
@@ -316,6 +310,14 @@ export async function publishExtensions({
     throw new Error(
       "Catalog signing credentials are required before publication",
     );
+  execFileSync(
+    "swift",
+    ["scripts/extension-catalog-sign.swift", "check-key", publicKey],
+    {
+      stdio: "inherit",
+      timeout: 60_000,
+    },
+  );
   const old = JSON.parse(
     await readFile(resolve(directory, "previous.json"), "utf8"),
   );
@@ -391,6 +393,7 @@ export async function publishExtensions({
         `Independent extension package for Edith host ${record.hostABI}.`,
       );
       item = release(repository, entry.tag);
+      if (!item) throw new Error("Created extension release is not available");
     }
     const publishedRecord = item.assets.find(
       (asset) => asset.name === `${entry.id}.json`,
@@ -481,6 +484,7 @@ export async function publishExtensions({
       "",
     );
     catalog = release(repository, catalogTag);
+    if (!catalog) throw new Error("Created catalog release is not available");
   }
   const candidate = `catalog-${next.revision}.json`;
   await upload(repository, catalog.id, catalogTag, envelope, candidate);

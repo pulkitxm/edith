@@ -7,6 +7,7 @@ import {
   preflightReleaseAsset,
   uploadReleaseAsset,
 } from "./release-asset-upload.mjs";
+import { lookupRelease } from "./release-lookup.mjs";
 
 export function preflightHostRelease({
   directory,
@@ -58,12 +59,7 @@ export async function publishHostRelease({
     execute("pukbot", [...args, "--repo", repository, "--json"], {
       encoding: "utf8",
     });
-  let release;
-  try {
-    release = JSON.parse(gh("api", `repos/${repository}/releases/tags/${tag}`));
-  } catch (error) {
-    if (!String(error.stderr).includes("404")) throw error;
-  }
+  let release = lookupRelease({ repository, tag, execute });
   if (!release) {
     if (rebuild) throw new Error("Cannot rebuild a missing release");
     mutate(
@@ -77,7 +73,8 @@ export async function publishHostRelease({
       "--draft",
       "--generate-notes",
     );
-    release = JSON.parse(gh("api", `repos/${repository}/releases/tags/${tag}`));
+    release = lookupRelease({ repository, tag, execute });
+    if (!release) throw new Error("Created host release is not available");
   }
   for (const name of assets) {
     const file = resolve(directory, name);

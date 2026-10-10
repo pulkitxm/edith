@@ -18,6 +18,7 @@ name: Extensions
       - scripts/link-shared-framework.py
       - scripts/*extension*
       - scripts/release-asset-*
+      - scripts/release-lookup.*
       - scripts/build-minimal-host.mjs
       - scripts/build-contained-host-runtime.mjs
       - scripts/build-camera-carrier.mjs
@@ -49,6 +50,7 @@ name: Extensions
       - scripts/link-shared-framework.py
       - scripts/*extension*
       - scripts/release-asset-*
+      - scripts/release-lookup.*
       - scripts/build-minimal-host.mjs
       - scripts/build-contained-host-runtime.mjs
       - scripts/build-camera-carrier.mjs
