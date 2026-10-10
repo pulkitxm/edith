@@ -5,6 +5,7 @@ import EdithExtensionUI
 import SwiftUI
 
 struct ColorPickerRows: View {
+    let presentation: ControlPresentation
     @AppStorage(AppStorageKeys.ColorPicker.enabled, store: SharedDefaults.store) private
         var colorPickerEnabled =
         false
@@ -22,8 +23,9 @@ struct ColorPickerRows: View {
         Group {
             Section {
                 Button("Pick now") {
-                    _ = ColorPickerOperationExecution.request(.pick)
+                    presentation.perform("pick")
                 }
+                .disabled(!presentation.active)
                 LabeledContent {
                     HotKeyRecorderControl(keyPrefix: "colorPickerHotKey", defaultLabel: "⌃⌥⌘C")
                 } label: {
@@ -62,8 +64,6 @@ struct ColorPickerRows: View {
                     }
                 }
             }
-            .disabled(!colorPickerEnabled)
-            .opacity(colorPickerEnabled ? 1 : 0.5)
 
             if colorPickerEnabled {
                 Section {
@@ -74,7 +74,8 @@ struct ColorPickerRows: View {
                         )
                         .settingsCaption()
                     } else {
-                        ColorSwatchGrid(history: history, defaultFormat: copyFormat)
+                        ColorSwatchGrid(
+                            history: history, defaultFormat: copyFormat, presentation: presentation)
                     }
                 } header: {
                     Text("Recent Colors")
@@ -96,13 +97,15 @@ struct ColorPickerRows: View {
 private struct ColorSwatchGrid: View {
     let history: [ColorSwatch]
     let defaultFormat: ColorCopyFormat
+    let presentation: ControlPresentation
 
     private let columns = [GridItem(.adaptive(minimum: 28), spacing: UIScale.pt(6))]
 
     var body: some View {
         LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(6)) {
             ForEach(history) { swatch in
-                ColorSwatchChip(swatch: swatch, defaultFormat: defaultFormat)
+                ColorSwatchChip(
+                    swatch: swatch, defaultFormat: defaultFormat, presentation: presentation)
             }
         }
     }
@@ -111,6 +114,7 @@ private struct ColorSwatchGrid: View {
 private struct ColorSwatchChip: View {
     let swatch: ColorSwatch
     let defaultFormat: ColorCopyFormat
+    let presentation: ControlPresentation
     @State private var copyError: String?
 
     var body: some View {
@@ -127,6 +131,7 @@ private struct ColorSwatchChip: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.iconOnly))
+        .disabled(!presentation.active)
         .accessibilityLabel("Copy \(swatch.string(for: defaultFormat))")
         .contextMenu {
             ForEach(ColorCopyFormat.allCases, id: \.self) { format in
@@ -147,16 +152,8 @@ private struct ColorSwatchChip: View {
     }
 
     private func copy(_ format: ColorCopyFormat) {
-        do {
-            try ColorSwatchOperationExecution.perform(
-                .copy, swatch: swatch, format: format,
-                write: { value in
-                    NSPasteboard.general.clearContents()
-                    return NSPasteboard.general.setString(value, forType: .string)
-                })
-            copyError = nil
-        } catch {
-            copyError = error.localizedDescription
+        presentation.perform("copy", value: swatch.id.uuidString + ":" + format.rawValue) { error in
+            copyError = error?.localizedDescription
         }
     }
 }

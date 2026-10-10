@@ -7,8 +7,10 @@
     "roles": {
       "helper": [
         "Extensions/keepAwake/KeepAwakeStore.swift",
+        "Extensions/keepAwake/Presentation.swift",
         "Extensions/keepAwake/Runtime.swift",
-        "Extensions/keepAwake/Surface.swift"
+        "Extensions/keepAwake/Surface.swift",
+        "Extensions/keepAwake/Views/KeepAwakeSettings.swift"
       ]
     },
     "inputs": [
@@ -68,10 +70,12 @@
     "roles": {
       "helper": [
         "Extensions/focusDim/Helper/Services/FocusDimEngine.swift",
-        "Extensions/focusDim/Runtime.swift",
         "Extensions/focusDim/Models/FocusDimMath.swift",
         "Extensions/focusDim/Models/FocusDimState.swift",
-        "Extensions/focusDim/Surface.swift"
+        "Extensions/focusDim/Presentation.swift",
+        "Extensions/focusDim/Runtime.swift",
+        "Extensions/focusDim/Surface.swift",
+        "Extensions/focusDim/Views/FocusDimSettings.swift"
       ]
     },
     "inputs": [
@@ -112,12 +116,13 @@
         "Extensions/windowSweaters/Models/SweaterState.swift",
         "Extensions/windowSweaters/Models/SweaterTheme.swift",
         "Extensions/windowSweaters/Models/SweaterYarn.swift",
+        "Extensions/windowSweaters/Presentation.swift",
         "Extensions/windowSweaters/Rendering/KnitGauge.swift",
         "Extensions/windowSweaters/Rendering/KnitRenderer.swift",
         "Extensions/windowSweaters/Rendering/KnitTile.swift",
         "Extensions/windowSweaters/Runtime.swift",
-        "Extensions/windowSweaters/Views/WindowSweatersRows.swift",
-        "Extensions/windowSweaters/Surface.swift"
+        "Extensions/windowSweaters/Surface.swift",
+        "Extensions/windowSweaters/Views/WindowSweatersRows.swift"
       ]
     },
     "inputs": [
@@ -146,9 +151,10 @@
         "Extensions/micMute/Helper/Services/MicMuteEngine.swift",
         "Extensions/micMute/Models/CoreAudioMicrophones.swift",
         "Extensions/micMute/Models/MicrophoneMuteSession.swift",
+        "Extensions/micMute/Presentation.swift",
         "Extensions/micMute/Runtime.swift",
-        "Extensions/micMute/Views/MicMuteRows.swift",
-        "Extensions/micMute/Surface.swift"
+        "Extensions/micMute/Surface.swift",
+        "Extensions/micMute/Views/MicMuteRows.swift"
       ]
     },
     "inputs": [
@@ -178,9 +184,10 @@
         "Extensions/keystrokeHighlight/Helper/Views/KeystrokeHighlightOverlay.swift",
         "Extensions/keystrokeHighlight/Models/KeystrokeEventLabelReader.swift",
         "Extensions/keystrokeHighlight/Models/KeystrokeHighlightModels.swift",
+        "Extensions/keystrokeHighlight/Presentation.swift",
         "Extensions/keystrokeHighlight/Runtime.swift",
-        "Extensions/keystrokeHighlight/Views/KeystrokeHighlightRows.swift",
-        "Extensions/keystrokeHighlight/Surface.swift"
+        "Extensions/keystrokeHighlight/Surface.swift",
+        "Extensions/keystrokeHighlight/Views/KeystrokeHighlightRows.swift"
       ]
     },
     "inputs": [
@@ -205,9 +212,11 @@
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "helper": [
+        "Extensions/presenter/CLI/PresenterCLIExecution.swift",
+        "Extensions/presenter/CLI/PresenterCommands.swift",
         "Extensions/presenter/Helper/Models/PresenterDebouncer.swift",
         "Extensions/presenter/Helper/Models/PresenterRules.swift",
         "Extensions/presenter/Helper/Models/PresenterSignals.swift",
@@ -220,10 +229,11 @@
         "Extensions/presenter/Models/PresenterRuntimeOperation.swift",
         "Extensions/presenter/Models/PresenterState.swift",
         "Extensions/presenter/Models/PresenterText.swift",
+        "Extensions/presenter/Presentation.swift",
         "Extensions/presenter/Runtime.swift",
+        "Extensions/presenter/Surface.swift",
         "Extensions/presenter/Views/PresenterRows.swift",
-        "Extensions/presenter/Views/PresenterSidebarScene.swift",
-        "Extensions/presenter/Surface.swift"
+        "Extensions/presenter/Views/PresenterSidebarScene.swift"
       ]
     },
     "inputs": [
@@ -250,14 +260,18 @@
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
+        "Extensions/colorPicker/CLI/CLIDestructivePlan.swift",
+        "Extensions/colorPicker/CLI/ColorCLIExecution.swift",
+        "Extensions/colorPicker/CLI/ColorCommands.swift",
         "Extensions/colorPicker/Helper/ViewModels/ColorPickerStore.swift",
         "Extensions/colorPicker/Models/ColorPickerOperation.swift",
         "Extensions/colorPicker/Models/ColorSwatch.swift",
         "Extensions/colorPicker/Models/RGBHex.swift",
         "Extensions/colorPicker/Models/UnitInterval.swift",
+        "Extensions/colorPicker/Presentation.swift",
         "Extensions/colorPicker/Runtime.swift",
-        "Extensions/colorPicker/Views/ColorPickerRows.swift",
-        "Extensions/colorPicker/Surface.swift"
+        "Extensions/colorPicker/Surface.swift",
+        "Extensions/colorPicker/Views/ColorPickerRows.swift"
       ]
     },
     "inputs": [
@@ -272,7 +286,7 @@
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "surfaceContractVersion": 1,
     "sameExecutableWorker": true
   },
@@ -283,8 +297,17 @@
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
+        "Extensions/systemStats/CLI/MachineReports.swift",
+        "Extensions/systemStats/CLI/SystemCommands.swift",
+        "Extensions/systemStats/CLI/SystemStatsCLIExecution.swift",
+        "Extensions/systemStats/CLI/SystemStatsFollow.swift",
         "Extensions/systemStats/Helper/SystemStatsStatusItem.swift",
+        "Extensions/systemStats/Models/ByteFormatter.swift",
+        "Extensions/systemStats/Models/LocalMachineSampler.swift",
+        "Extensions/systemStats/Models/MetricsModels.swift",
         "Extensions/systemStats/Models/SystemStatsReader.swift",
+        "Extensions/systemStats/Models/VolumeCapacity.swift",
+        "Extensions/systemStats/Presentation.swift",
         "Extensions/systemStats/Runtime.swift",
         "Extensions/systemStats/Surface.swift"
       ]
@@ -301,7 +324,7 @@
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "surfaceContractVersion": 1,
     "sameExecutableWorker": true
   },
@@ -311,9 +334,11 @@
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "helper": [
+        "Extensions/emoji/CLI/EmojiCLIExecution.swift",
+        "Extensions/emoji/CLI/EmojiCommands.swift",
         "Extensions/emoji/EdithHelper/Services/EmojiTypeSynth.swift",
         "Extensions/emoji/EdithHelper/ViewModels/EmojiPanelModel.swift",
         "Extensions/emoji/EdithHelper/ViewModels/EmojiStore.swift",
@@ -326,9 +351,10 @@
         "Extensions/emoji/EdithKit/Services/EmojiSearch.swift",
         "Extensions/emoji/EdithKit/Services/EmojiUsageLedger.swift",
         "Extensions/emoji/EmojiResources.swift",
+        "Extensions/emoji/Presentation.swift",
         "Extensions/emoji/Runtime.swift",
-        "Extensions/emoji/Views/EmojiSettingsRows.swift",
-        "Extensions/emoji/Surface.swift"
+        "Extensions/emoji/Surface.swift",
+        "Extensions/emoji/Views/EmojiSettingsRows.swift"
       ]
     },
     "resources": {

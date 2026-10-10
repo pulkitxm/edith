@@ -170,8 +170,7 @@ struct WindowSweatersRows: View {
             )
             .settingsCaption()
         }
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
+
     }
 
     private static func label(

@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import EdithExtensionSupport
+import EdithExtensionCommands
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -12,10 +13,74 @@ final class ExtensionRuntime: NSObject {
     private var state: PresenterState?
     private var observer: NSObjectProtocol?
     private var pauseObserver: NSObjectProtocol?
+    private var presentation: ControlPresentation?
+
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
+            if command == "presenter.cli.catalog" {
+                return try PresenterCLIExecution.catalog(payload)
+            }
+            if command == "presenter.cli" {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                if let help = try await PresenterCLIExecution.help(request) {
+                    return try JSONEncoder().encode(help)
+                }
+                guard let self, self.state != nil else { throw ExtensionPeerError.unavailable }
+                let reply = try await PresenterCLIExecution.run(
+                    request, defaults: SharedDefaults.store
+                ) { operation in
+                    if operation == .stop { self.service?.pauseUntilShareEnds() }
+                    let snapshot = PresenterRuntimeOperationExecution.perform(
+                        operation, post: { _ in })
+                    self.synchronize()
+                    return snapshot
+                }
+                return try JSONEncoder().encode(reply)
+            }
+            if command.hasPrefix("presenter.ui.") {
+                guard let self, self.state != nil else { throw ExtensionPeerError.unavailable }
+                let defaults = SharedDefaults.store
+                switch command {
+                case "presenter.ui.read":
+                    guard payload == Data("{}".utf8) else {
+                        throw ExtensionPeerError.invalidRequest
+                    }
+                case "presenter.ui.update":
+                    let wasManual = defaults.bool(forKey: AppStorageKeys.Presenter.mode)
+                    try ControlPresentationContract.update(payload, defaults: defaults)
+                    if wasManual && !defaults.bool(forKey: AppStorageKeys.Presenter.mode) {
+                        self.service?.pauseUntilShareEnds()
+                    }
+                    self.synchronize()
+                case "presenter.ui.action":
+                    let action = try JSONDecoder().decode(
+                        ControlPresentationAction.self, from: payload)
+                    guard action.value.isEmpty else { throw ExtensionPeerError.invalidRequest }
+                    switch action.action {
+                    case "screenRecording":
+                        guard
+                            let url = URL(
+                                string:
+                                    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+                            )
+                        else { throw ExtensionPeerError.invalidRequest }
+                        NSWorkspace.shared.open(url)
+                    case "start": _ = PresenterRuntimeOperationExecution.perform(.start)
+                    case "stop":
+                        self.service?.pauseUntilShareEnds()
+                        _ = PresenterRuntimeOperationExecution.perform(.stop)
+                    default: throw ExtensionPeerError.invalidRequest
+                    }
+                    self.synchronize()
+                default: throw ExtensionPeerError.invalidRequest
+                }
+                return try ControlPresentationContract.snapshot(
+                    defaults: defaults,
+                    state: ControlPresentationState(
+                        jevConfigured: PresenterJevClient.configured() != nil))
+            }
             guard let self, self.state != nil else { throw ExtensionPeerError.unavailable }
             if command == "surface.snapshot" || command == "surface.perform" {
                 return try await SurfaceCommandService.execute(
@@ -46,6 +111,15 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(prepareToStopWithCompletion:)
+    func prepareToStop(completion: @escaping () -> Void) {
+        Task {
+            await commands.shutdownAndWait()
+            _ = execute(["operation": "stop"])
+            completion()
+        }
+    }
+
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
         case "describe":
@@ -56,7 +130,25 @@ final class ExtensionRuntime: NSObject {
                     as? String ?? "",
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "presenter",
+                configuration.defaultsSuite
+                    == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+            else { return ["ok": false] as NSDictionary }
+            presentation?.stop()
+            presentation = ControlPresentation(client: configuration.engineClient)
+            return ["ok": true] as NSDictionary
+        case "stopUI":
+            presentation?.stop()
+            presentation = nil
+            return ["ok": true] as NSDictionary
+        case "prepareToStop":
+            commands.shutdown()
+            return ["ok": true] as NSDictionary
         case "start":
+            guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
+            else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -77,18 +169,26 @@ final class ExtensionRuntime: NSObject {
             }
             synchronize()
         case "view":
-            if let controller = PresenterSidebarScene.controller(input) { return controller }
+            guard let presentation else { return ["ok": false] as NSDictionary }
+            if let controller = PresenterSidebarScene.controller(input, presentation: presentation)
+            {
+                return controller
+            }
             return NSHostingController(
                 rootView: ExtensionPageHost {
-                    PageWorkspace {
-                        PageHeader("Presenter")
-                    } content: {
-                        Form { PresenterRows() }.formStyle(.grouped)
+                    ControlSettingsHost(presentation: presentation) {
+                        PageWorkspace {
+                            PageHeader("Presenter")
+                        } content: {
+                            Form { PresenterRows(presentation: presentation) }.formStyle(.grouped)
+                        }
                     }
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": synchronize()
         case "stop":
+            presentation?.stop()
+            presentation = nil
             commands.shutdown()
             service?.shutdown()
             service = nil

@@ -5,6 +5,7 @@ import EdithExtensionUI
 import SwiftUI
 
 struct PresenterRows: View {
+    let presentation: ControlPresentation
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
         var presenterEnabled =
         false
@@ -22,7 +23,7 @@ struct PresenterRows: View {
     private var detectMirroring = true
     @AppStorage(AppStorageKeys.Presenter.askJev, store: SharedDefaults.store)
     private var askJev = false
-    @State private var jevConfigured = PresenterJevClient.configured() != nil
+    private var jevConfigured: Bool { presentation.state.jevConfigured }
 
     var body: some View {
         Group {
@@ -37,10 +38,6 @@ struct PresenterRows: View {
                                 + "until you turn it back off."
                         )
                     }
-                }
-                .onChange(of: presenterMode) {
-                    _ = PresenterRuntimeOperationExecution.perform(
-                        presenterMode ? .start : .stop)
                 }
                 ForEach(PresenterPrivacy.allCases) { category in
                     PresenterPrivacySettingToggle(category: category)
@@ -123,13 +120,8 @@ struct PresenterRows: View {
 
             Section {
                 Button("Open Screen Recording Settings…") {
-                    if let url = URL(
-                        string:
-                            "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-                    ) {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
+                    presentation.perform("screenRecording")
+                }.disabled(!presentation.active)
             }
 
             Section {
@@ -147,17 +139,7 @@ struct PresenterRows: View {
                 Text("Shortcut")
             }
         }
-        .disabled(!presenterEnabled)
-        .opacity(presenterEnabled ? 1 : 0.5)
-        .pageTask {
-            jevConfigured = PresenterJevClient.configured() != nil
-        }
-        .onReceive(
-            DistributedNotificationCenter.default().publisher(
-                for: ExtensionSharedState.current?.notificationName ?? Notification.Name("unused"))
-        ) { _ in
-            jevConfigured = PresenterJevClient.configured() != nil
-        }
+
     }
 }
 

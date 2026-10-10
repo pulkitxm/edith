@@ -78,6 +78,16 @@ final class EmojiStore: FeatureModule {
         emoji.character(tone: skinTone)
     }
 
+    func insertAndWait(character: String) async throws -> Bool {
+        guard !isShutDown, catalog.emoji(matching: character) != nil else { return false }
+        try await Task.sleep(for: insertionDelay)
+        try Task.checkCancellation()
+        guard !isShutDown else { return false }
+        let inserted = typeCharacter(character)
+        if inserted { record(character) }
+        return inserted
+    }
+
     func insert(_ emoji: Emoji, tone: EmojiSkinTone? = nil) {
         insert(character: emoji.character(tone: tone ?? skinTone))
     }
@@ -164,7 +174,7 @@ final class EmojiStore: FeatureModule {
         revision += 1
     }
 
-    private func adoptSettings() {
+    func adoptSettings() {
         let tone = EmojiSkinTone.stored(forKey: AppStorageKeys.Emoji.skinTone, store: defaults)
         if tone != skinTone { skinTone = tone }
         ledger = EmojiUsageLedger.load(from: defaults, key: AppStorageKeys.Emoji.usage)

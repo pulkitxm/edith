@@ -3,6 +3,7 @@ import EdithExtensionUI
 import SwiftUI
 
 struct EmojiSettingsRows: View {
+    let presentation: ControlPresentation
     @AppStorage(AppStorageKeys.Emoji.skinTone, store: SharedDefaults.store) private var tone = 0
     @AppStorage(AppStorageKeys.Emoji.popupAt, store: SharedDefaults.store) private var popupAt =
         "cursor"
@@ -11,7 +12,7 @@ struct EmojiSettingsRows: View {
 
     var body: some View {
         Section("Picker") {
-            Button("Open Picker") { EmojiPanel.shared.show() }
+            Button("Open Picker") { presentation.perform("pick") }.disabled(!presentation.active)
             LabeledContent("Shortcut") {
                 HotKeyRecorderControl(keyPrefix: "emojiHotKey", defaultLabel: "⌃⇧E")
             }
@@ -30,8 +31,8 @@ struct EmojiSettingsRows: View {
                 "Show \(frequentCount) emoji", value: $frequentCount.notifyingSettingsChange(),
                 in: 0...24)
             Button("Clear Frequently Used", role: .destructive) {
-                _ = try? EmojiOperationExecution.perform(.clear)
-            }
+                presentation.perform("clear")
+            }.disabled(!presentation.active)
         }
     }
 }
