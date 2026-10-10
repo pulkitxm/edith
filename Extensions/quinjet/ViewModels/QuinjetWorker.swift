@@ -158,9 +158,11 @@ import Foundation
             else { throw ExtensionPeerError.invalidRequest }
             return try QuinjetCLICatalog.data()
         }
-        if ["quinjet.cli.start", "quinjet.cli.read", "quinjet.cli.cancel", "quinjet.cli.end"]
-            .contains(command)
-        {
+        if [
+            "quinjet.cli.start", "quinjet.cli.read", "quinjet.cli.cancel", "quinjet.cli.end",
+            "quinjet.cli.write", "quinjet.cli.resize",
+        ]
+        .contains(command) {
             if cliStreams == nil { cliStreams = try ExtensionCLIStreams(owner: "quinjet") }
             guard let cliStreams else { throw ExtensionPeerError.unavailable }
             return try QuinjetCLIExecution.invokeStream(

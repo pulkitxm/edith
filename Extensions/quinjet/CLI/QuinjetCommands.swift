@@ -603,10 +603,16 @@ enum QuinjetCLIEnvironment {
             _ = try await QuinjetCMUXLauncher.launch(request: request, replacing: nil)
             return 0
         }
-        guard noninteractive else {
-            throw CLIFailure.unavailable(
-                "foreground terminal transport is unavailable",
-                hint: "use `ed quinjet new` to control an embedded session")
+        if !noninteractive {
+            let environment = CLIToolEnvironment.sanitized().merging(request.environment) {
+                _, new in new
+            }
+            return try await OwnedTerminalCLI.run(
+                .init(
+                    executable: request.executableURL.path, arguments: request.arguments,
+                    environment: environment.map { "\($0.key)=\($0.value)" }),
+                directory: request.currentDirectory,
+                errorOutput: ExtensionCLIContext.request?.arguments.contains("--json") == true)
         }
         let result = try await CLICommandRunner.run(
             .init(
@@ -620,11 +626,11 @@ enum QuinjetCLIEnvironment {
                 terminatesProcessGroup: true)
         ) { _ in }
         if ExtensionCLIContext.request?.arguments.contains("--json") == true {
-            CLIOut.rawError(String(decoding: result.standardOutputData, as: UTF8.self))
+            try CLIOut.raw(result.standardOutputData, error: true)
         } else {
-            CLIOut.raw(String(decoding: result.standardOutputData, as: UTF8.self))
+            try CLIOut.raw(result.standardOutputData)
         }
-        CLIOut.rawError(String(decoding: result.standardErrorData, as: UTF8.self))
+        try CLIOut.raw(result.standardErrorData, error: true)
         return result.terminationStatus
     }
 

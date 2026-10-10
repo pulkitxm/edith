@@ -217,7 +217,10 @@ import Foundation
             else { throw ExtensionPeerError.invalidRequest }
             return try HerdrCLICatalog.data()
         }
-        if ["herdr.cli.start", "herdr.cli.read", "herdr.cli.cancel", "herdr.cli.end"].contains(
+        if [
+            "herdr.cli.start", "herdr.cli.read", "herdr.cli.cancel", "herdr.cli.end",
+            "herdr.cli.write", "herdr.cli.resize",
+        ].contains(
             command)
         {
             if cliStreams == nil { cliStreams = try ExtensionCLIStreams(owner: "herdr") }
