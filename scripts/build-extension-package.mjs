@@ -12,7 +12,6 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import { buildCameraCarrier } from "./build-camera-carrier.mjs";
 import {
   buildExtensionSupport,
   rewriteSupportImports,
@@ -742,6 +741,7 @@ export async function buildExtensionPackage({
       applicationIdentifier: `${hostIdentifier}.cameraCarrier`,
       extensionIdentifier: `${hostIdentifier}.camera`,
     };
+    const { buildCameraCarrier } = await import("./build-camera-carrier.mjs");
     await buildCameraCarrier({
       root,
       hostApp: containedHostApp,

@@ -16,7 +16,7 @@ import { basename, dirname, resolve } from "node:path";
 import {
   copyContainedHostRuntime,
   requireRegularTree,
-} from "./build-camera-carrier.mjs";
+} from "./build-contained-host-runtime.mjs";
 
 const identifierPattern = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
 const extensionPattern = /^[A-Za-z][A-Za-z0-9]{0,63}$/;

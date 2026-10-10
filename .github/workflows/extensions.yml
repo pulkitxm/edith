@@ -19,6 +19,8 @@ name: Extensions
       - scripts/*extension*
       - scripts/release-asset-*
       - scripts/build-minimal-host.mjs
+      - scripts/build-contained-host-runtime.mjs
+      - scripts/build-camera-carrier.mjs
       - scripts/build-ghostty.sh
       - scripts/patches/ghostty-external-io.patch
       - apps/music-player/**
@@ -47,6 +49,8 @@ name: Extensions
       - scripts/*extension*
       - scripts/release-asset-*
       - scripts/build-minimal-host.mjs
+      - scripts/build-contained-host-runtime.mjs
+      - scripts/build-camera-carrier.mjs
       - scripts/build-ghostty.sh
       - scripts/patches/ghostty-external-io.patch
       - apps/music-player/**
@@ -155,6 +159,7 @@ jobs:
       - run: |
           mkdir -p Packages/ExtensionMarketplace/.build/debug
           cp local/extension-tools/MarketplaceHarness Packages/ExtensionMarketplace/.build/debug/MarketplaceHarness
+      - run: bun scripts/test-extension-catalog-retention.mjs
       - run: bun scripts/test-extension-marketplace.mjs
     needs:
       - frozen-host
