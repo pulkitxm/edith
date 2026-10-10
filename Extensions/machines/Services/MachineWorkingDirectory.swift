@@ -2,11 +2,13 @@ import EdithExtensionSupport
 import Foundation
 
 public enum MachineWorkingDirectory {
+    @TaskLocal public static var terminalSession: String?
     public static let sharedSessionKey = "shared"
 
     public static var root: URL { MachinePaths.dir.appendingPathComponent("cwd") }
 
     public static func sessionKey(descriptor: Int32 = STDIN_FILENO) -> String {
+        if let terminalSession { return sanitize(terminalSession) }
         guard isatty(descriptor) == 1, let name = ttyname(descriptor) else {
             return sharedSessionKey
         }
