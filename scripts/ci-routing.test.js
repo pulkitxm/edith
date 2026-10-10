@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -321,6 +322,29 @@ test("Swift jobs restore commit times from full history before reusing builds", 
     );
     expect(checkout.with["fetch-depth"], name).toBe(0);
     expect(steps.indexOf(checkout), name).toBeLessThan(cache);
+  }
+});
+
+test("every host cache consumer has full history before restoring source times", () => {
+  for (const file of readdirSync(".github/workflows").filter((name) =>
+    /\.ya?ml$/.test(name),
+  )) {
+    const workflow = Bun.YAML.parse(
+      readFileSync(join(".github/workflows", file), "utf8"),
+    );
+    for (const [name, job] of Object.entries(workflow.jobs ?? {})) {
+      const steps = job.steps ?? [];
+      const cache = steps.findIndex(
+        (step) => step.uses === "./.github/actions/cache-host",
+      );
+      if (cache < 0) continue;
+      const checkout = steps.findIndex((step) =>
+        step.uses?.startsWith("actions/checkout@"),
+      );
+      expect(checkout, `${file}/${name}`).toBeGreaterThan(-1);
+      expect(checkout, `${file}/${name}`).toBeLessThan(cache);
+      expect(steps[checkout].with?.["fetch-depth"], `${file}/${name}`).toBe(0);
+    }
   }
 });
 
