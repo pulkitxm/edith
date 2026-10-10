@@ -43,6 +43,10 @@ public final class HostExtensionSessions {
         workers.compactMapValues(\.processIdentifier)
     }
 
+    public func requestDisable(ids: Set<String>) {
+        pendingDisableIDs.formUnion(ids.intersection(enabledIDs.union(workers.keys)))
+    }
+
     public func restore(packages: [String: ExtensionPackage]) async {
         for id in enabledIDs.union(pendingDisableIDs).sorted() {
             guard let package = packages[id] else { states[id] = .notInstalled; continue }

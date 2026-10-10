@@ -7,6 +7,35 @@ import Testing
 @testable import EdithHostCore
 
 @Suite @MainActor struct HostExtensionSessionTests {
+    @Test func batchDisableIntentSurvivesInterruptionBeforeAnyWorkerStops() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let packages = [
+            "sample": fixture.package("1.0.0"), "other": fixture.package("1.0.0", id: "other"),
+        ]
+        for package in packages.values { try await fixture.sessions.enable(package) }
+        let pids = Array(fixture.sessions.processIdentifiers.values)
+        fixture.sessions.requestDisable(ids: ["sample", "other", "not-installed"])
+        #expect(fixture.sessions.pendingDisableIDs == ["sample", "other"])
+        #expect(fixture.sessions.activeIDs.isEmpty)
+        #expect(fixture.sessions.automaticallyEnabledIDs.isEmpty)
+        for pid in pids { #expect(kill(pid, SIGKILL) == 0) }
+        let deadline = ContinuousClock.now + .seconds(3)
+        while pids.contains(where: { kill($0, 0) == 0 }) {
+            guard ContinuousClock.now < deadline else { throw HostWorkerError.stillRunning }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let restarted = try Fixture(suite: fixture.suite, mode: "require-recovery")
+        #expect(restarted.sessions.pendingDisableIDs == ["sample", "other"])
+        await restarted.sessions.restore(packages: packages)
+        #expect(restarted.sessions.pendingDisableIDs.isEmpty)
+        #expect(restarted.sessions.enabledIDs.isEmpty)
+        #expect(restarted.sessions.processIdentifiers.isEmpty)
+        #expect(restarted.sessions.states["sample"] == .disabled)
+        #expect(restarted.sessions.states["other"] == .disabled)
+        #expect(await fixture.sessions.shutdown())
+    }
+
     @Test func disabledExtensionsStartNoWorkers() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
