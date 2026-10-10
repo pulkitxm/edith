@@ -76,6 +76,7 @@ env:
   EXTENSION_CATALOG_PUBLIC_KEY: ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=
 jobs:
   frozen-host:
+    if: "needs.plan.outputs.changed == 'true'"
     needs:
       - plan
     runs-on: macos-26
@@ -137,6 +138,7 @@ jobs:
         if: always()
         run: "security delete-keychain \"$RUNNER_TEMP/extensions.keychain-db\" || true"
   tests:
+    if: "needs['frozen-host'].result == 'success'"
     runs-on: macos-26
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -170,6 +172,7 @@ jobs:
     outputs:
       matrix: "${{ steps.plan.outputs.matrix }}"
       changed: "${{ steps.plan.outputs.changed }}"
+      draft: "${{ steps.plan.outputs.draft }}"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -179,29 +182,29 @@ jobs:
         with:
           node-version: 24
       - run: node --test scripts/verify-extension-catalog.test.mjs
+      - name: Check portable publication and selective planning
+        run: bun test scripts/extension-publication-guard.test.js scripts/extension-release-plan.test.js scripts/extensions-workflow.test.js
       - run: bun scripts/extension-host-abi.mjs --write
+      - name: Require production publication from main
+        if: "github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true)"
+        run: 'test "$GITHUB_REF" = refs/heads/main || { echo "Extension publication requires main" >&2; exit 1; }'
       - name: Compare with the last trusted catalog
         id: plan
+        env:
+          GH_TOKEN: "${{ github.token }}"
         run: |
           mkdir -p dist/extensions
-          status="$(curl --silent --show-error --location --output dist/extensions/catalog.json --write-out '%{http_code}' https://github.com/pulkitxm/edith/releases/download/extension-catalog-v1/catalog.json)"
-          if [ "$status" = 404 ]; then
-            printf '%s' '{"schemaVersion":1,"revision":0,"packages":[]}' > dist/extensions/previous.json
-          elif [ "$status" = 200 ]; then
-            node scripts/verify-extension-catalog.mjs dist/extensions/catalog.json dist/extensions/previous.json "$EXTENSION_CATALOG_PUBLIC_KEY"
-          else
-            echo "Cannot read the published catalog: HTTP $status" >&2
-            exit 1
-          fi
+          node scripts/extension-publish.mjs --read-catalog dist/extensions/previous.json
           bun scripts/extension-release-plan.mjs dist/extensions/previous.json > dist/extensions/plan.json
           {
             echo "matrix=$(cat dist/extensions/plan.json)"
             echo "changed=$(bun -e 'console.log(JSON.parse(await Bun.file("dist/extensions/plan.json").text()).include.length > 0)')"
+            echo "draft=$(bun -e 'console.log(JSON.parse(await Bun.file("dist/extensions/previous-state.json").text()).draft)')"
           } >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: extension-plan
-          path: "dist/extensions/previous.json\ndist/extensions/plan.json\n"
+          path: "dist/extensions/previous.json\ndist/extensions/previous-state.json\ndist/extensions/plan.json\n"
           retention-days: 7
   build:
     needs:
@@ -335,7 +338,7 @@ jobs:
     needs:
       - plan
       - build
-    if: "github.event_name != 'pull_request' && needs.build.result == 'success' && needs.plan.outputs.changed == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
+    if: "!cancelled() && github.event_name != 'pull_request' && needs.plan.result == 'success' && ((needs.plan.outputs.changed == 'true' && needs.build.result == 'success') || (needs.plan.outputs.changed == 'false' && needs.plan.outputs.draft == 'true' && needs.build.result == 'skipped')) && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish == true && github.ref == 'refs/heads/main'))"
     runs-on: macos-26
     env:
       GH_TOKEN: "${{ secrets.RELEASE_PUSH_TOKEN }}"

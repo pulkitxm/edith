@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import {
   downloadReleaseAsset,
   releaseAssetMatchesFile,
@@ -13,6 +14,7 @@ import {
 } from "./release-asset-upload.mjs";
 import {
   maximumCatalogPackages,
+  maximumEnvelopeBytes,
   validateCatalog,
   verifiedCatalogPayload,
 } from "./verify-extension-catalog.mjs";
@@ -60,7 +62,11 @@ export function mergeExtensionCatalog(previous, records, revision) {
 }
 
 function gh(...args) {
-  return execFileSync("gh", args, { encoding: "utf8" });
+  return execFileSync("gh", args, {
+    encoding: "utf8",
+    timeout: args[0] === "api" ? 60_000 : undefined,
+    maxBuffer: 4 * 1024 ** 2,
+  });
 }
 
 function mutate(...args) {
@@ -136,10 +142,126 @@ export async function restorePublishedExtension({
   }
 }
 
+export async function verifiedPublicationState({
+  ref,
+  target,
+  previous,
+  publicKey,
+  readMain,
+  readCatalog,
+}) {
+  if (ref !== "refs/heads/main" || !/^[a-f0-9]{40}$/.test(target ?? ""))
+    throw new Error(
+      "Extension publication requires the approved main ref and commit",
+    );
+  validateCatalog(previous);
+  if ((await readMain()) !== target)
+    throw new Error("Extension publication superseded: main changed");
+  const current = await readCatalog();
+  if (current?.asset) {
+    const trusted = JSON.parse(verifiedCatalogPayload(current.data, publicKey));
+    if (!isDeepStrictEqual(trusted, previous))
+      throw new Error(
+        "Extension publication superseded: trusted catalog changed",
+      );
+  } else if (
+    previous.revision !== 0 ||
+    previous.packages.length !== 0 ||
+    (current?.release && current.release.draft !== true)
+  ) {
+    throw new Error(
+      "Extension publication blocked: trusted catalog pointer missing",
+    );
+  }
+  if ((await readMain()) !== target)
+    throw new Error("Extension publication superseded: main changed");
+  return current;
+}
+
+export async function readPublicationCatalog(
+  repository,
+  tag,
+  { loadRelease = release, downloadAsset = downloadReleaseAsset } = {},
+) {
+  const item = loadRelease(repository, tag);
+  if (!item) return undefined;
+  const asset = item.assets.find((entry) => entry.name === "catalog.json");
+  if (!asset) return { release: item };
+  const directory = await mkdtemp(resolve(tmpdir(), "edith-release-catalog-"));
+  try {
+    const destination = resolve(directory, "catalog.json");
+    await downloadAsset({
+      repository,
+      asset,
+      maximumBytes: maximumEnvelopeBytes,
+      destination,
+    });
+    const data = await readFile(destination);
+    if (data.length > maximumEnvelopeBytes)
+      throw new Error("Catalog envelope exceeds its limit");
+    return { release: item, asset, data };
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+export async function publicationPlanningState({
+  repository,
+  catalogTag,
+  publicKey,
+  readCatalog = () => readPublicationCatalog(repository, catalogTag),
+}) {
+  const current = await readCatalog();
+  if (current?.asset)
+    return {
+      catalog: JSON.parse(verifiedCatalogPayload(current.data, publicKey)),
+      draft: current.release.draft === true,
+    };
+  if (current?.release && current.release.draft !== true)
+    throw new Error("Published catalog pointer missing");
+  return {
+    catalog: { schemaVersion: 1, revision: 0, packages: [] },
+    draft: false,
+  };
+}
+
+export async function publicationPlanCatalog(options) {
+  return (await publicationPlanningState(options)).catalog;
+}
+
+export async function finalizeDraftCatalog({ verifyState, publish }) {
+  const current = await verifyState();
+  if (current?.release?.draft !== true || !current.asset) return false;
+  await publish(current.release.id);
+  return true;
+}
+
+export async function promoteExtensionCatalog({
+  candidate,
+  verifyState,
+  rename,
+}) {
+  const current = await verifyState();
+  const nextAsset = current?.release?.assets.find(
+    (asset) => asset.name === candidate,
+  );
+  if (!nextAsset) throw new Error("Catalog upload did not finish");
+  const priorAsset = current.asset;
+  if (priorAsset)
+    await rename(priorAsset.id, `catalog-${current.catalogRevision}.json`);
+  try {
+    await rename(nextAsset.id, "catalog.json");
+  } catch (error) {
+    if (priorAsset) await rename(priorAsset.id, "catalog.json");
+    throw error;
+  }
+}
+
 export async function publishExtensions({
   directory,
   repository,
   target,
+  ref,
   catalogTag,
   publicKey,
 }) {
@@ -153,7 +275,36 @@ export async function publishExtensions({
   const { include } = JSON.parse(
     await readFile(resolve(directory, "plan.json"), "utf8"),
   );
-  if (include.length === 0) return { published: [], revision: old.revision };
+  const verifyState = async () => {
+    const current = await verifiedPublicationState({
+      ref,
+      target,
+      previous: old,
+      publicKey,
+      readMain: async () =>
+        JSON.parse(gh("api", `repos/${repository}/git/ref/heads/main`)).object
+          .sha,
+      readCatalog: () => readPublicationCatalog(repository, catalogTag),
+    });
+    return current ? { ...current, catalogRevision: old.revision } : undefined;
+  };
+  await verifyState();
+  const publishDraft = async (id) =>
+    mutate(
+      "release",
+      "edit",
+      "--repo",
+      repository,
+      String(id),
+      "--draft",
+      "false",
+      "--make-latest",
+      "false",
+    );
+  if (include.length === 0) {
+    await finalizeDraftCatalog({ verifyState, publish: publishDraft });
+    return { published: [], revision: old.revision };
+  }
   for (const entry of include) {
     for (const suffix of ["zip", "json"]) {
       preflightReleaseAsset({
@@ -277,6 +428,7 @@ export async function publishExtensions({
       target,
       "--name",
       "Edith extension catalog",
+      "--draft",
       "--prerelease",
       "--body",
       "Signed extension catalog used by Edith.",
@@ -285,42 +437,34 @@ export async function publishExtensions({
   }
   const candidate = `catalog-${next.revision}.json`;
   await upload(repository, catalog.id, catalogTag, envelope, candidate);
-  catalog = release(repository, catalogTag);
-  const priorAsset = catalog.assets.find(
-    (asset) => asset.name === "catalog.json",
-  );
-  const nextAsset = catalog.assets.find((asset) => asset.name === candidate);
-  if (!nextAsset) throw new Error("Catalog upload did not finish");
-  if (priorAsset)
-    gh(
-      "api",
-      "--method",
-      "PATCH",
-      `repos/${repository}/releases/assets/${priorAsset.id}`,
-      "-f",
-      `name=catalog-${old.revision}.json`,
-    );
-  try {
-    gh(
-      "api",
-      "--method",
-      "PATCH",
-      `repos/${repository}/releases/assets/${nextAsset.id}`,
-      "-f",
-      "name=catalog.json",
-    );
-  } catch (error) {
-    if (priorAsset)
+  await promoteExtensionCatalog({
+    candidate,
+    verifyState,
+    rename: async (id, name) =>
       gh(
         "api",
         "--method",
         "PATCH",
-        `repos/${repository}/releases/assets/${priorAsset.id}`,
+        `repos/${repository}/releases/assets/${id}`,
         "-f",
-        "name=catalog.json",
-      );
-    throw error;
-  }
+        `name=${name}`,
+      ),
+  });
+  if (catalog.draft)
+    await finalizeDraftCatalog({
+      verifyState: () =>
+        verifiedPublicationState({
+          ref,
+          target,
+          previous: next,
+          publicKey,
+          readMain: async () =>
+            JSON.parse(gh("api", `repos/${repository}/git/ref/heads/main`))
+              .object.sha,
+          readCatalog: () => readPublicationCatalog(repository, catalogTag),
+        }),
+      publish: publishDraft,
+    });
   return {
     published: records.map(({ id, version }) => ({ id, version })),
     revision: next.revision,
@@ -328,14 +472,40 @@ export async function publishExtensions({
 }
 
 if (import.meta.main) {
-  const result = await publishExtensions({
-    directory: process.env.EXTENSION_OUTPUT ?? "dist/extensions",
-    repository: process.env.GITHUB_REPOSITORY ?? "pulkitxm/edith",
-    target:
-      process.env.GITHUB_SHA ??
-      execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
-    catalogTag: process.env.EXTENSION_CATALOG_TAG ?? "extension-catalog-v1",
-    publicKey: process.env.EXTENSION_CATALOG_PUBLIC_KEY,
-  });
-  process.stdout.write(`${JSON.stringify(result)}\n`);
+  const repository = process.env.GITHUB_REPOSITORY ?? "pulkitxm/edith";
+  const catalogTag =
+    process.env.EXTENSION_CATALOG_TAG ?? "extension-catalog-v1";
+  const publicKey = process.env.EXTENSION_CATALOG_PUBLIC_KEY;
+  if (process.argv[2] === "--read-catalog") {
+    if (process.argv.length !== 4)
+      throw new Error("Supply the verified catalog output file");
+    const state = await publicationPlanningState({
+      repository,
+      catalogTag,
+      publicKey,
+    });
+    const output = resolve(process.argv[3]);
+    await writeFile(output, JSON.stringify(state.catalog));
+    await writeFile(
+      resolve(dirname(output), "previous-state.json"),
+      JSON.stringify({ draft: state.draft }),
+    );
+    process.stdout.write(
+      `Verified catalog revision: ${state.catalog.revision}\n`,
+    );
+  } else {
+    if (process.argv.length !== 2)
+      throw new Error("Invalid publication arguments");
+    const result = await publishExtensions({
+      directory: process.env.EXTENSION_OUTPUT ?? "dist/extensions",
+      repository,
+      target:
+        process.env.GITHUB_SHA ??
+        execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+      ref: process.env.GITHUB_REF,
+      catalogTag,
+      publicKey,
+    });
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+  }
 }

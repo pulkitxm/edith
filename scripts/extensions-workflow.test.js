@@ -13,7 +13,9 @@ test("portable planning uses Ubuntu while native checks and publication keep mac
   expect(plan["runs-on"]).toBe("ubuntu-latest");
   for (const job of [workflow.jobs.tests, build, publish])
     expect(job["runs-on"]).toBe("macos-26");
-  expect(text(plan)).toContain("node scripts/verify-extension-catalog.mjs");
+  expect(text(plan)).toContain(
+    "node scripts/extension-publish.mjs --read-catalog",
+  );
   expect(text(plan)).toContain(
     "node --test scripts/verify-extension-catalog.test.mjs",
   );
@@ -142,7 +144,7 @@ test("every extension passes native lifecycle checks before release signing", ()
   expect(text(build)).toContain("secrets.NOTARY_KEY");
 });
 
-test("only successful changed extension builds can publish", () => {
+test("changed packages require successful builds before publication", () => {
   expect(build.if).toContain("!cancelled()");
   expect(build.if).toContain("needs.tests.result == 'success'");
   expect(build.if).toContain("needs.plan.outputs.changed == 'true'");
@@ -155,7 +157,7 @@ test("only successful changed extension builds can publish", () => {
   expect(text(publish)).toContain("EXTENSION_CATALOG_PRIVATE_KEY");
 });
 
-test("manual publication is explicit and checked builds can publish from the dispatched ref", () => {
+test("manual publication is explicit and checked builds can publish from main", () => {
   expect(workflow.on.workflow_dispatch.inputs.publish).toEqual({
     description:
       "Publish verified packages and the signed catalog from this ref",
