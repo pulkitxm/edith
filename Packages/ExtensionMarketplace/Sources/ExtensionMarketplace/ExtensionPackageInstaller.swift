@@ -33,7 +33,7 @@ public enum ExtensionArchive {
             let payloadNames =
                 [
                     "package.json", "app.bundle", "helper.bundle", "agent.bundle", "cli.bundle",
-                    "privileged.bundle",
+                    "privileged.bundle", "ExtensionCarrier.app",
                 ] + (package.id == "virtualCamera" ? ["CameraCarrier.app"] : [])
             guard !path.hasPrefix("/"), !path.contains("\\"), !path.contains("\0"),
                 parts.first == Substring(package.id),
@@ -67,6 +67,11 @@ public enum ExtensionArchive {
                 == ExtensionPayloadManifest(package: package)
         else {
             throw MarketplaceError.invalidArchive
+        }
+        if FileManager.default.fileExists(
+            atPath: payload.appendingPathComponent("ExtensionCarrier.app").path)
+        {
+            _ = try ExtensionUICarrier(payload: payload, package: package)
         }
         let bundles = try FileManager.default.contentsOfDirectory(
             at: payload, includingPropertiesForKeys: nil
@@ -117,6 +122,17 @@ public actor ExtensionPackageInstaller {
                 return file
             },
             verify: { directory in
+                let manifest = try JSONDecoder().decode(
+                    ExtensionPayloadManifest.self,
+                    from: Data(contentsOf: directory.appendingPathComponent("package.json")))
+                if FileManager.default.fileExists(
+                    atPath: directory.appendingPathComponent("ExtensionCarrier.app").path)
+                {
+                    try ExtensionUICarrier(
+                        payload: directory, manifest: manifest,
+                        expectedHostIdentifier: Bundle.main.bundleIdentifier ?? "com.pulkit.edith"
+                    ).verify(teamIdentifier: teamIdentifier)
+                }
                 for bundle in try FileManager.default.contentsOfDirectory(
                     at: directory, includingPropertiesForKeys: nil)
                 where bundle.pathExtension == "bundle"
