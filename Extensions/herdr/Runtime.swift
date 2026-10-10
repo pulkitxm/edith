@@ -24,6 +24,20 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(prepareDisableWithCompletion:)
+    func prepareDisable(completion: @escaping (NSError?) -> Void) {
+        startup?.cancel()
+        commands.shutdown()
+        Task {
+            await commands.shutdownAndWait()
+            await startup?.value
+            do { try await worker?.prepareDisable(); completion(nil) } catch {
+                completion(error as NSError)
+            }
+            GhosttyRuntime.shared.shutdown()
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         startup?.cancel()
@@ -58,12 +72,15 @@ final class ExtensionRuntime: NSObject {
             let created = HerdrWorker()
             worker = created
             surface = HerdrSurface(worker: created)
-            startup = Task { await created.start() }
+            let recovery =
+                input["recoveryOnly"] as? Bool == true
+                || ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"] == "1"
+            if !recovery { startup = Task { await created.start() } }
         case "view":
             guard let worker else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost {
-                    HerdrPage(store: worker.store)
+                    HerdrPage(store: worker.store, activity: worker.activity)
                         .environment(\.automaticViewActionsEnabled, worker.automaticActions)
                         .environment(\.terminalLaunchEnabled, worker.automaticActions)
                 })

@@ -30,6 +30,7 @@ struct HostSurfaceEditor: View {
     @State private var renamedProfile = ""
     @State private var layoutError: String?
     @State private var sourceChoices: [SurfaceSourceChoice] = []
+    @State private var agentSourceChoices: [SurfaceSourceChoice] = []
     @State private var sourceLoad = ContentLoad()
     @State private var tileFrames: [String: CGRect] = [:]
     @State private var canvasWidth = 600.0
@@ -136,7 +137,8 @@ struct HostSurfaceEditor: View {
         .pageTask(
             id: sourceRequestID,
             active: selection.map {
-                $0.widget.supportsSourceFilters && !marketplace.surfaces.privacy.hides($0.widget)
+                $0.widget.supportsSourceFilters && $0.widget != .agents
+                    && !marketplace.surfaces.privacy.hides($0.widget)
             } ?? false,
             cancel: {
                 sourceLoad.reset(); sourceChoices = []
@@ -169,6 +171,23 @@ struct HostSurfaceEditor: View {
                         }
                     }
                 }, apply: { sourceChoices = $0 })
+        }
+        .pageTask(
+            id: "agent-providers:" + sourceRequestID + ":" + String(glancesExpanded),
+            active: (selection?.widget == .agents || (target == .notch && glancesExpanded))
+                && availability.activeIDs.contains("herdr")
+                && !marketplace.surfaces.privacy.hides(.agents),
+            cancel: { agentSourceChoices = [] }
+        ) {
+            agentSourceChoices = []
+            var tile = SurfaceTile(.agents)
+            tile.itemLimit = 1
+            do {
+                let snapshot = try await marketplace.surfaces.requests.snapshot(
+                    providerID: "herdr", target: target, tile: tile)
+                try Task.checkCancellation()
+                agentSourceChoices = snapshot.sources
+            } catch { agentSourceChoices = [] }
         }
 
     }
@@ -1118,7 +1137,9 @@ struct HostSurfaceEditor: View {
                             }))
                 }
                 if tile.widget == .agents { agentFilters(tile) }
-                if tile.widget.supportsSourceFilters { extensionSources(tile) }
+                if tile.widget.supportsSourceFilters && tile.widget != .agents {
+                    extensionSources(tile)
+                }
                 if !tile.widget.contentChoices.isEmpty { extensionContent(tile) }
                 if tile.widget == .focus {
                     Stepper(
@@ -1220,8 +1241,13 @@ struct HostSurfaceEditor: View {
     }
 
     private var agentProviderChoices: [SurfaceSourceChoice] {
-        (selection?.sourceIDs ?? []).union(layout.notchAgentSources ?? []).sorted().map {
-            SurfaceSourceChoice($0, $0)
+        var choices = Dictionary(uniqueKeysWithValues: agentSourceChoices.map { ($0.id, $0) })
+        for id in (selection?.sourceIDs ?? []).union(layout.notchAgentSources ?? [])
+        where choices[id] == nil {
+            choices[id] = SurfaceSourceChoice(id, "Unavailable provider")
+        }
+        return choices.values.sorted {
+            $0.title.localizedStandardCompare($1.title) == .orderedAscending
         }
     }
 

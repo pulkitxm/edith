@@ -3,6 +3,8 @@ import EdithExtensionUI
 import SwiftUI
 
 struct HerdrPage: View {
+    private let activity: AgentActivityMonitor?
+    @State private var connectionsPresented = false
     @State private var store: HerdrStore
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
@@ -23,7 +25,11 @@ struct HerdrPage: View {
     @State private var compactDetailsPresented = false
     @State private var filterDismissedAt: Date?
 
-    @MainActor init(store: HerdrStore? = nil, drag: HerdrDragCoordinator? = nil) {
+    @MainActor init(
+        store: HerdrStore? = nil, drag: HerdrDragCoordinator? = nil,
+        activity: AgentActivityMonitor? = nil
+    ) {
+        self.activity = activity
         _store = State(initialValue: store ?? .shared)
         _drag = State(initialValue: drag ?? HerdrDragCoordinator())
     }
@@ -155,6 +161,18 @@ struct HerdrPage: View {
         .edithSheet(item: messageDraft, dismissible: false) { draft in
             HerdrMessageSheet(messaging: store.messaging, draft: draft, hideAgents: hideAgents)
         }
+        .edithSheet(
+            isPresented: Binding(
+                get: { connectionsPresented || activity?.connectionsPresented == true },
+                set: {
+                    connectionsPresented = $0; activity?.connectionsPresented = $0
+                })
+        ) {
+            if let activity {
+                AgentConnectionsPane(monitor: activity).frame(
+                    width: UIScale.pt(680), height: UIScale.pt(650))
+            }
+        }
         .edithSheet(isPresented: $launchSettingsPresented) {
             HerdrLaunchSettingsSheet()
         }
@@ -253,6 +271,12 @@ struct HerdrPage: View {
 
     private var headerActions: some View {
         HStack(spacing: UIScale.pt(2)) {
+            if activity != nil {
+                headerIcon(
+                    "link", "Agent connections",
+                    "Configure provider activity and permission requests"
+                ) { connectionsPresented = true }
+            }
             messageMenu
             headerIcon(
                 "magnifyingglass", "Search", "Search agent sessions on every machine (⌘K)"

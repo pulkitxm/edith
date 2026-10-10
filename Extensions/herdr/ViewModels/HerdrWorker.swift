@@ -3,9 +3,11 @@ import EdithExtensionUI
 import Foundation
 
 @MainActor final class HerdrWorker {
+    let activity: AgentActivityMonitor
     let store: HerdrStore
     let hooks: AgentHookService
     let automaticActions: Bool
+    private let activityInstaller: AgentActivityHookInstaller
     private let attention: HerdrAttentionBridge
     private let inventory: HerdrInventoryCommands
     private let send: @Sendable (String, HerdrAgent) async -> HerdrPromptOutcome
@@ -14,7 +16,9 @@ import Foundation
     private var maintenance: Task<Void, Never>?
 
     init(
-        store: HerdrStore? = nil, hooks: AgentHookService = .shared,
+        store: HerdrStore? = nil, activity: AgentActivityMonitor? = nil,
+        activityInstaller: AgentActivityHookInstaller? = nil,
+        hooks: AgentHookService = .shared,
         attention: HerdrAttentionBridge? = nil,
         automaticActions: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
             == nil, inventory: HerdrInventoryCommands = HerdrInventoryCommands(),
@@ -22,6 +26,12 @@ import Foundation
             await HerdrAgentPrompt.send($0, to: $1)
         }
     ) {
+        self.activity = activity ?? AgentActivityMonitor()
+        self.activityInstaller =
+            activityInstaller
+            ?? AgentActivityHookInstaller(
+                executable: Bundle.main.executableURL
+                    ?? URL(fileURLWithPath: CommandLine.arguments[0]))
         self.store = store ?? .shared
         self.hooks = hooks
         self.attention = attention ?? HerdrAttentionBridge()
@@ -34,6 +44,11 @@ import Foundation
     func start() async {
         guard !started, !isStopped else { return }
         started = true
+        do { try await activity.hookFiles.resume(activityInstaller) } catch {
+            activity.hookError = error.localizedDescription
+        }
+        guard !Task.isCancelled else { return }
+        await activity.start()
         PresenterState.shared.start()
         TextEditingCommands.install()
         HerdrOpenBridge.install()
@@ -47,6 +62,12 @@ import Foundation
             while !Task.isCancelled {
                 guard let self, !self.isStopped else { return }
                 await self.recordAttention()
+                await self.activity.terminals.refresh(
+                    hosts: self.store.hosts,
+                    enabled: self.activity.discoversTerminals
+                        && self.activity.settings.monitorTerminalAttention
+                        && !PresenterState.shared.hidesAgents,
+                    stuckMinutes: self.activity.stuckMinutes)
                 try? await Task.sleep(for: .seconds(25))
                 guard !Task.isCancelled else { return }
                 let before = MachineRegistry.machines()
@@ -61,6 +82,9 @@ import Foundation
     func execute(_ command: String, payload: Data) async throws -> Data {
         guard !isStopped else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
+        if command.hasPrefix("activity.") {
+            return try await activity.execute(command, payload: payload)
+        }
         if command == "herdr.list" || command == "herdr.command" {
             return try await inventory.execute(command, payload: payload)
         }
@@ -158,9 +182,18 @@ import Foundation
         return store.agents.first { $0.id == id }
     }
 
+    func prepareDisable() async throws {
+        await shutdown()
+        try await activity.hookFiles.suspend(activityInstaller)
+    }
+
     func shutdown() async {
         guard !isStopped else { return }
         isStopped = true
+        do { try await activity.hookFiles.suspend(activityInstaller) } catch {
+            activity.hookError = error.localizedDescription
+        }
+        await activity.shutdown()
         attention.shutdown()
         maintenance?.cancel()
         HerdrOpenBridge.shutdown()

@@ -10,6 +10,8 @@ import Testing
         fixture.controller.layouts.update(.notch) {
             $0.notchLeadingGlance = .none
             $0.notchTrailingGlance = .clock
+            $0.notchExpandPermissions = false
+            $0.notchPrioritizePermissions = false
         }
         #expect(fixture.controller.glanceProviderIDs.isEmpty)
         #expect(fixture.controller.leadingGlance == nil)
@@ -66,6 +68,74 @@ import Testing
         #expect(
             first["surface.openEditorToken"]
                 != state.values(for: "notchShelf")["surface.openEditorToken"])
+    }
+
+    @Test func agentGlancesRequireMatchingMetricsAndRespectSavedWingWidth() throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.state.publish([
+            "surface.activeIDs": "[\"notchShelf\",\"herdr\"]",
+            "surface.activeVersions": "{\"notchShelf\":\"1\",\"herdr\":\"1\"}",
+        ])
+        fixture.controller.synchronize()
+        fixture.controller.layouts.update(.notch) {
+            $0.notchLeadingGlance = .permissions
+            $0.notchTrailingGlance = .none
+            $0.notchWingWidth = 96
+            $0.notchPrioritizePermissions = false
+            $0.notchExpandPermissions = false
+        }
+        fixture.controller.recordSurfaceSnapshot(
+            .init(
+                providerID: "herdr",
+                rows: [.init("unrelated", title: "Synthetic working agent", value: "Working")]))
+        #expect(fixture.controller.leadingGlance == nil)
+        #expect(fixture.controller.glanceWingWidth == 0)
+        fixture.controller.recordSurfaceSnapshot(
+            .init(
+                providerID: "herdr",
+                metrics: [.init("permissions", "Permissions", "0")]))
+        #expect(fixture.controller.leadingGlance == nil)
+        fixture.controller.recordSurfaceSnapshot(
+            .init(
+                providerID: "herdr",
+                metrics: [.init("permissions", "Permissions", "2")]))
+        #expect(fixture.controller.leadingGlance?.value == "2")
+        #expect(fixture.controller.leadingGlance?.urgent == true)
+        #expect(fixture.controller.glanceWingWidth == 96)
+    }
+
+    @Test func newPermissionExpansionIsOptInAndDoesNotReopenForTheSameRequest() throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.state.publish([
+            "surface.activeIDs": "[\"notchShelf\",\"herdr\"]",
+            "surface.activeVersions": "{\"notchShelf\":\"1\",\"herdr\":\"1\"}",
+        ])
+        fixture.controller.synchronize()
+        fixture.controller.layouts.update(.notch) {
+            $0.notchLeadingGlance = .none
+            $0.notchTrailingGlance = .none
+            $0.notchExpandPermissions = true
+            $0.notchPrioritizePermissions = false
+        }
+        #expect(fixture.controller.glanceProviderIDs == ["herdr"])
+        let snapshot = SurfaceSnapshot(
+            providerID: "herdr",
+            metrics: [.init("permissions", "Permissions", "1")],
+            rows: [.init("synthetic-request", title: "Synthetic tool", field: "approvals")])
+        fixture.controller.recordSurfaceSnapshot(snapshot)
+        #expect(fixture.controller.isExpanded)
+        #expect(fixture.controller.activeTab == .agents)
+        fixture.controller.collapseNow()
+        fixture.controller.recordSurfaceSnapshot(snapshot)
+        #expect(!fixture.controller.isExpanded)
+        fixture.controller.layoutEditing = true
+        fixture.controller.recordSurfaceSnapshot(
+            .init(
+                providerID: "herdr",
+                metrics: [.init("permissions", "Permissions", "2")]))
+        #expect(!fixture.controller.isExpanded)
     }
 
     @MainActor private struct Fixture {
