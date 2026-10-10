@@ -11,16 +11,82 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { planSwiftTests } from "./ci-test-plan.mjs";
 
-test("an independent feature uses its extension build without unrelated macOS lanes", () => {
-  for (const path of [
-    "Extensions/calendar/Runtime.swift",
-    "Extensions/studio/CLI/StudioCommands.swift",
-    "Extensions/herdr/Views/SessionPage.swift",
-    "docs/cli/README.md",
-    "apps/music-player/src/catalog.rs",
-  ]) {
+test("unscoped features run their owning models without unrelated host lanes", () => {
+  expect(planSwiftTests(["Extensions/calendar/Runtime.swift"]).include).toEqual(
+    [{ lane: "feature-models", targets: "ci-extension-support" }],
+  );
+  for (const path of ["docs/cli/README.md", "apps/music-player/src/catalog.rs"])
     expect(planSwiftTests([path])).toEqual({ include: [] });
-  }
+});
+
+test.each([
+  [
+    "music",
+    "EmbeddedTests/MusicEmbeddedUITests.swift",
+    "ci-extension-music",
+    false,
+  ],
+  [
+    "attention",
+    "NativeRuntime/Tests/RuntimeTests.swift",
+    "ci-extension-attention",
+    false,
+  ],
+  [
+    "terminal",
+    "Native/Tests/TerminalTests.swift",
+    "ci-extension-terminal",
+    true,
+  ],
+  [
+    "database",
+    "DatabaseEngine/Tests/DatabaseTests.swift",
+    "ci-extension-database",
+    false,
+  ],
+  ["machines", "Tests/UI/SceneTests.swift", "ci-extension-machines", true],
+  ["presenter", "Tests/PresenterTests.swift", "ci-extension-presenter", false],
+  ["system", "Tests/SystemTests.swift", "ci-extension-system", false],
+  ["downloads", "Tests/DownloadsTests.swift", "ci-extension-downloads", false],
+])(
+  "test-only edits select the exact standalone owner %s",
+  (id, path, targets, ghostty) => {
+    expect(planSwiftTests([`Extensions/${id}/${path}`]).include).toEqual([
+      { lane: `extension-${id}`, extension: id, targets, ghostty },
+    ]);
+  },
+);
+
+test("multiple edits deduplicate each owner and the umbrella", () => {
+  expect(
+    planSwiftTests([
+      "Extensions/music/EmbeddedTests/SceneTests.swift",
+      "Extensions/music/Tests/PlaybackTests.swift",
+      "Extensions/calendar/Tests/CalendarTests.swift",
+      "Extensions/notchShelf/Tests/LayoutTests.swift",
+    ]).include,
+  ).toEqual([
+    { lane: "feature-models", targets: "ci-extension-support" },
+    {
+      lane: "extension-music",
+      extension: "music",
+      targets: "ci-extension-music",
+      ghostty: false,
+    },
+  ]);
+});
+
+test("owner boundaries and make arguments reject untrusted selections", () => {
+  expect(planSwiftTests(["Extensions/musicSibling/Tests/Test.swift"])).toEqual({
+    include: [],
+  });
+  expect(() =>
+    planSwiftTests(["Extensions/sample/Tests/Test.swift"], {
+      extensions: [
+        { id: "sample", testTargets: ["ci-extension-sample;unexpected"] },
+      ],
+    }),
+  ).toThrow("Invalid extension test targets");
 });
 
 test("host contracts and tests select host runtime checks", () => {
@@ -54,7 +120,10 @@ test("shared support changes select consumers while commands stay outside the em
 
 test("Docs and native Music select their actual owning checks", () => {
   expect(planSwiftTests(["Extensions/docs/Runtime.swift"]).include).toEqual([
-    { lane: "feature-models", targets: "ci-extension-docs" },
+    {
+      lane: "feature-models",
+      targets: "ci-extension-support ci-extension-docs",
+    },
   ]);
   expect(
     planSwiftTests(["Extensions/music/Native/Cargo.lock"]).include,
@@ -79,7 +148,9 @@ test("shared workflow and build inputs exercise all lanes without duplicate targ
   ]) {
     expect(planSwiftTests([path]).include).toEqual(expected);
   }
-  expect(planSwiftTests([], { all: true }).include).toEqual(expected);
+  expect(planSwiftTests([], { all: true, extensions: [] }).include).toEqual(
+    expected,
+  );
   expect(
     planSwiftTests([
       "Packages/ExtensionSupport/Package.swift",
@@ -142,6 +213,11 @@ test("a child behind its base routes the tested merge revision with the current 
     const head = git("rev-parse", "HEAD").trim();
     git("switch", "base");
     save("scripts/ci-test-plan.mjs", readFileSync("scripts/ci-test-plan.mjs"));
+    save(
+      "scripts/test-extension-package.mjs",
+      readFileSync("scripts/test-extension-package.mjs"),
+    );
+    save("Extensions/manifest.json", readFileSync("Extensions/manifest.json"));
     commit("Add planner fixture");
     git("update-ref", "refs/remotes/origin/base", "HEAD");
     git("merge", "--no-edit", "feature");
@@ -174,10 +250,39 @@ test("a child behind its base routes the tested merge revision with the current 
     expect(values.get("swift")).toBe("true");
     expect(values.get("host")).toBe("false");
     expect(values.get("scripts")).toBe("false");
-    expect(values.get("swift_tests")).toBe("false");
-    expect(JSON.parse(values.get("swift_matrix"))).toEqual({ include: [] });
+    expect(values.get("swift_tests")).toBe("true");
+    expect(JSON.parse(values.get("swift_matrix"))).toEqual({
+      include: [{ lane: "feature-models", targets: "ci-extension-support" }],
+    });
     expect(() => git("show", `${head}:scripts/ci-test-plan.mjs`)).toThrow();
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("explicit full verification includes every declared standalone owner", () => {
+  const owners = planSwiftTests([], { all: true }).include.filter(
+    (lane) => lane.extension,
+  );
+  expect(owners.map((lane) => lane.extension)).toEqual([
+    "audioMixer",
+    "presenter",
+    "system",
+    "music",
+    "terminal",
+    "studio",
+    "bifrost",
+    "lidAwake",
+    "attention",
+    "machines",
+    "downloads",
+    "virtualCamera",
+    "herdr",
+    "quinjet",
+    "database",
+  ]);
+  const makefile = readFileSync("Makefile", "utf8");
+  for (const lane of owners)
+    for (const target of lane.targets.split(" "))
+      expect(makefile).toMatch(new RegExp(`^${target}:`, "m"));
 });

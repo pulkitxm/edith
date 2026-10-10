@@ -260,8 +260,23 @@ jobs:
             Packages/EdithDocsWorker/.build
             Extensions/.build
             Extensions/music/Native/target
+            ${{ matrix.extension && format('Extensions/{0}/.build', matrix.extension) || '' }}
+            ${{ matrix.extension && format('Extensions/{0}/*/.build', matrix.extension) || '' }}
+            ${{ matrix.extension && format('local/extension-support/{0}_*', matrix.extension) || '' }}
           key: native-tests-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.lane }}-${{ hashFiles('Packages/ExtensionMarketplace/Package.*', 'Packages/ExtensionSupport/Package.*', 'Packages/EdithDocsWorker/Package.*', 'Extensions/Package.*', 'Extensions/music/Native/Cargo.lock') }}-${{ github.sha }}
           restore-keys: native-tests-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.lane }}-${{ hashFiles('Packages/ExtensionMarketplace/Package.*', 'Packages/ExtensionSupport/Package.*', 'Packages/EdithDocsWorker/Package.*', 'Extensions/Package.*', 'Extensions/music/Native/Cargo.lock') }}-
+      - name: Identify the optional terminal test toolchain
+        if: matrix.ghostty == true
+        id: ghostty-toolchain
+        run: |
+          command -v zig >/dev/null 2>&1 || brew install zig
+          echo "fingerprint=$(node scripts/extension-ghostty-native.mjs --fingerprint)" >> "$GITHUB_OUTPUT"
+      - name: Cache the optional terminal test library
+        if: matrix.ghostty == true
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: Extensions/terminal/Native/vendor
+          key: ghostty-extension-${{ runner.os }}-${{ runner.arch }}-${{ steps.ghostty-toolchain.outputs.fingerprint }}-${{ hashFiles('scripts/build-ghostty.sh', 'scripts/patches/ghostty-external-io.patch', 'scripts/extension-ghostty-native.mjs', 'Extensions/terminal/Native/Package.swift') }}
       - name: Tests
         timeout-minutes: 40
         env:

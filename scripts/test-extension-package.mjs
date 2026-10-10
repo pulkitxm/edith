@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 
-export function runExtensionPackageTests(definition, run = execFileSync) {
+export function extensionTestTargets(definition) {
   const targets = definition.testTargets ?? [];
   if (
     !Array.isArray(targets) ||
@@ -14,6 +14,11 @@ export function runExtensionPackageTests(definition, run = execFileSync) {
     )
   )
     throw new Error("Invalid extension test targets");
+  return targets;
+}
+
+export function runExtensionPackageTests(definition, run = execFileSync) {
+  const targets = extensionTestTargets(definition);
   if (targets.length) run("make", targets, { stdio: "inherit" });
 }
 

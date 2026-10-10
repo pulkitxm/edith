@@ -242,22 +242,23 @@ describe("independent extension releases", () => {
     );
     const root = await mkdtemp(join(tmpdir(), "extension-test-inputs-"));
     const definition = {
-      id: "calendar",
+      id: "music",
       version: "1.0.0",
       hostABI: "edith-host-1",
-      inputs: ["Extensions/calendar"],
+      inputs: ["Extensions/music"],
       sharedInputs: ["Packages/ExtensionSupport"],
       dependencies: [],
     };
     try {
       for (const directory of [
-        "Extensions/calendar/Tests",
+        "Extensions/music/Tests",
+        "Extensions/music/EmbeddedTests",
         "Packages/ExtensionSupport/Tests",
         "Packages/ExtensionSupport/Sources",
       ])
         await mkdir(join(root, directory), { recursive: true });
       await writeFile(
-        join(root, "Extensions/calendar/Runtime.swift"),
+        join(root, "Extensions/music/Runtime.swift"),
         "production",
       );
       await writeFile(
@@ -269,7 +270,7 @@ describe("independent extension releases", () => {
       ]);
       const published = [
         {
-          id: "calendar",
+          id: "music",
           version: "1.0.0",
           hostABI: "edith-host-1",
           architecture: "arm64",
@@ -277,13 +278,36 @@ describe("independent extension releases", () => {
         },
       ];
       await writeFile(
-        join(root, "Extensions/calendar/Tests/CalendarTests.swift"),
+        join(root, "Extensions/music/Tests/CalendarTests.swift"),
         "new extension test",
       );
       await writeFile(
         join(root, "Packages/ExtensionSupport/Tests/UITests.swift"),
         "new shared test",
       );
+      await writeFile(
+        join(root, "Extensions/music/EmbeddedTests/SceneTests.swift"),
+        "new native scene test",
+      );
+      const { planSwiftTests } = await import("./ci-test-plan.mjs");
+      expect(
+        planSwiftTests(["Extensions/music/EmbeddedTests/SceneTests.swift"])
+          .include,
+      ).toEqual([
+        {
+          lane: "extension-music",
+          extension: "music",
+          targets: "ci-extension-music",
+          ghostty: false,
+        },
+      ]);
+      expect(await extensionFingerprint(root, definition, [definition])).toBe(
+        fingerprint,
+      );
+      expect(
+        await planUnpublishedExtensions(root, [definition], published),
+      ).toEqual([]);
+      definition.testTargets = ["ci-extension-music"];
       expect(await extensionFingerprint(root, definition, [definition])).toBe(
         fingerprint,
       );

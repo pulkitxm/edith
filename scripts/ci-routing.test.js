@@ -195,7 +195,7 @@ test("Swift lanes exercise only independent host and extension packages", () => 
     ["$", "{{ fromJSON(needs.changes.outputs.swift_matrix) }}"].join(""),
   );
   expect(job.if).toBe("needs.changes.outputs.swift_tests == 'true'");
-  expect(planSwiftTests([], { all: true }).include).toEqual([
+  expect(planSwiftTests([], { all: true, extensions: [] }).include).toEqual([
     { lane: "host-runtime", targets: "ci-host ci-marketplace-runtime" },
     {
       lane: "feature-models",
@@ -409,4 +409,23 @@ test("native extension contracts run on macOS with private SDK execution enabled
   );
   expect(restore).toBeGreaterThanOrEqual(0);
   expect(job.steps.indexOf(proof)).toBeGreaterThan(restore);
+});
+
+test("standalone terminal consumers get verified native prerequisites independently of the frozen host", () => {
+  const job = ciJobs["swift-test"];
+  expect(job.needs).toBe("changes");
+  const setup = job.steps.find((step) => step.id === "ghostty-toolchain");
+  const cache = job.steps.find(
+    (step) => step.name === "Cache the optional terminal test library",
+  );
+  const tests = job.steps.find((step) => step.name === "Tests");
+  expect(setup.if).toBe("matrix.ghostty == true");
+  expect(setup.run).toContain("brew install zig");
+  expect(setup.run).toContain("extension-ghostty-native.mjs --fingerprint");
+  expect(cache.if).toBe("matrix.ghostty == true");
+  expect(cache.with.path).toBe("Extensions/terminal/Native/vendor");
+  expect(cache.with.key).toContain(
+    "steps.ghostty-toolchain.outputs.fingerprint",
+  );
+  expect(job.steps.indexOf(cache)).toBeLessThan(job.steps.indexOf(tests));
 });

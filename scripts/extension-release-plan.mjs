@@ -153,6 +153,7 @@ export async function extensionFingerprint(root, definition, definitions) {
           "target",
           "Tests",
           "tests",
+          "EmbeddedTests",
           "vendor",
         ].includes(entry.name)
       )
@@ -167,7 +168,9 @@ export async function extensionFingerprint(root, definition, definitions) {
     }
   }
   for (const input of [...inputs].sort()) await collect(input);
-  const digest = createHash("sha256").update(JSON.stringify(definition));
+  const packageDefinition = { ...definition };
+  delete packageDefinition.testTargets;
+  const digest = createHash("sha256").update(JSON.stringify(packageDefinition));
   for (const [path, bytes] of [...files].sort(([a], [b]) =>
     a.localeCompare(b),
   )) {

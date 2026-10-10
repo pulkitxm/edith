@@ -1,8 +1,16 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { extensionTestTargets } from "./test-extension-package.mjs";
 
-export function planSwiftTests(paths, { all = false } = {}) {
+const definitions = JSON.parse(
+  readFileSync(new URL("../Extensions/manifest.json", import.meta.url), "utf8"),
+);
+
+export function planSwiftTests(
+  paths,
+  { all = false, extensions = definitions } = {},
+) {
   const force =
     all ||
     paths.some((path) =>
@@ -40,6 +48,41 @@ export function planSwiftTests(paths, { all = false } = {}) {
   if (matches(/^Extensions\/music\/Native\//)) {
     include.push({ lane: "native-music", targets: "ci-music-native" });
   }
+  const selected = extensions.filter(
+    (definition) =>
+      all ||
+      paths.some(
+        (path) =>
+          path.startsWith(`Extensions/${definition.id}/`) &&
+          !(
+            definition.id === "music" &&
+            path.startsWith("Extensions/music/Native/")
+          ),
+      ),
+  );
+  for (const definition of selected) {
+    if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(definition.id))
+      throw new Error("Invalid extension test owner");
+    const ownedTargets = extensionTestTargets(definition);
+    if (ownedTargets.length === 0) {
+      if (!targets.includes("ci-extension-support"))
+        targets.unshift("ci-extension-support");
+      continue;
+    }
+    include.push({
+      lane: `extension-${definition.id}`,
+      extension: definition.id,
+      targets: ownedTargets.join(" "),
+      ghostty: definition.nativeProduct === "GhosttyTerminal",
+    });
+  }
+  const featureModels = include.find((lane) => lane.lane === "feature-models");
+  if (featureModels) featureModels.targets = targets.join(" ");
+  else if (targets.length > 0)
+    include.splice(include[0]?.lane === "host-runtime" ? 1 : 0, 0, {
+      lane: "feature-models",
+      targets: targets.join(" "),
+    });
   return { include };
 }
 

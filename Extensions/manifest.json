@@ -238,7 +238,10 @@
     ],
     "dependencies": [],
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-presenter"
+    ]
   },
   {
     "id": "colorPicker",
@@ -494,7 +497,10 @@
     ],
     "dependencies": [],
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-system"
+    ]
   },
   {
     "id": "timeLapse",
@@ -931,7 +937,10 @@
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-music"
+    ]
   },
   {
     "id": "docs",
@@ -1162,7 +1171,10 @@
       ]
     },
     "minimumSystemVersion": 14,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-terminal"
+    ]
   },
   {
     "id": "studio",
@@ -2017,7 +2029,10 @@
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "supportProduct": "EdithExtensionUI",
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-downloads"
+    ]
   },
   {
     "id": "seoAudit",
@@ -2727,6 +2742,9 @@
       ".build/checkouts/swift-numerics/Sources/_NumericsShims/include",
       ".build/checkouts/swift-nio/Sources/CNIOWindows/include"
     ],
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-database"
+    ]
   }
 ]
