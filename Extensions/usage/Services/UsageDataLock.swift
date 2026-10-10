@@ -30,7 +30,9 @@ public final class UsageDataLock: @unchecked Sendable {
 
     public static func acquire(dataDirectory: URL) throws -> UsageDataLock {
         let manager = FileManager.default
-        try manager.createDirectory(at: dataDirectory, withIntermediateDirectories: true)
+        try manager.createDirectory(
+            at: dataDirectory, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
         return try acquire(at: lockURL(dataDirectory: dataDirectory))
     }
 
@@ -198,7 +200,8 @@ public enum UsageDataTransaction {
         _ body: () throws -> T
     ) throws -> T {
         try FileManager.default.createDirectory(
-            at: dataDirectory, withIntermediateDirectories: true)
+            at: dataDirectory, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
         guard
             let transaction = try? UsageDataLock.acquire(
                 at: dataDirectory.appendingPathComponent("usage-transaction.lock"),
@@ -220,7 +223,9 @@ enum UsageDurableFile {
     static func prepare(_ data: Data, to url: URL) throws -> UsageDataPreparedWrite {
         let manager = FileManager.default
         let directory = url.deletingLastPathComponent()
-        try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try manager.createDirectory(
+            at: directory, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
         let temporary = directory.appendingPathComponent(
             ".\(url.lastPathComponent).\(UUID().uuidString).tmp")
         let descriptor = open(
@@ -243,7 +248,9 @@ enum UsageDurableFile {
     static func append(_ data: Data, to url: URL) throws {
         let manager = FileManager.default
         let directory = url.deletingLastPathComponent()
-        try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try manager.createDirectory(
+            at: directory, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
         let descriptor = open(
             url.path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK,
             mode_t(S_IRUSR | S_IWUSR))
