@@ -21,6 +21,8 @@ struct UsageUILimits: Codable, Sendable {
     private let defaults: UserDefaults
     private var documents: [UUID: (data: Data, expires: Date)] = [:]
     private var stopped = false
+    private var limitsPreparations: [UUID: Task<LimitsHistory.Snapshot, Never>] = [:]
+    var pendingHistoryPreparations: Int { limitsPreparations.count }
     private let exports: UsageExportDelivery
     private let navigate: @MainActor (UsageNavigationRequest) async throws -> Void
 
@@ -36,10 +38,18 @@ struct UsageUILimits: Codable, Sendable {
         self.exports = exports ?? UsageExportDelivery()
     }
 
-    func shutdown() { stopped = true; documents = [:]; exports.stop() }
+    func shutdown() {
+        stopped = true
+        for task in limitsPreparations.values { task.cancel() }
+        documents = [:]
+        exports.stop()
+    }
 
     func shutdownAndWait() async {
+        let pending = Array(limitsPreparations.values)
         shutdown()
+        for task in pending { await task.value }
+        limitsPreparations = [:]
         await exports.stopAndWait()
     }
 
@@ -164,9 +174,7 @@ struct UsageUILimits: Codable, Sendable {
             else {
                 throw ExtensionPeerError.invalidRequest
             }
-            let snapshot = await LimitsHistory.loadSnapshot(
-                preferredProvider: provider,
-                url: directory.appendingPathComponent("limits-history.jsonl"))
+            let snapshot = try await prepareLimits(provider: provider)
             try Task.checkCancellation()
             guard !stopped else { throw ExtensionPeerError.unavailable }
             return try receipt(
@@ -246,7 +254,25 @@ struct UsageUILimits: Codable, Sendable {
         }
     }
 
+    private func prepareLimits(provider: LimitProvider) async throws -> LimitsHistory.Snapshot {
+        guard !stopped, limitsPreparations.count < 8 else { throw ExtensionPeerError.unavailable }
+        let id = UUID()
+        let url = directory.appendingPathComponent("limits-history.jsonl")
+        let load = Task { await LimitsHistory.loadSnapshot(preferredProvider: provider, url: url) }
+        limitsPreparations[id] = load
+        defer { limitsPreparations[id] = nil }
+        let snapshot = await withTaskCancellationHandler {
+            await load.value
+        } onCancel: {
+            load.cancel()
+        }
+        try Task.checkCancellation()
+        guard !stopped, !load.isCancelled else { throw ExtensionPeerError.unavailable }
+        return snapshot
+    }
+
     private func receipt(_ data: Data) throws -> Data {
+        try Task.checkCancellation()
         guard !stopped, (1...67_108_864).contains(data.count), documents.count < 8 else {
             throw ExtensionPeerError.unavailable
         }

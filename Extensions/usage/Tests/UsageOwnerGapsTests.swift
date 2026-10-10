@@ -95,25 +95,7 @@ import Testing
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let count = 115_000
-        let date = Date(timeIntervalSince1970: 1_800_000_000)
-        let style = Date.ISO8601FormatStyle()
-        var rows = String()
-        rows.reserveCapacity(16 * 1_024 * 1_024)
-        for i in 0..<count {
-            let stamp = date.addingTimeInterval(Double(i)).formatted(style)
-            rows +=
-                "{\"ts\":\"\(stamp)\",\"p\":\"claude\",\"s\":\(i % 101),\"w\":18,\"sr\":\"2027-02-01T13:00:00Z\",\"wr\":\"2027-02-02T12:00:00Z\"}\n"
-        }
-        let maximum = 16 * 1_024 * 1_024
-        let padding = (maximum - rows.utf8.count) / count
-        rows = rows.replacingOccurrences(
-            of: "\n", with: String(repeating: " ", count: padding) + "\n")
-        rows.insert(
-            contentsOf: String(repeating: " ", count: maximum - rows.utf8.count),
-            at: rows.startIndex)
-        let raw = Data(rows.utf8)
-        #expect(raw.count == maximum)
-        try raw.write(to: root.appendingPathComponent("limits-history.jsonl"))
+        let (raw, date) = try historyFixture(root)
         let begin = ContinuousClock.now
         let snapshot = await LimitsHistory.loadSnapshot(
             preferredProvider: .claude, url: root.appendingPathComponent("limits-history.jsonl"))
@@ -135,5 +117,112 @@ import Testing
         print(
             "usage-history-profile records=\(count) inputBytes=\(raw.count) outputBytes=\(encoded.count) load=\(begin.duration(to: loaded)) encode=\(loaded.duration(to: end))"
         )
+    }
+    @Test(arguments: [false, true])
+    func historyCancellationAndDisableDrainRealPreparationAndRejectStaleReceipts(disabling: Bool)
+        async throws
+    {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        _ = try historyFixture(root)
+        let controller = UsageWorkerController(
+            dataDirectory: root,
+            collect: { _, _ in
+                Issue.record("Limits history preparation must not collect usage")
+                throw ExtensionPeerError.unavailable
+            })
+        let service = UsageUICommands(controller: controller, directory: root)
+        var receipts: [UUID] = []
+        var chunks = 0
+        let client = UsageUIClient(invoke: { operation, payload in
+            let data = try await service.execute(operation, payload: payload)
+            if operation == "usage.ui.limits" {
+                let object = try #require(
+                    JSONSerialization.jsonObject(with: data) as? [String: Any])
+                receipts.append(
+                    try #require((object["id"] as? String).flatMap(UUID.init(uuidString:))))
+                #expect(object["byteCount"] as? Int == 9_189_911)
+            }
+            if operation == "usage.ui.chunk" { chunks += 1 }
+            return data
+        })
+        let request = Task { try await client.limits(provider: .claude) }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while service.pendingHistoryPreparations == 0 && ContinuousClock.now < deadline {
+            await Task.yield()
+        }
+        try #require(service.pendingHistoryPreparations == 1)
+        if disabling { await service.shutdownAndWait() } else { request.cancel() }
+        await #expect(throws: (any Error).self) { try await request.value }
+        #expect(service.pendingHistoryPreparations == 0 && receipts.isEmpty)
+        if disabling {
+            await #expect(throws: (any Error).self) { try await client.limits(provider: .claude) }
+        } else {
+            let value = try await client.limits(provider: .claude)
+            #expect(value.points.count == 115_000 && chunks > 1)
+            #expect(
+                value.points.enumerated().allSatisfy {
+                    $0.element.s == Double($0.offset % 101) && $0.element.w == 18
+                })
+            let id = try #require(receipts.last)
+            let stale = try JSONSerialization.data(withJSONObject: [
+                "id": id.uuidString, "offset": 0,
+            ])
+            await #expect(throws: (any Error).self) {
+                try await service.execute("usage.ui.chunk", payload: stale)
+            }
+        }
+        await client.stopAndWait(); await service.shutdownAndWait(); await controller.shutdown()
+    }
+
+    @Test func historyPreparationsAreBoundedAndShutdownDrainsEveryRealLoad() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        _ = try historyFixture(root)
+        let controller = UsageWorkerController(
+            dataDirectory: root, collect: { _, _ in throw ExtensionPeerError.unavailable })
+        let service = UsageUICommands(controller: controller, directory: root)
+        let payload = Data(#"{"provider":"claude"}"#.utf8)
+        let tasks = (0..<8).map { _ in
+            Task { try await service.execute("usage.ui.limits", payload: payload) }
+        }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while service.pendingHistoryPreparations < 8 && ContinuousClock.now < deadline {
+            await Task.yield()
+        }
+        try #require(service.pendingHistoryPreparations == 8)
+        await #expect(throws: (any Error).self) {
+            try await service.execute("usage.ui.limits", payload: payload)
+        }
+        await service.shutdownAndWait()
+        for task in tasks { await #expect(throws: (any Error).self) { try await task.value } }
+        #expect(service.pendingHistoryPreparations == 0)
+        await controller.shutdown()
+    }
+
+    private func historyFixture(_ root: URL) throws -> (Data, Date) {
+        let count = 115_000
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        let style = Date.ISO8601FormatStyle()
+        var rows = String()
+        rows.reserveCapacity(16 * 1_024 * 1_024)
+        for i in 0..<count {
+            let stamp = date.addingTimeInterval(Double(i)).formatted(style)
+            rows +=
+                "{\"ts\":\"\(stamp)\",\"p\":\"claude\",\"s\":\(i % 101),\"w\":18,\"sr\":\"2027-02-01T13:00:00Z\",\"wr\":\"2027-02-02T12:00:00Z\"}\n"
+        }
+        let maximum = 16 * 1_024 * 1_024
+        let padding = (maximum - rows.utf8.count) / count
+        rows = rows.replacingOccurrences(
+            of: "\n", with: String(repeating: " ", count: padding) + "\n")
+        rows.insert(
+            contentsOf: String(repeating: " ", count: maximum - rows.utf8.count),
+            at: rows.startIndex)
+        let raw = Data(rows.utf8)
+        #expect(raw.count == maximum)
+        try raw.write(to: root.appendingPathComponent("limits-history.jsonl"))
+        return (raw, date)
     }
 }
