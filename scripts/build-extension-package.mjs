@@ -556,6 +556,8 @@ export async function buildExtensionPackage({
               "5",
               "-I",
               resolve(support.products, "Modules"),
+              "-I",
+              support.products,
               "-L",
               support.products,
               `-l${support.product}`,
