@@ -123,13 +123,20 @@ export async function copyContainedHostRuntime(
     throw new Error(
       "The contained executable differs from its host provenance",
     );
-  const hostResources = resolve(hostApp, "Contents/Resources/EdithHost_EdithHost.bundle");
+  const hostResources = resolve(
+    hostApp,
+    "Contents/Resources/EdithHost_EdithHost.bundle",
+  );
   await requireRegularTree(hostResources);
   await mkdir(resolve(contents, "Resources"), { recursive: true });
-  await cp(hostResources, resolve(contents, "Resources/EdithHost_EdithHost.bundle"), {
-    recursive: true,
-    dereference: false,
-  });
+  await cp(
+    hostResources,
+    resolve(contents, "Resources/EdithHost_EdithHost.bundle"),
+    {
+      recursive: true,
+      dereference: false,
+    },
+  );
   const dependencies = execFileSync("otool", ["-L", source], {
     encoding: "utf8",
   })

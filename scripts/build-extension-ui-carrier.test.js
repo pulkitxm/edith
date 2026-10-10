@@ -265,12 +265,21 @@ describe("extension UI carriers", () => {
         });
         expect(built.executableSHA256).toBe(digest);
         expect(
-          await readFile(join(payload, "ExtensionCarrier.app/Contents/Resources/EdithHost_EdithHost.bundle/MarketplaceArtwork.lzma")),
+          await readFile(
+            join(
+              payload,
+              "ExtensionCarrier.app/Contents/Resources/EdithHost_EdithHost.bundle/MarketplaceArtwork.lzma",
+            ),
+          ),
         ).toEqual(await readFile(join(artwork, "MarketplaceArtwork.lzma")));
         expect(
-          await readFile(join(payload, "ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/EdithHost_EdithHost.bundle/MarketplaceArtwork.lzma")),
+          await readFile(
+            join(
+              payload,
+              "ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/EdithHost_EdithHost.bundle/MarketplaceArtwork.lzma",
+            ),
+          ),
         ).toEqual(await readFile(join(artwork, "MarketplaceArtwork.lzma")));
-
 
         expect(
           createHash("sha256")
