@@ -8,6 +8,7 @@ import Foundation
         identity: HostIdentity, marketplace: HostMarketplace, updater: HostUpdater,
         shared: UserDefaults, standard: UserDefaults,
         permissionState: HostPermissions = HostPermissions(),
+        requirementToolDirectories: [URL]? = nil,
         showMainWindow: @escaping @MainActor () -> Void,
         navigation: @escaping HostAppCLIAdapter.Navigation,
         core: @escaping @MainActor () -> HostCoreServices? = { nil },
@@ -30,13 +31,13 @@ import Foundation
             local: agentBackend ?? HostCoreAgentCLIAdapter.backend(core: core), invoke: invoke)
         let readinessHooks = HostCoreOwnerHooks(invoke: invoke)
         let readiness = HostCoreReadinessCLI(
-            backend: .init(
-                entries: { marketplace.entries.map { .init(id: $0.id, title: $0.title) } },
-                inspect: { id, operation in
-                    try await readinessHooks.readiness(
-                        id: id, operation: operation,
-                        title: marketplace.entries.first { $0.id == id }?.title ?? id)
-                }, setup: { try await readinessHooks.setup(id: $0, dryRun: $1, installTools: $2) }))
+            backend: try HostRequirementsCLIAdapter.make(
+                marketplace: marketplace, permissions: permissionState, hooks: readinessHooks,
+                toolDirectories: requirementToolDirectories
+                    ?? (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map
+                {
+                    URL(fileURLWithPath: String($0), isDirectory: true)
+                }))
         let local = HostCommandCLI(
             version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
                 as? String ?? "development",

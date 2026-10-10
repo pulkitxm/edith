@@ -7,6 +7,44 @@ import Testing
 @testable import EdithHost
 
 @Suite @MainActor struct HostRequirementsCLIAdapterTests {
+    @Test func publicCoreReadinessInspectsAbsentOwnersWithoutInvokingOrStartingThem() async throws {
+        let fixture = try RequirementsConsumerFixture()
+        defer { fixture.clean() }
+        let core = try HostCoreCLIAdapter.make(
+            identity: fixture.identity, marketplace: fixture.marketplace,
+            updater: HostUpdater(startingUpdater: false), shared: fixture.defaults,
+            standard: fixture.defaults, permissionState: fixture.permissions,
+            requirementToolDirectories: [],
+            showMainWindow: { Issue.record("Readonly requirements opened a window.") },
+            navigation: { _, _ in
+                Issue.record("Readonly requirements requested navigation.")
+                throw HostCLIError.unavailable
+            }, quit: { Issue.record("Readonly requirements requested quit.") }, changed: {})
+        defer { core.shutdown() }
+        for id in HostExtensionRequirementCatalog.entries.map(\.id) {
+            let request = try HostCoreCLIEnvelope(
+                arguments: ["extensions", "status", id, "--json"],
+                workingDirectory: fixture.root.path
+            ).request()
+            let reply = try JSONDecoder().decode(
+                ExtensionCLIReply.self, from: await core.execute(request))
+            #expect(reply.exitCode == 0)
+            let report = try JSONDecoder().decode(
+                HostCLIJSON.self, from: Data(reply.stdout.utf8))
+            #expect(report.object?["id"] == .string(id))
+            #expect(report.object?["verified"] == .bool(false))
+            #expect(report.object?["state"]?.object?["phase"] == .string("disabled"))
+            #expect(
+                report.object?["checks"]?.array?.contains {
+                    $0.object?["id"] == .string("package")
+                        && $0.object?["runtimePhase"] == .string("uninstalled")
+                } == true)
+        }
+        #expect(await fixture.calls.count == 0)
+        #expect(fixture.marketplace.sessions.enabledIDs.isEmpty)
+        #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
+    }
+
     @Test func productionFactoryInspectsAll39AbsentAndDisabledPackagesWithoutEffects() async throws
     {
         let fixture = try RequirementsConsumerFixture()
