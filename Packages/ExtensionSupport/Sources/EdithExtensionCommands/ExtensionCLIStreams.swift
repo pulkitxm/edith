@@ -8,6 +8,7 @@ import Foundation
     private struct Session {
         let handle: ExtensionCLIStreamHandle
         let buffer: CLIStreamBuffer
+        let input: ExtensionCLIInput
         let task: Task<Void, Never>
         let timer: Task<Void, Never>
         var lastRead: ContinuousClock.Instant
@@ -29,6 +30,7 @@ import Foundation
     deinit {
         for session in sessions.values {
             session.buffer.discard()
+            session.input.close()
             session.timer.cancel()
             session.task.cancel()
         }
@@ -43,10 +45,12 @@ import Foundation
         else { throw ExtensionPeerError.rejected("The terminal stream cannot start.") }
         let handle = ExtensionCLIStreamHandle(owner: owner, session: request.session, token: UUID())
         let buffer = CLIStreamBuffer()
+        let input = ExtensionCLIInput(initial: request.request.standardInput)
         let task = Task { [weak self] in
+            defer { input.close() }
             do {
                 let code = try await ExtensionCLIExecution.run(
-                    root, request: request.request,
+                    root, request: request.request, input: input,
                     rawSink: { data, error in buffer.append(data, error: error) })
                 if (0...255).contains(code) {
                     buffer.finish(state: .completed, exitCode: code)
@@ -60,7 +64,9 @@ import Foundation
             }
             self?.finished(handle.token)
         }
-        buffer.setCancellation { task.cancel() }
+        buffer.setCancellation {
+            input.close(); task.cancel()
+        }
         let started = ContinuousClock.now
         let timer = Task { [weak self] in
             var deadlineReached = false
@@ -80,10 +86,12 @@ import Foundation
                 if !deadlineReached, started.duration(to: .now) >= .seconds(request.deadline) {
                     deadlineReached = true
                     session.buffer.cancel(state: .timedOut)
+                    session.input.close()
                     session.task.cancel()
                 }
                 if session.lastRead.duration(to: .now) >= self.idleTimeout {
                     session.buffer.cancel(state: .timedOut)
+                    session.input.close()
                     session.task.cancel()
                     self.endRetainingTask(handle.token)
                     return
@@ -91,7 +99,7 @@ import Foundation
             }
         }
         sessions[handle.token] = Session(
-            handle: handle, buffer: buffer, task: task, timer: timer, lastRead: .now)
+            handle: handle, buffer: buffer, input: input, task: task, timer: timer, lastRead: .now)
         return handle
     }
 
@@ -106,7 +114,16 @@ import Foundation
     public func cancel(_ handle: ExtensionCLIStreamHandle) throws {
         let session = try lookup(handle)
         session.buffer.cancel(state: .cancelled)
+        session.input.close()
         session.task.cancel()
+    }
+
+    public func write(_ request: ExtensionCLIStreamWrite) throws -> ExtensionCLIStreamInputAck {
+        try lookup(request.handle).input.write(request)
+    }
+
+    public func resize(_ request: ExtensionCLIStreamResize) throws -> ExtensionCLIStreamInputAck {
+        try lookup(request.handle).input.resize(request)
     }
 
     public func end(_ handle: ExtensionCLIStreamHandle) throws {
@@ -140,6 +157,14 @@ import Foundation
         case prefix + ".read":
             return try encoder.encode(
                 read(decoder.decode(ExtensionCLIStreamRead.self, from: payload)))
+        case prefix + ".write":
+            guard payload.count <= 32 * 1_024 else { throw ExtensionPeerError.invalidRequest }
+            return try encoder.encode(
+                write(decoder.decode(ExtensionCLIStreamWrite.self, from: payload)))
+        case prefix + ".resize":
+            guard payload.count <= 32 * 1_024 else { throw ExtensionPeerError.invalidRequest }
+            return try encoder.encode(
+                resize(decoder.decode(ExtensionCLIStreamResize.self, from: payload)))
         case prefix + ".cancel":
             try cancel(decoder.decode(ExtensionCLIStreamHandle.self, from: payload))
         case prefix + ".end":
@@ -160,6 +185,7 @@ import Foundation
         guard var session = sessions[token] else { return }
         session.ended = true
         session.buffer.discard()
+        session.input.close()
         session.timer.cancel()
         session.task.cancel()
         if session.buffer.finished {

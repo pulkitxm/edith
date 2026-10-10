@@ -25,20 +25,27 @@ import Foundation
         _ root: Command.Type, request: ExtensionCLIRequest,
         sink: @escaping @Sendable (String, Bool) -> Void
     ) async throws -> Int32 {
-        try await run(root, request: request, textSink: sink, rawSink: nil)
+        try await run(root, request: request, input: nil, textSink: sink, rawSink: nil)
     }
 
     public static func run<Command: AsyncParsableCommand>(
         _ root: Command.Type, request: ExtensionCLIRequest,
         rawSink: @escaping @Sendable (Data, Bool) -> Void
     ) async throws -> Int32 {
+        try await run(root, request: request, input: nil, rawSink: rawSink)
+    }
+
+    static func run<Command: AsyncParsableCommand>(
+        _ root: Command.Type, request: ExtensionCLIRequest, input: ExtensionCLIInput?,
+        rawSink: @escaping @Sendable (Data, Bool) -> Void
+    ) async throws -> Int32 {
         try await run(
-            root, request: request,
+            root, request: request, input: input,
             textSink: { text, error in rawSink(Data(text.utf8), error) }, rawSink: rawSink)
     }
 
     private static func run<Command: AsyncParsableCommand>(
-        _ root: Command.Type, request: ExtensionCLIRequest,
+        _ root: Command.Type, request: ExtensionCLIRequest, input: ExtensionCLIInput?,
         textSink: @escaping @Sendable (String, Bool) -> Void,
         rawSink: (@Sendable (Data, Bool) -> Void)?
     ) async throws -> Int32 {
@@ -53,7 +60,9 @@ import Foundation
         return try await ExtensionCLIContext.$request.withValue(request) {
             try await ExtensionCLIContext.$outputSink.withValue(textSink) {
                 try await ExtensionCLIContext.$rawOutputSink.withValue(rawSink) {
-                    try await execute(root, arguments: request.arguments)
+                    try await ExtensionCLIContext.$input.withValue(input) {
+                        try await execute(root, arguments: request.arguments)
+                    }
                 }
             }
         }
