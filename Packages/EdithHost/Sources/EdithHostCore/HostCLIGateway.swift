@@ -18,7 +18,9 @@ import Foundation
             throw HostCLIError.rejected("Unknown extension identifier.")
         }
         if request.action == .info { return try encodedInfo(id) }
-        if request.action == .invoke { return try await invoke(request, id: id) }
+        if request.action == .invoke || request.action == .terminal {
+            return try await invoke(request, id: id)
+        }
         guard marketplace.operationID == nil else {
             throw HostCLIError.rejected(
                 "Another marketplace operation is running. Try again when it finishes.")
@@ -56,6 +58,15 @@ import Foundation
             let pid = marketplace.sessions.processIdentifiers[id], kill(pid, 0) == 0,
             let operation = request.operation
         else {
+            if request.action == .terminal {
+                let title = marketplace.entries.first { $0.id == id }?.title ?? id
+                return try JSONEncoder().encode(
+                    ExtensionCLIReply(
+                        stdout: "",
+                        stderr:
+                            "error: the \(title) extension is off\nhint: run `ed extensions enable \(id)`\n",
+                        exitCode: 4))
+            }
             throw HostCLIError.rejected(
                 "Install and enable a compatible extension before invoking it.")
         }

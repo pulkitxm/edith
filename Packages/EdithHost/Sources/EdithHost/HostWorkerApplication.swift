@@ -154,7 +154,6 @@ final class HostWorkerApplication {
                         && $0.architecture == "arm64" && $0.version == next.version
                 })
             else { throw HostWorkerError.rejected }
-            let directory = store.directory(for: package).appendingPathComponent(package.id)
             let team = ExtensionCodeSignature.teamIdentifier()
             guard identity.development || team != nil else {
                 throw MarketplaceError.invalidSignature
@@ -175,7 +174,7 @@ final class HostWorkerApplication {
             for role in [ExtensionBundleRuntime.Role.helper, .agent, .app] {
                 guard
                     FileManager.default.fileExists(
-                        atPath: directory.appendingPathComponent("\(role.rawValue).bundle").path)
+                        atPath: store.roleBundle(for: package, role: role).path)
                 else { continue }
                 let runtime = ExtensionBundleRuntime(
                     store: store, role: role, hostABI: HostContract.compatibility,

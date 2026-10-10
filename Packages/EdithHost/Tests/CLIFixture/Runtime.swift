@@ -9,6 +9,16 @@ final class CLIFixtureRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { operation, payload in
             switch operation {
+            case "calendar.cli":
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                try request.validate()
+                let failed = request.arguments == ["synthetic-error"]
+                let output = try JSONSerialization.data(withJSONObject: request.arguments)
+                return try JSONEncoder().encode(
+                    ExtensionCLIReply(
+                        stdout: failed ? "" : String(decoding: output, as: UTF8.self) + "\n",
+                        stderr: failed ? "error: synthetic unavailable\n" : "",
+                        exitCode: failed ? 4 : 0))
             case "echo": return payload
             case "archive":
                 guard
@@ -47,7 +57,7 @@ final class CLIFixtureRuntime: NSObject {
         switch input["operation"] as? String {
         case "describe":
             return [
-                "id": "keepAwake", "version": "VERSION", "hostABI": "edith-host-1",
+                "id": "keepAwake", "version": "VERSION", "hostABI": "edith-host-2",
                 "role": "helper",
             ] as NSDictionary
         case "start":

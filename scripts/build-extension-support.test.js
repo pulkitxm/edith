@@ -83,3 +83,34 @@ test("archive dependency types are isolated from the host and other workers", ()
     "import ZIPFoundation\n",
   );
 });
+
+test("terminal parser code belongs only to explicitly selected command products", () => {
+  expect(supportProducts("EdithExtensionCommands")).toEqual([
+    "EdithExtensionSupport",
+    "EdithExtensionUI",
+    "EdithExtensionCommands",
+  ]);
+  expect(supportSourceInputs("EdithExtensionUI")).not.toContain(
+    "Packages/ExtensionSupport/Sources/EdithExtensionCommands",
+  );
+  expect(supportSourceInputs("EdithExtensionCommands")).toContain(
+    "Packages/ExtensionSupport/Licenses/swift-argument-parser-license.txt",
+  );
+  const first = supportModules("calendar_app");
+  const second = supportModules("database_app");
+  expect(first.ArgumentParser).not.toBe(second.ArgumentParser);
+  expect(first.ArgumentParserToolInfo).not.toBe(second.ArgumentParserToolInfo);
+  expect(
+    rewriteSupportImports(
+      "import ArgumentParser\nimport EdithExtensionCommands\n",
+      first,
+    ),
+  ).toBe(
+    "import ArgumentParser_calendar_app\nimport EdithExtensionCommands_calendar_app\n",
+  );
+  expect(
+    rewriteSupportImports("import ArgumentParser\n", first, {
+      packageAliases: true,
+    }),
+  ).toBe("import ArgumentParser\n");
+});

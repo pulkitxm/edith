@@ -8,10 +8,15 @@ let package = Package(
         .library(name: "EdithExtensionSupport", type: .static, targets: ["EdithExtensionSupport"]),
         .library(name: "EdithExtensionUI", type: .static, targets: ["EdithExtensionUI"]),
         .library(
+            name: "EdithExtensionCommands", type: .static, targets: ["EdithExtensionCommands"]),
+        .library(
             name: "EdithExtensionDocuments", type: .static, targets: ["EdithExtensionDocuments"]),
         .library(name: "EdithExtensionArchive", type: .static, targets: ["EdithExtensionArchive"]),
     ],
-    dependencies: [.package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.19")],
+    dependencies: [
+        .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.19"),
+        .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.8.2"),
+    ],
     targets: [
         .target(
             name: "EdithExtensionArchive",
@@ -23,6 +28,15 @@ let package = Package(
             name: "EdithExtensionArchiveTests", dependencies: ["EdithExtensionArchive"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(name: "EdithExtensionSupport", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
+            name: "EdithExtensionCommands",
+            dependencies: [
+                "EdithExtensionUI",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ], swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "EdithExtensionCommandsTests", dependencies: ["EdithExtensionCommands"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "EdithExtensionUI", dependencies: ["EdithExtensionSupport"],
             swiftSettings: [.swiftLanguageMode(.v5)]),

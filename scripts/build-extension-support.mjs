@@ -19,15 +19,23 @@ export function supportModules(scope) {
       "EdithExtensionUI",
       "EdithExtensionDocuments",
       "EdithExtensionArchive",
+      "EdithExtensionCommands",
+      "ArgumentParser",
+      "ArgumentParserToolInfo",
       "ZIPFoundation",
     ].map((name) => [name, `${name}_${scope}`]),
   );
 }
 
-export function rewriteSupportImports(source, modules) {
+export function rewriteSupportImports(
+  source,
+  modules,
+  { packageAliases = false } = {},
+) {
   return source.replace(
-    /^(\s*(?:@testable\s+)?import\s+)(EdithExtensionSupport|EdithExtensionUI|EdithExtensionDocuments|EdithExtensionArchive)(?=\s|$)/gm,
-    (_, prefix, name) => `${prefix}${modules[name]}`,
+    /^(\s*(?:@testable\s+)?import\s+)(EdithExtensionSupport|EdithExtensionUI|EdithExtensionDocuments|EdithExtensionArchive|EdithExtensionCommands|ArgumentParser)(?=\s|$)/gm,
+    (_, prefix, name) =>
+      `${prefix}${packageAliases && name === "ArgumentParser" ? name : modules[name]}`,
   );
 }
 
@@ -35,6 +43,11 @@ export function supportProducts(product) {
   const products = {
     EdithExtensionSupport: ["EdithExtensionSupport"],
     EdithExtensionUI: ["EdithExtensionSupport", "EdithExtensionUI"],
+    EdithExtensionCommands: [
+      "EdithExtensionSupport",
+      "EdithExtensionUI",
+      "EdithExtensionCommands",
+    ],
     EdithExtensionDocuments: [
       "EdithExtensionSupport",
       "EdithExtensionUI",
@@ -52,13 +65,21 @@ export function supportProducts(product) {
 }
 
 export function supportSourceInputs(product) {
-  return supportProducts(product).map(
+  const inputs = supportProducts(product).map(
     (name) => `Packages/ExtensionSupport/Sources/${name}`,
   );
+  if (product === "EdithExtensionCommands")
+    inputs.push(
+      "Packages/ExtensionSupport/Licenses/swift-argument-parser-license.txt",
+    );
+  return inputs;
 }
 
 export function buildExtensionSupport(root, product, scope) {
   const selected = supportProducts(product);
+  const buildSystem = selected.includes("EdithExtensionCommands")
+    ? "swiftbuild"
+    : "native";
   const modules = supportModules(scope);
   const developer =
     process.env.DEVELOPER_DIR ?? "/Applications/Xcode.app/Contents/Developer";
@@ -99,7 +120,9 @@ export function buildExtensionSupport(root, product, scope) {
           sources.push({
             module,
             path,
-            source: rewriteSupportImports(source, modules),
+            source: rewriteSupportImports(source, modules, {
+              packageAliases: true,
+            }),
           });
         }
       }
@@ -150,25 +173,38 @@ export function buildExtensionSupport(root, product, scope) {
       `.target(name: "${documents}", dependencies: ["${ui}"], resources: [.process("Resources")], swiftSettings: [.swiftLanguageMode(.v5)])`,
     );
   }
-  const archiveDependencies = selected.includes("EdithExtensionArchive")
-    ? '.package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.19")'
-    : "";
+  const packageDependencies = [];
+  if (selected.includes("EdithExtensionArchive"))
+    packageDependencies.push(
+      '.package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.19")',
+    );
+  if (selected.includes("EdithExtensionCommands")) {
+    packageDependencies.push(
+      '.package(url: "https://github.com/apple/swift-argument-parser", exact: "1.8.2")',
+    );
+    targets.push(
+      `.target(name: "${modules.EdithExtensionCommands}", dependencies: ["${ui}", .product(name: "ArgumentParser", package: "swift-argument-parser", moduleAliases: ["ArgumentParser": "${modules.ArgumentParser}", "ArgumentParserToolInfo": "${modules.ArgumentParserToolInfo}"])], swiftSettings: [.swiftLanguageMode(.v5)])`,
+    );
+  }
   if (selected.includes("EdithExtensionArchive"))
     targets.push(
       `.target(name: "${modules.EdithExtensionArchive}", dependencies: ["${ui}", .product(name: "ZIPFoundation", package: "ZIPFoundation", moduleAliases: ["ZIPFoundation": "${modules.ZIPFoundation}"])], swiftSettings: [.swiftLanguageMode(.v5)])`,
     );
   writeFileSync(
     join(directory, "Package.swift"),
-    `// swift-tools-version:6.0\nimport PackageDescription\nlet package = Package(name: "ExtensionSupport_${scope}", platforms: [.macOS(.v14)], products: [.library(name: "${modules[product]}", type: .static, targets: ["${modules[product]}"])], dependencies: [${archiveDependencies}], targets: [${targets.join(", ")}])\n`,
+    `// swift-tools-version:6.0\nimport PackageDescription\nlet package = Package(name: "ExtensionSupport_${scope}", platforms: [.macOS(.v14)], products: [.library(name: "${modules[product]}", type: .static, targets: ["${modules[product]}"])], dependencies: [${packageDependencies.join(", ")}], targets: [${targets.join(", ")}])\n`,
   );
   execFileSync(
     "swift",
     [
       "build",
+      ...(selected.includes("EdithExtensionCommands")
+        ? ["--disable-build-manifest-caching"]
+        : []),
       "--package-path",
       directory,
       "--build-system",
-      "native",
+      buildSystem,
       "--configuration",
       "release",
       "--jobs",
@@ -189,7 +225,7 @@ export function buildExtensionSupport(root, product, scope) {
       "--package-path",
       directory,
       "--build-system",
-      "native",
+      buildSystem,
       "--configuration",
       "release",
       "--show-bin-path",

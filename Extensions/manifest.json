@@ -384,7 +384,7 @@
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "app": [
         "Extensions/calendar/Models/CalendarDayEvents.swift",
@@ -399,7 +399,9 @@
         "Extensions/calendar/ViewModels/CalendarPresentationState.swift",
         "Extensions/calendar/ViewModels/CalendarStore.swift",
         "Extensions/calendar/Views/CalendarPage.swift",
-        "Extensions/calendar/Views/HomeMeetingsCard.swift"
+        "Extensions/calendar/Views/HomeMeetingsCard.swift",
+        "Extensions/calendar/CLI/CalendarCommands.swift",
+        "Extensions/calendar/CLI/CalendarCLIExecution.swift"
       ]
     },
     "inputs": [
@@ -414,7 +416,12 @@
     ],
     "dependencies": [],
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "resources": {
+      "app": [
+        "Packages/ExtensionSupport/Licenses/swift-argument-parser-license.txt"
+      ]
+    }
   },
   {
     "id": "jev",
