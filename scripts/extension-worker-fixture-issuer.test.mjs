@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import {
   inertFixtureWorkers,
   supportedFixtureWorkers,
   validateWorkerFixtureProof,
   validateWorkerFixtureSelection,
+  workerFixtureEnvironment,
 } from "./test-extension-workers.mjs";
 
 const definitions = JSON.parse(
@@ -108,4 +112,52 @@ test("inert proof never promotes unavailable features or metadata to media cover
       surfaceContractVersion: 1,
     }),
   );
+});
+
+test("fixture subprocesses inherit only owned homes and closed environment", async () => {
+  const home = await realpath(
+    await mkdtemp(join(tmpdir(), "edith-fixture-env-")),
+  );
+  try {
+    const identifier =
+      "com.pulkit.edith.tests.worker-20000000-0000-0000-0000-000000000001";
+    const old = process.env.EDITH_FIXTURE_UNRELATED_SECRET;
+    process.env.EDITH_FIXTURE_UNRELATED_SECRET = "synthetic-must-not-inherit";
+    try {
+      const environment = workerFixtureEnvironment(home, identifier);
+      const output = JSON.parse(
+        execFileSync(
+          process.execPath,
+          [
+            "-e",
+            "process.stdout.write(JSON.stringify({home:process.env.HOME,path:process.env.PATH,ssh:process.env.SSH_AUTH_SOCK??null,secret:process.env.EDITH_FIXTURE_UNRELATED_SECRET??null,defaults:process.env.EDITH_SHARED_DEFAULTS_SUITE??null,fixture:process.env.EDITH_EXTENSION_FIXTURE_HOME,identifier:process.env.EDITH_EXTENSION_TEST_HOST_IDENTIFIER}))",
+          ],
+          { encoding: "utf8", env: environment },
+        ),
+      );
+      assert.deepEqual(output, {
+        home,
+        path: "/usr/bin:/bin:/usr/sbin:/sbin",
+        ssh: null,
+        secret: null,
+        defaults: null,
+        fixture: home,
+        identifier,
+      });
+      assert.equal(
+        workerFixtureEnvironment(home).EDITH_EXTENSION_TEST_HOST_IDENTIFIER,
+        undefined,
+      );
+      assert.throws(() => workerFixtureEnvironment("relative-home"));
+      assert.throws(() => workerFixtureEnvironment(home, "com.pulkit.edith"));
+      assert.throws(() =>
+        workerFixtureEnvironment(home, "com.pulkit.edith.tests.worker-invalid"),
+      );
+    } finally {
+      if (old === undefined) delete process.env.EDITH_FIXTURE_UNRELATED_SECRET;
+      else process.env.EDITH_FIXTURE_UNRELATED_SECRET = old;
+    }
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
 });

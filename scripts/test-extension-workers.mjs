@@ -104,6 +104,30 @@ export function validateWorkerFixtureProof(
   assert.equal(result.studioMetadataValidated, id === "studio");
 }
 
+export function workerFixtureEnvironment(home, hostIdentifier) {
+  assert.equal(resolve(home), home);
+  const environment = {
+    PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
+    HOME: home,
+    SHELL: "/bin/sh",
+    LANG: "C",
+    LC_ALL: "C",
+    USER: "synthetic",
+    LOGNAME: "synthetic",
+    XDG_CONFIG_HOME: join(home, ".config"),
+    XDG_CACHE_HOME: join(home, ".cache"),
+    EDITH_EXTENSION_FIXTURE_HOME: home,
+  };
+  if (hostIdentifier !== undefined) {
+    assert.match(
+      hostIdentifier,
+      /^com\.pulkit\.edith\.tests\.worker-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+    environment.EDITH_EXTENSION_TEST_HOST_IDENTIFIER = hostIdentifier;
+  }
+  return environment;
+}
+
 async function run() {
   const definitions = JSON.parse(
     await readFile("Extensions/manifest.json", "utf8"),
@@ -221,15 +245,7 @@ async function run() {
           {
             encoding: "utf8",
             timeout: 90_000,
-            env: {
-              ...process.env,
-              EDITH_EXTENSION_FIXTURE_HOME: fixtureHome,
-              ...(fixtureIdentifier
-                ? {
-                    EDITH_EXTENSION_TEST_HOST_IDENTIFIER: fixtureIdentifier,
-                  }
-                : {}),
-            },
+            env: workerFixtureEnvironment(fixtureHome, fixtureIdentifier),
           },
         ).trim(),
       );
