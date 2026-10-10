@@ -52,10 +52,13 @@ import Foundation
         do {
             for frame in try frames.append(data) {
                 let next = try JSONDecoder().decode(HostCoreRequest.self, from: frame)
-                if next.operation == .cancel {
-                    runtime?.cancel()
+                if [.cancel, .status].contains(next.operation) {
+                    guard next.configuration == nil, let runtime else {
+                        throw HostWorkerError.rejected
+                    }
+                    if next.operation == .cancel { runtime.cancel() }
                     try control.send(
-                        HostCoreResponse(token: next.token, snapshot: runtime?.snapshot()))
+                        HostCoreResponse(token: next.token, snapshot: runtime.snapshot()))
                     continue
                 }
                 guard request == nil else { throw HostWorkerError.rejected }

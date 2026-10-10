@@ -18,7 +18,11 @@ import Foundation
                 try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
                 try Data(repeating: 7, count: 71).write(
                     to: data.appendingPathComponent("synthetic"))
-                let measured = try await service.perform(.inspect)
+                let inspection = Task { try await service.perform(.inspect) }
+                await Task.yield()
+                let concurrent = try await service.perform(.status)
+                guard concurrent.pid == started.pid else { throw HostWorkerError.rejected }
+                let measured = try await inspection.value
                 guard measured.storage?.footprints.first(where: { $0.id == "usage" })?.bytes == 71,
                     measured.tasks.last?.phase == .completed,
                     let pid = service.processIdentifier
@@ -45,6 +49,7 @@ import Foundation
                 try HostCoreFiles.write(
                     JSONSerialization.data(withJSONObject: [
                         "passed": true, "restartRetainedTasks": true, "stoppedProcesses": true,
+                        "concurrentStatus": true,
                     ]), to: directory.appendingPathComponent("result.json"))
                 exit(0)
             } catch {

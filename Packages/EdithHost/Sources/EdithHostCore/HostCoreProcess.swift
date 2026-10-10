@@ -11,7 +11,10 @@ import Foundation
     private let configuration: HostWorkerConfiguration
     private var source: DispatchSourceRead?
     private var frames = HostWorkerFrames()
-    private var pending: (UUID, CheckedContinuation<HostCoreSnapshot?, Error>, Task<Void, Never>)?
+    private var pending:
+        [UUID: (
+            HostCoreOperation, CheckedContinuation<HostCoreSnapshot?, Error>, Task<Void, Never>
+        )] = [:]
     private var abandoned: Set<UUID> = []
     private var identity: ExtensionProcessIdentity?
     private var launched = false
@@ -69,7 +72,8 @@ import Foundation
     }
 
     public func cancelCurrentTask() {
-        guard ready, pending != nil, abandoned.count < 63 else { return }
+        guard ready, pending.values.contains(where: { $0.0 != .status }), abandoned.count < 63
+        else { return }
         let request = HostCoreRequest(operation: .cancel)
         abandoned.insert(request.token)
         do {
@@ -94,7 +98,11 @@ import Foundation
         configuration: HostWorkerConfiguration? = nil,
         timeout: Duration = .seconds(30)
     ) async throws -> HostCoreSnapshot? {
-        guard process.isRunning, pending == nil, abandoned.count < 64 else {
+        guard process.isRunning, pending.count < 2, abandoned.count < 64,
+            !pending.values.contains(where: {
+                $0.0 == operation || (operation != .status && $0.0 != .status)
+            })
+        else {
             throw HostWorkerError.rejected
         }
         let request = HostCoreRequest(operation: operation, configuration: configuration)
@@ -105,7 +113,7 @@ import Foundation
                     do { try await Task.sleep(for: timeout) } catch { return }
                     self?.reject(request.token, error: HostWorkerError.timedOut)
                 }
-                pending = (request.token, continuation, timeoutTask)
+                pending[request.token] = (operation, continuation, timeoutTask)
                 do { try input.fileHandleForWriting.write(contentsOf: data) } catch {
                     reject(request.token, error: error)
                 }
@@ -126,10 +134,9 @@ import Foundation
                     for frame in try frames.append(Data(buffer.prefix(count))) {
                         let response = try JSONDecoder().decode(HostCoreResponse.self, from: frame)
                         if abandoned.remove(response.token) != nil { continue }
-                        guard let pending, pending.0 == response.token else {
+                        guard let pending = pending.removeValue(forKey: response.token) else {
                             throw HostWorkerError.invalidResponse
                         }
-                        self.pending = nil
                         pending.2.cancel()
                         if response.failure != nil {
                             pending.1.resume(throwing: HostWorkerError.rejected)
@@ -151,8 +158,7 @@ import Foundation
     }
 
     private func reject(_ token: UUID, error: Error) {
-        guard let pending, pending.0 == token else { return }
-        self.pending = nil
+        guard let pending = pending.removeValue(forKey: token) else { return }
         abandoned.insert(token)
         pending.2.cancel()
         pending.1.resume(throwing: error)
@@ -162,7 +168,7 @@ import Foundation
         ready = false
         source?.cancel()
         source = nil
-        if let pending { reject(pending.0, error: HostWorkerError.exited) }
+        for token in Array(pending.keys) { reject(token, error: HostWorkerError.exited) }
     }
 
     private func terminate() {
