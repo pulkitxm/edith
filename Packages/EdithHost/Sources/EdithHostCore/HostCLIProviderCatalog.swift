@@ -213,6 +213,7 @@ public struct HostCLIProviderState: Codable, Equatable, Sendable {
     public let version: String?
     public let disablePending: Bool
     public let removalPending: Bool
+    public let processIdentifier: Int32?
 
     public var available: Bool {
         installed && compatible && enabled && running && version != nil
