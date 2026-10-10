@@ -7,15 +7,18 @@ import Foundation
     let operations: LidAwakeOperationModel
     private var observer: NSObjectProtocol?
     private var stopped = false
+    private let recoveryOnly: Bool
     private let defaults: UserDefaults
     private let confirm: @MainActor () -> Bool
 
     init(
         defaults: UserDefaults = SharedDefaults.store, engine: LidAwakeEngine? = nil,
+        recoveryOnly: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"]
+            == "1",
         confirm: @escaping @MainActor () -> Bool = LidAwakeWorker.confirmActivation
     ) {
-        self.defaults = defaults; self.confirm = confirm
-        defaults.set(true, forKey: LidAwakeState.enabledKey)
+        self.defaults = defaults; self.confirm = confirm; self.recoveryOnly = recoveryOnly
+        if !recoveryOnly { defaults.set(true, forKey: LidAwakeState.enabledKey) }
         defaults.set(true, forKey: LidAwakeState.restoreOnQuitKey)
         let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
         let created =
@@ -26,13 +29,14 @@ import Foundation
                 applySystemState: fixture
                     ? { value in
                         defaults.set(value, forKey: LidAwakeState.activeKey); return .applied
-                    } : nil, startServices: !fixture,
+                    } : nil, startServices: !fixture && !recoveryOnly, recoveryOnly: recoveryOnly,
                 systemStateReader: fixture
                     ? { false } : { try await LidAwakeSystemStateReader.read() })
         self.engine = created
         operations = LidAwakeOperationModel { request in
             try await Self.perform(request, engine: created, defaults: defaults)
         }
+        guard !recoveryOnly else { return }
         observer = NotificationCenter.default.addObserver(
             forName: Notification.Name("lidAwakeSettingsChanged"), object: nil, queue: .main
         ) { _ in Task { @MainActor in created.syncSettings() } }
@@ -41,7 +45,7 @@ import Foundation
     func perform(_ request: LidAwakeRequest, requiresConfirmation: Bool = false) async throws
         -> LidAwakeSnapshot
     {
-        guard !stopped else { throw ExtensionPeerError.unavailable }
+        guard !stopped, !recoveryOnly else { throw ExtensionPeerError.unavailable }
         if requiresConfirmation, !confirm() { throw CancellationError() }
         return try await Self.perform(request, engine: engine, defaults: defaults)
     }

@@ -420,6 +420,23 @@ struct HostLifecycleHarness {
             }
             try await requireExited(terminalChildren)
             try await requireExited(cameraChildren)
+            stage = "pending disable in fresh replacement host"
+            let recoveryDefaults = UserDefaults(suiteName: suite)!
+            recoveryDefaults.set([extensionID], forKey: "enabledExtensions")
+            recoveryDefaults.set([extensionID], forKey: "pendingDisableExtensions")
+            sessions = makeSessions(
+                executable: replacement.appendingPathComponent("Contents/MacOS/Edith"))
+            surfaces = try HostSurfaces(
+                identity: identity, entries: HostIndex.bundled(), sessions: sessions)
+            guard sessions.pendingDisableIDs == [extensionID], sessions.activeIDs.isEmpty,
+                surfaces.context.activeIDs.isEmpty
+            else { throw HostWorkerError.invalidResponse }
+            await sessions.restore(packages: [second.id: second])
+            guard sessions.pendingDisableIDs.isEmpty, sessions.enabledIDs.isEmpty,
+                sessions.processIdentifiers.isEmpty, sessions.versions.isEmpty,
+                sessions.states[extensionID] == .disabled, surfaces.context.activeIDs.isEmpty,
+                surfaces.layouts.home == savedSurface
+            else { throw HostWorkerError.invalidResponse }
             guard try store.requestRemoval(id: first.id), try store.installedPackages().isEmpty
             else { throw HostWorkerError.rejected }
             guard surfaces.layouts.home == savedSurface,
@@ -435,7 +452,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
             )
         } catch {
             if extensionID == "jev" {

@@ -45,7 +45,9 @@ final class ExtensionRuntime: NSObject {
                 let created = BifrostWorker(); worker = created;
                 surface = BifrostSurface(store: created.store)
             }
-            TextEditingCommands.install()
+            if ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"] != "1" {
+                TextEditingCommands.install()
+            }
         case "view":
             guard worker != nil else { return ["ok": false] as NSDictionary }
             return NSHostingController(rootView: ExtensionPageHost { BifrostSettings() })

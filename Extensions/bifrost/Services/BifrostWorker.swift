@@ -9,15 +9,18 @@ import Foundation
     private var observer: NSObjectProtocol?
     private var hostObserver: NSObjectProtocol?
     private var stopped = false
+    private let recoveryOnly: Bool
 
     init() {
-        BifrostClipboardPreviewService.shared.resume()
-        if BifrostFixture.enabled {
+        recoveryOnly = ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"] == "1"
+        if !recoveryOnly { BifrostClipboardPreviewService.shared.resume() }
+        if BifrostFixture.enabled && !recoveryOnly {
             SharedDefaults.store.set(true, forKey: AppStorageKeys.Bifrost.enabled)
             BifrostIndexStore.shared.save(
                 .init(generatedAt: Date(), applications: BifrostFixture.applications))
         }
         store = BifrostStore()
+        guard !recoveryOnly else { return }
         BifrostPanel.shared.store = store
         observer = BifrostIPC.observe(BifrostIPC.Name.requestBifrostPanel) {
             BifrostPanel.shared.toggle()
@@ -30,7 +33,7 @@ import Foundation
     }
 
     func configureHotKey() {
-        guard !stopped, !BifrostFixture.enabled else { return }
+        guard !stopped, !recoveryOnly, !BifrostFixture.enabled else { return }
         HotKeyRegistrar.configure(
             .init(
                 id: "bifrost", carbonID: 3, prefix: "bifrostHotKey", defaultCode: 49,
@@ -48,7 +51,7 @@ import Foundation
         if let observer { BifrostIPC.stopObserving(observer) }; observer = nil
         ExtensionSharedState.current?.stopObserving(hostObserver); hostObserver = nil
         HotKeyRegistrar.shutdown()
-        BifrostPanel.shared.shutdown()
+        if !recoveryOnly { BifrostPanel.shared.shutdown() }
         store.shutdown()
     }
 }

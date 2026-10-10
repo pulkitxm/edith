@@ -50,9 +50,18 @@ import Testing
         let suite = "marketplace-runtime-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(false, forKey: "keepAwakeEnabled")
+        defaults.set(true, forKey: "preventSleep")
+        try runtime.start(id: package.id, context: ["defaultsSuite": suite, "recoveryOnly": true])
+        #expect(try runtime.snapshot(id: package.id)?.active == false)
+        #expect(
+            try runtime.response(id: package.id, operation: "status")["running"] as? Bool == false)
+        #expect(!defaults.bool(forKey: "keepAwakeEnabled"))
+        #expect(defaults.bool(forKey: "preventSleep"))
+        try await runtime.prepareDisableAll()
+        try runtime.stopAll()
         defaults.set(true, forKey: "keepAwakeEnabled")
         defaults.set(false, forKey: "preventSleep")
-        #expect(try runtime.snapshot(id: package.id) == nil)
         try runtime.start(id: package.id, context: ["defaultsSuite": suite])
         #expect(try runtime.snapshot(id: package.id)?.active == true)
         #expect(

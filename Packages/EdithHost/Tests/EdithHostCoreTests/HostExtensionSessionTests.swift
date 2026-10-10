@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Darwin
 import ExtensionMarketplace
 import Foundation
@@ -118,6 +119,13 @@ import Testing
         ) {
             try await original.sessions.disable(id: "sample")
         }
+        let originalPID = try #require(original.sessions.processIdentifiers["sample"])
+        #expect(kill(originalPID, SIGKILL) == 0)
+        let deadline = ContinuousClock.now + .seconds(3)
+        while kill(originalPID, 0) == 0 {
+            guard ContinuousClock.now < deadline else { throw HostWorkerError.stillRunning }
+            try await Task.sleep(for: .milliseconds(10))
+        }
         let restarted = try Fixture(suite: original.suite, mode: "require-recovery")
         #expect(restarted.sessions.pendingDisableIDs == ["sample"])
         #expect(restarted.sessions.activeIDs.isEmpty)
@@ -196,6 +204,80 @@ import Testing
         #expect(await fixture.sessions.shutdown())
         #expect(fixture.sessions.pendingDisableIDs.isEmpty)
         #expect(fixture.sessions.enabledIDs.isEmpty)
+    }
+
+    @Test func pendingDisableImmediatelyWithdrawsHomeAndNotchPublication() async throws {
+        let fixture = try Fixture(rejectDisable: true)
+        defer { fixture.clean() }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let identity = try HostIdentity(
+            identifier: "com.pulkit.edith.tests.surfaces." + UUID().uuidString,
+            supportDirectory: directory)
+        defer {
+            UserDefaults(suiteName: identity.defaultsSuite)?.removePersistentDomain(
+                forName: identity.defaultsSuite)
+        }
+        let entry = HostExtension(
+            id: "sample", title: "Synthetic", symbolName: "square", category: "Tools")
+        let surfaces = try HostSurfaces(
+            identity: identity, entries: [entry], sessions: fixture.sessions)
+        let channel = ExtensionSharedState(
+            root: identity.root.appendingPathComponent("ExtensionState"),
+            namespace: identity.identifier)
+        try await fixture.sessions.enable(fixture.package("1.0.0"))
+        #expect(channel.values(for: "host")["surface.activeIDs"] == "[\"sample\"]")
+        await #expect(
+            throws: HostWorkerError.disableRejected("Restore sleep settings and try again.")
+        ) {
+            try await fixture.sessions.disable(id: "sample")
+        }
+        #expect(channel.values(for: "host")["surface.activeIDs"] == "[]")
+        #expect(channel.values(for: "host")["surface.activeVersions"] == "{}")
+        await #expect(throws: (any Error).self) {
+            try await surfaces.requests.snapshot(
+                providerID: "sample", target: .home, tile: .init(.ability("sample")))
+        }
+        #expect(await fixture.sessions.shutdown())
+    }
+
+    @Test func manualEnableAfterFailedRecoveryRestartsNormalWorker() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        fixture.defaults.set(["sample"], forKey: "enabledExtensions")
+        fixture.defaults.set(["sample"], forKey: "pendingDisableExtensions")
+        let restarted = try Fixture(rejectDisable: true, suite: fixture.suite)
+        await restarted.sessions.restore(packages: ["sample": fixture.package("1.0.0")])
+        let recoveryPID = try #require(restarted.sessions.processIdentifiers["sample"])
+        try await restarted.sessions.enable(fixture.package("1.0.0"))
+        #expect(kill(recoveryPID, 0) == -1)
+        #expect(restarted.sessions.processIdentifiers["sample"] != recoveryPID)
+        #expect(restarted.sessions.pendingDisableIDs.isEmpty)
+        #expect(restarted.sessions.activeIDs == ["sample"])
+        #expect(await restarted.sessions.shutdown() == false)
+        #expect(await restarted.sessions.shutdown())
+    }
+
+    @Test func rejectedRecoveryStartupCannotClearDisableIntent() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        fixture.defaults.set(["sample"], forKey: "enabledExtensions")
+        fixture.defaults.set(["sample"], forKey: "pendingDisableExtensions")
+        let rejected = try Fixture(suite: fixture.suite, mode: "require-normal")
+        await rejected.sessions.restore(packages: ["sample": fixture.package("1.0.0")])
+        #expect(rejected.sessions.pendingDisableIDs == ["sample"])
+        #expect(rejected.sessions.enabledIDs == ["sample"])
+        #expect(rejected.sessions.processIdentifiers.isEmpty)
+        await #expect(throws: HostWorkerError.rejected) {
+            try await rejected.sessions.disable(id: "sample")
+        }
+        #expect(rejected.sessions.pendingDisableIDs == ["sample"])
+        let recovered = try Fixture(suite: fixture.suite, mode: "require-recovery")
+        await recovered.sessions.restore(packages: ["sample": fixture.package("1.1.0")])
+        #expect(recovered.sessions.pendingDisableIDs.isEmpty)
+        #expect(recovered.sessions.enabledIDs.isEmpty)
+        #expect(recovered.sessions.processIdentifiers.isEmpty)
     }
 
     @MainActor private struct Fixture {

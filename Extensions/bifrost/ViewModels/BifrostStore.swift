@@ -45,6 +45,8 @@ final class BifrostStore: FeatureModule {
         self.init(
             store: SharedDefaults.store, indexStore: .shared,
             rateStore: .shared,
+            startServices: ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"]
+                != "1",
             fetchRates: { BifrostFixture.enabled ? nil : await BifrostRateFeed.fetch() },
             scan: {
                 BifrostFixture.enabled
@@ -59,6 +61,7 @@ final class BifrostStore: FeatureModule {
     init(
         store: UserDefaults, indexStore: BifrostIndexStore,
         rateStore: BifrostRateStore = .shared,
+        startServices: Bool = true,
         fetchRates: @escaping @Sendable () async -> BifrostRates? = { nil },
         scan: @escaping @Sendable () -> [BifrostApplication],
         open: @escaping @MainActor (String) -> Bool,
@@ -81,6 +84,7 @@ final class BifrostStore: FeatureModule {
             applications = cached.applications
             indexedAt = cached.generatedAt
         }
+        guard startServices else { return }
         observers = [
             BifrostIPC.observe(BifrostIPC.Name.settingsChanged) { [weak self] in
                 Task { @MainActor in self?.adoptSettings() }

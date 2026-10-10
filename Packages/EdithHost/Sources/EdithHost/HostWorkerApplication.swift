@@ -254,6 +254,7 @@ final class HostWorkerApplication {
         switch request.operation {
         case "show": try showWindow()
         case "synchronize":
+            guard !configuration.recoveryOnly else { return }
             if let next = request.configuration {
                 guard next.identifier == configuration.identifier,
                     next.extensionID == configuration.extensionID,
@@ -276,7 +277,9 @@ final class HostWorkerApplication {
     }
 
     private func showWindow() throws {
-        guard !stopping, let configuration else { throw HostWorkerError.rejected }
+        guard !stopping, let configuration, !configuration.recoveryOnly else {
+            throw HostWorkerError.rejected
+        }
         if let window {
             window.makeKeyAndOrderFront(nil);
             NSApplication.shared.activate(ignoringOtherApps: true); return

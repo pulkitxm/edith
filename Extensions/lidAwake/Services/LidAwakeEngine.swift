@@ -165,7 +165,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
     init(
         defaults: UserDefaults, readSystemState: () -> Bool,
         applySystemState: (@MainActor @Sendable (Bool) async -> LidAwakeOutcome)?,
-        startServices: Bool,
+        startServices: Bool, recoveryOnly: Bool = false,
         systemStateReader: (@Sendable () async throws -> Bool)? = nil,
         initialError: String? = nil, automaticStopRetries: Int = 1,
         announceChange: @escaping @MainActor @Sendable () -> Void = {
@@ -185,7 +185,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
         let automaticStopPending = LidAwakeState.automaticStopPending(defaults)
         active = readSystemState()
         intent = active
-        if active {
+        if active && !recoveryOnly {
             displayWakeKeeper.prevent()
             if automaticStopPending {
                 remaining = 0
@@ -205,7 +205,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
         autoOffTimer.onTick = { [weak self] in
             Task { @MainActor in self?.updateRemaining() }
         }
-        if active, automaticStopPending { requestAutomaticStop() }
+        if active, automaticStopPending, !recoveryOnly { requestAutomaticStop() }
         if startServices {
             batteryMonitor.start()
             lidMonitor.start()
