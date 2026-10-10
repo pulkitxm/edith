@@ -678,9 +678,13 @@
     "supportProduct": "EdithExtensionDocuments",
     "roles": {
       "app": [
+        "Extensions/plugins/CLI/CLIDestructivePlan.swift",
+        "Extensions/plugins/CLI/SkillsCLIExecution.swift",
+        "Extensions/plugins/CLI/SkillsCommands.swift",
         "Extensions/plugins/PluginResources.swift",
         "Extensions/plugins/PluginsPage.swift",
         "Extensions/plugins/PluginsSurface.swift",
+        "Extensions/plugins/PluginsUIBridge.swift",
         "Extensions/plugins/Runtime.swift",
         "Extensions/plugins/SkillAgent.swift",
         "Extensions/plugins/SkillBrand.swift",

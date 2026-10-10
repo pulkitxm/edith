@@ -1,7 +1,8 @@
+import AppKit
 import EdithExtensionSupport
 import Foundation
 
-public struct SkillDocument: Sendable, Equatable {
+public struct SkillDocument: Codable, Sendable, Equatable {
     public let markdown: String
     public let isCached: Bool
 
@@ -34,15 +35,20 @@ public struct SkillDocument: Sendable, Equatable {
     public private(set) var isStopped = false
     private var pending: [UUID: Task<SkillDocument, any Error>] = [:]
     private var documents: [String: SkillDocument] = [:]
+    private let remoteLoad: (@MainActor (EdithSkill) async throws -> SkillDocument)?
+    private let remoteCopy: (@MainActor (EdithSkill) async throws -> Bool)?
     private let cacheDirectory: URL
     private let fetch: @Sendable (URL) async throws -> Data
 
     public init(
+        remoteLoad: (@MainActor (EdithSkill) async throws -> SkillDocument)? = nil,
+        remoteCopy: (@MainActor (EdithSkill) async throws -> Bool)? = nil,
         cacheDirectory: URL = ExtensionData.root.appendingPathComponent("cache"),
         fetch: @escaping @Sendable (URL) async throws -> Data = { url in
             try await SkillDocumentStore.download(url)
         }
     ) {
+        self.remoteLoad = remoteLoad; self.remoteCopy = remoteCopy
         self.cacheDirectory = cacheDirectory
         self.fetch = fetch
     }
@@ -84,7 +90,8 @@ public struct SkillDocument: Sendable, Equatable {
             let cache = cacheDirectory
             let fetch = fetch
             let task = Task {
-                try await Self.loadDocument(skill, cacheDirectory: cache, fetch: fetch)
+                if let remoteLoad = self.remoteLoad { return try await remoteLoad(skill) }
+                return try await Self.loadDocument(skill, cacheDirectory: cache, fetch: fetch)
             }
             pending[token] = task
             defer { pending[token] = nil }
@@ -102,6 +109,14 @@ public struct SkillDocument: Sendable, Equatable {
         guard !isStopped else { throw CancellationError() }
         documents[skill.id] = document
         return document
+    }
+
+    public func copy(_ skill: EdithSkill) async throws -> Bool {
+        guard !isStopped else { throw CancellationError() }
+        if let remoteCopy { return try await remoteCopy(skill) }
+        let document = try await load(skill)
+        NSPasteboard.general.clearContents()
+        return NSPasteboard.general.setString(document.markdown, forType: .string)
     }
 
     public func recordInstalled(_ document: SkillDocument, for skill: EdithSkill) throws {
