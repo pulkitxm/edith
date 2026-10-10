@@ -113,6 +113,23 @@ public struct JourneyFixture: Codable, Equatable, Sendable {
         else { throw JourneyContractError.invalidEnvironment }
     }
 
+    public func homeCategory(_ value: String?, accountHome: String) -> String {
+        guard let value else { return "absent" }
+        if value == accountHome { return "account" }
+        if value == home { return "synthetic" }
+        return "other"
+    }
+
+    public func validateRegistrationMetadata(
+        identifier: String?, executableName: String?, packageType: String?,
+        version: String?, executableDigest: String
+    ) throws {
+        guard identifier == self.identifier, executableName == "Edith", packageType == "APPL",
+            let version, appVersions.contains(version),
+            executableSHA256[version] == executableDigest
+        else { throw JourneyContractError.invalidMetadata }
+    }
+
     public func verifyProtectedDigests(_ actual: [String: String]) throws {
         guard actual == protectedSHA256 else { throw JourneyContractError.protectedDataChanged }
     }

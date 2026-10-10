@@ -13,7 +13,11 @@ import { join, resolve } from "node:path";
 import { journeyImageNames, validateJourneyImage } from "./evidence.mjs";
 import { validateDisabledJourneyProcesses } from "./outcomes.mjs";
 import { admitHostedJourney, prepareJourney } from "./prepare-journey.mjs";
-import { configureUITestRun, writeUIProject } from "./ui-project.mjs";
+import {
+  configureUITestRun,
+  journeyRunnerEnvironment,
+  writeUIProject,
+} from "./ui-project.mjs";
 
 assert.deepEqual(process.argv.slice(2), []);
 const uuid = randomUUID();
@@ -89,7 +93,8 @@ try {
     ],
     { stdio: "inherit" },
   );
-  const project = await writeUIProject(output, variables);
+  const runnerVariables = journeyRunnerEnvironment(variables);
+  const project = await writeUIProject(output, runnerVariables);
   const args = [
     "-project",
     project,
@@ -114,7 +119,7 @@ try {
   );
   assert.equal(plans.length, 1);
   const plan = join(products, plans[0]);
-  configureUITestRun(plan, variables);
+  configureUITestRun(plan, runnerVariables);
   execFileSync(
     "xcodebuild",
     [

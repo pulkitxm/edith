@@ -3,6 +3,7 @@ import CoreServices
 import CryptoKit
 import Darwin
 import Foundation
+import Security
 import XCTest
 
 @MainActor
@@ -29,10 +30,10 @@ final class OriginalShellJourneyTests: XCTestCase {
         try registerApplication(fixture)
         application.launch()
         let windowPresent = application.windows.firstMatch.waitForExistence(timeout: 30)
-        startup = [
+        startup.merge([
             "windowPresent": windowPresent, "applicationState": application.state.rawValue,
             "windowCount": application.windows.count,
-        ]
+        ]) { _, next in next }
         try saveOutcome()
         XCTAssertTrue(windowPresent)
         try waitState("empty-idle") { state in
@@ -300,21 +301,77 @@ final class OriginalShellJourneyTests: XCTestCase {
     }
 
     private func registerApplication(_ fixture: JourneyFixture) throws {
+        let environment = ProcessInfo.processInfo.environment
+        let accountHome = try XCTUnwrap(environment["EDITH_JOURNEY_ACCOUNT_HOME"])
+        let account = try XCTUnwrap(getpwuid(getuid()))
+        let actualHome = String(cString: account.pointee.pw_dir)
+        startup.merge([
+            "stage": "before-registration",
+            "runnerHomeCategory": fixture.homeCategory(
+                environment["HOME"], accountHome: actualHome),
+            "fixedHomeCategory": fixture.homeCategory(
+                environment["CFFIXED_USER_HOME"], accountHome: actualHome),
+            "foundationHomeCategory": fixture.homeCategory(
+                NSHomeDirectory(), accountHome: actualHome),
+            "accountHomeMatched": accountHome == actualHome,
+        ]) { _, next in next }
+        try saveOutcome()
+        XCTAssertEqual(accountHome, actualHome)
+        XCTAssertEqual(environment["HOME"], actualHome)
+        XCTAssertNotEqual(environment["CFFIXED_USER_HOME"], fixture.home)
         let app = URL(fileURLWithPath: fixture.application)
+        let executable = URL(fileURLWithPath: fixture.executable)
+        for (url, type) in [
+            (root, FileAttributeType.typeDirectory), (app, .typeDirectory),
+            (executable, .typeRegular),
+        ] {
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            XCTAssertEqual(attributes[.type] as? FileAttributeType, type)
+            XCTAssertEqual((attributes[.ownerAccountID] as? NSNumber)?.uint32Value, getuid())
+            XCTAssertEqual(url.resolvingSymlinksInPath().path, url.path)
+            XCTAssertEqual(
+                ((attributes[.posixPermissions] as? NSNumber)?.intValue ?? -1) & 0o022, 0)
+        }
         let info = try XCTUnwrap(
             PropertyListSerialization.propertyList(
                 from: Data(contentsOf: app.appendingPathComponent("Contents/Info.plist")),
                 format: nil) as? [String: Any])
-        XCTAssertEqual(info["CFBundleIdentifier"] as? String, fixture.identifier)
-        let version = try XCTUnwrap(info["CFBundleShortVersionString"] as? String)
-        let bytes = try Data(contentsOf: URL(fileURLWithPath: fixture.executable))
-        XCTAssertEqual(
-            SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined(),
-            fixture.executableSHA256[version])
-        XCTAssertEqual(LSRegisterURL(app as CFURL, true), noErr)
+        let bytes = try Data(contentsOf: executable)
+        try fixture.validateRegistrationMetadata(
+            identifier: info["CFBundleIdentifier"] as? String,
+            executableName: info["CFBundleExecutable"] as? String,
+            packageType: info["CFBundlePackageType"] as? String,
+            version: info["CFBundleShortVersionString"] as? String,
+            executableDigest: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())
+        var code: SecStaticCode?
+        let creation = SecStaticCodeCreateWithPath(app as CFURL, [], &code)
+        startup["signatureCreationStatus"] = creation
+        try saveOutcome()
+        XCTAssertEqual(creation, errSecSuccess)
+        let signature = SecStaticCodeCheckValidity(
+            try XCTUnwrap(code),
+            SecCSFlags(
+                rawValue: kSecCSStrictValidate | kSecCSCheckAllArchitectures | kSecCSCheckNestedCode
+            ), nil)
+        startup.merge([
+            "signatureStatus": signature, "canonicalLayoutMatched": true,
+            "metadataMatched": true, "stage": "registering",
+        ]) { _, next in next }
+        try saveOutcome()
+        XCTAssertEqual(signature, errSecSuccess)
+        let status = LSRegisterURL(app as CFURL, true)
+        startup["registrationStatus"] = status
+        try saveOutcome()
+        XCTAssertEqual(status, noErr)
         let registered = NSWorkspace.shared.urlsForApplications(
             withBundleIdentifier: fixture.identifier)
-        XCTAssertEqual(registered.map { $0.resolvingSymlinksInPath().path }, [fixture.application])
+        let matched = registered.map { $0.resolvingSymlinksInPath().path } == [fixture.application]
+        startup.merge([
+            "registeredCount": registered.count, "uniqueRegisteredPathMatched": matched,
+            "stage": "registered",
+        ]) { _, next in next }
+        try saveOutcome()
+        XCTAssertTrue(matched)
     }
 
     private func replaceApplication(_ fixture: JourneyFixture) throws {

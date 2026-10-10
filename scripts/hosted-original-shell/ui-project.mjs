@@ -2,8 +2,54 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { admitHostedJourney } from "./prepare-journey.mjs";
+
+const runnerKeys = [
+  "GITHUB_ACTIONS",
+  "RUNNER_OS",
+  "RUNNER_ENVIRONMENT",
+  "EDITH_HOSTED_SHELL_JOURNEY",
+  "EDITH_GUI_FIXTURE_DIRECTORY",
+  "EDITH_JOURNEY_ACCOUNT_HOME",
+  "EDITH_APPLICATION_IDENTIFIER",
+  "EDITH_SHARED_DEFAULTS_SUITE",
+  "EDITH_EXTENSION_FIXTURE_HOME",
+];
+
+export function journeyRunnerEnvironment(environment) {
+  const result = Object.fromEntries(
+    runnerKeys.map((key) => [key, environment[key]]),
+  );
+  validateRunnerEnvironment(result);
+  return result;
+}
+
+function validateRunnerEnvironment(environment) {
+  assert.deepEqual(Object.keys(environment).sort(), [...runnerKeys].sort());
+  for (const value of Object.values(environment))
+    assert(
+      typeof value === "string" &&
+        value.length <= 4096 &&
+        !/[\0\r\n]/.test(value),
+    );
+  admitHostedJourney(
+    environment,
+    environment.EDITH_GUI_FIXTURE_DIRECTORY,
+    environment.EDITH_APPLICATION_IDENTIFIER,
+    environment.EDITH_JOURNEY_ACCOUNT_HOME,
+  );
+  assert.equal(
+    environment.EDITH_SHARED_DEFAULTS_SUITE,
+    environment.EDITH_APPLICATION_IDENTIFIER,
+  );
+  assert.equal(
+    environment.EDITH_EXTENSION_FIXTURE_HOME,
+    join(environment.EDITH_GUI_FIXTURE_DIRECTORY, "synthetic-data"),
+  );
+}
 
 export async function writeUIProject(directory, environment) {
+  validateRunnerEnvironment(environment);
   const project = join(directory, "HostedShellJourney.xcodeproj");
   await mkdir(join(project, "xcshareddata/xcschemes"), { recursive: true });
   const source = resolve(
@@ -146,29 +192,7 @@ export async function writeUIProject(directory, environment) {
 }
 
 export function configureUITestRun(path, environment) {
-  const allowed = new Set([
-    "GITHUB_ACTIONS",
-    "RUNNER_OS",
-    "RUNNER_ENVIRONMENT",
-    "EDITH_HOSTED_SHELL_JOURNEY",
-    "EDITH_GUI_FIXTURE_DIRECTORY",
-    "EDITH_JOURNEY_ACCOUNT_HOME",
-    "HOME",
-    "XDG_CONFIG_HOME",
-    "XDG_CACHE_HOME",
-    "XDG_DATA_HOME",
-    "EDITH_APPLICATION_IDENTIFIER",
-    "EDITH_SHARED_DEFAULTS_SUITE",
-    "EDITH_EXTENSION_FIXTURE_HOME",
-  ]);
-  for (const [key, value] of Object.entries(environment)) {
-    assert(allowed.has(key), "Unexpected UI test environment key");
-    assert(
-      typeof value === "string" &&
-        value.length <= 4096 &&
-        !/[\0\r\n]/.test(value),
-    );
-  }
+  validateRunnerEnvironment(environment);
   execFileSync(
     "python3",
     [
@@ -183,7 +207,11 @@ assert set(value)=={'HostedShellJourney','__xctestrun_metadata__'}
 target=value['HostedShellJourney']
 assert target['IsUITestBundle'] is True
 assert target['UseUITargetAppProvidedByTests'] is True
-target.setdefault('EnvironmentVariables',{}).update(environment)
+variables=target.setdefault('EnvironmentVariables',{})
+assert variables.get('HOME',environment['EDITH_JOURNEY_ACCOUNT_HOME'])==environment['EDITH_JOURNEY_ACCOUNT_HOME']
+assert variables.get('CFFIXED_USER_HOME',environment['EDITH_JOURNEY_ACCOUNT_HOME'])==environment['EDITH_JOURNEY_ACCOUNT_HOME']
+assert not any(key in variables for key in ('XDG_CONFIG_HOME','XDG_CACHE_HOME','XDG_DATA_HOME','SSH_AUTH_SOCK'))
+variables.update(environment)
 target['TestTimeoutsEnabled']=True
 target['DefaultTestExecutionTimeAllowance']=600
 target['MaximumTestExecutionTimeAllowance']=600

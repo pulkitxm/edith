@@ -162,3 +162,29 @@ private func fixture(identifier: String = identifier, directory: String = direct
         }
     }
 }
+
+@Test func registrationDiagnosticsUseOnlyClosedCategoriesAndExactMetadata() throws {
+    let value = fixture()
+    #expect(value.homeCategory(nil, accountHome: "/Users/fixture") == "absent")
+    #expect(value.homeCategory("/Users/fixture", accountHome: "/Users/fixture") == "account")
+    #expect(value.homeCategory(value.home, accountHome: "/Users/fixture") == "synthetic")
+    #expect(value.homeCategory("/unrelated/private/path", accountHome: "/Users/fixture") == "other")
+    for version in value.appVersions {
+        try value.validateRegistrationMetadata(
+            identifier: identifier, executableName: "Edith", packageType: "APPL", version: version,
+            executableDigest: value.executableSHA256[version]!)
+    }
+    for (id, name, type, version, digest) in [
+        ("com.pulkit.edith", "Edith", "APPL", "1.0.0", String(repeating: "b", count: 64)),
+        (identifier, "other", "APPL", "1.0.0", String(repeating: "b", count: 64)),
+        (identifier, "Edith", "BNDL", "1.0.0", String(repeating: "b", count: 64)),
+        (identifier, "Edith", "APPL", "3.0.0", String(repeating: "b", count: 64)),
+        (identifier, "Edith", "APPL", "1.0.0", String(repeating: "0", count: 64)),
+    ] {
+        #expect(throws: JourneyContractError.invalidMetadata) {
+            try value.validateRegistrationMetadata(
+                identifier: id, executableName: name, packageType: type, version: version,
+                executableDigest: digest)
+        }
+    }
+}
