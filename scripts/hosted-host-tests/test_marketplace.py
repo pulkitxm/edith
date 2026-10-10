@@ -72,16 +72,70 @@ class MarketplaceDiagnosticsTests(unittest.TestCase):
                 os.chdir(directory)
                 with patch.object(sys, 'argv', ['marketplace.py']), patch.object(
                         marketplace.subprocess, 'check_output', side_effect=[
-                            'a' * 40, '/Applications/Xcode.app/Contents/Developer']), patch.object(
+                            'a' * 40, '/Applications/Xcode.app/Contents/Developer',
+                            '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift']), patch.object(
                         marketplace.watchdog, 'admit'), patch.object(
                         marketplace.watchdog, 'canonical_path', side_effect=lambda path, **_: Path(path)), patch.object(
+                        marketplace, 'swift_contract', return_value={'entry': 'synthetic', 'executable': 'synthetic', 'identity': {}}), patch.object(
                         marketplace.watchdog, 'run_batch', side_effect=RuntimeError('synthetic failure')):
                     with self.assertRaises(RuntimeError):
                         marketplace.main()
                 receipt = json.loads(Path('local/hosted-marketplace-tests/result.json').read_text())
-                self.assertEqual(receipt, {'schema': 1, 'sourceCommit': 'a' * 40, 'passed': False})
+                self.assertEqual(receipt['sourceCommit'], 'a' * 40)
+                self.assertFalse(receipt['passed'])
+                self.assertNotIn('batch', receipt)
             finally:
                 os.chdir(original)
+
+    def test_selected_swift_direct_and_in_toolchain_symlink_preserve_entry_and_pin_target(self):
+        for linked in [None, 'swift-driver', 'swift-frontend']:
+            with tempfile.TemporaryDirectory() as directory:
+                developer = Path(directory).resolve() / 'Xcode.app/Contents/Developer'
+                binary = developer / 'Toolchains/XcodeDefault.xctoolchain/usr/bin'
+                binary.mkdir(parents=True)
+                entry = binary / 'swift'
+                target = binary / (linked or 'swift')
+                target.write_bytes(b'synthetic executable')
+                target.chmod(0o700)
+                if linked:
+                    entry.symlink_to(linked)
+                contract = marketplace.swift_contract(developer, entry)
+                self.assertEqual(contract['entry'], str(entry))
+                self.assertEqual(contract['executable'], str(target))
+                calls = []
+                launch = marketplace.swift_process_factory(
+                    developer, contract, lambda arguments, **options: calls.append((arguments, options)))
+                arguments = marketplace.command(developer, entry)
+                launch(arguments, stdout=None)
+                self.assertEqual(calls[0][0], arguments)
+                self.assertEqual(calls[0][1]['executable'], str(target))
+                target.write_bytes(b'changed same-size exe')
+                with self.assertRaises(ValueError):
+                    launch(arguments)
+                self.assertEqual(len(calls), 1)
+
+    def test_selected_swift_rejects_escape_nonexecutable_and_wrong_toolchain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            developer = Path(directory).resolve() / 'Xcode.app/Contents/Developer'
+            binary = developer / 'Toolchains/XcodeDefault.xctoolchain/usr/bin'
+            binary.mkdir(parents=True)
+            entry = binary / 'swift'
+            outside = Path(directory).resolve() / 'foreign-swift'
+            outside.write_bytes(b'synthetic executable')
+            outside.chmod(0o700)
+            entry.symlink_to(outside)
+            with self.assertRaises(ValueError):
+                marketplace.swift_contract(developer, entry)
+            entry.unlink()
+            entry.write_bytes(b'synthetic executable')
+            entry.chmod(0o600)
+            with self.assertRaises(ValueError):
+                marketplace.swift_contract(developer, entry)
+            entry.chmod(0o700)
+            with self.assertRaises(ValueError):
+                marketplace.swift_contract(developer, outside)
+            with self.assertRaises(ValueError):
+                marketplace.swift_contract(developer, binary / '..' / 'bin/swift')
 
     def test_command_preserves_the_full_native_suite_without_filters_or_serial_override(self):
         developer = '/Applications/Xcode_26.6.app/Contents/Developer'
