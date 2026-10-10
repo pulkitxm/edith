@@ -20,16 +20,7 @@ final class ExtensionRuntime: NSObject {
                 guard self?.store != nil, payload == Data("{}".utf8) else {
                     throw ExtensionPeerError.unavailable
                 }
-                return try JSONSerialization.data(withJSONObject: [
-                    "version": 1, "owner": "calendar",
-                    "commands": [
-                        [
-                            "route": ["calendar"], "operation": "calendar.cli",
-                            "summary": "Read and open your schedule.", "destructive": false,
-                            "timeout": 30,
-                        ]
-                    ],
-                ])
+                return try CalendarCLICatalog.encoded(payload)
             }
             if command.hasPrefix("calendar.ui.") {
                 guard let engine = self?.uiEngine else { throw ExtensionPeerError.unavailable }
