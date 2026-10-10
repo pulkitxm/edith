@@ -118,6 +118,12 @@ export function validateWorkerFixtureProof(
   assert.equal(result.studioMetadataValidated, id === "studio");
 }
 
+export function workerFixtureHome(root, id) {
+  assert.equal(resolve(root), root);
+  assert(supportedFixtureWorkers.has(id));
+  return join(root, id === "calendar" ? "synthetic-data" : `${id}-home`);
+}
+
 export function workerFixtureEnvironment(home, hostIdentifier) {
   assert.equal(resolve(home), home);
   const environment = {
@@ -379,10 +385,8 @@ async function run() {
       }
       const fixtureRoot = join(root, `${id}-host`);
       await mkdir(fixtureRoot, { mode: 0o700 });
-      const fixtureHome =
-        id === "calendar" ? fixtureRoot : join(fixtureRoot, `${id}-home`);
-      if (fixtureHome !== fixtureRoot)
-        await mkdir(fixtureHome, { mode: 0o700 });
+      const fixtureHome = workerFixtureHome(fixtureRoot, id);
+      await mkdir(fixtureHome, { mode: 0o700 });
       await mkdir(join(fixtureHome, "tmp"), { mode: 0o700 });
       const result = JSON.parse(
         execFileSync(

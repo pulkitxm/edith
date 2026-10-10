@@ -22,6 +22,7 @@ import {
   validateWorkerFixtureProof,
   validateWorkerFixtureSelection,
   workerFixtureEnvironment,
+  workerFixtureHome,
 } from "./test-extension-workers.mjs";
 
 const definitions = JSON.parse(
@@ -171,6 +172,25 @@ test("inert proof never promotes unavailable features or metadata to media cover
   );
 });
 
+test("native fixture homes match generic and Calendar admission topology", () => {
+  for (const owner of workers.map(({ id }) => id)) {
+    const home = workerFixtureHome("/synthetic/fixture", owner);
+    assert.equal(
+      home,
+      join(
+        "/synthetic/fixture",
+        owner === "calendar" ? "synthetic-data" : `${owner}-home`,
+      ),
+    );
+    const environment = workerFixtureEnvironment(home);
+    assert.equal(environment.HOME, home);
+    assert.equal(environment.CFFIXED_USER_HOME, home);
+    assert.equal(environment.TMPDIR, join(home, "tmp"));
+  }
+  assert.throws(() => workerFixtureHome("relative", "calendar"));
+  assert.throws(() => workerFixtureHome("/synthetic/fixture", "futureWorker"));
+});
+
 test("fixture subprocesses inherit only owned homes and closed environment", async () => {
   const home = await realpath(
     await mkdtemp(join(tmpdir(), "edith-fixture-env-")),
@@ -204,7 +224,10 @@ test("fixture subprocesses inherit only owned homes and closed environment", asy
         fixture: home,
         identifier,
       });
-      assert((await stat(environment.TMPDIR)).isDirectory());
+      const temporary = await stat(environment.TMPDIR);
+      assert(temporary.isDirectory());
+      assert.equal(temporary.uid, process.getuid());
+      assert.equal(temporary.mode & 0o777, 0o700);
       assert.equal(environment.XDG_CONFIG_HOME, join(home, ".config"));
       assert.equal(environment.XDG_CACHE_HOME, join(home, ".cache"));
       assert.equal(
