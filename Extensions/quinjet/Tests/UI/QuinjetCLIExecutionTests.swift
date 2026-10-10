@@ -1,9 +1,26 @@
+import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 import Testing
 @testable import QuinjetUI
 
 @MainActor @Suite(.serialized) struct QuinjetCLIExecutionTests {
+    @Test func originalMachineSelectorsAcceptSavedIDsNamesTargetsAndUnambiguousPrefixes() throws {
+        let first = Machine(
+            id: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!,
+            name: "Build one", host: "fixture-one")
+        let second = Machine(
+            id: UUID(uuidString: "20000000-0000-0000-0000-000000000002")!,
+            name: "Build two", host: "fixture-two")
+        let machines = [first, second]
+        for query in [first.id.uuidString.lowercased(), "1000", "build ONE", "fixture-one"] {
+            #expect(try MachineResolver.machine(query, in: machines) == first)
+        }
+        for query in ["build", "fixture", "missing", ""] {
+            #expect(throws: CLIFailure.self) { try MachineResolver.machine(query, in: machines) }
+        }
+    }
+
     @Test func originalSessionCommandsMutateOwningModelAndPreserveStreams() async throws {
         defer { QuinjetWorkOwnership.enable() }
         let worker = QuinjetWorker(

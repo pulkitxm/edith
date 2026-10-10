@@ -21,8 +21,9 @@ enum CLIEnvironment {
 }
 
 enum MachineResolver {
-    static func machine(_ query: String) throws -> Machine {
-        let values = MachineRegistry.machines()
+    static func machine(_ query: String, in values: [Machine] = MachineRegistry.machines()) throws
+        -> Machine
+    {
         guard !values.isEmpty else {
             throw CLIFailure.notFound("no machines are configured", hint: "run `ed machines ls`")
         }
@@ -39,7 +40,8 @@ enum MachineResolver {
         let matches =
             exact.isEmpty
             ? values.filter {
-                $0.name.lowercased().hasPrefix(query.lowercased())
+                $0.id.uuidString.lowercased().hasPrefix(query.lowercased())
+                    || $0.name.lowercased().hasPrefix(query.lowercased())
                     || $0.sshTarget.lowercased().hasPrefix(query.lowercased())
             } : exact
         guard !query.isEmpty, matches.count == 1 else {
