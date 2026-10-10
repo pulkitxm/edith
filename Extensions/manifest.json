@@ -1709,7 +1709,8 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
       "scripts/build-extension-ui-carrier.mjs",
       "scripts/build-camera-carrier.mjs",
-      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands",
+      "scripts/prepare-extension-native-support.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
@@ -1727,6 +1728,10 @@
       {
         "source": "Extensions/attention/Licenses/GRDB-LICENSE",
         "destination": "GRDB-LICENSE"
+      },
+      {
+        "source": "Packages/ExtensionSupport/Licenses/swift-argument-parser-license.txt",
+        "destination": "swift-argument-parser-license.txt"
       }
     ],
     "testTargets": [
@@ -1802,7 +1807,8 @@
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionSettingsView.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionTimelineView.swift"
     ],
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "nativeSupportProduct": "EdithExtensionCommands"
   },
   {
     "id": "machines",

@@ -1,21 +1,12 @@
 // swift-tools-version:6.0
 import PackageDescription
-import Foundation
-
-let supportAliases = [
-    "EdithExtensionSupport": "EdithExtensionSupport_attention_native",
-    "EdithExtensionUI": "EdithExtensionUI_attention_native",
-    "EdithExtensionCommands": "EdithExtensionCommands_attention_native",
-    "ArgumentParser": "ArgumentParser_attention_native",
-    "ArgumentParserToolInfo": "ArgumentParserToolInfo_attention_native",
-]
 
 let package = Package(
     name: "AttentionNative",
     platforms: [.macOS(.v14)],
     products: [.library(name: "AttentionNative", type: .dynamic, targets: ["AttentionNative"])],
     dependencies: [
-        .package(path: "../../../Packages/ExtensionSupport"),
+        .package(path: "../../../local/extension-support/attention_native"),
         .package(url: "https://github.com/groue/GRDB.swift", exact: "7.11.1"),
     ],
     targets: [
@@ -23,8 +14,8 @@ let package = Package(
             name: "AttentionNative",
             dependencies: [
                 .product(
-                    name: "EdithExtensionCommands", package: "ExtensionSupport",
-                    moduleAliases: supportAliases),
+                    name: "EdithExtensionCommands_attention_native",
+                    package: "attention_native"),
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
             resources: [.copy("Resources/ChromeExtension")],

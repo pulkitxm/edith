@@ -1,7 +1,7 @@
 import Foundation
 import Testing
-import EdithExtensionSupport
-import EdithExtensionUI
+import EdithExtensionSupport_attention_native
+import EdithExtensionUI_attention_native
 import AppKit
 import SwiftUI
 

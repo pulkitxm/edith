@@ -569,3 +569,60 @@ test("role overrides fingerprint the complete selected SDK without changing unre
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("native private SDK consumers invalidate on every selected support source", async () => {
+  const root = await mkdtemp(join(tmpdir(), "extension-native-support-"));
+  const definition = {
+    id: "attention",
+    nativeSupportProduct: "EdithExtensionCommands",
+    inputs: [],
+    sharedInputs: [],
+    dependencies: [],
+  };
+  try {
+    for (const product of [
+      "EdithExtensionSupport",
+      "EdithExtensionUI",
+      "EdithExtensionCommands",
+    ]) {
+      const directory = join(
+        root,
+        "Packages/ExtensionSupport/Sources",
+        product,
+      );
+      await mkdir(directory, { recursive: true });
+      await writeFile(join(directory, "Source.swift"), product);
+    }
+    await mkdir(join(root, "Packages/ExtensionSupport/Licenses"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(
+        root,
+        "Packages/ExtensionSupport/Licenses/swift-argument-parser-license.txt",
+      ),
+      "license",
+    );
+    await mkdir(join(root, "scripts"), { recursive: true });
+    await writeFile(
+      join(root, "scripts/build-extension-support.mjs"),
+      "builder",
+    );
+    const before = await extensionFingerprint(root, definition, [definition]);
+    const cache = await supportCacheFingerprint(root, definition);
+    expect(cache).not.toBe("none");
+    expect(await supportCacheFingerprint(root, definition)).toBe(cache);
+    const source =
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands/Source.swift";
+    expect(
+      planExtensionBuilds([definition], [source]).map(({ id }) => id),
+    ).toEqual([definition.id]);
+    await writeFile(join(root, source), "updated commands");
+    expect(await extensionFingerprint(root, definition, [definition])).not.toBe(
+      before,
+    );
+    expect(await supportCacheFingerprint(root, definition)).not.toBe(cache);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

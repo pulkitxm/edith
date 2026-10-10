@@ -1,5 +1,5 @@
-@_implementationOnly import EdithExtensionCommands
-@_implementationOnly import EdithExtensionSupport
+@_implementationOnly import EdithExtensionCommands_attention_native
+@_implementationOnly import EdithExtensionSupport_attention_native
 import Foundation
 
 @MainActor enum AttentionCLIExecution {

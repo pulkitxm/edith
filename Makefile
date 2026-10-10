@@ -410,6 +410,7 @@ ci-extension-terminal: ghostty-extension
 
 .PHONY: ci-extension-attention
 ci-extension-attention:
+	bun scripts/prepare-extension-native-support.mjs attention
 	swift format lint --strict --recursive Extensions/attention
 	swift test --package-path Extensions/attention/NativeRuntime --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 .PHONY: ci-machines

@@ -1,5 +1,5 @@
-import ArgumentParser
-@_implementationOnly import EdithExtensionCommands
+import ArgumentParser_attention_native
+@_implementationOnly import EdithExtensionCommands_attention_native
 import Foundation
 
 struct AttentionRulesCommand: AsyncParsableCommand {

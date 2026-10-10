@@ -1,4 +1,4 @@
-@_implementationOnly import EdithExtensionSupport
+@_implementationOnly import EdithExtensionSupport_attention_native
 import Foundation
 import SwiftUI
 

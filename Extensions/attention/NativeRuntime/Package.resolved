@@ -1,5 +1,5 @@
 {
-  "originHash" : "646e729aae7ab321cb68979ed1db835d627059134fd61e56e9300c8c16d5bafe",
+  "originHash" : "f56320968300bebc26c1e694ea794495c9fbccb58f7fa008ad0d77698f1d5b65",
   "pins" : [
     {
       "identity" : "grdb.swift",
@@ -8,24 +8,6 @@
       "state" : {
         "revision" : "b83108d10f42680d78f23fe4d4d80fc88dab3212",
         "version" : "7.11.1"
-      }
-    },
-    {
-      "identity" : "swift-argument-parser",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-argument-parser",
-      "state" : {
-        "revision" : "6a52f3251125d74daf04fcbd5e6f08a75d074382",
-        "version" : "1.8.2"
-      }
-    },
-    {
-      "identity" : "zipfoundation",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/weichsel/ZIPFoundation.git",
-      "state" : {
-        "revision" : "02b6abe5f6eef7e3cbd5f247c5cc24e246efcfe0",
-        "version" : "0.9.19"
       }
     }
   ],

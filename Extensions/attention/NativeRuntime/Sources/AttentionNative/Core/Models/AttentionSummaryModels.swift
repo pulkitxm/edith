@@ -1,5 +1,5 @@
-@_implementationOnly import EdithExtensionSupport
-@_implementationOnly import EdithExtensionUI
+@_implementationOnly import EdithExtensionSupport_attention_native
+@_implementationOnly import EdithExtensionUI_attention_native
 import Foundation
 
 enum AttentionCategorySource: String, Codable, Sendable {
