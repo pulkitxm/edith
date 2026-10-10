@@ -22,15 +22,20 @@ final class DatabaseColumnsModel {
     private(set) var connectionID: DatabaseConnectionID?
     private(set) var object: DatabaseObjectIdentifier?
 
-    @ObservationIgnored private let defaults: UserDefaults
-    @ObservationIgnored private let persistenceKey: String
+    @ObservationIgnored private let readLayouts: () -> Data?
+    @ObservationIgnored private let writeLayouts: (Data) -> Void
 
     init(
         defaults: UserDefaults = SharedDefaults.store,
         persistenceKey: String = "database.columns.layouts.v1"
     ) {
-        self.defaults = defaults
-        self.persistenceKey = persistenceKey
+        readLayouts = { defaults.data(forKey: persistenceKey) }
+        writeLayouts = { defaults.set($0, forKey: persistenceKey) }
+    }
+
+    init(read: @escaping () -> Data?, write: @escaping (Data) -> Void) {
+        readLayouts = read
+        writeLayouts = write
     }
 
     var orderedFields: [DatabaseFieldDescriptor] {
@@ -174,17 +179,64 @@ final class DatabaseColumnsModel {
             stored.layouts.append(layout)
         }
         guard let data = try? JSONEncoder().encode(stored) else { return }
-        defaults.set(data, forKey: persistenceKey)
+        writeLayouts(data)
     }
 
     private func storedLayouts() -> DatabaseColumnsStoredLayouts {
-        guard let data = defaults.data(forKey: persistenceKey),
+        guard let data = readLayouts(),
             let stored = try? JSONDecoder().decode(DatabaseColumnsStoredLayouts.self, from: data),
             stored.version == DatabaseColumnsStoredLayouts.currentVersion
         else {
             return DatabaseColumnsStoredLayouts()
         }
         return stored
+    }
+
+    static func validateStoredLayouts(_ data: Data) throws {
+        guard data.count <= 4 * 1024 * 1024 else {
+            throw DatabaseBrokerCommandClientError.invalidRequest
+        }
+        let stored = try JSONDecoder().decode(DatabaseColumnsStoredLayouts.self, from: data)
+        guard stored.version == DatabaseColumnsStoredLayouts.currentVersion,
+            stored.layouts.count <= 4096,
+            stored.layouts.allSatisfy({ layout in
+                layout.columns.count <= 2048
+                    && layout.columns.allSatisfy { column in
+                        column.width.map { $0.isFinite && (90...520).contains($0) } ?? true
+                    }
+            })
+        else { throw DatabaseBrokerCommandClientError.invalidRequest }
+    }
+
+    static func changedLayouts(from previous: Data?, to current: Data) throws -> Data {
+        try validateStoredLayouts(current)
+        let old = try previous.map {
+            try JSONDecoder().decode(DatabaseColumnsStoredLayouts.self, from: $0)
+        }
+        var updates = try JSONDecoder().decode(DatabaseColumnsStoredLayouts.self, from: current)
+        updates.layouts.removeAll { layout in
+            old?.layouts.first(where: { $0.scope == layout.scope })?.columns == layout.columns
+        }
+        return try JSONEncoder().encode(updates)
+    }
+
+    static func mergedLayouts(stored: Data?, updates: Data) throws -> Data {
+        try validateStoredLayouts(updates)
+        if let stored { try validateStoredLayouts(stored) }
+        var combined =
+            try stored.map { try JSONDecoder().decode(DatabaseColumnsStoredLayouts.self, from: $0) }
+            ?? DatabaseColumnsStoredLayouts()
+        let incoming = try JSONDecoder().decode(DatabaseColumnsStoredLayouts.self, from: updates)
+        for layout in incoming.layouts {
+            if let index = combined.layouts.firstIndex(where: { $0.scope == layout.scope }) {
+                combined.layouts[index] = layout
+            } else {
+                combined.layouts.append(layout)
+            }
+        }
+        let data = try JSONEncoder().encode(combined)
+        try validateStoredLayouts(data)
+        return data
     }
 
     private static func mergedColumns(
@@ -248,7 +300,7 @@ private struct DatabaseColumnsStoredScope: Codable, Equatable {
     let object: DatabaseObjectIdentifier
 }
 
-private struct DatabaseColumnsStoredColumn: Codable {
+private struct DatabaseColumnsStoredColumn: Codable, Equatable {
     let field: DatabaseFieldPath
     let isVisible: Bool
     let width: Double?

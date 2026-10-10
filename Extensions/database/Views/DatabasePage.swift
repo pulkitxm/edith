@@ -27,6 +27,7 @@ struct DatabasePage: View {
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.databaseRemotePrivacy) private var remotePrivacy
 
     init(
         model: DatabasePageModel? = nil,
@@ -221,7 +222,7 @@ struct DatabasePage: View {
                 showsDetails: $showsServiceDetails,
                 repair: { Task { await model.repair() } })
         case .ready:
-            readyContent.presenterCover(DatabasePrivacy.hidden)
+            readyContent.presenterCover(remotePrivacy ?? DatabasePrivacy.hidden)
         }
     }
 
@@ -273,7 +274,7 @@ struct DatabasePage: View {
     }
 
     private func beginConnectionCreation() {
-        connectionCreation = DatabaseConnectionCreationModel()
+        connectionCreation = pageSession?.connectionCreation() ?? DatabaseConnectionCreationModel()
     }
 
     private func openConnection(_ connection: DatabaseConnectionSummary) {
@@ -438,7 +439,7 @@ struct DatabasePage: View {
         guard let confirmation = actionConfirmation else {
             return "Confirm connection change"
         }
-        guard DatabasePrivacy.hidden else { return confirmation.title }
+        guard remotePrivacy ?? DatabasePrivacy.hidden else { return confirmation.title }
         switch confirmation {
         case .favorite(let connection):
             return connection.isFavorite
