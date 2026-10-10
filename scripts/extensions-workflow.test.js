@@ -7,6 +7,28 @@ const workflow = Bun.YAML.parse(
 const { plan, build, publish } = workflow.jobs;
 const text = (value) => JSON.stringify(value).replaceAll("\\n", "\n");
 
+test("Camera release preparation receives explicit profiles after signing and before packaging", () => {
+  const preparation = build.steps.findIndex(
+    (step) => step.name === "Prepare the frozen Camera host and provisioning profiles",
+  );
+  const signing = build.steps.findIndex(
+    (step) => step.name === "Import the release signing certificate",
+  );
+  const packaging = build.steps.findIndex(
+    (step) => step.name === "Build only this extension",
+  );
+  expect(preparation).toBeGreaterThan(signing);
+  expect(preparation).toBeLessThan(packaging);
+  const step = build.steps[preparation];
+  expect(step.if).toBe("matrix.id == 'virtualCamera'");
+  expect(step.env.CAMERA_CARRIER_PROVISIONING_PROFILE).toContain("secrets.CAMERA_CARRIER_PROVISIONING_PROFILE");
+  expect(step.env.CAMERA_EXTENSION_PROVISIONING_PROFILE).toContain("secrets.CAMERA_EXTENSION_PROVISIONING_PROFILE");
+  expect(step.env.DEVELOPMENT).toContain("inputs.publish != true");
+  expect(step.run).toBe("python3 scripts/prepare-camera-extension-release.py");
+  expect(build.steps.at(-1).if).toBe("always()");
+  expect(build.steps.at(-1).run).toContain("camera-release-*");
+});
+
 test("release asset helper changes run the extension checks", () => {
   expect(workflow.on.pull_request.paths).toContain("scripts/release-asset-*");
   expect(workflow.on.push.paths).toContain("scripts/release-asset-*");
