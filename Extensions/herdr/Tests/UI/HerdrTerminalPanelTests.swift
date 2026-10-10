@@ -5,7 +5,7 @@ import AppKit
 import Foundation
 import Testing
 
-private actor HerdrPanelHerdr {
+actor HerdrPanelHerdr {
     private(set) var opened: [(session: String, cwd: String?, machine: UUID?)] = []
     private(set) var closed: [String] = []
     private(set) var ran: [(pane: String, command: String)] = []

@@ -114,7 +114,7 @@ struct HerdrPanelTerminal: Identifiable {
     }
 }
 
-struct HerdrTerminalPanel: Equatable {
+struct HerdrTerminalPanel: Equatable, Codable {
     var terminalIDs: [String] = []
     var selectedID: String?
     var open = false
@@ -276,12 +276,22 @@ final class HerdrTerminalPanels {
     private(set) var panels: [String: HerdrTerminalPanel] = [:]
     private(set) var terminals: [String: HerdrPanelTerminal] = [:]
     private(set) var focusedOwner: String?
-    var maximized = false
+    var uiAction: (@MainActor (String, [String: Any]) async throws -> Void)?
+    private var adoptingUI = false
+    private var uiStopped = false
+    private(set) var uiError: String?
+    private var uiTasks: [UUID: Task<Void, Never>] = [:]
+    var maximized = false {
+        didSet {
+            if !adoptingUI { dispatchUI("maximize", ["value": maximized]) }
+        }
+    }
     var closeRequest: HerdrTerminalCloseRequest?
     var height = HerdrTerminalPanelSizing.heightDefault {
         didSet {
             guard height != oldValue else { return }
             defaults.set(height, forKey: AppStorageKeys.Herdr.terminalPanelHeight)
+            if !adoptingUI { dispatchUI("height", ["value": height]) }
         }
     }
 
@@ -338,6 +348,15 @@ final class HerdrTerminalPanels {
     }
 
     func show(_ owner: String, host: HerdrPanelHost, cwd: String?) {
+        if uiAction != nil {
+            dispatchUI(
+                "show",
+                [
+                    "owner": owner, "machineID": host.machineID,
+                    "cwd": cwd ?? HerdrTerminalOrigin.home,
+                ]);
+            return
+        }
         guard let panel = panels[owner], !panel.terminalIDs.isEmpty else {
             newTerminal(in: owner, host: host, cwd: cwd)
             return
@@ -347,21 +366,25 @@ final class HerdrTerminalPanels {
     }
 
     func hide(_ owner: String) {
+        if uiAction != nil { dispatchUI("hide", ["owner": owner]); return }
         panels[owner]?.open = false
         if focusedOwner == owner { focusedOwner = nil }
     }
 
     func focus(_ owner: String) {
+        if uiAction != nil { dispatchUI("focus", ["owner": owner]); return }
         guard focusedOwner != owner else { return }
         focusedOwner = owner
     }
 
     func releaseFocus() {
+        if uiAction != nil { dispatchUI("releaseFocus", [:]); return }
         guard focusedOwner != nil else { return }
         focusedOwner = nil
     }
 
     func select(_ id: String, in owner: String) {
+        if uiAction != nil { dispatchUI("select", ["owner": owner, "terminalID": id]); return }
         guard panels[owner]?.terminalIDs.contains(id) == true else { return }
         panels[owner]?.selectedID = id
         focusedOwner = owner
@@ -369,6 +392,15 @@ final class HerdrTerminalPanels {
 
     @discardableResult
     func newTerminal(in owner: String, host: HerdrPanelHost, cwd: String?) -> String {
+        if uiAction != nil {
+            dispatchUI(
+                "new",
+                [
+                    "owner": owner, "machineID": host.machineID,
+                    "cwd": cwd ?? HerdrTerminalOrigin.home,
+                ])
+            return UUID().uuidString
+        }
         let id = UUID().uuidString
         terminals[id] = HerdrPanelTerminal(
             id: id, host: host, session: session, cwd: cwd, holder: TerminalSessionHolder(),
@@ -384,6 +416,7 @@ final class HerdrTerminalPanels {
     }
 
     func retry(_ id: String) {
+        if uiAction != nil { dispatchUI("retry", ["terminalID": id]); return }
         guard let terminal = terminals[id], terminal.failure != nil else { return }
         terminals[id]?.failure = nil
         guard terminal.pane == nil else { return }
@@ -450,12 +483,14 @@ final class HerdrTerminalPanels {
     }
 
     func close(_ id: String) {
+        if uiAction != nil { dispatchUI("close", ["terminalID": id]); return }
         guard let terminal = remove(id) else { return }
         terminal.holder.stop()
         dispose(terminal)
     }
 
     func closeAll(owners: [String]) {
+        if uiAction != nil { dispatchUI("closeAll", ["owners": owners]); return }
         for owner in owners {
             guard let panel = panels.removeValue(forKey: owner) else { continue }
             if focusedOwner == owner { focusedOwner = nil }
@@ -468,6 +503,7 @@ final class HerdrTerminalPanels {
     }
 
     func refresh(_ owner: String) async {
+        if let uiAction { try? await uiAction("refresh", ["owner": owner]); return }
         await refresh(ids: panels[owner]?.terminalIDs ?? [])
     }
 
@@ -594,6 +630,7 @@ final class HerdrTerminalPanels {
     }
 
     func retarget(previous: [HerdrTab], current: [HerdrTab], fallback: String) {
+        guard uiAction == nil else { return }
         let moves = HerdrTerminalOwnership.moves(
             owners: Array(panels.keys), previous: previous, current: current, fallback: fallback)
         for move in moves { adopt(move.owner, into: move.destination) }
@@ -614,6 +651,7 @@ final class HerdrTerminalPanels {
     }
 
     private func refresh(ids: [String]) async {
+        if let uiAction { try? await uiAction("refresh", ["ids": ids]); return }
         var requests: [HerdrPaneStateRequest] = []
         for id in ids {
             guard let terminal = terminals[id], let pane = terminal.pane else { continue }
@@ -633,6 +671,73 @@ final class HerdrTerminalPanels {
                 remove(id)?.holder.stop()
             case .live(let process):
                 if terminals[id]?.process != process { terminals[id]?.process = process }
+            }
+        }
+    }
+
+    var uiState: HerdrUIPanelState {
+        .init(
+            panels: panels, focused: focusedOwner, maximized: maximized, height: height,
+            terminals: terminals.values.map { terminal in
+                .init(
+                    id: terminal.id, machineID: terminal.host.machineID,
+                    machineName: terminal.host.machineName, isLocal: terminal.host.isLocal,
+                    session: terminal.session, cwd: terminal.cwd, pane: terminal.pane,
+                    process: terminal.process, failure: terminal.failure,
+                    adopted: terminal.adopted, seen: terminal.seen)
+            }.sorted { $0.id < $1.id })
+    }
+
+    func adoptUI(_ state: HerdrUIPanelState) {
+        adoptingUI = true
+        defer { adoptingUI = false }
+        let current = terminals
+        let live = Set(state.terminals.map(\.id))
+        for (id, terminal) in current where !live.contains(id) {
+            terminal.holder.stopRendering(); terminal.scroll.shutdown()
+        }
+        terminals = Dictionary(
+            uniqueKeysWithValues: state.terminals.map { record in
+                let previous = current[record.id]
+                return (
+                    record.id,
+                    HerdrPanelTerminal(
+                        id: record.id,
+                        host: .init(
+                            machineID: record.machineID, machineName: record.machineName,
+                            isLocal: record.isLocal, sshTarget: nil, machine: nil),
+                        session: record.session, cwd: record.cwd,
+                        holder: previous?.holder ?? TerminalSessionHolder(),
+                        scroll: previous?.scroll ?? HerdrTerminalScroll(), pane: record.pane,
+                        process: record.process, failure: record.failure, adopted: record.adopted,
+                        seen: record.seen)
+                )
+            })
+        panels = state.panels
+        focusedOwner = state.focused
+        maximized = state.maximized
+        height = state.height
+    }
+
+    func shutdownRendering() async {
+        uiStopped = true
+        let tasks = Array(uiTasks.values)
+        for task in tasks { task.cancel() }
+        for terminal in terminals.values {
+            terminal.holder.stopRendering(); terminal.scroll.shutdown()
+        }
+        for task in tasks { await task.value }
+        uiTasks.removeAll()
+        uiAction = nil
+    }
+
+    private func dispatchUI(_ operation: String, _ object: [String: Any]) {
+        guard let uiAction, !uiStopped, uiTasks.count < 32 else { return }
+        let id = UUID()
+        uiTasks[id] = Task { [weak self] in
+            defer { self?.uiTasks[id] = nil }
+            do { try await uiAction(operation, object); self?.uiError = nil } catch {
+                self?.uiError = error.localizedDescription
             }
         }
     }

@@ -79,7 +79,9 @@ final class HerdrNewAgentPopupModel {
             host.reachable, host.herdrPresent
         else { throw LaunchError.spaceUnavailable }
         let machine = store.machine(for: host)
-        guard host.isLocal || machine != nil else { throw HerdrQuinjetError.machineUnavailable }
+        guard store.uiClient != nil || host.isLocal || machine != nil else {
+            throw HerdrQuinjetError.machineUnavailable
+        }
         let workspaces: [HerdrWorkspaceSummary]
         if store.uiClient == nil {
             workspaces = try await listWorkspaces(machine)

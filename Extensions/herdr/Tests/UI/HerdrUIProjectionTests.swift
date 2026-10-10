@@ -79,7 +79,10 @@ import Testing
         layout.views = [forged.id: .agent]
         layout.selected = layout.tabs[0].id
         await #expect(throws: ExtensionPeerError.self) {
-            try await client.perform("herdr.ui.layout", payload: JSONEncoder().encode(layout))
+            try await client.perform(
+                "herdr.ui.layout",
+                payload: JSONEncoder().encode(
+                    HerdrUILayoutMutation(baseline: state.layout, layout: layout)))
         }
         #expect(worker.store.tabs.isEmpty)
         await #expect(throws: ExtensionPeerError.self) {
@@ -89,6 +92,124 @@ import Testing
         await #expect(throws: ExtensionPeerError.self) { try await client.perform("herdr.ui.read") }
         client.stop()
         #expect(throws: CancellationError.self) { try client.state(original) }
+    }
+
+    @Test func originalPanelCreatesOnlyInEngineAndPreservesRunningCloseConfirmation() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let backend = HerdrPanelHerdr()
+        let defaults = HerdrUIDefaults()
+        let panels = HerdrTerminalPanels(defaults: defaults, operations: backend.operations)
+        let engineStore = HerdrStore(
+            defaults: defaults, machinesProvider: { [] }, terminalPanels: panels)
+        engineStore.hosts = [
+            .init(
+                id: "local", name: "Synthetic Mac", isLocal: true,
+                herdrPresent: true, reachable: true, agents: [agent("first")])
+        ]
+        let worker = HerdrWorker(store: engineStore, defaults: defaults, automaticActions: false)
+        let client = HerdrUIClient { try await worker.execute($0, payload: $1) }
+        let ui = HerdrStore(uiClient: client)
+        try await ui.performUI("herdr.ui.read")
+        await #expect(throws: ExtensionPeerError.self) {
+            try await client.perform(
+                "herdr.ui.panel",
+                object: [
+                    "operation": "new", "owner": "board", "machineID": "local",
+                    "cwd": "/untrusted-folder",
+                ])
+        }
+        #expect(await backend.openedSessions.isEmpty)
+        ui.terminalPanels.newTerminal(in: "board", host: .local, cwd: "~")
+        for _ in 0..<200 {
+            if panels.terminals.values.first?.process != nil { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(await backend.openedSessions == ["default"])
+        #expect(await backend.openedDirectories == ["~"])
+        let terminal = try #require(panels.terminals.values.first)
+        let pane = try #require(terminal.pane)
+        await backend.run("synthetic-build", command: "fixture build", in: pane)
+        await ui.terminalPanels.refresh("board")
+        #expect(ui.terminalPanels.terminals[terminal.id]?.running == true)
+        #expect(ui.terminalPanels.terminals[terminal.id]?.holder.terminalLaunch == nil)
+        ui.terminalPanels.requestClose(terminal.id)
+        for _ in 0..<200 {
+            if ui.terminalPanels.closeRequest != nil { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let confirmation = try #require(ui.terminalPanels.closeRequest)
+        #expect(confirmation.running == ["synthetic-build"])
+        #expect(await backend.closed.isEmpty)
+        confirmation.proceed()
+        for _ in 0..<200 {
+            if await backend.closed == [pane] { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(await backend.closed == [pane])
+        #expect(panels.terminals.isEmpty)
+        await ui.shutdown()
+        await worker.shutdown()
+    }
+
+    @Test func originalHerdrPageRendersOffscreenWithCheckedStateAtBothWidthsZoomAndSchemes()
+        async throws
+    {
+        defer { HerdrWorkOwnership.enable() }
+        let previous = UIScale.current
+        defer { UIScale.apply(previous) }
+        let worker = worker()
+        for width in [620.0, 1100.0] {
+            for dark in [false, true] {
+                for zoom in [1.0, 1.4] {
+                    UIScale.apply(zoom)
+                    let ui = HerdrStore(
+                        uiClient: .init { try await worker.execute($0, payload: $1) })
+                    try await ui.performUI("herdr.ui.read")
+                    let host = NSHostingView(
+                        rootView: ExtensionPageHost {
+                            HerdrPage(store: ui)
+                                .environment(\.compactLayout, width < 720)
+                                .environment(\.colorScheme, dark ? .dark : .light)
+                                .environment(\.automaticViewActionsEnabled, false)
+                                .environment(\.terminalLaunchEnabled, false)
+                        })
+                    let frame = NSRect(x: 0, y: 0, width: width, height: 760)
+                    let window = TestWindowHost.window(contentRect: frame)
+                    window.isReleasedWhenClosed = false
+                    window.contentView = host
+                    host.frame = frame
+                    host.layoutSubtreeIfNeeded()
+                    await Task.yield()
+                    let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+                    host.cacheDisplay(in: host.bounds, to: bitmap)
+                    #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
+                    #expect(host.fittingSize.width <= width + 1)
+                    #expect(!TestWindowHost.isExposedOnDesktop(window))
+                    window.close()
+                    await ui.shutdown()
+                }
+            }
+        }
+        await worker.shutdown()
+    }
+
+    @Test func staleLayoutCannotOverwriteOriginalChangesFromAnotherClient() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let worker = worker()
+        let client = HerdrUIClient { try await worker.execute($0, payload: $1) }
+        let data = try await client.perform("herdr.ui.read")
+        let original = try #require(try client.state(data))
+        let first = try #require(worker.store.agents.first)
+        worker.store.open(first)
+        let current = worker.store.uiLayout
+        await #expect(throws: ExtensionPeerError.self) {
+            try await client.perform(
+                "herdr.ui.layout",
+                payload: JSONEncoder().encode(
+                    HerdrUILayoutMutation(baseline: original.layout, layout: original.layout)))
+        }
+        #expect(worker.store.uiLayout == current)
+        await worker.shutdown()
     }
 
     @Test func cancelledProjectionRejectsLateResponseAndOlderSequence() async throws {

@@ -94,6 +94,8 @@ final class HerdrStore {
     static let boardID = "board"
     var terminalClient: OwnedTerminalClient.Invoke?
     var uiClient: HerdrUIClient?
+    private var uiBaseline = HerdrUILayoutState(
+        tabs: [], selected: HerdrStore.boardID, views: [:], arrangements: [])
     private var uiOpenedAgents: [HerdrAgent] = []
     private var adoptingUI = false
     private var uiMutation: Task<Void, Never>?
@@ -164,7 +166,7 @@ final class HerdrStore {
     var inventoryReady: Bool { inventoryReceived && !settling && !refreshing }
 
     var inventoryFailureMessage: String? {
-        var failures: [String] = []
+        var failures: [String] = [uiError, terminalPanels.uiError].compactMap { $0 }
         for host in hosts where host.herdrPresent || !host.reachable {
             if let error = host.error { failures.append("\(host.name): \(error)") }
         }
@@ -599,6 +601,7 @@ final class HerdrStore {
             uiPoll?.cancel()
             uiMutation?.cancel()
             for holder in terminalHolders { holder.stopRendering() }
+            await terminalPanels.shutdownRendering()
             await uiPoll?.value
             await uiMutation?.value
             uiPoll = nil
@@ -653,7 +656,7 @@ final class HerdrStore {
 
     func refresh() async {
         if uiClient != nil {
-            try? await performUI("herdr.ui.read")
+            try? await performUI("herdr.ui.refresh")
             return
         }
         guard !refreshing else { return }
@@ -2192,6 +2195,7 @@ final class HerdrStore {
     }
 
     private func scheduleTerminalRetarget(from previous: [HerdrTab]) {
+        guard uiClient == nil else { return }
         guard !terminalPanels.isEmpty, tabsBeforeRetarget == nil else { return }
         tabsBeforeRetarget = previous
         HerdrWorkOwnership.start { @MainActor [weak self] in self?.retargetTerminals() }
@@ -2295,6 +2299,7 @@ final class HerdrStore {
     func adoptUI(_ state: HerdrUIState) {
         adoptingUI = true
         defer { adoptingUI = false }
+        uiBaseline = state.layout
         uiOpenedAgents = state.openedAgents
         hosts = state.hosts
         inventoryReceived = true
@@ -2302,6 +2307,7 @@ final class HerdrStore {
         refreshing = false
         applyUIPreferences(state.preferences)
         applyUILayout(state.layout)
+        terminalPanels.adoptUI(state.panels)
         agentStartupMessages = state.startupMessages
         messaging.adopt(state.hooks)
         uiError = nil
@@ -2309,6 +2315,7 @@ final class HerdrStore {
 
     func performUI(_ operation: String, object: [String: Any] = [:]) async throws {
         guard let uiClient else { throw ExtensionPeerError.unavailable }
+        if operation != "herdr.ui.read" { await uiMutation?.value }
         let data = try await uiClient.perform(operation, object: object)
         if let state = try uiClient.state(data) { adoptUI(state) }
     }
@@ -2324,11 +2331,18 @@ final class HerdrStore {
             while self.uiDirty, !Task.isCancelled {
                 self.uiDirty = false
                 do {
-                    let layout = try JSONEncoder().encode(self.uiLayout)
-                    let preferences = try JSONEncoder().encode(self.uiPreferences)
-                    _ = try await client.perform("herdr.ui.layout", payload: layout)
-                    let data = try await client.perform(
-                        "herdr.ui.preferences", payload: preferences)
+                    let layout = try JSONEncoder().encode(
+                        HerdrUILayoutMutation(baseline: self.uiBaseline, layout: self.uiLayout))
+                    let preferences = self.uiPreferences
+                    let layoutReply = try await client.perform("herdr.ui.layout", payload: layout)
+                    guard let layoutState = try client.state(layoutReply) else {
+                        throw ExtensionPeerError.unavailable
+                    }
+                    self.uiBaseline = layoutState.layout
+                    let payload = try JSONEncoder().encode(
+                        HerdrUIPreferencesMutation(
+                            baseline: layoutState.preferences, preferences: preferences))
+                    let data = try await client.perform("herdr.ui.preferences", payload: payload)
                     if !self.uiDirty, let state = try client.state(data) { self.adoptUI(state) }
                 } catch is CancellationError { return } catch {
                     self.uiError = error.localizedDescription

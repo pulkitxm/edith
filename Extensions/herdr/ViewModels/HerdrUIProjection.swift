@@ -2,7 +2,7 @@ import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
 
-struct HerdrUILayoutState: Codable {
+struct HerdrUILayoutState: Codable, Equatable {
     var tabs: [HerdrTab]
     var selected: String
     var views: [String: HerdrAgentView]
@@ -31,6 +31,16 @@ struct HerdrUILayoutState: Codable {
     }
 }
 
+struct HerdrUILayoutMutation: Codable {
+    let baseline: HerdrUILayoutState
+    let layout: HerdrUILayoutState
+}
+
+struct HerdrUIPreferencesMutation: Codable {
+    let baseline: [String: HerdrUIPreference]
+    let preferences: [String: HerdrUIPreference]
+}
+
 extension HerdrLayout {
     fileprivate func checked(depth: Int) throws -> Bool {
         guard depth <= 16 else { throw ExtensionPeerError.invalidRequest }
@@ -54,6 +64,7 @@ struct HerdrUIState: Codable {
     let sequence: UInt64
     let hosts: [HerdrHostSnapshot]
     let openedAgents: [HerdrAgent]
+    let panels: HerdrUIPanelState
     let layout: HerdrUILayoutState
     let hooks: HerdrHooksSnapshot
     let startupMessages: [String: String]
@@ -74,6 +85,7 @@ struct HerdrUIState: Codable {
         guard Set(agents.map(\.id)).count == agents.count else {
             throw ExtensionPeerError.invalidRequest
         }
+        try panels.validate()
         try layout.validate(
             allowed: Set(
                 agents.map(\.id) + openedAgents.map(\.id)
@@ -81,7 +93,7 @@ struct HerdrUIState: Codable {
     }
 }
 
-enum HerdrUIPreference: Codable {
+enum HerdrUIPreference: Codable, Equatable {
     case flag(Bool)
     case number(Double)
     case text(String)
@@ -194,7 +206,7 @@ final class HerdrUIDefaults: UserDefaults {
 }
 
 @MainActor final class HerdrUIEngine {
-    static let preferenceKeys: Set<String> = [
+    nonisolated static let preferenceKeys: Set<String> = [
         AppStorageKeys.Herdr.railOpen, AppStorageKeys.Herdr.detailOpen,
         AppStorageKeys.Herdr.animatesLayout, AppStorageKeys.Herdr.railWidth,
         AppStorageKeys.Herdr.detailWidth, AppStorageKeys.Herdr.agentsCollapsed,
@@ -215,25 +227,46 @@ final class HerdrUIDefaults: UserDefaults {
         else { throw ExtensionPeerError.invalidRequest }
         let store = worker.store
         switch operation {
+        case "herdr.ui.panel":
+            try await HerdrUIPanelActions.execute(object, store: store)
         case "herdr.ui.read":
             guard object.isEmpty else { throw ExtensionPeerError.invalidRequest }
+        case "herdr.ui.refresh":
+            guard object.isEmpty else { throw ExtensionPeerError.invalidRequest }
+            await store.refresh()
         case "herdr.ui.layout":
-            guard Set(object.keys) == ["tabs", "selected", "views", "arrangements"] else {
+            guard Set(object.keys) == ["baseline", "layout"] else {
                 throw ExtensionPeerError.invalidRequest
             }
-            let layout = try JSONDecoder().decode(HerdrUILayoutState.self, from: payload)
+            let mutation = try JSONDecoder().decode(HerdrUILayoutMutation.self, from: payload)
+            guard mutation.baseline == store.uiLayout else {
+                throw ExtensionPeerError.rejected(
+                    "The layout changed in another view. Refresh and try again.")
+            }
+            let layout = mutation.layout
             let agents = store.agents + store.hosts.map { HerdrMachineTerminal.agent(for: $0) }
             try layout.validate(allowed: Set((agents + store.sessions.map(\.agent)).map(\.id)))
             store.applyUILayout(layout)
         case "herdr.ui.preferences":
-            let preferences = try JSONDecoder().decode(
-                [String: HerdrUIPreference].self, from: payload)
+            guard Set(object.keys) == ["baseline", "preferences"] else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            let mutation = try JSONDecoder().decode(HerdrUIPreferencesMutation.self, from: payload)
+            guard mutation.baseline == store.uiPreferences else {
+                throw ExtensionPeerError.rejected(
+                    "The settings changed in another view. Refresh and try again.")
+            }
+            let preferences = mutation.preferences
             guard Set(preferences.keys).isSubset(of: Self.preferenceKeys) else {
                 throw ExtensionPeerError.invalidRequest
             }
             for (key, value) in preferences {
                 switch value {
                 case .flag: break
+                case .text(let value):
+                    guard key == AppStorageKeys.Herdr.terminalMouse,
+                        HerdrTerminalMouse(rawValue: value) != nil
+                    else { throw ExtensionPeerError.invalidRequest }
                 case .number(let number):
                     guard number.isFinite, (0...2048).contains(number) else {
                         throw ExtensionPeerError.invalidRequest
@@ -318,7 +351,8 @@ final class HerdrUIDefaults: UserDefaults {
         let store = worker.store
         let value = HerdrUIState(
             owner: "herdr", generation: generation, sequence: sequence,
-            hosts: store.hosts, openedAgents: store.sessions.map(\.agent), layout: store.uiLayout,
+            hosts: store.hosts, openedAgents: store.sessions.map(\.agent),
+            panels: store.terminalPanels.uiState, layout: store.uiLayout,
             hooks: await worker.hooks.list(), startupMessages: store.agentStartupMessages,
             preferences: store.uiPreferences, activity: worker.activity.activity,
             activitySettings: worker.activity.settings,
@@ -369,6 +403,12 @@ final class HerdrUIDefaults: UserDefaults {
             agentFocuser: { _, _, _ in throw ExtensionPeerError.unavailable },
             machinesProvider: { [] }, messaging: messaging)
         self.uiClient = uiClient
+        terminalPanels.uiAction = { [weak self] operation, object in
+            guard let self else { throw ExtensionPeerError.unavailable }
+            var object = object
+            object["operation"] = operation
+            try await self.performUI("herdr.ui.panel", object: object)
+        }
         terminalClient = { operation, payload in
             try await uiClient.perform(operation, payload: payload)
         }
