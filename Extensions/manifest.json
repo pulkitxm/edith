@@ -1724,7 +1724,10 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-usage-native"
+    ]
   },
   {
     "id": "bifrost",

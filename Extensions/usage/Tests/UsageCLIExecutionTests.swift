@@ -271,7 +271,9 @@ import Testing
         await waiting.shutdown()
     }
 
-    @Test func concurrentCLIFollowDetachesWithoutCancellingOriginalNativeRefresh() async throws {
+    @Test func currentSDKRejectsConcurrentCLIFollowWithoutCancellingOriginalNativeRefresh()
+        async throws
+    {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let home = root.appendingPathComponent("home")
@@ -310,12 +312,12 @@ import Testing
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
         while !gate.waiting && ContinuousClock.now < deadline { await Task.yield() }
         try #require(gate.waiting && controller.refreshing)
-        let follow = Task {
-            try await run(["refresh", "--follow", "--json"], controller: controller)
+        do {
+            _ = try await run(["refresh", "--follow", "--json"], controller: controller)
+            Issue.record("The current SDK admitted a simultaneous terminal command")
+        } catch ExtensionPeerError.rejected(let reason) {
+            #expect(reason == "Another terminal command is running.")
         }
-        try await Task.sleep(for: .milliseconds(30))
-        follow.cancel()
-        await #expect(throws: CancellationError.self) { try await follow.value }
         #expect(controller.refreshing && !refresh.isCancelled)
         gate.resume()
         let reply = try await refresh.value
