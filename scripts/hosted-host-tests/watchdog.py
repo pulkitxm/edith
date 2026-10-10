@@ -211,7 +211,8 @@ def completed_tests(batch, text):
 
 
 def run_batch(batch, arguments, directory, deadline, process_factory=subprocess.Popen,
-              ownership_factory=OwnedProcesses, clock=time.monotonic, sleep=time.sleep, environment=None):
+              ownership_factory=OwnedProcesses, clock=time.monotonic, sleep=time.sleep, environment=None,
+              testing_process=is_testing_process):
     start = clock()
     wall_start = time.time()
     timed_out = False
@@ -225,7 +226,7 @@ def run_batch(batch, arguments, directory, deadline, process_factory=subprocess.
                 if clock() - start >= deadline or (directory / f'{batch}.log').stat().st_size > 16_777_216:
                     timed_out = True
                     for identity in ownership.refresh():
-                        if batch != 'build' and is_testing_process(identity[3]):
+                        if batch != 'build' and testing_process(identity[3]):
                             if ownership.identity(identity[0]) == identity:
                                 subprocess.run(['/usr/bin/sample', str(identity[0]), '3', '-file',
                                                 str(directory / f'{batch}-{identity[0]}.sample')],
@@ -260,7 +261,7 @@ def run_batch(batch, arguments, directory, deadline, process_factory=subprocess.
     known = list(getattr(ownership, 'known', {}).values())
     conflicts = ownership.conflicts() if hasattr(ownership, 'conflicts') else []
     return {'batch': batch, 'testsCompleted': tests_completed,
-            'observedTestingProcess': any(is_testing_process(item[3]) for item in known),
+            'observedTestingProcess': any(testing_process(item[3]) for item in known),
             'knownOwnedProcesses': [{'pid': item[0], 'startedSeconds': item[1],
                                     'startedMicroseconds': item[2], 'executable': item[3],
                                     'processGroup': item[4],

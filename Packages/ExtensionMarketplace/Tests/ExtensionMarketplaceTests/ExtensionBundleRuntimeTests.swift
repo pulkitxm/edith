@@ -156,6 +156,24 @@ import Testing
 }
 
 struct MarketplaceRuntimeBuildFixture {
+    static func marker(stage: String, status: String, pid: Int32? = nil, exit: Int32? = nil)
+        -> String?
+    {
+        guard ["host-signature", "host-build", "package-build", "failed-build"].contains(stage),
+            ["started", "running", "exited", "launch-failed"].contains(status),
+            pid == nil || pid! > 1
+        else { return nil }
+        var value = "[marketplace-fixture] stage=\(stage) status=\(status)"
+        if let pid { value += " pid=\(pid)" }
+        if let exit { value += " exit=\(exit)" }
+        return value + "\n"
+    }
+
+    static func report(stage: String, status: String, pid: Int32? = nil, exit: Int32? = nil) {
+        guard let value = marker(stage: stage, status: status, pid: pid, exit: exit) else { return }
+        FileHandle.standardError.write(Data(value.utf8))
+    }
+
     struct Failure: Error, CustomStringConvertible {
         let arguments: [String]
         let status: Int32
@@ -192,8 +210,18 @@ struct MarketplaceRuntimeBuildFixture {
         process.environment = environment
         process.standardOutput = handle
         process.standardError = handle
-        try process.run()
+        report(stage: stage, status: "started")
+        do {
+            try process.run()
+        } catch {
+            report(stage: stage, status: "launch-failed")
+            throw error
+        }
+        report(stage: stage, status: "running", pid: process.processIdentifier)
         process.waitUntilExit()
+        report(
+            stage: stage, status: "exited", pid: process.processIdentifier,
+            exit: process.terminationStatus)
         try handle.synchronize()
         guard process.terminationStatus == 0 else {
             throw Failure(
@@ -204,6 +232,23 @@ struct MarketplaceRuntimeBuildFixture {
 }
 
 @Suite struct MarketplaceRuntimeBuildFixtureTests {
+    @Test func stageMarkersAreClosedAndNeverIncludeArgumentsOrLogPaths() {
+        #expect(
+            MarketplaceRuntimeBuildFixture.marker(stage: "host-build", status: "started")
+                == "[marketplace-fixture] stage=host-build status=started\n")
+        #expect(
+            MarketplaceRuntimeBuildFixture.marker(
+                stage: "package-build", status: "exited", pid: 123, exit: 3)
+                == "[marketplace-fixture] stage=package-build status=exited pid=123 exit=3\n")
+        #expect(
+            MarketplaceRuntimeBuildFixture.marker(stage: "/private/input", status: "started") == nil
+        )
+        #expect(MarketplaceRuntimeBuildFixture.marker(stage: "host-build", status: "secret") == nil)
+        #expect(
+            MarketplaceRuntimeBuildFixture.marker(stage: "host-build", status: "running", pid: 1)
+                == nil)
+    }
+
     @Test func anExplicitFrozenHostIsNeverReplacedByTheLocalDefault() {
         let root = URL(fileURLWithPath: "/synthetic/repository")
         #expect(
