@@ -195,6 +195,16 @@ import Testing
         let received = root.appendingPathComponent("canceled.txt")
         try Data("owned canceled writer".utf8).write(to: received)
         try fixture.publish([:])
+        for invalid in [
+            URL(string: "https://example.invalid/not-a-promised-file")!,
+            URL(fileURLWithPath: "/" + String(repeating: "x", count: 4096)),
+            root.appendingPathComponent("invalid\0name"),
+        ] {
+            #expect(throws: (any Error).self) {
+                try fixture.engine.finishPromise(finished(issued, fileURL: invalid))
+            }
+            #expect(FileManager.default.fileExists(atPath: received.path))
+        }
         let receipt = finished(issued, fileURL: received)
         try fixture.engine.finishPromise(receipt)
         try fixture.engine.finishPromise(receipt)

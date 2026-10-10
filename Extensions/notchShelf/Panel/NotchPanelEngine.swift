@@ -510,10 +510,15 @@ import Foundation
             issued.presentationID == request.presentationID, let controller
         else { throw ExtensionPeerError.invalidRequest }
         let point = try dropPoint(x: request.x, y: request.y)
-        if let url = request.fileURL, context.activeVersions["notchShelf"] == version {
-            guard url.isFileURL, url.path.utf8.count <= 4096, !url.path.utf8.contains(0) else {
+        if let url = request.fileURL {
+            guard url.isFileURL, url.absoluteString.utf8.count <= 16384,
+                url.path(percentEncoded: false).utf8.count <= 4096,
+                !url.path(percentEncoded: false).utf8.contains(0)
+            else {
                 throw ExtensionPeerError.invalidRequest
             }
+        }
+        if let url = request.fileURL, context.activeVersions["notchShelf"] == version {
             promises[request.id] = nil
             pendingPromiseFinishes[request.id] = request
             controller.store.adoptWhenAvailable(fileAt: url, id: request.id) {
