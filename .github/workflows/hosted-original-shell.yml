@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   calendar-journey:
-    if: github.repository == 'pulkitxm/edith' && github.event_name == 'workflow_dispatch' && (github.actor == 'pulkitxm' || github.actor == 'pukbot[bot]') && github.ref == 'refs/heads/feat/hosted-original-shell-journey'
+    if: github.repository == 'pulkitxm/edith' && github.event_name == 'workflow_dispatch' && (github.actor_id == '65671483' || github.actor_id == '320458784') && github.ref == 'refs/heads/feat/hosted-original-shell-journey'
     runs-on: macos-26
     timeout-minutes: 45
     env:
@@ -73,7 +73,7 @@ jobs:
         run: bun scripts/hosted-original-shell/run-journey.mjs
       - name: Retain bounded synthetic outcomes
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: hosted-original-shell-outcome
           retention-days: 3
