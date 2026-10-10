@@ -1,16 +1,20 @@
 import Foundation
 
 public enum HostAppPathsCLI {
+    private static func usageDirectory(_ identity: HostIdentity) -> URL {
+        identity.effectiveExtensionDirectory("usage").appendingPathComponent("data")
+    }
+
     public static func entries(identity: HostIdentity) -> [(id: String, label: String, url: URL)] {
         [
             ("app-data", "App data", identity.root),
             ("icloud", "iCloud", HostCoreCloud.directory(identity: identity)),
-            ("data", "Usage data", identity.extensionDirectory("usage")),
+            ("data", "Usage data", usageDirectory(identity)),
             (
                 "refresh-log", "Refresh log",
-                identity.extensionDirectory("usage").appendingPathComponent("refresh.log")
+                usageDirectory(identity).appendingPathComponent("refresh.log")
             ),
-            ("music", "Music", identity.extensionDirectory("music")),
+            ("music", "Music", identity.persistentExtensionLocations("music")[0]),
             ("caches", "Caches", identity.root.appendingPathComponent("Caches")),
             ("logs", "Logs", identity.root.appendingPathComponent("Logs")),
         ]
@@ -28,7 +32,7 @@ public enum HostAppPathsCLI {
         }
         if id == "refresh-log" {
             if manager.fileExists(atPath: entry.url.path) { return (entry.url, true) }
-            return (identity.extensionDirectory("usage"), false)
+            return (usageDirectory(identity), false)
         }
         return (entry.url, false)
     }

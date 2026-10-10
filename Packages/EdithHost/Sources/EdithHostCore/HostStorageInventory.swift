@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import ExtensionMarketplace
 import Foundation
 
@@ -23,7 +24,11 @@ public struct HostStorageExtension: Sendable, Identifiable {
     public let compressedDownloadBytes: Int64?
     public let pendingRemoval: Bool
     public var dataScopeID: String { "data:" + id }
-    public var dataScopeIDs: [String] { [dataScopeID, "preferences:" + id] }
+    public var preservedDataScopeIDs: [String] = []
+    public var sharedPreferences = false
+    public var dataScopeIDs: [String] {
+        [dataScopeID] + preservedDataScopeIDs + (sharedPreferences ? [] : ["preferences:" + id])
+    }
 
     public func packageBytes(in measurement: HostStorageMeasurement) -> HostStorageBytes {
         measurement.sum(versions.flatMap(\.scopeIDs))
@@ -68,17 +73,39 @@ public struct HostStorageInventory: Sendable {
                 root: preferencesDirectory.appendingPathComponent(identity.defaultsSuite + ".plist")
             ),
         ]
+        if !identity.development {
+            let library = identity.root.deletingLastPathComponent().deletingLastPathComponent()
+            scopes.append(
+                .init(id: "preserved-cache", root: library.appendingPathComponent("Caches/Edith")))
+            scopes.append(
+                .init(id: "preserved-logs", root: library.appendingPathComponent("Logs/Edith")))
+            scopes.append(
+                .init(
+                    id: "shared-preferences",
+                    root: preferencesDirectory.appendingPathComponent(
+                        identity.applicationDefaultsSuite + ".plist")))
+        }
         let known = Dictionary(uniqueKeysWithValues: marketplace.entries.map { ($0.id, $0.title) })
         let ids = Set(known.keys).union(marketplace.installedVersions.keys).sorted()
         var extensions: [HostStorageExtension] = []
         for id in ids {
             guard ExtensionPackage.validComponent(id) else { throw MarketplaceError.invalidCatalog }
             scopes.append(.init(id: "data:" + id, root: identity.extensionDirectory(id)))
-            scopes.append(
-                .init(
-                    id: "preferences:" + id,
-                    root: preferencesDirectory.appendingPathComponent(
-                        identity.extensionDefaultsSuite(id) + ".plist")))
+            var preservedIDs: [String] = []
+            if identity.development {
+                scopes.append(
+                    .init(
+                        id: "preferences:" + id,
+                        root: preferencesDirectory.appendingPathComponent(
+                            identity.extensionDefaultsSuite(id) + ".plist")))
+            } else {
+                for (index, relative) in (ExtensionData.productionLeaves[id] ?? []).enumerated() {
+                    let key = "preserved-data:" + id + ":" + String(index)
+                    preservedIDs.append(key)
+                    scopes.append(
+                        .init(id: key, root: identity.root.appendingPathComponent(relative)))
+                }
+            }
             var versions: [HostStorageVersion] = []
             let installed = (marketplace.installedVersions[id] ?? []).sorted {
                 if $0.version != $1.version {
@@ -148,7 +175,8 @@ public struct HostStorageInventory: Sendable {
                     id: id, title: known[id] ?? id, versions: versions,
                     catalogVersion: catalog?.version,
                     compressedDownloadBytes: catalog?.downloadBytes,
-                    pendingRemoval: marketplace.pendingRemovalIDs.contains(id)))
+                    pendingRemoval: marketplace.pendingRemovalIDs.contains(id),
+                    preservedDataScopeIDs: preservedIDs, sharedPreferences: !identity.development))
         }
         self.scopes = scopes
         self.extensions = extensions
@@ -164,10 +192,12 @@ public struct HostStorageInventory: Sendable {
                 scopeIDs: extensions.flatMap(\.dataScopeIDs)),
             .init(
                 id: "cache", title: "Archives, staging, cache and package metadata",
-                scopeIDs: ["package-cache", "cache", "catalog-cache"]),
+                scopeIDs: ["package-cache", "cache", "catalog-cache"]
+                    + (identity.development ? [] : ["preserved-cache"])),
             .init(
                 id: "host-data", title: "Host data and logs, including unassigned data",
-                scopeIDs: ["host-data", "logs", "host-preferences"]),
+                scopeIDs: ["host-data", "logs", "host-preferences"]
+                    + (identity.development ? [] : ["shared-preferences", "preserved-logs"])),
         ]
     }
 }

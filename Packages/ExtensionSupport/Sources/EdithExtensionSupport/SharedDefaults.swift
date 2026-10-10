@@ -4,12 +4,25 @@ public enum SharedDefaults {
     public static let systemAppearanceKey = "AppleInterfaceStyle"
 
     public static func applicationStore(identifier: String) -> UserDefaults? {
+        if identifier == "com.pulkit.edith" {
+            return UserDefaults(suiteName: identifier + ".shared")
+        }
         if Bundle.main.bundleIdentifier == identifier { return .standard }
         return UserDefaults(suiteName: identifier)
     }
 
+    public static func resolvedSuite(environment: [String: String], applicationIdentifier: String?)
+        -> String?
+    {
+        if let suite = environment["EDITH_SHARED_DEFAULTS_SUITE"] { return suite }
+        return applicationIdentifier == "com.pulkit.edith" ? "com.pulkit.edith.shared" : nil
+    }
+
     public static let store: UserDefaults = {
-        guard let suite = ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
+        guard
+            let suite = resolvedSuite(
+                environment: ProcessInfo.processInfo.environment,
+                applicationIdentifier: Bundle.main.bundleIdentifier),
             let defaults = UserDefaults(suiteName: suite)
         else { return .standard }
         return defaults

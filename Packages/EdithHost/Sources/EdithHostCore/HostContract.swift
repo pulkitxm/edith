@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Foundation
 import ExtensionMarketplace
 
@@ -126,7 +127,27 @@ public struct HostIdentity: Sendable {
             id, isDirectory: true)
     }
 
+    public func effectiveExtensionDirectory(_ id: String) -> URL {
+        ExtensionData.resolve(
+            environment: [
+                "EDITH_APPLICATION_IDENTIFIER": identifier,
+                "EDITH_EXTENSION_ID": id,
+                "EDITH_EXTENSION_DATA_ROOT": extensionDirectory(id).path,
+            ], fallback: extensionDirectory(id))
+    }
+
+    public func persistentExtensionLocations(_ id: String) -> [URL] {
+        guard !development, let leaves = ExtensionData.productionLeaves[id] else {
+            return [extensionDirectory(id)]
+        }
+        return leaves.map { root.appendingPathComponent($0) }
+    }
+
+    public var applicationDefaultsSuite: String {
+        development ? identifier : identifier + ".shared"
+    }
+
     public func extensionDefaultsSuite(_ id: String) -> String {
-        identifier + ".extensions." + id
+        development ? identifier + ".extensions." + id : applicationDefaultsSuite
     }
 }
