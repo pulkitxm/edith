@@ -13,10 +13,10 @@ import Foundation
 extension BifrostPanel: BifrostWorkerPanel {}
 
 @MainActor final class BifrostWorkerPanelOwnership {
-    private let makePanel: () -> any BifrostWorkerPanel
+    private let makePanel: @MainActor () -> any BifrostWorkerPanel
     private var panel: (any BifrostWorkerPanel)?
 
-    init(makePanel: @escaping () -> any BifrostWorkerPanel = { BifrostPanel.shared }) {
+    init(makePanel: @escaping @MainActor () -> any BifrostWorkerPanel = { BifrostPanel.shared }) {
         self.makePanel = makePanel
     }
 
