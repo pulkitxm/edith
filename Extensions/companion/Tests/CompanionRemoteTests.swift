@@ -84,6 +84,23 @@ import Testing
         #expect(invalid.exitCode == 2 && invalid.stdout.isEmpty)
     }
 
+    @Test func setupBeginCarriesTheOriginalPresentationReachability() async throws {
+        var request: CompanionSetupAction?
+        let state = CompanionSetupModel(onFinish: { _ in })
+        let bridge = CompanionUIBridge(invoke: { command, payload in
+            #expect(command == "companion.ui.setup")
+            request = try JSONDecoder().decode(CompanionSetupAction.self, from: payload)
+            return try JSONEncoder().encode(CompanionSetupState(state))
+        })
+        let ui = CompanionSetupModel(remote: bridge, onFinish: { _ in })
+        let home = CompanionHomeModel()
+        ui.begin(home: home, reasonerConfigured: true)
+        while request == nil { await Task.yield() }
+        #expect(request?.action == "begin" && request?.reachable == false)
+        #expect(request?.reasonerConfigured == true)
+        ui.shutdown()
+    }
+
     @Test func originalCommandHierarchyAndConfigurationValidationArePreserved() async throws {
         let help = try await CompanionCLIExecution.run(.init(arguments: ["--help"]))
         #expect(

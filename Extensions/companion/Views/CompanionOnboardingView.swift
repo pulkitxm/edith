@@ -71,12 +71,19 @@ final class CompanionSetupModel: Identifiable {
 
     func begin(home: CompanionHomeModel, reasonerConfigured: Bool) {
         if remote != nil {
-            remoteTask = Task { await remoteAction("begin", configured: reasonerConfigured) };
+            remoteTask = Task {
+                await remoteAction(
+                    "begin", configured: reasonerConfigured, reachable: home.reachable)
+            };
             return
         }
+        begin(reachable: home.reachable, reasonerConfigured: reasonerConfigured)
+    }
+
+    func begin(reachable: Bool, reasonerConfigured: Bool) {
         deployed = CompanionDeploymentStore.load()
         step = Self.initialStep(
-            deployment: deployed, reachable: home.reachable,
+            deployment: deployed, reachable: reachable,
             reasonerConfigured: reasonerConfigured)
         if step == .deploy, let deployed {
             selectedHostID = deployed.machineID ?? CompanionHost.localID
@@ -131,12 +138,15 @@ final class CompanionSetupModel: Identifiable {
         }
     }
 
-    private func remoteAction(_ action: String, configured: Bool? = nil) async {
+    private func remoteAction(_ action: String, configured: Bool? = nil, reachable: Bool? = nil)
+        async
+    {
         guard let remote else { return }
         do {
             var value = try await remote.setup(
                 .init(
-                    action: action, selectedHostID: selectedHostID, reasonerConfigured: configured))
+                    action: action, selectedHostID: selectedHostID, reasonerConfigured: configured,
+                    reachable: reachable))
             while !Task.isCancelled {
                 hosts = value.hosts; probing = value.probing; selectedHostID = value.selectedHostID
                 stages = value.stages; deploying = value.deploying; deployError = value.deployError

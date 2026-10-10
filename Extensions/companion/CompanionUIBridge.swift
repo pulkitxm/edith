@@ -426,7 +426,7 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
             case "snapshot": break
             case "begin":
                 model.begin(
-                    home: worker.workspace.home,
+                    reachable: action.reachable ?? false,
                     reasonerConfigured: action.reasonerConfigured ?? false)
             case "probe", "deploy":
                 guard setupTask == nil else { throw ExtensionPeerError.unavailable }
@@ -568,6 +568,7 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
 
 struct CompanionSetupAction: Codable {
     let action: String; var selectedHostID: UUID? = nil; var reasonerConfigured: Bool? = nil
+    var reachable: Bool? = nil
 }
 @MainActor struct CompanionSetupState: Codable {
     let step: CompanionSetupStep
