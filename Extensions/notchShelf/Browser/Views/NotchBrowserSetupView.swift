@@ -263,6 +263,12 @@ struct ChromeProfileAvatar: View {
             blue: Double(argb & 0xFF) / 255)
     }
 
+    @MainActor private static var remotePictures: [String: NSImage] = [:]
+    @MainActor static func installRemote(_ values: [String: Data]) {
+        for (id, data) in values { remotePictures[id] = NSImage(data: data) }
+        badges = [:]
+    }
+    @MainActor static func clearRemote() { remotePictures = [:]; badges = [:] }
     @MainActor private static var cache: [URL: NSImage] = [:]
     @MainActor private static var badges: [String: NSImage] = [:]
 
@@ -301,6 +307,7 @@ struct ChromeProfileAvatar: View {
     }
 
     @MainActor static func image(for profile: ChromeProfile) -> NSImage? {
+        if let image = remotePictures[profile.id] { return image }
         guard let url = profile.pictureURL else { return nil }
         if let cached = cache[url] { return cached }
         guard let image = NSImage(contentsOf: url) else { return nil }

@@ -11,6 +11,10 @@ import Foundation
     private var slots: [UInt32: [NotchPanelSlot]] = [:]
     private var heights: [UUID: Double] = [:]
     private var failures: [UUID: String] = [:]
+    private var transfer: (NotchPanelTransfer, ShelfStagedFiles)?
+    private var shareAcknowledgement: (UUID, CheckedContinuation<Void, Error>)?
+    private var transferTimer: Task<Void, Never>?
+    private var promises: Set<UUID> = []
     private var pointers: [UInt32: NotchPanelPointer] = [:]
     private var waiter: (UUID, CheckedContinuation<NotchPanelBatch, Error>)?
     private var waitTimer: Task<Void, Never>?
@@ -173,6 +177,12 @@ import Foundation
         stopped = true
         if let waiter { cancelWait(waiter.0) }
         slots = [:]; heights = [:]; failures = [:]; pointers = [:]
+        transferTimer?.cancel(); transferTimer = nil
+        transfer = nil
+        shareAcknowledgement?.1.resume(throwing: CancellationError()); shareAcknowledgement = nil
+        controller?.store.cancelActionSelection()
+        for id in promises { controller?.store.discardPromiseDestination(id: id) }
+        promises = []
         controller?.onPanelStateChanged = nil
         for display in displays.values { invalidate(display.presentationID) }
     }
@@ -181,7 +191,8 @@ import Foundation
         guard let identity, attached else { throw ExtensionPeerError.unavailable }
         let result = NotchPanelBatch(
             identity: identity, revision: revision,
-            states: try displays.keys.sorted().map { try state(for: $0) })
+            states: try displays.keys.sorted().map { try state(for: $0) },
+            transfers: transfer.map { [$0.0] } ?? [])
         guard try JSONEncoder().encode(result).count <= Self.maximumBytes else {
             throw ExtensionPeerError.rejected("The Notch panel state exceeds its capacity.")
         }
@@ -207,7 +218,9 @@ import Foundation
             leadingGlance: controller.leadingGlance, trailingGlance: controller.trailingGlance,
             glanceWingWidth: controller.glanceWingWidth, alert: controller.currentAlert,
             shelfOperationError: controller.shelfOperationError, heights: heights,
-            failures: failures)
+            failures: failures,
+            browserState: try controller.browserEngine?.state(includeAvatars: false),
+            privacyValues: controller.privacy.values)
         guard controller.items.count <= 512,
             try JSONEncoder().encode(result).count <= Self.maximumBytes
         else {
@@ -224,11 +237,15 @@ import Foundation
         }
         let item = request.itemID.flatMap { id in controller.items.first { $0.id == id } }
         switch request.operation {
-        case .tab:
+        case .tab, .glance:
             guard let raw = request.tab, let tab = NotchTab(rawValue: raw),
                 controller.visibleTabs.contains(tab)
             else { throw ExtensionPeerError.invalidRequest }
-            controller.selectTab(tab)
+            if request.operation == .glance {
+                controller.expand(on: request.displayID, preferredTab: tab)
+            } else {
+                controller.selectTab(tab)
+            }
         case .collapse: controller.collapseNow()
         case .editing:
             guard let flag = request.flag else { throw ExtensionPeerError.invalidRequest }
@@ -261,6 +278,12 @@ import Foundation
                     item, to: CGPoint(x: x, y: y), in: CGSize(width: width, height: height))
             default: break
             }
+        case .share, .drag:
+            guard let item, !controller.privacy.hides(.ability("notchShelf")) else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            try beginTransfer(
+                kind: request.operation == .share ? .share : .drag, item: item, request: request)
         case .endMove: controller.endCanvasDrag()
         case .dismissFailure: controller.dismissShelfFailure()
         case .alertTap:
@@ -276,6 +299,187 @@ import Foundation
             controller.measureHomeContent(height)
         }
         changed()
+    }
+
+    private func beginTransfer(
+        kind: NotchPanelTransfer.Kind, item: ShelfItem, request: NotchChromeAction
+    ) throws {
+        guard transfer == nil, let controller else { throw ShelfActionSelectionError.busy }
+        let ids = controller.selectedIDs.contains(item.id) ? controller.selectedIDs : [item.id]
+        let selection = try controller.store.actionSelection(itemIDs: ids)
+        let staged = try selection.stagedFiles()
+        let descriptor = NotchPanelTransfer(
+            id: UUID(), displayID: request.displayID, presentationID: request.presentationID,
+            kind: kind, items: selection.items, fileURLs: staged.urls)
+        guard descriptor.items.count <= 512, try JSONEncoder().encode(descriptor).count <= 32768,
+            controller.store.retainActionSelection(selection.snapshot)
+        else { throw ShelfActionSelectionError.busy }
+        transfer = (descriptor, staged)
+        transferTimer = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(60)) } catch { return }
+            guard let self, transfer?.0.id == descriptor.id else { return }
+            cancelTransfer(descriptor.id, error: "The native file action timed out.")
+        }
+    }
+
+    func shareCLI(_ ids: [UUID]) async throws {
+        guard !ids.isEmpty, let controller,
+            let display = displays[
+                controller.expandedDisplay ?? displays.values.first(where: \.isBuiltin)?.displayID
+                    ?? displays.keys.sorted().first ?? 0],
+            let identity, let item = controller.items.first(where: { $0.id == ids[0] }),
+            Set(ids).count == ids.count,
+            ids.allSatisfy({ id in controller.items.contains { $0.id == id } })
+        else { throw ExtensionPeerError.unavailable }
+        let selected = controller.selectedIDs
+        controller.hostSelect(Set(ids))
+        defer { controller.hostSelect(selected) }
+        let request = NotchChromeAction(
+            identity: identity, displayID: display.displayID,
+            presentationID: display.presentationID, revision: revision, operation: .share,
+            itemID: item.id)
+        try beginTransfer(kind: .share, item: item, request: request)
+        guard let id = transfer?.0.id else { throw ExtensionPeerError.unavailable }
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation {
+                (continuation: CheckedContinuation<Void, Error>) in
+                if Task.isCancelled {
+                    continuation.resume(throwing: CancellationError()); cancelTransfer(id); return
+                }
+                shareAcknowledgement = (id, continuation)
+                changed()
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.cancelTransfer(id) }
+        }
+    }
+
+    func acknowledgeTransfer(_ request: NotchPanelTransferAcknowledgement) throws {
+        try validate(request.identity)
+        guard transfer?.0.id == request.id, request.error.map({ $0.utf8.count <= 512 }) ?? true
+        else { throw ExtensionPeerError.invalidRequest }
+        if let acknowledgement = shareAcknowledgement, acknowledgement.0 == request.id {
+            shareAcknowledgement = nil
+            if request.opened {
+                acknowledgement.1.resume()
+            } else {
+                acknowledgement.1.resume(
+                    throwing: ExtensionPeerError.rejected(
+                        request.error ?? "The native share picker could not open."))
+            }
+        }
+        if !request.opened {
+            try finishTransfer(
+                .init(
+                    identity: request.identity, id: request.id, completed: false, outside: false,
+                    error: request.error))
+        }
+    }
+
+    private func cancelTransfer(_ id: UUID, error: String? = nil) {
+        guard transfer?.0.id == id else { return }
+        transfer?.0.cancelled = true
+        if let acknowledgement = shareAcknowledgement, acknowledgement.0 == id {
+            shareAcknowledgement = nil
+            if let error {
+                acknowledgement.1.resume(throwing: ExtensionPeerError.rejected(error))
+            } else {
+                acknowledgement.1.resume(throwing: CancellationError())
+            }
+        }
+        changed()
+    }
+
+    func finishTransfer(_ request: NotchPanelTransferFinish) throws {
+        try validate(request.identity)
+        guard let transfer, transfer.0.id == request.id, let controller,
+            request.error.map({ $0.utf8.count <= 512 && !$0.utf8.contains(0) }) ?? true
+        else { throw ExtensionPeerError.invalidRequest }
+        self.transfer = nil
+        if let acknowledgement = shareAcknowledgement, acknowledgement.0 == request.id {
+            shareAcknowledgement = nil
+            acknowledgement.1.resume(
+                throwing: ExtensionPeerError.rejected(
+                    request.error ?? "The native share picker closed before opening."))
+        }
+        transferTimer?.cancel(); transferTimer = nil
+        controller.store.releaseActionSelection()
+        if let error = request.error { controller.hostShelfFailure(error) }
+        if transfer.0.kind == .drag, request.completed, request.outside,
+            controller.context.defaults.object(forKey: AppStorageKeys.Notch.shelfRemoveAfterDragOut)
+                as? Bool ?? true
+        {
+            let ids = Set(transfer.0.items.map(\.id))
+            controller.hostRemoveAfterDrag(ids)
+        }
+        changed()
+    }
+
+    func drop(_ request: NotchPanelDrop) throws {
+        try validate(
+            request.identity, display: request.displayID, presentation: request.presentationID)
+        guard let controller, request.fileURLs.count <= 32,
+            request.fileURLs.allSatisfy({
+                $0.isFileURL && $0.path.utf8.count <= 4096 && !$0.path.utf8.contains(0)
+            }),
+            request.text.map({ !$0.isEmpty && $0.utf8.count <= 65536 }) ?? true,
+            !request.fileURLs.isEmpty || request.text != nil
+        else { throw ExtensionPeerError.invalidRequest }
+        let point = try dropPoint(x: request.x, y: request.y)
+        controller.hostDrop(fileURLs: request.fileURLs, text: request.text, location: point)
+        changed()
+    }
+
+    func preparePromise(_ request: NotchPanelPromise) throws -> URL {
+        try validate(
+            request.identity, display: request.displayID, presentation: request.presentationID)
+        guard promises.count < 32, !promises.contains(request.id), request.fileURL == nil,
+            let destination = controller?.store.promiseDestination(id: request.id)
+        else { throw ExtensionPeerError.invalidRequest }
+        _ = try dropPoint(x: request.x, y: request.y)
+        promises.insert(request.id)
+        return destination
+    }
+
+    func finishPromise(_ request: NotchPanelPromise) throws {
+        try validate(
+            request.identity, display: request.displayID, presentation: request.presentationID)
+        guard promises.contains(request.id), let controller else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        let point = try dropPoint(x: request.x, y: request.y)
+        promises.remove(request.id)
+        if let url = request.fileURL {
+            guard url.isFileURL, url.path.utf8.count <= 4096 else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            controller.store.adoptWhenAvailable(fileAt: url, id: request.id) {
+                [weak controller] item in
+                if let item, let point { controller?.store.setPosition(point, for: item) }
+                controller?.synchronizeShelfItems()
+            }
+        } else {
+            controller.store.discardPromiseDestination(id: request.id)
+        }
+        changed()
+    }
+
+    private func dropPoint(x: Double?, y: Double?) throws -> CGPoint? {
+        guard x != nil || y != nil else { return nil }
+        guard let x, let y, x.isFinite, y.isFinite, (-1200...2400).contains(x),
+            (-1024...2048).contains(y)
+        else { throw ExtensionPeerError.invalidRequest }
+        return CGPoint(x: x, y: y)
+    }
+
+    func browser(_ request: NotchBrowserRemoteRequest) async throws -> Data {
+        try validate(
+            request.identity, display: request.displayID, presentation: request.presentationID)
+        guard let engine = controller?.browserEngine else { throw ExtensionPeerError.unavailable }
+        let data = try await engine.execute(request)
+        try validate(
+            request.identity, display: request.displayID, presentation: request.presentationID)
+        return data
     }
 
     private func validate(

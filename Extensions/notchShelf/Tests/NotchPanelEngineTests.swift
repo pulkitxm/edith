@@ -6,7 +6,7 @@ import Testing
 
 @MainActor @Suite(.serialized) struct NotchPanelEngineTests {
     @Test func attachBeforeStartSuppressesOwnedPanelsAndPreservesOriginalLayout() throws {
-        let fixture = try Fixture()
+        let fixture = try NotchPanelFixture()
         defer { fixture.clean() }
         let batch = try fixture.attach()
         #expect(batch.states.count == 1)
@@ -32,7 +32,7 @@ import Testing
     }
 
     @Test func geometryAdmitsExactSavedTilesAndRejectsStaleDisabledAndOutOfBoundsSlots() throws {
-        let fixture = try Fixture()
+        let fixture = try NotchPanelFixture()
         defer { fixture.clean() }
         _ = try fixture.attach()
         let controller = fixture.bind()
@@ -65,7 +65,7 @@ import Testing
 
     @Test func eventDrivenWaitReturnsOwnedRevisionAndCancellationReleasesOnlyItsWait() async throws
     {
-        let fixture = try Fixture()
+        let fixture = try NotchPanelFixture()
         defer { fixture.clean() }
         let batch = try fixture.attach()
         let controller = fixture.bind()
@@ -104,7 +104,7 @@ import Testing
 
     @Test func pointerGateAndMeasuredProviderHeightKeepOriginalDwellAndShelfResizing() async throws
     {
-        let fixture = try Fixture()
+        let fixture = try NotchPanelFixture()
         defer { fixture.clean() }
         let batch = try fixture.attach()
         let controller = fixture.bind()
@@ -148,7 +148,7 @@ import Testing
     }
 
     @Test func chromeActionsMutateOriginalOwnedShelfAndRejectAnotherGeneration() async throws {
-        let fixture = try Fixture()
+        let fixture = try NotchPanelFixture()
         defer { fixture.clean() }
         _ = try fixture.attach()
         let controller = fixture.bind()
@@ -181,70 +181,71 @@ import Testing
         #expect(try ShelfMutationExecution.snapshot(root: controller.store.root).items.isEmpty)
     }
 
-    @MainActor private final class Fixture {
-        let id = "notch-panel-fixture-" + UUID().uuidString
-        let root: URL
-        let defaults: UserDefaults
-        let context: SurfaceHostContext
-        let presentation = UUID()
-        let ownership = UUID()
-        let music = SurfaceTile(.music)
-        let calendar = SurfaceTile(.calendar)
-        let engine: NotchPanelEngine
-        var controller: NotchShelfController?
-        init() throws {
-            root = FileManager.default.temporaryDirectory.appendingPathComponent(id)
-            defaults = try #require(UserDefaults(suiteName: id))
-            defaults.set(false, forKey: AppStorageKeys.Notch.shelfHaptics)
-            defaults.set(false, forKey: AppStorageKeys.Notch.alertsEnabled)
-            context = SurfaceHostContext(
-                defaults: defaults, sharedState: .init(root: root, namespace: id, owner: "host"))
-            engine = NotchPanelEngine(
-                context: context, connectedDisplays: { [42: CGSize(width: 1280, height: 900)] })
-            try publish(["notchShelf": "1", "music": "1", "calendar": "1"])
-        }
-        func publish(_ versions: [String: String]) throws {
-            try context.sharedState.publish([
-                "surface.activeIDs": String(
-                    decoding: JSONEncoder().encode(Array(versions.keys)), as: UTF8.self),
-                "surface.activeVersions": String(
-                    decoding: JSONEncoder().encode(versions), as: UTF8.self),
-            ])
-        }
-        @discardableResult func attach() throws -> NotchPanelBatch {
-            try engine.attach(
-                .init(
-                    ownershipID: ownership, version: "1",
-                    displays: [
-                        .init(
-                            displayID: 42, presentationID: presentation, width: 1280, height: 900,
-                            collapsedWidth: 150, collapsedHeight: 28, isBuiltin: true)
-                    ]))
-        }
-        func bind() -> NotchShelfController {
-            let controller = NotchShelfController(
-                context: context, startsServices: false, root: root.appendingPathComponent("Shelf"),
-                hostDisplays: Array(engine.displays.values))
-            self.controller = controller
-            engine.bind(controller)
-            return controller
-        }
-        func slot(_ tile: SurfaceTile) -> NotchPanelSlot {
+}
+
+@MainActor final class NotchPanelFixture {
+    let id = "notch-panel-fixture-" + UUID().uuidString
+    let root: URL
+    let defaults: UserDefaults
+    let context: SurfaceHostContext
+    let presentation = UUID()
+    let ownership = UUID()
+    let music = SurfaceTile(.music)
+    let calendar = SurfaceTile(.calendar)
+    let engine: NotchPanelEngine
+    var controller: NotchShelfController?
+    init() throws {
+        root = FileManager.default.temporaryDirectory.appendingPathComponent(id)
+        defaults = try #require(UserDefaults(suiteName: id))
+        defaults.set(false, forKey: AppStorageKeys.Notch.shelfHaptics)
+        defaults.set(false, forKey: AppStorageKeys.Notch.alertsEnabled)
+        context = SurfaceHostContext(
+            defaults: defaults, sharedState: .init(root: root, namespace: id, owner: "host"))
+        engine = NotchPanelEngine(
+            context: context, connectedDisplays: { [42: CGSize(width: 1280, height: 900)] })
+        try publish(["notchShelf": "1", "music": "1", "calendar": "1"])
+    }
+    func publish(_ versions: [String: String]) throws {
+        try context.sharedState.publish([
+            "surface.activeIDs": String(
+                decoding: JSONEncoder().encode(Array(versions.keys)), as: UTF8.self),
+            "surface.activeVersions": String(
+                decoding: JSONEncoder().encode(versions), as: UTF8.self),
+        ])
+    }
+    @discardableResult func attach() throws -> NotchPanelBatch {
+        try engine.attach(
             .init(
-                id: UUID(), providerID: tile.widget.providerIDs.sorted()[0], providerVersion: "1",
-                kind: .card, tile: tile, rectangle: .init(x: 30, y: 80, width: 220, height: 160))
-        }
-        func geometry(_ slots: [NotchPanelSlot]) throws {
-            try engine.geometry(
-                .init(
-                    identity: try #require(engine.identity), displayID: 42,
-                    presentationID: presentation, revision: engine.revision,
-                    layout: try #require(controller).surfaceLayout, slots: slots))
-        }
-        func clean() {
-            engine.stop(); controller?.shutdown()
-            UserDefaults.standard.removePersistentDomain(forName: id)
-            try? FileManager.default.removeItem(at: root)
-        }
+                ownershipID: ownership, version: "1",
+                displays: [
+                    .init(
+                        displayID: 42, presentationID: presentation, width: 1280, height: 900,
+                        collapsedWidth: 150, collapsedHeight: 28, isBuiltin: true)
+                ]))
+    }
+    func bind() -> NotchShelfController {
+        let controller = NotchShelfController(
+            context: context, startsServices: false, root: root.appendingPathComponent("Shelf"),
+            hostDisplays: Array(engine.displays.values))
+        self.controller = controller
+        engine.bind(controller)
+        return controller
+    }
+    func slot(_ tile: SurfaceTile) -> NotchPanelSlot {
+        .init(
+            id: UUID(), providerID: tile.widget.providerIDs.sorted()[0], providerVersion: "1",
+            kind: .card, tile: tile, rectangle: .init(x: 30, y: 80, width: 220, height: 160))
+    }
+    func geometry(_ slots: [NotchPanelSlot]) throws {
+        try engine.geometry(
+            .init(
+                identity: try #require(engine.identity), displayID: 42,
+                presentationID: presentation, revision: engine.revision,
+                layout: try #require(controller).surfaceLayout, slots: slots))
+    }
+    func clean() {
+        engine.stop(); controller?.shutdown()
+        UserDefaults.standard.removePersistentDomain(forName: id)
+        try? FileManager.default.removeItem(at: root)
     }
 }

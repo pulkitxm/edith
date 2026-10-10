@@ -3,7 +3,7 @@ import EdithExtensionUI
 import SwiftUI
 
 struct NotchHomeTab: View {
-    let controller: NotchShelfController
+    let controller: any NotchChromeFacade
     @State private var selected: String?
 
     private var layout: SurfaceLayout { controller.visibleSurfaceLayout }
@@ -32,10 +32,11 @@ struct NotchHomeTab: View {
                         selected: selected, select: { selected = $0 },
                         place: { widget, _ in add(widget) },
                         inspect: { controller.openCustomization(tileID: $0) }, reorder: reorder,
-                        configure: { tile in controller.layouts.update(.notch) { $0.position(tile) }
+                        configure: { tile in
+                            controller.chromeLayouts.update(.notch) { $0.position(tile) }
                         },
                         placeAt: { widget, column, row in
-                            controller.layouts.update(.notch) {
+                            controller.chromeLayouts.update(.notch) {
                                 selected = $0.add(widget, column: column, row: row)
                             }
                         }
@@ -50,22 +51,22 @@ struct NotchHomeTab: View {
         NotchSurfaceCard(controller: controller, tile: tile)
             .contextMenu {
                 Button("Move to first") {
-                    controller.layouts.update(.notch) {
+                    controller.chromeLayouts.update(.notch) {
                         $0.move(tile.id, before: $0.visible.first?.id)
                     }
                 }.disabled(tile.locked)
                 Button(tile.locked ? "Unlock layout" : "Lock layout") {
-                    controller.layouts.update(.notch) { layout in
+                    controller.chromeLayouts.update(.notch) { layout in
                         guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
                         else { return }
                         layout.tiles[index].locked.toggle()
                     }
                 }
                 Button("Duplicate") {
-                    controller.layouts.update(.notch) { selected = $0.duplicate(tile.id) }
+                    controller.chromeLayouts.update(.notch) { selected = $0.duplicate(tile.id) }
                 }
                 Button("Hide") {
-                    controller.layouts.update(.notch) { layout in
+                    controller.chromeLayouts.update(.notch) { layout in
                         guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
                         else { return }
                         layout.tiles[index].hidden = true
@@ -76,11 +77,11 @@ struct NotchHomeTab: View {
     }
 
     private func reorder(_ id: String, _ before: String?) {
-        controller.layouts.update(.notch) { $0.move(id, before: before) }
+        controller.chromeLayouts.update(.notch) { $0.move(id, before: before) }
     }
 
     private func configure(_ tile: SurfaceTile) {
-        controller.layouts.update(.notch) { layout in
+        controller.chromeLayouts.update(.notch) { layout in
             if let index = layout.tiles.firstIndex(where: { $0.id == tile.id }) {
                 layout.tiles[index] = tile
             }
@@ -88,17 +89,24 @@ struct NotchHomeTab: View {
     }
 
     private func add(_ widget: SurfaceWidget) {
-        controller.layouts.update(.notch) { selected = $0.add(widget) }
+        controller.chromeLayouts.update(.notch) { selected = $0.add(widget) }
     }
 }
 
 struct NotchSurfaceCard: View {
-    let controller: NotchShelfController
+    let controller: any NotchChromeFacade
     let tile: SurfaceTile
     @Environment(\.surfacePresentation) private var presentation
 
     var body: some View {
-        if tile.widget == .clocks {
+        if let client = controller as? NotchChromeClient, tile.widget != .clocks {
+            if tile.widget.providerIDs.count == 1 {
+                NotchNativeSlotView(client: client, tile: tile, kind: .card)
+            } else {
+                Text("This widget's native surface is unavailable.")
+                    .font(.edithText(.caption)).foregroundStyle(.orange).padding(12)
+            }
+        } else if tile.widget == .clocks {
             NotchClockCard(tile: tile)
         } else {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
@@ -147,7 +155,7 @@ private struct NotchClockCard: View {
 }
 
 private struct NotchProviderCard: View {
-    let controller: NotchShelfController
+    let controller: any NotchChromeFacade
     let providerID: String
     let tile: SurfaceTile
     @State private var snapshot: SurfaceSnapshot?
@@ -157,8 +165,8 @@ private struct NotchProviderCard: View {
     @State private var actionToken: UUID?
     @State private var actionError: String?
 
-    private var hidden: Bool { controller.privacy.hides(tile.widget) }
-    private var version: String? { controller.requests.versions[providerID] }
+    private var hidden: Bool { controller.hides(tile.widget) }
+    private var version: String? { controller.surfaceClient!.versions[providerID] }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
@@ -185,7 +193,7 @@ private struct NotchProviderCard: View {
             repeat {
                 await load.perform(
                     operation: {
-                        try await controller.requests.snapshot(
+                        try await controller.surfaceClient!.snapshot(
                             providerID: providerID, target: .notch, tile: tile)
                     }, apply: { snapshot = $0 })
                 do { try await Task.sleep(for: .seconds(15)) } catch { return }
@@ -222,7 +230,7 @@ private struct NotchProviderCard: View {
         actionTask = Task {
             defer { if actionToken == token { actionTask = nil; actionToken = nil } }
             do {
-                let next = try await controller.requests.perform(
+                let next = try await controller.surfaceClient!.perform(
                     providerID: providerID, target: .notch, tile: tile, snapshot: snapshot,
                     actionID: actionID, value: value)
                 try Task.checkCancellation()
