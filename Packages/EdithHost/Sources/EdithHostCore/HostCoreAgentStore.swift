@@ -72,7 +72,8 @@ import Foundation
 
     func begin(job: String, execution: UUID, now: Date = Date()) throws {
         guard let index = journal.jobs.firstIndex(where: { $0.id == job }),
-            journal.jobs[index].phase != .running, executions[execution] == nil
+            journal.jobs[index].phase != .running, journal.jobs[index].runCount < Int.max,
+            executions[execution] == nil
         else { throw HostWorkerError.rejected }
         let saved = journal
         let previous = journal.jobs[index]

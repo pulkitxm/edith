@@ -13,21 +13,8 @@ public struct HostCoreOwnerHooks: Sendable {
 
     public func jobs() async throws -> [HostCoreJobSnapshot] {
         let registry = try await HostCoreOwnerRegistry.load(invoke: invoke)
-        for state in registry.states
-        where state.available && Self.originalOwners.values.contains(state.id) {
-            guard
-                registry.providers.contains(where: {
-                    $0.state.id == state.id && $0.catalog.agent != nil
-                })
-            else {
-                throw HostCoreCommandFailure(
-                    "The original agent job inventory is unavailable for " + state.id,
-                    hint: "Update " + state.id
-                        + " to an extension with owned agent job hooks, then retry ed agent jobs.")
-            }
-        }
         var jobs: [HostCoreJobSnapshot] = []
-        for provider in registry.providers where provider.catalog.agent != nil {
+        for provider in try agentProviders(registry, operation: "jobs") {
             jobs += try await inventory(registry: registry, provider: provider)
         }
         guard Set(jobs.map(\.id)).count == jobs.count else {
@@ -74,8 +61,10 @@ public struct HostCoreOwnerHooks: Sendable {
     public func events() async throws -> [HostCoreAgentEvent] {
         let registry = try await HostCoreOwnerRegistry.load(invoke: invoke)
         var events: [HostCoreAgentEvent] = []
-        for provider in registry.providers {
-            guard let operation = provider.catalog.agent?.events else { continue }
+        for provider in try agentProviders(registry, operation: "events") {
+            guard let operation = provider.catalog.agent?.events else {
+                throw HostCLIError.unavailable
+            }
             let reply = try await registry.call(
                 Events.self, provider: provider, operation: operation)
             guard reply.owner == provider.state.id, reply.events.count <= 500,
@@ -96,8 +85,10 @@ public struct HostCoreOwnerHooks: Sendable {
         _ = try await HostCoreAgentCLI.logWindow(last)
         let registry = try await HostCoreOwnerRegistry.load(invoke: invoke)
         var lines: [String] = []
-        for provider in registry.providers {
-            guard let operation = provider.catalog.agent?.logs else { continue }
+        for provider in try agentProviders(registry, operation: "logs") {
+            guard let operation = provider.catalog.agent?.logs else {
+                throw HostCLIError.unavailable
+            }
             let reply = try await registry.call(
                 Logs.self, provider: provider, operation: operation,
                 payload: HostCLIJSON.object(["last": .string(last)]).encoded())
@@ -165,6 +156,32 @@ public struct HostCoreOwnerHooks: Sendable {
             ]).encoded(), timeout: 120)
         try reply.validate(owner: id, dryRun: dryRun, installTools: installTools)
         return reply
+    }
+
+    private func agentProviders(_ registry: HostCoreOwnerRegistry, operation: String) throws
+        -> [HostCoreOwnerRegistry.Provider]
+    {
+        let states = registry.states.filter { state in
+            state.available
+                && (Self.originalOwners.values.contains(state.id)
+                    || registry.providers.contains {
+                        $0.state.id == state.id && $0.catalog.agent != nil
+                    })
+        }
+        return try states.map { state in
+            guard let provider = registry.providers.first(where: { $0.state.id == state.id }),
+                let agent = provider.catalog.agent,
+                operation != "events" || agent.events != nil,
+                operation != "logs" || agent.logs != nil
+            else {
+                throw HostCoreCommandFailure(
+                    "The original agent " + operation + " hook is unavailable for " + state.id,
+                    hint: "Update " + state.id
+                        + " to an extension with owned agent hooks, then retry ed agent "
+                        + operation + ".")
+            }
+            return provider
+        }
     }
 
     private func inventory(

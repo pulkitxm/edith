@@ -70,6 +70,35 @@ import Testing
         await #expect(throws: HostCLIError.self) { try await cli.execute(["verify"]) }
     }
 
+    @Test func missingLiveOriginalOwnerDiagnosticsReturnActionableUnavailability() async throws {
+        let owner = try CoreOwnerFixture()
+        defer { owner.stop() }
+        let hooks = HostCoreOwnerHooks(invoke: { request in
+            let data = try await owner.invoke(request)
+            guard request.operation == "usage.cli.catalog" else { return data }
+            var catalog = try #require(JSONDecoder().decode(HostCLIJSON.self, from: data).object)
+            catalog.removeValue(forKey: "coreOwner")
+            return try HostCLIJSON.object(catalog).encoded()
+        })
+        for operation in ["jobs", "events", "logs"] {
+            do {
+                switch operation {
+                case "jobs": _ = try await hooks.jobs()
+                case "events": _ = try await hooks.events()
+                default: _ = try await hooks.logs(last: "1h")
+                }
+                Issue.record("Missing original owner hooks were silently omitted.")
+            } catch let error as HostCoreCommandFailure {
+                #expect(error.code == 4)
+                #expect(error.message.contains(operation) && error.message.contains("usage"))
+                #expect(error.hint?.contains("Update usage") == true)
+            }
+        }
+        #expect(
+            !FileManager.default.fileExists(atPath: owner.root.appendingPathComponent("trace").path)
+        )
+    }
+
     @Test func ownerDisableAndWrongAcknowledgementCannotAcknowledgeWork() async throws {
         let owner = try CoreOwnerFixture()
         defer { owner.stop() }

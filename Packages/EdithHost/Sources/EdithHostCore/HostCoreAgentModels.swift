@@ -169,7 +169,7 @@ public struct HostCoreAgentStatus: Codable, Sendable {
     public let uptimeSeconds: Int
     public let residentBytes: UInt64
     public let cpuPercent: Double
-    public let subscribers: Int
+    public internal(set) var subscribers: Int
     public let store: String
     public let schemaVersion: Int
     public let protocolVersion: Int
