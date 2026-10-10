@@ -1,6 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  catalogAssetURL,
+  catalogReleaseURL,
+  catalogTag,
+  parseCatalogPointer,
+  verifyCatalogPointerData,
+} from "./extension-catalog-pointer.mjs";
 import { writeHostABI } from "./extension-host-abi.mjs";
 import { extensionFingerprint } from "./extension-release-plan.mjs";
 import { verifiedCatalogPayload } from "./verify-extension-catalog.mjs";
@@ -70,12 +77,43 @@ export async function waitForPackages({
   const deadline = now() + timeout;
   let missing = expected;
   while (true) {
-    const response = await fetchCatalog(url, {
+    const response = await fetchCatalog(url ?? catalogReleaseURL, {
       signal: AbortSignal.timeout(15_000),
       headers: { "Cache-Control": "no-cache" },
     });
     if (response.status === 200) {
-      const catalog = verifyCatalog(await response.text(), publicKey);
+      let data;
+      let pointer;
+      if (url) data = Buffer.from(await response.text());
+      else {
+        const metadata = await response.text();
+        if (Buffer.byteLength(metadata) > 3 * 1024 ** 2)
+          throw new Error("Catalog release exceeds its limit");
+        const release = JSON.parse(metadata);
+        if (
+          release.tag_name !== catalogTag ||
+          release.draft !== false ||
+          !Array.isArray(release.assets)
+        )
+          throw new Error("Invalid catalog release");
+        pointer = parseCatalogPointer(release.body);
+        const assets = release.assets.filter(
+          (asset) => asset.name === pointer.assetName,
+        );
+        if (assets.length !== 1 || assets[0].size !== pointer.bytes)
+          throw new Error("Invalid catalog pointer asset");
+        const asset = await fetchCatalog(catalogAssetURL(pointer), {
+          signal: AbortSignal.timeout(15_000),
+          headers: { "Cache-Control": "no-cache" },
+        });
+        if (asset.status !== 200)
+          throw new Error(`Cannot verify catalog asset: HTTP ${asset.status}`);
+        data = Buffer.from(await asset.arrayBuffer());
+        verifyCatalogPointerData(data, pointer);
+      }
+      const catalog = verifyCatalog(data, publicKey);
+      if (pointer && pointer.revision !== catalog.revision)
+        throw new Error("Catalog pointer revision mismatch");
       missing = missingPackages(expected, catalog);
       if (missing.length === 0) return catalog.revision;
     } else if (response.status !== 404) {
@@ -97,7 +135,6 @@ if (
 ) {
   const revision = await waitForPackages({
     expected: await expectedPackages(process.argv[2] ?? process.cwd()),
-    url: "https://github.com/pulkitxm/edith/releases/download/extension-catalog-v1/catalog.json",
     publicKey: "ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=",
   });
   process.stdout.write(`Compatible extension catalog verified: ${revision}\n`);

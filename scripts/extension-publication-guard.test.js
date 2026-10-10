@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { catalogPointer } from "./extension-catalog-pointer.mjs";
 import {
   finalizeDraftCatalog,
   promoteExtensionCatalog,
@@ -44,19 +45,25 @@ function envelope(catalog) {
     }),
   );
 }
+const nextData = envelope({ ...previous, revision: 2 });
+const nextPointer = catalogPointer(nextData, 2);
 function current(catalog = previous) {
-  const asset = { id: 1, name: "catalog.json" };
+  const data = envelope(catalog);
+  const pointer = catalogPointer(data, catalog.revision);
+  const asset = { id: 1, name: pointer.assetName, size: data.length };
   return {
     release: {
       id: 10,
       draft: false,
-      assets: [asset, { id: 2, name: candidate }],
+      body: JSON.stringify(pointer),
+      assets: [asset, { id: 2, name: candidate, size: nextData.length }],
     },
     asset,
-    data: envelope(catalog),
-    catalogRevision: catalog.revision,
+    data,
+    pointer,
   };
 }
+
 function options(changes = {}) {
   return {
     ref: "refs/heads/main",
@@ -110,14 +117,15 @@ test("the second main check catches a move during trusted catalog download", asy
   let renames = 0;
   await expect(
     promoteExtensionCatalog({
-      candidate,
+      pointer: nextPointer,
+      verifyAsset: async () => {},
       verifyState: () =>
         verifiedPublicationState(
           options({
             readMain: async () => (++reads === 1 ? target : "b".repeat(40)),
           }),
         ),
-      rename: async () => {
+      updatePointer: async () => {
         renames++;
       },
     }),
@@ -129,19 +137,20 @@ test("the second main check catches a move during trusted catalog download", asy
 test("catalog changes, replays and tampering after immutable staging reject before pointer writes", async () => {
   for (const changed of [
     current({ ...previous, revision: 2 }),
-    current(empty),
+    { ...current(), data: envelope(empty) },
     { ...current(), data: Buffer.from("broken") },
   ]) {
     await verifiedPublicationState(options());
     const renames = [];
     await expect(
       promoteExtensionCatalog({
-        candidate,
+        pointer: nextPointer,
+        verifyAsset: async () => {},
         verifyState: () =>
           verifiedPublicationState(
             options({ readCatalog: async () => changed }),
           ),
-        rename: async (...args) => {
+        updatePointer: async (...args) => {
           renames.push(args);
         },
       }),
@@ -221,22 +230,23 @@ test("only true initial absence or an owned draft permits bootstrap and failed s
       draft: true,
       assets: [
         { id: 3, name: "catalog-1.json" },
-        { id: 2, name: candidate },
+        { id: 2, name: candidate, size: nextData.length },
       ],
     },
   };
   const renames = [];
   await promoteExtensionCatalog({
-    candidate,
+    pointer: nextPointer,
+    verifyAsset: async () => {},
     verifyState: () =>
       verifiedPublicationState(
         options({ previous: empty, readCatalog: async () => draft }),
       ),
-    rename: async (...args) => {
+    updatePointer: async (...args) => {
       renames.push(args);
     },
   });
-  expect(renames).toEqual([[2, "catalog.json"]]);
+  expect(renames).toEqual([[10, JSON.stringify(nextPointer)]]);
   expect(draft.release.assets).toHaveLength(2);
 });
 
@@ -284,38 +294,78 @@ test("catalog reads propagate auth, transport and parse errors instead of treati
   ).rejects.toThrow("download failed");
 });
 
-test("unchanged trusted state promotes only after verification and rename failure restores the old pointer", async () => {
+test("atomic promotion preserves immutable assets and leaves the old pointer usable on failure", async () => {
   for (const fails of [false, true]) {
-    const renames = [];
-    let verified = false;
+    const live = current();
+    const originalBody = live.release.body;
+    const originalAssets = structuredClone(live.release.assets);
+    let writes = 0;
+    let verifiedAsset = false;
     const work = promoteExtensionCatalog({
-      candidate,
-      verifyState: async () => {
-        const value = await verifiedPublicationState(options());
-        verified = true;
-        return value;
+      pointer: nextPointer,
+      verifyState: () =>
+        verifiedPublicationState(options({ readCatalog: async () => live })),
+      verifyAsset: async () => {
+        verifiedAsset = true;
       },
-      rename: async (id, name) => {
-        expect(verified).toBe(true);
-        renames.push([id, name]);
-        if (fails && id === 2) throw new Error("rename failed");
+      updatePointer: async (id, body) => {
+        expect(verifiedAsset).toBe(true);
+        expect(id).toBe(10);
+        writes++;
+        if (fails) throw new Error("pointer edit failed");
+        live.release.body = body;
       },
     });
-    if (fails) await expect(work).rejects.toThrow("rename failed");
+    if (fails) await expect(work).rejects.toThrow("pointer edit failed");
     else await work;
-    expect(renames).toEqual(
-      fails
-        ? [
-            [1, "catalog-1.json"],
-            [2, "catalog.json"],
-            [1, "catalog.json"],
-          ]
-        : [
-            [1, "catalog-1.json"],
-            [2, "catalog.json"],
-          ],
+    expect(writes).toBe(1);
+    expect(live.release.assets).toEqual(originalAssets);
+    expect(live.release.body).toBe(
+      fails ? originalBody : JSON.stringify(nextPointer),
     );
   }
+});
+
+test("a crash after immutable upload does not change the public pointer and retries safely", async () => {
+  const live = current();
+  const body = live.release.body;
+  await expect(
+    promoteExtensionCatalog({
+      pointer: nextPointer,
+      verifyState: () =>
+        verifiedPublicationState(options({ readCatalog: async () => live })),
+      verifyAsset: async () => {
+        throw new Error("interrupted before promotion");
+      },
+      updatePointer: async () => {
+        throw new Error("must not write");
+      },
+    }),
+  ).rejects.toThrow("interrupted");
+  expect(live.release.body).toBe(body);
+  let checks = 0;
+  let writes = 0;
+  await expect(
+    promoteExtensionCatalog({
+      pointer: nextPointer,
+      verifyState: async () => {
+        checks++;
+        return verifiedPublicationState(
+          options({
+            readCatalog: async () =>
+              checks === 1 ? live : current({ ...previous, revision: 3 }),
+          }),
+        );
+      },
+      verifyAsset: async () => {},
+      updatePointer: async () => {
+        writes++;
+      },
+    }),
+  ).rejects.toThrow("catalog changed");
+  expect(checks).toBe(2);
+  expect(writes).toBe(0);
+  expect(live.release.body).toBe(body);
 });
 
 test("production workflow refuses feature-ref publication before native jobs", () => {
@@ -346,7 +396,7 @@ test("production workflow refuses feature-ref publication before native jobs", (
 test("authenticated planning preserves draft revisions so rejected first publication can retry", async () => {
   const draft = {
     ...current({ ...previous, revision: 2 }),
-    release: { ...current().release, draft: true },
+    release: { ...current({ ...previous, revision: 2 }).release, draft: true },
   };
   const catalog = await publicationPlanCatalog({
     publicKey: rawKey,
@@ -404,9 +454,14 @@ test("authenticated planning preserves draft revisions so rejected first publica
 
 test("catalog downloads support the signed envelope limit without the metadata memory cap", async () => {
   const size = 1024 ** 2 + 17;
+  const data = Buffer.alloc(size, 42);
+  const pointer = catalogPointer(data, 2);
   let destination;
   const result = await readPublicationCatalog("synthetic/fixture", "catalog", {
-    loadRelease: () => ({ assets: [{ id: 1, name: "catalog.json", size }] }),
+    loadRelease: () => ({
+      body: JSON.stringify(pointer),
+      assets: [{ id: 1, name: pointer.assetName, size }],
+    }),
     downloadAsset: (options) => {
       destination = options.destination;
       return downloadReleaseAsset({
@@ -420,26 +475,21 @@ test("catalog downloads support the signed envelope limit without the metadata m
       });
     },
   });
-  expect(result.data).toEqual(Buffer.alloc(size, 42));
+  expect(result.data).toEqual(data);
   expect(existsSync(destination)).toBe(false);
   let starts = 0;
   await expect(
     readPublicationCatalog("synthetic/fixture", "catalog", {
       loadRelease: () => ({
-        assets: [
-          { id: 1, name: "catalog.json", size: maximumEnvelopeBytes + 1 },
-        ],
+        body: JSON.stringify({ ...pointer, bytes: maximumEnvelopeBytes + 1 }),
+        assets: [],
       }),
-      downloadAsset: (options) =>
-        downloadReleaseAsset({
-          ...options,
-          spawnProcess: () => {
-            starts++;
-            throw new Error("Must not start");
-          },
-        }),
+      downloadAsset: async () => {
+        starts++;
+        throw new Error("Must not start");
+      },
     }),
-  ).rejects.toThrow("size");
+  ).rejects.toThrow("pointer");
   expect(starts).toBe(0);
 });
 
@@ -684,5 +734,98 @@ test("the actual no-argument publisher finalizes a zero-build draft and refuses 
     }
   } finally {
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("an acknowledged-lost pointer edit stays complete and the next plan reads the new trusted revision", async () => {
+  const live = current();
+  const assets = structuredClone(live.release.assets);
+  await expect(
+    promoteExtensionCatalog({
+      pointer: nextPointer,
+      verifyState: () =>
+        verifiedPublicationState(options({ readCatalog: async () => live })),
+      verifyAsset: async () => {},
+      updatePointer: async (_id, body) => {
+        live.release.body = body;
+        live.pointer = nextPointer;
+        live.asset = live.release.assets.find(
+          (asset) => asset.name === nextPointer.assetName,
+        );
+        live.data = nextData;
+        throw new Error("response lost after atomic edit");
+      },
+    }),
+  ).rejects.toThrow("response lost");
+  expect(live.release.assets).toEqual(assets);
+  expect(
+    (
+      await publicationPlanCatalog({
+        publicKey: rawKey,
+        readCatalog: async () => live,
+      })
+    ).revision,
+  ).toBe(2);
+  await expect(
+    verifiedPublicationState(options({ readCatalog: async () => live })),
+  ).rejects.toThrow("catalog changed");
+});
+
+test("deletion or substitution of the staged immutable asset blocks the final pointer edit", async () => {
+  for (const replacement of [
+    [],
+    [{ id: 99, name: candidate, size: nextPointer.bytes }],
+  ]) {
+    const live = current();
+    let reads = 0;
+    let writes = 0;
+    await expect(
+      promoteExtensionCatalog({
+        pointer: nextPointer,
+        verifyState: async () => {
+          reads++;
+          return reads === 1
+            ? live
+            : {
+                ...live,
+                release: {
+                  ...live.release,
+                  assets: [live.asset, ...replacement],
+                },
+              };
+        },
+        verifyAsset: async () => {},
+        updatePointer: async () => {
+          writes++;
+        },
+      }),
+    ).rejects.toThrow("release changed");
+    expect(writes).toBe(0);
+  }
+});
+
+test("pointer publication reads reject wrong immutable bytes and signed revision mismatches", async () => {
+  const live = current();
+  for (const change of [
+    { sha256: "a".repeat(64) },
+    { revision: 2, assetName: candidate },
+  ]) {
+    const pointer = { ...live.pointer, ...change };
+    await expect(
+      publicationPlanningState({
+        publicKey: rawKey,
+        readCatalog: () =>
+          readPublicationCatalog("synthetic/fixture", "catalog", {
+            loadRelease: () => ({
+              ...live.release,
+              body: JSON.stringify(pointer),
+              assets: [{ ...live.asset, name: pointer.assetName }],
+            }),
+            downloadAsset: async (options) => {
+              writeFileSync(options.destination, live.data);
+            },
+          }),
+      }),
+    ).rejects.toThrow();
   }
 });

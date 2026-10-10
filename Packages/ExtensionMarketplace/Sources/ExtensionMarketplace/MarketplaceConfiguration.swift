@@ -3,10 +3,10 @@ import Foundation
 public enum MarketplaceConfiguration {
     public static let workerHostABI = "edith-host-2"
     public static let repository = "pulkitxm/edith"
-    public static let hostABI = "host-00403991c8cfbedcf6ef3304"
+    public static let hostABI = "host-a68fa35ae8344d247e89b556"
     public static let publicKey = Data(
         base64Encoded: "ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=")!
+    public static let catalogTag = "extension-catalog-v1"
     public static let catalogURL = URL(
-        string:
-            "https://github.com/pulkitxm/edith/releases/download/extension-catalog-v1/catalog.json")!
+        string: "https://api.github.com/repos/pulkitxm/edith/releases/tags/extension-catalog-v1")!
 }
