@@ -11,6 +11,7 @@ struct HostEntry {
         let arguments = Array(CommandLine.arguments.dropFirst())
         if ProcessInfo.processInfo.environment["EDITH_CLI"] == "1"
             || (!arguments.isEmpty && !arguments[0].hasPrefix("--extension-")
+                && !arguments[0].hasPrefix("--contained-extension-")
                 && arguments[0] != "--cli-fixture")
         {
             exit(HostCLI.run(arguments))
