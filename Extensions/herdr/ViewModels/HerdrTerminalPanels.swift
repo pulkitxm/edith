@@ -684,6 +684,7 @@ final class HerdrTerminalPanels {
                     machineName: terminal.host.machineName, isLocal: terminal.host.isLocal,
                     session: terminal.session, cwd: terminal.cwd, pane: terminal.pane,
                     process: terminal.process, failure: terminal.failure,
+                    scroll: terminal.scroll.info,
                     adopted: terminal.adopted, seen: terminal.seen)
             }.sorted { $0.id < $1.id })
     }
@@ -699,6 +700,12 @@ final class HerdrTerminalPanels {
         terminals = Dictionary(
             uniqueKeysWithValues: state.terminals.map { record in
                 let previous = current[record.id]
+                let scroll = previous?.scroll ?? HerdrTerminalScroll()
+                scroll.adoptUI(record.scroll)
+                scroll.remoteScroll = { [weak self] offset in
+                    guard let action = self?.uiAction else { return }
+                    try await action("scroll", ["terminalID": record.id, "offset": offset])
+                }
                 return (
                     record.id,
                     HerdrPanelTerminal(
@@ -708,7 +715,7 @@ final class HerdrTerminalPanels {
                             isLocal: record.isLocal, sshTarget: nil, machine: nil),
                         session: record.session, cwd: record.cwd,
                         holder: previous?.holder ?? TerminalSessionHolder(),
-                        scroll: previous?.scroll ?? HerdrTerminalScroll(), pane: record.pane,
+                        scroll: scroll, pane: record.pane,
                         process: record.process, failure: record.failure, adopted: record.adopted,
                         seen: record.seen)
                 )
@@ -731,6 +738,7 @@ final class HerdrTerminalPanels {
         let tasks = Array(uiTasks.values)
         stopRendering()
         for task in tasks { await task.value }
+        for terminal in terminals.values { await terminal.scroll.shutdownAndWait() }
         uiTasks.removeAll()
         uiAction = nil
     }

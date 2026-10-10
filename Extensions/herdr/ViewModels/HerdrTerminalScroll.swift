@@ -18,6 +18,9 @@ extension HerdrPaneScrollChannel: HerdrScrollChannel {}
 @MainActor
 @Observable
 final class HerdrTerminalScroll {
+    var remoteScroll: (@MainActor (Int) async throws -> Void)?
+    @ObservationIgnored private var watchTask: Task<Void, Never>?
+    @ObservationIgnored private var sendTask: Task<Void, Never>?
     private(set) var info: HerdrScrollInfo?
 
     @ObservationIgnored private let open: HerdrScrollChannelOpener
@@ -36,7 +39,21 @@ final class HerdrTerminalScroll {
         self.open = open
     }
 
+    func adoptUI(_ value: HerdrScrollInfo?) {
+        if !sending { info = value }
+    }
+
+    func startWatch(session: String, pane: String, machine: Machine?) {
+        guard watchTask == nil, remoteScroll == nil,
+            Bundle.main.bundleURL.pathExtension != "appex"
+        else { return }
+        watchTask = Task { [weak self] in
+            await self?.watch(session: session, pane: pane, machine: machine)
+        }
+    }
+
     func watch(session: String, pane: String, machine: Machine?) async {
+        guard remoteScroll == nil, Bundle.main.bundleURL.pathExtension != "appex" else { return }
         while !Task.isCancelled {
             do {
                 let channel = try await open(session, pane, machine)
@@ -62,20 +79,39 @@ final class HerdrTerminalScroll {
         pending = target
         guard !sending else { return }
         sending = true
-        HerdrWorkOwnership.start { [self] in await flush() }
+        sendTask = Task { [weak self] in await self?.flush() }
     }
 
     func shutdown() {
+        watchTask?.cancel()
+        sendTask?.cancel()
+        remoteScroll = nil
         pending = nil
         channel?.close()
         channel = nil
         sending = false
     }
 
+    func shutdownAndWait() async {
+        let watcher = watchTask
+        let sender = sendTask
+        shutdown()
+        await watcher?.value
+        await sender?.value
+        watchTask = nil
+        sendTask = nil
+    }
+
     private func flush() async {
-        while let target = pending, let channel {
+        while let target = pending, !Task.isCancelled {
             pending = nil
-            _ = try? await channel.scroll(to: target)
+            if let remoteScroll {
+                try? await remoteScroll(target)
+            } else if let channel {
+                _ = try? await channel.scroll(to: target)
+            } else {
+                break
+            }
         }
         pending = nil
         sending = false

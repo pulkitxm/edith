@@ -635,7 +635,7 @@ final class HerdrStore {
         }
         for terminal in terminalPanels.terminals.values {
             terminal.holder.stop()
-            terminal.scroll.shutdown()
+            await terminal.scroll.shutdownAndWait()
         }
         await watcher?.value
         await settlingTask?.value

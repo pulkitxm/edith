@@ -101,6 +101,28 @@ private final class FakeScrollChannel: HerdrScrollChannel, @unchecked Sendable {
         try await eventually { channel.closed }
     }
 
+    @Test func renderingScrollUsesOnlyCheckedOwnerOffsetsAndShutdownDrainsDelivery() async throws {
+        let engineChannel = FakeScrollChannel()
+        let engine = HerdrTerminalScroll(retryDelay: .milliseconds(10)) { _, _, _ in engineChannel }
+        engine.startWatch(session: "synthetic", pane: "w1:p1", machine: nil)
+        try await eventually { engineChannel.subscribed }
+        engineChannel.send(.init(offset: 0, maximum: 120, viewportRows: 24))
+        try await eventually { engine.info != nil }
+        let ui = HerdrTerminalScroll { _, _, _ in
+            Issue.record("The renderer must never open the engine scroll channel")
+            return FakeScrollChannel()
+        }
+        ui.adoptUI(engine.info)
+        ui.remoteScroll = { offset in engine.scroll(to: offset) }
+        await ui.watch(session: "untrusted", pane: "untrusted", machine: nil)
+        ui.scroll(to: 75)
+        try await eventually { engineChannel.sent == [75] }
+        #expect(ui.info?.offset == 75)
+        await ui.shutdownAndWait()
+        await engine.shutdownAndWait()
+        #expect(engineChannel.closed)
+    }
+
     @Test func aTerminalWithoutHistoryHasNothingToScroll() {
         let scroll = HerdrTerminalScroll { _, _, _ in FakeScrollChannel() }
         scroll.scroll(to: 10)

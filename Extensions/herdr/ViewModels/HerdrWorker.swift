@@ -248,6 +248,10 @@ import Foundation
                 let terminal = store.terminalPanels.terminals[id]
             else { throw ExtensionPeerError.invalidRequest }
             try await store.connectTerminal(for: terminal)
+            if let pane = terminal.pane {
+                terminal.scroll.startWatch(
+                    session: terminal.session, pane: pane, machine: terminal.host.machine)
+            }
             try Task.checkCancellation()
             guard !isStopped, let descriptor = terminal.holder.descriptor else {
                 throw ExtensionPeerError.unavailable

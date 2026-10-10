@@ -11,6 +11,7 @@ struct HerdrUIPanelTerminal: Codable {
     let pane: String?
     let process: HerdrPaneProcess?
     let failure: String?
+    let scroll: HerdrScrollInfo?
     let adopted: Bool
     let seen: Bool
 }
@@ -39,6 +40,12 @@ struct HerdrUIPanelState: Codable {
         }
         guard placed == ids else { throw ExtensionPeerError.invalidRequest }
         for terminal in terminals {
+            if let scroll = terminal.scroll {
+                guard (0...10_000_000).contains(scroll.maximum),
+                    (0...scroll.maximum).contains(scroll.offset),
+                    (0...65535).contains(scroll.viewportRows)
+                else { throw ExtensionPeerError.invalidRequest }
+            }
             guard UUID(uuidString: terminal.id) != nil, !terminal.session.isEmpty,
                 [
                     terminal.machineID, terminal.machineName, terminal.session, terminal.cwd ?? "",
@@ -103,6 +110,15 @@ struct HerdrUIPanelState: Codable {
                 throw ExtensionPeerError.invalidRequest
             }
             panels.select(selected, in: id)
+        case "scroll":
+            try keys(["terminalID", "offset"])
+            let id = try terminal()
+            guard let offset = object["offset"] as? NSNumber,
+                CFGetTypeID(offset) != CFBooleanGetTypeID(),
+                offset.doubleValue == Double(offset.intValue),
+                (0...10_000_000).contains(offset.intValue)
+            else { throw ExtensionPeerError.invalidRequest }
+            panels.terminals[id]?.scroll.scroll(to: offset.intValue)
         case "close", "retry":
             try keys(["terminalID"])
             let id = try terminal()

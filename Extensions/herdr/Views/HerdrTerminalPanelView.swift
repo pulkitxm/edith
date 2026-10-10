@@ -359,7 +359,7 @@ struct HerdrPanelTerminalView: View {
         .background(Color(nsColor: palette.background))
         .task(id: "\(terminal.pane ?? "")|\(mouse.rawValue)") { await start() }
         .task(id: terminal.pane) {
-            guard let pane = terminal.pane else { return }
+            guard store.uiClient == nil, let pane = terminal.pane else { return }
             await terminal.scroll.watch(
                 session: terminal.session, pane: pane, machine: terminal.host.machine)
         }
