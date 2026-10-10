@@ -41,6 +41,22 @@ import Testing
         #expect(restarted.profiles(.home).first?.layout == store.home)
     }
 
+    @Test func keystrokeHighlightKeepsSavedQuickActionsAvailableOnlyWhileEnabled() throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let store = SurfaceLayoutStore(defaults: fixture.defaults)
+        store.update(.notch) { $0.tiles = [.init(.actions)] }
+        let saved = store.notch
+        #expect(fixture.context.visibleLayout(.notch).tiles.isEmpty)
+        try fixture.host.publish(["surface.activeIDs": "[\"keystrokeHighlight\",\"notchShelf\"]"])
+        #expect(fixture.context.visibleLayout(.notch).tiles.map(\.widget) == [.actions])
+        try fixture.host.publish(["surface.activeIDs": "[\"notchShelf\"]"])
+        #expect(fixture.context.visibleLayout(.notch).tiles.isEmpty)
+        #expect(fixture.context.layout(.notch) == saved)
+        try fixture.host.publish(["surface.activeIDs": "[\"keystrokeHighlight\",\"notchShelf\"]"])
+        #expect(fixture.context.visibleLayout(.notch).tiles == saved.tiles)
+    }
+
     @Test func onlyPublishedActiveProvidersHaveVersionsAndTheClientObservesUpdates() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }

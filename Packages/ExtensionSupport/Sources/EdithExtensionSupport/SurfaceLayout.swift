@@ -62,7 +62,8 @@ public enum SurfaceWidget: Codable, RawRepresentable, CaseIterable, Hashable, Id
     public var providerIDs: Set<String> {
         switch self {
         case .clocks: []
-        case .actions: ["keepAwake", "lidAwake", "presenter", "system", "micMute"]
+        case .actions:
+            ["keepAwake", "lidAwake", "presenter", "system", "micMute", "keystrokeHighlight"]
         case .activity, .usage, .limits: ["usage"]
         case .agents: ["herdr"]
         case .music: ["music"]
