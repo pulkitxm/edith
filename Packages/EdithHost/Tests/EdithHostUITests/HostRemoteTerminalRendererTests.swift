@@ -70,9 +70,8 @@ import EdithHostCore
                         "presentationID", "payload",
                     ])
                 #expect(context["presentationID"] as? String == request.presentationID.uuidString)
-                #expect(
-                    context["payload"] as? Data
-                        == (try? event.encoded(presentationID: request.presentationID)))
+                let payload = try #require(context["payload"] as? Data)
+                #expect(try JSONDecoder().decode(HostTerminalUIEvent.self, from: payload) == event)
                 return ["ok": true]
             }
             #expect(try JSONSerialization.jsonObject(with: data) as? [String: Bool] == ["ok": true])
