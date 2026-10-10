@@ -53,6 +53,7 @@ struct GhosttyPane: NSViewRepresentable {
     var onFocus: (() -> Void)?
 
     final class Coordinator {
+        weak var holder: TerminalSessionHolder?
         private var requested = false
 
         func shouldRequest(active: Bool, wantsFocus: Bool) -> Bool {
@@ -65,6 +66,8 @@ struct GhosttyPane: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> GhosttyTerminalView {
+        context.coordinator.holder = holder
+        holder.presented = active
         let view = holder.retainedGhosttyView(theme: theme)
         view.onFocus = onFocus
         view.onDropFiles = onDropFiles
@@ -72,7 +75,12 @@ struct GhosttyPane: NSViewRepresentable {
         return view
     }
 
+    static func dismantleNSView(_ view: GhosttyTerminalView, coordinator: Coordinator) {
+        coordinator.holder?.presented = false
+    }
+
     func updateNSView(_ view: GhosttyTerminalView, context: Context) {
+        holder.presented = active
         view.apply(theme: theme)
         view.onFocus = onFocus
         view.onDropFiles = onDropFiles

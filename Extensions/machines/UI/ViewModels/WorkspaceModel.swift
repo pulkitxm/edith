@@ -173,6 +173,21 @@ final class WorkspaceModel {
         }
     }
 
+    func performHostTabAction(
+        _ action: MachineTerminalUIEvent.Action, paneID: UUID, target: PaneTarget
+    ) -> Bool {
+        guard layout.root.pane(paneID) != nil, target.screen == .terminal else { return false }
+        switch action {
+        case .newTab:
+            addTab(to: paneID, target: target); return true
+        case .closeTab, .nextTab, .previousTab:
+            apply { $0.focused = paneID }
+            if action == .closeTab { return closeFocusedTab() }
+            return cycleTab(backwards: action == .previousTab)
+        default: return false
+        }
+    }
+
     @discardableResult
     func cycleTab(backwards: Bool) -> Bool {
         guard let pane = layout.root.pane(layout.focused) ?? layout.root.panes.first,

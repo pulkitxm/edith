@@ -93,6 +93,19 @@ final class TerminalTabsModel {
         return MachineTerminalBroadcastDelivery(sent: sent, unavailable: unavailable)
     }
 
+    func performHostTabAction(_ action: MachineTerminalUIEvent.Action) -> Bool {
+        switch action {
+        case .newTab: addTab(named: "Shell \(tabs.count + 1)")
+        case .closeTab:
+            guard let selected else { return false }; closeTab(selected)
+        case .nextTab, .previousTab:
+            guard tabs.count > 1 else { return false }
+            selectNext(backwards: action == .previousTab)
+        default: return false
+        }
+        return true
+    }
+
     func stopAll() {
         for tab in tabs { tab.holder.stop() }
         tabs = []
@@ -118,7 +131,9 @@ struct TerminalTabsView: View {
                 ForEach(model.tabs) { tab in
                     let active = presented && tab.id == model.selected
                     MachineTerminalTab(
-                        session: session, active: active, holder: tab.holder
+                        session: session, active: active,
+                        hostTabAction: { [weak model] in model?.performHostTabAction($0) ?? false },
+                        holder: tab.holder
                     )
                     .opacity(tab.id == model.selected ? 1 : 0)
                     .allowsHitTesting(tab.id == model.selected)

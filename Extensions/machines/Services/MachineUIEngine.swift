@@ -118,6 +118,15 @@ import Foundation
             value.operation == "machines.ui.files"
             ? try JSONDecoder().decode(MachineFileRequest.self, from: value.payload) : nil
         try fileRequest?.validate()
+        if value.operation == "machines.ui.openWindow" {
+            let window = try JSONDecoder().decode(
+                MachineHostWindowRequest.self, from: value.payload)
+            try window.validate()
+            guard let presentation = value.presentationID, window.presentationID == presentation
+            else {
+                throw MachineUIError.invalidRequest
+            }
+        }
         if let presentation = value.presentationID {
             guard presentations[presentation] != nil || presentations.count < 128 else {
                 throw MachineUIError.invalidRequest

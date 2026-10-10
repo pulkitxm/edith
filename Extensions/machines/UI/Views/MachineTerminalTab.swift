@@ -22,6 +22,7 @@ struct MachineTerminalTab: View {
     var wantsFocus = true
     var allowsShellLaunch = true
     var onFocus: (() -> Void)?
+    var hostTabAction: ((MachineTerminalUIEvent.Action) -> Bool)?
     @State private var ownHolder = TerminalSessionHolder()
     @State private var selectedWindowsShell = WindowsTerminalShell.automatic
     @State private var availableWindowsShells = [WindowsTerminalShell.automatic]
@@ -35,6 +36,7 @@ struct MachineTerminalTab: View {
         context: MachineTerminalContext? = nil,
         showsStatusBar: Bool = true,
         onFocus: (() -> Void)? = nil,
+        hostTabAction: ((MachineTerminalUIEvent.Action) -> Bool)? = nil,
         holder: TerminalSessionHolder? = nil,
         allowsShellLaunch: Bool = true
     ) {
@@ -46,6 +48,7 @@ struct MachineTerminalTab: View {
         self.context = context
         self.showsStatusBar = showsStatusBar
         self.onFocus = onFocus
+        self.hostTabAction = hostTabAction
     }
 
     private var holder: TerminalSessionHolder { injectedHolder ?? ownHolder }
@@ -77,8 +80,12 @@ struct MachineTerminalTab: View {
             }
         }
         .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
-        .onAppear(perform: startIfPossible)
+        .onAppear {
+            holder.hostTabAction = hostTabAction; holder.presented = active
+            startIfPossible()
+        }
         .onChange(of: active) { _, active in
+            holder.presented = active; holder.hostTabAction = hostTabAction
             if active { startIfPossible() }
         }
         .onChange(of: session.state.isConnected) { _, connected in
@@ -87,7 +94,10 @@ struct MachineTerminalTab: View {
         .task(id: session.state.isConnected) {
             await detectWindowsShells()
         }
-        .onDisappear { if injectedHolder == nil { holder.stop() } }
+        .onDisappear {
+            holder.presented = false; holder.hostTabAction = nil
+            if injectedHolder == nil { holder.stop() }
+        }
     }
 
     private func statusBar(_ presentation: MachineTerminalPresentation) -> some View {
@@ -185,6 +195,7 @@ struct MachineTerminalTab: View {
                 active: active, launchEnabled: shellLaunchEnabled, started: holder.started,
                 isLocal: session.isLocal, connected: session.state.isConnected)
         else { return }
+        holder.hostTabAction = hostTabAction; holder.presented = active
         holder.start(session: session, context: context, windowsShell: selectedWindowsShell)
     }
 

@@ -73,6 +73,34 @@ import Testing
         await engine.shutdown(); await session.shutdown()
     }
 
+    @Test func detachedWindowJobsRejectMismatchedPresentationBeforeHostInvocation() async throws {
+        let owner = MachineSession(machine: .local, local: true, synthetic: true)
+        var opened = false
+        let engine = MachineUIEngine(
+            session: { _ in owner },
+            state: {
+                MachineUIState(
+                    machines: [], forwards: [], snippets: [], sessions: [], workspaces: .init())
+            }, mutation: { _ in }, workspace: { _ in }, openWindow: { _ in opened = true })
+        let origin = UUID()
+        let request = MachineHostWindowRequest(
+            kind: .terminal, machineID: owner.id,
+            presentationID: UUID())
+        for presentation in [origin, nil] as [UUID?] {
+            let reply = try JSONDecoder().decode(
+                MachineUIReply.self,
+                from: await engine.execute(
+                    "machines.ui.begin",
+                    payload: JSONEncoder().encode(
+                        MachineUIJobInput(
+                            presentationID: presentation, operation: "machines.ui.openWindow",
+                            payload: JSONEncoder().encode(request)))))
+            #expect(reply.error != nil)
+            #expect(!opened)
+        }
+        await engine.shutdown(); await owner.shutdown()
+    }
+
     @Test func originalDefaultAppOpenMaterializesOnlyInTheEngine() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

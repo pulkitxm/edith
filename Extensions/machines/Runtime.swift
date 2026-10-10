@@ -115,6 +115,21 @@ final class ExtensionRuntime: NSObject {
             uiClient = facade
             facade.start()
             return ["ok": true] as NSDictionary
+        case "terminalUI":
+            guard let facade = uiClient, let data = input["payload"] as? Data,
+                let value = input["presentationID"] as? String,
+                UUID(uuidString: value) == facade.terminalUI.presentationID,
+                let ok = try? facade.terminalUI.accept(data)
+            else { return ["ok": false] as NSDictionary }
+            return ["ok": ok] as NSDictionary
+        case "terminalUIStatus":
+            guard let facade = uiClient, let value = input["presentationID"] as? String,
+                UUID(uuidString: value) == facade.terminalUI.presentationID
+            else { return ["ok": false] as NSDictionary }
+            return [
+                "ok": true, "presentationID": facade.terminalUI.presentationID.uuidString,
+                "focused": facade.terminalUI.focused,
+            ] as NSDictionary
         case "stopUI":
             uiClient?.shutdown(); uiClient = nil
             FinderUndoBridge.shutdown()

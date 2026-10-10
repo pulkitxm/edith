@@ -3,6 +3,7 @@ import Foundation
 
 @MainActor public final class MachineUIClient {
     private let client: ExtensionEngineClient
+    let terminalUI: MachineTerminalUIPresentation
     private var generation = 0
     private var stopped = false
     private var tasks: [UUID: Task<Void, Never>] = [:]
@@ -10,7 +11,10 @@ import Foundation
     var receive: (MachineUIState) -> Void = { _ in }
     var failure: (String) -> Void = { _ in }
 
-    public init(client: ExtensionEngineClient) { self.client = client }
+    public init(client: ExtensionEngineClient) {
+        self.client = client
+        terminalUI = MachineTerminalUIPresentation(presentationID: client.presentationID)
+    }
 
     func start() {
         guard polling == nil, !stopped else { return }
@@ -29,6 +33,7 @@ import Foundation
     public func shutdown() {
         guard !stopped else { return }
         stopped = true
+        terminalUI.invalidate()
         generation += 1
         polling?.cancel(); polling = nil
         for task in tasks.values { task.cancel() }
@@ -315,5 +320,93 @@ import Foundation
             throw MachineUIError.invalidRequest
         }
         return try JSONDecoder().decode(Reply.self, from: value)
+    }
+}
+
+struct MachineTerminalUIEvent: Codable {
+    enum Action: String, Codable {
+        case fontZoomIn, fontZoomOut, fontZoomReset
+        case newTab, closeTab, nextTab, previousTab, windowClosed
+    }
+    let version: Int
+    let presentationID: UUID
+    let sequence: UInt64
+    let active: Bool
+    let key: Bool
+    let visible: Bool
+    let action: Action?
+}
+
+@MainActor final class MachineTerminalUIPresentation {
+    private struct Entry { weak var holder: TerminalSessionHolder? }
+    let presentationID: UUID
+    private var holders: [UUID: Entry] = [:]
+    private var latest: MachineTerminalUIEvent?
+    private var invalidated = false
+
+    init(presentationID: UUID) { self.presentationID = presentationID }
+
+    var isAvailable: Bool { !invalidated }
+
+    var focused: Bool {
+        guard !invalidated, let latest, latest.active, latest.key, latest.visible else {
+            return false
+        }
+        return focusedHolders.count == 1
+    }
+
+    func register(_ holder: TerminalSessionHolder) {
+        guard !invalidated else { return }
+        holders = holders.filter { $0.value.holder != nil }
+        guard holders[holder.id] != nil || holders.count < 64 else { return }
+        holders[holder.id] = Entry(holder: holder)
+        update(holder)
+    }
+
+    func unregister(_ holder: TerminalSessionHolder) { holders.removeValue(forKey: holder.id) }
+
+    func update(_ holder: TerminalSessionHolder) {
+        guard holders[holder.id]?.holder === holder else { return }
+        holder.ghosttyView?.setHostWindowState(
+            active: !invalidated && latest?.active == true && latest?.visible == true
+                && holder.presented,
+            key: !invalidated && latest?.key == true && latest?.visible == true && holder.presented)
+    }
+
+    func accept(_ data: Data) throws -> Bool {
+        guard !invalidated, data.count <= 1_024 else { throw MachineUIError.invalidRequest }
+        let event = try JSONDecoder().decode(MachineTerminalUIEvent.self, from: data)
+        guard event.version == 1, event.presentationID == presentationID,
+            latest.map({ event.sequence > $0.sequence }) ?? true
+        else { throw MachineUIError.invalidRequest }
+        latest = event
+        for holder in holders.values.compactMap({ $0.holder }) { update(holder) }
+        guard let action = event.action else { return true }
+        if action == .windowClosed { invalidate(); return true }
+        guard event.active, event.key, event.visible, focusedHolders.count == 1,
+            let holder = focusedHolders.first
+        else { return false }
+        switch action {
+        case .fontZoomIn: return holder.ghosttyView?.fontZoom(.increase) ?? false
+        case .fontZoomOut: return holder.ghosttyView?.fontZoom(.decrease) ?? false
+        case .fontZoomReset: return holder.ghosttyView?.fontZoom(.reset) ?? false
+        case .newTab, .closeTab, .nextTab, .previousTab:
+            return holder.hostTabAction?(action) ?? false
+        case .windowClosed: return false
+        }
+    }
+
+    func invalidate() {
+        guard !invalidated else { return }
+        invalidated = true
+        let owned = holders.values.compactMap { $0.holder }
+        holders = [:]
+        for holder in owned { holder.stop() }
+    }
+
+    private var focusedHolders: [TerminalSessionHolder] {
+        holders.values.compactMap { $0.holder }.filter {
+            $0.started && $0.presented && $0.ghosttyView?.hasInputFocus == true
+        }
     }
 }

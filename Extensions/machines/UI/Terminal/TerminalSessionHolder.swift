@@ -16,6 +16,10 @@ final class TerminalSessionHolder {
     }
 
     let id = UUID()
+    var hostTabAction: ((MachineTerminalUIEvent.Action) -> Bool)?
+    var presented = false {
+        didSet { engineClient?.terminalUI.update(self) }
+    }
     private var closingTask: Task<Void, Never>?
     private var queuedExternalInput = Data()
     private var inputEvents = 0
@@ -56,7 +60,7 @@ final class TerminalSessionHolder {
         session: MachineSession, context: MachineTerminalContext? = nil,
         windowsShell: WindowsTerminalShell = .automatic, containerID: String? = nil
     ) {
-        guard !started, let client = session.uiClient else { return }
+        guard !started, let client = session.uiClient, client.terminalUI.isAvailable else { return }
         queuedGhosttyInput = ""
         started = true
         hasTerminal = true
@@ -64,6 +68,7 @@ final class TerminalSessionHolder {
         currentTitle = nil
         currentWorkingDirectory = context?.startingDirectory
         engineClient = client
+        client.terminalUI.register(self)
         engineRequest = MachineTerminalRequest(
             operation: .open, machineID: session.id, tabID: id,
             directory: context?.startingDirectory, containerID: containerID,
@@ -277,6 +282,8 @@ final class TerminalSessionHolder {
         inputTask?.cancel(); inputTask = nil
         linkTask?.cancel(); linkTask = nil
         externalIO?.invalidate(); externalIO = nil
+        engineClient?.terminalUI.unregister(self)
+        hostTabAction = nil; presented = false
         engineRequest = nil; engineClient = nil
         pendingUserClose = nil
         queuedGhosttyInput = ""
@@ -401,6 +408,7 @@ final class TerminalSessionHolder {
             self.startEngine()
         }
         ghosttyView = view
+        engineClient?.terminalUI.update(self)
         flushQueuedInput(to: view)
         return view
     }

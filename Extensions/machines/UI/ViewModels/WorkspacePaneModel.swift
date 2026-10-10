@@ -75,6 +75,7 @@ struct PaneContentView: View {
     let presented: Bool
     let wantsFocus: Bool
     var onFocus: (() -> Void)?
+    var hostTabAction: ((MachineTerminalUIEvent.Action) -> Bool)?
 
     var body: some View {
         switch screen {
@@ -86,7 +87,7 @@ struct PaneContentView: View {
                 session: session,
                 active: presented,
                 wantsFocus: wantsFocus,
-                onFocus: onFocus,
+                onFocus: onFocus, hostTabAction: hostTabAction,
                 holder: PaneViewStore.shared.terminal(for: tabID, session: session))
         case .files:
             FinderPane(model: PaneViewStore.shared.finder(for: tabID, session: session))
@@ -163,7 +164,12 @@ struct WorkspacePaneView: View {
                         session: machines.session(for: tab.target.machineID),
                         machines: machines, screen: tab.target.screen, tabID: tab.id,
                         presented: live, wantsFocus: live && focused,
-                        onFocus: { model.apply { $0.focused = pane.id } }
+                        onFocus: { model.apply { $0.focused = pane.id } },
+                        hostTabAction: {
+                            [weak model, paneID = pane.id, target = tab.target] action in
+                            model?.performHostTabAction(action, paneID: paneID, target: target)
+                                ?? false
+                        }
                     )
                     .machineActivity(machines.session(for: tab.target.machineID))
                     .environment(\.machineViewPresented, live)
