@@ -33,7 +33,7 @@ extension MusicExtensionTests {
                 "music.ui.read", payload: JSONEncoder().encode(MusicUIQuery()))
             let state = try JSONDecoder().decode(MusicUIState.self, from: bytes)
             try state.validate()
-            #expect(state.root == root)
+            #expect(state.root.path == root.resolvingSymlinksInPath().path)
             #expect(state.folderTracks.map(\.path) == ["Mock Garden.wav"])
             _ = try await service.execute(
                 "music.ui.action",
@@ -66,6 +66,24 @@ extension MusicExtensionTests {
             let reply = try JSONDecoder().decode(ExtensionCLIReply.self, from: replyData)
             #expect(reply.exitCode == 0)
             #expect(reply.stdout.contains("Mock Waves.wav"))
+            _ = try await service.execute(
+                "music.ui.action",
+                payload: JSONEncoder().encode(MusicUIAction(kind: .crossfade, value: 0)))
+            #expect(!defaults.bool(forKey: MusicFade.enabledKey))
+            _ = try await service.execute(
+                "music.ui.action",
+                payload: JSONEncoder().encode(MusicUIAction(kind: .fadeLength, value: 3)))
+            #expect(defaults.double(forKey: MusicFade.secondsKey) == 3)
+            _ = try await service.execute(
+                "music.ui.action",
+                payload: JSONEncoder().encode(MusicUIAction(kind: .barCollapsed, value: 1)))
+            #expect(defaults.bool(forKey: AppStorageKeys.Music.barCollapsed))
+            await #expect(throws: (any Error).self) {
+                try await service.execute(
+                    "music.ui.action",
+                    payload: JSONEncoder().encode(MusicUIAction(kind: .fadeLength, value: 15)))
+            }
+            #expect(defaults.double(forKey: MusicFade.secondsKey) == 3)
             service.stop()
             await #expect(throws: (any Error).self) {
                 try await service.execute(
