@@ -309,7 +309,7 @@ ci-host-cli:
 
 ci-marketplace-runtime:
 	swift format lint --strict --parallel --recursive Packages/ExtensionMarketplace/Sources Packages/ExtensionMarketplace/Tests
-	swift test --package-path Packages/ExtensionMarketplace --build-system native --jobs $(EXTENSION_SWIFT_JOBS)
+	swift test --package-path Packages/ExtensionMarketplace --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS)
 
 .PHONY: ci-marketplace-runtime-diagnostics
 ci-marketplace-runtime-diagnostics:

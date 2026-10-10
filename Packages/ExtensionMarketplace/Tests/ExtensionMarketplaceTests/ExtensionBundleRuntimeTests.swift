@@ -205,7 +205,8 @@ struct MarketplaceRuntimeBuildFixture {
         process.arguments = Array(arguments.dropFirst())
         process.currentDirectoryURL = repositoryRoot
         var environment = environment
-        environment["DEVELOPER_DIR"] = "/Applications/Xcode.app/Contents/Developer"
+        environment["DEVELOPER_DIR"] =
+            environment["DEVELOPER_DIR"] ?? "/Applications/Xcode.app/Contents/Developer"
         environment["EXTENSION_SWIFT_JOBS"] = "1"
         process.environment = environment
         process.standardOutput = handle
@@ -232,6 +233,23 @@ struct MarketplaceRuntimeBuildFixture {
 }
 
 @Suite struct MarketplaceRuntimeBuildFixtureTests {
+    @Test func fixtureCommandsRetainTheSelectedDeveloperAndDefaultOnlyWhenAbsent() throws {
+        let fixture = try PackageFixture()
+        defer { fixture.clean() }
+        for selected in ["/synthetic/SelectedXcode.app/Contents/Developer", nil] {
+            let environment = selected.map { ["DEVELOPER_DIR": $0] } ?? [:]
+            try MarketplaceRuntimeBuildFixture.run(
+                ["/usr/bin/printenv", "DEVELOPER_DIR"], repositoryRoot: fixture.directory,
+                directory: fixture.directory, environment: environment, stage: "failed-build")
+            let output = try String(
+                contentsOf: fixture.directory.appendingPathComponent("failed-build.log"),
+                encoding: .utf8)
+            #expect(
+                output.trimmingCharacters(in: .whitespacesAndNewlines)
+                    == selected ?? "/Applications/Xcode.app/Contents/Developer")
+        }
+    }
+
     @Test func stageMarkersAreClosedAndNeverIncludeArgumentsOrLogPaths() {
         #expect(
             MarketplaceRuntimeBuildFixture.marker(stage: "host-build", status: "started")

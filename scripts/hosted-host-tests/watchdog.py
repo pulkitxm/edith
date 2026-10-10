@@ -216,6 +216,7 @@ def run_batch(batch, arguments, directory, deadline, process_factory=subprocess.
     start = clock()
     wall_start = time.time()
     timed_out = False
+    retirement_failed = False
     with (directory / f'{batch}.log').open('wb') as log:
         process = process_factory(arguments, stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
                                   env=environment)
@@ -240,7 +241,10 @@ def run_batch(batch, arguments, directory, deadline, process_factory=subprocess.
                     process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     ownership.terminate(signal.SIGKILL)
-                    process.wait(timeout=5)
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        retirement_failed = True
             else:
                 process.wait(timeout=5)
         finally:
@@ -268,7 +272,7 @@ def run_batch(batch, arguments, directory, deadline, process_factory=subprocess.
                                     'discoveredParent': getattr(ownership, 'parents', {}).get(item[0])}
                                    for item in known],
             'unverifiedOwnedProcesses': len(conflicts), 'argv': arguments, 'exitCode': process.returncode,
-            'timedOut': timed_out, 'durationSeconds': round(clock() - start, 3),
+            'timedOut': timed_out, 'retirementFailed': retirement_failed, 'durationSeconds': round(clock() - start, 3),
             'remainingOwnedProcesses': len(ownership.refresh()),
             'ownedCrashReports': owned_crash_reports(
                 Path.home() / 'Library/Logs/DiagnosticReports', directory,
