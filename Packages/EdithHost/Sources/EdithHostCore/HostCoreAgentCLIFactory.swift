@@ -7,7 +7,7 @@ import Foundation
         let hooks = HostCoreOwnerHooks(invoke: invoke)
         return HostCoreAgentCLI(
             backend: .init(
-                ownedJobs: local.ownedJobs,
+                ownedJobs: local.ownedJobs, command: local.command,
                 status: {
                     var status = try await local.status()
                     status.subscribers += try await hooks.jobs().reduce(0) { $0 + $1.subscribers }

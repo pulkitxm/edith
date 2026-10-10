@@ -17,6 +17,7 @@ import Foundation
         }
         return .init(
             ownedJobs: { core()?.cliOwnedJobIDs ?? [] },
+            command: { try await service().cliCommand($0, payload: $1) },
             status: { try await service().cliStatus() }, jobs: { try await service().cliJobs() },
             restart: { try await service().cliRestart() },
             logs: { try await service().cliLogs(last: $0) },

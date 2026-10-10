@@ -125,6 +125,10 @@ public actor HostMCPCLI {
         retired.removeAll()
     }
 
+    private static func publicCommand(_ command: HostCLIProviderCommand) -> Bool {
+        command.route != ["agent", "activity", "hook"]
+    }
+
     private func execute(_ method: String, params: [String: HostCLIJSON]) async throws
         -> HostCLIJSON
     {
@@ -142,7 +146,7 @@ public actor HostMCPCLI {
                 throw HostCLIError.usage("Tool pagination is not supported.")
             }
             let commands =
-                registry.providers.flatMap { $0.catalog.allCommands }
+                registry.providers.flatMap { $0.catalog.allCommands }.filter(Self.publicCommand)
                 + (coreCatalog?.commands ?? [])
             let native = registry.providers.flatMap { $0.catalog.nativeTools ?? [] }.map(\.tool)
             return .object([
@@ -180,7 +184,7 @@ public actor HostMCPCLI {
         guard Set(params.keys).isSubset(of: ["name", "arguments", "_meta"]),
             let name = params["name"]?.string,
             let command =
-                (registry.providers.flatMap({ $0.catalog.allCommands })
+                (registry.providers.flatMap({ $0.catalog.allCommands }).filter(Self.publicCommand)
                 + (coreCatalog?.commands ?? []))
                 .first(where: {
                     $0.toolName == name
@@ -206,6 +210,22 @@ public actor HostMCPCLI {
         else {
             throw HostCLIError.usage(
                 "Pass confirm: true instead of a confirmation flag inside arguments.")
+        }
+        if command.destructive, object["confirm"] != .bool(true),
+            command.route.first == "agent" || command.route == ["extensions", "setup"]
+        {
+            let preview = try HostCLIJSON.object([
+                "preview": .bool(true), "requiresConfirmation": .bool(true),
+                "command": .strings(command.route + arguments),
+            ]).encoded()
+            return .object([
+                "content": .array([
+                    .object([
+                        "type": .string("text"),
+                        "text": .string(String(decoding: preview, as: UTF8.self)),
+                    ])
+                ]), "isError": .bool(false),
+            ])
         }
         var routed = command.route
         if command.jsonOutput != false, !arguments.contains("--json") { routed.append("--json") }

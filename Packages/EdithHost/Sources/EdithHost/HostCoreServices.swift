@@ -295,6 +295,10 @@ import SwiftUI
                 return IOPSGetProvidingPowerSourceType(snapshot).takeUnretainedValue() as String
                     == kIOPMBatteryPowerKey
             },
+            pauseAmbientOnBattery: { [defaults] in
+                defaults.bool(forKey: HostCoreBackgroundPolicy.preferenceKey)
+            },
+            power: .pauseOnBattery,
             run: { [weak self] in
                 guard let self else { throw CancellationError() }
                 _ = try await synchronizeSettings()
@@ -306,9 +310,49 @@ import SwiftUI
         settingsScheduler?.start()
     }
 
+    func backgroundPolicy() async throws -> HostCoreBackgroundPolicy {
+        try await backgroundPolicyControl().read()
+    }
+
+    func setBackgroundPolicy(pauseAmbientOnBattery: Bool) async throws -> HostCoreBackgroundPolicy {
+        try await backgroundPolicyControl().set(pauseAmbientOnBattery: pauseAmbientOnBattery)
+    }
+
+    private func backgroundPolicyControl() -> HostCoreBackgroundPolicyControl {
+        HostCoreBackgroundPolicyControl(
+            defaults: defaults,
+            processIdentifier: { [weak self] in
+                guard let self, online, !cliStopping else { return nil }
+                return process?.processIdentifier
+            },
+            refresh: { [weak self] in
+                guard let self else { throw CancellationError() }
+                return try await cliSnapshot().pid
+            },
+            changed: { [weak self] in
+                IPC.post(IPC.Name.settingsChanged)
+                self?.settingsScheduler?.preferencesChanged()
+            })
+    }
+
     var cliOwnedJobIDs: Set<String> {
         guard online, !cliStopping else { return [] }
         return Set(snapshot?.agent?.jobs.map(\.id) ?? [])
+    }
+
+    func cliCommand(_ operation: HostAgentCommandOperation, payload: Data) async throws -> Data {
+        try Task.checkCancellation()
+        guard !cliStopping, online, let process, let pid = process.processIdentifier else {
+            throw HostAgentCommandError(.unavailable, "The owned core command service is offline.")
+        }
+        let result = try await process.performCommand(operation, payload: payload)
+        try Task.checkCancellation()
+        guard !cliStopping, self.process === process, online, process.processIdentifier == pid
+        else {
+            throw HostAgentCommandError(
+                .unavailable, "The core process changed during the command.")
+        }
+        return result
     }
 
     func cliStatus() async throws -> HostCoreAgentStatus {

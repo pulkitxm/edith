@@ -108,14 +108,28 @@ import Testing
     }
 
     @Test func typedOptionalAgentRoutesCannotClaimCoreOrForeignDomains() throws {
-        let valid = try CoreCatalogCalls.catalog(owner: "herdr", route: ["agent", "tasks", "ls"])
+        let valid = try CoreCatalogCalls.catalog(
+            owner: "herdr", route: ["agent", "activity", "status"])
         let catalog = try HostCLIProviderCatalog.decode(valid, owner: "herdr")
-        #expect(catalog.allCommands.contains { $0.route == ["agent", "tasks", "ls"] })
-        for route in [["agent", "run"], ["agent", "activity"], ["agent", "status"]] {
+        #expect(catalog.allCommands.contains { $0.route == ["agent", "activity", "status"] })
+        for route in [
+            ["agent", "run"], ["agent", "tasks", "ls"], ["agent", "schedule", "ls"],
+            ["agent", "status"],
+        ] {
             let invalid = try CoreCatalogCalls.catalog(owner: "herdr", route: route)
             #expect(throws: (any Error).self) {
                 try HostCLIProviderCatalog.decode(invalid, owner: "herdr")
             }
+        }
+        let foreign = try CoreCatalogCalls.catalog(
+            owner: "usage", route: ["agent", "activity", "status"])
+        #expect(throws: (any Error).self) {
+            try HostCLIProviderCatalog.decode(foreign, owner: "usage")
+        }
+        let hook = try CoreCatalogCalls.catalog(
+            owner: "herdr", route: ["agent", "activity", "hook"])
+        #expect(throws: (any Error).self) {
+            try HostCLIProviderCatalog.decode(hook, owner: "herdr")
         }
     }
 }

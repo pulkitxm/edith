@@ -12,13 +12,19 @@ import Foundation
     private var cancellation: WorkCancellation?
     private let journal: URL
     private let agent: HostCoreAgentStore
+    private let environment: @Sendable () -> [String: String]
+    private var commands: HostAgentCommandService?
+    private var commandTasks: [HostAgentTaskSnapshot] = []
     private var stopping = false
     private let settings: HostSettingsArchive
     private var backup: Task<HostSettingsBackupResult, Error>?
     private var backupResult: HostSettingsBackupResult?
 
-    public init(identity: HostIdentity, cloudDirectory: URL? = nil) throws {
-        self.identity = identity
+    public init(
+        identity: HostIdentity, cloudDirectory: URL? = nil,
+        environment: @escaping @Sendable () -> [String: String] = { CLIToolEnvironment.sanitized() }
+    ) throws {
+        self.identity = identity; self.environment = environment
         cloud = cloudDirectory ?? HostCoreCloud.directory(identity: identity)
         let directory = identity.root.appendingPathComponent("Core")
         try FileManager.default.createDirectory(
@@ -61,7 +67,40 @@ import Foundation
             cpuSeconds: valid ? Double(info.pti_total_user + info.pti_total_system) / 1e9 : 0,
             storage: storage, tasks: tasks, cloudDirectory: cloud,
             cloudAvailable: HostCoreCloud.available(identity: identity, directory: cloud),
-            settingsBackup: backupResult, agent: agent.snapshot())
+            settingsBackup: backupResult, agent: agent.snapshot(), commandTasks: commandTasks)
+    }
+
+    public func startCommands() async throws {
+        guard !stopping, commands == nil else { throw HostWorkerError.rejected }
+        let service = try HostAgentCommandService(
+            directory: identity.root.appendingPathComponent("Core/Commands"),
+            environment: environment,
+            publish: { [weak self] tasks, _ in
+                await MainActor.run { self?.commandTasks = tasks }
+            },
+            record: { [agent] event in
+                await MainActor.run { try? agent.recordCommand(event) }
+            })
+        commands = service
+        do { try await service.start() } catch {
+            await service.shutdown(); commands = nil; throw error
+        }
+    }
+
+    public func command(_ request: HostCoreCommandRequest) async throws -> HostCLIJSON {
+        try Task.checkCancellation()
+        try request.validate()
+        guard !stopping, let commands else {
+            throw HostAgentCommandError(.unavailable, "The owned core command service is offline.")
+        }
+        let result = try await commands.execute(
+            request.operation, payload: request.payload.encoded())
+        try Task.checkCancellation()
+        guard !stopping else {
+            throw HostAgentCommandError(.unavailable, "The core stopped during the command.")
+        }
+        commandTasks = await commands.tasks.snapshots()
+        return try JSONDecoder().decode(HostCLIJSON.self, from: result)
     }
 
     public func inspect() async throws -> HostCoreSnapshot {
@@ -155,6 +194,8 @@ import Foundation
     public func shutdown() async {
         stopping = true
         cancel()
+        await commands?.shutdown()
+        commandTasks = await commands?.tasks.snapshots() ?? []
         _ = try? await inspection?.value
         await settings.shutdown()
         _ = try? await backup?.value

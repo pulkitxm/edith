@@ -15,6 +15,7 @@ import Foundation
     private var callbacks: [String] = []
     private var stoppedPIDs: [Int32] = []
     private var stopping = false
+    private var exercisedPowerPolicy = false
 
     init(identity: HostIdentity, executable: URL, directory: URL) {
         self.identity = identity; self.executable = executable; self.directory = directory
@@ -27,6 +28,13 @@ import Foundation
                     process.processIdentifier == previous?.pid
                 else { return [] }
                 return Set(previous?.agent?.jobs.map(\.id) ?? [])
+            },
+            command: { [self] operation, payload in
+                guard !stopping, let process, process.ready else {
+                    throw HostAgentCommandError(.unavailable, "The owned fixture core is offline.")
+                }
+                try record("command:" + operation.rawValue)
+                return try await process.performCommand(operation, payload: payload)
             },
             status: { [self] in
                 try record("status")
@@ -41,6 +49,7 @@ import Foundation
             },
             jobs: { [self] in
                 try record("jobs")
+                try await exerciseRequestedPowerPolicy()
                 guard let agent = try await snapshot().agent else {
                     throw HostWorkerError.invalidResponse
                 }
@@ -143,6 +152,60 @@ import Foundation
         statusFlight = task
         defer { statusFlight = nil }
         return try await task.value
+    }
+
+    private func exerciseRequestedPowerPolicy() async throws {
+        guard !exercisedPowerPolicy,
+            FileManager.default.fileExists(
+                atPath: directory.appendingPathComponent("power-request").path)
+        else { return }
+        guard let process, process.ready, let pid = process.processIdentifier,
+            let defaults = UserDefaults(suiteName: identity.defaultsSuite)
+        else { throw HostWorkerError.rejected }
+        exercisedPowerPolicy = true
+        let controller = HostCoreBackgroundPolicyControl(
+            defaults: defaults,
+            processIdentifier: { [weak self] in
+                guard let self, !stopping, self.process === process else { return nil }
+                return process.processIdentifier
+            },
+            refresh: { try await process.perform(.status).pid },
+            changed: { defaults.synchronize() })
+        let scheduler = HostSettingsScheduler(
+            signature: { Data("synthetic-power-policy".utf8) },
+            enabled: { process.ready }, onBattery: { true },
+            pauseAmbientOnBattery: {
+                defaults.bool(forKey: HostCoreBackgroundPolicy.preferenceKey)
+            },
+            power: .any,
+            run: { [self] in
+                let next = try await process.perform(.synchronize)
+                guard next.settingsBackup?.exported == true else { return false }
+                previous = next
+                return true
+            })
+        let initial = try await controller.read()
+        let before = try await process.perform(.status)
+        _ = try await controller.set(pauseAmbientOnBattery: true)
+        await scheduler.runIfNeeded()
+        let paused = try await process.perform(.status)
+        let persisted = defaults.bool(forKey: HostCoreBackgroundPolicy.preferenceKey)
+        _ = try await controller.set(pauseAmbientOnBattery: false)
+        await scheduler.runIfNeeded()
+        let resumed = try await process.perform(.status)
+        await scheduler.shutdown()
+        try JSONSerialization.data(withJSONObject: [
+            "pid": pid, "initialPause": initial.pauseAmbientOnBattery,
+            "persistedPause": persisted,
+            "beforeRuns": before.agent?.jobs.first { $0.id == "backup.sync" }?.runCount ?? -1,
+            "pausedRuns": paused.agent?.jobs.first { $0.id == "backup.sync" }?.runCount ?? -1,
+            "resumedRuns": resumed.agent?.jobs.first { $0.id == "backup.sync" }?.runCount ?? -1,
+            "pausedPID": paused.pid, "resumedPID": resumed.pid,
+            "exported": resumed.settingsBackup?.exported == true,
+            "cloudFileExists": FileManager.default.fileExists(
+                atPath: resumed.cloudDirectory.appendingPathComponent("settings.json").path),
+            "readyAfter": process.ready,
+        ]).write(to: directory.appendingPathComponent("power-proof.json"), options: .atomic)
     }
 
     private func record(_ value: String) throws {

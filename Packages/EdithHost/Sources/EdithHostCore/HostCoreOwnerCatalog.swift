@@ -61,9 +61,13 @@ public struct HostCoreOwnerCatalog: Codable, Sendable {
         }
         for route in routes {
             let domains =
-                owner == "herdr" ? ["tasks", "schedule"] : owner == "usage" ? ["activity"] : []
+                owner == "herdr" ? ["activity"] : []
             guard (2...12).contains(route.route.count), route.route[0] == "agent",
                 domains.contains(route.route[1]),
+                [
+                    ["agent", "activity"], ["agent", "activity", "status"],
+                    ["agent", "activity", "hook"],
+                ].contains(route.route),
                 route.route.dropFirst().allSatisfy({
                     !$0.isEmpty && $0.utf8.count <= 128
                         && $0.utf8.allSatisfy {
@@ -72,9 +76,24 @@ public struct HostCoreOwnerCatalog: Codable, Sendable {
                                 || $0 == 45 || $0 == 46 || $0 == 95
                         }
                 }), route.operation == owner + ".agent.cli", route.timeout.isFinite,
-                (1...120).contains(route.timeout), route.readsInput != true,
+                (1...120).contains(route.timeout),
+                route.readsInput != true || route.route == ["agent", "activity", "hook"],
                 HostCoreReadinessReport.text(route.summary)
             else { throw HostCLIError.rejected("Invalid original agent route owner.") }
+            if route.route == ["agent", "activity", "hook"] {
+                let activity = parserHelp?.object?["command"]?.object?["subcommands"]?.array?.first
+                { $0.object?["commandName"] == .string("activity") }
+                let hook = activity?.object?["subcommands"]?.array?.first {
+                    $0.object?["commandName"] == .string("hook")
+                }
+                guard route.readsInput == true, route.destructive,
+                    hook?.object?["shouldDisplay"] == .bool(false)
+                else {
+                    throw HostCLIError.rejected(
+                        "The original activity hook must have hidden parser metadata and bounded stdin."
+                    )
+                }
+            }
             if let stream = route.streamOperation {
                 guard stream == owner + ".agent.cli", let deadline = route.streamDeadline,
                     deadline.isFinite, (1...21600).contains(deadline)
@@ -140,6 +159,18 @@ public struct HostCoreOwnerRegistry: Sendable {
         return Self(
             states: current, providers: providers.sorted { $0.state.id < $1.state.id },
             issues: issues, invoke: invoke)
+    }
+
+    public func validateCurrent(_ provider: Provider) async throws {
+        try Task.checkCancellation()
+        guard provider.identity.isAlive,
+            ExtensionProcessIdentity.read(provider.identity.pid) == provider.identity,
+            try await HostCLIProviderRegistry.states(invoke: invoke).contains(provider.state)
+        else {
+            throw HostCoreCommandFailure(
+                "The owning extension changed or was disabled.",
+                hint: "Retry after checking ed extensions status " + provider.state.id)
+        }
     }
 
     public func call<T: Decodable>(
