@@ -31,7 +31,9 @@ enum BrowserCLI {
         guard let configuration = BrowserCLIEnvironment.configuration else {
             throw CLIFailure.unavailable("the Notch browser is not available")
         }
-        return try await configuration.request(request)
+        let result = try await configuration.request(request)
+        try Task.checkCancellation()
+        return result
     }
 
     static func emit(_ snapshot: NotchBrowserSnapshot, json: Bool) {
@@ -106,6 +108,7 @@ enum BrowserCLI {
     }
 
     @MainActor static func copy(_ link: String?) throws {
+        try Task.checkCancellation()
         guard let link, !link.isEmpty else {
             throw CLIFailure("That tab has no address to copy")
         }

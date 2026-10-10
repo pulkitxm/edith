@@ -102,6 +102,21 @@ import Testing
         #expect(throws: (any Error).self) { try NotchCLIProviderCatalog.encode(Data("[]".utf8)) }
     }
 
+    @Test func cancellationAfterNativeReplyDoesNotCopyOrEmitSuccess() async throws {
+        let state = snapshot()
+        var copied = false
+        let task = Task {
+            try await BrowserCLIExecution.run(
+                .init(arguments: ["copy", "--json"]),
+                request: { _ in
+                    withUnsafeCurrentTask { $0?.cancel() }
+                    return state
+                }, copy: { _ in copied = true })
+        }
+        await #expect(throws: CancellationError.self) { try await task.value }
+        #expect(!copied)
+    }
+
     @Test func runtimePublishesBothCatalogsAndHelpWithoutStartingBrowserOrPanel() async throws {
         var ownersCreated = 0
         let runtime = ExtensionRuntime(
