@@ -17,15 +17,30 @@ struct HostPageContent: View {
     var defaults: UserDefaults = SharedDefaults.store
     let select: (String) -> Void
     private var active: Set<String> { marketplace.surfaceAvailability.activeIDs }
+    private var settingsSections: [HostNavigationSection] {
+        HostNavigationCatalog.settingsSections(
+            installed: Set(marketplace.installed.keys),
+            pending: marketplace.sessions.pendingDisableIDs.union(marketplace.pendingRemovalIDs))
+    }
+    private var settingsDestination: String {
+        settingsSections.contains { $0.id == settings } ? settings : "general"
+    }
+    private var settingsBinding: Binding<String> {
+        Binding(get: { settingsDestination }, set: { settings = $0 })
+    }
 
     @ViewBuilder var body: some View {
         switch destination.id {
         case "home":
             HostHomePage(
                 marketplace: marketplace, customize: customize,
-                extensions: { select("extensions") }, openExtension: openExtension)
+                extensions: { select("extensions") }, openExtension: openExtension,
+                presenter: presenter)
         case "extensions": MarketplacePage(marketplace: marketplace, presenter: presenter)
-        case "settings": HostSettingsContainer(category: $settings) { settingsContent }
+        case "settings":
+            HostSettingsContainer(category: settingsBinding, sections: settingsSections) {
+                settingsContent
+            }
         case "about": HostAboutPage(identity: marketplace.identity)
         default:
             if destination.id == "appMaintenance",
@@ -42,7 +57,7 @@ struct HostPageContent: View {
         }
     }
     @ViewBuilder private var settingsContent: some View {
-        switch settings {
+        switch settingsDestination {
         case "surfaces": HostSurfaceEditor(marketplace: marketplace)
         case "general":
             HostSettingsPage(
@@ -57,15 +72,15 @@ struct HostPageContent: View {
         case "shortcuts":
             HostShortcutsPane(marketplace: marketplace, panelShortcutChanged: panelShortcutChanged)
         default:
-            if let section = HostNavigationCatalog.settings.first(where: { $0.id == settings }),
+            if let section = settingsSections.first(where: { $0.id == settingsDestination }),
                 let id = section.extensionID
             {
-                content(id, section: settings)
-            } else if let view = additionalSettings?(settings) {
+                content(id, section: settingsDestination)
+            } else if let view = additionalSettings?(settingsDestination) {
                 view
             } else {
                 ContentUnavailableView(
-                    HostNavigationCatalog.settings.first(where: { $0.id == settings })?.title
+                    settingsSections.first(where: { $0.id == settingsDestination })?.title
                         ?? "General", systemImage: "gearshape")
             }
         }

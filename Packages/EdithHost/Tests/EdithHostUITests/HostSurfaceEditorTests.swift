@@ -10,6 +10,51 @@ import Testing
 
 @MainActor
 @Suite(.serialized) struct HostSurfaceEditorTests {
+    @Test func nativeHomeScenePreservesTileAndWithdrawsOnPrivacyAndDisable() async throws {
+        let fixture = try Fixture(activeIDs: ["calendar"])
+        defer { fixture.clean() }
+        await fixture.marketplace.enable(id: "calendar")
+        #expect(fixture.marketplace.surfaceAvailability.activeIDs == ["calendar"])
+        let restore = enableAccessibility()
+        defer { restore() }
+        var tile = SurfaceTile(.calendar)
+        tile.title = "Synthetic customized calendar"
+        tile.sourceIDs = ["synthetic-calendar"]
+        tile.itemLimit = 4
+        let original = tile
+        let presenter = NativeFixturePresenter()
+        let host = NSHostingView(
+            rootView: HostSurfaceCard(
+                marketplace: fixture.marketplace, target: .home, tile: tile, presenter: presenter
+            ).environment(\.windowVisible, true))
+        host.frame = CGRect(x: 0, y: 0, width: 600, height: 400)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        #expect(presenter.requests.count == 1)
+        let request = try #require(presenter.requests.first)
+        #expect(request.location == "home" && request.section == "calendar")
+        #expect(request.surface?.tile == original)
+        #expect(request.surface?.target == .home)
+        #expect(find(host, label: "Owned calendar scene") != nil)
+        #expect(find(host, label: tile.title) == nil)
+        let privacy = ExtensionSharedState(
+            root: fixture.marketplace.identity.root.appendingPathComponent("ExtensionState"),
+            namespace: fixture.marketplace.identity.identifier, owner: "presenter")
+        try privacy.publish(["active": "1", "blurCalendar": "1"])
+        fixture.marketplace.surfaces.privacy.refresh()
+        await settle(window, host: host)
+        #expect(find(host, label: "Owned calendar scene") == nil)
+        #expect(presenter.ended.contains(request.presentationID))
+        #expect(presenter.requests.count == 1)
+        await fixture.marketplace.disable(id: "calendar")
+        await settle(window, host: host)
+        #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(presenter.requests.count == 1)
+        #expect(await fixture.requests.count == 0)
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+    }
     @Test func marketplaceRestoresSuiteGroupsSearchAndOriginalArtworkWithoutStartingWorkers()
         async throws
     {
@@ -368,7 +413,14 @@ import Testing
         defaults.set(true, forKey: AppStorageKeys.Suites.media)
         #expect(HostNavigationCatalog.resolve("calendar", active: [], defaults: defaults) == "home")
         #expect(
-            HostNavigationCatalog.resolve("machines", active: [], defaults: defaults) == "machines")
+            HostNavigationCatalog.resolve("machines", active: [], defaults: defaults) == "home")
+        #expect(
+            HostNavigationCatalog.resolve("docs", active: [], defaults: defaults) == "home")
+        #expect(
+            HostNavigationCatalog.resolve("machines", active: ["machines"], defaults: defaults)
+                == "machines")
+        #expect(
+            HostNavigationCatalog.resolve("docs", active: ["docs"], defaults: defaults) == "docs")
         #expect(HostNavigationCatalog.resolve("missing", active: [], defaults: defaults) == "home")
         defaults.set(false, forKey: AppStorageKeys.General.settingsCategoriesExpanded)
         #expect(
@@ -376,7 +428,10 @@ import Testing
                 HostNavigationCatalog.page("settings"), defaults: defaults))
     }
 
-    @Test func mainShellShowsOriginalCoreAndAppNavigationWithoutStartingExtensions() async throws {
+    @Test(arguments: [540.0, 1240.0])
+    func mainShellShowsOriginalCoreAndAppNavigationWithoutStartingExtensions(width: Double)
+        async throws
+    {
         let fixture = try Fixture()
         defer { fixture.clean() }
         let restore = enableAccessibility()
@@ -386,19 +441,39 @@ import Testing
                 marketplace: fixture.marketplace, defaults: fixture.marketplace.surfaces.preferences
             ).environment(\.automaticViewActionsEnabled, false).environment(
                 \.surfaceSampleContent, true))
-        host.frame = CGRect(x: 0, y: 0, width: 1240, height: 850)
+        host.frame = CGRect(x: 0, y: 0, width: width, height: 850)
         let window = TestWindowHost.window(contentRect: host.frame)
         window.contentView = host; window.orderBack(nil)
         defer { window.orderOut(nil) }
         await settle(window, host: host)
-        for title in ["Home", "Fleet", "Docs", "Extensions", "Settings", "About", "Toggle sidebar"]
-        {
+        for title in ["Home", "Extensions", "Settings", "About", "Toggle sidebar"] {
             #expect(find(host, label: title) != nil)
+        }
+        for title in ["Fleet", "Docs", "Agents", "Media", "Agent connections", "Jev", "Terminal"] {
+            #expect(find(host, label: title) == nil)
         }
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.requests.count == 0)
         #expect(window.titleVisibility == .hidden)
         #expect(window.styleMask.contains(.fullSizeContentView))
+    }
+
+    @Test func extensionSettingsRequireCompatibleInstalledPackagesAndHidePendingCleanup() {
+        let core = HostNavigationCatalog.settingsSections(installed: [], pending: [])
+        #expect(core.allSatisfy { $0.extensionID == nil })
+        #expect(
+            core.map(\.id) == [
+                "general", "surfaces", "permissions", "agent", "data", "shortcuts", "icloud",
+                "updates",
+            ])
+        let installed = HostNavigationCatalog.settingsSections(
+            installed: ["herdr", "jev", "terminal"], pending: [])
+        #expect(installed == HostNavigationCatalog.settings)
+        let cleaning = HostNavigationCatalog.settingsSections(
+            installed: ["herdr", "jev", "terminal"], pending: ["herdr", "terminal"])
+        #expect(cleaning.first { $0.id == "jev" }?.extensionID == "jev")
+        #expect(!cleaning.contains { $0.id == "agentActivity" || $0.id == "terminal" })
+        #expect(HostNavigationCatalog.settings.map(\.id).contains("agentActivity"))
     }
 
     @Test func originalSidebarFocusesExplicitDetachedSectionsAndOtherwiseUsesMainSelection()
@@ -1027,7 +1102,10 @@ import Testing
         let requests = Requests()
         let heldLease: PackageFileLock?
 
-        init(pendingDisableID: String? = nil, packageState: String? = nil) throws {
+        init(
+            pendingDisableID: String? = nil, packageState: String? = nil,
+            activeIDs: Set<String> = []
+        ) throws {
             directory = FileManager.default.temporaryDirectory.appendingPathComponent(
                 UUID().uuidString)
             let identity = try HostIdentity(
@@ -1036,7 +1114,7 @@ import Testing
             let store = ExtensionPackageStore(
                 root: identity.root.appendingPathComponent("Extensions"))
             let defaults = try #require(UserDefaults(suiteName: identity.defaultsSuite))
-            let fixtureID = pendingDisableID ?? (packageState == nil ? nil : "calendar")
+            let fixtureID = pendingDisableID ?? (packageState == nil ? activeIDs.first : "calendar")
             var lease: PackageFileLock?
             if let id = fixtureID {
                 try FileManager.default.createDirectory(
@@ -1068,8 +1146,16 @@ import Testing
                 }
             }
             heldLease = lease
-            let sessions = HostExtensionSessions(defaults: defaults) { _ in
-                throw HostWorkerError.rejected
+            let sessions = HostExtensionSessions(defaults: defaults) { package in
+                guard activeIDs.contains(package.id) else { throw HostWorkerError.rejected }
+                let script = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+                    .deletingLastPathComponent().appendingPathComponent(
+                        "EdithHostCoreTests/Fixtures/worker.py")
+                return HostWorker(
+                    configuration: HostWorkerConfiguration(
+                        identity: identity, extensionID: package.id, version: package.version),
+                    executable: URL(fileURLWithPath: "/usr/bin/python3"),
+                    arguments: [script.path, "normal"], requestTimeout: .seconds(2))
             }
             let client = ExtensionCatalogClient(
                 url: URL(string: "https://github.com/pulkitxm/edith/catalog")!,
@@ -1100,5 +1186,15 @@ import Testing
                 forName: identity.defaultsSuite)
             try? FileManager.default.removeItem(at: directory)
         }
+    }
+
+    @MainActor private final class NativeFixturePresenter: HostExtensionContentPresenting {
+        var requests: [HostExtensionContentRequest] = []
+        var ended: [UUID] = []
+        func controller(for request: HostExtensionContentRequest) async throws -> NSViewController {
+            requests.append(request)
+            return NSHostingController(rootView: Text("Owned calendar scene"))
+        }
+        func endPresentation(id: UUID) { ended.append(id) }
     }
 }

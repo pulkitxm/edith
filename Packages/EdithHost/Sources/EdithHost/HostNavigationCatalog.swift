@@ -159,13 +159,20 @@ enum HostNavigationCatalog {
     static func visible(_ page: HostNavigationPage, active: Set<String>, defaults: UserDefaults)
         -> Bool
     {
+        if let provider = page.extensionID, !active.contains(provider) { return false }
         guard let suite = page.suite else { return true }
         let enabled =
             defaults.object(forKey: "suite" + suite.capitalized + "Enabled") as? Bool
             ?? !active.isDisjoint(with: suiteProviders[suite] ?? [])
         guard enabled else { return false }
-        if let provider = page.extensionID { return active.contains(provider) }
         return true
+    }
+    static func settingsSections(installed: Set<String>, pending: Set<String>)
+        -> [HostNavigationSection]
+    {
+        settings.filter { section in
+            section.extensionID.map { installed.contains($0) && !pending.contains($0) } ?? true
+        }
     }
     static func expansionKey(_ page: HostNavigationPage) -> String? {
         if page.id == "settings" { return AppStorageKeys.General.settingsCategoriesExpanded }

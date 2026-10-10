@@ -178,8 +178,14 @@ struct HostWorkspace: View {
                         if expanded(page) {
                             ForEach(
                                 page.sections.filter {
-                                    page.id == "settings"
-                                        || $0.extensionID.map(active.contains) ?? true
+                                    if page.id == "settings" {
+                                        return HostNavigationCatalog.settingsSections(
+                                            installed: Set(marketplace.installed.keys),
+                                            pending: marketplace.sessions.pendingDisableIDs.union(
+                                                marketplace.pendingRemovalIDs)
+                                        ).contains($0)
+                                    }
+                                    return $0.extensionID.map(active.contains) ?? true
                                 }
                             ) { section in sectionRow(section, parent: page) }
                             ForEach(pages.filter { $0.parentID == page.id }) { child in row(child) }
