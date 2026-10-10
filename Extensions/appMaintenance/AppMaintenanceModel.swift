@@ -16,7 +16,7 @@ typealias AppMaintenanceDiscover =
 @MainActor
 @Observable
 final class AppMaintenanceModel {
-    enum Phase: Equatable {
+    enum Phase: String, Codable, Equatable {
         case loading
         case ready
         case scanning
@@ -26,6 +26,9 @@ final class AppMaintenanceModel {
         case updating
     }
 
+    var preferences = MaintenanceUISettings()
+    let preferenceDefaults: UserDefaults
+    private var preferencesTask: Task<Void, Never>?
     var applications: [InstalledApplication] = []
     var previewToken = UUID()
     var selectedApplicationID: String? { didSet { previewToken = UUID() } }
@@ -47,6 +50,11 @@ final class AppMaintenanceModel {
     var focusedUpdateID: String?
     var lastUpdateRefresh: Date?
     var checkingUpdates = false
+    private var remoteIcons: [String: Data] = [:]
+    private var engineClient: ExtensionEngineClient?
+    private var remoteTask: Task<Void, Never>?
+    private var remoteRevision = 0
+    private var applyingRemote = false
     private var updateState = AppUpdateCenterState()
     private let updatePersistence: AppUpdatePersistence
     private let snapshots: AppMaintenanceSnapshotStore
@@ -68,6 +76,7 @@ final class AppMaintenanceModel {
     private var refreshInterval: TimeInterval = 86_400
 
     init(
+        defaults: UserDefaults = SharedDefaults.store,
         persistence: AppUpdatePersistence = AppUpdatePersistence(),
         snapshots: AppMaintenanceSnapshotStore = AppMaintenanceSnapshotStore(),
         inventory: @escaping AppMaintenanceInventoryLoad = { data in
@@ -79,6 +88,8 @@ final class AppMaintenanceModel {
                 onBatch: onBatch)
         }
     ) {
+        preferenceDefaults = defaults
+        preferences = MaintenanceUISettings.load(defaults)
         updatePersistence = persistence
         self.snapshots = snapshots
         self.inventory = inventory
@@ -112,7 +123,146 @@ final class AppMaintenanceModel {
 
     var selectedBytes: Int64 { selectedItems.reduce(0) { $0 + $1.sizeBytes } }
 
+    convenience init(engineClient: ExtensionEngineClient) {
+        self.init()
+        self.engineClient = engineClient
+    }
+
+    var visiblePaths: Set<String> {
+        Set(
+            applications.map { $0.url.path } + (plan?.items.map { $0.url.path } ?? [])
+                + updates.compactMap(\.applicationPath)
+                + [installPlan?.sourceApplication.url.path].compactMap { $0 })
+    }
+    func icon(for path: String) -> NSImage {
+        if engineClient != nil {
+            return remoteIcons[path].flatMap(NSImage.init(data:)) ?? NSImage(
+                named: NSImage.applicationIconName) ?? NSImage()
+        }
+        return NSWorkspace.shared.icon(forFile: path)
+    }
+    private func snapshotIcons() -> [String: Data] {
+        var result: [String: Data] = [:]
+        for path in visiblePaths.sorted().prefix(256) {
+            let original = NSWorkspace.shared.icon(forFile: path)
+            let image = NSImage(size: NSSize(width: 64, height: 64), flipped: false) { rect in
+                original.draw(in: rect); return true
+            }
+            if let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
+                let png = bitmap.representation(using: .png, properties: [:])
+            {
+                result[path] = png
+            }
+        }
+        return result
+    }
+    func reveal(_ url: URL) {
+        if engineClient != nil { sendRemote("reveal", value: url.path); return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    func uiSnapshot() -> AppMaintenanceUISnapshot {
+        .init(
+            preferences: preferences, icons: snapshotIcons(), applications: applications,
+            previewToken: previewToken,
+            selectedApplicationID: selectedApplicationID,
+            plan: plan, selectedItemIDs: selectedItemIDs, phase: phase, errorMessage: errorMessage,
+            resultMessage: resultMessage,
+            installPlan: installPlan, updates: updates, updateHistory: updateHistory,
+            selectedUpdateIDs: selectedUpdateIDs,
+            focusedUpdateID: focusedUpdateID, lastUpdateRefresh: lastUpdateRefresh,
+            checkingUpdates: checkingUpdates)
+    }
+
+    func updatePreferences(_ change: (inout MaintenanceUISettings) -> Void) {
+        guard !stopped else { return }
+        var next = preferences; change(&next)
+        if let engineClient {
+            preferences = next; preferencesTask?.cancel()
+            preferencesTask = Task { [weak self] in
+                do {
+                    let data = try await engineClient.invoke(
+                        "maintenance.ui.preferences", payload: JSONEncoder().encode(next))
+                    guard let self, !stopped, !Task.isCancelled else { return }
+                    preferences = try JSONDecoder().decode(
+                        AppMaintenanceUISnapshot.self, from: data
+                    ).preferences
+                } catch is CancellationError {} catch {
+                    guard let self, !stopped else { return };
+                    errorMessage = error.localizedDescription
+                }
+            }
+        } else {
+            do { try next.save(preferenceDefaults); preferences = next } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func refreshRemote() async {
+        guard let engineClient, !stopped else { return }
+        let revision = remoteRevision
+        do {
+            let data = try await engineClient.invoke("maintenance.ui.snapshot")
+            guard !stopped, !Task.isCancelled, revision == remoteRevision else { return }
+            applyRemote(try JSONDecoder().decode(AppMaintenanceUISnapshot.self, from: data))
+        } catch is CancellationError {} catch {
+            if !stopped { errorMessage = error.localizedDescription }
+        }
+    }
+
+    private func applyRemote(_ value: AppMaintenanceUISnapshot) {
+        preferences = value.preferences
+        remoteIcons = value.icons
+        applyingRemote = true
+        defer { applyingRemote = false }
+        applications = value.applications; selectedApplicationID = value.selectedApplicationID;
+        plan = value.plan
+        selectedItemIDs = value.selectedItemIDs; phase = value.phase;
+        errorMessage = value.errorMessage; resultMessage = value.resultMessage
+        installPlan = value.installPlan; updates = value.updates;
+        updateHistory = value.updateHistory
+        selectedUpdateIDs = value.selectedUpdateIDs; lastUpdateRefresh = value.lastUpdateRefresh;
+        checkingUpdates = value.checkingUpdates
+        previewToken = value.previewToken
+        if value.phase == .loading {
+            if !loading.isRunning { _ = loading.begin() }
+        } else if let error = value.errorMessage, value.applications.isEmpty {
+            loading.fail(loading.begin(), message: error)
+        } else {
+            loading.setContent()
+        }
+    }
+
+    private func sendRemote(
+        _ operation: String, value: String? = nil, item: String? = nil, enabled: Bool? = nil,
+        integer: Int? = nil, number: Double? = nil
+    ) {
+        guard let engineClient, !stopped, !applyingRemote else { return }
+        remoteTask?.cancel(); remoteRevision += 1
+        let revision = remoteRevision
+        let request = AppMaintenanceUIAction(
+            operation: operation, value: value, item: item, enabled: enabled, integer: integer,
+            number: number, previewToken: previewToken)
+        remoteTask = Task {
+            defer { if revision == remoteRevision { remoteTask = nil } }
+            do {
+                let payload = try JSONEncoder().encode(request)
+                let data = try await engineClient.invoke("maintenance.ui.action", payload: payload)
+                guard !stopped, !Task.isCancelled, revision == remoteRevision else { return }
+                applyRemote(try JSONDecoder().decode(AppMaintenanceUISnapshot.self, from: data))
+            } catch is CancellationError {} catch {
+                if !stopped, revision == remoteRevision {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
     func refresh(automatic: Bool = false, interval: TimeInterval = 86_400) {
+        if engineClient != nil, !stopped {
+            sendRemote("refresh", enabled: automatic, number: interval); return
+        }
         guard !stopped, !mutationInProgress else { return }
         cancelOperation()
         let generation = loading.begin()
@@ -233,6 +383,9 @@ final class AppMaintenanceModel {
     }
 
     func setUpdateSelected(_ selected: Bool, item: AppUpdateItem) {
+        if engineClient != nil, !stopped {
+            sendRemote("updateSelection", value: item.id, enabled: selected); return
+        }
         guard !stopped else { return }
         if selected {
             selectedUpdateIDs.insert(item.id)
@@ -242,6 +395,9 @@ final class AppMaintenanceModel {
     }
 
     func runSelectedUpdates(concurrency: Int, retries: Int) {
+        if engineClient != nil, !stopped {
+            sendRemote("update", integer: concurrency, number: Double(retries)); return
+        }
         guard !stopped, !mutationInProgress else { return }
         let selected = updates.filter { selectedUpdateIDs.contains($0.id) }
         guard !selected.isEmpty else { return }
@@ -271,18 +427,23 @@ final class AppMaintenanceModel {
     }
 
     func ignore(_ item: AppUpdateItem) {
+        if engineClient != nil, !stopped { sendRemote("ignore", value: item.id); return }
         guard !stopped else { return }
         updateState.ignoredVersions[item.id] = item.availableVersion
         persistPolicy(removing: item)
     }
 
     func snooze(_ item: AppUpdateItem, until: Date) {
+        if engineClient != nil, !stopped {
+            sendRemote("snooze", value: item.id, number: until.timeIntervalSince1970); return
+        }
         guard !stopped else { return }
         updateState.snoozedUntil[item.id] = until
         persistPolicy(removing: item)
     }
 
     func exclude(_ item: AppUpdateItem) {
+        if engineClient != nil, !stopped { sendRemote("exclude", value: item.id); return }
         guard !stopped else { return }
         guard let bundleID = item.bundleID else { return }
         updateState.excludedBundleIDs.insert(bundleID)
@@ -290,6 +451,7 @@ final class AppMaintenanceModel {
     }
 
     func resetUpdatePolicies() {
+        if engineClient != nil, !stopped { sendRemote("reset"); return }
         guard !stopped else { return }
         updateState.ignoredVersions = [:]
         updateState.snoozedUntil = [:]
@@ -331,6 +493,7 @@ final class AppMaintenanceModel {
     }
 
     func select(_ application: InstalledApplication) {
+        if engineClient != nil, !stopped { sendRemote("select", value: application.id); return }
         guard !stopped, !mutationInProgress else { return }
         cancelOperation()
         selectedApplicationID = application.id
@@ -360,6 +523,9 @@ final class AppMaintenanceModel {
     }
 
     func setSelected(_ selected: Bool, item: AppMaintenanceItem) {
+        if engineClient != nil, !stopped {
+            sendRemote("selection", value: item.id, enabled: selected); return
+        }
         guard !stopped else { return }
         if selected {
             selectedItemIDs.insert(item.id)
@@ -369,6 +535,7 @@ final class AppMaintenanceModel {
     }
 
     func removeSelected() {
+        if engineClient != nil, !stopped { sendRemote("remove"); return }
         guard !stopped, !mutationInProgress else { return }
         guard let plan else { return }
         let selectedIDs = selectedItemIDs
@@ -406,6 +573,9 @@ final class AppMaintenanceModel {
     }
 
     func prepareDiskImage(_ url: URL, destination: AppMaintenanceInstallDestination) {
+        if engineClient != nil, !stopped {
+            sendRemote("prepareImage", value: url.path, item: destination.rawValue); return
+        }
         guard !stopped, !mutationInProgress else { return }
         cancelOperation()
         cancelInstallPlan()
@@ -439,6 +609,10 @@ final class AppMaintenanceModel {
     }
 
     func installDiskImage(replaceExisting: Bool, moveImageToTrash: Bool) {
+        if engineClient != nil, !stopped {
+            sendRemote("install", enabled: replaceExisting, integer: moveImageToTrash ? 1 : 0);
+            return
+        }
         guard !stopped, !mutationInProgress else { return }
         guard let installPlan else { return }
         cancelOperation()
@@ -474,6 +648,7 @@ final class AppMaintenanceModel {
     }
 
     func cancelInstallPlan() {
+        if engineClient != nil, !stopped { sendRemote("cancelImage"); return }
         if let installPlan {
             self.installPlan = nil
             trackCleanup { await AppMaintenanceDiskImageInstaller.cancel(plan: installPlan) }
@@ -482,6 +657,7 @@ final class AppMaintenanceModel {
     }
 
     func cancel() {
+        if engineClient != nil, !stopped { sendRemote("cancel"); return }
         loading.cancel()
         cancelOperation()
         if phase != .installing { cancelInstallPlan() }
@@ -533,6 +709,8 @@ final class AppMaintenanceModel {
     func shutdown() async {
         guard !stopped else { return }
         stopped = true
+        preferencesTask?.cancel(); await preferencesTask?.value; preferencesTask = nil
+        remoteRevision += 1; remoteTask?.cancel(); await remoteTask?.value; remoteTask = nil
         cancel()
         while let task = ownedTasks.values.first { await task.value }
         cancelInstallPlan()
@@ -551,6 +729,7 @@ final class AppMaintenanceModel {
     }
 
     func openExtension(_ id: String) {
+        if engineClient != nil, !stopped { sendRemote("openExtension", value: id); return }
         guard !stopped else { return }
         trackCleanup { [self] in
             do {

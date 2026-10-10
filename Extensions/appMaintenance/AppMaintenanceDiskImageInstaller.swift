@@ -33,7 +33,7 @@ public struct AppMaintenanceDiskImageAttachment: Equatable, Sendable {
     }
 }
 
-public struct AppMaintenanceDiskImagePlan: Identifiable, Equatable, Sendable {
+public struct AppMaintenanceDiskImagePlan: Codable, Identifiable, Equatable, Sendable {
     public let imageURL: URL
     public let imageIdentity: AppMaintenanceFileIdentity
     public let imageSizeBytes: Int64

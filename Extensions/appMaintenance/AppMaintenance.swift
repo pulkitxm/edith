@@ -94,7 +94,7 @@ public struct InstalledApplication: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
-public enum AppMaintenanceCategory: String, CaseIterable, Sendable {
+public enum AppMaintenanceCategory: String, Codable, CaseIterable, Sendable {
     case application = "Application"
     case support = "Application Support"
     case caches = "Caches"
@@ -105,7 +105,7 @@ public enum AppMaintenanceCategory: String, CaseIterable, Sendable {
     case web = "Web Data"
 }
 
-public struct AppMaintenanceFileIdentity: Equatable, Sendable {
+public struct AppMaintenanceFileIdentity: Codable, Equatable, Sendable {
     public let device: UInt64
     public let inode: UInt64
 
@@ -115,7 +115,7 @@ public struct AppMaintenanceFileIdentity: Equatable, Sendable {
     }
 }
 
-public struct AppMaintenanceItem: Identifiable, Equatable, Sendable {
+public struct AppMaintenanceItem: Codable, Identifiable, Equatable, Sendable {
     public let id: String
     public let url: URL
     public let category: AppMaintenanceCategory
@@ -134,7 +134,7 @@ public struct AppMaintenanceItem: Identifiable, Equatable, Sendable {
     }
 }
 
-public struct AppMaintenancePlan: Equatable, Sendable {
+public struct AppMaintenancePlan: Codable, Equatable, Sendable {
     public let application: InstalledApplication
     public let items: [AppMaintenanceItem]
     public let roots: [URL]

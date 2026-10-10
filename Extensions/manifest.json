@@ -630,7 +630,12 @@
         "Extensions/appMaintenance/MaintenanceCommands.swift",
         "Extensions/appMaintenance/MaintenancePreferences.swift",
         "Extensions/appMaintenance/Runtime.swift",
-        "Extensions/appMaintenance/Surface.swift"
+        "Extensions/appMaintenance/Surface.swift",
+        "Extensions/appMaintenance/AppMaintenanceUICommands.swift",
+        "Extensions/appMaintenance/CLI/MaintenancePolicyCommands.swift",
+        "Extensions/appMaintenance/CLI/MaintenanceCLIExecution.swift",
+        "Extensions/appMaintenance/CLI/MaintenanceTerminalCommands.swift",
+        "Extensions/appMaintenance/CLI/MaintenanceCLICatalog.swift"
       ]
     },
     "inputs": [
@@ -645,7 +650,7 @@
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "surfaceContractVersion": 1,
     "sameExecutableWorker": true
   },
