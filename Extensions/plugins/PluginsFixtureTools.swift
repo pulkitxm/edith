@@ -65,9 +65,11 @@ struct PluginsFixtureTools: Sendable {
         return SkillsModel(
             defaults: defaults, documents: documents, installer: installer,
             detectAgents: {
-                SkillAgentCatalog.detected(home: admission.home, environment: [:], exists: {
-                    agentMarkerExists($0)
-                })
+                SkillAgentCatalog.detected(
+                    home: admission.home, environment: [:],
+                    exists: {
+                        agentMarkerExists($0)
+                    })
             },
             discoverInstaller: { executable(named: "npx") != nil })
     }

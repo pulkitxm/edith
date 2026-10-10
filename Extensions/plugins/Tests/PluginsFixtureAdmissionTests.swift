@@ -59,9 +59,12 @@ import WorkerFixtureTestSupport
         let tools = try PluginsFixtureTools(admission: input.admission)
         #expect(tools.toolbin.path.hasPrefix(input.admission.home.path + "/"))
         #expect(try FileManager.default.contentsOfDirectory(atPath: tools.toolbin.path).isEmpty)
-        #expect(!tools.agentMarkerExists("/external-fixture-path", exists: { _ in
-            Issue.record("Fixture discovery escaped the owned home"); return true
-        }))
+        #expect(
+            !tools.agentMarkerExists(
+                "/external-fixture-path",
+                exists: { _ in
+                    Issue.record("Fixture discovery escaped the owned home"); return true
+                }))
         #expect(tools.agentMarkerExists(tools.toolbin.path))
         #expect(tools.executable(named: "npx") == nil)
         #expect(tools.executable(named: "node") == nil)
