@@ -104,6 +104,11 @@ final class ExtensionRuntime: NSObject {
                 let facade = HerdrUIClient(client: client)
                 let store = HerdrStore(uiClient: facade)
                 store.uiPresentationID = presentationID
+                store.terminalUI = store.makeTerminalUIPresentation(
+                    id: presentationID,
+                    location: location, target: input["target"] as? String ?? "",
+                    token: (input["herdrPresentationToken"] as? String).flatMap(
+                        UUID.init(uuidString:)))
                 let activity = AgentActivityMonitor(defaults: store.uiDefaults, uiClient: facade)
                 store.uiActivity = activity
                 uiStore = store
@@ -164,6 +169,9 @@ final class ExtensionRuntime: NSObject {
                 uiController = NSHostingController(
                     rootView: ExtensionPageHost { HerdrSettingsPage(model: model) })
             }
+        case "terminalUI", "terminalUIStatus":
+            guard let binding = uiStore?.terminalUI else { return ["ok": false] as NSDictionary }
+            return binding.execute(input)
         case "stopUI": stopUI()
         case "start":
             guard uiLocation == nil, Bundle.main.bundleURL.pathExtension != "appex",

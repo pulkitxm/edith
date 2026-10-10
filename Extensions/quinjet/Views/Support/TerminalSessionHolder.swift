@@ -16,6 +16,8 @@ final class TerminalSessionHolder {
         let completion: @MainActor (Bool) -> Void
     }
 
+    private(set) var terminalColumns: UInt16 = 80
+    private(set) var terminalRows: UInt16 = 24
     private(set) var generation = 0
     private(set) var started = false
     private(set) var exitMessage: String?
@@ -67,6 +69,8 @@ final class TerminalSessionHolder {
     private(set) var presentationGeneration = 0
     private var appliedTheme: GhosttyTheme?
     private var presentation: (Bool, Bool)?
+    private var hostWindowState: (active: Bool, key: Bool, visible: Bool)?
+    var nativePaneAction: (@MainActor (GhosttyPaneAction) -> Void)?
     func start(
         executable: String, arguments: [String], environment: [String],
         currentDirectory: String? = nil, allowsLocalFileLinks: Bool = true,
@@ -109,9 +113,15 @@ final class TerminalSessionHolder {
         let focus = active && wantsFocus
         guard presentation?.0 != active || presentation?.1 != focus else { return }
         presentation = (active, focus); presentationGeneration += 1
-        ghosttyView?.setRenderingActive(active)
+        ghosttyView?.setRenderingActive(active && (hostWindowState?.visible ?? true))
         if focus { ghosttyView?.requestFocus() } else { ghosttyView?.cancelFocusRequest() }
     }
+    func setHostWindowState(active: Bool, key: Bool, visible: Bool) {
+        hostWindowState = (active, key, visible)
+        ghosttyView?.setHostWindowState(active: active, key: key && visible)
+        ghosttyView?.setRenderingActive(visible && (presentation?.0 ?? true))
+    }
+
     func handleDropFiles(_ payload: TerminalDropPayload, generation expected: Int? = nil) -> Bool {
         if let expected, expected != generation { payload.removeTemporaryFiles(); return true }
         guard dropTask == nil else {
@@ -195,6 +205,8 @@ final class TerminalSessionHolder {
         queuedGhosttyInput = ""
         appliedTheme = nil
         presentation = nil
+        hostWindowState = nil
+        nativePaneAction = nil
         dropTransferError = nil
         generation += 1
         started = false
@@ -256,6 +268,7 @@ final class TerminalSessionHolder {
             },
             resize: { [weak self] columns, rows, width, height in
                 guard let self, self.generation == viewGeneration else { return }
+                self.terminalColumns = columns; self.terminalRows = rows
                 self.enqueue(.resize(columns, rows, width, height), bytes: 0)
             }, failure: { [weak self] in self?.failStream("The terminal input queue is full.") })
         let view = GhosttyTerminalView(
@@ -263,6 +276,16 @@ final class TerminalSessionHolder {
             allowsLocalFileLinks: descriptor?.allowsLocalFileLinks ?? false,
             resetTerminalAfterInterrupt: descriptor?.resetTerminalAfterInterrupt ?? false,
             theme: theme)
+        if let hostWindowState {
+            view.setHostWindowState(
+                active: hostWindowState.active, key: hostWindowState.key && hostWindowState.visible)
+            view.setRenderingActive(hostWindowState.visible && (presentation?.0 ?? true))
+        }
+        view.onPaneAction = { [weak self, weak view] action in
+            guard let self, let view, self.generation == viewGeneration, self.ghosttyView === view
+            else { return }
+            self.nativePaneAction?(action)
+        }
         view.onOpenTarget = { [weak self, weak view] value, untrusted in
             guard let self, let view, self.generation == viewGeneration else { return false }
             return self.openTarget(value, untrusted: untrusted, view: view)

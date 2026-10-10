@@ -2,6 +2,7 @@ import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
 import Observation
+import GhosttyTerminal
 
 @MainActor
 @Observable
@@ -38,6 +39,7 @@ final class QuinjetPageModel {
 
     private let client: QuinjetClient
     let machines: QuinjetMachines
+    var terminalUI: OwnedTerminalUIPresentation?
     private var uiClient: QuinjetUIClient?
     private var uiActions: [UUID: Task<Void, Never>] = [:]
     private var projectedPrivacy = false
@@ -200,6 +202,45 @@ final class QuinjetPageModel {
         projectedPrivacy = state.hidesReview
         cmuxAvailable = state.cmuxAvailable
         projectError = state.projectError
+        terminalUI?.refresh()
+    }
+
+    func terminalUIAction(_ action: OwnedTerminalUIEvent.Action) -> Bool {
+        guard !stopped, isRemote else { return false }
+        switch action {
+        case .newTab: enqueueUI("quinjet.ui.session", object: ["operation": "create"])
+        case .closeTab:
+            guard let selectedTab else { return false }
+            enqueueUI(
+                "quinjet.ui.session",
+                object: ["operation": "close", "session": selectedTab.id.uuidString])
+        case .nextTab, .previousTab:
+            guard !tabs.isEmpty, let index = tabs.firstIndex(where: { $0.id == selected }) else {
+                return false
+            }
+            let delta = action == .previousTab ? tabs.count - 1 : 1
+            return selectSession(tabs[(index + delta) % tabs.count].id)
+        default: return false
+        }
+        return true
+    }
+
+    func terminalPaneAction(_ action: GhosttyPaneAction) {
+        switch action {
+        case .newTab: _ = terminalUIAction(.newTab)
+        case .selectTab(let index):
+            if index == -1 {
+                _ = terminalUIAction(.previousTab)
+            } else if index == -2 {
+                _ = terminalUIAction(.nextTab)
+            } else if index == -3, let last = tabs.last {
+                _ = selectSession(last.id)
+            } else if index > 0, Int(index) <= tabs.count {
+                _ = selectSession(tabs[Int(index) - 1].id)
+            }
+        default: break
+        }
+        terminalUI?.refresh()
     }
 
     private func enqueueUI(_ operation: String, object: [String: Any]) {
@@ -582,6 +623,7 @@ final class QuinjetPageModel {
     }
 
     func stopRendering() {
+        terminalUI?.invalidate()
         guard let uiClient else { return }
         stopped = true
         uiClient.stop()

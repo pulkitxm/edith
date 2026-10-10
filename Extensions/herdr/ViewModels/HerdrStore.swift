@@ -100,6 +100,7 @@ final class HerdrStore {
     private var uiBaseline = HerdrUILayoutState(
         tabs: [], selected: HerdrStore.boardID, views: [:], arrangements: [])
     private(set) var uiSpaces: [String: HerdrSpaceWindowModel] = [:]
+    var terminalUI: OwnedTerminalUIPresentation?
     var uiPresentationID: UUID?
     private(set) var uiPresentations: [HerdrUIPresentation] = []
     private var uiSpaceBaselines: [String: HerdrUISpace] = [:]
@@ -614,6 +615,7 @@ final class HerdrStore {
     }
 
     func stopRendering() {
+        terminalUI?.invalidate()
         guard let uiClient else { return }
         uiClient.stop()
         uiPoll?.cancel()
@@ -2394,6 +2396,7 @@ final class HerdrStore {
         messaging.adopt(state.hooks)
         uiActivity?.adoptUI(state)
         uiError = nil
+        terminalUI?.refresh()
     }
 
     func projectionAgent(_ id: String) -> HerdrAgent? {
