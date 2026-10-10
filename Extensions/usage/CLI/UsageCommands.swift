@@ -13,6 +13,8 @@ struct UsageCommand: AsyncParsableCommand {
             the UI cannot disagree. `ed usage refresh` collects fresh data itself,
             whether or not the app is open.
             """,
+        version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+            as? String ?? "dev",
         subcommands: [
             UsageLimitsCommand.self, UsageAlertsCommand.self, UsageSummaryCommand.self,
             UsageDailyCommand.self, UsageModelsCommand.self, UsageProjectsCommand.self,

@@ -56,6 +56,9 @@ import Testing
         #expect(invalid.stdout.isEmpty && invalid.stderr.contains("no usage source named unknown"))
         let help = try await run(["--help"], controller: controller)
         #expect(help.exitCode == 0 && help.stdout.contains("statusline"))
+        let version = try await run(["--version"], controller: controller)
+        #expect(version.exitCode == 0 && version.stderr.isEmpty)
+        #expect(version.stdout == UsageCommand.configuration.version + "\n")
         await controller.shutdown()
     }
 

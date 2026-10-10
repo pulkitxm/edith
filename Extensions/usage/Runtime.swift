@@ -32,6 +32,17 @@ final class ExtensionRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, self.controller != nil else { throw ExtensionPeerError.unavailable }
+            if command == "usage.cli.catalog" { return try UsageCLIProvider.catalog() }
+            if command == "usage.cli.complete" { return try UsageCLIProvider.complete(payload) }
+            if command == "usage.config.cli", let controller = self.controller {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                try request.validate()
+                let resources = UsageCLIResources(controller: controller)
+                let reply = try await UsageCLIEnvironment.$resources.withValue(resources) {
+                    try await ExtensionCLIExecution.run(UsageConfigCommand.self, request: request)
+                }
+                return try JSONEncoder().encode(reply)
+            }
             if command.hasPrefix("usage.cli"), let controller = self.controller {
                 let forget: @MainActor (UUID) async throws -> Void = { id in
                     guard let projection = self.machinesProjection else {

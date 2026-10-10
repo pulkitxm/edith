@@ -74,6 +74,15 @@ import Testing
         let runtime = ExtensionRuntime()
         let started = runtime.execute(["operation": "start", "defaultsSuite": suite])
         try #require((started as? NSDictionary)?["ok"] as? Bool == true)
+        let catalog = try await invoke(runtime, command: "usage.cli.catalog", payload: Data())
+        let metadata = try #require(
+            try JSONSerialization.jsonObject(with: catalog) as? [String: Any])
+        #expect(metadata["owner"] as? String == "usage")
+        let get = try ExtensionCLIRequest(arguments: ["get", "dashRange", "--json"])
+        let config = try await invoke(
+            runtime, command: "usage.config.cli", payload: JSONEncoder().encode(get))
+        let value = try JSONDecoder().decode(ExtensionCLIReply.self, from: config)
+        #expect(value.exitCode == 0 && value.stdout.contains("dashRange"))
         let request = ExtensionCLIStreamStart(
             owner: "usage", session: UUID(),
             request: try ExtensionCLIRequest(arguments: ["summary", "--json"]), deadline: 10)
