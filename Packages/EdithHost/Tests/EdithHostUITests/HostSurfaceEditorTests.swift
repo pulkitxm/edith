@@ -446,10 +446,10 @@ import Testing
         window.contentView = host; window.orderBack(nil)
         defer { window.orderOut(nil) }
         await settle(window, host: host)
-        for title in ["Home", "Extensions", "Settings", "About", "Toggle sidebar"] {
+        for title in ["Home", "Extensions", "Settings", "About", "Toggle sidebar", "Terminal"] {
             #expect(find(host, label: title) != nil)
         }
-        for title in ["Fleet", "Docs", "Agents", "Media", "Agent connections", "Jev", "Terminal"] {
+        for title in ["Fleet", "Docs", "Agents", "Media", "Agent connections", "Jev"] {
             #expect(find(host, label: title) == nil)
         }
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
@@ -465,16 +465,20 @@ import Testing
         #expect(
             core.map(\.id) == [
                 "general", "surfaces", "permissions", "agent", "data", "storage", "shortcuts",
-                "icloud",
+                "terminal", "icloud",
                 "updates",
             ])
+        #expect(core.first { $0.id == "terminal" }?.extensionID == nil)
         let installed = HostNavigationCatalog.settingsSections(
             installed: ["herdr", "jev", "terminal"], pending: [])
         #expect(installed == HostNavigationCatalog.settings)
         let cleaning = HostNavigationCatalog.settingsSections(
             installed: ["herdr", "jev", "terminal"], pending: ["herdr", "terminal"])
         #expect(cleaning.first { $0.id == "jev" }?.extensionID == "jev")
-        #expect(!cleaning.contains { $0.id == "agentActivity" || $0.id == "terminal" })
+        #expect(!cleaning.contains { $0.id == "agentActivity" })
+        #expect(cleaning.first { $0.id == "terminal" } == core.first { $0.id == "terminal" })
+        #expect(
+            HostNavigationCatalog.settingsSections(installed: ["terminal"], pending: []) == core)
         #expect(HostNavigationCatalog.settings.map(\.id).contains("agentActivity"))
     }
 
