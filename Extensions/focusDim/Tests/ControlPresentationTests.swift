@@ -281,4 +281,50 @@ import Testing
         }
     }
 
+    @Test func sharedLoadingRetainsContentAndRejectsCancelledRefresh() async throws {
+        let defaults = fixture()
+        var reads = 0
+        var pending: CheckedContinuation<Data, any Error>?
+        let packet = try ControlPresentationContract.snapshot(
+            defaults: defaults, state: ControlPresentationState(muted: true))
+        let model = ControlPresentation(client: nil, defaults: defaults) { _, _ in
+            reads += 1
+            if reads > 1 { return try await withCheckedThrowingContinuation { pending = $0 } }
+            return packet
+        }
+        await model.refresh()
+        #expect(model.load.hasContent)
+        let refresh = Task { await model.refresh() }
+        while pending == nil { await Task.yield() }
+        #expect(model.load.isRefreshing)
+        #expect(model.load.state == .content)
+        model.load.cancel()
+        pending?.resume(
+            returning: try ControlPresentationContract.snapshot(
+                defaults: defaults, state: ControlPresentationState(muted: false)))
+        await refresh.value
+        #expect(model.state.muted)
+        #expect(model.load.hasContent)
+        model.stop()
+    }
+
+    @Test func failedInitialLoadExposesRecoveryAndRestoresOriginalContent() async throws {
+        let defaults = fixture()
+        var fail = true
+        let model = ControlPresentation(client: nil, defaults: defaults) { _, _ in
+            if fail { throw ExtensionPeerError.unavailable }
+            return try ControlPresentationContract.snapshot(
+                defaults: defaults, state: ControlPresentationState())
+        }
+        await model.refresh()
+        #expect(model.load.state == .error)
+        #expect(!model.ready)
+        #expect(model.error != nil)
+        fail = false
+        await model.refresh()
+        #expect(model.ready && model.error == nil)
+        #expect(model.load.state == .content)
+        model.stop()
+    }
+
 }

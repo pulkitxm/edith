@@ -108,12 +108,13 @@ enum ControlPresentationContract {
 final class ControlPresentation {
     private(set) var state = ControlPresentationState()
     private(set) var error: String?
-    private(set) var ready: Bool
+    let load = ContentLoad()
+    var ready: Bool { load.hasContent }
+    var running: Bool { !stopped }
     let active: Bool
     private let defaults: UserDefaults
     private let client: ExtensionEngineClient?
     private let invoke: (String, Data) async throws -> Data
-    private var polling: Task<Void, Never>?
     private var writing: Task<Void, Never>?
     private var actions: [UUID: Task<Void, Never>] = [:]
     private var observer: NSObjectProtocol?
@@ -132,7 +133,6 @@ final class ControlPresentation {
         self.client = client
         self.defaults = defaults
         active = client != nil || invoke != nil
-        ready = !active
         self.invoke =
             invoke ?? { operation, payload in
                 guard let client else { throw ExtensionPeerError.unavailable }
@@ -140,6 +140,8 @@ final class ControlPresentation {
             }
         baseline = ControlPresentationContract.values(
             from: defaults, keys: ControlPresentationContract.writable)
+        if !active { load.setContent() }
+        start()
     }
 
     func start() {
@@ -150,14 +152,6 @@ final class ControlPresentation {
         defaultsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: defaults, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.changed() } }
-        guard active else { return }
-        polling = Task { [weak self] in
-            while !Task.isCancelled {
-                guard let self, !self.stopped else { return }
-                await self.refresh()
-                do { try await Task.sleep(for: .seconds(2)) } catch { return }
-            }
-        }
     }
 
     func changed() {
@@ -166,6 +160,8 @@ final class ControlPresentation {
             from: defaults, keys: ControlPresentationContract.writable)
         guard !(values as NSDictionary).isEqual(to: baseline) else { return }
         if !active {
+            applying = true
+            defer { applying = false }
             do {
                 try queuePreferences(values)
                 baseline = values
@@ -239,12 +235,14 @@ final class ControlPresentation {
         reading = true
         defer { reading = false }
         let revision = revision
+        let request = load.begin()
+        defer { if load.owns(request), load.isRunning { load.cancel(request) } }
         do {
             var data = try await invoke("colorPicker.ui.read", Data("{}".utf8))
-            guard !stopped, revision == self.revision else { return }
+            guard !stopped, revision == self.revision, load.isCurrent(request) else { return }
             if !ready, let queued = defaults.data(forKey: Self.pendingPreferencesKey) {
                 _ = try await invoke("colorPicker.ui.update", queued)
-                guard !stopped, revision == self.revision else { return }
+                guard !stopped, revision == self.revision, load.isCurrent(request) else { return }
                 if defaults.data(forKey: Self.pendingPreferencesKey) == queued {
                     defaults.removeObject(forKey: Self.pendingPreferencesKey)
                 }
@@ -253,7 +251,9 @@ final class ControlPresentation {
             let packet = try JSONDecoder().decode(ControlPresentationPacket.self, from: data)
             let values = try ControlPresentationContract.decode(
                 packet.preferences, keys: ControlPresentationContract.readable)
-            guard !stopped, revision == self.revision, writing == nil, actions.isEmpty else {
+            guard !stopped, revision == self.revision, load.isCurrent(request), writing == nil,
+                actions.isEmpty
+            else {
                 return
             }
             applying = true
@@ -268,11 +268,16 @@ final class ControlPresentation {
                 from: defaults, keys: ControlPresentationContract.writable)
             state = packet.state
             error = nil
-            ready = true
+            load.complete(request)
             applying = false
             IPC.post(IPC.Name.settingsChanged)
         } catch {
-            if !stopped { self.error = error.localizedDescription }
+            if !stopped {
+                load.fail(request, error: error)
+                if !(error is CancellationError), !Task.isCancelled {
+                    self.error = error.localizedDescription
+                }
+            }
         }
     }
 
@@ -300,7 +305,7 @@ final class ControlPresentation {
         guard !stopped else { return }
         stopped = true
         revision += 1
-        polling?.cancel(); polling = nil
+        load.cancel()
         writing?.cancel(); writing = nil
         actions.values.forEach { $0.cancel() }; actions.removeAll()
         IPC.stopObserving(observer); observer = nil
@@ -319,15 +324,31 @@ struct ControlSettingsHost<Content: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let error = presentation.error {
+            if presentation.ready, let error = presentation.error {
                 HStack {
                     Label(error, systemImage: "exclamationmark.triangle")
-                    Button("Retry") {
-                        presentation.changed(); Task { await presentation.refresh() }
-                    }
+                    Button("Retry", action: retry)
                 }.padding()
             }
-            content().disabled(presentation.active && !presentation.ready)
-        }.task { presentation.start() }
+            if presentation.active, !presentation.ready {
+                Button("Load settings", action: retry).padding()
+            }
+            PageLoading(
+                state: presentation.load.state, title: "Settings unavailable",
+                message: presentation.error ?? "The extension engine is unavailable.",
+                layout: .list, retry: retry
+            ) { content() }
+        }
+        .pageRefresh(
+            active: presentation.active && presentation.running,
+            interval: { .seconds(2) }, cancel: { presentation.load.cancel() }
+        ) {
+            await presentation.refresh()
+        }
+    }
+
+    private func retry() {
+        presentation.changed()
+        Task { await presentation.refresh() }
     }
 }
