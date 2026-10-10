@@ -2,6 +2,7 @@ import EdithExtensionSupport
 import Foundation
 
 public enum HostSettingsCatalog {
+    public static let onboardingCompletedKey = "onboardingCompleted"
     public static let keys: Set<String> = [
         "SUAutomaticallyUpdate",
         "SUEnableAutomaticChecks",
@@ -56,7 +57,7 @@ public enum HostSettingsCatalog {
         "musicLastPosition",
         "musicLastTrack",
         "musicWasPlaying",
-        "onboardingCompleted",
+        onboardingCompletedKey,
         "presenterHotKeyCode",
         "presenterHotKeyLabel",
         "presenterHotKeyMods",
