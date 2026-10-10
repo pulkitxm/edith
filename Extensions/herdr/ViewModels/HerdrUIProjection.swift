@@ -233,6 +233,23 @@ final class HerdrUIDefaults: UserDefaults {
         else { throw ExtensionPeerError.invalidRequest }
         let store = worker.store
         switch operation {
+        case "herdr.ui.present":
+            return try JSONEncoder().encode(worker.spaces.present(object))
+        case "herdr.ui.presentation.admit", "herdr.ui.presentation.close",
+            "herdr.ui.presentation.focus":
+            let fields: Set<String> = operation.hasSuffix(".focus") ? ["token", "key"] : ["token"]
+            guard Set(object.keys) == fields, let raw = object["token"] as? String,
+                let token = UUID(uuidString: raw)
+            else { throw ExtensionPeerError.invalidRequest }
+            if operation.hasSuffix(".admit") {
+                try worker.spaces.admit(token)
+            } else if operation.hasSuffix(".close") {
+                try worker.spaces.close(token)
+            } else {
+                guard let key = object["key"] as? NSNumber, CFGetTypeID(key) == CFBooleanGetTypeID()
+                else { throw ExtensionPeerError.invalidRequest }
+                try worker.spaces.focus(token, key: key.boolValue)
+            }
         case "herdr.ui.activity.settings":
             guard Set(object.keys) == ["providers", "quietMinutes", "monitorTerminalAttention"]
             else { throw ExtensionPeerError.invalidRequest }

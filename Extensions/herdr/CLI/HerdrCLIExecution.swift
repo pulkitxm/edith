@@ -59,19 +59,19 @@ import Foundation
             try await MainActor.run {
                 guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
                 try Task.checkCancellation()
-                let windows: [HerdrSpaceWindow.Info]
+                let windows: [HerdrSpaceInfo]
                 let message: String?
                 switch action {
-                case "list": windows = HerdrSpaceWindow.listed(); message = nil
+                case "list": windows = worker.spaces.listed(); message = nil
                 case "terminal":
-                    guard let opened = HerdrSpaceWindow.openTerminal(window) else {
-                        throw CLIFailure.notFound(HerdrSpaceWindow.missing(window))
+                    guard let opened = worker.spaces.openTerminal(window) else {
+                        throw CLIFailure.notFound(worker.spaces.missing(window))
                     }
                     windows = [opened]; message = "opened a terminal"
                 case "split":
                     guard let insert = InsertSide(rawValue: side ?? "right"),
-                        let opened = HerdrSpaceWindow.split(window, side: insert)
-                    else { throw CLIFailure.notFound(HerdrSpaceWindow.missing(window)) }
+                        let opened = worker.spaces.split(window, side: insert)
+                    else { throw CLIFailure.notFound(worker.spaces.missing(window)) }
                     windows = [opened]; message = "split \(side ?? "right")"
                 default: throw CLIFailure.usage("unknown space action")
                 }

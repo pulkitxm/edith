@@ -5,6 +5,73 @@ import Testing
 @testable import HerdrUI
 
 @MainActor @Suite(.serialized) struct HerdrCLIExecutionTests {
+    @Test func originalSpaceCLIUsesRetainedEngineModelsAndAuthenticatedFocus() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let worker = makeWorker()
+        let agents = ["Desk", "Other"].enumerated().map { index, workspace in
+            HerdrAgent.make(
+                machineID: "local", machineName: "Synthetic Mac", machineIsLocal: true,
+                sshTarget: nil, session: "fixture", pane: "p\(index)", kind: "Synthetic tool",
+                status: .working, title: workspace, workspace: workspace, cwd: "/tmp/fixture")
+        }
+        worker.store.hosts = [
+            .init(
+                id: "local", name: "Synthetic Mac", isLocal: true,
+                herdrPresent: true, reachable: true, agents: agents)
+        ]
+        let groups = HerdrAgentSpace.group(agents)
+        var presentations: [HerdrUIPresentation] = []
+        for group in groups {
+            let value = try JSONDecoder().decode(
+                HerdrUIPresentation.self,
+                from: await worker.execute(
+                    "herdr.ui.present",
+                    payload: JSONSerialization.data(withJSONObject: [
+                        "kind": "space", "id": group.id,
+                    ])))
+            presentations.append(value)
+        }
+        #expect(worker.spaces.listed().isEmpty)
+        for value in presentations {
+            _ = try await worker.execute(
+                "herdr.ui.presentation.admit",
+                payload: JSONSerialization.data(
+                    withJSONObject: ["token": value.token.uuidString]))
+        }
+        let missing = try await HerdrCLIExecution.run(
+            ExtensionCLIRequest(arguments: ["space", "terminal"]), worker: worker)
+        #expect(
+            missing.exitCode != 0 && missing.stderr.contains("more than one space window is open"))
+        let desk = try #require(presentations.first { $0.title == "Desk" })
+        _ = try await worker.execute(
+            "herdr.ui.presentation.focus",
+            payload: JSONSerialization.data(
+                withJSONObject: ["token": desk.token.uuidString, "key": true]))
+        let terminal = try await HerdrCLIExecution.run(
+            ExtensionCLIRequest(arguments: ["space", "terminal", "--json"]), worker: worker)
+        #expect(
+            terminal.exitCode == 0 && terminal.stderr.isEmpty
+                && terminal.stdout.contains("opened a terminal"))
+        #expect(worker.spaces.listed().first { $0.title == "Desk" }?.tabs == 2)
+        let split = try await HerdrCLIExecution.run(
+            ExtensionCLIRequest(arguments: [
+                "space", "split", "--window", "desk", "--side", "down", "--json",
+            ]), worker: worker)
+        #expect(split.exitCode == 0 && split.stdout.contains("split bottom"))
+        #expect(worker.spaces.listed().first { $0.title == "Desk" }?.panes == 3)
+        await #expect(throws: ExtensionPeerError.self) {
+            try await worker.execute(
+                "herdr.ui.presentation.close",
+                payload: JSONSerialization.data(withJSONObject: ["token": UUID().uuidString]))
+        }
+        _ = try await worker.execute(
+            "herdr.ui.presentation.close",
+            payload: JSONSerialization.data(withJSONObject: ["token": desk.token.uuidString]))
+        #expect(worker.spaces.listed().count == 1)
+        await worker.shutdown()
+        #expect(worker.spaces.listed().isEmpty)
+    }
+
     @Test func ownedStreamsExecuteOriginalCommandsWithRetainedOwnerContext() async throws {
         defer { HerdrWorkOwnership.enable() }
         let worker = makeWorker()

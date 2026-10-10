@@ -94,6 +94,7 @@ final class HerdrStore {
     static let boardID = "board"
     var terminalClient: OwnedTerminalClient.Invoke?
     var uiClient: HerdrUIClient?
+    var ownsSpaceAgent: @MainActor (String) -> Bool = { _ in false }
     @ObservationIgnored weak var uiActivity: AgentActivityMonitor?
     private var uiBaseline = HerdrUILayoutState(
         tabs: [], selected: HerdrStore.boardID, views: [:], arrangements: [])
@@ -1682,7 +1683,7 @@ final class HerdrStore {
         if case .space = item { return false }
         let item = normalized(item)
         if case let .agent(agent) = item, session(agent.id) == nil,
-            HerdrSpaceWindow.holds(agent: agent.id)
+            ownsSpaceAgent(agent.id)
         {
             return false
         }

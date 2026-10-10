@@ -29,6 +29,7 @@ import Foundation
         @MainActor (PaneTarget, HerdrStore) async throws -> TerminalLaunchRequest
     private lazy var uiHookPlans = HerdrUIHookPlans(
         files: activity.hookFiles, installer: activityInstaller)
+    lazy var spaces = HerdrSpaceSessions(store: store)
     private lazy var uiEngine = HerdrUIEngine(worker: self)
     private var maintenance: Task<Void, Never>?
 
@@ -82,6 +83,7 @@ import Foundation
         self.send = send
         self.prepareShell = prepareShell
         HerdrWorkOwnership.enable()
+        ownedStore.ownsSpaceAgent = { [weak self] in self?.spaces.holds($0) ?? false }
     }
 
     func start() async {
@@ -240,8 +242,11 @@ import Foundation
             guard Set(object.keys) == ["agentID"], let id = object["agentID"] as? String,
                 let agent = currentAgent(id)
             else { throw ExtensionPeerError.invalidRequest }
-            store.open(agent)
-            guard let tab = store.session(id) else { throw ExtensionPeerError.unavailable }
+            let retained = spaces.agentTab(id) ?? store.detachedTab(id: id) ?? store.session(id)
+            if retained == nil { store.open(agent) }
+            guard let tab = retained ?? store.session(id) else {
+                throw ExtensionPeerError.unavailable
+            }
             try await store.connectTerminal(for: tab)
             try Task.checkCancellation()
             guard !isStopped else { throw ExtensionPeerError.unavailable }
@@ -271,8 +276,11 @@ import Foundation
                 let number = object["restart"] as? NSNumber,
                 CFGetTypeID(number) == CFBooleanGetTypeID()
             else { throw ExtensionPeerError.invalidRequest }
-            store.open(agent)
-            guard let tab = store.session(id) else { throw ExtensionPeerError.unavailable }
+            let retained = spaces.agentTab(id) ?? store.detachedTab(id: id) ?? store.session(id)
+            if retained == nil { store.open(agent) }
+            guard let tab = retained ?? store.session(id) else {
+                throw ExtensionPeerError.unavailable
+            }
             await store.prepareDiff(
                 for: tab, appearance: appearance,
                 restarting: number.boolValue, launchEnabled: true)
@@ -375,7 +383,13 @@ import Foundation
 
     func currentAgent(_ id: String) -> HerdrAgent? {
         guard !isStopped, !id.isEmpty, id.utf8.count <= 512 else { return nil }
-        return store.agents.first { $0.id == id }
+        if let agent = store.agents.first(where: { $0.id == id }) { return agent }
+        guard
+            let terminal = store.hosts.map({ HerdrMachineTerminal.agent(for: $0) }).first(where: {
+                $0.id == id
+            })
+        else { return nil }
+        return store.session(id)?.agent ?? store.detachedTab(id: id)?.agent ?? terminal
     }
 
     func prepareDisable() async throws {
@@ -394,6 +408,7 @@ import Foundation
         guard !isStopped else { return }
         isStopped = true
         terminalSessions.stopAll()
+        spaces.stopAll()
         uiHookPlans.shutdown()
         await catalogs.shutdown()
         for selection in shells.values { selection.holder.stop() }

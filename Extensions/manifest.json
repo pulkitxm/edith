@@ -2842,7 +2842,8 @@
         "Extensions/herdr/ViewModels/HerdrUIProjection.swift",
         "Extensions/herdr/ViewModels/HerdrUIPanelProjection.swift",
         "Extensions/herdr/ViewModels/HerdrUIHookProjection.swift",
-        "ViewModels/HerdrUILaunchSettings.swift"
+        "ViewModels/HerdrUILaunchSettings.swift",
+        "ViewModels/HerdrSpaceSessions.swift"
       ]
     },
     "resources": {
