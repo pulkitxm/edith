@@ -3,7 +3,7 @@ import EdithExtensionUI
 import AppKit
 import Foundation
 
-enum ChromeReadiness: Equatable, Sendable {
+enum ChromeReadiness: Equatable, Sendable, Codable {
     case notInstalled
     case unreadable(String)
     case notDefault(currentBrowser: String?)

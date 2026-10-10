@@ -519,6 +519,10 @@ ci-extension-music:
 	swift format lint --strict --parallel --recursive Extensions/music
 	fixture=$$(mktemp -d /tmp/edith-music-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/data" EDITH_SHARED_DEFAULTS_SUITE="edith.music.tests.$$(basename "$$fixture")" swift test --package-path Extensions/music --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
+.PHONY: ci-extension-notch-native
+ci-extension-notch-native:
+	@fixture=$$(mktemp -d /tmp/edith-notch-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_BACKGROUND_TESTING=1 EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/data" EDITH_SHARED_DEFAULTS_SUITE="com.pulkit.edith.tests.notch.$$(basename "$$fixture")" swift test --package-path Extensions/notchShelf --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
 .PHONY: ci-extension-presenter
 ci-extension-presenter:
 	swift format lint --strict --parallel --recursive Extensions/presenter

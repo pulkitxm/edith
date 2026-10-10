@@ -46,13 +46,17 @@ final class BrowserTab: Identifiable {
         return "\(scheme)://\(host):\(port)"
     }
 
-    func close() {
+    @discardableResult func close() -> Task<Void, Never> {
         observations.forEach { $0.invalidate() }
         observations = []
         webView.stopLoading()
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
         webView.removeFromSuperview()
+        return Task { [webView] in
+            await webView.setAllMediaPlaybackSuspended(true)
+            await webView.closeAllMediaPresentations()
+        }
     }
 
     nonisolated private func syncOnMain() {

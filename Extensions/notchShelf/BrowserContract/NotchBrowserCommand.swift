@@ -1,15 +1,6 @@
 import EdithExtensionSupport
 import Foundation
 
-public enum NotchBrowserIPC {
-    public static let requestKey = "request"
-    public static let requestIDKey = "requestID"
-    public static let deadlineKey = "deadline"
-    public static let snapshotKey = "snapshot"
-    public static let okKey = "ok"
-    public static let errorKey = "error"
-}
-
 public struct NotchBrowserProfileState: Codable, Equatable, Sendable {
     public var id: String
     public var name: String
@@ -77,13 +68,6 @@ public struct NotchBrowserSnapshot: Codable, Equatable, Sendable {
         return try? JSONDecoder().decode(NotchBrowserSnapshot.self, from: Data(text.utf8))
     }
 
-    public func resultPayload(requestID: String?, error: String? = nil) -> [String: Any] {
-        var payload: [String: Any] = [NotchBrowserIPC.okKey: error == nil]
-        if let requestID { payload[NotchBrowserIPC.requestIDKey] = requestID }
-        if let encoded { payload[NotchBrowserIPC.snapshotKey] = encoded }
-        if let error { payload[NotchBrowserIPC.errorKey] = error }
-        return payload
-    }
 }
 
 public enum NotchBrowserRequest: Codable, Equatable, Sendable {
@@ -109,40 +93,4 @@ public enum NotchBrowserRequest: Codable, Equatable, Sendable {
     public static func decode(_ text: String) -> NotchBrowserRequest? {
         try? JSONDecoder().decode(NotchBrowserRequest.self, from: Data(text.utf8))
     }
-}
-
-public struct NotchBrowserRuntimeRequest: Equatable, Sendable {
-    public let request: NotchBrowserRequest
-    public let requestID: String
-    public let deadline: Date
-
-    public init(
-        request: NotchBrowserRequest, requestID: String = UUID().uuidString, deadline: Date
-    ) {
-        self.request = request
-        self.requestID = requestID
-        self.deadline = deadline
-    }
-
-    public init?(payload: [AnyHashable: Any]) {
-        guard let text = payload[NotchBrowserIPC.requestKey] as? String,
-            let request = NotchBrowserRequest.decode(text),
-            let requestID = payload[NotchBrowserIPC.requestIDKey] as? String,
-            UUID(uuidString: requestID) != nil,
-            let deadline = payload[NotchBrowserIPC.deadlineKey] as? TimeInterval, deadline.isFinite
-        else { return nil }
-        self.init(
-            request: request, requestID: requestID, deadline: Date(timeIntervalSince1970: deadline))
-    }
-
-    public var payload: [String: Any]? {
-        guard let encoded = request.encoded else { return nil }
-        return [
-            NotchBrowserIPC.requestKey: encoded,
-            NotchBrowserIPC.requestIDKey: requestID,
-            NotchBrowserIPC.deadlineKey: deadline.timeIntervalSince1970,
-        ]
-    }
-
-    public func isLive(at now: Date = Date()) -> Bool { now < deadline }
 }

@@ -1,7 +1,7 @@
 import EdithExtensionSupport
 import Foundation
 
-public struct ChromeProfile: Identifiable, Equatable, Hashable, Sendable {
+public struct ChromeProfile: Identifiable, Equatable, Hashable, Sendable, Codable {
     public init(
         directory: String, name: String, email: String?, pictureURL: URL?, colorARGB: UInt32?
     ) {

@@ -5,7 +5,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct NotchShelfContentView: View {
-    var controller: NotchShelfController
+    var controller: any NotchChromeFacade
     var displayID: CGDirectDisplayID = 0
     var collapsedBase: CGSize = NotchGeometry.fallbackSize
     var isBuiltin = true
@@ -42,7 +42,7 @@ struct NotchShelfContentView: View {
             .onReceive(
                 DistributedNotificationCenter.default().publisher(
                     for: Notification.Name(NotchWorkerIPC.Name.settingsChanged))
-            ) { _ in controller.layouts.reload() }
+            ) { _ in controller.chromeLayouts.reload() }
             .onContinuousHover { phase in
                 switch phase {
                 case .active(let point):
@@ -151,14 +151,20 @@ struct NotchShelfContentView: View {
 
     private var collapsed: some View {
         HStack(spacing: 0) {
-            glance(controller.leadingGlance)
+            glance(controller.leadingGlance, leading: true)
             Color.clear.frame(width: collapsedBase.width, height: collapsedBase.height)
-            glance(controller.trailingGlance)
+            glance(controller.trailingGlance, leading: false)
         }
     }
 
-    @ViewBuilder private func glance(_ value: NotchSurfaceGlance?) -> some View {
-        if let value {
+    @ViewBuilder private func glance(_ value: NotchSurfaceGlance?, leading: Bool) -> some View {
+        if let value, value.source == .music, let client = controller as? NotchChromeClient {
+            NotchNativeSlotView(
+                client: client, tile: SurfaceTile(.music),
+                kind: leading ? .collapsedLeading : .collapsedTrailing
+            )
+            .frame(width: controller.glanceWingWidth, height: collapsedBase.height)
+        } else if let value {
             Button {
                 controller.openGlance(value, on: displayID)
             } label: {
@@ -181,7 +187,7 @@ struct NotchShelfContentView: View {
         } else {
             VStack(spacing: 6) {
                 header
-                tabContent
+                NotchSlotViewport { tabContent }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .padding(.top, collapsedBase.height)
@@ -212,6 +218,12 @@ struct NotchShelfContentView: View {
 
     private var header: some View {
         HStack(spacing: 4) {
+            if let client = controller as? NotchChromeClient,
+                client.activeIDs.contains("music"), !client.hides(.music)
+            {
+                NotchNativeSlotView(client: client, tile: SurfaceTile(.music), kind: .header)
+                    .frame(width: 24, height: 24).padding(.trailing, 6)
+            }
             ScrollViewReader { reader in
                 ScrollView(.horizontal) {
                     HStack(spacing: 4) {
@@ -228,7 +240,9 @@ struct NotchShelfContentView: View {
                 Menu {
                     ForEach(SurfacePreset.allCases) { preset in
                         Button {
-                            controller.layouts.update(.notch) { $0 = preset.layout(for: .notch) }
+                            controller.chromeLayouts.update(.notch) {
+                                $0 = preset.layout(for: .notch)
+                            }
                         } label: {
                             Label(preset.title, systemImage: preset.icon)
                         }
@@ -239,15 +253,15 @@ struct NotchShelfContentView: View {
                 .menuStyle(.borderlessButton).fixedSize().help("Notch presets")
                 if controller.layoutEditing {
                     Button {
-                        controller.layouts.undo(.notch)
+                        controller.chromeLayouts.undo(.notch)
                     } label: {
                         Image(systemName: "arrow.uturn.backward")
-                    }.disabled(!controller.layouts.canUndo(.notch)).help("Undo layout change")
+                    }.disabled(!controller.chromeLayouts.canUndo(.notch)).help("Undo layout change")
                     Button {
-                        controller.layouts.redo(.notch)
+                        controller.chromeLayouts.redo(.notch)
                     } label: {
                         Image(systemName: "arrow.uturn.forward")
-                    }.disabled(!controller.layouts.canRedo(.notch)).help("Redo layout change")
+                    }.disabled(!controller.chromeLayouts.canRedo(.notch)).help("Redo layout change")
                 }
                 Button {
                     controller.layoutEditing.toggle()
@@ -311,7 +325,7 @@ struct NotchShelfContentView: View {
         .onDrag { SurfaceTabDrag.provider(tab.rawValue) }
         .onDrop(of: [SurfaceTabDrag.type], isTargeted: nil) { providers in
             SurfaceTabDrag.accept(providers) { source in
-                controller.layouts.update(.notch) { layout in
+                controller.chromeLayouts.update(.notch) { layout in
                     guard source != tab.rawValue else { return }
                     layout.tabOrder.removeAll { $0 == source }
                     layout.tabOrder.insert(
@@ -324,7 +338,7 @@ struct NotchShelfContentView: View {
     }
 
     private var visibleTabs: [NotchTab] {
-        _ = controller.layouts.notch
+        _ = controller.chromeLayouts.notch
         return controller.visibleTabs
     }
 
@@ -336,7 +350,12 @@ struct NotchShelfContentView: View {
         case .files: filesCanvas
         case .clipboard: providerTab(SurfaceTile(.ability("clipboard")))
         case .audio: providerTab(SurfaceTile(.ability("audioMixer")))
-        case .camera: NotchCameraTab()
+        case .camera:
+            if let client = controller as? NotchChromeClient, let camera = client.camera {
+                NotchRemoteCameraTab(model: camera)
+            } else {
+                NotchCameraTab()
+            }
         }
     }
 
@@ -348,9 +367,16 @@ struct NotchShelfContentView: View {
             configured.sourceIDs = controller.surfaceLayout.notchAgentSources
             configured.includeSubagents = controller.surfaceLayout.notchIncludeSubagents
         }
-        return ScrollView {
-            NotchSurfaceCard(controller: controller, tile: configured)
-                .padding(.horizontal, 12).padding(.bottom, 12)
+        return Group {
+            if let client = controller as? NotchChromeClient {
+                NotchNativeSlotView(client: client, tile: configured, kind: .providerTab)
+                    .padding(.horizontal, 12).padding(.bottom, 12)
+            } else {
+                ScrollView {
+                    NotchSurfaceCard(controller: controller, tile: configured)
+                        .padding(.horizontal, 12).padding(.bottom, 12)
+                }
+            }
         }
     }
 
@@ -419,7 +445,7 @@ struct NotchRiseFade: ViewModifier, Animatable {
 
 private struct NotchAlertDropView: View {
     let alert: NotchAlert
-    var controller: NotchShelfController
+    var controller: any NotchChromeFacade
     let glide: Animation
     @State private var appeared = false
 
@@ -480,7 +506,7 @@ extension Color {
 
 private struct ShelfItemView: View {
     let item: ShelfItem
-    var controller: NotchShelfController
+    var controller: any NotchChromeFacade
     let canvasSize: CGSize
     @State private var handedOffToSystemDrag = false
     @State private var thumbnail: NSImage?
@@ -494,13 +520,13 @@ private struct ShelfItemView: View {
             .aspectRatio(contentMode: .fit)
             .frame(width: 38, height: 38)
             .clipShape(RoundedRectangle(cornerRadius: 4))
-            .opacity(controller.privacy.hides(.ability("notchShelf")) ? 0 : 1)
+            .opacity(controller.hides(.ability("notchShelf")) ? 0 : 1)
             Text(item.name)
                 .font(.system(size: 10))
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .frame(width: 64)
-                .redacted(reason: controller.privacy.hides(.ability("notchShelf")) ? .privacy : [])
+                .redacted(reason: controller.hides(.ability("notchShelf")) ? .privacy : [])
         }
         .padding(4)
         .background(

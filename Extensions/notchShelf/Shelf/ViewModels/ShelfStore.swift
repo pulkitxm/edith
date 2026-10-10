@@ -38,7 +38,7 @@ final class ShelfStore {
     }
 
     private(set) var items: [ShelfItem] = []
-    private let root: URL
+    let root: URL
     private var changeObserver: NSObjectProtocol?
     private var incomingDirectories: [UUID: ShelfIncomingDirectory] = [:]
     private var retainedActionSelection: ShelfPinnedSelection?
@@ -46,6 +46,7 @@ final class ShelfStore {
     private var indexRefresh: Task<Void, Never>?
     private var mutationGeneration = 0
     private var stopped = false
+    var actionSelectionRetained: Bool { retainedActionSelection != nil }
     var onExternalChange: (@MainActor () -> Void)?
 
     init(root: URL = ShelfIndex.root) {

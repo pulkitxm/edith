@@ -3,6 +3,13 @@ import Foundation
 
 extension NotchShelfController {
     func execute(_ command: String, payload: Data) async throws -> Data {
+        guard isRunning else { throw ExtensionPeerError.unavailable }
+        if [
+            "notch.settings.read", "notch.settings.write", "notch.customize",
+            "notch.browser.detach",
+        ].contains(command) {
+            return try executeSettings(command, payload: payload)
+        }
         switch command {
         case "surface.snapshot":
             let request = try SurfaceSnapshotRequest.decode(payload, providerID: "notchShelf")

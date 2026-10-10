@@ -4,7 +4,7 @@ import CryptoKit
 import Foundation
 import WebKit
 
-struct ChromeProfileSnapshot: Sendable {
+struct ChromeProfileSnapshot: Sendable, Codable {
     let cookies: [ChromeCookie]
     let localStorage: [String: [String: String]]
 

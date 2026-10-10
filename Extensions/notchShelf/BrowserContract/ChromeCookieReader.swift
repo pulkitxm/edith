@@ -2,14 +2,14 @@ import EdithExtensionSupport
 import Foundation
 import SQLite3
 
-public enum ChromeSameSite: Int, Sendable {
+public enum ChromeSameSite: Int, Sendable, Codable {
     case unspecified = -1
     case none = 0
     case lax = 1
     case strict = 2
 }
 
-public struct ChromeCookie: Equatable, Sendable {
+public struct ChromeCookie: Equatable, Sendable, Codable {
     public let host: String
     public let name: String
     public let value: String
