@@ -39,9 +39,15 @@ public enum HostCoreAgentRouteCLI {
             else {
                 throw HostCoreCommandFailure("The original agent provider was disabled or changed.")
             }
+            let checkedInvoke: HostCLIProviderRegistry.Invoke = { request in
+                try await registry.validateCurrent(provider)
+                let data = try await invoke(request)
+                try await registry.validateCurrent(provider)
+                return data
+            }
             let stream = try await HostCLIStream.start(
                 owner: owner, operation: operation, request: context,
-                maximumDuration: command.streamDeadline ?? 1800, invoke: invoke)
+                maximumDuration: command.streamDeadline ?? 1800, invoke: checkedInvoke)
             if let streamWrite {
                 let code = try await stream.consume(write: streamWrite)
                 return try ExtensionCLIReply(stdout: "", stderr: "", exitCode: code)

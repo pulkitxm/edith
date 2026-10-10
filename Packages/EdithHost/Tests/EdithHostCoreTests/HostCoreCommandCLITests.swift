@@ -141,6 +141,14 @@ import Testing
         #expect(
             guide.exitCode == 0 && guide.stdout.contains("postTerminator")
                 && guide.stdout.contains("schedule"))
+        let completion = await fixture.cli.run([
+            "__complete", "--index", "4", "--", "ed", "agent", "tasks", "exec", "--",
+        ])
+        #expect(
+            completion.exitCode == 0
+                && completion.stdout.split(separator: "\n").map(String.init) == [
+                    "--detach", "--help", "--json", "--timeout",
+                ])
         let invalid = await fixture.cli.run(["agent", "tasks", "exec", "--", "relative-command"])
         #expect(invalid.exitCode == 2 && invalid.stdout.isEmpty)
         let unknown = await fixture.cli.run(["agent", "schedule", "rm", "missing"])

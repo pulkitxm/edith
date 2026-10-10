@@ -102,6 +102,15 @@ public enum HostCLIHelp {
         return lines.joined(separator: "\n")
     }
 
+    public static func completionOptions(_ route: [String]) -> [String] {
+        guard let arguments = find(coreCommand(), route: route)?.object?["arguments"]?.array else {
+            return []
+        }
+        return arguments.flatMap { $0.object?["names"]?.array ?? [] }.compactMap {
+            $0.object?["name"]?.string
+        }.map { "--" + $0 }
+    }
+
     public static var routes: [[String]] { definitions.map(\.route) }
 
     private static func coreCommand() -> HostCLIJSON {

@@ -64,6 +64,10 @@ public struct HostCoreOwnerCatalog: Codable, Sendable {
                 owner == "herdr" ? ["activity"] : []
             guard (2...12).contains(route.route.count), route.route[0] == "agent",
                 domains.contains(route.route[1]),
+                [
+                    ["agent", "activity"], ["agent", "activity", "status"],
+                    ["agent", "activity", "hook"],
+                ].contains(route.route),
                 route.route.dropFirst().allSatisfy({
                     !$0.isEmpty && $0.utf8.count <= 128
                         && $0.utf8.allSatisfy {
@@ -155,6 +159,18 @@ public struct HostCoreOwnerRegistry: Sendable {
         return Self(
             states: current, providers: providers.sorted { $0.state.id < $1.state.id },
             issues: issues, invoke: invoke)
+    }
+
+    public func validateCurrent(_ provider: Provider) async throws {
+        try Task.checkCancellation()
+        guard provider.identity.isAlive,
+            ExtensionProcessIdentity.read(provider.identity.pid) == provider.identity,
+            try await HostCLIProviderRegistry.states(invoke: invoke).contains(provider.state)
+        else {
+            throw HostCoreCommandFailure(
+                "The owning extension changed or was disabled.",
+                hint: "Retry after checking ed extensions status " + provider.state.id)
+        }
     }
 
     public func call<T: Decodable>(

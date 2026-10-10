@@ -538,9 +538,18 @@ public struct HostCommandCLI: Sendable {
         let registry = try? await HostCLIProviderRegistry.load(invoke: invoke)
         let routes =
             HostCLIHelp.routes
-            + (registry?.providers.flatMap { $0.catalog.allCommands.map(\.route) } ?? [])
+            + (registry?.providers.flatMap {
+                $0.catalog.allCommands.filter { $0.route != ["agent", "activity", "hook"] }.map(
+                    \.route)
+            } ?? [])
         var candidates = routes.filter { $0.starts(with: leading) && $0.count > leading.count }.map
         { $0[leading.count] }
+        if leading.starts(with: ["agent", "tasks"]) || leading.starts(with: ["agent", "schedule"]),
+            !leading.contains("--")
+        {
+            let route = Array(leading.prefix(3))
+            candidates += HostCLIHelp.completionOptions(route)
+        }
         if leading.count == 2, leading.first == "config",
             ["get", "set", "unset", "describe"].contains(leading[1])
         {
@@ -638,6 +647,9 @@ public struct HostCommandCLI: Sendable {
                 }
                 return data
             }
+        }
+        if arguments.first == "agent", !arguments.starts(with: ["agent", "activity", "hook"]) {
+            return Data()
         }
         var declaredInput = false
         if isatty(descriptor) == 0, let command = arguments.first,
