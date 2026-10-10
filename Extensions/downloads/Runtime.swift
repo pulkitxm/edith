@@ -12,6 +12,7 @@ final class ExtensionRuntime: NSObject {
     private var engineClient: ExtensionEngineClient?
     private var surface: DownloadsSurface?
     private let commands = ExtensionCommandRegistry()
+    private var cliStreams: ExtensionCLIStreams?
     private var stopped = false
     private var activeCalls = 0
     private var stoppingTask: Task<Void, Never>?
@@ -23,6 +24,14 @@ final class ExtensionRuntime: NSObject {
             }
             self.activeCalls += 1
             defer { self.activeCalls -= 1 }
+            if command.hasPrefix("downloads.cli.") {
+                if self.cliStreams == nil {
+                    self.cliStreams = try ExtensionCLIStreams(owner: "downloads")
+                }
+                guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
+                return try await DownloadsCLIExecution.stream(
+                    streams, operation: command, payload: payload, worker: worker.queue)
+            }
             if command == "downloads.cli" {
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
                 return try JSONEncoder().encode(
@@ -46,10 +55,13 @@ final class ExtensionRuntime: NSObject {
                 await stoppingTask.value; completion()
             }; return
         }
+        let streams = cliStreams; cliStreams = nil; streams?.stop()
         stopped = true
         commands.shutdown()
         let task = Task {
             await worker?.shutdown()
+            await streams?.stopAndWait()
+            await commands.shutdownAndWait()
             while activeCalls > 0 { await Task.yield() }
         }
         stoppingTask = task
@@ -109,6 +121,8 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": worker?.downloader.checkAvailability()
         case "stop":
+            let streams = cliStreams; cliStreams = nil; streams?.stop()
+            Task { await streams?.stopAndWait() }
             commands.shutdown()
             worker = nil
             surface = nil

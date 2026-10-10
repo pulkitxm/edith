@@ -222,8 +222,8 @@ import Foundation
             }
             let added = try await DownloadsCLIExecution.enqueue(
                 urls: parsed, prefix: prefix, kind: wanted, file: DownloadBridge.file,
-                outputDirectory: directory.map {
-                    URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath)
+                outputDirectory: try directory.map {
+                    try ExtensionCLIContext.resolvePath(($0 as NSString).expandingTildeInPath)
                 },
                 browser: cookieBrowser)
             let records = DownloadBridge.records()

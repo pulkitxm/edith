@@ -2,23 +2,43 @@ import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 
-@MainActor enum DownloadsCLIEnvironment {
-    static var worker = DownloadWorker.shared
-    static var records: [DownloadRecord] = []
+@MainActor final class DownloadsCLIRecords {
+    var records: [DownloadRecord]
+    init(_ records: [DownloadRecord]) { self.records = records }
 }
-
+@MainActor enum DownloadsCLIEnvironment {
+    @TaskLocal static var worker = DownloadWorker.shared
+    @TaskLocal static var storage: DownloadsCLIRecords?
+    static var records: [DownloadRecord] {
+        get { storage?.records ?? [] }
+        set { storage?.records = newValue }
+    }
+}
 @MainActor enum DownloadsCLIExecution {
+    private static func bind<Value>(_ worker: DownloadWorker, operation: () async throws -> Value)
+        async throws -> Value
+    {
+        let records = DownloadsCLIRecords(await worker.snapshot().records)
+        return try await DownloadsCLIEnvironment.$worker.withValue(worker) {
+            try await DownloadsCLIEnvironment.$storage.withValue(records) { try await operation() }
+        }
+    }
     static func run(_ request: ExtensionCLIRequest, worker: DownloadWorker) async throws
         -> ExtensionCLIReply
     {
         try request.validate()
-        let old = DownloadsCLIEnvironment.worker
-        let oldRecords = DownloadsCLIEnvironment.records
-        DownloadsCLIEnvironment.worker = worker
-        DownloadsCLIEnvironment.records = await worker.snapshot().records
-        defer { DownloadsCLIEnvironment.worker = old; DownloadsCLIEnvironment.records = oldRecords }
-        return try await ExtensionCLIExecution.run(
-            DownloadCommand.self, arguments: request.arguments)
+        return try await bind(worker) {
+            try await ExtensionCLIExecution.run(DownloadCommand.self, request: request)
+        }
+    }
+    static func stream(
+        _ streams: ExtensionCLIStreams, operation: String, payload: Data, worker: DownloadWorker
+    ) async throws -> Data {
+        try await bind(worker) {
+            try streams.invoke(
+                DownloadCommand.self, operation: operation, prefix: "downloads.cli",
+                payload: payload)
+        }
     }
 
     static func record(at index: Int) throws -> DownloadRecord {
