@@ -118,9 +118,12 @@ import Testing
     }
 
     @Test func runtimePublishesBothCatalogsAndHelpWithoutStartingBrowserOrPanel() async throws {
+        let fixture = try NotchPanelFixture()
+        defer { fixture.clean() }
         var ownersCreated = 0
         let runtime = ExtensionRuntime(
-            contextSource: { nil }, connectedDisplays: { [:] },
+            fixtureAdmission: { _ in nil },
+            contextSource: { fixture.context }, connectedDisplays: { [:] },
             createController: { _, _ in
                 ownersCreated += 1; fatalError("No owner is allowed")
             })
@@ -143,6 +146,15 @@ import Testing
         let data = try await invoke("notchShelf.cli.catalog", [String: String]())
         let catalog = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect((catalog["parserHelp"] as? [[String: Any]])?.count == 2)
+        await #expect(throws: (any Error).self) {
+            try await invoke("browser.cli", ExtensionCLIRequest(arguments: ["--help"]))
+        }
+        let suite = try #require(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
+        let started =
+            runtime.execute(["operation": "start", "defaultsSuite": suite]) as? NSDictionary
+        try #require(started?["ok"] as? Bool == true)
+        let status = runtime.execute(["operation": "status"]) as? NSDictionary
+        #expect(status?["running"] as? Bool == false)
         let help = try JSONDecoder().decode(
             ExtensionCLIReply.self,
             from: await invoke("browser.cli", ExtensionCLIRequest(arguments: ["--help"])))

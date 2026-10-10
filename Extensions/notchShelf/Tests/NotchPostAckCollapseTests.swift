@@ -15,6 +15,7 @@ struct NotchPostAckCollapseTests {
         let otherPresentation = UUID()
         var owner: NotchShelfController?
         let runtime = ExtensionRuntime(
+            fixtureAdmission: { _ in nil },
             contextSource: { fixture.context },
             connectedDisplays: {
                 [42: CGSize(width: 1280, height: 900), 43: CGSize(width: 1600, height: 1000)]
@@ -28,7 +29,9 @@ struct NotchPostAckCollapseTests {
                 return controller
             })
         let suite = try #require(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
-        _ = runtime.execute(["operation": "start", "defaultsSuite": suite])
+        let started =
+            runtime.execute(["operation": "start", "defaultsSuite": suite]) as? NSDictionary
+        try #require(started?["ok"] as? Bool == true)
         let attach = NotchPanelAttach(
             ownershipID: fixture.ownership, version: "1",
             displays: [
