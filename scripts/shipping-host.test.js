@@ -62,6 +62,15 @@ test.skipIf(!fixture || process.platform !== "darwin")(
         expect(
           JSON.parse(verified.stdout.toString()).extensionPayloadBytes,
         ).toBe(0);
+        const artwork = join(
+          app,
+          "Contents/Resources/EdithHost_EdithHost.bundle/MarketplaceArtwork.lzma",
+        );
+        expect(readFileSync(artwork)).toEqual(
+          readFileSync(
+            "Packages/EdithHost/Sources/EdithHost/Resources/MarketplaceArtwork.lzma",
+          ),
+        );
         const sparkle = join(app, "Contents/Frameworks/Sparkle.framework");
         const inspectLinks = (directory) => {
           for (const name of readdirSync(directory)) {

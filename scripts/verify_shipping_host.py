@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 import plistlib
@@ -55,6 +56,13 @@ def inspect_layout(bundle, release=False, launcher_required=True):
     assert {path.name for path in (bundle / 'Contents/MacOS').iterdir()} == ({'Edith', 'ed'} if launcher_required else {'Edith'}), 'Unexpected host executable'
     assert {path.name for path in (bundle / 'Contents/Frameworks').iterdir()} == {'Sparkle.framework'}, 'Feature framework in host'
     resources = {'AppIcon.icns', 'index.json', 'ed-launcher'} if launcher_required else {'AppIcon.icns', 'index.json'}
+    resources.add('EdithHost_EdithHost.bundle')
+    artwork = bundle / 'Contents/Resources/EdithHost_EdithHost.bundle'
+    assert artwork.is_dir() and not artwork.is_symlink(), 'Invalid artwork resource bundle'
+    assert {path.name for path in artwork.iterdir()} == {'MarketplaceArtwork.lzma'}, 'Unexpected artwork resources'
+    packed = artwork / 'MarketplaceArtwork.lzma'
+    assert packed.is_file() and not packed.is_symlink() and packed.stat().st_size == 220_928, 'Invalid artwork archive'
+    assert hashlib.sha256(packed.read_bytes()).hexdigest() == '101f6c1abdaf28fd4b8f0b10b80a0aaa0b43bd4cb3c37e472bf02aac763079db', 'Invalid artwork content'
     assert {path.name for path in (bundle / 'Contents/Resources').iterdir()} == resources, 'Feature resources in host'
     if launcher_required:
         launcher = bundle / 'Contents/MacOS/ed'

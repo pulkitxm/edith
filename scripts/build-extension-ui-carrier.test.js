@@ -192,6 +192,12 @@ describe("extension UI carriers", () => {
         const host = join(root, "Edith.app");
         const contents = join(host, "Contents");
         await mkdir(join(contents, "MacOS"), { recursive: true });
+        const artwork = join(contents, "Resources/EdithHost_EdithHost.bundle");
+        await mkdir(artwork, { recursive: true });
+        await copyFile(
+          "Packages/EdithHost/Sources/EdithHost/Resources/MarketplaceArtwork.lzma",
+          join(artwork, "MarketplaceArtwork.lzma"),
+        );
         const executable = join(contents, "MacOS/Edith");
         await copyFile(process.env.EDITH_UI_CARRIER_TEMPLATE, executable);
         const writePlist = (path, value) =>
@@ -258,6 +264,23 @@ describe("extension UI carriers", () => {
           development: true,
         });
         expect(built.executableSHA256).toBe(digest);
+        expect(
+          await readFile(
+            join(
+              payload,
+              "ExtensionCarrier.app/Contents/Resources/EdithHost_EdithHost.bundle/MarketplaceArtwork.lzma",
+            ),
+          ),
+        ).toEqual(await readFile(join(artwork, "MarketplaceArtwork.lzma")));
+        expect(
+          await readFile(
+            join(
+              payload,
+              "ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/EdithHost_EdithHost.bundle/MarketplaceArtwork.lzma",
+            ),
+          ),
+        ).toEqual(await readFile(join(artwork, "MarketplaceArtwork.lzma")));
+
         expect(
           createHash("sha256")
             .update(await readFile(executable))

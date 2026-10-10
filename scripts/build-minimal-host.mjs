@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
   copyFile,
+  cp,
   mkdir,
   readdir,
   readFile,
@@ -114,6 +115,11 @@ await copyFile(
 await copyFile(
   join(packageDirectory, "Sources/EdithHostCore/Resources/index.json"),
   join(contents, "Resources/index.json"),
+);
+await cp(
+  join(products, "EdithHost_EdithHost.bundle"),
+  join(contents, "Resources/EdithHost_EdithHost.bundle"),
+  { recursive: true, dereference: false },
 );
 await mkdir(join(contents, "Library/LaunchDaemons"), { recursive: true });
 await writeFile(

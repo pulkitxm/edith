@@ -30,6 +30,7 @@ let package = Package(
                 "HostBootstrap", "EdithHostCore", .product(name: "Sparkle", package: "Sparkle"),
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
             ],
+            resources: [.copy("Resources/MarketplaceArtwork.lzma")],
             linkerSettings: [
                 .unsafeFlags([
                     "-Xlinker", "-e", "-Xlinker", "_NSExtensionMain", "-Xlinker",
