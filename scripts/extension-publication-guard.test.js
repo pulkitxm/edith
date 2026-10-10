@@ -736,3 +736,96 @@ test("the actual no-argument publisher finalizes a zero-build draft and refuses 
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("an acknowledged-lost pointer edit stays complete and the next plan reads the new trusted revision", async () => {
+  const live = current();
+  const assets = structuredClone(live.release.assets);
+  await expect(
+    promoteExtensionCatalog({
+      pointer: nextPointer,
+      verifyState: () =>
+        verifiedPublicationState(options({ readCatalog: async () => live })),
+      verifyAsset: async () => {},
+      updatePointer: async (_id, body) => {
+        live.release.body = body;
+        live.pointer = nextPointer;
+        live.asset = live.release.assets.find(
+          (asset) => asset.name === nextPointer.assetName,
+        );
+        live.data = nextData;
+        throw new Error("response lost after atomic edit");
+      },
+    }),
+  ).rejects.toThrow("response lost");
+  expect(live.release.assets).toEqual(assets);
+  expect(
+    (
+      await publicationPlanCatalog({
+        publicKey: rawKey,
+        readCatalog: async () => live,
+      })
+    ).revision,
+  ).toBe(2);
+  await expect(
+    verifiedPublicationState(options({ readCatalog: async () => live })),
+  ).rejects.toThrow("catalog changed");
+});
+
+test("deletion or substitution of the staged immutable asset blocks the final pointer edit", async () => {
+  for (const replacement of [
+    [],
+    [{ id: 99, name: candidate, size: nextPointer.bytes }],
+  ]) {
+    const live = current();
+    let reads = 0;
+    let writes = 0;
+    await expect(
+      promoteExtensionCatalog({
+        pointer: nextPointer,
+        verifyState: async () => {
+          reads++;
+          return reads === 1
+            ? live
+            : {
+                ...live,
+                release: {
+                  ...live.release,
+                  assets: [live.asset, ...replacement],
+                },
+              };
+        },
+        verifyAsset: async () => {},
+        updatePointer: async () => {
+          writes++;
+        },
+      }),
+    ).rejects.toThrow("release changed");
+    expect(writes).toBe(0);
+  }
+});
+
+test("pointer publication reads reject wrong immutable bytes and signed revision mismatches", async () => {
+  const live = current();
+  for (const change of [
+    { sha256: "a".repeat(64) },
+    { revision: 2, assetName: candidate },
+  ]) {
+    const pointer = { ...live.pointer, ...change };
+    await expect(
+      publicationPlanningState({
+        publicKey: rawKey,
+        readCatalog: () =>
+          readPublicationCatalog("synthetic/fixture", "catalog", {
+            loadRelease: () => ({
+              ...live.release,
+              body: JSON.stringify(pointer),
+              assets: [{ ...live.asset, name: pointer.assetName }],
+            }),
+            downloadAsset: async (options) => {
+              writeFileSync(options.destination, live.data);
+            },
+          }),
+      }),
+    ).rejects.toThrow();
+  }
+});
