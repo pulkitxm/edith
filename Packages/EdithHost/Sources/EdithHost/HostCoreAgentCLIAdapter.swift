@@ -16,6 +16,7 @@ import Foundation
             return service
         }
         return .init(
+            ownedJobs: { core()?.cliOwnedJobIDs ?? [] },
             status: { try await service().cliStatus() }, jobs: { try await service().cliJobs() },
             restart: { try await service().cliRestart() },
             logs: { try await service().cliLogs(last: $0) },

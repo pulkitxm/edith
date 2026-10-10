@@ -64,6 +64,40 @@ import Testing
         await runtime.shutdown()
     }
 
+    @Test func registeredCoreControlDoesNotBlockOnAStatusRoundTrip() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "core-control-" + UUID().uuidString)
+        let identity = try HostIdentity(
+            identifier: "com.pulkit.edith.tests.core-" + UUID().uuidString, supportDirectory: root)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let runtime = try HostCoreRuntime(identity: identity)
+        let registered = Set(try #require(runtime.snapshot().agent).jobs.map(\.id))
+        var reads = 0
+        let cli = HostCoreAgentCLIFactory.make(
+            local: .init(
+                ownedJobs: { registered },
+                status: {
+                    throw HostCoreCommandFailure("The controlled status channel is paused.")
+                },
+                jobs: {
+                    reads += 1;
+                    throw HostCoreCommandFailure("The controlled status channel is paused.")
+                },
+                restart: {}, logs: { _ in [] }, events: { [] },
+                run: { job in
+                    #expect(job == "storage.inspect"); _ = try await runtime.inspect()
+                },
+                cancel: { _ in throw HostCoreCommandFailure("The owned job is not running.") }),
+            invoke: { _ in Data("[]".utf8) })
+        let reply = try await cli.execute(["run", "storage.inspect"])
+        #expect(reply.stdout == "queued storage.inspect\n" && reply.exitCode == 0)
+        #expect(runtime.snapshot().agent?.jobs.first { $0.id == "storage.inspect" }?.runCount == 1)
+        #expect(reads == 0)
+        let cancellation = try await cli.execute(["cancel", "storage.inspect"])
+        #expect(cancellation.exitCode == 4 && cancellation.stdout.isEmpty)
+        await runtime.shutdown()
+    }
+
     @Test func unavailableMutationsNeverEmitSuccess() async throws {
         let failure = HostCoreCommandFailure(
             "background agent", hint: "No owned core process is running.")

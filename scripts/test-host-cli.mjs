@@ -27,10 +27,12 @@ const app = join(fixture, "Edith.app");
 const identifier = `com.pulkit.edith.tests.cli-${crypto.randomUUID()}`;
 let host;
 let identityRoot;
+let coreFixturePID;
 const home = join(fixture, "Home");
 const environment = {
   ...process.env,
   EDITH_CLI_FIXTURE_HOME: home,
+  EDITH_CORE_CLI_FIXTURE: "1",
   EDITH_EXTENSION_FIXTURE_HOME: home,
 };
 const clients = new Set();
@@ -228,6 +230,12 @@ function children() {
     .split("\n")
     .filter((line) => Number(line.trim().split(/\s+/)[1]) === host.pid);
 }
+function extensionChildren() {
+  return children().filter(
+    (line) => Number(line.trim().split(/\s+/)[0]) !== coreFixturePID,
+  );
+}
+
 try {
   await cp(resolve("local/minimal-host/Edith.app"), app, { recursive: true });
   await copyFile(
@@ -288,6 +296,11 @@ try {
   ).trim();
   const binary = join(app, "Contents/MacOS/Edith");
   await copyFile(join(productsPath, "EdithHost"), binary);
+  await cp(
+    join(productsPath, "EdithHost_EdithHost.bundle"),
+    join(app, "Contents/Resources/EdithHost_EdithHost.bundle"),
+    { recursive: true, verbatimSymlinks: true },
+  );
   const links = run("otool", ["-L", binary], { encoding: "utf8" });
   for (const line of links.split("\n").slice(1)) {
     const dependency = line.trim().split(" ")[0];
@@ -508,6 +521,158 @@ try {
   const ready = JSON.parse(await readFile(join(fixture, "ready.json"), "utf8"));
   identityRoot = ready.root;
 
+  await until(() => existsSync(join(fixture, "core-ready.json")));
+  const coreReady = JSON.parse(
+    await readFile(join(fixture, "core-ready.json"), "utf8"),
+  );
+  assert.equal(coreReady.owner, host.pid);
+  assert(
+    coreReady.pid > 1 && coreReady.pid !== host.pid,
+    JSON.stringify(coreReady),
+  );
+  coreFixturePID = coreReady.pid;
+  const coreStatus = await command(["agent", "status", "--json"]);
+  assert.equal(coreStatus.pid, coreFixturePID);
+  assert.equal(coreStatus.state, "enabled");
+  assert(coreStatus.residentBytes > 0);
+  assert.equal(coreStatus.store, join(identityRoot, "Core/agent.json"));
+  assert.equal(coreStatus.schemaVersion, 1);
+  assert.equal(coreStatus.protocolVersion, 1);
+  assert.deepEqual(
+    Object.keys(coreStatus).sort(),
+    [
+      "state",
+      "build",
+      "pid",
+      "uptimeSeconds",
+      "residentBytes",
+      "cpuPercent",
+      "subscribers",
+      "store",
+      "schemaVersion",
+      "protocolVersion",
+    ].sort(),
+  );
+  const originalStatusText = await command(["agent", "status"], 0, undefined, {
+    rawResult: true,
+  });
+  assert.equal(originalStatusText.stderr, "");
+  assert.match(originalStatusText.stdout, /^FIELD\s+VALUE\nstate\s+Enabled\n/);
+  assert(originalStatusText.stdout.endsWith("\n"));
+  const initialJobs = await command(["agent", "jobs", "--json"]);
+  assert.deepEqual(
+    initialJobs.map((job) => job.id),
+    ["backup.sync", "backup.restore", "storage.inspect"],
+  );
+  assert(
+    initialJobs.every((job) => job.runCount === 0 && job.phase === "idle"),
+  );
+  const queued = await command(
+    ["agent", "run", "storage.inspect"],
+    0,
+    undefined,
+    { rawResult: true },
+  );
+  assert.deepEqual(queued, {
+    code: 0,
+    stdout: "queued storage.inspect\n",
+    stderr: "",
+  });
+  await until(async () => {
+    const jobs = await command(["agent", "jobs", "--json"]);
+    return (
+      jobs.find((job) => job.id === "storage.inspect").runCount === 1 &&
+      jobs.every((job) => job.phase !== "running")
+    );
+  });
+  const ownedEvents = await command(["agent", "events", "--json"]);
+  assert(
+    ownedEvents.some(
+      (event) =>
+        event.name === "storage.inspect" && event.message === "Completed.",
+    ),
+  );
+  assert(ownedEvents.every((event) => typeof event.date === "string"));
+  const ownedLogs = await command(["agent", "logs", "--last", "10m", "--json"]);
+  assert(
+    ownedLogs.some((line) => line.includes("storage.inspect: Completed.")),
+  );
+  await command(["agent", "run"], 2);
+  const unknownJob = await command(["agent", "run", "unknown-owned-job"], 3);
+  assert.equal(
+    unknownJob.stderr,
+    "error: The background job is unavailable: unknown-owned-job\nhint: Choose a job from ed agent jobs.\n",
+  );
+  process.kill(coreFixturePID, "SIGSTOP");
+  try {
+    assert.deepEqual(
+      await command(["agent", "run", "storage.inspect", "--json"]),
+      { queued: "storage.inspect" },
+    );
+    const cancelled = await command(
+      ["agent", "cancel", "storage.inspect"],
+      0,
+      undefined,
+      { rawResult: true },
+    );
+    assert.deepEqual(cancelled, {
+      code: 0,
+      stdout: "cancellation requested for storage.inspect\n",
+      stderr: "",
+    });
+  } finally {
+    process.kill(coreFixturePID, "SIGCONT");
+  }
+  await until(async () => {
+    const jobs = await command(["agent", "jobs", "--json"]);
+    return (
+      jobs.find((job) => job.id === "storage.inspect").runCount === 1 &&
+      jobs.every((job) => job.phase !== "running")
+    );
+  });
+  const stoppedCorePID = coreFixturePID;
+  const restarting = await command(["agent", "restart"], 0, undefined, {
+    rawResult: true,
+  });
+  assert.deepEqual(restarting, {
+    code: 0,
+    stdout: "background agent restarting\n",
+    stderr: "",
+  });
+  const restartedStatus = await command(["agent", "status", "--json"]);
+  coreFixturePID = restartedStatus.pid;
+  assert.notEqual(coreFixturePID, stoppedCorePID);
+  assert.throws(() => process.kill(stoppedCorePID, 0), /ESRCH/);
+  const retainedJobs = await command(["agent", "jobs", "--json"]);
+  assert.equal(
+    retainedJobs.find((job) => job.id === "storage.inspect").runCount,
+    1,
+  );
+  assert.equal(children().length, 1);
+  for (const operation of ["status", "verify", "doctor"]) {
+    const report = await command([
+      "extensions",
+      operation,
+      "calendar",
+      "--json",
+    ]);
+    assert.equal(report.verified, false);
+    assert.equal(report.state.phase, "unavailable");
+    assert.equal(report.state.runtimePhase, "uninstalled");
+    assert(report.checks.some((check) => check.status === "failed"));
+  }
+  const setupUnavailable = await command(
+    ["extensions", "setup", "calendar", "--dry-run", "--json"],
+    4,
+  );
+  assert.match(setupUnavailable.stderr, /owning setup provider is unavailable/);
+  assert(!existsSync(join(identityRoot, "Extensions/calendar")));
+  const missingOwner = await command(["agent", "tasks", "ls"], 4);
+  assert.match(
+    missingOwner.stderr,
+    /original agent tasks provider is unavailable/,
+  );
+
   assert.equal(ready.pid, host.pid);
   await until(() => existsSync(join(fixture, "application-state.json")));
   const applicationState = JSON.parse(
@@ -522,7 +687,7 @@ try {
     prohibited: true,
   });
 
-  assert.equal(children().length, 0);
+  assert.equal(extensionChildren().length, 0);
   const version = await command(["version", "--json"]);
   assert.equal(version.appRunning, true);
   const status = await command(["status", "--json"]);
@@ -650,10 +815,10 @@ try {
   assert.equal(info.version, "1.0.0");
   assert.equal(info.running, false);
   await command(["invoke", "keepAwake", "echo"], 1);
-  assert.equal(children().length, 0);
+  assert.equal(extensionChildren().length, 0);
   info = await command(["extensions", "enable", "keepAwake"]);
   assert.equal(info.running, true);
-  assert.equal(children().length, 1);
+  assert.equal(extensionChildren().length, 1);
   assert.deepEqual(
     await command([
       "invoke",
@@ -735,7 +900,7 @@ try {
   const calendarState = await command(["extensions", "info", "calendar"]);
   assert(Number.isInteger(calendarState.processIdentifier));
   assert(
-    children().some(
+    extensionChildren().some(
       (line) =>
         Number(line.trim().split(/\s+/)[0]) === calendarState.processIdentifier,
     ),
@@ -925,7 +1090,7 @@ try {
   assert.equal(disabledTool.error.code, -32602);
   await mcp.close();
   await command(["extensions", "remove", "calendar"]);
-  await until(() => children().length === 1);
+  await until(() => extensionChildren().length === 1);
   await catalog(2, 2);
   info = await command(["extensions", "update", "keepAwake"]);
   assert.equal(info.version, "1.1.0");
@@ -965,11 +1130,11 @@ try {
   info = await command(["extensions", "disable", "keepAwake"]);
   assert.equal(info.running, false);
   assert.equal(info.enabled, false);
-  await until(() => children().length === 0);
+  await until(() => extensionChildren().length === 0);
   await command(["invoke", "keepAwake", "echo"], 1);
   info = await command(["extensions", "remove", "keepAwake"]);
   assert.equal(info.installed, false);
-  assert.equal(children().length, 0);
+  assert.equal(extensionChildren().length, 0);
   await catalog(3, 2);
   await command(["extensions", "install", "calendar"]);
   await command(["extensions", "enable", "calendar"]);
@@ -1006,6 +1171,18 @@ try {
   assert.notEqual(stoppingCommand.exitCode, 0);
   assert(!existsSync(cliMarker));
   assert.equal(children().length, 0);
+  assert.throws(() => process.kill(coreFixturePID, 0), /ESRCH/);
+  const coreCapture = JSON.parse(
+    await readFile(join(fixture, "core-callbacks.json"), "utf8"),
+  );
+  assert.equal(coreCapture.ownedCoreProcesses, 0);
+  assert(coreCapture.callbacks.includes("shutdown"));
+  assert(coreCapture.callbacks.includes("run:storage.inspect"));
+  assert(coreCapture.callbacks.includes("cancel:storage.inspect:sent"));
+  assert(coreCapture.callbacks.includes("restart"));
+  for (const pid of coreCapture.stoppedPIDs) {
+    assert.throws(() => process.kill(pid, 0), /ESRCH/);
+  }
   assert.throws(
     () => process.kill(stoppingState.processIdentifier, 0),
     /ESRCH/,
@@ -1018,7 +1195,7 @@ try {
   await until(() => !existsSync(ready.socket));
   await command(["extensions", "ls"], 4);
   process.stdout.write(
-    `${JSON.stringify({ fixtureScope: "synthetic transport and core behavior, not feature parity", shippingEntrypoint: true, reservedCoreServer: true, liveProviderCatalog: true, dynamicMCP: true, callerStdinAndDirectory: true, sdkOutputStream: true, liveStdinEOF: true, concurrentInputStreams: true, bidirectionalSyntheticFraming: true, callerPTYResizeAndRestoration: true, boundedMCPInput: true, idleMCPCancellation: true, shutdownCommandExitCode: stoppingCommand.exitCode, originalPlainVersionAndErrors: true, publicLauncher: true, sameSignedExecutable: true, install: "1.0.0", update: "1.1.0", invokeJSONAndStdin: true, scopedArchiveDecoder: true, abi2Carrier: true, syntheticProviderRouting: true, exactProviderExitCodes: true, duplicateRuntimeClasses: false, timeoutAndDisconnectCancellation: true, responsiveHost: true, forgedCallerRejected: true, boundedRequests: true, offlineError: true, disabledWorkers: 0, removedPayload: true, socketCleanup: true })}\n`,
+    `${JSON.stringify({ fixtureScope: "synthetic transport and core behavior, not feature parity", shippingEntrypoint: true, originalOwnedAgentCallbacks: true, actualCoreJournalAndRestart: true, ownedQueuedCancellation: true, unhealthyReadinessExitZero: true, reservedCoreServer: true, liveProviderCatalog: true, dynamicMCP: true, callerStdinAndDirectory: true, sdkOutputStream: true, liveStdinEOF: true, concurrentInputStreams: true, bidirectionalSyntheticFraming: true, callerPTYResizeAndRestoration: true, boundedMCPInput: true, idleMCPCancellation: true, shutdownCommandExitCode: stoppingCommand.exitCode, originalPlainVersionAndErrors: true, publicLauncher: true, sameSignedExecutable: true, install: "1.0.0", update: "1.1.0", invokeJSONAndStdin: true, scopedArchiveDecoder: true, abi2Carrier: true, syntheticProviderRouting: true, exactProviderExitCodes: true, duplicateRuntimeClasses: false, timeoutAndDisconnectCancellation: true, responsiveHost: true, forgedCallerRejected: true, boundedRequests: true, offlineError: true, disabledWorkers: 0, removedPayload: true, socketCleanup: true })}\n`,
   );
 } finally {
   for (const client of clients) {

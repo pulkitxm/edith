@@ -7,7 +7,7 @@ import Foundation
         let hooks = HostCoreOwnerHooks(invoke: invoke)
         return HostCoreAgentCLI(
             backend: .init(
-                status: local.status,
+                ownedJobs: local.ownedJobs, status: local.status,
                 jobs: {
                     let jobs = try await local.jobs() + hooks.jobs()
                     guard Set(jobs.map(\.id)).count == jobs.count else {
@@ -32,14 +32,14 @@ import Foundation
                         }.suffix(500))
                 },
                 run: { job in
-                    if try await local.jobs().contains(where: { $0.id == job }) {
+                    if local.ownedJobs().contains(job) {
                         try await local.run(job)
                     } else {
                         try await hooks.control(job: job, cancel: false)
                     }
                 },
                 cancel: { job in
-                    if try await local.jobs().contains(where: { $0.id == job }) {
+                    if local.ownedJobs().contains(job) {
                         try await local.cancel(job)
                     } else {
                         try await hooks.control(job: job, cancel: true)

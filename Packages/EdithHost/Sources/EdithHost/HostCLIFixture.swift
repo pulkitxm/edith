@@ -68,6 +68,10 @@ import Foundation
         delegate.activate = { preconditionFailure("The CLI fixture cannot activate windows.") }
         delegate.mainWindow = { nil }
         var requestQuit: @MainActor () -> Void = {}
+        let coreFixture =
+            ProcessInfo.processInfo.environment["EDITH_CORE_CLI_FIXTURE"] == "1"
+            ? HostCoreAgentCLIFixture(
+                identity: identity, executable: executable, directory: directory) : nil
         let core = try HostCoreCLIAdapter.make(
             identity: identity, marketplace: marketplace,
             updater: HostUpdater(startingUpdater: false),
@@ -86,6 +90,7 @@ import Foundation
                     })),
             showMainWindow: { preconditionFailure("The CLI fixture cannot open windows.") },
             navigation: { _, _ in throw HostCLIError.rejected("No fixture window is available.") },
+            agentBackend: coreFixture?.backend,
             quit: { requestQuit() }, changed: {})
         let server = HostCLIServer(identity: identity) { request in
             if HostCoreCLIService.handles(request) {
@@ -95,6 +100,10 @@ import Foundation
                     let safe = ["info", "diagnostics", "paths", "links", "actions", "quit"]
                     guard
                         envelope.arguments.first == "config"
+                            || coreFixture != nil && envelope.arguments.first == "agent"
+                            || envelope.arguments.first == "extensions"
+                                && ["status", "verify", "doctor", "setup"].contains(
+                                    envelope.arguments.dropFirst().first ?? "")
                             || envelope.arguments.first == "app"
                                 && safe.contains(envelope.arguments.dropFirst().first ?? "")
                             || envelope.arguments.first == "permissions"
@@ -112,6 +121,7 @@ import Foundation
         delegate.shutdown = {
             guard await sessions.shutdown() else { exit(1) }
             core.shutdown(); server.shutdown()
+            await coreFixture?.shutdown()
             let socket = try? HostCLITransport.socketPath(identity: identity)
             let deadline = ContinuousClock.now.advanced(by: .seconds(2))
             while let socket, FileManager.default.fileExists(atPath: socket),
@@ -143,6 +153,12 @@ import Foundation
             "socket": HostCLITransport.socketPath(identity: identity),
         ]).write(to: directory.appendingPathComponent("ready.json"), options: .atomic)
         Task {
+            do { try await coreFixture?.start() } catch {
+                try? JSONSerialization.data(withJSONObject: ["error": String(describing: error)])
+                    .write(
+                        to: directory.appendingPathComponent("core-ready.json"), options: .atomic)
+                requestQuit(); return
+            }
             try? await Task.sleep(for: .milliseconds(100))
             try? JSONSerialization.data(withJSONObject: [
                 "running": application.isRunning,

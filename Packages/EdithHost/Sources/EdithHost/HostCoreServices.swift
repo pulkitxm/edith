@@ -309,6 +309,11 @@ import SwiftUI
         settingsScheduler?.start()
     }
 
+    var cliOwnedJobIDs: Set<String> {
+        guard online, !cliStopping else { return [] }
+        return Set(snapshot?.agent?.jobs.map(\.id) ?? [])
+    }
+
     func cliStatus() async throws -> HostCoreAgentStatus {
         try HostCoreAgentStatus(snapshot: await cliSnapshot(), cpuPercent: cpuPercent)
     }

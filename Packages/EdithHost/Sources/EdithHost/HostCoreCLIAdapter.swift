@@ -61,7 +61,7 @@ import Foundation
                 shared: shared, standard: standard, changed: changed),
             commandProvider: {
                 commands.filter { command in
-                    (command.route.first != "agent" || agentBackend != nil
+                    (command.route.first != "agent" || agentBackend?.ownedJobs().isEmpty == false
                         || core()?.online == true)
                         && (command.route != ["app", "clean-keys"]
                             || marketplace.sessions.activeIDs.contains("system"))
