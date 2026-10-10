@@ -372,37 +372,85 @@ import Testing
         #expect(session.connectionRef == nil)
         #expect(!window.isVisible)
         holder.stop()
-        await engine.shutdown()
         client.shutdown()
+        await bridge.shutdownAndWait()
+        #expect(bridge.activeRequestCount == 0)
+        await engine.shutdown()
+    }
+
+    @Test func stoppedEngineReturnsARealCheckedFacadeFailure() async throws {
+        let owner = MachineSession(machine: .local, local: true, synthetic: true)
+        let engine = MachineTerminalEngine(session: { _ in owner })
+        let bridge = MachineTerminalTestBridge(engine: engine)
+        let client = MachineUIClient(
+            client: try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID())))
+        await engine.shutdown()
+        await #expect(throws: MachineUIFailure.self) {
+            try await client.terminal(MachineTerminalRequest(operation: .open, machineID: owner.id))
+        }
+        client.shutdown()
+        await bridge.shutdownAndWait()
+        #expect(bridge.activeRequestCount == 0)
     }
 }
 
 @MainActor private final class MachineTerminalTestBridge: NSObject {
     let engine: MachineTerminalEngine
+    private var tasks: [UUID: Task<Void, Never>] = [:]
+    var activeRequestCount: Int { tasks.count }
     init(engine: MachineTerminalEngine) { self.engine = engine }
 
     @objc func invoke(_ data: NSData, completion: @escaping @Sendable (NSData) -> Void) {
-        Task {
+        let request: ExtensionEngineRequest
+        do {
+            request = try ExtensionEngineWire.decode(
+                ExtensionEngineRequest.self, from: data as Data)
+        } catch { Issue.record(error); return }
+        let task = Task {
+            defer { tasks.removeValue(forKey: request.token) }
             do {
-                let request = try ExtensionEngineWire.decode(
-                    ExtensionEngineRequest.self, from: data as Data)
                 guard request.operation == "machines.ui.terminal" else {
                     throw MachineUIError.invalidRequest
                 }
                 let value = try JSONDecoder().decode(
                     MachineTerminalRequest.self, from: request.payload)
                 let frame = try await engine.execute(value)
-                let payload = try JSONEncoder().encode(
-                    MachineUIReply(value: JSONEncoder().encode(frame), error: nil))
-                completion(
-                    try ExtensionEngineWire.encode(
-                        ExtensionEngineReply(token: request.token, ok: true, payload: payload))
-                        as NSData)
-            } catch { Issue.record(error) }
+                try respond(
+                    request.token,
+                    reply: MachineUIReply(value: JSONEncoder().encode(frame), error: nil),
+                    completion: completion)
+            } catch {
+                do {
+                    try respond(
+                        request.token,
+                        reply: MachineUIReply(value: nil, error: error.localizedDescription),
+                        completion: completion)
+                } catch { Issue.record(error) }
+            }
         }
+        tasks[request.token] = task
     }
-    @objc func cancel(_ token: NSString) {}
-    @objc func invalidate() {}
+
+    private func respond(
+        _ token: UUID, reply: MachineUIReply, completion: @Sendable (NSData) -> Void
+    ) throws {
+        completion(
+            try ExtensionEngineWire.encode(
+                ExtensionEngineReply(
+                    token: token, ok: true,
+                    payload: JSONEncoder().encode(reply))) as NSData)
+    }
+
+    @objc func cancel(_ token: NSString) {
+        guard let id = UUID(uuidString: token as String) else { return }
+        tasks[id]?.cancel()
+    }
+    @objc func invalidate() { for task in tasks.values { task.cancel() } }
+    func shutdownAndWait() async {
+        let retained = Array(tasks.values)
+        invalidate()
+        for task in retained { await task.value }
+    }
 }
 
 private final class MachineTerminalRawCapture: @unchecked Sendable {
