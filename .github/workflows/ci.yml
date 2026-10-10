@@ -16,6 +16,21 @@ on:
         type: string
         required: false
         default: ""
+      hosted_managed_views_sha:
+        description: "Reviewed synthetic hosted managed original-view smoke commit."
+        type: string
+        required: false
+        default: ""
+      hosted_managed_artifacts_run:
+        description: "Completed immutable nonpublishing Extensions run containing all 39 packages."
+        type: string
+        required: false
+        default: ""
+      hosted_managed_artifacts_sha:
+        description: "Exact original package and frozen host source commit."
+        type: string
+        required: false
+        default: ""
       release:
         description: "Run every product check, then cut a release from main."
         type: boolean
@@ -42,7 +57,7 @@ permissions:
 
 jobs:
   hosted-host-tests:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_host_tests_sha != '' && inputs.hosted_shell_journey_sha == '' && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' || github.ref == 'refs/heads/feat/hosted-journey-registration' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_host_tests_sha == github.sha
+    if: github.event_name == 'workflow_dispatch' && inputs.hosted_host_tests_sha != '' && inputs.hosted_shell_journey_sha == '' && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' || github.ref == 'refs/heads/feat/hosted-journey-registration' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_host_tests_sha == github.sha
     uses: ./.github/workflows/hosted-host-test-diagnostics.yml
     with:
       expected_sha: ${{ inputs.hosted_host_tests_sha }}
@@ -50,7 +65,7 @@ jobs:
       rebuild: ${{ inputs.rebuild }}
 
   hosted-original-shell:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_shell_journey_sha != '' && inputs.hosted_host_tests_sha == '' && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-original-shell-journey' || github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' || github.ref == 'refs/heads/feat/hosted-journey-registration' || github.ref == 'refs/heads/feat/hosted-journey-attachments' || github.ref == 'refs/heads/feat/hosted-journey-state' || github.ref == 'refs/heads/fix/hosted-journey-environment' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_shell_journey_sha == github.sha
+    if: github.event_name == 'workflow_dispatch' && inputs.hosted_shell_journey_sha != '' && inputs.hosted_host_tests_sha == '' && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-original-shell-journey' || github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' || github.ref == 'refs/heads/feat/hosted-journey-registration' || github.ref == 'refs/heads/feat/hosted-journey-attachments' || github.ref == 'refs/heads/feat/hosted-journey-state' || github.ref == 'refs/heads/fix/hosted-journey-environment' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_shell_journey_sha == github.sha
     uses: ./.github/workflows/hosted-original-shell.yml
     with:
       expected_sha: ${{ inputs.hosted_shell_journey_sha }}
@@ -60,10 +75,26 @@ jobs:
       MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
       MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
 
+  hosted-managed-views:
+    if: github.event_name == 'workflow_dispatch' && inputs.hosted_managed_views_sha != '' && inputs.hosted_managed_artifacts_run != '' && inputs.hosted_managed_artifacts_sha != '' && inputs.hosted_shell_journey_sha == '' && inputs.hosted_host_tests_sha == '' && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-managed-view-execution' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_managed_views_sha == github.sha
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/hosted-managed-views.yml
+    with:
+      expected_sha: ${{ inputs.hosted_managed_views_sha }}
+      artifact_run: ${{ inputs.hosted_managed_artifacts_run }}
+      artifact_source: ${{ inputs.hosted_managed_artifacts_sha }}
+      release: ${{ inputs.release }}
+      rebuild: ${{ inputs.rebuild }}
+    secrets:
+      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+
   changes:
     name: changes
     if: >-
-      !(github.event_name == 'workflow_dispatch' && (inputs.hosted_shell_journey_sha != '' || inputs.hosted_host_tests_sha != ''))
+      !(github.event_name == 'workflow_dispatch' && (inputs.hosted_shell_journey_sha != '' || inputs.hosted_host_tests_sha != '' || inputs.hosted_managed_views_sha != '' || inputs.hosted_managed_artifacts_run != '' || inputs.hosted_managed_artifacts_sha != ''))
       && (github.event_name != 'push'
       || (!startsWith(github.event.head_commit.message, 'Release v')
       && !startsWith(github.event.head_commit.message, 'Refresh the contributor list')))
