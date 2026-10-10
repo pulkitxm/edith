@@ -11,6 +11,24 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { planSwiftTests } from "./ci-test-plan.mjs";
 
+const standaloneOwners = [
+  "audioMixer",
+  "presenter",
+  "system",
+  "music",
+  "terminal",
+  "studio",
+  "bifrost",
+  "lidAwake",
+  "attention",
+  "machines",
+  "downloads",
+  "virtualCamera",
+  "herdr",
+  "quinjet",
+  "database",
+];
+
 test("unscoped features run their owning models without unrelated host lanes", () => {
   expect(planSwiftTests(["Extensions/calendar/Runtime.swift"]).include).toEqual(
     [{ lane: "feature-models", targets: "ci-extension-support" }],
@@ -32,12 +50,7 @@ test.each([
     "ci-extension-attention",
     false,
   ],
-  [
-    "terminal",
-    "Native/Tests/TerminalTests.swift",
-    "ci-extension-terminal",
-    true,
-  ],
+  ["terminal", "Tests/TerminalTests.swift", "ci-extension-terminal", true],
   [
     "database",
     "DatabaseEngine/Tests/DatabaseTests.swift",
@@ -89,31 +102,69 @@ test("owner boundaries and make arguments reject untrusted selections", () => {
   ).toThrow("Invalid extension test targets");
 });
 
-test("host contracts and tests select host runtime checks", () => {
+test("host tests select runtime checks without feature compilation fanout", () => {
   for (const path of [
-    "Packages/EdithHost/Sources/EdithHost/HostApplication.swift",
     "Packages/EdithHost/Tests/EdithHostCoreTests/HostWorkerTests.swift",
-    "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/PackageStore.swift",
     "Packages/ExtensionMarketplace/Tests/ExtensionMarketplaceTests/StoreTests.swift",
   ]) {
     expect(planSwiftTests([path]).include).toEqual([
       { lane: "host-runtime", targets: "ci-host ci-marketplace-runtime" },
     ]);
   }
+  for (const path of [
+    "Packages/EdithHost/Sources/EdithHost/HostApplication.swift",
+    "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/PackageStore.swift",
+  ]) {
+    expect(planSwiftTests([path]).include).toEqual([
+      { lane: "host-runtime", targets: "ci-host ci-marketplace-runtime" },
+      {
+        lane: "extension-virtualCamera",
+        extension: "virtualCamera",
+        targets:
+          "ci-extension-camera ci-extension-camera-carrier ci-extension-camera-voice",
+        ghostty: false,
+      },
+    ]);
+  }
 });
 
 test("shared support changes select consumers while commands stay outside the empty host", () => {
-  expect(
-    planSwiftTests([
-      "Packages/ExtensionSupport/Sources/EdithExtensionUI/PageScaffold.swift",
-    ]).include,
-  ).toEqual([
+  const ui = planSwiftTests([
+    "Packages/ExtensionSupport/Sources/EdithExtensionUI/PageScaffold.swift",
+  ]).include;
+  expect(ui.slice(0, 2)).toEqual([
     { lane: "host-runtime", targets: "ci-host ci-marketplace-runtime" },
     { lane: "feature-models", targets: "ci-extension-support" },
   ]);
+  expect(ui.slice(2).map((lane) => lane.extension)).toEqual(standaloneOwners);
   expect(
     planSwiftTests([
       "Packages/ExtensionSupport/Sources/EdithExtensionCommands/ExtensionCLIExecution.swift",
+    ]).include,
+  ).toEqual([
+    { lane: "feature-models", targets: "ci-extension-support" },
+    {
+      lane: "extension-attention",
+      extension: "attention",
+      targets: "ci-extension-attention",
+      ghostty: false,
+    },
+  ]);
+  const documents = planSwiftTests([
+    "Packages/ExtensionSupport/Sources/EdithExtensionDocuments/DocumentView.swift",
+  ]).include;
+  expect(documents[0]).toEqual({
+    lane: "feature-models",
+    targets: "ci-extension-support",
+  });
+  expect(documents.slice(1).map((lane) => lane.extension)).toEqual([
+    "machines",
+    "herdr",
+    "quinjet",
+  ]);
+  expect(
+    planSwiftTests([
+      "Packages/ExtensionSupport/Tests/UITests/DeliveryTests.swift",
     ]).include,
   ).toEqual([{ lane: "feature-models", targets: "ci-extension-support" }]);
 });
@@ -146,18 +197,24 @@ test("shared workflow and build inputs exercise all lanes without duplicate targ
     ".github/actions/cache-host/action.yml",
     "scripts/ci-test-plan.mjs",
   ]) {
-    expect(planSwiftTests([path]).include).toEqual(expected);
+    const lanes = planSwiftTests([path]).include;
+    expect(lanes.slice(0, 3)).toEqual(expected);
+    expect(lanes.slice(3).map((lane) => lane.extension)).toEqual(
+      standaloneOwners,
+    );
   }
   expect(planSwiftTests([], { all: true, extensions: [] }).include).toEqual(
     expected,
   );
-  expect(
-    planSwiftTests([
-      "Packages/ExtensionSupport/Package.swift",
-      "Extensions/docs/Runtime.swift",
-      "Extensions/docs/Views/DocsPage.swift",
-    ]).include,
-  ).toEqual(expected.slice(0, 2));
+  const lanes = planSwiftTests([
+    "Packages/ExtensionSupport/Package.swift",
+    "Extensions/docs/Runtime.swift",
+    "Extensions/docs/Views/DocsPage.swift",
+  ]).include;
+  expect(lanes.slice(0, 2)).toEqual(expected.slice(0, 2));
+  expect(lanes.slice(2).map((lane) => lane.extension)).toEqual(
+    standaloneOwners,
+  );
 });
 
 test("the actual planner consumes changed paths and rejects unknown options", () => {
@@ -174,6 +231,118 @@ test("the actual planner consumes changed paths and rejects unknown options", ()
       stdio: "pipe",
     }),
   ).toThrow();
+});
+
+test("shared native renderer changes exercise every owning consumer", () => {
+  for (const path of [
+    "Extensions/terminal/Native/Sources/GhosttyTerminal/TerminalSurface.swift",
+    "Extensions/terminal/Native/Tests/GhosttyTerminalTests/TerminalTests.swift",
+    "scripts/patches/ghostty-external-io.patch",
+    "scripts/build-ghostty.sh",
+  ]) {
+    const lanes = planSwiftTests([path]).include;
+    expect(lanes.map((lane) => lane.extension)).toEqual([
+      "terminal",
+      "machines",
+      "herdr",
+      "quinjet",
+    ]);
+    expect(lanes.every((lane) => lane.ghostty === true)).toBe(true);
+  }
+});
+
+test("manifest and SDK package inputs cannot silently omit native owners", () => {
+  for (const path of [
+    "Extensions/manifest.json",
+    "Packages/ExtensionSupport/Package.swift",
+    "Packages/ExtensionSupport/Package.resolved",
+  ]) {
+    const lanes = planSwiftTests([path]).include;
+    expect(
+      lanes.filter((lane) => lane.extension).map((lane) => lane.extension),
+    ).toEqual(standaloneOwners);
+    expect(lanes.filter((lane) => lane.lane === "feature-models")).toHaveLength(
+      1,
+    );
+  }
+  for (const path of [
+    "Extensions/Package.swift",
+    "Extensions/Package.resolved",
+  ])
+    expect(planSwiftTests([path]).include).toEqual([
+      { lane: "feature-models", targets: "ci-extension-support" },
+    ]);
+  expect(
+    planSwiftTests(["scripts/prepare-extension-native-support.mjs"]).include,
+  ).toEqual([
+    {
+      lane: "extension-attention",
+      extension: "attention",
+      targets: "ci-extension-attention",
+      ghostty: false,
+    },
+  ]);
+});
+
+test("SDK selection follows role composition and transitive consumers", () => {
+  const extensions = [
+    {
+      id: "composed",
+      supportProduct: "EdithExtensionUI",
+      supportProducts: {
+        app: ["EdithExtensionDocuments", "EdithExtensionCommands"],
+        privileged: null,
+      },
+      testTargets: ["ci-extension-composed"],
+    },
+    {
+      id: "dependent",
+      dependencies: ["composed"],
+      testTargets: ["ci-extension-dependent"],
+    },
+    {
+      id: "unrelated",
+      supportProduct: "EdithExtensionArchive",
+      testTargets: ["ci-extension-unrelated"],
+    },
+  ];
+  const paths = [
+    "Packages/ExtensionSupport/Sources/EdithExtensionCommands/Execution.swift",
+    "Packages/ExtensionSupport/Sources/EdithExtensionDocuments/Document.swift",
+  ];
+  expect(
+    planSwiftTests(paths, { extensions }).include.map((lane) => lane.extension),
+  ).toEqual([undefined, "composed", "dependent"]);
+  expect(
+    planSwiftTests(
+      ["Packages/EdithHost/Sources/EdithHostCore/HostWorker.swift"],
+      {
+        extensions,
+      },
+    ).include,
+  ).toEqual([
+    { lane: "host-runtime", targets: "ci-host ci-marketplace-runtime" },
+  ]);
+});
+
+test("every extension test directory selects a deduplicated executable lane", () => {
+  const definitions = JSON.parse(
+    readFileSync("Extensions/manifest.json", "utf8"),
+  );
+  expect(definitions).toHaveLength(39);
+  for (const { id } of definitions) {
+    const paths = [
+      `Extensions/${id}/Tests/RegressionTests.swift`,
+      `Extensions/${id}/Tests/RegressionTests.swift`,
+    ];
+    const lanes = planSwiftTests(paths).include;
+    expect(lanes.length, id).toBeGreaterThan(0);
+    expect(new Set(lanes.map((lane) => lane.lane)).size, id).toBe(lanes.length);
+    expect(
+      lanes.every((lane) => lane.targets.length > 0),
+      id,
+    ).toBe(true);
+  }
 });
 
 test("a child behind its base routes the tested merge revision with the current planner", () => {
@@ -217,6 +386,13 @@ test("a child behind its base routes the tested merge revision with the current 
       "scripts/test-extension-package.mjs",
       readFileSync("scripts/test-extension-package.mjs"),
     );
+    for (const path of [
+      "scripts/extension-release-plan.mjs",
+      "scripts/build-extension-support.mjs",
+      "scripts/extension-ghostty-native.mjs",
+      "scripts/extension-host-abi.mjs",
+    ])
+      save(path, readFileSync(path));
     save("Extensions/manifest.json", readFileSync("Extensions/manifest.json"));
     commit("Add planner fixture");
     git("update-ref", "refs/remotes/origin/base", "HEAD");
@@ -264,23 +440,7 @@ test("explicit full verification includes every declared standalone owner", () =
   const owners = planSwiftTests([], { all: true }).include.filter(
     (lane) => lane.extension,
   );
-  expect(owners.map((lane) => lane.extension)).toEqual([
-    "audioMixer",
-    "presenter",
-    "system",
-    "music",
-    "terminal",
-    "studio",
-    "bifrost",
-    "lidAwake",
-    "attention",
-    "machines",
-    "downloads",
-    "virtualCamera",
-    "herdr",
-    "quinjet",
-    "database",
-  ]);
+  expect(owners.map((lane) => lane.extension)).toEqual(standaloneOwners);
   const makefile = readFileSync("Makefile", "utf8");
   for (const lane of owners)
     for (const target of lane.targets.split(" "))

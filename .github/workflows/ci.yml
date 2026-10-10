@@ -251,6 +251,11 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       - name: Cache host products
         uses: ./.github/actions/cache-host
+      - name: Identify the native test toolchain
+        id: native-toolchain
+        run: |
+          fingerprint="$( { xcodebuild -version; swift --version; xcrun --sdk macosx --show-sdk-version; } | shasum -a 256 | cut -d ' ' -f 1)"
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
       - name: Cache independent test products
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
@@ -263,8 +268,8 @@ jobs:
             ${{ matrix.extension && format('Extensions/{0}/.build', matrix.extension) || '' }}
             ${{ matrix.extension && format('Extensions/{0}/*/.build', matrix.extension) || '' }}
             ${{ matrix.extension && format('local/extension-support/{0}_*', matrix.extension) || '' }}
-          key: native-tests-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.lane }}-${{ hashFiles('Packages/ExtensionMarketplace/Package.*', 'Packages/ExtensionSupport/Package.*', 'Packages/EdithDocsWorker/Package.*', 'Extensions/Package.*', 'Extensions/music/Native/Cargo.lock') }}-${{ github.sha }}
-          restore-keys: native-tests-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.lane }}-${{ hashFiles('Packages/ExtensionMarketplace/Package.*', 'Packages/ExtensionSupport/Package.*', 'Packages/EdithDocsWorker/Package.*', 'Extensions/Package.*', 'Extensions/music/Native/Cargo.lock') }}-
+          key: native-tests-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.lane }}-${{ steps.native-toolchain.outputs.fingerprint }}-${{ hashFiles('Packages/ExtensionMarketplace/Package.*', 'Packages/ExtensionSupport/Package.*', 'Packages/EdithDocsWorker/Package.*', 'Extensions/Package.*', 'Extensions/music/Native/Cargo.lock') }}-${{ matrix.extension && hashFiles(format('Extensions/{0}/**/Package.*', matrix.extension)) || 'shared' }}-${{ github.sha }}
+          restore-keys: native-tests-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.lane }}-${{ steps.native-toolchain.outputs.fingerprint }}-${{ hashFiles('Packages/ExtensionMarketplace/Package.*', 'Packages/ExtensionSupport/Package.*', 'Packages/EdithDocsWorker/Package.*', 'Extensions/Package.*', 'Extensions/music/Native/Cargo.lock') }}-${{ matrix.extension && hashFiles(format('Extensions/{0}/**/Package.*', matrix.extension)) || 'shared' }}-
       - name: Identify the optional terminal test toolchain
         if: matrix.ghostty == true
         id: ghostty-toolchain

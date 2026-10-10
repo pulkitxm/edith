@@ -418,7 +418,7 @@ ci-machines:
 	EDITH_EXTENSION_FIXTURE_HOME=/tmp/edith-machines-tests swift test --package-path Extensions --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter MachinesExtensionTests
 
 .PHONY: ci-machines-ui
-ci-machines-ui:
+ci-machines-ui: ghostty-extension
 	EDITH_EXTENSION_FIXTURE_HOME=/tmp/edith-machines-tests swift test --package-path Extensions/machines --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
 .PHONY: ci-extension-machines

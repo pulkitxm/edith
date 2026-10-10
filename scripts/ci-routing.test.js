@@ -1,5 +1,15 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { planSwiftTests } from "./ci-test-plan.mjs";
 
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
@@ -217,6 +227,51 @@ test("Swift lanes exercise only independent host and extension packages", () => 
   expect(cache.with.path).toContain("Extensions/.build");
   expect(cache.with.key).toContain("runner.arch");
   expect(cache.with.key).toContain("matrix.lane");
+  const toolchain = job.steps.find((step) => step.id === "native-toolchain");
+  expect(toolchain.run).toContain("xcodebuild -version");
+  expect(toolchain.run).toContain("swift --version");
+  expect(toolchain.run).toContain("xcrun --sdk macosx --show-sdk-version");
+  expect(job.steps.indexOf(toolchain)).toBeLessThan(job.steps.indexOf(cache));
+  for (const key of [cache.with.key, cache.with["restore-keys"]]) {
+    expect(key).toContain("steps.native-toolchain.outputs.fingerprint");
+    expect(key).toContain("Extensions/{0}/**/Package.*");
+  }
+});
+
+test("a cold Machines target prepares its native renderer before Swift tests", () => {
+  const makefile = resolve("Makefile");
+  const root = mkdtempSync(join(tmpdir(), "edith-native-prerequisite-"));
+  const bin = join(root, "bin");
+  mkdirSync(bin);
+  const script = (name, body) => {
+    const path = join(bin, name);
+    writeFileSync(path, `#!/bin/sh\nset -eu\n${body}\n`);
+    chmodSync(path, 0o755);
+  };
+  try {
+    script(
+      "bash",
+      'test "$1" = scripts/build-ghostty.sh\ntest "$2" = --extension-only\nmkdir -p Extensions/terminal/Native/vendor\n: > Extensions/terminal/Native/vendor/prepared\nprintf "%s\\n" renderer >> events',
+    );
+    script(
+      "swift",
+      'case "$*" in\n  *"--package-path Extensions/machines"*) test -f Extensions/terminal/Native/vendor/prepared; printf "%s\\n" machines >> events ;;\n  *"--package-path Extensions "*) printf "%s\\n" models >> events ;;\n  *) exit 2 ;;\nesac',
+    );
+    execFileSync("make", ["-f", makefile, "ci-extension-machines"], {
+      cwd: root,
+      stdio: "pipe",
+      env: {
+        ...process.env,
+        EDITH_MAKE_GATE: "skip",
+        PATH: `${bin}:${process.env.PATH}`,
+      },
+    });
+    expect(
+      readFileSync(join(root, "events"), "utf8").trim().split("\n"),
+    ).toEqual(["models", "renderer", "machines"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("host build consumers use the narrow host cache", () => {

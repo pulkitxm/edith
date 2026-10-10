@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  definitionSupportInputs,
+  planExtensionBuilds,
+} from "./extension-release-plan.mjs";
 import { extensionTestTargets } from "./test-extension-package.mjs";
 
 const definitions = JSON.parse(
@@ -32,7 +36,11 @@ export function planSwiftTests(
     });
   }
   const targets = [];
-  if (matches(/^Packages\/ExtensionSupport\//)) {
+  if (
+    matches(
+      /^Packages\/ExtensionSupport\/|^Extensions\/Package\.(swift|resolved)$/,
+    )
+  ) {
     targets.push("ci-extension-support");
   }
   if (
@@ -48,17 +56,28 @@ export function planSwiftTests(
   if (matches(/^Extensions\/music\/Native\//)) {
     include.push({ lane: "native-music", targets: "ci-music-native" });
   }
-  const selected = extensions.filter(
+  const owners = extensions.map((definition) => ({
+    ...definition,
+    inputs: definition.inputs ?? [`Extensions/${definition.id}`],
+    sharedInputs: definition.sharedInputs ?? [],
+    dependencies: definition.dependencies ?? [],
+    sameExecutableWorker: false,
+  }));
+  const supportPackageChanged = paths.some((path) =>
+    /^Packages\/ExtensionSupport\/Package\.(swift|resolved)$/.test(path),
+  );
+  const selectedIDs = new Set(
+    planExtensionBuilds(
+      owners,
+      paths.filter((path) => !path.startsWith("Extensions/music/Native/")),
+    ).map(({ id }) => id),
+  );
+  const selected = owners.filter(
     (definition) =>
-      all ||
-      paths.some(
-        (path) =>
-          path.startsWith(`Extensions/${definition.id}/`) &&
-          !(
-            definition.id === "music" &&
-            path.startsWith("Extensions/music/Native/")
-          ),
-      ),
+      force ||
+      paths.includes("Extensions/manifest.json") ||
+      selectedIDs.has(definition.id) ||
+      (supportPackageChanged && definitionSupportInputs(definition).length > 0),
   );
   for (const definition of selected) {
     if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(definition.id))
