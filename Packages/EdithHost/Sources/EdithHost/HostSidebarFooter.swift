@@ -60,6 +60,7 @@ struct HostSidebarFooter: View {
     let openExtensions: () -> Void
     let openPermissions: () -> Void
     var enabled = true
+    var music: AnyView? = nil
     @State private var snapshots: [String: SurfaceSnapshot] = [:]
     @State private var actionTask: Task<Void, Never>?
     @State private var actionToken: UUID?
@@ -85,8 +86,11 @@ struct HostSidebarFooter: View {
     }
     var body: some View {
         Group {
-            if !utilities.isEmpty || missingPermissions || updater.updateReady != nil {
+            if music != nil || !utilities.isEmpty || missingPermissions
+                || updater.updateReady != nil
+            {
                 VStack(spacing: UIScale.pt(8)) {
+                    if let music { music }
                     if let version = updater.updateReady {
                         Button {
                             updater.checkForUpdates()

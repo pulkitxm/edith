@@ -16,6 +16,11 @@ struct HostWorkspace: View {
     var presenter: (any HostExtensionContentPresenting)? = nil
     var sectionWindows: HostSectionWindows? = nil
     var windowNavigation: HostWindowNavigation? = nil
+    var musicSlots: HostMusicSlots? = nil
+    @State private var musicWindowID = UUID()
+    @AppStorage(AppStorageKeys.Suites.media, store: SharedDefaults.store) private var mediaEnabled =
+        true
+    @Environment(\.windowVisible) private var windowVisible
     @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
         var selection = "home"
     @AppStorage(AppStorageKeys.General.settingsTab, store: SharedDefaults.store) private
@@ -51,6 +56,7 @@ struct HostWorkspace: View {
         additionalSettings: ((String) -> AnyView?)? = nil,
         coreOnline: Bool = false, coreSummary: String = "Not running",
         sectionWindows: HostSectionWindows? = nil, windowNavigation: HostWindowNavigation? = nil,
+        musicSlots: HostMusicSlots? = nil,
         defaults: UserDefaults = SharedDefaults.store
     ) {
         self.marketplace = marketplace
@@ -59,7 +65,7 @@ struct HostWorkspace: View {
         self.additionalSettings = additionalSettings
         self.coreOnline = coreOnline; self.coreSummary = coreSummary
         self.presenter = presenter; self.sectionWindows = sectionWindows
-        self.windowNavigation = windowNavigation
+        self.windowNavigation = windowNavigation; self.musicSlots = musicSlots
         navigationDefaults = defaults
         _selection = AppStorage(
             wrappedValue: "home", AppStorageKeys.General.mainWindowSection, store: defaults)
@@ -74,6 +80,7 @@ struct HostWorkspace: View {
         _creditHidden = AppStorage(
             wrappedValue: false, AppStorageKeys.General.creditHidden, store: defaults)
         _zoom = AppStorage(wrappedValue: 1, WindowZoom.defaultsKey, store: defaults)
+        _mediaEnabled = AppStorage(wrappedValue: true, AppStorageKeys.Suites.media, store: defaults)
         _maintenanceSection = AppStorage(
             wrappedValue: "Updates", AppStorageKeys.AppMaintenance.section, store: defaults)
     }
@@ -100,26 +107,32 @@ struct HostWorkspace: View {
 
     var body: some View {
         NavigationRouteHost(router: router, role: .main) {
-            ZStack(alignment: .topLeading) {
-                sidebar.frame(width: width).frame(
-                    maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                detailColumn
-                    .clipShape(
-                        UnevenRoundedRectangle(
-                            topLeadingRadius: sidebarOpen ? 12 : 0,
-                            bottomLeadingRadius: sidebarOpen ? 12 : 0)
-                    )
-                    .padding(.leading, sidebarOpen ? width : 0)
-                    .shadow(
-                        color: scheme == .dark ? .black.opacity(0.55) : .black.opacity(0.16),
-                        radius: UIScale.pt(18), x: -6, y: 0)
-                sidebarEdge.offset(x: sidebarOpen ? width : 0).opacity(sidebarOpen ? 1 : 0)
-                titlebar.padding(.leading, UIScale.pt(fullscreen ? 12 : 94))
+            HostMusicWindowLayout {
+                ZStack(alignment: .topLeading) {
+                    sidebar.frame(width: width).frame(
+                        maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    detailColumn
+                        .clipShape(
+                            UnevenRoundedRectangle(
+                                topLeadingRadius: sidebarOpen ? 12 : 0,
+                                bottomLeadingRadius: sidebarOpen ? 12 : 0)
+                        )
+                        .padding(.leading, sidebarOpen ? width : 0)
+                        .shadow(
+                            color: scheme == .dark ? .black.opacity(0.55) : .black.opacity(0.16),
+                            radius: UIScale.pt(18), x: -6, y: 0)
+                    sidebarEdge.offset(x: sidebarOpen ? width : 0).opacity(sidebarOpen ? 1 : 0)
+                    titlebar.padding(.leading, UIScale.pt(fullscreen ? 12 : 94))
+                }
+                .ignoresSafeArea()
+                .animation(
+                    Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: sidebarOpen
+                )
+            } footer: {
+                if musicAdmission.eligible, musicSlots?.footer == true {
+                    musicRegion(.footer).transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
-            .ignoresSafeArea()
-            .animation(
-                Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: sidebarOpen
-            )
             .navigationRoute(
                 "section", selection: binding,
                 isValid: { raw in raw.isEmpty || pages.contains { $0.id == raw } })
@@ -141,7 +154,15 @@ struct HostWorkspace: View {
             }
         }
         .onAppear { installKeys() }
-        .onDisappear { removeKeys() }
+        .onDisappear {
+            removeKeys(); musicSlots?.setVisible(musicWindowID, visible: false)
+        }
+        .onChange(of: musicAdmission, initial: true) {
+            musicSlots?.synchronize(
+                version: musicAdmission.version, mediaEnabled: musicAdmission.mediaEnabled,
+                hidden: musicAdmission.hidden)
+            musicSlots?.setVisible(musicWindowID, visible: musicAdmission.visible)
+        }
         .onExitCommand { NSApp.keyWindow?.makeFirstResponder(nil) }
         .onChange(of: marketplace.surfaces.navigation.editorRequest, initial: true) {
             guard let request = marketplace.surfaces.navigation.editorRequest else { return }
@@ -149,6 +170,30 @@ struct HostWorkspace: View {
             defaults.set(request.tileID ?? "", forKey: HostSurfaceEditorKeys.widget)
             customize()
         }
+    }
+    private struct MusicAdmission: Equatable {
+        let version: String?
+        let mediaEnabled: Bool
+        let hidden: Bool
+        let visible: Bool
+        var eligible: Bool { version != nil && mediaEnabled && !hidden && visible }
+    }
+    private var musicAdmission: MusicAdmission {
+        MusicAdmission(
+            version: active.contains("music") ? marketplace.sessions.versions["music"] : nil,
+            mediaEnabled: mediaEnabled,
+            hidden: marketplace.surfaces.privacy.hides(.music),
+            visible: windowVisible && automaticActions)
+    }
+    private func musicRegion(_ region: HostMusicRegion) -> some View {
+        HostExtensionContent(
+            marketplace: marketplace, extensionID: "music", location: region.rawValue,
+            section: "music",
+            presenter: presenter, openMarketplace: { selection = "extensions" },
+            initialHeight: UIScale.pt(region == .footer ? 64 : 46)
+        )
+        .environment(\.compactLayout, region == .sidebar)
+        .frame(maxWidth: .infinity)
     }
     private var titlebar: some View {
         HStack(spacing: 14) {
@@ -218,7 +263,9 @@ struct HostWorkspace: View {
                 openExtensions: { selection = "extensions" },
                 openPermissions: {
                     settings = "permissions"; selection = "settings"
-                }, enabled: sidebarOpen)
+                }, enabled: sidebarOpen,
+                music: musicAdmission.eligible && musicSlots?.sidebar == true
+                    ? AnyView(musicRegion(.sidebar)) : nil)
             HostAgentStatusBar(online: coreOnline, summary: coreSummary) {
                 settings = "agent"; selection = "settings"
             }

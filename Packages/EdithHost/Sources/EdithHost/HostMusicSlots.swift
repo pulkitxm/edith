@@ -1,3 +1,5 @@
+import EdithExtensionSupport
+import EdithHostCore
 import Foundation
 import Observation
 
@@ -46,6 +48,30 @@ final class HostMusicSlots {
     ) {
         self.namespace = namespace; self.minimumInterval = minimumInterval
         self.now = now; self.invoke = invoke
+    }
+
+    static func live(marketplace: HostMarketplace) -> HostMusicSlots {
+        HostMusicSlots(namespace: marketplace.identity.identifier) { payload in
+            guard let package = marketplace.installed["music"],
+                marketplace.surfaceAvailability.activeIDs.contains("music"),
+                marketplace.sessions.versions["music"] == package.version,
+                let pid = marketplace.sessions.processIdentifiers["music"]
+            else { throw HostWorkerError.rejected }
+            let owner = try HostRemoteKernelIdentity.read(pid)
+            let endpoint = try ExtensionPeerEndpoint(
+                namespace: marketplace.identity.identifier, owner: "music",
+                directory: marketplace.identity.root.appendingPathComponent(
+                    "ExtensionState/Commands"))
+            let response = try await endpoint.invoke(
+                "music.ui.hostSlots", payload: payload, timeout: 5)
+            try Task.checkCancellation()
+            guard owner.isRunning, marketplace.installed["music"] == package,
+                marketplace.surfaceAvailability.activeIDs.contains("music"),
+                marketplace.sessions.versions["music"] == package.version,
+                marketplace.sessions.processIdentifiers["music"] == owner.pid
+            else { throw HostWorkerError.rejected }
+            return response
+        }
     }
 
     deinit {
