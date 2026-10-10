@@ -16,6 +16,8 @@ final class ExtensionRuntime: NSObject {
     private var machinesProjection: UsageMachinesProjection?
     private var alerts: UsageLimitAlerts?
     private var alertsTask: Task<Void, Never>?
+    private var backup: UsageBackupProvider?
+    private var backupRestoreTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
     private let commands = ExtensionCommandRegistry()
 
@@ -27,6 +29,11 @@ final class ExtensionRuntime: NSObject {
             }
             if command.hasPrefix("usage.statusline."), let statusLine = self.statusLine {
                 return try await statusLine.execute(command, payload: payload)
+            }
+            if command.hasPrefix("backup."), let backup = self.backup {
+                if command == "backup.synchronize" { await self.backupRestoreTask?.value }
+                try Task.checkCancellation()
+                return try await backup.execute(command, payload: payload)
             }
             if ["usage.machines.project", "usage.machines.result", "usage.machines.cancel"]
                 .contains(command),
@@ -59,6 +66,7 @@ final class ExtensionRuntime: NSObject {
         commands.shutdown()
         controller?.beginShutdown()
         alertsTask?.cancel()
+        backupRestoreTask?.cancel()
         for observer in observers { UsageEvents.stopObserving(observer) }
         observers = []
         usageStore?.shutdown()
@@ -74,10 +82,14 @@ final class ExtensionRuntime: NSObject {
         let projection = machinesProjection; machinesProjection = nil
         let statusLine = self.statusLine; self.statusLine = nil
         let connectionTask = statusLineConnectionTask; statusLineConnectionTask = nil
+        let backup = self.backup; self.backup = nil
+        let backupRestoreTask = self.backupRestoreTask; self.backupRestoreTask = nil
         connectionTask?.cancel()
         recovering = false
         surface = nil; usageStore = nil
         Task {
+            await backup?.shutdown()
+            await backupRestoreTask?.value
             await commands.shutdownAndWait()
             await connectionTask?.value
             try? await statusLine?.shutdown()
@@ -116,6 +128,11 @@ final class ExtensionRuntime: NSObject {
                 recovering = true
                 return ["ok": true] as NSDictionary
             }
+            if !fixture {
+                do { backup = try UsageBackupProvider.live() } catch {
+                    return ["ok": false, "error": error.localizedDescription] as NSDictionary
+                }
+            }
             let controller = UsageWorkerController { policy, event in
                 let local = try await UsageNativeCollector.collect(
                     home: UsageExecutionEnvironment.home, dataDirectory: Repo.dataDir,
@@ -150,7 +167,12 @@ final class ExtensionRuntime: NSObject {
                     UsageEvents.observe(UserDefaults.didChangeNotification) { [weak self] in
                         self?.usageStore?.syncStatusItem(); self?.usageStore?.refreshMenuBarItem()
                     })
-                controller.startBackgroundCollection()
+                let backup = self.backup
+                backupRestoreTask = Task { [weak self, weak controller] in
+                    _ = await backup?.restoreOnEnable()
+                    guard !Task.isCancelled, self?.controller === controller else { return }
+                    controller?.startBackgroundCollection()
+                }
             }
         case "view":
             guard controller != nil else { return ["ok": false] as NSDictionary }
