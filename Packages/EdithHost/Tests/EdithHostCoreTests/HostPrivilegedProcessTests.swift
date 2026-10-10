@@ -9,18 +9,25 @@ import Testing
     @Test func disablingOnePrivilegedWorkerReleasesItsProcessAndKeepsTheOtherAlive() async throws {
         let first = try fixture("normal")
         let second = try fixture("normal")
-        try await first.start(); try await second.start()
+        try await stage("first worker start") { try await first.start() }
+        try await stage("second worker start") { try await second.start() }
         let firstPID = try #require(first.processIdentifier)
         let secondPID = try #require(second.processIdentifier)
         #expect(firstPID != secondPID)
         let bytes = Data("synthetic".utf8)
-        #expect(try await first.invoke("read", payload: bytes) == bytes)
-        try await first.stop()
+        let firstRead = try await stage("first worker read") {
+            try await first.invoke("read", payload: bytes)
+        }
+        #expect(firstRead == bytes)
+        try await stage("first worker disable") { try await first.stop() }
         #expect(first.processIdentifier == nil)
         #expect(kill(firstPID, 0) == -1)
         #expect(second.processIdentifier == secondPID)
-        #expect(try await second.invoke("read", payload: bytes) == bytes)
-        try await second.stop()
+        let secondRead = try await stage("second worker read after first disable") {
+            try await second.invoke("read", payload: bytes)
+        }
+        #expect(secondRead == bytes)
+        try await stage("second worker disable") { try await second.stop() }
         #expect(kill(secondPID, 0) == -1)
     }
 
@@ -155,13 +162,57 @@ import Testing
         #expect(worker.processIdentifier == nil)
     }
 
-    private func fixture(_ mode: String, recording: URL? = nil) throws -> HostPrivilegedProcess {
+    @Test func coldFixtureStartupUsesTheProductionRequestBudget() async throws {
+        let worker = try fixture("delayed-start", startupDelay: 3.4)
+        let started = ContinuousClock.now
+        try await stage("delayed fixture start using production budget") {
+            try await worker.start()
+        }
+        #expect(ContinuousClock.now - started >= .seconds(3.4))
+        let pid = try #require(worker.processIdentifier)
+        let bytes = Data("synthetic delayed startup".utf8)
+        #expect(try await worker.invoke("read", payload: bytes) == bytes)
+        try await worker.stop()
+        #expect(worker.processIdentifier == nil && kill(pid, 0) == -1)
+    }
+
+    @Test func anUnresponsiveStartupStillFailsWithinItsExplicitBudgetAndExits() async throws {
+        let worker = try fixture(
+            "silent-start", startupDelay: 0.6, timeout: .milliseconds(150))
+        let started = ContinuousClock.now
+        await #expect(throws: HostWorkerError.timedOut) { try await worker.start() }
+        #expect(ContinuousClock.now - started < .seconds(5))
+        let pid = try #require(worker.processIdentifier)
+        let deadline = ContinuousClock.now + .seconds(5)
+        while worker.processIdentifier != nil, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(worker.processIdentifier == nil && kill(pid, 0) == -1)
+    }
+
+    private enum FixtureStageFailure: Error {
+        case failed(String, String)
+    }
+
+    private func stage<T>(_ name: String, operation: () async throws -> T) async throws -> T {
+        do { return try await operation() } catch {
+            throw FixtureStageFailure.failed(name, String(describing: error))
+        }
+    }
+
+    private func fixture(
+        _ mode: String, recording: URL? = nil, startupDelay: TimeInterval = 0,
+        timeout: Duration? = nil
+    ) throws -> HostPrivilegedProcess {
         let script = try #require(
             Bundle.module.url(
                 forResource: "privileged-worker", withExtension: "py", subdirectory: "Fixtures"))
-        return HostPrivilegedProcess(
-            executable: URL(fileURLWithPath: "/usr/bin/python3"),
-            arguments: [script.path, mode] + (recording.map { [$0.path] } ?? []),
-            timeout: .seconds(3))
+        let executable = URL(fileURLWithPath: "/usr/bin/python3")
+        let arguments = ["-I", script.path, mode, recording?.path ?? "", String(startupDelay)]
+        if let timeout {
+            return HostPrivilegedProcess(
+                executable: executable, arguments: arguments, timeout: timeout)
+        }
+        return HostPrivilegedProcess(executable: executable, arguments: arguments)
     }
 }
