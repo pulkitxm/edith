@@ -1,5 +1,4 @@
 import AppKit
-import CoreServices
 import CryptoKit
 import Darwin
 import Foundation
@@ -417,10 +416,21 @@ final class OriginalShellJourneyTests: XCTestCase {
         ]) { _, next in next }
         try saveOutcome()
         XCTAssertEqual(signature, errSecSuccess)
-        let status = LSRegisterURL(app as CFURL, true)
-        startup["registrationStatus"] = status
+        let registration = try registrationReceipt()
+        XCTAssertEqual(registration["hostIdentifier"] as? String, fixture.identifier)
+        XCTAssertEqual(registration["sourceCommit"] as? String, fixture.sourceCommit)
+        XCTAssertEqual(
+            registration["applicationVersion"] as? String,
+            info["CFBundleShortVersionString"] as? String)
+        XCTAssertEqual(
+            registration["executableSHA256"] as? String,
+            SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())
+        XCTAssertEqual(registration["registrationStatus"] as? Int, 0)
+        XCTAssertEqual(registration["registeredCount"] as? Int, 1)
+        XCTAssertEqual(registration["uniqueRegisteredPathMatched"] as? Bool, true)
+        startup["registrationStatus"] = registration["registrationStatus"]
+        startup["registrationOwner"] = "hosted-producer"
         try saveOutcome()
-        XCTAssertEqual(status, noErr)
         let registered = NSWorkspace.shared.urlsForApplications(
             withBundleIdentifier: fixture.identifier)
         let matched = registered.map { $0.resolvingSymlinksInPath().path } == [fixture.application]
@@ -430,6 +440,45 @@ final class OriginalShellJourneyTests: XCTestCase {
         ]) { _, next in next }
         try saveOutcome()
         XCTAssertTrue(matched)
+    }
+
+    private func registrationReceipt() throws -> [String: Any] {
+        let path = root.appendingPathComponent("registration.json").path
+        let descriptor = open(path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+        guard descriptor >= 0 else { throw JourneyContractError.invalidPaths }
+        defer { close(descriptor) }
+        var before = stat()
+        guard fstat(descriptor, &before) == 0,
+            before.st_mode & S_IFMT == S_IFREG, before.st_uid == getuid(),
+            before.st_mode & 0o777 == 0o600, before.st_nlink == 1,
+            before.st_size > 0, before.st_size <= 1024,
+            URL(fileURLWithPath: path).resolvingSymlinksInPath().path == path
+        else { throw JourneyContractError.invalidPaths }
+        var buffer = [UInt8](repeating: 0, count: 1025)
+        let count = Darwin.read(descriptor, &buffer, buffer.count)
+        var after = stat()
+        var current = stat()
+        guard count == before.st_size, fstat(descriptor, &after) == 0,
+            lstat(path, &current) == 0,
+            before.st_dev == after.st_dev, before.st_ino == after.st_ino,
+            before.st_size == after.st_size, before.st_mode == after.st_mode,
+            before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec,
+            before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec,
+            before.st_ctimespec.tv_sec == after.st_ctimespec.tv_sec,
+            before.st_ctimespec.tv_nsec == after.st_ctimespec.tv_nsec,
+            after.st_dev == current.st_dev, after.st_ino == current.st_ino
+        else { throw JourneyContractError.invalidPaths }
+        let value = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(buffer.prefix(count))) as? [String: Any])
+        XCTAssertEqual(
+            Set(value.keys),
+            Set([
+                "schema", "hostIdentifier", "sourceCommit", "applicationVersion",
+                "executableSHA256", "registrationStatus", "registeredCount",
+                "uniqueRegisteredPathMatched",
+            ]))
+        XCTAssertEqual(value["schema"] as? Int, 1)
+        return value
     }
 
     private func replaceApplication(_ fixture: JourneyFixture) async throws {

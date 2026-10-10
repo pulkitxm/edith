@@ -18,6 +18,7 @@ import { journeyImageNames, validateJourneyImage } from "./evidence.mjs";
 import { validateDisabledJourneyProcesses } from "./outcomes.mjs";
 import { runOwnedJourneyCommand } from "./owned-command.mjs";
 import { admitHostedJourney, prepareJourney } from "./prepare-journey.mjs";
+import { registerJourneyApplication } from "./registration.mjs";
 import {
   createJourneyReplacement,
   createJourneyStateReader,
@@ -113,11 +114,28 @@ try {
   );
   assert.equal(fixture.identifier, identifier);
   assert.equal(fixture.sourceCommit, receipt.sourceCommit);
+  const registrationExecutable = join(output, "JourneyRegistration");
+  execFileSync(
+    "xcrun",
+    [
+      "swiftc", "-parse-as-library", "-target", "arm64-apple-macos14.0",
+      "Tests/HostedOriginalShell/Sources/JourneyContract/JourneyContract.swift",
+      "Tests/HostedOriginalShell/FixtureSources/JourneyRegistration.swift",
+      "-o", registrationExecutable,
+    ],
+    { stdio: "inherit", timeout: 180_000 },
+  );
+  const registerApplication = (version) => registerJourneyApplication({
+    directory, fixture, environment: variables, accountHome: homedir(),
+    version, registrationExecutable,
+  });
+  await registerApplication("1.0.0");
   const replacement = await createJourneyReplacement({
     directory,
     environment: variables,
     accountHome: homedir(),
     fixture,
+    registerApplication,
     audit: async () =>
       JSON.parse(
         execFileSync(auditExecutable, [directory], {

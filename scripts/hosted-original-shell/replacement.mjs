@@ -71,6 +71,7 @@ export async function createJourneyReplacement({
   accountHome,
   fixture,
   audit,
+  registerApplication,
   verifyApplication = (path, version, identifier) => {
     const info = JSON.parse(
       execFileSync(
@@ -96,6 +97,7 @@ export async function createJourneyReplacement({
   uid = process.getuid(),
 }) {
   admitHostedJourney(environment, directory, fixture.identifier, accountHome);
+  assert.equal(typeof registerApplication, "function");
   assert.equal(fixture.directory, directory);
   assert.match(fixture.sourceCommit, /^[a-f0-9]{40}$/);
   assert.deepEqual(fixture.appVersions, ["1.0.0", "2.0.0"]);
@@ -221,6 +223,7 @@ export async function createJourneyReplacement({
       moved = true;
       await rename(staged, original);
       await checkApp(original, "2.0.0");
+      await registerApplication("2.0.0");
       catalogChanged = true;
       await writeCatalog(nextCatalog);
       await checkRoot();
@@ -252,6 +255,7 @@ export async function createJourneyReplacement({
         await rename(previous, original);
         if (catalogChanged) await writeCatalog(oldCatalog);
         await checkApp(original, "1.0.0");
+        await registerApplication("1.0.0");
       }
       throw error;
     } finally {
