@@ -25,6 +25,11 @@ final class SystemPresentationState {
         hideApps = values["active"] == "1" && values["blurRunningApps"] != "0"
     }
 
+    func apply(hideApps: Bool) {
+        guard !stopped else { return }
+        self.hideApps = hideApps
+    }
+
     func shutdown() {
         stopped = true
         channel?.stopObserving(observer)

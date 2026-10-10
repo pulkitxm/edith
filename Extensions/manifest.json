@@ -504,7 +504,7 @@
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "app": [
         "Extensions/system/Runtime.swift",
@@ -515,7 +515,10 @@
         "Extensions/system/Surface.swift",
         "Extensions/system/ViewModels/KeyboardCleaning.swift",
         "Extensions/system/Services/KeyboardCleaningHardware.swift",
-        "Extensions/system/Views/CleaningOverlay.swift"
+        "Extensions/system/Views/CleaningOverlay.swift",
+        "Extensions/system/SystemAppsSnapshot.swift",
+        "Extensions/system/CLI/AppsCommands.swift",
+        "Extensions/system/CLI/SystemCLIExecution.swift"
       ]
     },
     "inputs": [

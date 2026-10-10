@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
@@ -8,6 +9,9 @@ import SwiftUI
 @objc(EdithSystemExtensionRuntime)
 final class ExtensionRuntime: NSObject {
     private var model: RunningAppsModel?
+    private var uiModel: RunningAppsModel?
+    private var uiPresentation: SystemPresentationState?
+    private var uiClient: ExtensionEngineClient?
     private var presentation: SystemPresentationState?
     private var cleaning: KeyboardCleaning?
     private let operations: RunningAppOperationCenter = {
@@ -57,6 +61,25 @@ final class ExtensionRuntime: NSObject {
                     })
             }
             switch command {
+            case "system.cli":
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                return try JSONEncoder().encode(
+                    try await SystemCLIExecution.run(request, operations: self.operations))
+            case "system.apps.snapshot":
+                guard payload == Data("{}".utf8), let model = self.model,
+                    let presentation = self.presentation
+                else { throw ExtensionPeerError.invalidRequest }
+                await model.refresh()
+                return try JSONEncoder().encode(model.snapshot(presentation: presentation))
+            case "system.apps.sort":
+                let sort = try JSONDecoder().decode(SystemAppsSort.self, from: payload)
+                guard let key = AppSortKey(rawValue: sort.sortKey) else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                SharedDefaults.store.set(key.rawValue, forKey: RunningAppsKeys.sort)
+                SharedDefaults.store.set(sort.ascending, forKey: RunningAppsKeys.ascending)
+                self.model?.restoreSort(sort)
+                return Data("{}".utf8)
             case "system.cleanKeys", "system.stopCleaning", "system.cleaning.status":
                 guard let cleaning = self.cleaning else { throw ExtensionPeerError.unavailable }
                 return try cleaning.execute(command, payload: payload)
@@ -116,8 +139,22 @@ final class ExtensionRuntime: NSObject {
             if model == nil { model = RunningAppsModel(operations: operations) }
             if presentation == nil { presentation = SystemPresentationState() }
             if cleaning == nil { cleaning = KeyboardCleaning() }
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                let client = configuration.engineClient,
+                let defaults = UserDefaults(suiteName: configuration.defaultsSuite)
+            else { return ["ok": false] as NSDictionary }
+            stopUI()
+            let presentation = SystemPresentationState(channel: nil)
+            uiClient = client
+            uiPresentation = presentation
+            uiModel = RunningAppsModel(
+                engineClient: client, presentation: presentation, defaults: defaults)
+        case "stopUI": stopUI()
         case "view":
-            guard let model, let presentation else { return ["ok": false] as NSDictionary }
+            guard let model = uiModel, let presentation = uiPresentation else {
+                return ["ok": false] as NSDictionary
+            }
             return NSHostingController(
                 rootView: ExtensionPageHost { SystemPage(model: model, presentation: presentation) }
             )
@@ -137,10 +174,17 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
 
+    private func stopUI() {
+        uiModel?.shutdown(); uiModel = nil
+        uiPresentation?.shutdown(); uiPresentation = nil
+        uiClient?.invalidate(); uiClient = nil
+    }
+
     private static func encode(_ snapshot: RunningAppSnapshot) -> [String: Any] {
         [
             "pid": snapshot.pid, "name": snapshot.name, "bundleID": snapshot.bundleID ?? "",
-            "active": snapshot.active,
+            "active": snapshot.active, "cpuPercent": snapshot.cpuPercent,
+            "memoryMB": snapshot.memoryMB,
         ]
     }
 }

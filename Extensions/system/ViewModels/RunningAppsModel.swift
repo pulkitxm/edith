@@ -86,6 +86,9 @@ final class RunningAppsModel {
     var refreshing: Bool { loading.isRunning }
     private(set) var scrolling = false
 
+    private var engineClient: ExtensionEngineClient?
+    private var presentation: SystemPresentationState?
+    private var remoteTasks: [UUID: Task<Void, Never>] = [:]
     private var stopped = false
     private var resourceBaseline: RunningAppResourceBaseline?
     private let operations: RunningAppOperationCenter
@@ -115,12 +118,55 @@ final class RunningAppsModel {
         }
     }
 
+    convenience init(
+        engineClient: ExtensionEngineClient, presentation: SystemPresentationState,
+        defaults: UserDefaults
+    ) {
+        self.init(
+            operations: RunningAppOperationCenter(
+                snapshot: { [] }, perform: { _, _ in 0 },
+                resource: { _ in .init(cpuNanoseconds: 0, memoryMB: 0) }), defaults: defaults)
+        self.engineClient = engineClient
+        self.presentation = presentation
+    }
+
+    func snapshot(presentation: SystemPresentationState) -> SystemAppsSnapshot {
+        SystemAppsSnapshot(
+            apps: apps.map {
+                RunningAppSnapshot(
+                    pid: $0.pid, name: $0.name, bundleID: $0.bundleID, active: false,
+                    cpuPercent: $0.cpuPercent, memoryMB: $0.memoryMB)
+            },
+            icons: Dictionary(
+                uniqueKeysWithValues: apps.compactMap { row in
+                    row.icon?.tiffRepresentation.map { (String(row.pid), $0) }
+                }),
+            sortKey: sortKey.rawValue, ascending: ascending, hideApps: presentation.hideApps)
+    }
+
+    func restoreSort(_ sort: SystemAppsSort) {
+        guard let key = AppSortKey(rawValue: sort.sortKey), !stopped else { return }
+        sortKey = key; ascending = sort.ascending
+        apps = sorted(apps)
+    }
+
     func sort(by key: AppSortKey) {
         if sortKey == key {
             ascending.toggle()
         } else {
             sortKey = key
             ascending = key == .name
+        }
+        if let engineClient {
+            let sortKey = sortKey.rawValue
+            let ascending = ascending
+            launchRemote {
+                let payload = try JSONEncoder().encode(
+                    SystemAppsSort(sortKey: sortKey, ascending: ascending))
+                _ = try await engineClient.invoke("system.apps.sort", payload: payload)
+            }
+            apps = sorted(apps)
+            return
         }
         let d = defaults
         d.set(sortKey.rawValue, forKey: RunningAppsKeys.sort)
@@ -149,6 +195,25 @@ final class RunningAppsModel {
 
     func refresh() async {
         guard !stopped else { return }
+        if let engineClient {
+            await loading.perform(operation: {
+                let data = try await engineClient.invoke("system.apps.snapshot")
+                return try JSONDecoder().decode(SystemAppsSnapshot.self, from: data)
+            }) { snapshot in
+                guard !stopped else { return }
+                sortKey = AppSortKey(rawValue: snapshot.sortKey) ?? .cpu
+                ascending = snapshot.ascending
+                presentation?.apply(hideApps: snapshot.hideApps)
+                publish(
+                    snapshot.apps,
+                    icons: snapshot.icons.reduce(into: [:]) { result, pair in
+                        if let pid = Int32(pair.key), let image = NSImage(data: pair.value) {
+                            result[pid] = image
+                        }
+                    })
+            }
+            return
+        }
         let operations = self.operations
         let previous = resourceBaseline
         let now = Date()
@@ -165,6 +230,8 @@ final class RunningAppsModel {
 
     func shutdown() {
         stopped = true
+        for task in remoteTasks.values { task.cancel() }
+        remoteTasks.removeAll()
         loading.cancel()
         resourceBaseline = nil
         apps = []
@@ -211,6 +278,12 @@ final class RunningAppsModel {
 
     func quit(_ row: RunningAppRow, force: Bool = false) {
         guard !stopped else { return }
+        if engineClient != nil {
+            remoteQuit(
+                input: ["pid": Int(row.pid), "force": force, "confirmed": true], name: row.name,
+                force: force)
+            return
+        }
         do {
             let plan = try operations.plan(.pid(row.pid), force: force)
             record(operations.apply(plan, confirmed: true), name: row.name)
@@ -223,6 +296,11 @@ final class RunningAppsModel {
 
     func quitAll(force: Bool = false) {
         guard !stopped else { return }
+        if engineClient != nil {
+            remoteQuit(
+                input: ["all": true, "force": force, "confirmed": true], name: nil, force: force)
+            return
+        }
         do {
             let plan = try operations.plan(.all, force: force)
             record(operations.apply(plan, confirmed: true), name: nil)
@@ -230,6 +308,31 @@ final class RunningAppsModel {
             actionStatus = .planRejected(error)
         } catch {
             actionStatus = .planningFailed(error.localizedDescription)
+        }
+    }
+
+    private func remoteQuit(input: [String: Any], name: String?, force: Bool) {
+        guard let engineClient, let payload = try? JSONSerialization.data(withJSONObject: input)
+        else { return }
+        launchRemote {
+            let data = try await engineClient.invoke("apps.quit", payload: payload)
+            let result = try JSONDecoder().decode(SystemAppsQuitReply.self, from: data)
+            guard !self.stopped else { return }
+            let plan = RunningAppQuitPlan(selection: .all, targets: result.targets, force: force)
+            self.record(
+                RunningAppQuitOutcome(plan: plan, applied: result.applied, changed: result.changed),
+                name: name)
+        }
+    }
+
+    private func launchRemote(_ operation: @escaping @MainActor () async throws -> Void) {
+        let id = UUID()
+        remoteTasks[id] = Task {
+            defer { remoteTasks[id] = nil }
+            do { try await operation() } catch is CancellationError {} catch {
+                guard !stopped else { return }
+                actionStatus = .planningFailed(error.localizedDescription)
+            }
         }
     }
 

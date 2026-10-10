@@ -8,8 +8,8 @@ let package = Package(
     targets: [
         .target(
             name: "SystemExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: ".", exclude: ["Tests", "Runtime.swift", "Package.swift"],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
+            path: ".", exclude: ["Tests"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "SystemExtensionTests", dependencies: ["SystemExtension"], path: "Tests",
