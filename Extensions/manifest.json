@@ -2085,12 +2085,16 @@
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "app": [
+        "Extensions/seoAudit/CLI/CLIDestructivePlan.swift",
+        "Extensions/seoAudit/CLI/SEOOriginalCommands.swift",
+        "Extensions/seoAudit/CLI/SEOCLIExecution.swift",
         "Extensions/seoAudit/Models/SEOAuditModels.swift",
         "Extensions/seoAudit/Models/SEOAuditSelection.swift",
         "Extensions/seoAudit/Runtime.swift",
+        "Extensions/seoAudit/SEOAuditUIBridge.swift",
         "Extensions/seoAudit/Services/LighthouseAuditor.swift",
         "Extensions/seoAudit/Services/SEOAuditCommands.swift",
         "Extensions/seoAudit/Services/SEOAuditHTTPClient.swift",

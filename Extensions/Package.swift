@@ -29,8 +29,8 @@ let package = Package(
 
         .target(
             name: "SEOAuditExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "seoAudit", exclude: ["Tests", "Runtime.swift"],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
+            path: "seoAudit", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "SEOAuditExtensionTests", dependencies: ["SEOAuditExtension"],
