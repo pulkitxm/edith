@@ -5,36 +5,117 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 import WebKit
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 
-@MainActor
-final class MusicWorker {
+@MainActor struct MusicWorkerResources {
     let player: LocalMusicPlayer
     let external: ExternalMusic
     let accounts: MusicAccounts
-    private let session = URLSession(configuration: .ephemeral)
+    let session: URLSession
+
+    static func live(
+        player: LocalMusicPlayer? = nil, external: ExternalMusic? = nil,
+        accounts: MusicAccounts? = nil
+    ) -> Self {
+        Self(
+            player: player ?? LocalMusicPlayer(), external: external ?? ExternalMusic(),
+            accounts: accounts ?? .shared, session: URLSession(configuration: .ephemeral))
+    }
+}
+
+@MainActor
+final class MusicWorker {
+    private let fixture: WorkerFixtureAdmission?
+    private let resources: MusicWorkerResources?
+    var isInertFixture: Bool { fixture != nil }
+    var liveDependencyCount: Int { resources == nil ? 0 : 4 }
+    var player: LocalMusicPlayer {
+        guard let resources else {
+            preconditionFailure("Playback is unavailable in Music lifecycle fixtures.")
+        }
+        return resources.player
+    }
+    var external: ExternalMusic {
+        guard let resources else {
+            preconditionFailure("External playback is unavailable in Music lifecycle fixtures.")
+        }
+        return resources.external
+    }
+    var accounts: MusicAccounts {
+        guard let resources else {
+            preconditionFailure("Accounts are unavailable in Music lifecycle fixtures.")
+        }
+        return resources.accounts
+    }
     private var artwork: [URL: SurfaceThumbnail] = [:]
     private var stopped = false
     private let tasks = MusicTaskOwner()
     var browserPresentation: MusicBrowserPresentation?
     var videoPresentation: MusicVideoPlayback?
 
+    convenience init(
+        context: NSDictionary, roleBundle: Bundle,
+        validateProduction: @escaping @MainActor () throws -> Void = {}
+    ) throws {
+        try self.init(
+            admission: {
+                try Self.resolveFixture(
+                    admission: {
+                        try WorkerFixtureAdmission.current(
+                            extensionID: "music", context: context, roleBundle: roleBundle)
+                    },
+                    applicationIdentifier: ProcessInfo.processInfo.environment[
+                        "EDITH_APPLICATION_IDENTIFIER"])
+            },
+            makeLiveResources: {
+                try validateProduction()
+                return MusicWorkerResources.live()
+            })
+    }
+
     init(
-        player: LocalMusicPlayer? = nil, external: ExternalMusic? = nil,
-        accounts: MusicAccounts? = nil, startImmediately: Bool = true
-    ) {
-        self.player = player ?? LocalMusicPlayer()
-        self.external = external ?? ExternalMusic()
-        self.accounts = accounts ?? .shared
-        self.accounts.presentationOwnedYoutube = true
+        admission: () throws -> WorkerFixtureAdmission?,
+        makeLiveResources: (@MainActor () throws -> MusicWorkerResources)? = nil,
+        startImmediately: Bool = true
+    ) throws {
+        let fixture = try Self.resolveFixture(admission: admission)
+        self.fixture = fixture
+        if fixture == nil {
+            resources = try makeLiveResources?() ?? MusicWorkerResources.live()
+        } else {
+            resources = nil
+        }
+        guard let resources else { return }
+        resources.accounts.presentationOwnedYoutube = true
         if startImmediately {
-            self.accounts.activate()
-            self.external.start()
+            resources.accounts.activate()
+            resources.external.start()
             tasks.start { try? await DownloadWorker.shared.start() }
         }
     }
 
+    static func resolveFixture(
+        admission: () throws -> WorkerFixtureAdmission?, applicationIdentifier: String? = nil
+    ) throws -> WorkerFixtureAdmission? {
+        let fixture = try admission()
+        if fixture == nil, applicationIdentifier?.hasPrefix("com.pulkit.edith.tests.") == true {
+            throw WorkerFixtureError.invalid
+        }
+        if let fixture {
+            guard fixture.extensionID == "music", fixture.role == .app,
+                let mode = try FileManager.default.attributesOfItem(
+                    atPath: fixture.home.deletingLastPathComponent().path)[.posixPermissions]
+                    as? NSNumber,
+                mode.intValue == 0o700
+            else { throw WorkerFixtureError.invalid }
+        }
+        return fixture
+    }
+
     func read(_ tile: SurfaceTile) async throws -> [MusicSurfacePlayback] {
-        guard !stopped else { throw ExtensionPeerError.unavailable }
+        guard !stopped, !isInertFixture else { throw ExtensionPeerError.unavailable }
         var result: [MusicSurfacePlayback] = []
         let track = videoPresentation?.track ?? player.current
         var local = MusicSurfacePlayback(
@@ -85,25 +166,26 @@ final class MusicWorker {
                     repeating: playback?.canRepeat == true ? playback?.repeating : nil))
         }
         try Task.checkCancellation()
-        guard !stopped else { throw ExtensionPeerError.unavailable }
+        guard !stopped, !isInertFixture else { throw ExtensionPeerError.unavailable }
         return result
     }
 
     func readNotch(_ tile: SurfaceTile) async throws -> [MusicSurfacePlayback] {
-        guard !stopped else { throw ExtensionPeerError.unavailable }
+        guard !stopped, !isInertFixture else { throw ExtensionPeerError.unavailable }
         await external.refreshPresentationPlayback()
         try Task.checkCancellation()
         return try await read(tile)
     }
 
     func retryNotch(_ tile: SurfaceTile) async throws -> [MusicSurfacePlayback] {
-        guard !stopped else { throw ExtensionPeerError.unavailable }
+        guard !stopped, !isInertFixture else { throw ExtensionPeerError.unavailable }
         await external.refreshPresentationPlayback(force: true)
         try Task.checkCancellation()
         return try await read(tile)
     }
 
     func notchAppIcon(_ sourceID: String) -> SurfaceThumbnail? {
+        guard !stopped, !isInertFixture else { return nil }
         guard
             let app = ExternalApp.allCases.first(where: {
                 sourceID == "external." + $0.rawValue || sourceID == $0.rawValue
@@ -120,7 +202,7 @@ final class MusicWorker {
     }
 
     func perform(_ command: MusicSurfaceCommand) async throws {
-        guard !stopped else { throw ExtensionPeerError.unavailable }
+        guard !stopped, !isInertFixture else { throw ExtensionPeerError.unavailable }
         if ["open", "openPlayer"].contains(command.action) {
             if let app = ExternalApp.allCases.first(where: {
                 command.sourceID == "external." + $0.rawValue
@@ -207,16 +289,17 @@ final class MusicWorker {
 
     func shutdown() async {
         stop()
-        await DownloadWorker.shared.stop()
+        if !isInertFixture { await DownloadWorker.shared.stop() }
     }
 
     func stop() {
         guard !stopped else { return }
         stopped = true
+        guard let resources else { tasks.shutdown(); return }
         videoPresentation?.stop(); videoPresentation = nil
         browserPresentation?.stop(); browserPresentation = nil
         tasks.shutdown()
-        session.invalidateAndCancel(); artwork.removeAll()
+        resources.session.invalidateAndCancel(); artwork.removeAll()
         player.shutdown(); external.stop(); accounts.shutdown()
         MusicRemote.shared.stop(); YoutubeDownloader.shared.shutdown(); MusicTools.shared.shutdown()
         MusicPrivacyState.shared.shutdown(); WindowVisibility.shared.shutdown()
@@ -242,8 +325,9 @@ final class MusicWorker {
     }
 
     func streamingThumbnail(_ url: URL) async throws -> SurfaceThumbnail? {
+        guard !stopped, let resources else { throw ExtensionPeerError.unavailable }
         if let cached = artwork[url] { return cached }
-        let (bytes, response) = try await session.bytes(from: url)
+        let (bytes, response) = try await resources.session.bytes(from: url)
         guard let response = response as? HTTPURLResponse, response.statusCode == 200,
             response.expectedContentLength <= 1_048_576
         else { return nil }

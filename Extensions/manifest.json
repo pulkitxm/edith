@@ -992,6 +992,7 @@
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
+        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
         "Extensions/music/Bridge/MusicDownloadsEnvelope.swift",
         "Extensions/music/Bridge/MusicUIEnvelope.swift",
         "Extensions/music/CLI/MusicCLIExecution.swift",

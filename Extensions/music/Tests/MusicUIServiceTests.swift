@@ -20,7 +20,9 @@ extension MusicExtensionTests {
             let accounts = MusicAccounts(
                 defaults: defaults,
                 spotify: MusicSpotifySession(libraryURL: nil, defaults: defaults), pauseLocal: {})
-            let worker = MusicWorker(accounts: accounts, startImmediately: false)
+            let worker = try MusicWorker(
+                admission: { nil }, makeLiveResources: { .live(accounts: accounts) },
+                startImmediately: false)
             var invalidations = 0
             let service = MusicUIService(
                 worker: worker, version: "1.2.3", invalidateHostSlots: { invalidations += 1 })
@@ -88,7 +90,7 @@ extension MusicExtensionTests {
         @Test func folderIntentRequiresAcknowledgementAndRejectsLateCompletionAfterStop()
             async throws
         {
-            let worker = MusicWorker(startImmediately: false)
+            let worker = try MusicWorker(admission: { nil }, startImmediately: false)
             let service = MusicUIService(worker: worker)
             let prior = MusicHostNavigation.navigate
             defer {
@@ -138,7 +140,9 @@ extension MusicExtensionTests {
                         defaults: defaults,
                         spotify: MusicSpotifySession(libraryURL: nil, defaults: defaults),
                         pauseLocal: {})
-                    let worker = MusicWorker(accounts: accounts, startImmediately: false)
+                    let worker = try MusicWorker(
+                        admission: { nil }, makeLiveResources: { .live(accounts: accounts) },
+                        startImmediately: false)
                     let service = MusicUIService(worker: worker, version: "1.2.3")
                     for autoHide in [false, true] {
                         for collapsed in [false, true] {
@@ -181,12 +185,16 @@ extension MusicExtensionTests {
             let queue = DownloadWorker(
                 file: file, executable: { nil }, galleryExecutable: { nil }, isEnabled: { true })
             let defaults = SharedDefaults.store
-            let worker = MusicWorker(
-                player: LocalMusicPlayer(),
-                accounts: MusicAccounts(
-                    defaults: defaults,
-                    spotify: MusicSpotifySession(libraryURL: nil, defaults: defaults),
-                    pauseLocal: {}), startImmediately: false)
+            let worker = try MusicWorker(
+                admission: { nil },
+                makeLiveResources: {
+                    .live(
+                        player: LocalMusicPlayer(),
+                        accounts: MusicAccounts(
+                            defaults: defaults,
+                            spotify: MusicSpotifySession(libraryURL: nil, defaults: defaults),
+                            pauseLocal: {}))
+                }, startImmediately: false)
             defer { worker.stop() }
             let downloader = YoutubeDownloader(
                 client: MusicDownloadClient(worker: queue), start: false)
@@ -259,7 +267,10 @@ extension MusicExtensionTests {
             let accounts = MusicAccounts(
                 defaults: defaults,
                 spotify: MusicSpotifySession(libraryURL: nil, defaults: defaults), pauseLocal: {})
-            let worker = MusicWorker(player: player, accounts: accounts, startImmediately: false)
+            let worker = try MusicWorker(
+                admission: { nil },
+                makeLiveResources: { .live(player: player, accounts: accounts) },
+                startImmediately: false)
             let service = MusicUIService(worker: worker)
             defer { worker.stop() }
             let levelData = try await service.execute("music.ui.level", payload: Data("{}".utf8))

@@ -202,7 +202,7 @@ import Testing
         MusicStorage.setMusicDirectory(root)
         let url = root.appendingPathComponent("Mock Garden.mov")
         try await movie(at: url)
-        let worker = MusicWorker(startImmediately: false)
+        let worker = try MusicWorker(admission: { nil }, startImmediately: false)
         let service = MusicUIService(worker: worker)
         defer { service.stop(); worker.stop() }
         let lease = try JSONDecoder().decode(
