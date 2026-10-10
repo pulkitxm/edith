@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionCommands
 import EdithExtensionUI
 import SwiftUI
 import Foundation
@@ -10,10 +11,22 @@ final class ExtensionRuntime: NSObject {
 
     private var presentation: ControlPresentation?
 
+    private var follow = SystemStatsFollow()
+
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
+            if command.hasPrefix("systemStats.follow.") {
+                guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
+                return try await self.follow.execute(command, payload: payload)
+            }
+            if command == "systemStats.cli" {
+                guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                let reply = try await SystemStatsCLIExecution.run(request)
+                return try JSONEncoder().encode(reply)
+            }
             if command.hasPrefix("systemStats.ui.") {
                 guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
                 let defaults = SharedDefaults.store
@@ -105,9 +118,14 @@ final class ExtensionRuntime: NSObject {
                         } content: {
                             Form {
                                 Section("Usage") {
-                                    SystemMenuReadings(
-                                        cpu: presentation.state.cpu,
-                                        memory: presentation.state.memory)
+                                    if presentation.active {
+                                        SystemMenuReadings(
+                                            cpu: presentation.state.cpu,
+                                            memory: presentation.state.memory)
+                                    } else {
+                                        Text("Enable System Stats to see live readings.")
+                                            .settingsCaption()
+                                    }
                                 }
                                 Section("Menu Bar") {
                                     Text(
@@ -122,6 +140,7 @@ final class ExtensionRuntime: NSObject {
         case "synchronize": break
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
+            follow.shutdown()
             presentation?.stop()
             presentation = nil
             commands.shutdown()

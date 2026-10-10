@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import EdithExtensionSupport
+import EdithExtensionCommands
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -18,6 +19,20 @@ final class ExtensionRuntime: NSObject {
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
+            if command == "presenter.cli" {
+                guard let self, self.state != nil else { throw ExtensionPeerError.unavailable }
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                let reply = try await PresenterCLIExecution.run(
+                    request, defaults: SharedDefaults.store
+                ) { operation in
+                    if operation == .stop { self.service?.pauseUntilShareEnds() }
+                    let snapshot = PresenterRuntimeOperationExecution.perform(
+                        operation, post: { _ in })
+                    self.synchronize()
+                    return snapshot
+                }
+                return try JSONEncoder().encode(reply)
+            }
             if command.hasPrefix("presenter.ui.") {
                 guard let self, self.state != nil else { throw ExtensionPeerError.unavailable }
                 let defaults = SharedDefaults.store

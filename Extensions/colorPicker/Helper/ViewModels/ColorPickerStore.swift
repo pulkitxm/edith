@@ -26,6 +26,11 @@ final class ColorPickerStore: FeatureModule {
         requestObserver = nil
     }
 
+    func reloadHistory() {
+        guard !stopped else { return }
+        history = ColorHistoryStore.load()
+    }
+
     func registerHotKey() {
         HotKeyRegistrar.install(HotKeyCatalog.colorPicker) { [weak self] in
             self?.pick()

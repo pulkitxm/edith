@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import EdithExtensionSupport
+import EdithExtensionCommands
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -16,6 +17,17 @@ final class ExtensionRuntime: NSObject {
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
+            if command == "emoji.cli" {
+                guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
+                guard let service = self.service else { throw ExtensionPeerError.unavailable }
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                let reply = try await EmojiCLIExecution.run(
+                    request, defaults: SharedDefaults.store,
+                    catalog: service.catalog, pick: { EmojiPanel.shared.show() },
+                    insert: { try await service.insertAndWait(character: $0) },
+                    changed: { service.adoptSettings() })
+                return try JSONEncoder().encode(reply)
+            }
             if command.hasPrefix("emoji.ui.") {
                 guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
                 let defaults = SharedDefaults.store

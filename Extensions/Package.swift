@@ -146,7 +146,7 @@ let package = Package(
             path: "windowSweaters/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "ColorPickerExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
             path: "colorPicker", exclude: ["Tests", "Runtime.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
@@ -162,7 +162,7 @@ let package = Package(
             path: "keystrokeHighlight/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "SystemStatsExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
             path: "systemStats", exclude: ["Tests", "Runtime.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
@@ -178,7 +178,7 @@ let package = Package(
             path: "micMute/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "EmojiExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
             path: "emoji", exclude: ["Tests", "Runtime.swift"], resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
@@ -210,7 +210,7 @@ let package = Package(
             path: "jev/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "PresenterExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
             path: "presenter", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(

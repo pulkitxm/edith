@@ -210,9 +210,11 @@
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "helper": [
+        "Extensions/presenter/CLI/PresenterCLIExecution.swift",
+        "Extensions/presenter/CLI/PresenterCommands.swift",
         "Extensions/presenter/Helper/Models/PresenterDebouncer.swift",
         "Extensions/presenter/Helper/Models/PresenterRules.swift",
         "Extensions/presenter/Helper/Models/PresenterSignals.swift",
@@ -256,6 +258,9 @@
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
+        "Extensions/colorPicker/CLI/CLIDestructivePlan.swift",
+        "Extensions/colorPicker/CLI/ColorCLIExecution.swift",
+        "Extensions/colorPicker/CLI/ColorCommands.swift",
         "Extensions/colorPicker/Helper/ViewModels/ColorPickerStore.swift",
         "Extensions/colorPicker/Models/ColorPickerOperation.swift",
         "Extensions/colorPicker/Models/ColorSwatch.swift",
@@ -279,7 +284,7 @@
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "surfaceContractVersion": 1,
     "sameExecutableWorker": true
   },
@@ -290,8 +295,16 @@
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
+        "Extensions/systemStats/CLI/MachineReports.swift",
+        "Extensions/systemStats/CLI/SystemCommands.swift",
+        "Extensions/systemStats/CLI/SystemStatsCLIExecution.swift",
+        "Extensions/systemStats/CLI/SystemStatsFollow.swift",
         "Extensions/systemStats/Helper/SystemStatsStatusItem.swift",
+        "Extensions/systemStats/Models/ByteFormatter.swift",
+        "Extensions/systemStats/Models/LocalMachineSampler.swift",
+        "Extensions/systemStats/Models/MetricsModels.swift",
         "Extensions/systemStats/Models/SystemStatsReader.swift",
+        "Extensions/systemStats/Models/VolumeCapacity.swift",
         "Extensions/systemStats/Presentation.swift",
         "Extensions/systemStats/Runtime.swift",
         "Extensions/systemStats/Surface.swift"
@@ -309,7 +322,7 @@
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "surfaceContractVersion": 1,
     "sameExecutableWorker": true
   },
@@ -319,9 +332,11 @@
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "helper": [
+        "Extensions/emoji/CLI/EmojiCLIExecution.swift",
+        "Extensions/emoji/CLI/EmojiCommands.swift",
         "Extensions/emoji/EdithHelper/Services/EmojiTypeSynth.swift",
         "Extensions/emoji/EdithHelper/ViewModels/EmojiPanelModel.swift",
         "Extensions/emoji/EdithHelper/ViewModels/EmojiStore.swift",
