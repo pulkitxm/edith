@@ -1038,7 +1038,10 @@
         "Extensions/music/Views/MusicSpotifyLibrary.swift",
         "Extensions/music/Views/MusicSpotifyWorkspace.swift",
         "Extensions/music/Views/PlaybackWave.swift",
-        "Extensions/music/Views/VideoPreview.swift"
+        "Extensions/music/Views/VideoPreview.swift",
+        "Extensions/music/Bridge/MusicVideoEnvelope.swift",
+        "Extensions/music/UI/MusicVideoEnvelope.swift",
+        "Extensions/music/UI/MusicNativeVideo.swift"
       ]
     },
     "nativeCargo": {

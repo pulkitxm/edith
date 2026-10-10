@@ -30,10 +30,12 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        embeddedUI.stop()
         uiService?.stop()
         commands.shutdown()
         backup?.beginShutdown()
         Task {
+            await EmbeddedMusicVideoSession.drainAll()
             await backup?.shutdown()
             await commands.shutdownAndWait()
             await worker?.shutdown()

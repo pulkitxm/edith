@@ -50,6 +50,7 @@ struct MusicUIState: Codable, Sendable {
     var events: [MusicUIEvent]
     var cursor: Int
     var privacy: Bool
+    var videoControl: MusicVideoControl?
     var folderIntent: MusicUIFolderIntent?
     var preferences = MusicUIPreferences()
     var tools = MusicUITools()
@@ -64,6 +65,11 @@ struct MusicUIState: Codable, Sendable {
             tracks.count <= 50_000, folders.count <= 50_000, events.count <= 64,
             ["local", "spotify", "youtubeMusic"].contains(selected), cursor >= 0
         else { throw CocoaError(.validationMissingMandatoryProperty) }
+        if let videoControl {
+            guard videoControl.volume.isFinite, (0...1).contains(videoControl.volume),
+                videoControl.seek.map({ $0.isFinite && $0 >= 0 && $0 <= 604_800 }) ?? true
+            else { throw CocoaError(.validationMissingMandatoryProperty) }
+        }
         if let folderIntent {
             guard folderIntent.revision > 0 else {
                 throw CocoaError(.validationMissingMandatoryProperty)

@@ -71,6 +71,7 @@ import Observation
     func start() { rescan() }
 
     func stop() {
+        EmbeddedMusicVideoSession.stopAll()
         generation &+= 1; lifecycle &+= 1; cursor = 0
         folderIntentRevision = 0
         readTask?.cancel(); readTask = nil
@@ -176,6 +177,7 @@ import Observation
         restorePending = value.restorePending
         entriesLoaded = true; searchLoaded = true; favouritesLoaded = true
         folderCache[folderPath] = folders
+        EmbeddedMusicVideoSession.apply(value.videoControl)
         EmbeddedMusicAccounts.shared.apply(value)
         let tools = EmbeddedMusicTools.shared
         tools.installed = value.tools.installed; tools.installing = value.tools.installing;

@@ -95,60 +95,6 @@ import EdithExtensionUI
     }
 }
 
-struct EmbeddedMusicVideoArtwork: View {
-    let track: EmbeddedTrack
-    @State private var frame: NSImage?
-    @State private var ready = false
-    var body: some View {
-        VStack(spacing: UIScale.pt(8)) {
-            Group {
-                if let frame {
-                    Image(nsImage: frame).resizable().scaledToFit()
-                } else {
-                    LoadingIndicator()
-                }
-            }.aspectRatio(16.0 / 9.0, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(10)))
-            HStack {
-                Button {
-                    EmbeddedMusicRemote.shared.playPause()
-                } label: {
-                    Image(
-                        systemName: EmbeddedMusicRemote.shared.isPlaying
-                            ? "pause.fill" : "play.fill")
-                }.accessibilityLabel("Play or pause video")
-                Slider(
-                    value: Binding(
-                        get: { EmbeddedMusicRemote.shared.progress },
-                        set: { EmbeddedMusicRemote.shared.seek(to: $0) }), in: 0...1
-                )
-                .accessibilityLabel("Video playback position")
-                Text(EmbeddedTrackMeta.timeLabel(EmbeddedMusicRemote.shared.elapsed))
-                    .monospacedDigit()
-            }.disabled(!ready)
-        }
-        .pageTask(id: track.id) {
-            do {
-                _ = try await EmbeddedMusicRemote.shared.request(
-                    "music.ui.action", action: .init(kind: .videoOpen, path: track.relativePath))
-                ready = true
-                EmbeddedMusicRemote.shared.rescan()
-            } catch { ready = false }
-        }
-        .pageRefresh(interval: { .milliseconds(100) }) {
-            guard ready,
-                let data = try? await EmbeddedMusicRemote.shared.request(
-                    "music.ui.video.frame",
-                    action: .init(kind: .startTrack, path: track.relativePath)),
-                let bytes = try? JSONDecoder().decode(Data.self, from: data),
-                bytes.count <= 1_048_576, !Task.isCancelled
-            else { return }
-            frame = NSImage(data: bytes)
-        }
-        .onDisappear { EmbeddedMusicRemote.shared.send(.videoClose, path: track.relativePath) }
-    }
-}
-
 struct EmbeddedMusicEngineImage<Content: View, Placeholder: View>: View {
     let url: URL?
     @ViewBuilder var content: (Image) -> Content

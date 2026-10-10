@@ -13,6 +13,8 @@ import WebKit
     private var events: [MusicUIEvent] = []
     private var sequence = 0
     private var video: MusicVideoPlayback?
+    private var videoDeadline: Task<Void, Never>?
+    private var videoActivity = Date()
     private var resumeAudio = false
     private var stopped = false
     init(worker: MusicWorker, version: String = "") {
@@ -108,6 +110,7 @@ import WebKit
                     forKey: MusicBackupProvider.restorePendingKey),
                 events: events.filter { $0.sequence > query.cursor }, cursor: sequence,
                 privacy: MusicPrivacyState.shared.active,
+                videoControl: video?.control,
                 folderIntent: MusicHostNavigation.folderIntent,
                 preferences: .init(
                     crossfade: SharedDefaults.store.object(forKey: MusicFade.enabledKey) as? Bool
@@ -151,13 +154,29 @@ import WebKit
                         forFileNamed: (action.path as NSString).lastPathComponent))
             }
             return try JSONEncoder().encode(TrackMeta.trackCount(under: action.path))
-        case "music.ui.video.frame":
+        case "music.ui.video.open":
             let action = try JSONDecoder().decode(MusicUIAction.self, from: payload)
             try action.validate()
-            guard let video, video.track.relativePath == action.path else {
+            try openVideo(action.path)
+            return try JSONEncoder().encode(video!.lease)
+        case "music.ui.video.range":
+            guard payload.count <= 2048, let video else { throw ExtensionPeerError.invalidRequest }
+            return try JSONEncoder().encode(
+                await video.read(JSONDecoder().decode(MusicVideoRange.self, from: payload)))
+        case "music.ui.video.update":
+            guard payload.count <= 2048, let video else { throw ExtensionPeerError.invalidRequest }
+            try video.report(JSONDecoder().decode(MusicVideoReport.self, from: payload))
+            videoActivity = Date()
+            return Data("{}".utf8)
+        case "music.ui.video.close":
+            guard payload.count <= 2048 else { throw ExtensionPeerError.invalidRequest }
+            let lease = try JSONDecoder().decode(MusicVideoLease.self, from: payload)
+            guard let video, video.lease.id == lease.id, video.lease.revision == lease.revision
+            else {
                 throw ExtensionPeerError.invalidRequest
             }
-            return try JSONEncoder().encode(await video.frame())
+            closeVideo()
+            return Data("{}".utf8)
         case "music.ui.profiles":
             let profiles = try await Task.detached { try MusicBrowserConnection.profiles() }.value
             try Task.checkCancellation()
@@ -220,7 +239,11 @@ import WebKit
             return try JSONEncoder().encode(
                 await MusicCLIExecution.run(
                     JSONDecoder().decode(ExtensionCLIRequest.self, from: payload),
-                    player: worker.player))
+                    read: { [weak self] in
+                        self?.playbackSnapshot() ?? PlayerSnapshot(player: .builtin)
+                    },
+                    send: { [weak self] in self?.transport($0) }, refresh: worker.player.rescan,
+                    renamed: worker.player.renameCurrent))
         default: throw ExtensionPeerError.invalidRequest
         }
     }
@@ -353,16 +376,7 @@ import WebKit
                 [MusicProvider.youtubeMusic.homeURL!], withApplicationAt: chrome,
                 configuration: configuration)
 
-        case .videoOpen:
-            let track = try MusicLibrary.track(at: action.path)
-            guard track.isVideo else { throw ExtensionPeerError.invalidRequest }
-            if video?.track.relativePath == action.path { return }
-            closeVideo()
-            resumeAudio = player.isPlaying
-            let position = player.current?.relativePath == action.path ? player.elapsed : 0
-            player.perform(.pause)
-            video = MusicVideoPlayback(
-                track: track, position: position, playing: resumeAudio, volume: player.volume)
+        case .videoOpen: try openVideo(action.path)
         case .videoClose:
             if video?.track.relativePath == action.path { closeVideo() }
         case .crossfade, .barCollapsed, .barAutoHide, .gridView:
@@ -408,7 +422,58 @@ import WebKit
         events.removeAll()
     }
 
+    private func playbackSnapshot() -> PlayerSnapshot {
+        let player = worker.player
+        return PlayerSnapshot(
+            player: .builtin, isRunning: true, isPlaying: video?.playing ?? player.isPlaying,
+            title: (video?.track ?? player.current).map {
+                ($0.relativePath as NSString).lastPathComponent
+            } ?? "",
+            elapsedSeconds: video?.elapsed ?? player.elapsed,
+            durationSeconds: video?.duration ?? player.trackDuration,
+            volume: video?.volume ?? player.volume,
+            trackPath: video?.track.relativePath ?? player.current?.relativePath)
+    }
+
+    private func transport(_ request: MusicTransportRequest) {
+        guard let video else { worker.player.perform(request); return }
+        switch request {
+        case .play: video.resume()
+        case .pause: video.pause()
+        case .toggle: video.toggle()
+        case .stop: video.pause(); video.seek(0)
+        case .seek(let value): video.seek(value)
+        case .volume(let value): video.setVolume(value)
+        case .status: break
+        case .shuffle, .repeat: worker.player.perform(request)
+        default: closeVideo(); worker.player.perform(request)
+        }
+    }
+
+    private func openVideo(_ path: String) throws {
+        let track = try MusicLibrary.track(at: path)
+        guard track.isVideo else { throw ExtensionPeerError.invalidRequest }
+        closeVideo()
+        let player = worker.player
+        let wasPlaying = player.isPlaying
+        let next = try MusicVideoPlayback(
+            track: track, position: player.current?.relativePath == path ? player.elapsed : 0,
+            playing: wasPlaying, volume: player.volume)
+        resumeAudio = wasPlaying
+        player.perform(.pause)
+        video = next
+        videoActivity = Date()
+        videoDeadline = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(5)) } catch { return }
+                guard let self, !self.stopped, self.video?.lease.id == next.lease.id else { return }
+                if Date().timeIntervalSince(self.videoActivity) >= 10 { self.closeVideo(); return }
+            }
+        }
+    }
+
     private func closeVideo() {
+        videoDeadline?.cancel(); videoDeadline = nil
         guard let video else { return }
         let position = video.duration > 0 ? video.elapsed / video.duration : 0
         let same = worker.player.current?.relativePath == video.track.relativePath
