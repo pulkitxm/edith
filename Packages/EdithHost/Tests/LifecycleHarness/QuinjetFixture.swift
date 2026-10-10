@@ -103,7 +103,8 @@ enum QuinjetFixture {
             "quinjet.launch", payload: JSONSerialization.data(withJSONObject: ["worktreeID": tree]))
         let pid = try await QuinjetLifecycleFixture.verify(
             invoke: { try await endpoint.invoke($0, payload: $1) }, workerPID: workerPID,
-            script: script.path, scriptSHA256: scriptSHA256,
+            script: script.path, project: home.appendingPathComponent("synthetic-project").path,
+            scriptSHA256: scriptSHA256,
             receipt: {
                 guard FileManager.default.fileExists(atPath: receipt.path) else { return nil }
                 let attributes = try FileManager.default.attributesOfItem(atPath: receipt.path)

@@ -15,10 +15,19 @@ import Testing
         #expect(!worker.commands.contains("surface.perform"))
     }
 
+    @Test func anEmptyReadBacksOffAndKeepsTheOwnedStream() async throws {
+        let worker = Worker(mode: "empty-read")
+        let started = ContinuousClock.now
+        #expect(try await worker.verify() == 101)
+        #expect(started.duration(to: .now) >= .milliseconds(50))
+        #expect(worker.reads == 3)
+    }
+
     @Test(arguments: [
         "parent", "group", "tty", "script", "script-hash", "birth", "executable", "argv",
         "pid-reuse", "stale-accepted", "stale-timeout", "offset", "exit", "raw-terminal",
         "false-action", "changed-generation", "missing-receipt", "live-tty",
+        "late-script", "wrong-project", "wrong-command",
     ])
     func malformedOwnershipOrStreamCannotClaimSuccess(mode: String) async {
         let worker = Worker(mode: mode)
@@ -63,7 +72,8 @@ import Testing
 
         func verify() async throws -> Int32 {
             try await Fixture.verify(
-                invoke: invoke, workerPID: 100, script: "/owned/bin/quinjet", scriptSHA256: "hash",
+                invoke: invoke, workerPID: 100, script: "/owned/bin/quinjet",
+                project: "/owned/synthetic-project", scriptSHA256: "hash",
                 receipt: receipt, process: process,
                 timeout: mode == "missing-receipt" ? .milliseconds(1) : .seconds(1))
         }
@@ -90,7 +100,14 @@ import Testing
                 parent: parent, group: pid,
                 executable: mode == "executable" ? "/foreign" : "/usr/bin/python3",
                 inputTerminal: mode != "live-tty",
-                arguments: ["python3", mode == "argv" ? "/foreign" : "/owned/bin/quinjet", "tui"])
+                arguments: mode == "late-script"
+                    ? ["/usr/bin/python3", "/foreign", "--argument", "/owned/bin/quinjet"]
+                    : [
+                        "/usr/bin/python3", mode == "argv" ? "/foreign" : "/owned/bin/quinjet",
+                        "--client", "edith", "-C",
+                        mode == "wrong-project" ? "/foreign" : "/owned/synthetic-project",
+                        mode == "wrong-command" ? "status" : "tui",
+                    ])
         }
 
         func invoke(_ operation: String, _ data: Data) async throws -> Data {
@@ -109,7 +126,7 @@ import Testing
                 #expect(Set(object.keys) == ["tabID", "action"])
                 #expect(object["tabID"] as? String == tabID.uuidString)
                 #expect(object["action"] as? String == "quinjet;open-new-tab")
-                #expect(reads == 2)
+                #expect(reads == (mode == "empty-read" ? 3 : 2))
                 tabs.append(.init(id: UUID(), terminal: nil))
                 return Data(
                     (mode == "false-action" ? "{\"accepted\":false}" : "{\"accepted\":true}").utf8)
@@ -138,8 +155,14 @@ import Testing
             #expect(operation == "quinjet.terminal.read")
             reads += 1
             let offset = try #require(object["offset"] as? UInt64)
+            if mode == "empty-read", reads == 1 {
+                return try JSONEncoder().encode(
+                    Fixture.Output(
+                        bytes: Data(), nextOffset: offset, exitCode: nil, canonical: true,
+                        echo: true))
+            }
             let bytes =
-                reads == 1
+                reads == (mode == "empty-read" ? 2 : 1)
                 ? Data("\u{1B}]6973;quinjet;".utf8)
                 : Data(("open-new-tab\u{7}\r\nsynthetic-input:" + marker + "\r\n").utf8)
             return try JSONEncoder().encode(

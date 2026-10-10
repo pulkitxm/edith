@@ -48,7 +48,7 @@ import Foundation
 
     static func verify(
         invoke: (String, Data) async throws -> Data, workerPID: Int32,
-        script: String, scriptSHA256: String, receipt: () throws -> Data?,
+        script: String, project: String, scriptSHA256: String, receipt: () throws -> Data?,
         process: (Int32, Int32) throws -> Process,
         timeout: Duration = .seconds(10)
     ) async throws -> Int32 {
@@ -82,7 +82,7 @@ import Foundation
                     value.executable.hasPrefix("/"), !value.executable.contains("\0")
                 else { throw failure("Rejected direct-tool receipt ownership or script identity") }
                 let live = try process(value.pid, workerPID)
-                try validate(value, live: live)
+                try validate(value, live: live, project: project)
                 initial = current
                 owned = value
             }
@@ -130,7 +130,7 @@ import Foundation
         while bytes.range(of: action) == nil
             || !String(decoding: bytes, as: UTF8.self).contains("synthetic-input:" + marker)
         {
-            try validate(owned, live: process(owned.pid, workerPID))
+            try validate(owned, live: process(owned.pid, workerPID), project: project)
             let output = try JSONDecoder().decode(
                 Output.self,
                 from: await call(
@@ -142,6 +142,7 @@ import Foundation
             else { throw failure("Invalid owned terminal stream") }
             bytes.append(output.bytes)
             offset = output.nextOffset
+            if output.bytes.isEmpty { try await Task.sleep(for: .milliseconds(50)) }
             guard ContinuousClock.now < deadline else {
                 throw failure("Missing synthetic PTY output")
             }
@@ -154,7 +155,7 @@ import Foundation
             as? [String: Bool]
         guard accepted == ["accepted": true] else { throw failure("Managed action rejected") }
         while true {
-            try validate(owned, live: process(owned.pid, workerPID))
+            try validate(owned, live: process(owned.pid, workerPID), project: project)
             let current = try await state()
             guard current.generation == initial.generation, current.sequence > initial.sequence,
                 current.tabs.first(where: { $0.id == tab.id })?.terminal?.handle == handle
@@ -167,11 +168,19 @@ import Foundation
         }
     }
 
-    static func validate(_ receipt: Receipt, live: Process) throws {
+    static func validate(_ receipt: Receipt, live: Process, project: String) throws {
+        let prefix = [receipt.script, "--client", "edith", "-C", project, "tui"]
+        guard let interpreter = live.arguments.first,
+            interpreter == "/usr/bin/python3"
+                || (interpreter.hasPrefix("/")
+                    && URL(fileURLWithPath: interpreter).resolvingSymlinksInPath().path
+                        == live.executable),
+            live.arguments.count >= prefix.count + 1,
+            Array(live.arguments.dropFirst().prefix(prefix.count)) == prefix
+        else { throw failure("Direct-tool launch arguments do not match the owned review request") }
         guard live.pid == receipt.pid, live.birth == receipt.birth,
             live.parent == receipt.parent, live.group == receipt.group,
-            live.inputTerminal, live.executable == receipt.executable,
-            live.arguments.contains(receipt.script)
+            live.inputTerminal, live.executable == receipt.executable
         else { throw failure("Direct-tool process identity changed or script was substituted") }
     }
 
