@@ -216,9 +216,11 @@ public actor DatabaseExecutor {
                 retryClassification: .safeIdempotent,
                 terminalProgress: .determinate(completed: 1, total: 1, unit: .pages)
             ) { [self, sessionPool] context, _ in
-                let authority = try await continuationAuthorityForUse()
-                let continuation = try request.page.continuation.map {
-                    try authority.open($0, for: request)
+                let continuation: DatabaseAdapterContinuation?
+                if let token = request.page.continuation {
+                    continuation = try await continuationAuthorityForUse().open(token, for: request)
+                } else {
+                    continuation = nil
                 }
                 let adapterRequest = try DatabaseAdapterPageRequest(
                     target: request.target,
@@ -234,8 +236,12 @@ public actor DatabaseExecutor {
                     context: context)
                 try adapterPage.validate(for: adapterRequest)
                 try await context.checkCancellation()
-                let nextContinuation = try adapterPage.nextContinuation.map {
-                    try authority.issue($0, for: request)
+                let nextContinuation: DatabaseContinuationToken?
+                if let cursor = adapterPage.nextContinuation {
+                    nextContinuation = try await continuationAuthorityForUse().issue(
+                        cursor, for: request)
+                } else {
+                    nextContinuation = nil
                 }
                 return DatabaseBrowseResult(
                     page: DatabasePage(
@@ -267,9 +273,11 @@ public actor DatabaseExecutor {
                 retryClassification: .safeIdempotent,
                 terminalProgress: .determinate(completed: 1, total: 1, unit: .pages)
             ) { [self, sessionPool] context, _ in
-                let authority = try await continuationAuthorityForUse()
-                let continuation = try request.page.continuation.map {
-                    try authority.open($0, for: request)
+                let continuation: DatabaseAdapterContinuation?
+                if let token = request.page.continuation {
+                    continuation = try await continuationAuthorityForUse().open(token, for: request)
+                } else {
+                    continuation = nil
                 }
                 let adapterRequest = try DatabaseAdapterQueryRequest(
                     request: request,
@@ -284,8 +292,12 @@ public actor DatabaseExecutor {
                     context: context)
                 try adapterPage.validate(for: adapterRequest.source)
                 try await context.checkCancellation()
-                let nextContinuation = try adapterPage.nextContinuation.map {
-                    try authority.issue($0, for: request)
+                let nextContinuation: DatabaseContinuationToken?
+                if let cursor = adapterPage.nextContinuation {
+                    nextContinuation = try await continuationAuthorityForUse().issue(
+                        cursor, for: request)
+                } else {
+                    nextContinuation = nil
                 }
                 return DatabaseQueryResult(
                     page: DatabasePage(
