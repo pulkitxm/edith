@@ -126,7 +126,7 @@ index 8eddc14c8..33bc3d6e5 100644
      const runtime_str = try std.fmt.allocPrint(alloc, "{d} ms", .{info.runtime_ms});
 
 diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
-index 525bc856d..05286cb6d 100644
+index 525bc856d..cf065af38 100644
 --- a/src/apprt/embedded.zig
 +++ b/src/apprt/embedded.zig
 @@ -454,6 +454,8 @@ pub const Surface = struct {
@@ -182,7 +182,7 @@ index 525bc856d..05286cb6d 100644
 +    export fn ghostty_surface_external_exit(surface: *Surface) bool {
 +        const core_surface = &surface.core_surface;
 +        if (core_surface.io.backend != .external) return false;
-+        core_surface.io.backend.external.stopped.store(true, .release);
++        core_surface.io.backend.external.stop();
 +        core_surface.child_exited = true;
 +        core_surface.renderer_state.mutex.lockUncancelable(global.io());
 +        defer core_surface.renderer_state.mutex.unlock(global.io());
@@ -330,11 +330,12 @@ index c29009acb..4398a6a88 100644
 
 diff --git a/vendor/ghostty/src/termio/External.zig b/src/termio/External.zig
 new file mode 100644
-index 00000000..568818ea
+index 00000000..58edd07b
 --- /dev/null
 +++ b/src/termio/External.zig
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,50 @@
 +const std = @import("std");
++const global = @import("../global.zig");
 +const renderer = @import("../renderer.zig");
 +const External = @This();
 +
@@ -345,6 +346,7 @@ index 00000000..568818ea
 +};
 +
 +options: Options,
++callback_mutex: std.Io.Mutex = .init,
 +stopped: std.atomic.Value(bool) = .init(false),
 +
 +pub fn init(options: Options) !External {
@@ -352,12 +354,22 @@ index 00000000..568818ea
 +    return .{ .options = options };
 +}
 +
++pub fn stop(self: *External) void {
++    self.callback_mutex.lockUncancelable(global.io());
++    defer self.callback_mutex.unlock(global.io());
++    self.stopped.store(true, .release);
++}
++
 +pub fn resize(self: *External, grid: renderer.GridSize, screen: renderer.ScreenSize) void {
++    self.callback_mutex.lockUncancelable(global.io());
++    defer self.callback_mutex.unlock(global.io());
 +    if (self.stopped.load(.acquire)) return;
 +    self.options.resize.?(self.options.userdata, grid.columns, grid.rows, screen.width, screen.height);
 +}
 +
 +pub fn queueWrite(self: *External, data: []const u8, linefeed: bool) void {
++    self.callback_mutex.lockUncancelable(global.io());
++    defer self.callback_mutex.unlock(global.io());
 +    if (self.stopped.load(.acquire) or data.len == 0) return;
 +    if (!linefeed) {
 +        self.options.write.?(self.options.userdata, data.ptr, data.len);
@@ -374,10 +386,10 @@ index 00000000..568818ea
 +}
 diff --git a/vendor/ghostty/tests/external_io.m b/tests/external_io.m
 new file mode 100644
-index 00000000..4e47d092
+index 00000000..887d4a1e
 --- /dev/null
 +++ b/tests/external_io.m
-@@ -0,0 +1,303 @@
+@@ -0,0 +1,361 @@
 +#import <AppKit/AppKit.h>
 +#import <ghostty.h>
 +#import <IOSurface/IOSurface.h>
@@ -399,6 +411,10 @@ index 00000000..4e47d092
 +static atomic_bool auditing;
 +static atomic_uint process_calls;
 +static atomic_uint pty_calls;
++static atomic_bool hold_input;
++static atomic_bool input_entered;
++static atomic_bool release_input;
++static atomic_bool input_finished;
 +static pid_t engine_pid = -1;
 +static int engine_fd = -1;
 +static pthread_mutex_t capture_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -480,15 +496,28 @@ index 00000000..4e47d092
 +}
 +
 +static void send_input(void *context, const uint8_t *bytes, size_t count) {
++    require(context == &input_count, "input userdata retained by value");
 +    pthread_mutex_lock(&capture_lock);
 +    require(count <= sizeof(input_bytes) - input_count, "input capture bounded");
 +    memcpy(input_bytes + input_count, bytes, count);
 +    input_count += count;
 +    if (engine_fd >= 0) require(write(engine_fd, bytes, count) == count, "engine input write");
 +    pthread_mutex_unlock(&capture_lock);
++    if (atomic_load(&hold_input)) {
++        atomic_store(&input_entered, true);
++        while (!atomic_load(&release_input)) usleep(1000);
++        atomic_store(&input_finished, true);
++    }
++}
++
++static void *release_pending_input(void *context) {
++    usleep(50000);
++    atomic_store(&release_input, true);
++    return NULL;
 +}
 +
 +static void resize_engine(void *context, uint16_t columns, uint16_t rows, uint32_t width, uint32_t height) {
++    require(context == &input_count, "resize userdata retained by value");
 +    pthread_mutex_lock(&capture_lock);
 +    resized_columns = columns;
 +    resized_rows = rows;
@@ -582,7 +611,7 @@ index 00000000..4e47d092
 +        ghostty_app_t app = ghostty_app_new(&runtime, config);
 +        require(app != NULL, "native app creation");
 +        NSView *view = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600)];
-+        ghostty_external_io_s io = {.write_cb = send_input, .resize_cb = resize_engine};
++        ghostty_external_io_s io = {.userdata = &input_count, .write_cb = send_input, .resize_cb = resize_engine};
 +        ghostty_surface_config_s options = ghostty_surface_config_new();
 +        options.platform_tag = GHOSTTY_PLATFORM_MACOS;
 +        options.platform.macos.nsview = (__bridge void *)view;
@@ -590,6 +619,9 @@ index 00000000..4e47d092
 +        options.external_io = &io;
 +        ghostty_surface_t surface = ghostty_surface_new(app, &options);
 +        require(surface != NULL, "process-free native surface creation");
++        io.userdata = NULL;
++        io.write_cb = NULL;
++        io.resize_cb = NULL;
 +        [view setFrameSize:NSMakeSize(640, 400)];
 +        ghostty_surface_set_size(surface, 640, 400);
 +        drain(app, surface, 10);
@@ -656,7 +688,45 @@ index 00000000..4e47d092
 +        pthread_mutex_lock(&capture_lock);
 +        uint32_t resize_count_at_exit = resize_count;
 +        pthread_mutex_unlock(&capture_lock);
++        const uint8_t linefeed_mode[] = "\033[20h";
++        require(ghostty_surface_external_output(surface, linefeed_mode, sizeof(linefeed_mode) - 1), "VT linefeed mode accepted");
++        ghostty_surface_text(surface, "a\rb", 3);
++        drain(app, surface, 10);
++        pthread_mutex_lock(&capture_lock);
++        require(input_count == 4 && memcmp(input_bytes, "a\r\nb", 4) == 0, "original linefeed input encoding");
++        input_count = 0;
++        pthread_mutex_unlock(&capture_lock);
++        ghostty_input_key_s key = {.action = GHOSTTY_ACTION_PRESS, .mods = GHOSTTY_MODS_CTRL,
++                                  .keycode = 0, .unshifted_codepoint = 'a'};
++        require(ghostty_surface_key(surface, key), "original control key accepted");
++        drain(app, surface, 10);
++        pthread_mutex_lock(&capture_lock);
++        require(input_count == 1 && input_bytes[0] == 1, "original control key encoding");
++        input_count = 0;
++        pthread_mutex_unlock(&capture_lock);
++        const uint8_t mouse_mode[] = "\033[?1000h\033[?1006h";
++        require(ghostty_surface_external_output(surface, mouse_mode, sizeof(mouse_mode) - 1), "VT mouse modes accepted");
++        ghostty_surface_mouse_pos(surface, 20, 20, 0);
++        require(ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, 0), "original mouse press accepted");
++        require(ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, 0), "original mouse release accepted");
++        drain(app, surface, 10);
++        pthread_mutex_lock(&capture_lock);
++        require(input_count > 12 && memcmp(input_bytes, "\033[<0;", 5) == 0 && input_bytes[input_count - 1] == 'm', "original SGR mouse protocol encoded");
++        input_count = 0;
++        pthread_mutex_unlock(&capture_lock);
++        atomic_store(&hold_input, true);
++        ghostty_surface_text(surface, "x", 1);
++        for (unsigned attempt = 0; attempt < 300 && !atomic_load(&input_entered); attempt++) usleep(10000);
++        require(atomic_load(&input_entered), "callback in flight before engine exit");
++        pthread_t releaser;
++        require(pthread_create(&releaser, NULL, release_pending_input, NULL) == 0, "owned callback release thread");
 +        require(ghostty_surface_external_exit(surface), "engine-driven exit accepted");
++        require(atomic_load(&input_finished), "engine exit waits for in-flight callback completion");
++        require(pthread_join(releaser, NULL) == 0, "owned callback release thread joined");
++        atomic_store(&hold_input, false);
++        pthread_mutex_lock(&capture_lock);
++        input_count = 0;
++        pthread_mutex_unlock(&capture_lock);
 +        require(ghostty_surface_process_exited(surface), "native lifecycle marked exited");
 +        require(!ghostty_surface_external_output(surface, output, sizeof(output) - 1), "stale output rejected");
 +        require(!ghostty_surface_needs_confirm_quit(surface), "exited surface needs no process confirmation");
@@ -676,7 +746,7 @@ index 00000000..4e47d092
 +        require(NSApp.windows.count == 0, "no visible or hidden windows created");
 +        require(atomic_load(&process_calls) == 0 && atomic_load(&pty_calls) == 0,
 +                "UI lifetime made zero child-process or PTY creation calls");
-+        puts("external IO: native VT, real PTY input/resize, alternate screen, DSR, exit, stale output and process audit passed");
++        puts("external IO: native Metal glyphs, real PTY input/resize, split VT, alternate screen, DSR, control/mouse/linefeed input, callback ownership, exit barrier and process audit passed");
 +        puts("renderer process creation calls: 0; renderer PTY creation calls: 0; visible windows: 0");
 +    }
 +    return 0;
