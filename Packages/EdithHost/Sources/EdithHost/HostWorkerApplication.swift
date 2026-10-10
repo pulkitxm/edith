@@ -195,6 +195,7 @@ final class HostWorkerApplication {
                     try await runtime.prepareDisableAll()
                 }
                 try await engine.prepareToStopAll()
+                guard !stopping, host.isAlive else { throw HostWorkerError.rejected }
                 preparedApplicationQuit = true
                 try control.send(
                     HostWorkerResponse(
