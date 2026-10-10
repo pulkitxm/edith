@@ -711,6 +711,136 @@ import Testing
         #expect(await fixture.requests.count == 0)
     }
 
+    @Test func sidebarUtilitiesAdmitOnlyCurrentProviderActions() {
+        #expect(
+            HostSidebarUtility.allCases.map(\.id) == [
+                "system", "keepAwake", "lidAwake", "keystrokeHighlight", "presenter",
+            ])
+        let controls: [(HostSidebarUtility, String, String)] = [
+            (.system, "cleanKeys", "stopCleaning"), (.keepAwake, "enable", "disable"),
+            (.lidAwake, "on", "off"), (.keystrokeHighlight, "enable", "disable"),
+            (.presenter, "start", "stop"),
+        ]
+        for (utility, start, stop) in controls {
+            let idle = SurfaceSnapshot(
+                providerID: utility.id, actions: [.init(start, "Start", "play")])
+            let active = SurfaceSnapshot(
+                providerID: utility.id, actions: [.init(stop, "Stop", "stop")])
+            #expect(utility.action(in: idle)?.id == start)
+            #expect(!utility.isOn(idle))
+            #expect(utility.isOn(active))
+            #expect(
+                utility.action(in: SurfaceSnapshot(providerID: "foreign", actions: idle.actions))
+                    == nil)
+            #expect(
+                utility.action(
+                    in: SurfaceSnapshot(
+                        providerID: utility.id, actions: [.init("open:/tmp", "Open", "folder")]))
+                    == nil)
+        }
+    }
+
+    @Test func originalFooterButtonsRenderAndDispatchAtBothWidthsAndZoom() async throws {
+        let restore = enableAccessibility()
+        defer { restore() }
+        let previousScale = UIScale.current
+        defer { UIScale.apply(previousScale) }
+        for variant in [
+            Variant("compact", 180, 1, .light), Variant("regular", 260, 1, .dark),
+            Variant("zoomed", 360, 1.5, .light),
+        ] {
+            UIScale.apply(variant.zoom)
+            var actions: [String] = []
+            let host = NSHostingView(
+                rootView: VStack {
+                    ForEach(HostSidebarUtility.allCases) { utility in
+                        HostSidebarUtilityButton(
+                            utility: utility, active: utility == .keepAwake, theme: .blue
+                        ) {
+                            actions.append(utility.id)
+                        }
+                    }
+                    HostAgentStatusBar(online: true, summary: "2 active") {
+                        actions.append("agent")
+                    }
+                }.padding(10).environment(\.colorScheme, variant.scheme))
+            host.frame = CGRect(x: 0, y: 0, width: variant.width, height: 550)
+            let window = TestWindowHost.window(contentRect: host.frame)
+            window.contentView = host; window.orderBack(nil)
+            await settle(window, host: host)
+            let bounds = window.convertToScreen(host.convert(host.bounds, to: nil))
+            for utility in HostSidebarUtility.allCases {
+                let button = try #require(find(host, label: utility.title))
+                let frame = try #require((button as AnyObject).accessibilityFrame?())
+                #expect(bounds.insetBy(dx: -1, dy: -1).contains(frame))
+                #expect((button as AnyObject).accessibilityPerformPress?() == true)
+            }
+            let agent = try #require(find(host, label: "Background agent"))
+            #expect((agent as AnyObject).accessibilityPerformPress?() == true)
+            #expect(actions == HostSidebarUtility.allCases.map(\.id) + ["agent"])
+            #expect(!TestWindowHost.isExposedOnDesktop(window))
+            window.orderOut(nil)
+        }
+    }
+
+    @Test func homeOpenUsesOriginalNavigationWithoutOpeningWorkerWindows() async throws {
+        let fixture = try SuiteFixture(rejectDisable: false)
+        defer { fixture.clean() }
+        await fixture.marketplace.enable(id: "keepAwake")
+        let pid = fixture.marketplace.sessions.processIdentifiers["keepAwake"]
+        let restore = enableAccessibility()
+        defer { restore() }
+        var opened: [String] = []
+        let host = NSHostingView(
+            rootView: HostSurfaceCard(
+                marketplace: fixture.marketplace, target: .home,
+                tile: SurfaceTile(.ability("keepAwake")),
+                openExtension: { opened.append($0) }
+            )
+            .environment(\.automaticViewActionsEnabled, false))
+        host.frame = CGRect(x: 0, y: 0, width: 400, height: 250)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        let button = try #require(find(host, label: "Open Keep Awake"))
+        #expect((button as AnyObject).accessibilityPerformPress?() == true)
+        #expect(opened == ["keepAwake"])
+        #expect(fixture.marketplace.sessions.processIdentifiers["keepAwake"] == pid)
+        #expect(HostNavigationCatalog.route(extensionID: "usage")?.page == "dashboard")
+        #expect(HostNavigationCatalog.route(extensionID: "system")?.page == "runningApps")
+        #expect(HostNavigationCatalog.route(extensionID: "music")?.page == "music")
+        #expect(HostNavigationCatalog.route(extensionID: "homebrew")?.page == "appMaintenance")
+        #expect(HostNavigationCatalog.route(extensionID: "homebrew")?.section == "Packages")
+        #expect(HostNavigationCatalog.route(extensionID: "cleaner")?.section == "Cleaner")
+        #expect(HostNavigationCatalog.route(extensionID: "keepAwake") == nil)
+        #expect(await fixture.marketplace.sessions.shutdown())
+    }
+
+    @Test func panelActivationPreservesSelectionAndReusesMainWindow() throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        fixture.marketplace.surfaces.preferences.set(
+            "music", forKey: AppStorageKeys.General.mainWindowSection)
+        let delegate = HostApplicationDelegate()
+        var opened = 0
+        var activated = 0
+        delegate.openMainWindow = { opened += 1 }
+        delegate.activate = { activated += 1 }
+        delegate.mainWindow = { nil }
+        delegate.showMainWindow()
+        #expect(opened == 1 && activated == 1)
+        let window = TestWindowHost.window(contentRect: CGRect(x: 0, y: 0, width: 700, height: 500))
+        delegate.mainWindow = { window }
+        delegate.showMainWindow()
+        #expect(opened == 1 && activated == 2)
+        #expect(
+            fixture.marketplace.surfaces.preferences.string(
+                forKey: AppStorageKeys.General.mainWindowSection) == "music")
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+        window.orderOut(nil)
+    }
+
     private func find(_ node: NSObject, label: String, depth: Int = 0) -> NSObject? {
         guard depth < 64 else { return nil }
         let isControl =

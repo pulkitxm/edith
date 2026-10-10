@@ -21,6 +21,15 @@ struct HostNavigationPage: Identifiable, Equatable {
 }
 
 enum HostNavigationCatalog {
+    static func route(extensionID: String) -> (page: String, section: String?)? {
+        if let page = pages.first(where: { $0.extensionID == extensionID }) {
+            return (page.id, nil)
+        }
+        if let section = maintenance.first(where: { $0.extensionID == extensionID }) {
+            return ("appMaintenance", section.id)
+        }
+        return nil
+    }
     static let settings: [HostNavigationSection] = [
         .init(id: "general", title: "General", symbol: "gearshape", extensionID: nil),
         .init(id: "surfaces", title: "Home & Notch", symbol: "rectangle.3.group", extensionID: nil),

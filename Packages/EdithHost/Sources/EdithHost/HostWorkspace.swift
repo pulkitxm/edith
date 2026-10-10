@@ -9,7 +9,9 @@ struct HostWorkspace: View {
     let updater: HostUpdater
     var showWelcome: (() -> Void)? = nil
     var panelShortcutChanged: () -> Void = {}
-    var additionalSettings: ((String) -> AnyView)? = nil
+    var additionalSettings: ((String) -> AnyView?)? = nil
+    var coreOnline = false
+    var coreSummary = "Not running"
     @State private var permissions = HostPermissions()
     var presenter: (any HostExtensionContentPresenting)? = nil
     @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
@@ -44,13 +46,15 @@ struct HostWorkspace: View {
         marketplace: HostMarketplace, presenter: (any HostExtensionContentPresenting)? = nil,
         updater: HostUpdater? = nil, showWelcome: (() -> Void)? = nil,
         panelShortcutChanged: @escaping () -> Void = {},
-        additionalSettings: ((String) -> AnyView)? = nil,
+        additionalSettings: ((String) -> AnyView?)? = nil,
+        coreOnline: Bool = false, coreSummary: String = "Not running",
         defaults: UserDefaults = SharedDefaults.store
     ) {
         self.marketplace = marketplace
         self.updater = updater ?? HostUpdater(startingUpdater: false)
         self.showWelcome = showWelcome; self.panelShortcutChanged = panelShortcutChanged
         self.additionalSettings = additionalSettings
+        self.coreOnline = coreOnline; self.coreSummary = coreSummary
         self.presenter = presenter
         navigationDefaults = defaults
         _selection = AppStorage(
@@ -182,6 +186,17 @@ struct HostWorkspace: View {
                     }
                 }.padding(.horizontal, UIScale.pt(8)).padding(.top, UIScale.pt(8))
             }
+            Rectangle().fill(Color.primary.opacity(0.06)).frame(height: UIScale.pt(1))
+            HostSidebarFooter(
+                marketplace: marketplace, updater: updater, permissions: permissions,
+                theme: theme, sidebarWidth: liveSidebarWidth ?? sidebarWidth, presenter: presenter,
+                openExtensions: { selection = "extensions" },
+                openPermissions: {
+                    settings = "permissions"; selection = "settings"
+                }, enabled: sidebarOpen)
+            HostAgentStatusBar(online: coreOnline, summary: coreSummary) {
+                settings = "agent"; selection = "settings"
+            }
             if !creditHidden {
                 HStack(spacing: UIScale.pt(3)) {
                     Spacer(minLength: 0)
@@ -308,7 +323,7 @@ struct HostWorkspace: View {
         case "home":
             HostHomePage(
                 marketplace: marketplace, customize: customize,
-                extensions: { selection = "extensions" })
+                extensions: { selection = "extensions" }, openExtension: openExtension)
         case "extensions": MarketplacePage(marketplace: marketplace, presenter: presenter)
         case "settings": HostSettingsContainer(category: $settings) { settingsContent }
         case "about": HostAboutPage(identity: marketplace.identity)
@@ -346,13 +361,24 @@ struct HostWorkspace: View {
                 let id = section.extensionID
             {
                 content(id, section: settings)
-            } else if let additionalSettings {
-                additionalSettings(settings)
+            } else if let view = additionalSettings?(settings) {
+                view
             } else {
                 ContentUnavailableView(
                     HostNavigationCatalog.settings.first(where: { $0.id == settings })?.title
                         ?? "General", systemImage: "gearshape")
             }
+        }
+    }
+    private func openExtension(_ id: String) {
+        if let route = HostNavigationCatalog.route(extensionID: id) {
+            if route.page == "appMaintenance", let section = route.section {
+                maintenanceSection = section
+            }
+            selection = route.page
+        } else {
+            defaults.set(id, forKey: "extensionsExpand")
+            selection = "extensions"
         }
     }
     private func content(_ id: String, section: String? = nil) -> some View {
