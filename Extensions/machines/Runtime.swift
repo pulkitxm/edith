@@ -332,7 +332,7 @@ final class ExtensionRuntime: NSObject {
         await health?.stop(); health = nil
         await cli?.shutdown(); cli = nil
         MachinesCLIEnvironment.changed = {}
-        peer?.shutdown()
+        await peer?.shutdownAndWait()
         FinderUndoBridge.shutdown()
         PaneViewStore.shared.shutdown()
         await WorkspaceModel.shared.shutdown()

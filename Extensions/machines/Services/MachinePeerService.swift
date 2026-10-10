@@ -131,7 +131,8 @@ import Foundation
                 }
             }
             return try JSONEncoder().encode(Prepared(prepared: true, name: machine.name))
-        case "machines.usage.collect", "machines.usage.result", "machines.usage.cancel":
+        case "machines.usage.start", "machines.usage.progress", "machines.usage.collect",
+            "machines.usage.result", "machines.usage.cancel":
             return try await usage.execute(command, payload: payload)
         default: throw ExtensionPeerError.invalidRequest
         }
@@ -140,6 +141,11 @@ import Foundation
     public func shutdown() {
         stopped = true
         usage.shutdown()
+    }
+
+    public func shutdownAndWait() async {
+        stopped = true
+        await usage.shutdownAndWait()
     }
 
     private func selected(_ id: UUID) throws -> Machine {

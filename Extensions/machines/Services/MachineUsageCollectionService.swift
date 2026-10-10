@@ -18,6 +18,14 @@ import Foundation
     private let lifetime: TimeInterval
     private var pending: [UUID: Task<Data, Error>] = [:]
     private var collections: [UUID: Collection] = [:]
+    private struct ProgressJob {
+        let machine: Machine
+        var expires: Date
+        let stream: MachineUsageProgress
+        let task: Task<Void, Never>
+    }
+    private var progressJobs: [UUID: ProgressJob] = [:]
+    private var reaper: Task<Void, Never>?
     private var stopped = false
 
     public init(
@@ -35,6 +43,46 @@ import Foundation
         prune()
         try Task.checkCancellation()
         switch command {
+        case "machines.usage.start":
+            let request = try MachineCommandPayload.decode(
+                CollectRequest.self, data: payload, required: ["machineID", "force"])
+            let machine = try selected(request.machineID)
+            guard progressJobs.count < 2 else { throw ExtensionPeerError.unavailable }
+            let id = UUID()
+            let stream = MachineUsageProgress()
+            let task = Task {
+                do {
+                    let receipt = try await MachineUsageProgressContext.$output.withValue({
+                        line, error in
+                        stream.receive(line, error: error)
+                    }) {
+                        try await self.execute("machines.usage.collect", payload: payload)
+                    }
+                    try Task.checkCancellation()
+                    stream.finish(
+                        receipt: try JSONDecoder().decode(
+                            MachineUsageCollectionDescriptor.self, from: receipt))
+                } catch {
+                    stream.finish(error: error)
+                }
+            }
+            stream.attach(task)
+            progressJobs[id] = ProgressJob(
+                machine: machine, expires: now().addingTimeInterval(60), stream: stream, task: task)
+            ensureReaper()
+            return try JSONEncoder().encode(CancelRequest(collectionID: id))
+        case "machines.usage.progress":
+            let request = try MachineCommandPayload.decode(
+                ProgressRequest.self, data: payload, required: ["collectionID", "sequence"])
+            guard var job = progressJobs[request.collectionID],
+                try selected(job.machine.id) == job.machine
+            else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            let frame = try job.stream.read(id: request.collectionID, sequence: request.sequence)
+            job.expires = now().addingTimeInterval(60)
+            progressJobs[request.collectionID] = job
+            return try JSONEncoder().encode(frame)
         case "machines.usage.collect":
             let request = try MachineCommandPayload.decode(
                 CollectRequest.self, data: payload, required: ["machineID", "force"])
@@ -95,11 +143,24 @@ import Foundation
         case "machines.usage.cancel":
             let request = try MachineCommandPayload.decode(
                 CancelRequest.self, data: payload, required: ["collectionID"])
+            if let job = progressJobs[request.collectionID] {
+                let receiptID = job.stream.receiptID
+                job.stream.cancel()
+                job.task.cancel()
+                await job.task.value
+                if let receiptID { collections.removeValue(forKey: receiptID) }
+                progressJobs.removeValue(forKey: request.collectionID)
+                return Data("{}".utf8)
+            }
             guard pending[request.collectionID] != nil || collections[request.collectionID] != nil
             else {
                 throw ExtensionPeerError.invalidRequest
             }
-            pending.removeValue(forKey: request.collectionID)?.cancel()
+            if let task = pending[request.collectionID] {
+                task.cancel()
+                _ = try? await task.value
+                pending.removeValue(forKey: request.collectionID)
+            }
             collections.removeValue(forKey: request.collectionID)
             return Data("{}".utf8)
         default: throw ExtensionPeerError.invalidRequest
@@ -108,9 +169,30 @@ import Foundation
 
     public func shutdown() {
         stopped = true
+        reaper?.cancel(); reaper = nil
+        for job in progressJobs.values { job.stream.cancel(); job.task.cancel() }
         for task in pending.values { task.cancel() }
-        pending = [:]
         collections = [:]
+    }
+
+    public func shutdownAndWait() async {
+        let tasks = Array(pending.values)
+        let jobs = Array(progressJobs.values)
+        shutdown()
+        for task in tasks { _ = try? await task.value }
+        for job in jobs { await job.task.value }
+        progressJobs = [:]
+    }
+
+    private func ensureReaper() {
+        guard reaper == nil else { return }
+        reaper = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                guard let self, !self.stopped else { return }
+                self.prune()
+            }
+        }
     }
 
     private func selected(_ id: UUID) throws -> Machine {
@@ -122,6 +204,16 @@ import Foundation
     private func prune() {
         let instant = now()
         let machines = MachineRegistry.machines(files)
+        for (id, job) in progressJobs {
+            if job.expires <= instant
+                || machines.filter({ $0.id == job.machine.id }) != [job.machine]
+            {
+                let receiptID = job.stream.receiptID
+                job.stream.cancel(); job.task.cancel()
+                if let receiptID { collections.removeValue(forKey: receiptID) }
+                if job.stream.isFinished { progressJobs.removeValue(forKey: id) }
+            }
+        }
         collections = collections.filter { entry in
             entry.value.expires > instant
                 && machines.filter { $0.id == entry.value.machine.id } == [entry.value.machine]
@@ -131,7 +223,7 @@ import Foundation
         let hash = SHA256.hash(data: collection.document).map { String(format: "%02x", $0) }
             .joined()
         return try JSONEncoder().encode(
-            Descriptor(
+            MachineUsageCollectionDescriptor(
                 collectionID: id, byteCount: collection.document.count,
                 sha256: hash, generatedAt: collection.generatedAt))
     }
@@ -144,9 +236,7 @@ import Foundation
     private struct ResultRequest: Decodable {
         let collectionID: UUID; let offset: Int; let maximumBytes: Int
     }
-    private struct CancelRequest: Decodable { let collectionID: UUID }
-    private struct Descriptor: Encodable {
-        let collectionID: UUID; let byteCount: Int; let sha256: String; let generatedAt: String
-    }
+    private struct ProgressRequest: Decodable { let collectionID: UUID; let sequence: UInt64 }
+    private struct CancelRequest: Codable { let collectionID: UUID }
     private struct Chunk: Encodable { let offset: Int; let data: Data; let finished: Bool }
 }

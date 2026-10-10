@@ -1966,9 +1966,7 @@
   },
   {
     "id": "machines",
-    "testTargets": [
-      "ci-extension-machines"
-    ],
+    "testTargets": ["ci-extension-machines"],
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -1976,18 +1974,14 @@
     "supportProduct": "EdithExtensionDocuments",
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
-    "nativeResources": [
-      "TerminalNative_GhosttyTerminal.bundle"
-    ],
+    "nativeResources": ["TerminalNative_GhosttyTerminal.bundle"],
     "nativeLicenses": [
       {
         "source": "Extensions/terminal/Native/LICENSE-GHOSTTY",
         "destination": "Ghostty-LICENSE"
       }
     ],
-    "inputs": [
-      "Extensions/machines"
-    ],
+    "inputs": ["Extensions/machines"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
@@ -2169,7 +2163,8 @@
         "Extensions/machines/UI/Views/MachinesPage.swift",
         "Extensions/machines/UI/Views/SelectableChipRow.swift",
         "Extensions/machines/UI/Views/TerminalDropTransferStatus.swift",
-        "Extensions/machines/UI/Views/TerminalLoadingSkeleton.swift"
+        "Extensions/machines/UI/Views/TerminalLoadingSkeleton.swift",
+        "Extensions/machines/Services/MachineUsageProgress.swift"
       ]
     },
     "resources": {
@@ -2181,10 +2176,7 @@
     },
     "sameExecutableWorker": true,
     "supportProducts": {
-      "app": [
-        "EdithExtensionDocuments",
-        "EdithExtensionCommands"
-      ]
+      "app": ["EdithExtensionDocuments", "EdithExtensionCommands"]
     }
   },
   {

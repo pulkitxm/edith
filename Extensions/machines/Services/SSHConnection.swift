@@ -266,15 +266,19 @@ public actor SSHConnection {
     @discardableResult
     public func run(
         _ command: String, stdin: Data? = nil, timeout: TimeInterval = 60,
-        maximumOutputBytes: Int = 64 * 1_024 * 1_024
+        maximumOutputBytes: Int = 64 * 1_024 * 1_024,
+        onStandardErrorLine: (@Sendable (String) -> Void)? = nil
     ) async throws -> SSHExecResult {
 
-        let result = try await CLICommandRunner.run(
+        let result = try await CLICommandRunner.runSeparated(
             CLICommandRequest(
                 executableURL: Self.executable, arguments: execArguments(command: command),
                 environment: environment(), timeout: timeout,
                 maximumOutputBytes: maximumOutputBytes,
-                standardInputData: stdin, terminatesProcessGroup: true), onLine: { _ in })
+                standardInputData: stdin, terminatesProcessGroup: true),
+            streamsWhileRunning: onStandardErrorLine != nil,
+            onStandardOutputLine: { _ in },
+            onStandardErrorLine: onStandardErrorLine ?? { _ in })
         return SSHExecResult(
             status: result.terminationStatus, stdout: result.standardOutputData,
             stderr: result.standardErrorData)
