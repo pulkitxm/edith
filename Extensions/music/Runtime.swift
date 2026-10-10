@@ -47,6 +47,17 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(prepareUIToClose:completion:)
+    func prepareUIToClose(_ value: NSString, completion: @escaping (NSString?) -> Void) {
+        guard let id = UUID(uuidString: value as String) else {
+            completion("Invalid Music presentation."); return
+        }
+        Task {
+            await embeddedUI.prepareToClose(id)
+            completion(nil)
+        }
+    }
+
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
         case "describe":
@@ -73,6 +84,8 @@ final class ExtensionRuntime: NSObject {
             if let worker, surface == nil {
                 surface = MusicSurface(
                     read: worker.read, perform: worker.perform, readNotch: worker.readNotch,
+                    version: Bundle(for: ExtensionRuntime.self).object(
+                        forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
                     appIcon: worker.notchAppIcon)
                 uiService = MusicUIService(
                     worker: worker,
@@ -86,6 +99,8 @@ final class ExtensionRuntime: NSObject {
                 return ["ok": false] as NSDictionary
             }
             return controller
+        case "releaseUI":
+            _ = embeddedUI.release(input)
         case "stopUI": embeddedUI.stop()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break

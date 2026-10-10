@@ -43,6 +43,7 @@ struct MusicSurfaceCommand: Equatable, Sendable {
 final class MusicSurface {
     typealias Read = @MainActor (SurfaceTile) async throws -> [MusicSurfacePlayback]
     typealias Perform = @MainActor (MusicSurfaceCommand) async throws -> Void
+    private let version: String
     private let appIcon: @MainActor (String) -> SurfaceThumbnail?
     private let readNotch: Read
     private let read: Read
@@ -51,13 +52,14 @@ final class MusicSurface {
 
     init(
         read: @escaping Read, perform: @escaping Perform, readNotch: Read? = nil,
+        version: String = "1.0.0",
         appIcon: @escaping @MainActor (String) -> SurfaceThumbnail? = { _ in nil },
         privacyValues: @escaping @MainActor () -> [String: String] = {
             ExtensionSharedState.current?.values(for: "presenter") ?? [:]
         }
     ) {
         self.read = read; self.perform = perform; self.privacyValues = privacyValues
-        self.appIcon = appIcon; self.readNotch = readNotch ?? read
+        self.version = version; self.appIcon = appIcon; self.readNotch = readNotch ?? read
     }
 
     func execute(_ command: String, payload: Data) async throws -> Data {
@@ -73,6 +75,7 @@ final class MusicSurface {
             }
             if SurfacePrivacyState.hides(.music, values: privacyValues()) {
                 return try MusicNotchState(
+                    version: version,
                     snapshot: .init(providerID: "music", message: "Hidden while presenting."),
                     playback: []
                 ).encoded()
@@ -81,6 +84,7 @@ final class MusicSurface {
             try Task.checkCancellation()
             guard !SurfacePrivacyState.hides(.music, values: privacyValues()) else {
                 return try MusicNotchState(
+                    version: version,
                     snapshot: .init(providerID: "music", message: "Hidden while presenting."),
                     playback: []
                 ).encoded()
@@ -103,7 +107,8 @@ final class MusicSurface {
                     repeating: request.tile.shows("repeat") ? state.repeating : nil,
                     appIcon: appIcon(state.sourceID))
             }
-            return try MusicNotchState(snapshot: snapshot, playback: playback).encoded()
+            return try MusicNotchState(version: version, snapshot: snapshot, playback: playback)
+                .encoded()
         }
         return try await SurfaceCommandService.execute(
             providerID: "music", command: command, payload: payload,

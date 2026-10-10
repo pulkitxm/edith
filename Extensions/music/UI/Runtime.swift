@@ -7,26 +7,32 @@ import SwiftUI
 @MainActor final class MusicEmbeddedRuntime {
     private(set) var configured = false
     private var presentations: [UUID: MusicEmbeddedPresentation] = [:]
+    private var closing: [UUID: MusicEmbeddedPresentation] = [:]
     static let presentationLimit = 16
 
     func configure(_ input: NSDictionary) -> NSDictionary {
         guard let configuration = ExtensionUIConfiguration(context: input),
             configuration.extensionID == "music",
+            let version = Bundle(for: MusicEmbeddedRuntime.self).object(
+                forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+            !version.isEmpty,
             let value = input["presentationID"] as? String, let id = UUID(uuidString: value),
             let scene = MusicEmbeddedPresentation(
                 context: input, client: configuration.engineClient,
-                uiOnly: configuration.uiOnly)
+                uiOnly: configuration.uiOnly, version: version)
         else { return ["ok": false] }
         return install(scene, id: id) ? ["ok": true] : ["ok": false]
     }
 
-    var presentationCount: Int { presentations.count }
+    var presentationCount: Int { presentations.count + closing.count }
 
     func install(_ scene: MusicEmbeddedPresentation, id: UUID) -> Bool {
         for key in Array(presentations.keys) where presentations[key]?.isRetained == false {
             presentations.removeValue(forKey: key)?.shutdown()
         }
-        guard presentations.count < Self.presentationLimit || presentations[id] != nil else {
+        guard closing[id] == nil,
+            presentationCount < Self.presentationLimit || presentations[id] != nil
+        else {
             scene.shutdown(); return false
         }
         presentations.removeValue(forKey: id)?.shutdown()
@@ -43,9 +49,31 @@ import SwiftUI
         return scene.controller()
     }
 
+    func release(_ input: NSDictionary) -> Bool {
+        guard let value = input["presentationID"] as? String, let id = UUID(uuidString: value),
+            let scene = presentations.removeValue(forKey: id)
+        else { return false }
+        scene.shutdown(); configured = !presentations.isEmpty
+        return true
+    }
+
+    func prepareToClose(_ id: UUID) async {
+        guard let scene = presentations.removeValue(forKey: id) else { return }
+        closing[id] = scene
+        scene.beginShutdown()
+        if scene.isMain { EmbeddedMusicVideoSession.stopAll() }
+        if presentations.isEmpty {
+            EmbeddedMusicVideoSession.stopAll(); EmbeddedMusicBrowserSession.stopAll()
+        }
+        await EmbeddedMusicVideoSession.drainAll()
+        await EmbeddedMusicBrowserSession.drainAll()
+        scene.shutdown(); closing[id] = nil; configured = !presentations.isEmpty
+    }
+
     func stop() {
         for scene in presentations.values { scene.shutdown() }
-        presentations.removeAll(); configured = false
+        for scene in closing.values { scene.shutdown() }
+        presentations.removeAll(); closing.removeAll(); configured = false
     }
 }
 
@@ -61,9 +89,13 @@ import SwiftUI
     private var pending = true
     private weak var presentedController: NSViewController?
     private var closed = false
+    private var detached = false
+    var isMain: Bool { location == "main" }
     var isRetained: Bool { !closed && (pending || presentedController != nil) }
 
-    init?(context: NSDictionary, client: ExtensionEngineClient?, uiOnly: Bool) {
+    init?(
+        context: NSDictionary, client: ExtensionEngineClient?, uiOnly: Bool, version: String? = nil
+    ) {
         guard let location = context["location"] as? String,
             let section = context["section"] as? String
         else { return nil }
@@ -94,7 +126,7 @@ import SwiftUI
         self.uiOnly = uiOnly; self.client = client; self.notch = notch
         if let notch, let client {
             notchModel = EmbeddedMusicNotchModel(
-                request: notch.request,
+                request: notch.request, expectedVersion: version,
                 invoke: { operation, payload in
                     try await client.invoke(operation, payload: payload)
                 })
@@ -143,10 +175,14 @@ import SwiftUI
         return controller
     }
 
+    func beginShutdown() {
+        closed = true; pending = false; notchModel?.shutdown()
+    }
+
     func shutdown() {
-        guard !closed else { return }
-        closed = true; pending = false
-        notchModel?.shutdown()
+        beginShutdown()
+        guard !detached else { return }
+        detached = true
         if let client { EmbeddedMusicRemote.shared.detach(client) }
     }
 }

@@ -13,12 +13,14 @@ struct EmbeddedMusicNotchPlayback: Codable, Equatable {
 }
 
 struct EmbeddedMusicNotchState: Codable, Equatable {
+    var version: String
     var snapshot: SurfaceSnapshot
     var playback: [EmbeddedMusicNotchPlayback]
 
     func encoded() throws -> Data {
         _ = try snapshot.encoded()
-        guard snapshot.providerID == "music", playback.count <= 100,
+        guard !version.isEmpty, version.utf8.count <= 80, !version.contains("\0"),
+            snapshot.providerID == "music", playback.count <= 100,
             Set(playback.map(\.rowID)).count == playback.count,
             playback.allSatisfy({ value in
                 snapshot.rows.contains { $0.id == value.rowID }

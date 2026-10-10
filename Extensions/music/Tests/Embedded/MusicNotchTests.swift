@@ -172,6 +172,39 @@ import Testing
         #expect(throws: (any Error).self) { try invalid.encoded() }
     }
 
+    @Test func wrongEngineVersionFailsClosedAndPresentationCloseReleasesOnlyItsOwner() async throws
+    {
+        let input = try context(.card)
+        let route = try #require(EmbeddedMusicNotchRoute(context: input))
+        let service = engine(states: { [playback()] })
+        let stale = EmbeddedMusicNotchModel(
+            request: route.request, expectedVersion: "2.0.0", invoke: service.execute)
+        await stale.refresh()
+        #expect(stale.state == nil && stale.nowPlaying == nil)
+        #expect(stale.nowPlayingControlError != nil)
+        stale.shutdown()
+        let bridge = MusicNotchReadonlyBridge()
+        let runtime = MusicEmbeddedRuntime()
+        var scenes: [MusicEmbeddedPresentation] = []
+        let first = UUID(); let second = UUID()
+        for id in [first, second] {
+            let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: id))
+            let scene = try #require(
+                MusicEmbeddedPresentation(context: input, client: client, uiOnly: false))
+            scenes.append(scene)
+            #expect(runtime.install(scene, id: id))
+        }
+        await runtime.prepareToClose(first)
+        #expect(runtime.presentationCount == 1)
+        #expect(!scenes[0].isRetained && scenes[1].isRetained)
+        #expect(!runtime.release(["presentationID": first.uuidString]))
+        #expect(!runtime.release(["presentationID": UUID().uuidString]))
+        #expect(runtime.release(["presentationID": second.uuidString]))
+        #expect(runtime.presentationCount == 0 && !runtime.configured)
+        #expect(!scenes[1].isRetained)
+        runtime.stop()
+    }
+
     @Test func originalNativeNotchBodiesRenderUnshownAndStopAtSixteenPresentations() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let bridge = MusicNotchReadonlyBridge()

@@ -43,6 +43,7 @@ struct EmbeddedNotchNowPlaying: Equatable {
 
 @MainActor @Observable final class EmbeddedMusicNotchModel {
     let request: SurfaceSnapshotRequest
+    private let expectedVersion: String?
     private(set) var state: EmbeddedMusicNotchState?
     private(set) var nowPlayingControlError: String?
     private(set) var closed = false
@@ -53,14 +54,17 @@ struct EmbeddedNotchNowPlaying: Equatable {
     private var selectedSource: String?
 
     init(request: SurfaceSnapshotRequest, remote: EmbeddedMusicRemote = .shared) {
-        self.request = request;
+        self.expectedVersion = nil; self.request = request;
         self.invoke = { operation, payload in
             try await remote.dataRequest(operation, payload: payload)
         }
     }
 
-    init(request: SurfaceSnapshotRequest, invoke: @escaping (String, Data) async throws -> Data) {
-        self.request = request; self.invoke = invoke
+    init(
+        request: SurfaceSnapshotRequest, expectedVersion: String? = nil,
+        invoke: @escaping (String, Data) async throws -> Data
+    ) {
+        self.expectedVersion = expectedVersion; self.request = request; self.invoke = invoke
     }
 
     var row: SurfaceDataRow? {
@@ -102,6 +106,10 @@ struct EmbeddedNotchNowPlaying: Equatable {
                 operation: { try await task.value }, onCancel: { task.cancel() })
             try Task.checkCancellation()
             guard !closed, revision == token else { return }
+            guard expectedVersion == nil || value.version == expectedVersion else {
+                state = nil; selectedSource = nil
+                throw ExtensionPeerError.invalidRequest
+            }
             let candidates = value.snapshot.rows.filter { row in
                 value.playback.contains { $0.rowID == row.id }
             }
