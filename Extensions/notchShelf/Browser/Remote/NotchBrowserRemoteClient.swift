@@ -17,6 +17,7 @@ import Observation
     private var leaseEnd: NotchBrowserRemoteRequest?
     private var renewal: Task<Void, Never>?
     private var teardown: Task<Void, Never>?
+    private var revocation: Task<Void, Never>?
     var updated: ((NotchBrowserClientState) -> Void)?
     var failed: ((String) -> Void)?
     var revoked: (() -> Void)?
@@ -34,7 +35,18 @@ import Observation
         self.invoke = invoke
     }
 
-    func apply(_ state: NotchBrowserClientState) { self.state = state; updated?(state) }
+    func apply(_ state: NotchBrowserClientState) {
+        guard !stopped else { return }
+        self.state = state
+        if let lease, state.leaseRevision >= lease.stateRevision,
+            !state.leaseIDs.contains(lease.id)
+        {
+            renewal?.cancel()
+            revoked?()
+            revocation = Task { await endLease() }
+        }
+        updated?(state)
+    }
 
     func perform(
         _ operation: NotchBrowserRemoteRequest.Operation,
@@ -95,6 +107,7 @@ import Observation
                 descriptor.lease.ownershipID == start.identity.ownershipID,
                 descriptor.lease.presentationID == start.presentationID,
                 descriptor.lease.displayID == start.displayID,
+                descriptor.lease.stateRevision > 0,
                 descriptor.lease.expiresAt > Date(),
                 descriptor.lease.expiresAt.timeIntervalSinceNow <= 121
             else { throw ExtensionPeerError.invalidRequest }
@@ -194,9 +207,11 @@ import Observation
         renewal?.cancel()
         let actions = actionTask
         let renewing = renewal
+        let revoking = revocation
         teardown = Task {
             await actions?.value
             await renewing?.value
+            await revoking?.value
             await endLease()
         }
         revoked = nil
@@ -221,6 +236,7 @@ import Observation
         guard !stopped, lease == current, next.id == current.id,
             next.ownershipID == current.ownershipID, next.presentationID == current.presentationID,
             next.displayID == current.displayID, next.generation == current.generation,
+            next.stateRevision == current.stateRevision,
             next.profileID == current.profileID, next.revision == current.revision + 1,
             next.expiresAt > Date(), next.expiresAt.timeIntervalSinceNow <= 121
         else { throw ExtensionPeerError.invalidRequest }

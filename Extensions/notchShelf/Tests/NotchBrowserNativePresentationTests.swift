@@ -111,6 +111,28 @@ import WebKit
         await #expect(throws: (any Error).self) { try await fixture.engine.execute(replay) }
     }
 
+    @Test func engineProfileDetachImmediatelyRevokesUnshownNativePresentation() async throws {
+        let server = try BrowserHTTPFixture(pages: ["/": "<title>synthetic native lease</title>"])
+        defer { server.stop() }
+        let origin = try await server.origin()
+        let fixture = try Fixture(tabs: [origin.absoluteString])
+        defer { fixture.clean() }
+        fixture.store.appeared()
+        try await eventually { fixture.store.selectedTab?.title == "synthetic native lease" }
+        let view = try #require(fixture.store.selectedTab?.webView)
+        let store = view.configuration.websiteDataStore
+        fixture.engine.detach()
+        fixture.remote.apply(try fixture.engine.state())
+        #expect(fixture.store.tabs.isEmpty)
+        #expect(fixture.store.profile == nil && fixture.store.showsSetup)
+        #expect(view.navigationDelegate == nil && view.uiDelegate == nil)
+        await fixture.store.shutdownAndWait()
+        #expect(fixture.remote.lease == nil)
+        #expect(await store.httpCookieStore.allCookies().isEmpty)
+        #expect(await store.dataRecords(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes()).isEmpty)
+        #expect(view.window == nil)
+    }
+
     private func eventually(_ predicate: @MainActor () -> Bool) async throws {
         let deadline = ContinuousClock.now + .seconds(15)
         while !predicate() {

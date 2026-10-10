@@ -22,6 +22,7 @@ import Foundation
     private let now: () -> Date
     private let leaseGeneration = UUID()
     private var leases: [UUID: NotchBrowserLease] = [:]
+    private var leaseRevision: UInt64 = 0
     private var leaseExpiries: [UUID: Task<Void, Never>] = [:]
     var held = false
     var changed: (() -> Void)?
@@ -79,7 +80,7 @@ import Foundation
             dataStoreID: inspected.profiles.first(where: { $0.directory == session.profile }).map {
                 ChromeProfileImporter.dataStoreIdentifier(
                     profile: $0, userData: installation.userData)
-            })
+            }, leaseRevision: leaseRevision, leaseIDs: leases.values.map(\.id))
         guard try JSONEncoder().encode(state).count <= NotchPanelEngine.maximumBytes else {
             throw ExtensionPeerError.rejected("The browser profile state exceeds its capacity.")
         }
@@ -96,6 +97,7 @@ import Foundation
                 id: current.id, ownershipID: current.ownershipID,
                 presentationID: current.presentationID, displayID: current.displayID,
                 generation: current.generation, revision: current.revision + 1,
+                stateRevision: current.stateRevision,
                 profileID: current.profileID, expiresAt: now().addingTimeInterval(120))
             leases[request.presentationID] = renewed
             scheduleExpiry(renewed)
@@ -221,8 +223,10 @@ import Foundation
     {
         expireLeases()
         let owner = request.presentationID
+        guard leases[owner] != nil || leases.count < 8 else {
+            throw ExtensionPeerError.rejected("The browser has reached its presentation capacity.")
+        }
         guard importTask == nil, imported == nil, let profileID = request.profileID,
-            leases[owner] != nil || leases.count < 8,
             let profile = installation.inspect().profiles.first(where: { $0.directory == profileID }
             )
         else { throw ExtensionPeerError.invalidRequest }
@@ -261,9 +265,11 @@ import Foundation
         cookieKey = key
         releaseLease(owner: owner)
         downloads.release(owner: owner)
+        leaseRevision += 1
         let lease = NotchBrowserLease(
             id: UUID(), ownershipID: request.identity.ownershipID, presentationID: owner,
             displayID: request.displayID, generation: leaseGeneration, revision: 1,
+            stateRevision: leaseRevision,
             profileID: profile.directory, expiresAt: now().addingTimeInterval(120))
         leases[owner] = lease
         scheduleExpiry(lease)
@@ -331,7 +337,7 @@ import Foundation
     }
 
     private func releaseLease(owner: UUID) {
-        leases[owner] = nil
+        if leases.removeValue(forKey: owner) != nil { leaseRevision += 1 }
         leaseExpiries.removeValue(forKey: owner)?.cancel()
     }
 
