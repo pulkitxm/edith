@@ -10,6 +10,111 @@ import Testing
 
 @MainActor
 @Suite(.serialized) struct HostSurfaceEditorTests {
+    @Test func mainNavigationPreservesEstablishedDestinationOrderAndSections() {
+        #expect(
+            HostNavigationCatalog.pages.map(\.id) == [
+                "home", "machines", "docs", "agents", "dashboard", "herdr", "quinjet", "companion",
+                "plugins",
+                "appMaintenance", "blitztree", "system", "runningApps", "desk", "media", "studio",
+                "latex",
+                "timeLapse", "downloads", "music", "calendar", "virtualCamera", "data", "database",
+                "attention",
+                "seoAudit", "codeStats", "extensions", "settings", "about",
+            ])
+        #expect(
+            HostNavigationCatalog.settings.map(\.id) == [
+                "general", "surfaces", "agentActivity", "permissions", "agent", "jev", "data",
+                "shortcuts", "terminal", "icloud", "updates",
+            ])
+        #expect(
+            HostNavigationCatalog.maintenance.map(\.id) == [
+                "Updates", "Packages", "Remove", "Cleaner", "History",
+            ])
+        #expect(HostNavigationCatalog.page("dashboard").extensionID == "usage")
+        #expect(HostNavigationCatalog.page("runningApps").extensionID == "system")
+    }
+
+    @Test func mainNavigationHonorsExplicitSuiteSelectionAndFallsBackAfterDisable() throws {
+        let name = "com.pulkit.edith.tests.navigation-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        #expect(
+            HostNavigationCatalog.resolve("calendar", active: ["calendar"], defaults: defaults)
+                == "calendar")
+        defaults.set(false, forKey: AppStorageKeys.Suites.media)
+        #expect(
+            HostNavigationCatalog.resolve("calendar", active: ["calendar"], defaults: defaults)
+                == "home")
+        defaults.set(true, forKey: AppStorageKeys.Suites.media)
+        #expect(HostNavigationCatalog.resolve("calendar", active: [], defaults: defaults) == "home")
+        #expect(
+            HostNavigationCatalog.resolve("machines", active: [], defaults: defaults) == "machines")
+        #expect(HostNavigationCatalog.resolve("missing", active: [], defaults: defaults) == "home")
+        defaults.set(false, forKey: AppStorageKeys.General.settingsCategoriesExpanded)
+        #expect(
+            !HostNavigationCatalog.expanded(
+                HostNavigationCatalog.page("settings"), defaults: defaults))
+    }
+
+    @Test func mainShellShowsOriginalCoreAndAppNavigationWithoutStartingExtensions() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let restore = enableAccessibility()
+        defer { restore() }
+        let host = NSHostingView(
+            rootView: HostWorkspace(
+                marketplace: fixture.marketplace, defaults: fixture.marketplace.surfaces.preferences
+            ).environment(\.automaticViewActionsEnabled, false).environment(
+                \.surfaceSampleContent, true))
+        host.frame = CGRect(x: 0, y: 0, width: 1240, height: 850)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        for title in ["Home", "Fleet", "Docs", "Extensions", "Settings", "About", "Toggle sidebar"]
+        {
+            #expect(find(host, label: title) != nil)
+        }
+        #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(await fixture.requests.count == 0)
+        #expect(window.titleVisibility == .hidden)
+        #expect(window.styleMask.contains(.fullSizeContentView))
+    }
+
+    @Test func originalHomeLayoutControlsChangeLayoutAndOpenItsEditorWithoutStartingWorkers()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let restore = enableAccessibility()
+        defer { restore() }
+        fixture.marketplace.surfaceLayouts.update(.home) { $0.balancedRows = false }
+        var editorOpened = false
+        let host = NSHostingView(
+            rootView: HostHomePage(
+                marketplace: fixture.marketplace, customize: { editorOpened = true }, extensions: {}
+            ).environment(\.automaticViewActionsEnabled, false).environment(
+                \.surfaceSampleContent, true))
+        host.frame = CGRect(x: 0, y: 0, width: 1240, height: 850)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        let fit = try #require(find(host, label: "Auto fit"))
+        #expect((fit as AnyObject).accessibilityPerformPress?() == true)
+        await settle(window, host: host)
+        #expect(fixture.marketplace.surfaceLayouts.home.balancedRows == true)
+        let edit = try #require(find(host, label: "Edit layout"))
+        #expect((edit as AnyObject).accessibilityPerformPress?() == true)
+        await settle(window, host: host)
+        #expect(find(host, label: "Done") != nil)
+        let editor = try #require(find(host, label: "Widget editor"))
+        #expect((editor as AnyObject).accessibilityPerformPress?() == true)
+        #expect(editorOpened)
+        #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(await fixture.requests.count == 0)
+    }
+
     @Test func emptyHomeRendersOnlyTheBuiltInClockAndOffersExtensionDiscovery() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
@@ -17,6 +122,7 @@ import Testing
         defer { restore() }
         let host = NSHostingView(
             rootView: HostHomePage(marketplace: fixture.marketplace, customize: {}, extensions: {})
+                .environment(\.surfaceSampleContent, true)
                 .environment(\.compactLayout, false).environment(
                     \.automaticViewActionsEnabled, false))
         host.frame = CGRect(x: 0, y: 0, width: 1200, height: 900)
@@ -25,8 +131,9 @@ import Testing
         defer { window.orderOut(nil) }
         await settle(window, host: host)
         #expect(find(host, label: "World clocks") != nil)
-        #expect(find(host, label: "Customize") != nil)
-        #expect(find(host, label: "Extensions") != nil)
+        #expect(find(host, label: "Widget editor") != nil)
+        #expect(find(host, label: "Auto fit") != nil)
+        #expect(find(host, label: "Edit layout") != nil)
         #expect(find(host, label: "Meetings") == nil)
         #expect(find(host, label: "Open Calendar") == nil)
         #expect(fixture.marketplace.surfaces.requests.pendingCount == 0)

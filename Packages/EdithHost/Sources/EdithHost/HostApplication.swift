@@ -171,43 +171,6 @@ struct HostApplication: App {
     }
 }
 
-private enum HostWorkspacePage: String, CaseIterable {
-    case home = "Home"
-    case extensions = "Extensions"
-    case customize = "Customize Home and Notch"
-}
-
-private struct HostWorkspace: View {
-    let marketplace: HostMarketplace
-    @State private var page = HostWorkspacePage.home
-
-    var body: some View {
-        VStack(spacing: 0) {
-            EdithSegmentedPicker(
-                "Workspace", selection: $page, options: HostWorkspacePage.allCases,
-                label: { $0.rawValue }
-            ).padding(UIScale.pt(12))
-            Divider()
-            switch page {
-            case .home:
-                HostHomePage(
-                    marketplace: marketplace, customize: { page = .customize },
-                    extensions: { page = .extensions })
-            case .extensions: MarketplacePage(marketplace: marketplace)
-            case .customize: HostSurfaceEditor(marketplace: marketplace)
-            }
-        }
-        .onChange(of: marketplace.surfaces.navigation.editorRequest, initial: true) {
-            guard let request = marketplace.surfaces.navigation.editorRequest else { return }
-            marketplace.surfaces.preferences.set(
-                request.target.rawValue, forKey: "surfaceEditorTarget")
-            marketplace.surfaces.preferences.set(
-                request.tileID ?? "", forKey: "surfaceEditorWidget")
-            page = .customize
-        }
-    }
-}
-
 struct MarketplacePage: View {
     @Bindable var marketplace: HostMarketplace
     @State private var search = ""
