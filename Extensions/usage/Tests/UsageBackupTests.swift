@@ -97,7 +97,8 @@ import Testing
         let existing = try usage("2026-08-21", tokens: 42)
         try existing.write(to: cloud.appendingPathComponent("usage.json"))
         defaults.set(false, forKey: AppStorageKeys.Backup.icloud)
-        let provider = UsageBackupProvider(directory: local, cloud: cloud, defaults: defaults)
+        let provider = UsageBackupProvider(
+            directory: local, cloud: cloud, defaults: defaults, onBattery: { false })
         let result = try await provider.execute("backup.synchronize", payload: Data())
         #expect(String(decoding: result, as: UTF8.self) == "{\"enabled\":false}")
         #expect(!FileManager.default.fileExists(atPath: local.path))
@@ -125,7 +126,8 @@ import Testing
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let provider = UsageBackupProvider(
-            directory: root, cloud: root.appendingPathComponent("cloud"), defaults: defaults)
+            directory: root, cloud: root.appendingPathComponent("cloud"), defaults: defaults,
+            onBattery: { false })
         await #expect(throws: ExtensionPeerError.self) {
             try await provider.execute(
                 "backup.synchronize", payload: Data(#"{"path":"/foreign"}"#.utf8))
@@ -167,7 +169,8 @@ import Testing
         let document = local.appendingPathComponent("usage.json")
         let exported = cloud.appendingPathComponent("usage.json")
         try usage("2026-08-20", tokens: 23).write(to: document)
-        let provider = UsageBackupProvider(directory: local, cloud: cloud, defaults: defaults)
+        let provider = UsageBackupProvider(
+            directory: local, cloud: cloud, defaults: defaults, onBattery: { false })
         provider.startScheduling(debounce: .milliseconds(20))
         await wait { FileManager.default.fileExists(atPath: exported.path) }
         #expect(
@@ -217,7 +220,8 @@ import Testing
         defaults.set(true, forKey: AppStorageKeys.Backup.icloud)
         let cloud = root.appendingPathComponent("unavailable")
         let provider = UsageBackupProvider(
-            directory: root, cloud: cloud, defaults: defaults, cloudAvailable: { false })
+            directory: root, cloud: cloud, defaults: defaults, cloudAvailable: { false },
+            onBattery: { false })
         provider.startScheduling(debounce: .zero)
         UsageEvents.post(UsageEvents.usageUpdated)
         #expect(await provider.restoreOnEnable())
@@ -238,7 +242,8 @@ import Testing
         defaults.set(true, forKey: AppStorageKeys.Backup.icloud)
         let cloud = root.appendingPathComponent("cloud")
         try usage("2026-08-20", tokens: 23).write(to: root.appendingPathComponent("usage.json"))
-        let provider = UsageBackupProvider(directory: root, cloud: cloud, defaults: defaults)
+        let provider = UsageBackupProvider(
+            directory: root, cloud: cloud, defaults: defaults, onBattery: { false })
         _ = try await provider.execute("backup.cancel", payload: Data())
         provider.startScheduling(debounce: .zero, restorePending: true)
         let status =

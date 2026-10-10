@@ -315,7 +315,8 @@ import Testing
             let directory = directory ?? local
             return MusicBackupProvider(
                 directory: { directory }, ownedDirectory: local, cloud: cloud,
-                applicationDefaults: defaults, defaults: defaults, cloudAvailable: cloudAvailable)
+                applicationDefaults: defaults, defaults: defaults, cloudAvailable: cloudAvailable,
+                onBattery: { false })
         }
 
         func remove() {

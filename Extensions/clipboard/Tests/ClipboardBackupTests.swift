@@ -256,7 +256,7 @@ import Testing
         {
             ClipboardBackupProvider(
                 archive: archive, cloud: cloud, applicationDefaults: defaults, defaults: defaults,
-                cloudAvailable: cloudAvailable)
+                cloudAvailable: cloudAvailable, onBattery: { false })
         }
 
         func remove() {
