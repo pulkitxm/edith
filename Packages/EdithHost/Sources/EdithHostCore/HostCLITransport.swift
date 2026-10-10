@@ -46,10 +46,26 @@ struct HostCLIProcess: Equatable, Sendable {
     }
 }
 
-struct HostCLIResponse: Codable, Sendable {
+struct HostCLIResponse: Sendable {
     let payload: Data?
     let error: String?
     let exitCode: Int32
+
+    func encoded() throws -> Data {
+        var object: [String: Any] = ["exitCode": exitCode]
+        object["payload"] = payload?.base64EncodedString()
+        object["error"] = error
+        return try JSONSerialization.data(withJSONObject: object)
+    }
+    static func decoded(_ data: Data) throws -> Self {
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let code = object["exitCode"] as? NSNumber,
+            CFGetTypeID(code) != CFBooleanGetTypeID(), (0...4).contains(code.int32Value)
+        else { throw HostCLIError.rejected("Invalid command response.") }
+        return Self(
+            payload: (object["payload"] as? String).flatMap { Data(base64Encoded: $0) },
+            error: object["error"] as? String, exitCode: code.int32Value)
+    }
 }
 
 public enum HostCLITransport {
@@ -98,10 +114,8 @@ public enum HostCLITransport {
         }
         guard connected == 0 else { throw HostCLIError.unavailable }
         let peer = try HostCLIProcess.peer(descriptor)
-        try connection.write(JSONEncoder().encode(request), limit: maximumRequest)
-        let response = try JSONDecoder().decode(
-            HostCLIResponse.self,
-            from: connection.read(limit: maximumFrame))
+        try connection.write(request.encoded(), limit: maximumRequest)
+        let response = try HostCLIResponse.decoded(connection.read(limit: maximumFrame))
         guard HostCLIProcess.read(peer.pid) == peer else { throw HostCLIError.unavailable }
         if let error = response.error {
             if response.exitCode == 4 { throw HostCLIError.timedOut }

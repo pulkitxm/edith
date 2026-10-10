@@ -53,10 +53,10 @@ import Testing
     @Test func decodedRequestsCannotBypassValidation() throws {
         let request = try HostCLIRequest(action: .ls)
         var object = try #require(
-            JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
+            JSONSerialization.jsonObject(with: request.encoded()) as? [String: Any])
         object["timeout"] = 999
-        let decoded = try JSONDecoder().decode(
-            HostCLIRequest.self, from: JSONSerialization.data(withJSONObject: object))
-        #expect(throws: HostCLIError.self) { try decoded.validate() }
+        #expect(throws: HostCLIError.self) {
+            try HostCLIRequest.decoded(JSONSerialization.data(withJSONObject: object))
+        }
     }
 }

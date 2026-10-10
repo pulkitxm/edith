@@ -94,7 +94,6 @@ import Foundation
         let connection = HostCLIConnection(descriptor)
         let token = UUID()
         let task = Task { [weak self, execute] in
-            defer { self?.retired.removeValue(forKey: token); self?.resumeListener() }
             do {
                 let request = try await Task.detached(priority: .utility) {
                     try connection.configure(timeout: 5)
@@ -103,7 +102,7 @@ import Foundation
                     guard HostCLIProcess.read(peer.pid) == peer else {
                         throw HostCLIError.unavailable
                     }
-                    let request = try JSONDecoder().decode(HostCLIRequest.self, from: data)
+                    let request = try HostCLIRequest.decoded(data)
                     try request.validate()
                     return request
                 }.value
@@ -158,7 +157,7 @@ import Foundation
         _ = try? await Task.detached(priority: .utility) {
             try job.connection.configure(timeout: 2)
             try job.connection.write(
-                JSONEncoder().encode(response), limit: HostCLITransport.maximumFrame)
+                response.encoded(), limit: HostCLITransport.maximumFrame)
         }.value
         close(token)
     }

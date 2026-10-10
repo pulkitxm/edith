@@ -25,8 +25,8 @@ public enum HostCLIError: Error, LocalizedError, Sendable {
     }
 }
 
-public struct HostCLIRequest: Codable, Sendable, Equatable {
-    public enum Action: String, Codable, Sendable {
+public struct HostCLIRequest: Sendable, Equatable {
+    public enum Action: String, Sendable {
         case ls, info, install, update, enable, disable, remove, invoke
     }
     public let action: Action
@@ -46,6 +46,31 @@ public struct HostCLIRequest: Codable, Sendable, Equatable {
         self.payload = payload
         self.timeout = timeout
         try validate()
+    }
+
+    public func encoded() throws -> Data {
+        var object: [String: Any] = [
+            "action": action.rawValue, "payload": payload.base64EncodedString(), "timeout": timeout,
+        ]
+        object["id"] = id
+        object["operation"] = operation
+        return try JSONSerialization.data(withJSONObject: object)
+    }
+
+    public static func decoded(_ data: Data) throws -> Self {
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            Set(object.keys).isSubset(of: ["action", "id", "operation", "payload", "timeout"]),
+            let value = object["action"] as? String, let action = Action(rawValue: value),
+            let encoded = object["payload"] as? String, let payload = Data(base64Encoded: encoded),
+            let timeout = object["timeout"] as? NSNumber,
+            CFGetTypeID(timeout) != CFBooleanGetTypeID(),
+            object["id"] == nil || object["id"] is String,
+            object["operation"] == nil || object["operation"] is String
+        else { throw HostCLIError.usage("Invalid command request.") }
+        return try Self(
+            action: action, id: object["id"] as? String,
+            operation: object["operation"] as? String, payload: payload,
+            timeout: timeout.doubleValue)
     }
 
     public func validate() throws {
