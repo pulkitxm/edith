@@ -24,7 +24,10 @@ public actor DatabaseEngine: DatabaseBrokerCommandSending {
 
     public init(root: URL, keychainService: String = DatabaseKeychainSecretStore.defaultService) {
         self.init(
-            metadataFile: root.appendingPathComponent("metadata.sqlite"),
+            metadataFile: DatabaseStorageIdentity.metadataFile(
+                root: root,
+                applicationIdentifier: ProcessInfo.processInfo.environment[
+                    "EDITH_APPLICATION_IDENTIFIER"]),
             secretStore: { try DatabaseKeychainSecretStore(service: keychainService) },
             adapters: DatabaseEngineAdapters.live)
     }
