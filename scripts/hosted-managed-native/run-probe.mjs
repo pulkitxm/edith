@@ -79,8 +79,6 @@ try {
     "1",
     "-parallel-testing-enabled",
     "NO",
-    "-maximum-concurrent-test-macos-destinations",
-    "1",
   ];
   execFileSync("xcodebuild", ["build-for-testing", ...args], {
     stdio: "inherit",
