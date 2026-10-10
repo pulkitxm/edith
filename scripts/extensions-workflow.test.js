@@ -44,6 +44,27 @@ test("downloaded Docs source and reference changes run independent package check
   ).toEqual(["docs"]);
 });
 
+test("maintained terminal native inputs trigger selective extension checks", () => {
+  const definitions = JSON.parse(
+    readFileSync("Extensions/manifest.json", "utf8"),
+  );
+  const inputs = [
+    "scripts/build-ghostty.sh",
+    "scripts/patches/ghostty-external-io.patch",
+    "scripts/extension-ghostty-native.mjs",
+  ];
+  for (const path of inputs) {
+    for (const event of [workflow.on.pull_request, workflow.on.push]) {
+      expect(
+        event.paths.some((pattern) => new Bun.Glob(pattern).match(path)),
+      ).toBe(true);
+    }
+    expect(
+      planExtensionBuilds(definitions, [path]).map(({ id }) => id),
+    ).toEqual(["terminal", "machines", "herdr", "quinjet"]);
+  }
+});
+
 test("all extension releases reuse one signed host without Camera provisioning", () => {
   const signing = frozen.steps.findIndex(
     (step) => step.name === "Import the release signing certificate",
@@ -230,4 +251,39 @@ test("matrix jobs restore executable modes and never rebuild the shared host", (
   expect(text(frozen)).toContain("tar -czf");
   expect(text(frozen)).toContain("HostLifecycleHarness");
   expect(text(frozen)).toContain("MarketplaceHarness");
+});
+
+test("native cache keys include maintained patch and exact toolchain; validation gates release signing", () => {
+  const toolchain = build.steps.findIndex(
+    (step) => step.id === "ghostty-toolchain",
+  );
+  const cache = build.steps.findIndex(
+    (step) => step.name === "Cache the optional terminal library",
+  );
+  const validation = build.steps.findIndex(
+    (step) => step.name === "Build the optional terminal library",
+  );
+  const signing = build.steps.findIndex(
+    (step) => step.name === "Import the release signing certificate",
+  );
+  expect(toolchain).toBeGreaterThan(-1);
+  expect(toolchain).toBeLessThan(cache);
+  expect(cache).toBeLessThan(validation);
+  expect(validation).toBeLessThan(signing);
+  expect(build.steps[cache].with.key).toContain(
+    "scripts/patches/ghostty-external-io.patch",
+  );
+  expect(build.steps[cache].with.key).toContain(
+    "steps.ghostty-toolchain.outputs.fingerprint",
+  );
+  expect(build.steps[toolchain].run).toContain(
+    "extension-ghostty-native.mjs --fingerprint",
+  );
+  expect(build.steps[validation].run).toContain(
+    "extension-ghostty-native.mjs --check",
+  );
+  expect(build.steps[validation].run).toContain(
+    "extension-ghostty-native.test.js",
+  );
+  expect(build.steps[validation]["continue-on-error"]).toBeUndefined();
 });

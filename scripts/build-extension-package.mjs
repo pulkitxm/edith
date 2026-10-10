@@ -19,6 +19,7 @@ import {
   supportProducts,
 } from "./build-extension-support.mjs";
 import { buildExtensionUICarrier } from "./build-extension-ui-carrier.mjs";
+import { verifyExtensionNativeDependencies } from "./extension-ghostty-native.mjs";
 import { writeHostABI } from "./extension-host-abi.mjs";
 import { buildHostInterfaces } from "./extension-host-build.mjs";
 import { extensionFingerprint } from "./extension-release-plan.mjs";
@@ -246,12 +247,13 @@ export async function buildExtensionPackage({
   tagOverride,
   containedHostApp = process.env.EXTENSION_CONTAINING_HOST_APP,
 }) {
-  await writeHostABI(root);
   const definitions = JSON.parse(
     await readFile(resolve(root, "Extensions/manifest.json"), "utf8"),
   );
   const definition = definitions.find((entry) => entry.id === id);
   if (!definition) throw new Error(`Unknown extension ${id}`);
+  await verifyExtensionNativeDependencies(root, definition);
+  await writeHostABI(root);
   containedHostApp ??= development
     ? resolve(root, "local/minimal-host/Edith.app")
     : undefined;

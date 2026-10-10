@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { supportSourceInputs } from "./build-extension-support.mjs";
+import { ghosttyNativeInputs } from "./extension-ghostty-native.mjs";
 import { writeHostABI } from "./extension-host-abi.mjs";
 
 export const workerRuntimeInputs = [
@@ -42,6 +43,7 @@ export function definitionInputs(definition) {
     : definition.sharedInputs;
   return [
     ...definition.inputs,
+    ...ghosttyNativeInputs(definition),
     ...shared,
     ...(definition.sameExecutableWorker ? workerRuntimeInputs : []),
   ];
