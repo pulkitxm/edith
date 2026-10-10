@@ -207,6 +207,7 @@ public final class UsageWorkerController {
 @MainActor
 public enum UsageWorkerOperations {
     public static weak var controller: UsageWorkerController?
+    public static weak var statusLineCommands: UsageStatusLineCommands?
     static var machinesProjection: UsageMachinesProjection?
 
     public static func forgetMachine(_ machineID: UUID) async throws {

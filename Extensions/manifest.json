@@ -1394,6 +1394,7 @@
         "Extensions/usage/Services/UsageRefreshProgress.swift",
         "Extensions/usage/Services/UsageReportCommands.swift",
         "Extensions/usage/Services/UsageStatusLineCommands.swift",
+        "Extensions/usage/Services/UsageStatusLineConnection.swift",
         "Extensions/usage/Services/UsageSurface.swift",
         "Extensions/usage/Services/UsageWorkerController.swift",
         "Extensions/usage/ViewModels/DashboardRefreshBridge.swift",

@@ -137,13 +137,22 @@ public enum ClaudeStatusLine {
     }
 
     @discardableResult
-    public static func install(executable: String, settings url: URL = settingsURL()) throws
+    public static func install(
+        executable: String, settings url: URL = settingsURL(),
+        ownedCommand: String? = nil,
+        preserveOwnership: (String) throws -> Void = { _ in }
+    ) throws
         -> Change
     {
         var document = try readSettings(url) ?? [:]
         let existing = statusCommand(in: document)
-        let previous = existing.flatMap { isRecorder($0) ? wrappedCommand(in: $0) : $0 }
+        let previous = existing.flatMap { existing in
+            let wrapped = wrappedCommand(in: existing)
+            let canonical = command(executable: executable, wrapping: wrapped)
+            return existing == ownedCommand || existing == canonical ? wrapped : existing
+        }
         let command = command(executable: executable, wrapping: previous)
+        try preserveOwnership(command)
         guard existing != command else { return .unchanged }
         var statusLine = document["statusLine"] as? [String: Any] ?? [:]
         statusLine["type"] = "command"
@@ -190,9 +199,17 @@ public enum ClaudeStatusLine {
     public static func setConnected(
         _ connected: Bool, settings url: URL = settingsURL()
     ) async throws -> Change {
-        guard connected else { return try disconnect(settings: url) }
-        guard let executable = defaultExecutable() else { throw Failure.missingExecutable }
-        return try connect(executable: executable, settings: url)
+        guard let service = await UsageWorkerOperations.statusLineCommands else {
+            throw ExtensionPeerError.unavailable
+        }
+        let response = try await service.execute(
+            connected ? "usage.statusline.install" : "usage.statusline.remove",
+            payload: Data("{}".utf8))
+        let change = try JSONDecoder().decode(UsageStatusLineChangeResponse.self, from: response)
+        guard let result = Change(rawValue: change.change) else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        return result
     }
 
     public static func isConnected(settings url: URL = settingsURL()) async -> Bool {
@@ -239,6 +256,10 @@ public enum ClaudeStatusLine {
 
     private static func statusCommand(in document: [String: Any]) -> String? {
         (document["statusLine"] as? [String: Any])?["command"] as? String
+    }
+
+    static func configuredCommand(settings: URL) throws -> String? {
+        try readSettings(settings).flatMap(statusCommand)
     }
 
     private static func readSettings(_ url: URL) throws -> [String: Any]? {
