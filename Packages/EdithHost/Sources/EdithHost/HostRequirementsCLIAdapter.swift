@@ -12,7 +12,7 @@ import Foundation
         let removalPending: Bool
 
         var available: Bool {
-            enabled && active && version != nil && processIdentifier != nil
+            enabled && active && version != nil && (processIdentifier ?? 0) > 0
                 && !disablePending && !removalPending
         }
     }
@@ -123,10 +123,15 @@ import Foundation
                             : report.checks.contains(where: { $0.status == .failed })
                                 || ![.ready, .degraded].contains(report.state.phase)
                                 ? .failed
-                                : report.state.phase == .degraded ? .warning : .passed
+                                : report.state.phase == .degraded
+                                    || report.checks.contains(where: { $0.status == .warning })
+                                    ? .warning : .passed
                         let detail =
                             ([report.state.summary]
-                            + report.state.issues.map { $0.title + ": " + $0.detail }).joined(
+                            + report.state.issues.map { $0.title + ": " + $0.detail }
+                            + report.checks.filter { $0.status != .passed }.map {
+                                $0.title + ": " + $0.detail
+                            }).joined(
                                 separator: "\n")
                         return .init(
                             owner: id, phase: report.state.runtimePhase, status: status,

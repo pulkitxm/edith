@@ -146,6 +146,34 @@ import Testing
         #expect(fixture.inspections == 0)
     }
 
+    @Test func disabledCompatible39PackagesNeverInspectOwnersAndWarningsRemainVisible() async throws
+    {
+        let fixture = try RequirementsOwnerFixture()
+        defer { fixture.clean() }
+        let backend = HostRequirementsCLIAdapter.make(environment: fixture.environment())
+        fixture.activation = .init(
+            enabled: false, active: false, version: nil, processIdentifier: nil,
+            disablePending: false, removalPending: false)
+        for entry in backend.entries() {
+            let report = try await backend.inspect(entry.id, "doctor")
+            #expect(!report.verified && report.state.phase == .disabled)
+            #expect(report.checks.first { $0.id == "package" }?.status == .passed)
+            let preview = try await backend.setup(entry.id, true, true)
+            #expect(!preview.changed && preview.installedTools.isEmpty)
+        }
+        #expect(fixture.inspections == 0 && fixture.setups == 0)
+        fixture.reset()
+        fixture.warning = true
+        let warning = try await backend.inspect("calendar", "verify")
+        #expect(!warning.verified && warning.state.phase == .degraded)
+        #expect(warning.checks.last?.status == .warning)
+        #expect(warning.checks.last?.detail.contains("Original optional owner policy") == true)
+        fixture.reset()
+        fixture.activation = fixture.state(pid: 0)
+        #expect(try await backend.inspect("calendar", "verify").verified == false)
+        #expect(fixture.inspections == 0)
+    }
+
     @Test func setupDelegatesOnlyAlreadyActiveOwnerAndRejectsLateReplacement() async throws {
         let fixture = try RequirementsOwnerFixture()
         defer { fixture.clean() }
@@ -328,6 +356,7 @@ private actor RequirementsCalls {
     var activation: HostRequirementsCLIAdapter.Activation
     var inspections = 0; var setups = 0
     var change: String?; var cancel = false; var cancelTool = false; var wrongOwner = false
+    var warning = false
     init() throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "requirements-owner-" + UUID().uuidString)
@@ -349,7 +378,7 @@ private actor RequirementsCalls {
     }
     func reset() {
         activation = state(); inspections = 0; setups = 0; change = nil; cancel = false;
-        cancelTool = false; wrongOwner = false
+        cancelTool = false; wrongOwner = false; warning = false
     }
     func mutate() {
         switch change {
@@ -367,8 +396,9 @@ private actor RequirementsCalls {
                 extensionID: id, phase: .ready, summary: "Captured synthetic owner inspection"),
             checks: [
                 .init(
-                    id: "synthetic", title: "Synthetic", status: .passed,
-                    detail: "Captured synthetic owner state")
+                    id: "synthetic", title: "Synthetic", status: warning ? .warning : .passed,
+                    detail: warning
+                        ? "Original optional owner policy" : "Captured synthetic owner state")
             ])
     }
     func environment() -> HostRequirementsCLIAdapter.Environment {
