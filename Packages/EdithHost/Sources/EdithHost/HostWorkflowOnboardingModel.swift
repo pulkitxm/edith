@@ -186,6 +186,10 @@ import Observation
         }
     }
 
+    var skipTitle: String {
+        environment.active().isEmpty ? "Start without extensions" : "Keep current setup"
+    }
+
     func skip() {
         guard !busy else { return }
         selected = []

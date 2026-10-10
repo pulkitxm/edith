@@ -195,12 +195,24 @@ import Testing
         #expect(!model.incomplete)
     }
 
+    @Test func emptyFirstLaunchPreservesTheExplicitEmptySetupOption() {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        let model = fixture.model()
+        model.present()
+        #expect(model.skipTitle == "Start without extensions")
+        model.skip()
+        #expect(fixture.active.isEmpty)
+        #expect(fixture.installs.isEmpty)
+    }
+
     @Test func explicitStartWithoutExtensionsCompletesAndNeverRemovesExistingUserSelection() {
         let fixture = Fixture()
         defer { fixture.remove() }
         fixture.active = ["usage"]
         let model = fixture.model()
         model.present()
+        #expect(model.skipTitle == "Keep current setup")
         model.skip()
         model.dismiss()
         #expect(fixture.active == ["usage"])
