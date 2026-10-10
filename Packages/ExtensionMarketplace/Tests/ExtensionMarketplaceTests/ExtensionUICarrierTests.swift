@@ -10,10 +10,10 @@ private struct UICarrierFixture {
     let worker: URL
     let host = "com.pulkit.edith.tests.ui"
 
-    init() throws {
+    init(id: String = "calendar") throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "extension-ui-test-\(UUID().uuidString)")
-        package = fixturePackage("calendar")
+        package = fixturePackage(id)
         carrier = root.appendingPathComponent("ExtensionCarrier.app")
         worker = carrier.appendingPathComponent("Contents/Extensions/ExtensionWorker.appex")
         let shared: [String: Any] = [
@@ -30,11 +30,11 @@ private struct UICarrierFixture {
             "EdithPayloadRelativePath": "Contents/Resources/Payload",
         ]
         var applicationInfo = shared
-        applicationInfo["CFBundleIdentifier"] = "\(host).extension.calendar"
+        applicationInfo["CFBundleIdentifier"] = "\(host).extension.\(id)"
         applicationInfo["CFBundlePackageType"] = "APPL"
         applicationInfo["LSUIElement"] = true
         var workerInfo = shared
-        workerInfo["CFBundleIdentifier"] = "\(host).extension.calendar.worker"
+        workerInfo["CFBundleIdentifier"] = "\(host).extension.\(id).worker"
         workerInfo["CFBundlePackageType"] = "XPC!"
         workerInfo["EXAppExtensionAttributes"] = [
             "EXExtensionPointIdentifier": "\(host).ExtensionUI"
@@ -50,7 +50,7 @@ private struct UICarrierFixture {
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o755], ofItemAtPath: executable.path)
         }
-        let selectedPayload = worker.appendingPathComponent("Contents/Resources/Payload/calendar")
+        let selectedPayload = worker.appendingPathComponent("Contents/Resources/Payload/\(id)")
         try FileManager.default.createDirectory(
             at: selectedPayload, withIntermediateDirectories: true)
         try JSONEncoder().encode(ExtensionPayloadManifest(package: package))
@@ -70,6 +70,79 @@ private struct UICarrierFixture {
     }
 
     func clean() { try? FileManager.default.removeItem(at: root) }
+
+    func sign(workerEntitlements: [String: Any], carrierEntitlements: [String: Any] = [:]) throws {
+        for bundle in [worker, carrier] {
+            let executable = bundle.appendingPathComponent("Contents/MacOS/Edith")
+            try FileManager.default.removeItem(at: executable)
+            try FileManager.default.copyItem(
+                at: URL(fileURLWithPath: "/usr/bin/true"), to: executable)
+        }
+        for (bundle, entitlements) in [
+            (worker, workerEntitlements), (carrier, carrierEntitlements),
+        ] {
+            let plist = root.appendingPathComponent("entitlements.plist")
+            try PropertyListSerialization.data(
+                fromPropertyList: entitlements, format: .xml, options: 0
+            )
+            .write(to: plist)
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+            process.arguments = [
+                "--force", "--sign", "-", "--entitlements", plist.path, bundle.path,
+            ]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            process.waitUntilExit()
+            #expect(process.terminationStatus == 0)
+        }
+    }
+}
+
+@Test(arguments: ["calendar", "music", "notchShelf", "camera", "micMute"])
+func signedWorkerRequiresExactlyItsOwnedCapabilities(id: String) throws {
+    let fixture = try UICarrierFixture(id: id)
+    defer { fixture.clean() }
+    let selected = try ExtensionUICarrier(payload: fixture.root, package: fixture.package)
+    var expected: [String: Any] = ["com.apple.security.app-sandbox": true]
+    let network = ["music", "notchShelf"].contains(id)
+    if network { expected["com.apple.security.network.client"] = true }
+    try fixture.sign(workerEntitlements: expected)
+    try selected.verifyDevelopment()
+    var wrongNetwork = expected
+    if network {
+        wrongNetwork.removeValue(forKey: "com.apple.security.network.client")
+    } else {
+        wrongNetwork["com.apple.security.network.client"] = true
+    }
+    try fixture.sign(workerEntitlements: wrongNetwork)
+    #expect(throws: MarketplaceError.invalidSignature) { try selected.verifyDevelopment() }
+    for key in [
+        "com.apple.security.device.camera", "com.apple.security.device.audio-input",
+        "com.apple.security.network.server", "com.apple.security.files.user-selected.read-write",
+    ] {
+        var extra = expected
+        extra[key] = true
+        try fixture.sign(workerEntitlements: extra)
+        #expect(throws: MarketplaceError.invalidSignature) { try selected.verifyDevelopment() }
+    }
+    for key in expected.keys {
+        var missing = expected
+        missing.removeValue(forKey: key)
+        try fixture.sign(workerEntitlements: missing)
+        #expect(throws: MarketplaceError.invalidSignature) { try selected.verifyDevelopment() }
+        for invalid in [false as Any, 1 as Any, "true" as Any] {
+            var wrongType = expected
+            wrongType[key] = invalid
+            try fixture.sign(workerEntitlements: wrongType)
+            #expect(throws: MarketplaceError.invalidSignature) { try selected.verifyDevelopment() }
+        }
+    }
+    try fixture.sign(
+        workerEntitlements: expected,
+        carrierEntitlements: ["com.apple.security.network.client": true])
+    #expect(throws: MarketplaceError.invalidSignature) { try selected.verifyDevelopment() }
 }
 
 @Test func selectedCarrierRequiresMatchingHostPackageAndSceneIdentity() throws {

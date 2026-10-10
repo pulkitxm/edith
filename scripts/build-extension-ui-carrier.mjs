@@ -23,6 +23,17 @@ const extensionPattern = /^[A-Za-z][A-Za-z0-9]{0,63}$/;
 const versionPattern = /^\d+\.\d+\.\d+$/;
 const hashPattern = /^[a-f0-9]{64}$/;
 
+export function extensionUIWorkerEntitlements(id) {
+  if (!extensionPattern.test(id ?? ""))
+    throw new Error("Invalid extension UI identity");
+  return {
+    "com.apple.security.app-sandbox": true,
+    ...(["music", "notchShelf"].includes(id)
+      ? { "com.apple.security.network.client": true }
+      : {}),
+  };
+}
+
 export function extensionUIExtensionPoint(hostIdentifier) {
   if (!identifierPattern.test(hostIdentifier ?? ""))
     throw new Error("Invalid extension UI host identity");
@@ -302,7 +313,7 @@ export async function buildExtensionUICarrier({
   await writeFile(resolve(paths.contents, "PkgInfo"), "APPL????");
   await writeFile(resolve(paths.workerContents, "PkgInfo"), "XPC!????");
   const entitlements = resolve(paths.contents, ".worker-entitlements.plist");
-  await writePlist(entitlements, { "com.apple.security.app-sandbox": true });
+  await writePlist(entitlements, extensionUIWorkerEntitlements(id));
   sign(paths.worker, signingIdentity, development, entitlements);
   await unlink(entitlements);
   sign(paths.carrier, signingIdentity, development);

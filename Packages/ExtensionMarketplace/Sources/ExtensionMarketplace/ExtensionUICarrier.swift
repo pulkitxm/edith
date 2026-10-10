@@ -11,6 +11,7 @@ public struct ExtensionUICarrier: Sendable {
     public let hostCodeRequirement: String
     public let executableProvenance: String
     public let payloadDirectory: URL
+    private let extensionID: String
 
     public init(payload: URL, package: ExtensionPackage, expectedHostIdentifier: String? = nil)
         throws
@@ -108,12 +109,13 @@ public struct ExtensionUICarrier: Sendable {
         executableProvenance = provenance
         workerIdentifier = "\(identifier).worker"
         extensionPointIdentifier = "\(host).ExtensionUI"
+        extensionID = manifest.id
     }
 
     public func verify(teamIdentifier: String) throws {
         try ExtensionCodeSignature.verify(application, teamIdentifier: teamIdentifier)
         try ExtensionCodeSignature.verify(worker, teamIdentifier: teamIdentifier)
-        try requireSandbox()
+        try requireWorkerCapabilities()
     }
 
     public func verifyDevelopment() throws {
@@ -123,22 +125,37 @@ public struct ExtensionUICarrier: Sendable {
         else { throw MarketplaceError.invalidSignature }
         try ExtensionCodeSignature.verifyDevelopment(application)
         try ExtensionCodeSignature.verifyDevelopment(worker)
-        try requireSandbox()
+        try requireWorkerCapabilities()
     }
 
-    private func requireSandbox() throws {
+    private func requireWorkerCapabilities() throws {
+        var expected = ["com.apple.security.app-sandbox": true]
+        if ["music", "notchShelf"].contains(extensionID) {
+            expected["com.apple.security.network.client"] = true
+        }
+        try Self.requireEntitlements(worker, expected: expected)
+        try Self.requireEntitlements(application, expected: [:])
+    }
+
+    private static func requireEntitlements(_ bundle: URL, expected: [String: Bool]) throws {
         var code: SecStaticCode?
         var information: CFDictionary?
-        guard SecStaticCodeCreateWithPath(worker as CFURL, [], &code) == errSecSuccess,
+        guard SecStaticCodeCreateWithPath(bundle as CFURL, [], &code) == errSecSuccess,
             let code,
             SecCodeCopySigningInformation(
                 code, SecCSFlags(rawValue: kSecCSSigningInformation), &information)
                 == errSecSuccess,
-            let information = information as? [String: Any],
-            let entitlements = information[kSecCodeInfoEntitlementsDict as String]
-                as? [String: Any],
-            entitlements.count == 1,
-            entitlements["com.apple.security.app-sandbox"] as? Bool == true
+            let information = information as? [String: Any]
+        else { throw MarketplaceError.invalidSignature }
+        let entitlements =
+            information[kSecCodeInfoEntitlementsDict as String] as? [String: Any] ?? [:]
+        guard entitlements.count == expected.count,
+            expected.allSatisfy({ key, value in
+                guard let actual = entitlements[key] as? NSNumber,
+                    CFGetTypeID(actual) == CFBooleanGetTypeID()
+                else { return false }
+                return actual.boolValue == value
+            })
         else { throw MarketplaceError.invalidSignature }
     }
 
