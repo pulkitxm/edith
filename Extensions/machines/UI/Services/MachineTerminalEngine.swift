@@ -5,6 +5,7 @@ import Foundation
 @MainActor final class MachineTerminalEngine {
     private struct Terminal {
         let machineID: UUID
+        let presentationID: UUID?
         let tabID: UUID
         let pty: MachinePTY
         var touched = ContinuousClock.now
@@ -129,7 +130,9 @@ import Foundation
             let pty = try MachinePTY(
                 launch: launch(session, request), columns: request.columns, rows: request.rows)
             let handle = UUID()
-            terminals[handle] = Terminal(machineID: session.id, tabID: request.tabID, pty: pty)
+            terminals[handle] = Terminal(
+                machineID: session.id, presentationID: request.presentationID, tabID: request.tabID,
+                pty: pty)
             startReaper()
             return MachineTerminalFrame(handle: handle)
         case .upload:
@@ -152,7 +155,8 @@ import Foundation
                 shells: [.automatic] + WindowsTerminalCommands.parseAvailableShells(text))
         case .read, .input, .resize, .close:
             guard let handle = request.handle, var terminal = terminals[handle],
-                terminal.machineID == request.machineID, terminal.tabID == request.tabID
+                terminal.machineID == request.machineID, terminal.tabID == request.tabID,
+                terminal.presentationID == request.presentationID
             else { throw MachineUIError.invalidRequest }
             terminal.touched = .now
             terminals[handle] = terminal
@@ -297,6 +301,15 @@ import Foundation
                 for pty in children { await pty.closeAndWait() }
             }
         }
+    }
+
+    func release(_ presentation: UUID) {
+        for id in terminals.keys.filter({ terminals[$0]?.presentationID == presentation }) {
+            if let terminal = terminals.removeValue(forKey: id) {
+                terminal.pty.close(); retired.append(terminal.pty)
+            }
+        }
+        registrations = registrations.filter { $0.value.presentationID != presentation }
     }
 
     func shutdown() async {

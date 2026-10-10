@@ -199,7 +199,6 @@ struct MachineWindowView: View {
                 .onAppear {
                     if case .disconnected = session.state { session.start() }
                 }
-                .environment(\.compactLayout, geometry.size.width < UIScale.pt(640))
             }
         }
     }
@@ -207,59 +206,11 @@ struct MachineWindowView: View {
 
 @MainActor
 enum MachineWindow {
-    static func shutdown() {
-        let owned = Array(windows.values)
-        windows = [:]
-        for window in owned { window.close() }
-    }
-
-    private static var windows: [UUID: NSWindow] = [:]
-
     static func open(machineID: UUID, title: String) {
-        if let existing = windows[machineID] {
-            WindowPresentation.present(existing)
+        guard let client = MachinesModel.shared.uiClient else {
+            MachinesModel.shared.operationError = "The owning app window bridge is unavailable."
             return
         }
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 900, height: 620),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
-            backing: .buffered, defer: false)
-        window.title = title
-        window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 600, height: 440)
-        window.tabbingMode = .automatic
-        window.tabbingIdentifier = "EdithMachine"
-        let hosting = NSHostingController(
-            rootView: ExtensionPageHost { MachineWindowView(machineID: machineID) })
-        hosting.sizingOptions = []
-        window.contentViewController = hosting
-        window.setContentSize(NSSize(width: 900, height: 620))
-        window.setFrameAutosaveName("EdithMachine.\(machineID.uuidString)")
-        if window.frame.origin == .zero { window.center() }
-        window.delegate = MachineWindowDelegate.shared
-        windows[machineID] = window
-        WindowPresentation.present(window)
-    }
-
-    static func forget(_ window: NSWindow) {
-        guard let key = windows.first(where: { $0.value === window })?.key else { return }
-        windows.removeValue(forKey: key)
-    }
-
-    static func close(machineID: UUID) {
-        windows[machineID]?.close()
-        windows.removeValue(forKey: machineID)
-    }
-
-    static var openCount: Int { windows.count }
-}
-
-@MainActor
-final class MachineWindowDelegate: NSObject, NSWindowDelegate {
-    static let shared = MachineWindowDelegate()
-
-    func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else { return }
-        MachineWindow.forget(window)
+        client.enqueue { try await client.openWindow(.init(kind: .machine, machineID: machineID)) }
     }
 }

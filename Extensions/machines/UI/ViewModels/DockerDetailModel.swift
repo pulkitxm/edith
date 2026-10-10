@@ -517,12 +517,12 @@ struct DockerContainerDetail: View {
                 Button("Shell", action: onShell).disabled(!live.state.isRunning)
                 Spacer(minLength: 0)
                 ForEach(browserPorts.prefix(3), id: \.self) { port in
-                    if let url = DockerBrowserOperationExecution.url(
-                        for: port, machine: session.machine)
+                    if DockerBrowserOperationExecution.url(
+                        for: port, machine: session.machine) != nil
                     {
                         Button(port.displayName) {
-                            RemoteFileOperationExecution.present([url], action: .open) { urls, _ in
-                                NSWorkspace.shared.open(urls[0])
+                            if let number = port.hostPort {
+                                session.openDockerPort(containerID: live.id, port: number)
                             }
                         }
                     }

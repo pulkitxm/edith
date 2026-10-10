@@ -34,6 +34,7 @@ import Testing
             })
         var request = MachineTerminalRequest(
             operation: .open, machineID: session.id, columns: 104, rows: 35)
+        request.presentationID = UUID()
         request.handle = try await engine.execute(request).handle
         request.operation = .read
         var bytes = Data()
@@ -63,8 +64,10 @@ import Testing
         #expect(code == 7)
         #expect(String(decoding: bytes, as: UTF8.self).contains("received:synthetic"))
         #expect(String(decoding: bytes, as: UTF8.self).contains("29 83"))
-        request.operation = .close
-        _ = try await engine.execute(request)
+        let presentation = try #require(request.presentationID)
+        engine.release(presentation)
+        request.operation = .read
+        await #expect(throws: MachineUIError.self) { try await engine.execute(request) }
         await engine.shutdown()
         await #expect(throws: MachineUIError.self) { try await engine.execute(request) }
     }

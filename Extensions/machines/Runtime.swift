@@ -263,7 +263,9 @@ final class ExtensionRuntime: NSObject {
                     preview: { value in try await previews.execute(value) },
                     logs: { value in try logs.execute(value) },
                     fileProgress: { value in try files.progress(value) },
-                    presentationRelease: { id in files.release(id) },
+                    presentationRelease: { id in
+                        files.release(id); terminals.release(id); logs.release(id)
+                    },
                     terminal: { value in try await terminals.execute(value) })
                 do {
                     cli = try MachineCLIService(runner: { machine, owner in
@@ -286,6 +288,20 @@ final class ExtensionRuntime: NSObject {
             }
         case "view":
             guard uiClient != nil else { return ["ok": false] as NSDictionary }
+            if input["location"] as? String == "machines.window" {
+                guard let target = input["target"] as? NSDictionary,
+                    let bytes = try? JSONSerialization.data(withJSONObject: target),
+                    let request = try? JSONDecoder().decode(
+                        MachineHostWindowRequest.self, from: bytes),
+                    (try? request.validate()) != nil
+                else { return ["ok": false] as NSDictionary }
+                return NSHostingController(
+                    rootView: ExtensionPageHost {
+                        MachinesHostWindowPage(request: request)
+                            .environment(\.machineConnectionsEnabled, true)
+                            .environment(\.terminalLaunchEnabled, true)
+                    })
+            }
             return NSHostingController(
                 rootView: ExtensionPageHost {
                     MachinesPage().environment(\.machineConnectionsEnabled, true)
@@ -319,8 +335,6 @@ final class ExtensionRuntime: NSObject {
         peer?.shutdown()
         FinderUndoBridge.shutdown()
         PaneViewStore.shared.shutdown()
-        MachineWindow.shutdown(); FinderWindow.shutdown(); DockerWindow.shutdown();
-        TerminalWindow.shutdown()
         await WorkspaceModel.shared.shutdown()
         await MachinesModel.shared.shutdown()
         await transport?.shutdown()

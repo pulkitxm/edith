@@ -1274,3 +1274,51 @@ extension MachineSession {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: mount.mountPoint)])
     }
 }
+
+extension MachineSession {
+    func openDockerPort(containerID: String, port: Int) {
+        if let uiClient {
+            var value = MachineUIAction(operation: .openDockerPort, machineID: id)
+            value.text = containerID; value.port = port; uiClient.enqueue(value)
+            return
+        }
+        guard let container = containers.first(where: { $0.id == containerID }),
+            let mapping = DockerBrowserOperationExecution.reachablePorts(
+                in: container, for: machine
+            ).first(where: { $0.hostPort == port }),
+            let url = DockerBrowserOperationExecution.url(for: mapping, machine: machine)
+        else { return }
+        _ = MachinesCLIEnvironment.presentURLs([url], .open)
+    }
+
+    func openForward(_ forward: PortForward) {
+        if let uiClient {
+            var value = MachineUIAction(operation: .openForward, machineID: id)
+            value.forward = forward; uiClient.enqueue(value); return
+        }
+        guard activeForwards.contains(forward.id), forward.machineID == id,
+            let url = PortForwardBrowserOperationExecution.url(forward: forward)
+        else { return }
+        _ = MachinesCLIEnvironment.presentURLs([url], .open)
+    }
+
+    func openFile(_ entry: RemoteFileEntry) {
+        guard let uiClient else { return }
+        var value = MachineUIAction(operation: .openFile, machineID: id)
+        value.entry = entry; uiClient.enqueue(value)
+    }
+
+    func performFileOpen(_ entry: RemoteFileEntry) async throws -> Bool {
+        guard entry.path.utf8.count <= 4096, !entry.path.utf8.contains(0), !entry.isDirectory else {
+            throw MachineUIError.invalidRequest
+        }
+        let url = try await RemoteFileOperationExecution.materialize(
+            entry, machineID: id, isLocal: isLocal
+        ) { path, destination in
+            guard let connection = self.connectionRef else { throw MachineUIError.unavailable }
+            try await connection.download(remotePath: path, to: destination)
+        }
+        try Task.checkCancellation()
+        return MachinesCLIEnvironment.presentURLs([url], .open)
+    }
+}

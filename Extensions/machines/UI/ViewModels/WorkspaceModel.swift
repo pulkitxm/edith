@@ -435,7 +435,6 @@ struct WorkspaceNodeView: View {
         switch node {
         case let .pane(pane):
             WorkspacePaneView(pane: pane, model: model, machines: machines, dark: dark)
-                .environment(\.compactLayout, size.width < UIScale.pt(640))
                 .frame(width: size.width, height: size.height)
         case let .split(split):
             splitBody(split)

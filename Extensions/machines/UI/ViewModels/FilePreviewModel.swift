@@ -308,11 +308,9 @@ struct FilePreviewPane: View {
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .multilineTextAlignment(.center)
-                if let url {
+                if url != nil {
                     Button("Open in default app") {
-                        RemoteFileOperationExecution.present([url], action: .open) { urls, _ in
-                            NSWorkspace.shared.open(urls[0])
-                        }
+                        if let entry { session.openFile(entry) }
                     }
                 }
             }

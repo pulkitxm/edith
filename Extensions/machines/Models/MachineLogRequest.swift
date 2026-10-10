@@ -3,6 +3,7 @@ import Foundation
 struct MachineLogRequest: Codable, Sendable {
     enum Operation: String, Codable, Sendable { case start, read, cancel }
     var operation: Operation
+    var presentationID: UUID?
     var machineID: UUID
     var containerID: String = ""
     var handle: UUID?

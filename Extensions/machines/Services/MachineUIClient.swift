@@ -192,6 +192,12 @@ import Foundation
         }
     }
 
+    func openWindow(_ value: MachineHostWindowRequest) async throws {
+        var value = value; value.presentationID = client.presentationID
+        try value.validate()
+        let _: Bool = try await job("machines.ui.openWindow", value: value)
+    }
+
     func files(
         _ value: MachineFileRequest, progress: @escaping (FileOperationProgress?) -> Void = { _ in }
     ) async throws -> MachineFileState {
@@ -201,6 +207,7 @@ import Foundation
     }
 
     func logs(_ value: MachineLogRequest) async throws -> MachineLogFrame {
+        var value = value; value.presentationID = client.presentationID
         try value.validate()
         return try await request("machines.ui.logs", value: value)
     }

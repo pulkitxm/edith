@@ -43,7 +43,8 @@ public struct MachineUISessionState: Codable, Sendable {
 public struct MachineUIAction: Codable, Sendable {
     public enum Operation: String, Codable, Sendable {
         case connect, disconnect, retry, observe, dockerObserve, speedObserve
-        case power, service, revealMount, mount, unmount, forwardAdd, forwardRemove, snippetAdd,
+        case power, service, revealMount, openDockerPort, openForward, openFile, mount, unmount,
+            forwardAdd, forwardRemove, snippetAdd,
             snippetRemove
         case command, docker, refreshDocker, refreshInventory, refreshServices
         case refreshProfile, setProfile, speedTest, restoreMount, forward, listFiles, home, mkdir
@@ -54,6 +55,8 @@ public struct MachineUIAction: Codable, Sendable {
     public var input: Data?
     public var timeout: Double = 60
     public var presentationID: UUID?
+    public var entry: RemoteFileEntry?
+    public var port: Int?
     public var service: MachineServiceOperation?
     public var token: UUID?
     public var active = false

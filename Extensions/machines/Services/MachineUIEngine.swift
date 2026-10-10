@@ -6,6 +6,7 @@ import Foundation
     private let session: Session
     private let state: () -> MachineUIState
     private let mutation: (MachineUIMutation) async throws -> Void
+    private let openWindow: (MachineHostWindowRequest) async throws -> Void
     private let directoryExport: (MachineDirectoryExportRequest) async throws -> Data
     private let preview: (MachinePreviewRequest) async throws -> Data
     private let logs: (MachineLogRequest) throws -> MachineLogFrame
@@ -49,6 +50,9 @@ import Foundation
         files: @escaping (MachineFileRequest) async throws -> MachineFileState = { _ in
             throw MachineUIError.unavailable
         },
+        openWindow: @escaping (MachineHostWindowRequest) async throws -> Void = {
+            try await MachinesHostWindowNavigation.open($0)
+        },
         directoryExport: @escaping (MachineDirectoryExportRequest) async throws -> Data = { _ in
             throw MachineUIError.unavailable
         },
@@ -77,6 +81,7 @@ import Foundation
         self.workspace = workspace
         self.observe = observe
         self.files = files
+        self.openWindow = openWindow
         self.directoryExport = directoryExport
         self.preview = preview
         self.logs = logs
@@ -102,7 +107,7 @@ import Foundation
         guard
             [
                 "machines.ui.action", "machines.ui.probe", "machines.ui.files",
-                "machines.ui.preview", "machines.ui.export",
+                "machines.ui.preview", "machines.ui.export", "machines.ui.openWindow",
             ]
             .contains(value.operation),
             value.payload.count <= 2_097_152, jobs.count < 4
@@ -213,6 +218,9 @@ import Foundation
             if operation == "machines.ui.release" {
                 release(value.id)
             } else {
+                guard presentations[value.id] != nil || presentations.count < 128 else {
+                    throw MachineUIError.unavailable
+                }
                 presentations[value.id] = now(); presentationHeartbeat(value.id); ensureReaper()
             }
             return try encode(true)
@@ -232,6 +240,12 @@ import Foundation
         case "machines.ui.cancel":
             let id = try JSONDecoder().decode(UUID.self, from: payload)
             cancelJob(id)
+            return try encode(true)
+        case "machines.ui.openWindow":
+            let value = try JSONDecoder().decode(MachineHostWindowRequest.self, from: payload)
+            try value.validate(); _ = try session(value.machineID)
+            guard value.presentationID != nil else { throw MachineUIError.invalidRequest }
+            try await openWindow(value); try Task.checkCancellation()
             return try encode(true)
         case "machines.ui.export":
             let value = try JSONDecoder().decode(MachineDirectoryExportRequest.self, from: payload)
@@ -330,6 +344,9 @@ import Foundation
                 let key = LeaseKey(
                     presentation: presentation, machine: session.id,
                     operation: value.operation.rawValue, token: token)
+                guard presentations[presentation] != nil || presentations.count < 128,
+                    leases[key] != nil || leases.count < 8192
+                else { throw MachineUIError.unavailable }
                 presentations[presentation] = now(); ensureReaper()
                 if value.active, leases[key] == nil {
                     let lease = Lease(session: session, operation: value.operation, token: token)
@@ -338,6 +355,23 @@ import Foundation
                     change(lease, active: false)
                 }
                 result = try encode(true)
+            case .openDockerPort:
+                guard let port = value.port, (1...65535).contains(port),
+                    let container = session.containers.first(where: { $0.id == value.text }),
+                    DockerBrowserOperationExecution.reachablePorts(
+                        in: container, for: session.machine
+                    ).contains(where: { $0.hostPort == port })
+                else { throw MachineUIError.invalidRequest }
+                session.openDockerPort(containerID: value.text, port: port);
+                result = try encode(true)
+            case .openForward:
+                guard let forward = value.forward, state().forwards.contains(forward),
+                    session.activeForwards.contains(forward.id)
+                else { throw MachineUIError.invalidRequest }
+                session.openForward(forward); result = try encode(true)
+            case .openFile:
+                guard let entry = value.entry else { throw MachineUIError.invalidRequest }
+                result = try encode(try await session.performFileOpen(entry))
             case .service:
                 guard let operation = value.service else { throw MachineUIError.invalidRequest }
                 result = try encode(

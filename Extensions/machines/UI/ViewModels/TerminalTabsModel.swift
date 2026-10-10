@@ -276,61 +276,13 @@ struct TerminalTabsView: View {
 
 @MainActor
 enum TerminalWindow {
-    static func shutdown() {
-        let owned = Array(windows.values)
-        windows = [:]
-        for entry in owned { entry.model.stopAll(); entry.window.close() }
-    }
-
-    private struct Entry {
-        let window: NSWindow
-        let model: TerminalTabsModel
-    }
-
-    private static var windows: [UUID: Entry] = [:]
-
     static func open(session: MachineSession, model: TerminalTabsModel? = nil) {
-        if let existing = windows[session.machine.id] {
-            WindowPresentation.present(existing.window)
+        guard let client = session.uiClient else {
+            MachinesModel.shared.operationError = "The owning app window bridge is unavailable."
             return
         }
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 900, height: 560),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
-            backing: .buffered, defer: false)
-        window.title = "Terminal · \(session.machine.name)"
-        window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 520, height: 320)
-        window.tabbingMode = .automatic
-        window.tabbingIdentifier = "EdithTerminal"
-        let ownedModel = model ?? TerminalTabsModel()
-        let hosting = NSHostingController(
-            rootView: ExtensionPageHost { TerminalTabsView(session: session, model: ownedModel) })
-        hosting.sizingOptions = []
-        window.contentViewController = hosting
-        window.setContentSize(NSSize(width: 900, height: 560))
-        window.setFrameAutosaveName("EdithTerminalWindow")
-        if window.frame.origin == .zero { window.center() }
-        window.delegate = TerminalWindowDelegate.shared
-        windows[session.machine.id] = Entry(window: window, model: ownedModel)
-        WindowPresentation.present(window)
-    }
-
-    static func forget(_ window: NSWindow) {
-        guard let entry = windows.first(where: { $0.value.window === window }) else { return }
-        entry.value.model.stopAll()
-        window.contentViewController = nil
-        window.contentView = nil
-        windows.removeValue(forKey: entry.key)
-    }
-}
-
-@MainActor
-final class TerminalWindowDelegate: NSObject, NSWindowDelegate {
-    static let shared = TerminalWindowDelegate()
-
-    func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else { return }
-        TerminalWindow.forget(window)
+        client.enqueue {
+            try await client.openWindow(.init(kind: .terminal, machineID: session.id))
+        }
     }
 }

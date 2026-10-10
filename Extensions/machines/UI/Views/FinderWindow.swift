@@ -484,53 +484,13 @@ struct FinderRowContextMenu: View {
 
 @MainActor
 enum FinderWindow {
-    static func shutdown() {
-        let owned = Array(windows.values)
-        windows = [:]
-        for window in owned { window.close() }
-    }
-
-    private static var windows: [String: NSWindow] = [:]
-
     static func open(session: MachineSession, path: String? = nil) {
-        let key = session.machine.id.uuidString + (path ?? "")
-        if let existing = windows[key] {
-            WindowPresentation.present(existing)
+        guard let client = session.uiClient else {
+            MachinesModel.shared.operationError = "The owning app window bridge is unavailable."
             return
         }
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 940, height: 620),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
-            backing: .buffered, defer: false)
-        window.title = session.machine.name
-        window.subtitle = path ?? (session.isLocal ? "Home" : "Files")
-        window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 620, height: 400)
-        window.tabbingMode = .automatic
-        window.tabbingIdentifier = "EdithFinder"
-        let hosting = NSHostingController(
-            rootView: ExtensionPageHost { FinderWindowView(session: session, path: path) })
-        hosting.sizingOptions = []
-        window.contentViewController = hosting
-        window.setContentSize(NSSize(width: 940, height: 620))
-        window.setFrameAutosaveName("EdithFinderWindow")
-        if window.frame.origin == .zero { window.center() }
-        window.delegate = FinderWindowDelegate.shared
-        windows[key] = window
-        WindowPresentation.present(window)
-    }
-
-    static func forget(_ window: NSWindow) {
-        windows = windows.filter { $0.value !== window }
-    }
-}
-
-@MainActor
-final class FinderWindowDelegate: NSObject, NSWindowDelegate {
-    static let shared = FinderWindowDelegate()
-
-    func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else { return }
-        FinderWindow.forget(window)
+        client.enqueue {
+            try await client.openWindow(.init(kind: .files, machineID: session.id, path: path))
+        }
     }
 }

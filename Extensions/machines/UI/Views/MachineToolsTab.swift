@@ -225,13 +225,7 @@ struct MachineToolsTab: View {
                         Spacer(minLength: 0)
                         if session.activeForwards.contains(forward.id) {
                             Button("Open") {
-                                if let url = PortForwardBrowserOperationExecution.url(
-                                    forward: forward)
-                                {
-                                    RemoteFileOperationExecution.present(
-                                        [url], action: .open
-                                    ) { urls, _ in NSWorkspace.shared.open(urls[0]) }
-                                }
+                                session.openForward(forward)
                             }
                             .font(.system(size: UIScale.pt(11)))
                         }

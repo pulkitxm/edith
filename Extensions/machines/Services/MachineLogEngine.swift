@@ -34,6 +34,7 @@ private final class MachineLogBuffer: @unchecked Sendable {
 @MainActor final class MachineLogEngine {
     private final class Log {
         let machineID: UUID
+        let presentationID: UUID?
         let stream: SSHLineStream
         let buffer: MachineLogBuffer
         let owner: MachineExecutionOwner
@@ -42,8 +43,9 @@ private final class MachineLogBuffer: @unchecked Sendable {
 
         init(
             machineID: UUID, stream: SSHLineStream, buffer: MachineLogBuffer,
-            owner: MachineExecutionOwner
+            owner: MachineExecutionOwner, presentationID: UUID?
         ) {
+            self.presentationID = presentationID
             self.machineID = machineID
             self.stream = stream
             self.buffer = buffer
@@ -99,12 +101,15 @@ private final class MachineLogBuffer: @unchecked Sendable {
                     if !buffer.append(text, isStderr: isStderr) { owner.cancel() }
                 },
                 onExit: { code in buffer.finish(code) })
-            logs[id] = Log(machineID: session.id, stream: stream, buffer: buffer, owner: owner)
+            logs[id] = Log(
+                machineID: session.id, stream: stream, buffer: buffer, owner: owner,
+                presentationID: request.presentationID)
             do { try owner.start(stream) } catch { logs.removeValue(forKey: id); throw error }
             startReaper()
             return MachineLogFrame(handle: id, sequence: 0, nextSequence: 0, lines: [])
         case .read, .cancel:
-            guard let id = request.handle, let log = logs[id], log.machineID == request.machineID
+            guard let id = request.handle, let log = logs[id], log.machineID == request.machineID,
+                log.presentationID == request.presentationID
             else { throw MachineUIError.invalidRequest }
             guard request.sequence == log.sequence else { throw MachineUIError.stale }
             if request.operation == .cancel {
@@ -123,6 +128,10 @@ private final class MachineLogBuffer: @unchecked Sendable {
             if code != nil { retire(id) }
             return result
         }
+    }
+
+    func release(_ presentation: UUID) {
+        for id in logs.keys.filter({ logs[$0]?.presentationID == presentation }) { retire(id) }
     }
 
     private func retire(_ id: UUID) {
