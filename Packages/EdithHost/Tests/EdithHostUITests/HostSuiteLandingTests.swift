@@ -63,7 +63,11 @@ import Testing
         #expect(HostExtensionSettingsPolicy.canPresent(id: "keepAwake", active: false))
         #expect(HostExtensionSettingsPolicy.canPresent(id: "downloads", active: true))
         #expect(!HostExtensionSettingsPolicy.canPresent(id: "downloads", active: false))
-        for id in ["calendar", "terminal", "database", "docs", "studio", "machines", "unknown"] {
+        for id in ["studio", "attention", "appMaintenance", "usage", "music", "jev"] {
+            #expect(HostExtensionSettingsPolicy.canPresent(id: id, active: true))
+            #expect(!HostExtensionSettingsPolicy.canPresent(id: id, active: false))
+        }
+        for id in ["calendar", "terminal", "database", "docs", "machines", "unknown"] {
             #expect(!HostExtensionSettingsPolicy.canPresent(id: id, active: true))
             #expect(!HostExtensionSettingsPolicy.canPresent(id: id, active: false))
         }

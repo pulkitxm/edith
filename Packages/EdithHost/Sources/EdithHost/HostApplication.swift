@@ -16,6 +16,7 @@ struct HostApplication: App {
     @State private var windowNavigation: HostWindowNavigation?
     @State private var musicSlots: HostMusicSlots?
     @State private var machinesWindows: HostMachinesWindows?
+    @State private var herdrWindows: HostHerdrWindows?
     @State private var notchStartup: HostNotchStartup?
     @State private var remoteCleanupNotice = false
     @Environment(\.openWindow) private var openWindow
@@ -140,13 +141,16 @@ struct HostApplication: App {
             let slots = HostMusicSlots.live(marketplace: loaded)
             let ownedMachines = HostMachinesWindows(
                 manager: manager, presenter: presenter, navigation: navigation)
+            let ownedHerdr = HostHerdrWindows(
+                manager: manager, presenter: presenter, navigation: navigation)
             let notch = HostNotchStartup(
                 marketplace: loaded, manager: manager, navigation: navigation)
             ownedNotch = notch
             notchStartup = notch
             loaded.sessions.didRequestNavigation = {
-                [weak manager, weak navigation, weak ownedMachines, weak notch] request in
-                guard let manager, let navigation, let ownedMachines else {
+                [weak manager, weak navigation, weak ownedMachines, weak ownedHerdr, weak notch]
+                request in
+                guard let manager, let navigation, let ownedMachines, let ownedHerdr else {
                     throw HostWorkerError.rejected
                 }
                 try manager.validateNavigationOrigin(request)
@@ -156,6 +160,8 @@ struct HostApplication: App {
                 }
                 if request.machinesWindow != nil {
                     try await ownedMachines.open(request)
+                } else if request.herdrWindow != nil {
+                    try await ownedHerdr.open(request)
                 } else {
                     try await navigation.navigate(
                         extensionID: request.extensionID, version: request.version,
@@ -174,11 +180,13 @@ struct HostApplication: App {
             loaded.sessions.willDisable = { id in
                 if id == "music" { await slots.stop() }
                 if id == "machines" { try await ownedMachines.stop() }
+                if id == "herdr" { try await ownedHerdr.stop() }
                 try await disable(id)
             }
             windowNavigation = navigation
             musicSlots = slots
             machinesWindows = ownedMachines
+            herdrWindows = ownedHerdr
             remotePresenter = presenter
             marketplace = loaded
             delegate.openMainWindow = { openWindow(id: "main") }
@@ -205,7 +213,10 @@ struct HostApplication: App {
             sectionWindows = windows
             windows.install()
             delegate.shutdown = {
-                do { try await notch.stop() } catch { return false }
+                do {
+                    try await notch.stop()
+                    try await ownedHerdr.stop()
+                } catch { return false }
                 let ready = await loaded.sessions.shutdown()
                 if ready {
                     windows.closeAll(); windows.uninstall()
