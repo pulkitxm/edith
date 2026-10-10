@@ -142,9 +142,7 @@ struct EmbeddedMusicPage: View {
         }
         .navigationRoute("place", selection: musicPlaceBinding, isValid: musicPlaceIsValid)
         .navigationTitle("Music")
-        .onChange(of: showDownloader) {
-            if showDownloader { remote.openDownloads(); showDownloader = false }
-        }
+        .edithSheet(isPresented: $showDownloader) { EmbeddedDownloadSheet() }
         .alert("New folder", isPresented: $showNewFolder) {
             TextField("Folder name", text: $newFolderName)
             Button("Cancel", role: .cancel) { newFolderName = "" }
@@ -375,7 +373,7 @@ struct EmbeddedMusicPage: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, UIScale.pt(14))
                     .padding(.vertical, UIScale.pt(7))
-                    .liquidGlass(in: Capsule(), tint: theme, interactive: true, dark: dark)
+                    .embeddedLiquidGlass(in: Capsule(), tint: theme, interactive: true, dark: dark)
             }
             .buttonStyle(.edith(.borderless))
             .help(
@@ -1363,7 +1361,7 @@ private struct EmbeddedMusicDetailSheet: View {
                         .contentShape(Circle())
                 }
                 .buttonStyle(.edith(.borderless))
-                .liquidGlass(in: Circle(), tint: theme, interactive: true, dark: dark)
+                .embeddedLiquidGlass(in: Circle(), tint: theme, interactive: true, dark: dark)
                 .shadow(color: .black.opacity(0.28), radius: UIScale.pt(8), y: UIScale.pt(3))
                 .help(isPlaying ? "Pause" : "Play")
                 .offset(x: UIScale.pt(10), y: UIScale.pt(10))
@@ -1498,7 +1496,7 @@ private enum EmbeddedGlassStyle {
 
 extension View {
     @ViewBuilder
-    func liquidGlass<S: InsettableShape>(
+    func embeddedLiquidGlass<S: InsettableShape>(
         in shape: S, tint: Color? = nil, interactive: Bool = false, dark: Bool = false
     ) -> some View {
         if #available(macOS 26, *) {
@@ -1729,7 +1727,7 @@ struct EmbeddedMusicFooter: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.edith(.borderless))
-        .liquidGlass(in: Circle(), tint: tint, interactive: true, dark: dark)
+        .embeddedLiquidGlass(in: Circle(), tint: tint, interactive: true, dark: dark)
     }
 
     private var scrubber: some View {
@@ -1802,7 +1800,7 @@ struct EmbeddedMusicFooter: View {
             }
             .padding(.horizontal, UIScale.pt(12))
             .padding(.vertical, UIScale.pt(7))
-            .liquidGlass(in: Capsule(), dark: dark)
+            .embeddedLiquidGlass(in: Capsule(), dark: dark)
         }
     }
 

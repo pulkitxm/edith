@@ -948,6 +948,7 @@
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
+        "Extensions/music/Bridge/MusicDownloadsEnvelope.swift",
         "Extensions/music/Bridge/MusicUIEnvelope.swift",
         "Extensions/music/CLI/MusicCLIExecution.swift",
         "Extensions/music/CLI/MusicCommands.swift",
@@ -977,6 +978,7 @@
         "Extensions/music/Services/MusicBackupProvider.swift",
         "Extensions/music/Services/MusicBrowserConnection.swift",
         "Extensions/music/Services/MusicDownloadClient.swift",
+        "Extensions/music/Services/MusicDownloadsService.swift",
         "Extensions/music/Services/MusicEvents.swift",
         "Extensions/music/Services/MusicFade.swift",
         "Extensions/music/Services/MusicFolderSelectionOperation.swift",
@@ -1002,6 +1004,11 @@
         "Extensions/music/UI/MusicAccountsFacade.swift",
         "Extensions/music/UI/MusicAuxiliaryScenes.swift",
         "Extensions/music/UI/MusicDetailPresenter.swift",
+        "Extensions/music/UI/MusicDownloadData.swift",
+        "Extensions/music/UI/MusicDownloadImage.swift",
+        "Extensions/music/UI/MusicDownloadSheet.swift",
+        "Extensions/music/UI/MusicDownloadsEnvelope.swift",
+        "Extensions/music/UI/MusicDownloadsFacade.swift",
         "Extensions/music/UI/MusicKeyCommand.swift",
         "Extensions/music/UI/MusicMetadataFacade.swift",
         "Extensions/music/UI/MusicPageViews.swift",

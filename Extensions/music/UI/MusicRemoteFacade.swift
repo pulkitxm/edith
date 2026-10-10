@@ -78,6 +78,7 @@ import Observation
         entriesLoaded = false; searchLoaded = false; favouritesLoaded = false
         folderCache.removeAll(); EmbeddedTrackMeta.clear()
         EmbeddedMusicAccounts.shared.reset()
+        EmbeddedYoutubeDownloader.shared.stop()
     }
 
     func rescan() {
@@ -147,6 +148,15 @@ import Observation
                 EmbeddedMusicAccounts.shared.spotify.library.apply(object)
             }
         }
+    }
+
+    func dataRequest(_ operation: String, payload: Data = Data("{}".utf8)) async throws -> Data {
+        guard let invoke else { throw ExtensionPeerError.unavailable }
+        let token = lifecycle
+        let result = try await invoke(operation, payload)
+        try Task.checkCancellation()
+        guard self.invoke != nil, lifecycle == token else { throw CancellationError() }
+        return result
     }
 
     func request(_ operation: String, action: EmbeddedMusicUIAction) async throws -> Data {

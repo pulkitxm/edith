@@ -6,6 +6,73 @@ import Testing
 
 extension MusicExtensionTests {
     @MainActor @Suite(.serialized) struct MusicUIServiceTests {
+        @Test func downloadsUseOwnedQueueAndRejectRequestsAfterDisable() async throws {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+                "music-downloads-" + UUID().uuidString)
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("queue.json")
+            let queue = DownloadWorker(
+                file: file, executable: { nil }, galleryExecutable: { nil }, isEnabled: { true })
+            let defaults = SharedDefaults.store
+            let worker = MusicWorker(
+                player: LocalMusicPlayer(),
+                accounts: MusicAccounts(
+                    defaults: defaults,
+                    spotify: MusicSpotifySession(libraryURL: nil, defaults: defaults),
+                    pauseLocal: {}), startImmediately: false)
+            defer { worker.stop() }
+            let downloader = YoutubeDownloader(
+                client: MusicDownloadClient(worker: queue), start: false)
+            let service = MusicDownloadsService(
+                worker: worker, queue: queue, downloader: downloader)
+            let url = URL(string: "https://youtu.be/mock-garden")!
+            _ = try await service.execute(
+                "music.ui.downloads.action",
+                payload: JSONEncoder().encode(
+                    MusicDownloadAction(
+                        kind: .enqueue, urls: [url], prefix: "Mock", outputDirectory: root)))
+            let state = try JSONDecoder().decode(
+                MusicDownloadsState.self,
+                from: await service.execute("music.ui.downloads.read", payload: Data("{}".utf8)))
+            #expect(state.snapshot.queued == 1)
+            #expect(state.snapshot.records.first?.url == url)
+            #expect(
+                try JSONDecoder().decode([DownloadRecord].self, from: Data(contentsOf: file)).count
+                    == 1)
+            let id = try #require(state.snapshot.records.first?.id)
+            _ = try await service.execute(
+                "music.ui.downloads.action",
+                payload: JSONEncoder().encode(MusicDownloadAction(kind: .cancel, id: id)))
+            #expect(await queue.snapshot().records.first?.status == .interrupted("Cancelled"))
+            _ = try await service.execute(
+                "music.ui.downloads.action",
+                payload: JSONEncoder().encode(MusicDownloadAction(kind: .retry, id: id)))
+            #expect(await queue.snapshot().queued == 1)
+            await #expect(throws: (any Error).self) {
+                try await service.execute(
+                    "music.ui.downloads.action",
+                    payload: JSONEncoder().encode(
+                        MusicDownloadAction(
+                            kind: .enqueue, urls: [URL(fileURLWithPath: "/tmp/mock")],
+                            outputDirectory: root)))
+            }
+            #expect(await queue.snapshot().records.count == 1)
+            await #expect(throws: (any Error).self) {
+                try await service.execute(
+                    "music.ui.downloads.thumbnail",
+                    payload: JSONEncoder().encode(URL(string: "https://youtu.be/mock-unowned")!))
+            }
+            service.stop()
+            await #expect(throws: (any Error).self) {
+                try await service.execute(
+                    "music.ui.downloads.action",
+                    payload: JSONEncoder().encode(MusicDownloadAction(kind: .remove, id: id)))
+            }
+            #expect(await queue.snapshot().records.count == 1)
+            await queue.stop()
+        }
+
         @Test func ownedEngineReadsLibraryAndValidatesActionsAgainstRealFiles() async throws {
             let root = FileManager.default.temporaryDirectory.appendingPathComponent(
                 "music-engine-" + UUID().uuidString)

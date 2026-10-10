@@ -6,6 +6,7 @@ import WebKit
 
 @MainActor final class MusicUIService {
     private let worker: MusicWorker
+    private var downloads: MusicDownloadsService?
 
     private var events: [MusicUIEvent] = []
     private var sequence = 0
@@ -27,6 +28,10 @@ import WebKit
     func execute(_ operation: String, payload: Data) async throws -> Data {
         try Task.checkCancellation()
         guard !stopped else { throw ExtensionPeerError.unavailable }
+        if operation.hasPrefix("music.ui.downloads.") {
+            if downloads == nil { downloads = MusicDownloadsService(worker: worker) }
+            return try await downloads!.execute(operation, payload: payload)
+        }
         switch operation {
         case "music.ui.read":
             let query = try JSONDecoder().decode(MusicUIQuery.self, from: payload)
@@ -353,7 +358,8 @@ import WebKit
 
     func stop() {
         guard !stopped else { return }
-        stopped = true; resumeAudio = false; closeVideo()
+        stopped = true
+        downloads?.stop(); downloads = nil; resumeAudio = false; closeVideo()
         worker.accounts.spotify.receiveUIEvent = nil
         events.removeAll()
     }

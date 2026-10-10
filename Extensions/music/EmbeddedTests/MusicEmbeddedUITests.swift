@@ -92,6 +92,54 @@ import Testing
         remote.stop()
     }
 
+    @Test func downloadFacadePreservesQueueActionsAndRejectsStaleOrLateState() async throws {
+        let remote = EmbeddedMusicRemote.shared
+        let downloader = EmbeddedYoutubeDownloader.shared
+        let id = UUID()
+        let record = EmbeddedDownloadRecord(
+            id: id, url: URL(string: "https://youtu.be/mock-garden")!,
+            status: .error("Mock interrupted"), outputFilename: nil, createdAt: Date(), kind: .audio
+        )
+        let generation = UUID()
+        let value = EmbeddedMusicDownloadsState(
+            snapshot: .init(
+                records: [record], logs: [id.uuidString: "Mock log"], enabled: true, running: false,
+                generation: generation, revision: 2), updating: false,
+            directories: ["audio": URL(fileURLWithPath: "/tmp/mock-audio")])
+        var actions: [EmbeddedMusicDownloadAction] = []
+        let encoded = try JSONEncoder().encode(value)
+        remote.configure { operation, payload in
+            if operation == "music.ui.downloads.read" { return encoded }
+            #expect(operation == "music.ui.downloads.action")
+            actions.append(
+                try JSONDecoder().decode(EmbeddedMusicDownloadAction.self, from: payload))
+            return Data("{}".utf8)
+        }
+        defer { remote.stop() }
+        await downloader.refresh()
+        let item = try #require(downloader.items.first)
+        #expect(item.logs == "Mock log")
+        #expect(item.record.canRetry)
+        downloader.retry(item)
+        for _ in 0..<20 where actions.isEmpty { await Task.yield() }
+        #expect(actions.first?.kind == .retry)
+        #expect(actions.first?.id == id)
+        var old = value
+        old.snapshot = .init(
+            records: [], logs: [:], enabled: true, running: false, generation: generation,
+            revision: 1)
+        try downloader.apply(old)
+        #expect(downloader.items.count == 1)
+        var pending: CheckedContinuation<Data, Error>?
+        remote.configure { _, _ in try await withCheckedThrowingContinuation { pending = $0 } }
+        let read = Task { await downloader.refresh() }
+        for _ in 0..<20 where pending == nil { await Task.yield() }
+        remote.stop()
+        pending?.resume(returning: encoded)
+        await read.value
+        #expect(downloader.items.isEmpty)
+    }
+
     @Test func originalEmbeddedControllersRenderAtBothWidthsThemesAndZoom() async throws {
         let application = NSApplication.shared
         application.setActivationPolicy(.prohibited)

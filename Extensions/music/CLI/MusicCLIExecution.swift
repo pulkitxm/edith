@@ -30,7 +30,8 @@ import Foundation
             read: {
                 PlayerSnapshot(
                     player: .builtin, isRunning: true, isPlaying: player.isPlaying,
-                    title: player.current?.title ?? "", elapsedSeconds: player.elapsed,
+                    title: player.current.map { ($0.relativePath as NSString).lastPathComponent }
+                        ?? "", elapsedSeconds: player.elapsed,
                     durationSeconds: player.trackDuration, volume: player.volume,
                     trackPath: player.current?.relativePath)
             }, send: player.perform, refresh: player.rescan, renamed: player.renameCurrent)
