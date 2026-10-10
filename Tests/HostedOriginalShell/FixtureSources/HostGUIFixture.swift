@@ -17,6 +17,7 @@ import SwiftUI
     static private(set) var fixture: JourneyFixture?
     private static var telemetry: Task<Void, Never>?
     private static var processes = JourneyProcessRegistry()
+    private static var packageDirectories: [JourneyPackageDirectory] = []
     private static weak var remoteManager: HostRemoteSessionManager?
 
     static func make() throws -> HostMarketplace {
@@ -81,6 +82,16 @@ import SwiftUI
             Set(packages.map(\.downloadURL)).count == 2
         else { throw JourneyContractError.invalidMetadata }
         let store = ExtensionPackageStore(root: identity.root.appendingPathComponent("Extensions"))
+        packageDirectories = try packages.map { package in
+            let captured = try JourneyPackageDirectory(
+                id: package.id, hostABI: package.hostABI, architecture: package.architecture,
+                version: package.version)
+            guard
+                store.directory(for: package).path
+                    == identity.root.appendingPathComponent(captured.relativePath).path
+            else { throw JourneyContractError.invalidPaths }
+            return captured
+        }
         let publicKey = try Curve25519.Signing.PrivateKey(
             rawRepresentation: Data(repeating: 90, count: 32)
         ).publicKey.rawRepresentation
@@ -239,6 +250,12 @@ import SwiftUI
             with: JSONEncoder().encode(marketplace.surfaceLayouts.home))
         let notch = try JSONSerialization.jsonObject(
             with: JSONEncoder().encode(marketplace.surfaceLayouts.notch))
+        let packageObservations = try packageDirectories.map { captured in
+            [
+                "version": captured.version, "relativePath": captured.relativePath,
+                "present": try captured.isPresent(in: URL(fileURLWithPath: fixture.identityRoot)),
+            ] as [String: Any]
+        }
         let state: [String: Any] = [
             "schema": 1,
             "producerExecutableSHA256": try digest(URL(fileURLWithPath: fixture.executable)),
@@ -249,6 +266,7 @@ import SwiftUI
             "active": marketplace.surfaceAvailability.activeIDs.sorted(),
             "workers": marketplace.sessions.processIdentifiers,
             "versions": marketplace.sessions.versions,
+            "packageDirectories": packageObservations,
             "error": marketplace.error ?? "", "home": home, "notch": notch,
             "visibleHome": marketplace.surfaceAvailability.projected(
                 marketplace.surfaceLayouts.home, target: .home

@@ -20,6 +20,9 @@ private func syntheticRoot() throws -> URL {
     defer { try? FileManager.default.removeItem(at: root) }
     let first = try packageDirectory()
     let second = try packageDirectory("1.1.0")
+    let sentinel = root.appendingPathComponent("retained-sentinel.json")
+    let retained = Data("synthetic protected data".utf8)
+    try retained.write(to: sentinel)
     #expect(try !first.isPresent(in: root))
     #expect(try !second.isPresent(in: root))
     for package in [first, second] {
@@ -34,6 +37,7 @@ private func syntheticRoot() throws -> URL {
     #expect(try second.isPresent(in: root))
     try FileManager.default.removeItem(at: root.appendingPathComponent(second.relativePath))
     #expect(try !second.isPresent(in: root))
+    #expect(try Data(contentsOf: sentinel) == retained)
 }
 
 @Test func packageInspectionRejectsEverySymlinkedAncestorAndLeaf() throws {
