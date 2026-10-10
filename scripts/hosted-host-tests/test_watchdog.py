@@ -38,22 +38,32 @@ class WatchdogTests(unittest.TestCase):
         developer = '/Applications/Xcode_26.6.app/Contents/Developer'
         helper = developer + '/Toolchains/XcodeDefault.xctoolchain/usr/libexec/swift/pm/swiftpm-testing-helper'
         bundle = '/owned/.build/debug/EdithHostPackageTests.xctest'
+        executable = bundle + '/Contents/MacOS/EdithHostPackageTests'
         for batch in ['transport', 'core', 'ui']:
-            command = watchdog.command(batch, developer, helper, bundle)
-            self.assertEqual(command[:4], [helper, '--test-bundle-path', bundle, 'test'])
-            self.assertEqual(command[-3:], [bundle, '--testing-library', 'swift-testing'])
+            command = watchdog.command(batch, developer, helper, executable)
+            self.assertEqual(command[:4], [helper, '--test-bundle-path', executable, 'test'])
+            self.assertEqual(command[-3:], [executable, '--testing-library', 'swift-testing'])
             self.assertIn('--no-parallel', command)
             self.assertIn('--skip-build', command)
             self.assertEqual(command[command.index('--jobs') + 1], '1')
-        core = watchdog.command('core', developer, helper, bundle)
-        ui = watchdog.command('ui', developer, helper, bundle)
+        core = watchdog.command('core', developer, helper, executable)
+        ui = watchdog.command('ui', developer, helper, executable)
         self.assertIn('HostLifecycleHarnessTests', core[core.index('--filter') + 1])
         self.assertNotIn('EdithHostUITests', core[core.index('--filter') + 1])
         self.assertEqual(ui[ui.index('--filter') + 1], '^EdithHostUITests\\.')
         with self.assertRaises(ValueError):
             watchdog.command('ui', developer)
         with self.assertRaises(KeyError):
-            watchdog.command('unknown', developer, helper, bundle)
+            watchdog.command('unknown', developer, helper, executable)
+
+    def test_helper_refuses_bundle_directory_and_unowned_binary_layout(self):
+        for image in ['/owned/EdithHostPackageTests.xctest',
+                      '/owned/EdithHostPackageTests.xctest/Contents/MacOS/other',
+                      '/owned/Other.xctest/Contents/MacOS/EdithHostPackageTests',
+                      'EdithHostPackageTests.xctest/Contents/MacOS/EdithHostPackageTests',
+                      '/owned/../EdithHostPackageTests.xctest/Contents/MacOS/EdithHostPackageTests']:
+            with self.subTest(image=image), self.assertRaises(ValueError):
+                watchdog.command('transport', '/developer', '/helper', image)
 
     def test_selected_toolchain_and_native_bundle_are_canonical_and_environment_matches_swiftpm(self):
         with tempfile.TemporaryDirectory() as temporary:

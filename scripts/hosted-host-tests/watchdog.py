@@ -106,7 +106,7 @@ def admit(environment, source):
         raise ValueError('Reviewed source mismatch')
 
 
-def command(batch, developer, helper=None, bundle=None):
+def command(batch, developer, helper=None, executable=None):
     common = ['--package-path', 'Packages/EdithHost', '--build-system', 'native',
               '--jobs', '1', '-Xswiftc', '-plugin-path', '-Xswiftc',
               str(Path(developer) / 'Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins')]
@@ -117,10 +117,14 @@ def command(batch, developer, helper=None, bundle=None):
                'core': '^(EdithHostCoreTests|HostLifecycleHarnessTests)\\.',
                'ui': '^EdithHostUITests\\.'}
     selected = filters[batch]
-    if helper is None or bundle is None:
-        raise ValueError('Validated selected toolchain helper and test bundle required')
-    return [str(helper), '--test-bundle-path', str(bundle), 'test', '--skip-build',
-            '--no-parallel', *common, '--filter', selected, str(bundle),
+    if helper is None or executable is None:
+        raise ValueError('Validated selected toolchain helper and test executable required')
+    image = Path(executable)
+    if (not image.is_absolute() or '..' in image.parts
+            or image.parts[-4:] != ('EdithHostPackageTests.xctest', 'Contents', 'MacOS', 'EdithHostPackageTests')):
+        raise ValueError('Native test executable must be inside its owning bundle')
+    return [str(helper), '--test-bundle-path', str(image), 'test', '--skip-build',
+            '--no-parallel', *common, '--filter', selected, str(image),
             '--testing-library', 'swift-testing']
 
 
@@ -297,7 +301,7 @@ def main():
                                   'dyldFrameworkPath': environment['DYLD_FRAMEWORK_PATH'],
                                   'dyldLibraryPath': environment['DYLD_LIBRARY_PATH']}
             for batch in ['transport', 'core', 'ui']:
-                result = run_batch(batch, command(batch, developer, helper, bundle), directory, 600,
+                result = run_batch(batch, command(batch, developer, helper, executable), directory, 600,
                                    environment=environment)
                 receipt['batches'].append(result)
     finally:
