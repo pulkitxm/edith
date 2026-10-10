@@ -22,6 +22,49 @@ import Testing
         #expect(ready())
     }
 
+    @Test func ownedOpenCompletesOnlyAfterExactMountedAcknowledgement() async throws {
+        let url = try fixture()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let movie = try await VideoEditorServiceTests.movie(in: url.deletingLastPathComponent())
+        _ = try await VideoEditorService.apply(
+            VideoEditPlan(operations: [.addMedia(path: movie.path, name: "intro")]),
+            to: url, overwrite: true)
+        let bridge = VideoEditorOpenBridge()
+        defer { bridge.shutdown() }
+        let request = try VideoEditorService.prepareOpen(url)
+        var completed = false
+        let task = Task {
+            try await bridge.open(request, timeout: 5)
+            completed = true
+        }
+        try await waitUntil { bridge.pending != nil }
+        #expect(!completed)
+        let presentation = try #require(bridge.pending)
+        bridge.mounted(presentation)
+        try await task.value
+        #expect(completed)
+    }
+
+    @Test func ownedOpenCancellationReleasesPendingNativeEditor() async throws {
+        let url = try fixture()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let movie = try await VideoEditorServiceTests.movie(in: url.deletingLastPathComponent())
+        _ = try await VideoEditorService.apply(
+            VideoEditPlan(operations: [.addMedia(path: movie.path, name: "intro")]),
+            to: url, overwrite: true)
+        let bridge = VideoEditorOpenBridge()
+        defer { bridge.shutdown() }
+        let request = try VideoEditorService.prepareOpen(url)
+        let task = Task { try await bridge.open(request, timeout: 5) }
+        try await waitUntil { bridge.pending != nil }
+        task.cancel()
+        do {
+            try await task.value
+            Issue.record("Cancelled open was acknowledged.")
+        } catch is CancellationError {}
+        #expect(bridge.pending == nil && bridge.activeEditor == nil)
+    }
+
     @Test func commandPresentationHasOneOwnerAndOnlyThatOwnerClosesIt() throws {
         let url = try fixture()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }

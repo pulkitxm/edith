@@ -12,6 +12,7 @@ let package = Package(
             name: "StudioExtension",
             dependencies: [
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
                 .product(name: "EdithStudio", package: "NativeRuntime"),
             ],
             path: ".",

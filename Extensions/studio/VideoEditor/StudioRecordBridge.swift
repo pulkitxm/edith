@@ -1,35 +1,6 @@
 import EdithExtensionSupport
-import EdithExtensionUI
+import EdithExtensionCommands
 import Foundation
-
-enum StudioRecordInstaller {
-    @MainActor
-    static func install() {
-        if #available(macOS 15.0, *) {
-            StudioRecordBridge.shared.install()
-        } else {
-            StudioRecordFallback.install()
-        }
-    }
-}
-
-private enum StudioRecordFallback {
-    static var token: NSObjectProtocol?
-
-    static func install() {
-        guard token == nil else { return }
-        token = IPC.observe(
-            IPC.Name.requestStudioRecord,
-            info: { info in
-                MainActor.assumeIsolated {
-                    guard let runtime = StudioRecordRuntimeRequest(payload: info) else { return }
-                    StudioRecordReply.send(
-                        requestID: runtime.requestID, ok: false, snapshot: nil,
-                        error: "Screen recording needs macOS 15 or later.")
-                }
-            })
-    }
-}
 
 @available(macOS 15.0, *)
 @MainActor
@@ -37,96 +8,73 @@ final class StudioRecordBridge {
     static let shared = StudioRecordBridge()
 
     private let recorder = VideoRecorder()
-    private var token: NSObjectProtocol?
     private var finishedURL: URL?
     private var stopWait: CheckedContinuation<Void, Never>?
     private var settled = false
 
-    func install() {
-        guard token == nil else { return }
-        token = IPC.observe(
-            IPC.Name.requestStudioRecord,
-            info: { [weak self] info in
-                Task { @MainActor in await self?.receive(info) }
-            })
-    }
-
     func shutdown() async {
-        if let token { IPC.stopObserving(token) }
-        token = nil
         await recorder.shutdown()
         complete(nil)
     }
 
-    private func receive(_ info: [AnyHashable: Any]) async {
-        guard let runtime = StudioRecordRuntimeRequest(payload: info) else { return }
-        guard runtime.isLive(at: Date()) else {
-            StudioRecordReply.send(
-                requestID: runtime.requestID, ok: false, snapshot: nil,
-                error: "The recording request expired before it ran.")
-            return
-        }
-        switch runtime.request {
+    func perform(
+        _ request: StudioRecordRequest, source: String = "", systemAudio: Bool = true,
+        microphone: Bool = false, showCursor: Bool = true
+    ) async throws -> StudioRecordSnapshot {
+        try Task.checkCancellation()
+        switch request {
         case .sources:
             await recorder.loadSources()
-            let failure = recorder.error
-            StudioRecordReply.send(
-                requestID: runtime.requestID, ok: failure == nil,
-                snapshot: snapshot(changed: false),
-                error: failure)
+            if let error = recorder.error { throw CLIFailure(error) }
+            return snapshot(changed: false)
         case .status:
-            StudioRecordReply.send(
-                requestID: runtime.requestID, ok: true, snapshot: snapshot(changed: false),
-                error: nil)
+            return snapshot(changed: false)
         case .start:
-            await begin(runtime)
-        case .stop:
-            await end(runtime.requestID)
-        }
-    }
-
-    private func begin(_ runtime: StudioRecordRuntimeRequest) async {
-        if recorder.recording {
-            StudioRecordReply.send(
-                requestID: runtime.requestID, ok: false, snapshot: snapshot(changed: false),
-                error: "A recording is already in progress.")
-            return
-        }
-        if recorder.displays.isEmpty && recorder.windows.isEmpty {
-            await recorder.loadSources()
-        }
-        recorder.systemAudio = runtime.systemAudio
-        recorder.microphone = runtime.microphone
-        recorder.showCursor = runtime.showCursor
-        recorder.source = resolve(runtime.source)
-        finishedURL = nil
-        settled = false
-        await recorder.start { [weak self] url in
-            MainActor.assumeIsolated { self?.complete(url) }
-        }
-        StudioRecordReply.send(
-            requestID: runtime.requestID, ok: recorder.error == nil && recorder.recording,
-            snapshot: snapshot(changed: recorder.recording), error: recorder.error)
-    }
-
-    private func end(_ requestID: String) async {
-        guard recorder.recording else {
-            StudioRecordReply.send(
-                requestID: requestID, ok: false, snapshot: snapshot(changed: false),
-                error: "Nothing is recording.")
-            return
-        }
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            stopWait = continuation
-            Task { @MainActor in
-                await self.recorder.stop()
-                if self.recorder.error != nil { self.complete(nil) }
+            guard !recorder.recording else {
+                throw CLIFailure("A recording is already in progress.")
             }
+            if recorder.displays.isEmpty && recorder.windows.isEmpty {
+                await recorder.loadSources()
+            }
+            try Task.checkCancellation()
+            recorder.systemAudio = systemAudio
+            recorder.microphone = microphone
+            recorder.showCursor = showCursor
+            recorder.source = resolve(source)
+            finishedURL = nil
+            settled = false
+            await recorder.start { [weak self] url in
+                MainActor.assumeIsolated { self?.complete(url) }
+            }
+            if Task.isCancelled {
+                await recorder.shutdown()
+                complete(nil)
+                throw CancellationError()
+            }
+            guard recorder.recording, recorder.error == nil else {
+                throw CLIFailure(recorder.error ?? "The recording did not start.")
+            }
+            return snapshot(changed: true)
+        case .stop:
+            guard recorder.recording else { throw CLIFailure("Nothing is recording.") }
+            guard stopWait == nil else { throw CLIFailure("The recording is already stopping.") }
+            await withTaskCancellationHandler {
+                await withCheckedContinuation { continuation in
+                    stopWait = continuation
+                    Task { @MainActor in
+                        await self.recorder.stop()
+                        if self.recorder.error != nil { self.complete(nil) }
+                    }
+                }
+            } onCancel: {
+                Task { @MainActor in await self.shutdown() }
+            }
+            try Task.checkCancellation()
+            guard finishedURL != nil else {
+                throw CLIFailure(recorder.error ?? "The recording did not finish.")
+            }
+            return snapshot(changed: true)
         }
-        StudioRecordReply.send(
-            requestID: requestID, ok: finishedURL != nil,
-            snapshot: snapshot(changed: finishedURL != nil),
-            error: finishedURL == nil ? recorder.error ?? "The recording did not finish." : nil)
     }
 
     private func complete(_ url: URL?) {
@@ -171,18 +119,5 @@ final class StudioRecordBridge {
             sources: sources, recording: recorder.recording, source: recorder.source,
             systemAudio: recorder.systemAudio, microphone: recorder.microphone,
             showCursor: recorder.showCursor, output: finishedURL?.path, changed: changed)
-    }
-}
-
-enum StudioRecordReply {
-    static func send(
-        requestID: String, ok: Bool, snapshot: StudioRecordSnapshot?, error: String?
-    ) {
-        var payload: [String: Any] = [
-            StudioRecordIPC.requestIDKey: requestID, StudioRecordIPC.okKey: ok,
-        ]
-        if let encoded = snapshot?.encoded() { payload[StudioRecordIPC.snapshotKey] = encoded }
-        if let error { payload[StudioRecordIPC.errorKey] = error }
-        IPC.post(IPC.Name.studioRecordResult, userInfo: payload)
     }
 }

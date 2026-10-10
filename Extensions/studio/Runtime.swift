@@ -1,6 +1,7 @@
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
+import EdithExtensionCommands
 import Foundation
 import SwiftUI
 
@@ -14,6 +15,11 @@ final class ExtensionRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let model = self.model else { throw ExtensionPeerError.unavailable }
+            if command == "studio.cli" {
+                let request = try JSONDecoder().decode(StudioCLIRequest.self, from: payload)
+                return try JSONEncoder().encode(
+                    try await StudioCLIExecution.run(request, model: model))
+            }
             if command == "surface.snapshot" || command == "surface.perform" {
                 return try await SurfaceCommandService.execute(
                     providerID: "studio", command: command, payload: payload,
@@ -33,8 +39,10 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        shutdown()
+        commands.shutdown()
         Task {
+            await commands.shutdownAndWait()
+            shutdown()
             if #available(macOS 15.0, *) {
                 await StudioRecordBridge.shared.shutdown(); await VideoRecorder.shutdownAll()
             }
