@@ -379,6 +379,12 @@ ci-companion-migrate:
 	@test -n "$$DATABASE_URL" || { echo "set DATABASE_URL to a pgvector database (start one with ac)" >&2; exit 1; }
 	cd apps/companion && cargo +stable run --locked -- --migrate-only
 
+.PHONY: ci-extension-database
+ci-extension-database:
+	swift format lint --strict --recursive Extensions/database
+	env -u EDITH_DATABASE_POSTGRESQL_HOST swift test --package-path Extensions/database/DatabaseEngine --no-parallel --jobs $(EXTENSION_SWIFT_JOBS)
+	cd Extensions/database && env -u EDITH_DATABASE_POSTGRESQL_HOST EDITH_DATABASE_RELATION_FILTERS=0 node test.mjs $(if $(FILTER),'$(FILTER)')
+
 ci-tools:
 	brew install yamllint lychee gitleaks trivy osv-scanner actionlint zizmor semgrep go zig fish || true
 	cargo install cargo-audit --locked || true

@@ -141,6 +141,7 @@ try {
     assert.equal(result.audioMixerDataValidated, id === "audioMixer");
     assert.equal(result.usageDataValidated, id === "usage");
     assert.equal(result.cameraDataValidated, id === "virtualCamera");
+    assert.equal(result.databaseDataValidated, id === "database");
     if (id === "lidAwake") {
       const privileged = JSON.parse(
         execFileSync(
