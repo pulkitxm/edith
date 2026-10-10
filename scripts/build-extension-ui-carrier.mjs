@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   copyFile,
+  cp,
   lstat,
   mkdir,
   readdir,
@@ -243,6 +244,11 @@ export async function buildExtensionUICarrier({
     identity: signingIdentity,
     development,
   });
+  await cp(
+    resolve(hostApp, "Contents/Resources/EdithHost_EdithHost.bundle"),
+    resolve(paths.workerContents, "Resources/EdithHost_EdithHost.bundle"),
+    { recursive: true, dereference: false },
+  );
   if (provenance.runtimeDependencies.length > 0) {
     const loadCommands = execFileSync("otool", ["-l", source], {
       encoding: "utf8",

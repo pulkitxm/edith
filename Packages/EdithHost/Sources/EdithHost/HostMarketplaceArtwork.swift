@@ -53,7 +53,7 @@ import Foundation
                 bundleURL.deletingLastPathComponent().lastPathComponent == "Extensions",
                 contents.deletingLastPathComponent().pathExtension == "app"
             else { return nil }
-            resources = contents.appendingPathComponent("Resources")
+            resources = bundleURL.appendingPathComponent("Contents/Resources")
         } else if bundleURL.pathExtension == "app" {
             resources = bundleURL.appendingPathComponent("Contents/Resources")
         } else if bundleURL.pathExtension == "xctest" {

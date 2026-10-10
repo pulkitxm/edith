@@ -87,11 +87,18 @@ import Testing
         try archive().write(to: archiveURL)
         #expect(HostMarketplaceArtwork.loadPixels(at: archiveURL)?.count == 1_843_200)
         let appex = app.appendingPathComponent("Contents/Extensions/Synthetic.appex")
-        #expect(HostMarketplaceArtwork.resourceURL(bundleURL: appex) == archiveURL)
+        let workerURL = try #require(HostMarketplaceArtwork.resourceURL(bundleURL: appex))
+        #expect(workerURL != archiveURL)
+        #expect(HostMarketplaceArtwork.loadPixels(at: workerURL) == nil)
+        try FileManager.default.createDirectory(
+            at: workerURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try archive().write(to: workerURL)
+        #expect(HostMarketplaceArtwork.loadPixels(at: workerURL)?.count == 1_843_200)
         #expect(
             HostMarketplaceArtwork.resourceURL(
                 bundleURL: root.appendingPathComponent("foreign.appex")) == nil)
         try Data([0]).write(to: archiveURL)
+        #expect(HostMarketplaceArtwork.loadPixels(at: workerURL)?.count == 1_843_200)
         #expect(HostMarketplaceArtwork.loadPixels(at: archiveURL) == nil)
         try FileManager.default.removeItem(at: archiveURL)
         #expect(HostMarketplaceArtwork.loadPixels(at: archiveURL) == nil)
