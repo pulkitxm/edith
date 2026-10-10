@@ -99,3 +99,23 @@ import Foundation
         waiter.continuation.resume()
     }
 }
+
+@MainActor enum HerdrTrackingDemand {
+    static func read(
+        activeVersion: @escaping @MainActor () -> String?,
+        invoke: @escaping @MainActor (String, Data) async throws -> Data
+    ) async -> Bool {
+        guard let version = activeVersion(), !version.isEmpty, version.utf8.count <= 128 else {
+            return false
+        }
+        do {
+            let data = try await invoke("attention.settings.get", Data("{}".utf8))
+            guard !Task.isCancelled, activeVersion() == version, data.count <= 1_048_576 else {
+                return false
+            }
+            struct Settings: Decodable { let isEnabled: Bool; let agentTrackingEnabled: Bool }
+            let settings = try JSONDecoder().decode(Settings.self, from: data)
+            return settings.isEnabled && settings.agentTrackingEnabled
+        } catch { return false }
+    }
+}

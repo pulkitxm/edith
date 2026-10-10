@@ -3,15 +3,16 @@ import Foundation
 
 public enum HerdrLive {
     static let remoteLeaseDuration = Duration.seconds(20)
-    static let snapshotInterval = Duration.seconds(2)
+    @MainActor static weak var admission: HerdrDiscoveryAdmission?
 
     public static func watch(_ yield: @escaping @Sendable ([HerdrHostSnapshot]) -> Void) async {
+        guard let admission = await MainActor.run(body: { admission }) else { return }
         let fleet = FleetBag(yield: yield)
         await withTaskGroup(of: Void.self) { group in
-            group.addTask { await watchLocal(fleet) }
+            group.addTask { await watchLocal(fleet, admission: admission) }
             group.addTask {
                 await watchRemotes(MachineRegistry.machines()) { machine in
-                    await watchRemoteLease(machine, fleet)
+                    await watchRemoteLease(machine, fleet, admission: admission)
                 }
             }
             await group.waitForAll()
@@ -27,8 +28,10 @@ public enum HerdrLive {
             machines, maximumInFlight: maximumInFlight, operation: watcher)
     }
 
-    private static func watchLocal(_ fleet: FleetBag) async {
-        while !Task.isCancelled {
+    private static func watchLocal(
+        _ fleet: FleetBag, admission: HerdrDiscoveryAdmission
+    ) async {
+        while await admission.admit("local.discovery") {
             let sockets = HerdrSocketDiscovery.local()
             if sockets.isEmpty {
                 let present = HerdrCollector.executable() != nil
@@ -37,7 +40,6 @@ public enum HerdrLive {
                         herdrPresent: present,
                         error: present
                             ? "no herdr server is running" : "herdr is not on PATH"))
-                try? await Task.sleep(for: .seconds(present ? 2 : 8))
                 continue
             }
             await runHost(
@@ -47,12 +49,14 @@ public enum HerdrLive {
                 machineName: "This Mac",
                 machineIsLocal: true,
                 sshTarget: nil,
-                fleet: fleet)
-            try? await Task.sleep(for: .seconds(1))
+                fleet: fleet, admission: admission)
         }
     }
 
-    private static func watchRemoteLease(_ machine: Machine, _ fleet: FleetBag) async {
+    private static func watchRemoteLease(
+        _ machine: Machine, _ fleet: FleetBag, admission: HerdrDiscoveryAdmission
+    ) async {
+        guard await admission.admit("remote.discovery.\(machine.id)") else { return }
         let connection = SSHConnection(machine: machine, controlSocketMode: .isolated)
         do {
             try await connection.connect()
@@ -87,7 +91,7 @@ public enum HerdrLive {
             machineName: machine.name,
             machineIsLocal: false,
             sshTarget: machine.sshTarget,
-            fleet: fleet)
+            fleet: fleet, admission: admission)
         await connection.disconnect()
     }
 
@@ -95,14 +99,14 @@ public enum HerdrLive {
         sockets: [(name: String, path: String)],
         connect: @escaping @Sendable (String) throws -> HerdrSocketClient,
         machineID: String, machineName: String, machineIsLocal: Bool, sshTarget: String?,
-        fleet: FleetBag
+        fleet: FleetBag, admission: HerdrDiscoveryAdmission
     ) async {
         await withTaskGroup(of: Void.self) { group in
             group.addTask {
                 await runHost(
                     sockets: sockets, connect: connect, machineID: machineID,
                     machineName: machineName, machineIsLocal: machineIsLocal,
-                    sshTarget: sshTarget, fleet: fleet)
+                    sshTarget: sshTarget, fleet: fleet, admission: admission)
             }
             group.addTask { try? await Task.sleep(for: remoteLeaseDuration) }
             await group.next()
@@ -124,7 +128,7 @@ public enum HerdrLive {
         sockets: [(name: String, path: String)],
         connect: @escaping @Sendable (String) throws -> HerdrSocketClient,
         machineID: String, machineName: String, machineIsLocal: Bool, sshTarget: String?,
-        fleet: FleetBag
+        fleet: FleetBag, admission: HerdrDiscoveryAdmission
     ) async {
         let sessions = SessionBag(
             machineID: machineID, machineName: machineName, machineIsLocal: machineIsLocal,
@@ -133,7 +137,8 @@ public enum HerdrLive {
             for socket in sockets {
                 group.addTask {
                     await runSession(
-                        socket: socket, connect: connect, sessions: sessions, fleet: fleet)
+                        socket: socket, connect: connect, sessions: sessions, fleet: fleet,
+                        admission: admission)
                 }
             }
             await group.waitForAll()
@@ -144,9 +149,11 @@ public enum HerdrLive {
         socket: (name: String, path: String),
         connect: @escaping @Sendable (String) throws -> HerdrSocketClient,
         sessions: SessionBag,
-        fleet: FleetBag
+        fleet: FleetBag, admission: HerdrDiscoveryAdmission
     ) async {
-        while !Task.isCancelled {
+        await poll(
+            admission: admission, key: "snapshot.\(sessions.machineID).\(socket.path)"
+        ) {
             do {
                 fleet.put(
                     sessions.applySnapshot(
@@ -155,8 +162,14 @@ public enum HerdrLive {
             } catch {
                 fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
             }
-            try? await Task.sleep(for: snapshotInterval)
         }
+    }
+
+    static func poll(
+        admission: HerdrDiscoveryAdmission, key: String,
+        operation: @escaping @Sendable () async -> Void
+    ) async {
+        while await admission.admit(key) { await operation() }
     }
 
     static func snapshot(

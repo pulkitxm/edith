@@ -187,6 +187,9 @@ final class ExtensionRuntime: NSObject {
             }
             let created = HerdrWorker(
                 hostWindowNavigation: navigation, hostFolderChoice: folderChoice)
+            do { try created.applyAmbientPolicy(context: input) } catch {
+                return ["ok": false] as NSDictionary
+            }
             worker = created
             surface = HerdrSurface(worker: created)
             let recovery =
@@ -199,7 +202,11 @@ final class ExtensionRuntime: NSObject {
             }
             return uiController
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": break
+        case "synchronize":
+            guard let worker else { return ["ok": false] as NSDictionary }
+            do { try worker.applyAmbientPolicy(context: input) } catch {
+                return ["ok": false] as NSDictionary
+            }
         case "status": return ["ok": true, "running": worker?.isStopped == false] as NSDictionary
         case "stop":
             commands.shutdown()
