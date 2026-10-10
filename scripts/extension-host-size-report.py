@@ -10,6 +10,24 @@ from pathlib import Path
 BUILD_FIELDS = ("sourceCommit", "configuration", "optimization", "architecture", "signature", "xcode", "sdk", "ghosttySourceCommit", "ghosttyArchive")
 
 
+def measure_host_components(app):
+    components = dict.fromkeys(("hostAndCLI", "appUpdater", "resources", "bundleMetadata"), 0)
+    for path in app.rglob("*"):
+        if not path.is_file() or path.is_symlink():
+            continue
+        parts = path.relative_to(app).parts
+        if parts[:2] == ("Contents", "MacOS"):
+            component = "hostAndCLI"
+        elif parts[:3] == ("Contents", "Frameworks", "Sparkle.framework"):
+            component = "appUpdater"
+        elif parts[:2] == ("Contents", "Resources"):
+            component = "resources"
+        else:
+            component = "bundleMetadata"
+        components[component] += path.stat().st_size
+    return components
+
+
 def build_report(baseline, app, packages, definitions, index, expected_fingerprints=None, host_build=None):
     migrated = [entry["id"] for entry in definitions if entry.get("contractVersion") == 1]
     known = {entry["id"] for entry in index}
@@ -28,6 +46,7 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
     if host_build is not None and host_build.get("hostExecutableSHA256") != executable_hash:
         raise ValueError("Host build metadata must match the measured executable checksum")
     result = measurements.compare(baseline, measured, measurements.measure_packages(packages, migrated))
+    result["hostComponents"] = measure_host_components(app)
     result["migratedExtensionPackages"] = result.pop("allExtensionPackages")
     result["appWithMigratedExtensions"] = result.pop("appWithAllExtensions")
     remaining = sorted(known - set(migrated))
@@ -96,6 +115,13 @@ def render_markdown(report, index):
         f"The measured host is {saved:.2f}% smaller on disk than the recorded bundled-app baseline."
         if saved is not None else "A percentage reduction cannot be calculated from a zero-byte baseline."
     )
+    component_labels = {
+        "hostAndCLI": "Host and CLI", "appUpdater": "Sparkle app updater",
+        "resources": "Icons, index and launcher resource", "bundleMetadata": "Bundle metadata and signatures",
+    }
+    component_rows = "\n".join(
+        f"| {component_labels[key]} | {value:,} |" for key, value in report["hostComponents"].items()
+    )
     return f"""# Lightweight host rebuild measurements
 
 Measured on {report['measuredAtUTC'].split('T')[0]}. {coverage} Package coverage describes the measured artifacts. It does not establish merge readiness, lifecycle test results, visual review, production signing, or release publication.
@@ -111,6 +137,13 @@ MB means 1,000,000 bytes. {savings} Comparison ZIPs use deflate level 9 over reg
 Baseline build: {describe_build(report['measurement']['baselineBuild'])}.
 
 Host build: {describe_build(report['measurement']['hostBuild'])}.
+
+| Empty host component | Installed bytes |
+| --- | ---: |
+{component_rows}
+| Total empty host | {host['installedBytes']:,} |
+
+The host contains the marketplace, window and surface layout controls, worker lifecycle and command gateway. Sparkle updates the application independently of extension updates. Downloaded feature code and resources belong to the packages below. Component sizes count each regular file once and exclude symbolic links.
 
 | Local extension artifact | ZIP bytes | Installed package bytes | Package metadata bytes |
 | --- | ---: | ---: | ---: |

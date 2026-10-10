@@ -109,6 +109,33 @@ class HostSizeReportTests(unittest.TestCase):
         self.assertIn("Host build: Build configuration was not recorded.", rendered)
         self.assertIn("Current package source fingerprints were not checked", rendered)
 
+    def test_component_totals_account_for_every_regular_file_without_counting_aliases(self):
+        files = {
+            "Contents/Frameworks/Sparkle.framework/Sparkle": b"updater",
+            "Contents/Resources/index.json": b"[]",
+            "Contents/Info.plist": b"metadata",
+            "Contents/Library/LaunchDaemons/carrier.plist": b"carrier",
+            "Contents/_CodeSignature/CodeResources": b"signature",
+        }
+        for relative, data in files.items():
+            path = self.app / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        (self.executable.parent / "ed").symlink_to(self.executable)
+        self.package("sample")
+        index = [{"id": "sample", "title": "Sample"}]
+        result = report.build_report(self.baseline, self.app, self.packages,
+            [{"id": "sample", "contractVersion": 1}], index)
+        components = result["hostComponents"]
+        self.assertEqual(components["hostAndCLI"], len(self.executable.read_bytes()))
+        self.assertEqual(components["appUpdater"], len(b"updater"))
+        self.assertEqual(components["resources"], len(b"[]"))
+        self.assertEqual(components["bundleMetadata"], len(b"metadata") + len(b"carrier") + len(b"signature"))
+        self.assertEqual(sum(components.values()), result["appWithoutExtensions"]["installedBytes"])
+        rendered = report.render_markdown(result, index)
+        self.assertIn("| Sparkle app updater | 7 |", rendered)
+        self.assertIn(f"| Total empty host | {sum(components.values()):,} |", rendered)
+
     def test_platform_retirement_and_verification_are_separate_from_worker_exit(self):
         self.package("sample")
         index = [{"id": "sample", "title": "Sample"}]
