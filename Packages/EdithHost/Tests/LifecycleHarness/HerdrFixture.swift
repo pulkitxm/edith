@@ -117,7 +117,8 @@ enum HerdrFixture {
     private static func executablePath(_ pid: Int32) -> String? {
         var bytes = [CChar](repeating: 0, count: 4096)
         guard proc_pidpath(pid, &bytes, UInt32(bytes.count)) > 0 else { return nil }
-        return String(cString: bytes)
+        return String(
+            decoding: bytes.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 
 }

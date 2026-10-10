@@ -17,7 +17,10 @@ public struct HostRemoteKernelIdentity: Equatable, Sendable {
         else { throw HostWorkerError.rejected }
         return Self(
             pid: pid, generation: "\(info.pbi_start_tvsec):\(info.pbi_start_tvusec)",
-            executable: URL(fileURLWithPath: String(cString: path)).resolvingSymlinksInPath())
+            executable: URL(
+                fileURLWithPath: String(
+                    decoding: path.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+            ).resolvingSymlinksInPath())
     }
 
     public func verify(_ connection: NSXPCConnection) throws {

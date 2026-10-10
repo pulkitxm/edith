@@ -29,7 +29,9 @@ struct HostCLIProcess: Equatable, Sendable {
         else { return nil }
         return Self(
             pid: pid, started: info.pbi_start_tvsec, microseconds: info.pbi_start_tvusec,
-            executable: String(cString: path), codeHash: Data(hash))
+            executable: String(
+                decoding: path.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self),
+            codeHash: Data(hash))
     }
 
     static func peer(_ descriptor: Int32) throws -> Self {
