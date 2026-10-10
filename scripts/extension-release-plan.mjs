@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
@@ -76,7 +77,7 @@ export async function supportCacheFingerprint(root, definition) {
   return extensionFingerprint(root, support, [support]);
 }
 
-export function planExtensionBuilds(definitions, changes) {
+export function planExtensionBuilds(definitions, changes, changedIDs = []) {
   const ids = new Set(definitions.map(({ id }) => id));
   if (ids.size !== definitions.length)
     throw new Error("Duplicate extension id");
@@ -86,7 +87,9 @@ export function planExtensionBuilds(definitions, changes) {
     if (definition.dependencies.some((id) => !ids.has(id)))
       throw new Error("Unknown dependency");
   }
-  const selected = new Set();
+  if (changedIDs.some((id) => !ids.has(id)))
+    throw new Error("Unknown changed extension");
+  const selected = new Set(changedIDs);
   for (const definition of definitions) {
     if (
       changes.some((path) =>
@@ -112,6 +115,109 @@ export function planExtensionBuilds(definitions, changes) {
     }
   }
   return definitions.filter(({ id }) => selected.has(id));
+}
+
+export function planPullRequestBuilds(definitions, changes, priorDefinitions) {
+  if (priorDefinitions === null)
+    return planExtensionBuilds(
+      definitions,
+      [],
+      definitions.map(({ id }) => id),
+    );
+  if (!Array.isArray(priorDefinitions))
+    throw new Error("Invalid base extension manifest");
+  planExtensionBuilds(priorDefinitions, []);
+  const prior = new Map(priorDefinitions.map((entry) => [entry.id, entry]));
+  const productionDefinition = (entry) => {
+    if (!entry) return undefined;
+    const value = { ...entry };
+    delete value.testTargets;
+    return JSON.stringify(value);
+  };
+  const changedIDs = definitions
+    .filter(
+      (entry) =>
+        productionDefinition(entry) !==
+        productionDefinition(prior.get(entry.id)),
+    )
+    .map(({ id }) => id);
+  return planExtensionBuilds(
+    definitions,
+    changes.filter((path) => path !== "Extensions/manifest.json"),
+    changedIDs,
+  );
+}
+
+export function readPullRequestBaseline(root, baseSHA) {
+  if (typeof baseSHA !== "string" || !/^[a-f0-9]{40}$/.test(baseSHA))
+    throw new Error("Invalid pull request base commit");
+  const git = (arguments_) =>
+    execFileSync("git", arguments_, {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+    });
+  const actual = git(["rev-parse", "--verify", `${baseSHA}^{commit}`]).trim();
+  if (actual !== baseSHA) throw new Error("Pull request base commit mismatch");
+  git(["merge-base", "--is-ancestor", baseSHA, "HEAD"]);
+  const tree = git([
+    "ls-tree",
+    "-z",
+    baseSHA,
+    "--",
+    "Extensions/manifest.json",
+  ]);
+  let priorDefinitions = null;
+  if (tree) {
+    if (!/^100644 blob [a-f0-9]{40}\tExtensions\/manifest\.json\0$/.test(tree))
+      throw new Error("Invalid base extension manifest tree");
+    priorDefinitions = JSON.parse(
+      git(["show", `${baseSHA}:Extensions/manifest.json`]),
+    );
+    if (!Array.isArray(priorDefinitions))
+      throw new Error("Invalid base extension manifest");
+  }
+  const changes = git([
+    "diff",
+    "--name-only",
+    "-z",
+    "--no-renames",
+    baseSHA,
+    "HEAD",
+    "--",
+  ])
+    .split("\0")
+    .filter(Boolean);
+  return { priorDefinitions, changes };
+}
+
+export async function planPullRequestExtensions(root, definitions, baseSHA) {
+  const { priorDefinitions, changes } = readPullRequestBaseline(root, baseSHA);
+  const selected = planPullRequestBuilds(
+    definitions,
+    changes,
+    priorDefinitions,
+  );
+  return Promise.all(
+    selected.map(async (definition) => {
+      const fingerprint = await extensionFingerprint(
+        root,
+        definition,
+        definitions,
+      );
+      return {
+        id: definition.id,
+        version: definition.version,
+        fingerprint,
+        tag: extensionReleaseTag({
+          id: definition.id,
+          version: definition.version,
+          fingerprint,
+        }),
+        supportFingerprint: await supportCacheFingerprint(root, definition),
+      };
+    }),
+  );
 }
 
 export async function extensionFingerprint(root, definition, definitions) {

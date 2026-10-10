@@ -1,11 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   extensionFingerprint,
   extensionReleaseTag,
   planExtensionBuilds,
+  planPullRequestBuilds,
+  planPullRequestExtensions,
+  planUnpublishedExtensions,
+  readPullRequestBaseline,
   supportCacheFingerprint,
   workerRuntimeInputs,
 } from "./extension-release-plan.mjs";
@@ -825,4 +830,285 @@ test("Database MCP tests run their owner without rebuilding the downloaded engin
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+const pullRequestDefinitions = definitions.map((entry) => ({
+  ...entry,
+  version: "1.0.0",
+  hostABI: "edith-host-2",
+}));
+
+async function pullRequestRepository(run, { legacy = false } = {}) {
+  const root = await mkdtemp(join(tmpdir(), "extension-pr-plan-"));
+  const git = (...arguments_) =>
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=Synthetic Fixture",
+        "-c",
+        "user.email=fixture@example.test",
+        ...arguments_,
+      ],
+      { cwd: root, encoding: "utf8" },
+    ).trim();
+  const commit = async () => {
+    git("add", ".");
+    git("commit", "--quiet", "-m", "Fixture checkpoint");
+    return git("rev-parse", "HEAD");
+  };
+  try {
+    git("init", "--quiet");
+    for (const entry of pullRequestDefinitions) {
+      await mkdir(join(root, entry.inputs[0]), { recursive: true });
+      await writeFile(join(root, entry.inputs[0], "Runtime.swift"), entry.id);
+    }
+    await mkdir(join(root, "Packages/ExtensionMarketplace"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(root, "Packages/ExtensionMarketplace/API.swift"),
+      "contract",
+    );
+    if (!legacy)
+      await writeFile(
+        join(root, "Extensions/manifest.json"),
+        JSON.stringify(pullRequestDefinitions),
+      );
+    const baseSHA = await commit();
+    await run({ root, git, commit, baseSHA });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+describe("pull request candidate planning", () => {
+  test("a single owner change includes only its transitive consumers", () => {
+    expect(
+      planPullRequestBuilds(
+        pullRequestDefinitions,
+        ["Extensions/music/Player.swift"],
+        pullRequestDefinitions,
+      ).map(({ id }) => id),
+    ).toEqual(["music", "shelf"]);
+  });
+  test("manifest production rows select only the changed owner and consumers", () => {
+    const next = structuredClone(pullRequestDefinitions);
+    next[0].minimumSystemVersion = 15;
+    expect(
+      planPullRequestBuilds(
+        next,
+        ["Extensions/manifest.json"],
+        pullRequestDefinitions,
+      ).map(({ id }) => id),
+    ).toEqual(["music", "shelf"]);
+    next[0] = pullRequestDefinitions[0];
+    next[1] = { ...next[1], testTargets: ["ci-calendar"] };
+    expect(
+      planPullRequestBuilds(
+        next,
+        ["Extensions/manifest.json"],
+        pullRequestDefinitions,
+      ),
+    ).toEqual([]);
+  });
+  test("added owners are selected without rebuilding unrelated manifest rows", () => {
+    const next = [
+      ...pullRequestDefinitions,
+      {
+        ...pullRequestDefinitions[1],
+        id: "newOwner",
+        inputs: ["Extensions/newOwner"],
+      },
+    ];
+    expect(
+      planPullRequestBuilds(
+        next,
+        ["Extensions/manifest.json"],
+        pullRequestDefinitions,
+      ).map(({ id }) => id),
+    ).toEqual(["newOwner"]);
+  });
+  test("changed shared SDK products rebuild only their dependency closure", () => {
+    const consumers = [
+      "EdithExtensionSupport",
+      "EdithExtensionUI",
+      "EdithExtensionDocuments",
+      "EdithExtensionCommands",
+    ].map((supportProduct, index) => ({
+      id: `owner${index}`,
+      inputs: [`Extensions/owner${index}`],
+      sharedInputs: ["Packages/ExtensionSupport"],
+      dependencies: [],
+      supportProduct,
+    }));
+    expect(
+      planPullRequestBuilds(
+        consumers,
+        ["Packages/ExtensionSupport/Sources/EdithExtensionUI/Screen.swift"],
+        consumers,
+      ).map(({ id }) => id),
+    ).toEqual(["owner1", "owner2", "owner3"]);
+    expect(
+      planPullRequestBuilds(
+        consumers,
+        [
+          "Packages/ExtensionSupport/Sources/EdithExtensionSupport/Runtime.swift",
+        ],
+        consumers,
+      ),
+    ).toEqual(consumers);
+  });
+  test("worker protocols rebuild all consumers while host presentation changes remain independent", () => {
+    const workers = pullRequestDefinitions.map((entry) => ({
+      ...entry,
+      sameExecutableWorker: true,
+    }));
+    for (const path of [
+      "Packages/EdithHost/Sources/EdithHostCore/HostWorkerProtocol.swift",
+      "Packages/EdithHost/Sources/EdithHostCore/HostAmbientPolicyCoordinator.swift",
+    ])
+      expect(planPullRequestBuilds(workers, [path], workers)).toEqual(workers);
+    expect(
+      planPullRequestBuilds(
+        workers,
+        ["Packages/EdithHost/Sources/EdithHost/HostHomePage.swift"],
+        workers,
+      ),
+    ).toEqual([]);
+  });
+  test("the original legacy baseline selects all39 for the first extraction", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const current = JSON.parse(
+      await readFile("Extensions/manifest.json", "utf8"),
+    );
+    expect(current).toHaveLength(39);
+    expect(planPullRequestBuilds(current, [], null)).toEqual(current);
+    await pullRequestRepository(
+      async ({ root, commit, baseSHA }) => {
+        await writeFile(
+          join(root, "Extensions/manifest.json"),
+          JSON.stringify(pullRequestDefinitions),
+        );
+        await commit();
+        const { priorDefinitions, changes } = readPullRequestBaseline(
+          root,
+          baseSHA,
+        );
+        expect(priorDefinitions).toBeNull();
+        expect(
+          planPullRequestBuilds(current, changes, priorDefinitions),
+        ).toEqual(current);
+      },
+      { legacy: true },
+    );
+  });
+  test("exact git base reads include both sides of a rename and exclude unrelated sources", async () => {
+    await pullRequestRepository(async ({ root, commit, baseSHA }) => {
+      await rename(
+        join(root, "Extensions/music/Runtime.swift"),
+        join(root, "Extensions/calendar/Moved.swift"),
+      );
+      await writeFile(join(root, "README.md"), "presentation only");
+      await commit();
+      const baseline = readPullRequestBaseline(root, baseSHA);
+      expect(baseline.changes).toContain("Extensions/music/Runtime.swift");
+      expect(baseline.changes).toContain("Extensions/calendar/Moved.swift");
+      expect(
+        planPullRequestBuilds(
+          pullRequestDefinitions,
+          baseline.changes,
+          baseline.priorDefinitions,
+        ),
+      ).toEqual(pullRequestDefinitions);
+    });
+  });
+  test("git planning rejects malformed absent or nonancestor commit identities", async () => {
+    await pullRequestRepository(async ({ root, git, commit, baseSHA }) => {
+      for (const value of ["", "main", "--all", "a".repeat(39), "g".repeat(40)])
+        expect(() => readPullRequestBaseline(root, value)).toThrow(
+          "Invalid pull request base",
+        );
+      expect(() => readPullRequestBaseline(root, "0".repeat(40))).toThrow();
+      await writeFile(join(root, "README.md"), "future");
+      const future = await commit();
+      git("checkout", "--quiet", "--detach", baseSHA);
+      expect(() => readPullRequestBaseline(root, future)).toThrow();
+    });
+  });
+  test("malformed base manifests fail closed instead of producing an empty matrix", async () => {
+    await pullRequestRepository(async ({ root, commit }) => {
+      await writeFile(join(root, "Extensions/manifest.json"), "invalid");
+      const invalid = await commit();
+      await writeFile(
+        join(root, "Extensions/manifest.json"),
+        JSON.stringify(pullRequestDefinitions),
+      );
+      await commit();
+      expect(() => readPullRequestBaseline(root, invalid)).toThrow();
+      expect(() =>
+        planPullRequestBuilds(pullRequestDefinitions, [], {}),
+      ).toThrow("Invalid base");
+      expect(() =>
+        planPullRequestBuilds(
+          pullRequestDefinitions,
+          [],
+          [pullRequestDefinitions[0], pullRequestDefinitions[0]],
+        ),
+      ).toThrow("Duplicate");
+    });
+  });
+  test("PR candidates use exact current fingerprints while catalog release planning still bumps published versions", async () => {
+    await pullRequestRepository(async ({ root, commit, baseSHA }) => {
+      const fingerprints = await Promise.all(
+        pullRequestDefinitions.map((entry) =>
+          extensionFingerprint(root, entry, pullRequestDefinitions),
+        ),
+      );
+      const published = pullRequestDefinitions.map((entry, index) => ({
+        ...entry,
+        architecture: "arm64",
+        version: "1.0.7",
+        sourceFingerprint: fingerprints[index],
+      }));
+      expect(
+        await planUnpublishedExtensions(
+          root,
+          pullRequestDefinitions,
+          published,
+        ),
+      ).toEqual([]);
+      await writeFile(
+        join(root, "Extensions/music/Runtime.swift"),
+        "changed engine",
+      );
+      await commit();
+      const candidates = await planPullRequestExtensions(
+        root,
+        pullRequestDefinitions,
+        baseSHA,
+      );
+      expect(candidates.map(({ id }) => id)).toEqual(["music", "shelf"]);
+      expect(candidates.map(({ version }) => version)).toEqual([
+        "1.0.0",
+        "1.0.0",
+      ]);
+      expect(candidates[0].fingerprint).toBe(
+        await extensionFingerprint(
+          root,
+          pullRequestDefinitions[0],
+          pullRequestDefinitions,
+        ),
+      );
+      const releases = await planUnpublishedExtensions(
+        root,
+        pullRequestDefinitions,
+        published,
+      );
+      expect(releases.map(({ id, version }) => ({ id, version }))).toEqual([
+        { id: "music", version: "1.0.8" },
+        { id: "shelf", version: "1.0.8" },
+      ]);
+    });
+  });
 });
