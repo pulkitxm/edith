@@ -24,7 +24,7 @@ struct HostBackgroundPolicySection: View {
             ).settingsCaption()
             LabeledContent("Global policy", value: model.propagationLabel)
             if let propagation = model.propagation {
-                ForEach(propagation.owners, id: \.identity.id) { owner in
+                ForEach(propagation.owners.filter { !$0.applied }, id: \.identity.id) { owner in
                     LabeledContent(owner.identity.id, value: owner.applied ? "Applied" : "Failed")
                     if let failure = owner.failure {
                         Text(failure).settingsCaption().foregroundStyle(.orange)

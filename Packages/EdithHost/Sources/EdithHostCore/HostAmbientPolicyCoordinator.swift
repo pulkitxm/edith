@@ -173,7 +173,7 @@ public struct HostAmbientPolicyReceipt: Equatable, Sendable {
     public func current(_ receipt: HostAmbientPolicyReceipt, owners: [HostAmbientPolicyOwner])
         -> Bool
     {
-        receipt.generation == generation
+        self.receipt == receipt && receipt.generation == generation
             && receipt.owners.map(\.identity) == owners.sorted { $0.id < $1.id }
     }
 
@@ -199,6 +199,9 @@ public struct HostAmbientPolicyReceipt: Equatable, Sendable {
             try Task.checkCancellation()
             guard generation == token else { throw CancellationError() }
             let selected = try owners().sorted { $0.id < $1.id }
+            guard Set(selected.map(\.id)).count == selected.count,
+                selected.allSatisfy({ HostAmbientPolicy.jobs[$0.id] != nil })
+            else { throw HostWorkerError.rejected }
             var results: [HostAmbientPolicyReceipt.Owner] = []
             for owner in selected {
                 try Task.checkCancellation()
@@ -206,7 +209,9 @@ public struct HostAmbientPolicyReceipt: Equatable, Sendable {
                 let policy = policy(owner: owner, pauseAmbientOnBattery: pauseAmbientOnBattery)
                 var failure: String?
                 do {
-                    guard try owners().contains(owner) else { throw HostWorkerError.rejected }
+                    guard owner.processIdentifier > 1, !owner.version.isEmpty,
+                        !owner.processGeneration.isEmpty, try owners().contains(owner)
+                    else { throw HostWorkerError.rejected }
                     try await apply(owner, policy)
                     try Task.checkCancellation()
                     guard try owners().contains(owner) else { throw HostWorkerError.rejected }
@@ -263,4 +268,26 @@ public struct HostBackgroundPolicyResult: Sendable {
     public init(core: HostCoreBackgroundPolicy, propagation: HostAmbientPolicyReceipt) {
         self.core = core; self.propagation = propagation
     }
+    @MainActor public static func checked(
+        core: HostCoreBackgroundPolicy,
+        validateCore: @MainActor () throws -> Void,
+        synchronize: @MainActor (Bool) async throws -> HostAmbientPolicyReceipt,
+        recheck: @MainActor () async throws -> HostCoreBackgroundPolicy,
+        current: @MainActor (HostAmbientPolicyReceipt) -> Bool
+    ) async throws -> Self {
+        try Task.checkCancellation()
+        try validateCore()
+        let propagation = try await synchronize(core.pauseAmbientOnBattery)
+        let returned = try await recheck()
+        try Task.checkCancellation()
+        try validateCore()
+        guard core == returned, propagation.pauseAmbientOnBattery == returned.pauseAmbientOnBattery,
+            propagation.owners.allSatisfy({
+                $0.policy.pauseAmbientOnBattery == returned.pauseAmbientOnBattery
+            }),
+            current(propagation)
+        else { throw HostWorkerError.rejected }
+        return .init(core: returned, propagation: propagation)
+    }
+
 }

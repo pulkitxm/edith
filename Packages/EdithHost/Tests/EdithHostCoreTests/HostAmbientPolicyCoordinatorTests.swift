@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Foundation
 import Testing
 
@@ -131,6 +132,14 @@ import Testing
                 if owner.id == "machines" { throw HostWorkerError.rejected }
             })
         #expect(applied == ["machines", "usage"] && !receipt.applied)
+        let forged = HostAmbientPolicyReceipt(
+            generation: receipt.generation,
+            pauseAmbientOnBattery: receipt.pauseAmbientOnBattery,
+            owners: receipt.owners.map {
+                .init(identity: $0.identity, policy: $0.policy, failure: nil)
+            })
+        #expect(!coordinator.current(forged, owners: owners))
+        #expect(coordinator.current(receipt, owners: owners))
         #expect(receipt.owners.first?.failure != nil && receipt.owners.last?.applied == true)
         let empty = try await coordinator.synchronize(
             pauseAmbientOnBattery: false, owners: { [] },
@@ -271,6 +280,115 @@ import Testing
             apply: { _, policy in
                 #expect(policy.subscribers["companion.health"] == 0)
             })
+    }
+
+    @Test func checkedHostReceiptRejectsChangedCoreAndRetainsActualFailedOwner() async throws {
+        let core = try corePolicy(false)
+        let owner = identity("machines")
+        let receipt = HostAmbientPolicyReceipt(
+            generation: UUID(), pauseAmbientOnBattery: false,
+            owners: [
+                .init(
+                    identity: owner,
+                    policy: .initial(owner: "machines", pauseAmbientOnBattery: false),
+                    failure: "Actual worker failure")
+            ])
+        var calls: [Bool] = []
+        let result = try await HostBackgroundPolicyResult.checked(
+            core: core, validateCore: {},
+            synchronize: { value in
+                calls.append(value); return receipt
+            }, recheck: { core }, current: { $0 == receipt })
+        #expect(
+            calls == [false] && result.pauseAmbientOnBattery == false && !result.propagation.applied
+        )
+        #expect(result.propagation.owners.first?.failure == "Actual worker failure")
+        for changed in [try corePolicy(true), try corePolicy(false, pid: 42)] {
+            do {
+                _ = try await HostBackgroundPolicyResult.checked(
+                    core: core, validateCore: {},
+                    synchronize: { _ in receipt }, recheck: { changed }, current: { _ in true })
+                Issue.record("Changed Core accepted")
+            } catch {}
+        }
+        do {
+            _ = try await HostBackgroundPolicyResult.checked(
+                core: core, validateCore: {},
+                synchronize: { _ in receipt }, recheck: { core }, current: { _ in false })
+            Issue.record("Stale worker receipt accepted")
+        } catch {}
+        var valid = true
+        do {
+            _ = try await HostBackgroundPolicyResult.checked(
+                core: core,
+                validateCore: { guard valid else { throw HostWorkerError.rejected } },
+                synchronize: { _ in
+                    valid = false; return receipt
+                }, recheck: { core }, current: { _ in true })
+            Issue.record("Changed Core birth accepted")
+        } catch {}
+    }
+
+    @Test func actualSDKAdmissionConsumesClosedHostScalarAndLeaseCountsForAllSixOwners()
+        async throws
+    {
+        let definitions: [String: [String: ExtensionAmbientCadence]] = [
+            "usage": [
+                "usage.refresh": .init(ambient: 900),
+                "usage.limits": .init(ambient: 900, live: 300),
+            ],
+            "herdr": ["sessions.discover": .init(ambient: 30, live: 2)],
+            "machines": ["machines.health": .init(ambient: 300)],
+            "attention": ["attention.ingest": .init(ambient: 900, live: 900)],
+            "companion": ["companion.health": .init(ambient: 60, live: 20)],
+            "codeStats": ["codestats.schedule": .init(ambient: 600)],
+        ]
+        let coordinator = HostAmbientPolicyCoordinator()
+        let owners = definitions.keys.sorted().map { identity($0) }
+        let policies = definitions.mapValues { jobs in
+            ExtensionAmbientPolicy(
+                jobs: jobs, onBattery: { true }, constrained: { false },
+                notificationCenter: NotificationCenter(), observeBatteryChanges: { _ in {} })
+        }
+        _ = try await coordinator.synchronize(
+            pauseAmbientOnBattery: true, owners: { owners },
+            apply: { owner, context in
+                let policy = try #require(policies[owner.id])
+                try policy.apply(context: context.context(owner: owner.id))
+                for job in definitions[owner.id]!.keys { #expect(policy.interval(for: job) == nil) }
+            })
+        for owner in owners {
+            for job in HostAmbientPolicy.jobs[owner.id]!
+            where HostAmbientPolicy.liveJobs.contains(job) {
+                try coordinator.visible(presentation: UUID(), owner: owner, job: job)
+            }
+        }
+        _ = try await coordinator.synchronize(
+            pauseAmbientOnBattery: true, owners: { owners },
+            apply: { owner, context in
+                let policy = try #require(policies[owner.id])
+                try policy.apply(context: context.context(owner: owner.id))
+                for (job, cadence) in definitions[owner.id]! {
+                    #expect(policy.interval(for: job) == cadence.live)
+                }
+            })
+        _ = try await coordinator.synchronize(
+            pauseAmbientOnBattery: false, owners: { owners },
+            apply: { owner, context in
+                let policy = try #require(policies[owner.id])
+                try policy.apply(context: context.context(owner: owner.id))
+                for (job, cadence) in definitions[owner.id]! {
+                    #expect(policy.interval(for: job) == (cadence.live ?? cadence.ambient))
+                }
+            })
+    }
+
+    private func corePolicy(_ value: Bool, pid: Int32 = 41) throws -> HostCoreBackgroundPolicy {
+        try JSONDecoder().decode(
+            HostCoreBackgroundPolicy.self,
+            from: JSONSerialization.data(withJSONObject: [
+                "processIdentifier": pid, "pauseAmbientOnBattery": value,
+            ]))
     }
 
     private func identity(

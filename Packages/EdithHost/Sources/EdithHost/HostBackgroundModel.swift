@@ -191,6 +191,7 @@ struct HostBackgroundPolicyEnvironment {
     let read: @MainActor () async throws -> HostBackgroundPolicyResult
     let set: @MainActor (Bool) async throws -> HostBackgroundPolicyResult
     var receiptCurrent: @MainActor (HostAmbientPolicyReceipt) -> Bool = { _ in true }
+    var latestReceipt: @MainActor (Bool) -> HostAmbientPolicyReceipt? = { _ in nil }
 }
 
 @MainActor @Observable final class HostBackgroundPolicyModel {
@@ -211,10 +212,13 @@ struct HostBackgroundPolicyEnvironment {
     }
     var value: Bool? { current ? policy?.pauseAmbientOnBattery : nil }
     var propagation: HostAmbientPolicyReceipt? {
-        guard current, let policy, environment.receiptCurrent(policy.propagation) else {
-            return nil
-        }
-        return policy.propagation
+        guard current, let policy else { return nil }
+        if environment.receiptCurrent(policy.propagation) { return policy.propagation }
+        guard let latest = environment.latestReceipt(policy.pauseAmbientOnBattery),
+            latest.pauseAmbientOnBattery == policy.pauseAmbientOnBattery,
+            environment.receiptCurrent(latest)
+        else { return nil }
+        return latest
     }
     var propagationLabel: String {
         guard let propagation else { return "Reload required" }

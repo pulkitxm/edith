@@ -245,6 +245,38 @@ import Testing
                 && model.propagationLabel == "Reload required")
     }
 
+    @Test func latestActualAcknowledgmentReportsFailuresWithoutInventingANewScalar() async throws {
+        let fixture = Fixture()
+        var latest: HostAmbientPolicyReceipt?
+        let model = HostBackgroundPolicyModel(
+            environment: .init(
+                owner: { fixture.owner }, read: { try await fixture.wait() },
+                set: { _ in try await fixture.wait() },
+                receiptCurrent: { $0.generation == latest?.generation },
+                latestReceipt: { _ in latest }))
+        let initial = try scalar(false)
+        latest = initial.propagation
+        let read = Task { await model.refresh() }
+        await fixture.started(1)
+        fixture.finish(0, initial)
+        await read.value
+        #expect(model.value == false && model.propagationLabel == "No active ambient owners")
+        let owner = HostAmbientPolicyOwner(
+            id: "machines", version: "1", processIdentifier: 77, processGeneration: "birth")
+        latest = .init(
+            generation: UUID(), pauseAmbientOnBattery: false,
+            owners: [
+                .init(
+                    identity: owner,
+                    policy: .initial(owner: "machines", pauseAmbientOnBattery: false),
+                    failure: "Synchronization failed")
+            ])
+        #expect(model.value == false && model.propagationLabel == "Some owners failed")
+        #expect(model.propagation?.owners.first?.failure == "Synchronization failed")
+        latest = .init(generation: UUID(), pauseAmbientOnBattery: true, owners: [])
+        #expect(model.value == false && model.propagation == nil)
+    }
+
     private func scalar(_ value: Bool, pid: Int32 = 41) throws -> HostBackgroundPolicyResult {
         let core = try JSONDecoder().decode(
             HostCoreBackgroundPolicy.self,

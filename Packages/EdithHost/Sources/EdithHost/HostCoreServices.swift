@@ -30,6 +30,8 @@ import SwiftUI
     @ObservationIgnored private let settingsCapture: HostSettingsArchive
     @ObservationIgnored private var settingsScheduler: HostSettingsScheduler?
     @ObservationIgnored private var settingsObserver: NSObjectProtocol?
+    @ObservationIgnored private var backgroundPolicyRequests = 0
+    @ObservationIgnored private var backgroundPolicySynchronizationNeeded = false
     @ObservationIgnored private var workflowValue: HostWorkflowOnboardingModel?
 
     init(
@@ -45,12 +47,13 @@ import SwiftUI
             identity: identity, cloudDirectory: HostCoreCloud.directory(identity: identity))
         self.executable = executable
         panel = HostPanelService(defaults: defaults, action: togglePanel)
-        marketplace.sessions.ambientPackageSelected = { package in
-            marketplace.installed[package.id] == package
+        marketplace.sessions.ambientPackageSelected = { [weak marketplace] package in
+            guard let marketplace else { return false }
+            return marketplace.installed[package.id] == package
                 && !marketplace.pendingRemovalIDs.contains(package.id)
         }
         marketplace.sessions.ambientPolicyCoordinator.changed = { [weak self] in
-            Task { @MainActor [weak self] in _ = try? await self?.backgroundPolicy() }
+            self?.backgroundPolicyChanged()
         }
     }
 
@@ -314,19 +317,23 @@ import SwiftUI
         settingsObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
             MainActor.assumeIsolated {
                 self?.settingsScheduler?.preferencesChanged()
-                Task { @MainActor [weak self] in _ = try? await self?.backgroundPolicy() }
+                self?.backgroundPolicyChanged()
             }
         }
         settingsScheduler?.start()
     }
 
     func backgroundPolicy() async throws -> HostBackgroundPolicyResult {
+        backgroundPolicyRequests += 1
+        defer { finishBackgroundPolicyRequest() }
         let core = try await backgroundPolicyControl().read()
         return try await propagateBackgroundPolicy(core)
     }
 
     func setBackgroundPolicy(pauseAmbientOnBattery: Bool) async throws -> HostBackgroundPolicyResult
     {
+        backgroundPolicyRequests += 1
+        defer { finishBackgroundPolicyRequest() }
         let core = try await backgroundPolicyControl().set(
             pauseAmbientOnBattery: pauseAmbientOnBattery)
         return try await propagateBackgroundPolicy(core)
@@ -336,15 +343,40 @@ import SwiftUI
         -> HostBackgroundPolicyResult
     {
         let kernel = try HostRemoteKernelIdentity.read(core.processIdentifier)
-        let propagation = try await marketplace.sessions.synchronizeAmbientPolicy(
-            pauseAmbientOnBattery: core.pauseAmbientOnBattery)
-        let checked = try await backgroundPolicyControl().read()
-        try Task.checkCancellation()
-        guard online, kernel.isRunning, core == checked,
-            marketplace.sessions.ambientPolicyCoordinator.current(
-                propagation, owners: marketplace.sessions.ambientPolicyOwners())
-        else { throw HostWorkerError.rejected }
-        return .init(core: checked, propagation: propagation)
+        let result = try await HostBackgroundPolicyResult.checked(
+            core: core,
+            validateCore: {
+                guard self.online, kernel.isRunning else { throw HostWorkerError.rejected }
+            },
+            synchronize: {
+                try await self.marketplace.sessions.synchronizeAmbientPolicy(
+                    pauseAmbientOnBattery: $0)
+            },
+            recheck: { try await self.backgroundPolicyControl().read() },
+            current: {
+                self.marketplace.sessions.ambientPolicyCoordinator.current(
+                    $0, owners: self.marketplace.sessions.ambientPolicyOwners())
+            })
+        backgroundPolicySynchronizationNeeded = false
+        return result
+    }
+
+    private func backgroundPolicyChanged() {
+        backgroundPolicySynchronizationNeeded = true
+        guard backgroundPolicyRequests == 0 else { return }
+        Task { @MainActor [weak self] in
+            guard let self, backgroundPolicyRequests == 0, backgroundPolicySynchronizationNeeded
+            else { return }
+            backgroundPolicySynchronizationNeeded = false
+            _ = try? await backgroundPolicy()
+        }
+    }
+
+    private func finishBackgroundPolicyRequest() {
+        backgroundPolicyRequests -= 1
+        if backgroundPolicyRequests == 0, backgroundPolicySynchronizationNeeded {
+            backgroundPolicyChanged()
+        }
     }
 
     private func backgroundPolicyControl() -> HostCoreBackgroundPolicyControl {

@@ -77,6 +77,12 @@ import Foundation
             receiptCurrent: { receipt in
                 services.marketplace.sessions.ambientPolicyCoordinator.current(
                     receipt, owners: services.marketplace.sessions.ambientPolicyOwners())
+            },
+            latestReceipt: { value in
+                guard let receipt = services.marketplace.sessions.ambientPolicyCoordinator.receipt,
+                    receipt.pauseAmbientOnBattery == value
+                else { return nil }
+                return receipt
             })
     }
 
