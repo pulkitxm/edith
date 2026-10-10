@@ -4,6 +4,7 @@ import {
   copyFile,
   mkdir,
   readdir,
+  readFile,
   rm,
   stat,
   writeFile,
@@ -53,12 +54,10 @@ const products = execFileSync(
 await rm(destination, { recursive: true, force: true });
 const contents = join(destination, "Contents");
 const executable = join(contents, "MacOS/Edith");
-const library = join(contents, "Frameworks/libExtensionMarketplace.dylib");
 await mkdir(join(contents, "MacOS"), { recursive: true });
 await mkdir(join(contents, "Frameworks"), { recursive: true });
 await mkdir(join(contents, "Resources"), { recursive: true });
 await copyFile(join(products, "EdithHost"), executable);
-await copyFile(join(products, "libExtensionMarketplace.dylib"), library);
 const sparkle = join(contents, "Frameworks/Sparkle.framework");
 execFileSync("/bin/cp", ["-RL", join(products, "Sparkle.framework"), sparkle]);
 await rm(join(sparkle, "Versions"), { recursive: true, force: true });
@@ -158,11 +157,6 @@ execFileSync("python3", [
   JSON.stringify(plist),
   join(contents, "Info.plist"),
 ]);
-execFileSync("install_name_tool", [
-  "-id",
-  "@rpath/libExtensionMarketplace.dylib",
-  library,
-]);
 const linked = execFileSync("otool", ["-L", executable], { encoding: "utf8" });
 for (const line of linked.split("\n").slice(1)) {
   const dependency = line.trim().split(" ")[0];
@@ -174,24 +168,13 @@ for (const line of linked.split("\n").slice(1)) {
       executable,
     ]);
   }
-  if (
-    dependency.endsWith("/libExtensionMarketplace.dylib") &&
-    dependency !== "@rpath/libExtensionMarketplace.dylib"
-  ) {
-    execFileSync("install_name_tool", [
-      "-change",
-      dependency,
-      "@rpath/libExtensionMarketplace.dylib",
-      executable,
-    ]);
-  }
 }
 execFileSync("install_name_tool", [
   "-add_rpath",
   "@executable_path/../Frameworks",
   executable,
 ]);
-for (const file of [executable, library]) {
+for (const file of [executable]) {
   const commands = execFileSync("otool", ["-l", file], { encoding: "utf8" });
   for (const match of commands.matchAll(
     /cmd LC_RPATH\n\s+cmdsize \d+\n\s+path (\S+) \(offset/g,
@@ -214,7 +197,7 @@ execFileSync("codesign", ["--force", "--sign", "-", destination], {
 execFileSync("codesign", ["--verify", "--deep", "--strict", destination], {
   stdio: "inherit",
 });
-const closure = execFileSync("otool", ["-L", executable, library], {
+const closure = execFileSync("otool", ["-L", executable], {
   encoding: "utf8",
 });
 for (const name of [
@@ -232,7 +215,7 @@ for (const name of [
     `Feature dependency leaked into the host: ${name}`,
   );
 }
-const symbols = execFileSync("nm", ["-g", executable, library], {
+const symbols = execFileSync("nm", ["-g", executable], {
   encoding: "utf8",
 });
 for (const name of [
@@ -263,9 +246,7 @@ assert(
   `The minimal host exceeds its 5 MB size limit: ${bytes}`,
 );
 const index = JSON.parse(
-  execFileSync(executable, ["extensions", "catalog", "--json"], {
-    encoding: "utf8",
-  }),
+  await readFile(join(contents, "Resources/index.json"), "utf8"),
 );
 assert(index.length >= 35);
 process.stdout.write(

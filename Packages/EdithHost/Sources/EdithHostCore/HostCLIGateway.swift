@@ -51,7 +51,7 @@ import Foundation
 
     private func invoke(_ request: HostCLIRequest, id: String) async throws -> Data {
         guard let package = marketplace.installed[id],
-            marketplace.sessions.states[id] == .active,
+            marketplace.sessions.activeIDs.contains(id),
             marketplace.sessions.versions[id] == package.version,
             let pid = marketplace.sessions.processIdentifiers[id], kill(pid, 0) == 0,
             let operation = request.operation
@@ -68,7 +68,7 @@ import Foundation
                 operation, payload: request.payload, timeout: request.timeout)
         } catch ExtensionPeerError.timedOut { throw HostCLIError.timedOut }
         try Task.checkCancellation()
-        guard marketplace.sessions.states[id] == .active,
+        guard marketplace.sessions.activeIDs.contains(id),
             marketplace.sessions.processIdentifiers[id] == pid,
             marketplace.sessions.versions[id] == package.version,
             marketplace.installed[id]?.version == package.version,
@@ -89,10 +89,12 @@ import Foundation
         let entry = marketplace.entries.first { $0.id == id }
         return [
             "id": id, "title": entry?.title ?? id,
-            "installed": marketplace.downloadedIDs.contains(id),
+            "installed": marketplace.installedVersions[id] != nil,
+            "removalPending": marketplace.pendingRemovalIDs.contains(id),
+            "disablePending": marketplace.sessions.pendingDisableIDs.contains(id),
             "compatible": marketplace.installed[id] != nil,
             "enabled": marketplace.sessions.enabledIDs.contains(id),
-            "running": marketplace.sessions.states[id] == .active,
+            "running": marketplace.sessions.activeIDs.contains(id),
             "state": marketplace.sessions.states[id]?.rawValue ?? "notInstalled",
             "version": marketplace.installed[id]?.version as Any? ?? NSNull(),
             "availableVersion": marketplace.available[id]?.version as Any? ?? NSNull(),

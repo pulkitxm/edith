@@ -45,7 +45,7 @@ import Foundation
             HostWorker(
                 configuration: HostWorkerConfiguration(
                     identity: identity, extensionID: package.id, version: package.version),
-                executable: executable)
+                executable: executable, errorOutput: .standardError)
         }
         let marketplace = try HostMarketplace(
             identity: identity, entries: HostIndex.bundled(), store: store,

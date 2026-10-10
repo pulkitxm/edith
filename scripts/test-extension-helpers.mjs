@@ -24,10 +24,6 @@ try {
       join(products, "libEdithShared.dylib"),
       join(shared, "EdithShared"),
     );
-    await copyFile(
-      join(products, "libExtensionMarketplace.dylib"),
-      join(frameworks, "libExtensionMarketplace.dylib"),
-    );
     await writeFile(
       join(app, "Contents/Info.plist"),
       JSON.stringify({

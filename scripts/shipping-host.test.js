@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import {
   lstatSync,
-  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -88,16 +87,14 @@ test.skipIf(!fixture || process.platform !== "darwin")(
         expect(dependencies.stdout.toString()).not.toContain(
           "/Sparkle.framework/Versions/",
         );
-        const catalog = run(
-          join(app, "Contents/MacOS/ed"),
-          "extensions",
-          "catalog",
-          "--json",
+        const catalog = JSON.parse(
+          readFileSync(join(app, "Contents/Resources/index.json"), "utf8"),
         );
-        expect(catalog.exitCode).toBe(0);
-        expect(
-          JSON.parse(catalog.stdout.toString()).length,
-        ).toBeGreaterThanOrEqual(35);
+        expect(catalog.length).toBeGreaterThanOrEqual(35);
+        const stopped = run(join(app, "Contents/MacOS/ed"), "extensions", "ls");
+        expect(stopped.exitCode).toBe(3);
+        expect(stopped.stdout.toString()).toBe("");
+        expect(JSON.parse(stopped.stderr.toString()).exitCode).toBe(3);
         writeFileSync(
           join(app, "Contents/Library/feature.bundle"),
           "synthetic payload",

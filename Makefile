@@ -56,10 +56,8 @@ site-dev:
 approve-package-plugins:
 	python3 scripts/approve-package-plugins.py
 
-cli: approve-package-plugins
-	$(XCODEBUILD) -scheme ed -configuration Release build
-	build/Build/Products/Release/ed install --directory $(HOME)/.local/bin
-	build/Build/Products/Release/ed completions install
+cli:
+	./build.sh --no-open
 
 icon:
 	@set -eu; \
@@ -237,11 +235,16 @@ ci-extension-studio-native:
 ci-extension-commands:
 	bun scripts/test-extension-commands.mjs
 
+.PHONY: ci-host-cli
+ci-host-cli:
+	bun scripts/test-host-cli.mjs
+
 ci-marketplace-runtime:
 	swift format lint --strict --parallel --recursive Packages/ExtensionMarketplace/Sources Packages/ExtensionMarketplace/Tests
 	swift test --package-path Packages/ExtensionMarketplace --build-system native --jobs $(EXTENSION_SWIFT_JOBS)
 
 ci-marketplace-host: ci-host host
+	$(MAKE) ci-host-cli
 	python3 -B scripts/test-extension-size-report.py
 	python3 -B scripts/test-extension-host-size-report.py
 	bun scripts/extension-host-abi.mjs --write

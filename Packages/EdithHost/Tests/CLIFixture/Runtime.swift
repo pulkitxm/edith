@@ -1,3 +1,4 @@
+import EdithExtensionArchive
 import EdithExtensionSupport
 import Foundation
 
@@ -9,6 +10,16 @@ final class CLIFixtureRuntime: NSObject {
         commands.invoke(request, completion: completion) { operation, payload in
             switch operation {
             case "echo": return payload
+            case "archive":
+                guard
+                    let input = try JSONSerialization.jsonObject(with: payload)
+                        as? [String: String],
+                    let encoded = input["archive"], let archive = Data(base64Encoded: encoded),
+                    let contents = try ArchiveFileReader.read(
+                        named: "fixture.txt", from: archive, maximumBytes: 128),
+                    let text = String(data: contents, encoding: .utf8)
+                else { throw ExtensionPeerError.rejected("Invalid archive fixture.") }
+                return try JSONSerialization.data(withJSONObject: ["text": text])
             case "wait":
                 let marker = ExtensionData.root.appendingPathComponent("wait.ready")
                 try Data("ready".utf8).write(to: marker, options: .atomic)
