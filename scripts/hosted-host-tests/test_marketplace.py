@@ -73,7 +73,7 @@ class MarketplaceDiagnosticsTests(unittest.TestCase):
                 with patch.object(sys, 'argv', ['marketplace.py']), patch.object(
                         marketplace.subprocess, 'check_output', side_effect=[
                             'a' * 40, '/Applications/Xcode.app/Contents/Developer',
-                            '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift']), patch.object(
+                            '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-build']), patch.object(
                         marketplace.watchdog, 'admit'), patch.object(
                         marketplace.watchdog, 'canonical_path', side_effect=lambda path, **_: Path(path)), patch.object(
                         marketplace, 'swift_contract', return_value={'entry': 'synthetic', 'executable': 'synthetic', 'identity': {}}), patch.object(
@@ -88,13 +88,13 @@ class MarketplaceDiagnosticsTests(unittest.TestCase):
                 os.chdir(original)
 
     def test_selected_swift_direct_and_in_toolchain_symlink_preserve_entry_and_pin_target(self):
-        for linked in [None, 'swift-driver', 'swift-frontend']:
+        for linked in [None, 'swift-package']:
             with tempfile.TemporaryDirectory() as directory:
                 developer = Path(directory).resolve() / 'Xcode.app/Contents/Developer'
                 binary = developer / 'Toolchains/XcodeDefault.xctoolchain/usr/bin'
                 binary.mkdir(parents=True)
-                entry = binary / 'swift'
-                target = binary / (linked or 'swift')
+                entry = binary / 'swift-build'
+                target = binary / (linked or 'swift-build')
                 target.write_bytes(b'synthetic executable')
                 target.chmod(0o700)
                 if linked:
@@ -119,7 +119,7 @@ class MarketplaceDiagnosticsTests(unittest.TestCase):
             developer = Path(directory).resolve() / 'Xcode.app/Contents/Developer'
             binary = developer / 'Toolchains/XcodeDefault.xctoolchain/usr/bin'
             binary.mkdir(parents=True)
-            entry = binary / 'swift'
+            entry = binary / 'swift-build'
             outside = Path(directory).resolve() / 'foreign-swift'
             outside.write_bytes(b'synthetic executable')
             outside.chmod(0o700)
@@ -137,12 +137,113 @@ class MarketplaceDiagnosticsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 marketplace.swift_contract(developer, binary / '..' / 'bin/swift')
 
-    def test_command_preserves_the_full_native_suite_without_filters_or_serial_override(self):
+    def test_separate_build_and_unfiltered_serial_helper_preserve_the_full_native_suite(self):
         developer = '/Applications/Xcode_26.6.app/Contents/Developer'
         self.assertEqual(marketplace.command(developer), [
-            developer + '/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift', 'test',
+            developer + '/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-build',
             '--package-path', 'Packages/ExtensionMarketplace', '--build-system', 'native',
-            '--jobs', '1'])
+            '--jobs', '1', '--build-tests'])
+        executable = '/owned/ExtensionMarketplacePackageTests.xctest/Contents/MacOS/ExtensionMarketplacePackageTests'
+        args = marketplace.test_command('/selected/swiftpm-testing-helper', executable)
+        self.assertEqual(args, ['/selected/swiftpm-testing-helper', '--test-bundle-path',
+                               executable, 'test', '--skip-build', '--no-parallel',
+                               '--package-path', 'Packages/ExtensionMarketplace', '--build-system',
+                               'native', '--jobs', '1', executable, '--testing-library', 'swift-testing'])
+        self.assertNotIn('--filter', args)
+        self.assertNotIn('--skip', args)
+        for unsafe in ['relative', '/foreign/Other.xctest/Contents/MacOS/Other',
+                       '/owned/../ExtensionMarketplacePackageTests.xctest/Contents/MacOS/ExtensionMarketplacePackageTests']:
+            with self.assertRaises(ValueError):
+                marketplace.test_command('/selected/swiftpm-testing-helper', unsafe)
+
+    def test_selected_helper_keeps_its_pinned_executable_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            helper = Path(directory).resolve() / 'swiftpm-testing-helper'
+            helper.write_bytes(b'synthetic executable')
+            helper.chmod(0o700)
+            image = helper.parent / 'ExtensionMarketplacePackageTests.xctest/Contents/MacOS/ExtensionMarketplacePackageTests'
+            image.parent.mkdir(parents=True)
+            image.write_bytes(b'synthetic executable'); image.chmod(0o700)
+            calls = []
+            launch = marketplace.helper_process_factory(helper, image, lambda args, **options: calls.append(args))
+            args = marketplace.test_command(helper, image)
+            launch(args)
+            self.assertEqual(calls, [args])
+            with self.assertRaises(ValueError):
+                launch(['/foreign/helper'])
+            helper.write_bytes(b'changed synthetic exe')
+            with self.assertRaises(ValueError):
+                launch(args)
+            self.assertEqual(len(calls), 1)
+            launch = marketplace.helper_process_factory(helper, image, lambda args, **options: calls.append(args))
+            image.write_bytes(b'changed synthetic exe')
+            with self.assertRaises(ValueError):
+                launch(args)
+            self.assertEqual(len(calls), 1)
+
+    def test_marketplace_runtime_rejects_foreign_bundles_symlinks_and_unsafe_helper(self):
+        original = Path.cwd()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            developer = root / 'Xcode.app/Contents/Developer'
+            toolchain = developer / 'Toolchains/XcodeDefault.xctoolchain'
+            helper = toolchain / 'usr/libexec/swift/pm/swiftpm-testing-helper'
+            binary = root / 'Packages/ExtensionMarketplace/.build/arm64-apple-macosx/debug'
+            image = binary / 'ExtensionMarketplacePackageTests.xctest/Contents/MacOS/ExtensionMarketplacePackageTests'
+            platform = developer / 'Platforms/MacOSX.platform/Developer'
+            testing = toolchain / 'usr/lib/swift/macosx/testing'
+            for path in [helper.parent, image.parent, platform / 'Library/Frameworks',
+                         platform / 'Library/PrivateFrameworks', platform / 'usr/lib', testing]:
+                path.mkdir(parents=True)
+            for path in [helper, image]:
+                path.write_bytes(b'synthetic unexecuted'); path.chmod(0o700)
+            try:
+                os.chdir(root)
+                selected, executable, env = marketplace.runtime_contract(developer, binary, {
+                    'DYLD_LIBRARY_PATH': '/foreign/library', 'DYLD_FRAMEWORK_PATH': '/foreign/framework'})
+                self.assertEqual((selected, executable), (helper, image))
+                self.assertEqual(env['DYLD_LIBRARY_PATH'], str(testing) + ':' + str(platform / 'usr/lib'))
+                self.assertEqual(env['NO_COLOR'], '1')
+                self.assertNotIn('/foreign', env['DYLD_FRAMEWORK_PATH'])
+                self.assertEqual(env['DEVELOPER_DIR'], str(developer))
+                outside = root / 'foreign/debug'; outside.mkdir(parents=True)
+                with self.assertRaises(ValueError):
+                    marketplace.runtime_contract(developer, outside, {})
+                image.unlink(); image.symlink_to(helper)
+                with self.assertRaises(ValueError):
+                    marketplace.runtime_contract(developer, binary, {})
+                image.unlink(); image.write_bytes(b'synthetic unexecuted'); image.chmod(0o700)
+                helper.chmod(0o777)
+                with self.assertRaises(ValueError):
+                    marketplace.runtime_contract(developer, binary, {})
+            finally:
+                os.chdir(original)
+
+    def test_unreaped_child_retains_a_failure_ledger_without_claiming_zero_owned_processes(self):
+        class Child:
+            pid = 123
+            returncode = None
+            def poll(self): return None
+            def wait(self, timeout): raise marketplace.subprocess.TimeoutExpired(['synthetic'], timeout)
+        class Ownership:
+            def __init__(self, leader, uid):
+                self.known = {123: (123, 1, 2, '/owned/swiftpm-testing-helper', 123)}
+            def refresh(self): return list(self.known.values())
+            def identity(self, pid): return self.known.get(pid)
+            def terminate(self, value): signals.append(value)
+        signals = []
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+                marketplace.watchdog, 'owned_crash_reports', return_value=[]), patch.object(
+                marketplace.watchdog.subprocess, 'run'):
+            result = marketplace.watchdog.run_batch(
+                'marketplace', ['synthetic'], Path(directory), 0,
+                process_factory=lambda *_, **__: Child(), ownership_factory=Ownership, sleep=lambda _: None,
+                testing_process=marketplace.is_testing_process)
+        self.assertTrue(result['retirementFailed'])
+        self.assertTrue(result['observedTestingProcess'])
+        self.assertEqual(result['remainingOwnedProcesses'], 1)
+        self.assertFalse(marketplace.passed(result))
+        self.assertIn(marketplace.watchdog.signal.SIGKILL, signals)
 
     def test_only_actual_marketplace_testing_names_are_admitted_for_sampling(self):
         for name in ['swiftpm-testing', 'swiftpm-testing-helper', 'ExtensionMarketplacePackageTests']:
