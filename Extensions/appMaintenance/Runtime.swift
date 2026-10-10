@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
@@ -8,11 +9,31 @@ import SwiftUI
 @objc(EdithAppMaintenanceExtensionRuntime)
 final class ExtensionRuntime: NSObject {
     private var model: AppMaintenanceModel?
+    private var uiModel: AppMaintenanceModel?
+    private var uiClient: ExtensionEngineClient?
     private let commands = ExtensionCommandRegistry()
+    private let cliStreams = try? ExtensionCLIStreams(owner: "appMaintenance")
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let model = self?.model else { throw ExtensionPeerError.unavailable }
+            if command == "appMaintenance.cli.catalog" { return try MaintenanceCLICatalog.data() }
+            if command.hasPrefix("maintenance.cli.stream.") {
+                guard let cliStreams = self?.cliStreams else {
+                    throw ExtensionPeerError.unavailable
+                }
+                return try cliStreams.invoke(
+                    MaintenanceCommand.self, operation: command, prefix: "maintenance.cli.stream",
+                    payload: payload)
+            }
+            if command == "maintenance.cli" {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                return try JSONEncoder().encode(try await MaintenanceCLIExecution.run(request))
+            }
+            if command.hasPrefix("maintenance.ui.") {
+                return try await AppMaintenanceUICommands.execute(
+                    command, payload: payload, model: model)
+            }
             if command == "surface.snapshot" || command == "surface.perform" {
                 return try await SurfaceCommandService.execute(
                     providerID: "appMaintenance", command: command, payload: payload,
@@ -27,8 +48,9 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        commands.shutdown()
         Task {
+            await commands.shutdownAndWait()
+            await cliStreams?.stopAndWait()
             await model?.shutdown()
             completion()
         }
@@ -50,14 +72,20 @@ final class ExtensionRuntime: NSObject {
             else { return ["ok": false] as NSDictionary }
             if model == nil { model = AppMaintenanceModel() }
             TextEditingCommands.install()
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                let client = configuration.engineClient
+            else { return ["ok": false] as NSDictionary }
+            stopUI(); uiClient = client; uiModel = AppMaintenanceModel(engineClient: client)
+        case "stopUI": stopUI()
         case "view":
-            guard let model else { return ["ok": false] as NSDictionary }
+            guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost { AppMaintenanceView(model: model) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
-            commands.shutdown()
+            commands.shutdown(); cliStreams?.stop()
             model = nil
             TextEditingCommands.shutdown()
         case "status": return ["ok": true, "running": model != nil] as NSDictionary
@@ -66,6 +94,11 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
 
+    private func stopUI() {
+        let model = uiModel; uiModel = nil
+        uiClient?.invalidate(); uiClient = nil
+        Task { await model?.shutdown() }
+    }
 }
 
 @_cdecl("edith_extension_create")

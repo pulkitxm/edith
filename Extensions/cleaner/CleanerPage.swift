@@ -11,5 +11,6 @@ struct CleanerPage: View {
         } content: {
             CleanerCard(dark: scheme == .dark, model: model)
         }
+        .pageRefresh(interval: { .seconds(1) }) { await model.refreshRemote() }
     }
 }

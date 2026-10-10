@@ -417,7 +417,8 @@ struct VirtualCameraBackgroundPanel: View {
                     supportsOpacity: false)
             case .image:
                 VirtualCameraImageRow(
-                    title: "Backdrop image", path: model.composition.background.imagePath,
+                    model: model, title: "Backdrop image",
+                    path: model.composition.background.imagePath,
                     dark: dark, choose: { model.chooseImage(for: .background) },
                     remove: { model.removeImage(for: .background) })
             }
@@ -426,6 +427,7 @@ struct VirtualCameraBackgroundPanel: View {
 }
 
 struct VirtualCameraImageRow: View {
+    let model: VirtualCameraPageModel
     let title: String
     let path: String?
     let dark: Bool
@@ -436,7 +438,8 @@ struct VirtualCameraImageRow: View {
         HStack(spacing: UIScale.pt(10)) {
             Group {
                 if let path {
-                    CameraAssetThumbnail(url: URL(fileURLWithPath: path), side: 56, corner: 6)
+                    CameraAssetThumbnail(
+                        model: model, url: URL(fileURLWithPath: path), side: 56, corner: 6)
                 } else {
                     Image(systemName: "photo")
                         .foregroundStyle(DashSkin.inkFaint(dark))
@@ -506,7 +509,8 @@ struct VirtualCameraOverlayPanel: View {
             }
             VirtualCameraPanelSection(title: "Logo", dark: dark) {
                 VirtualCameraImageRow(
-                    title: "Logo", path: model.composition.overlays.logo.imagePath, dark: dark,
+                    model: model, title: "Logo", path: model.composition.overlays.logo.imagePath,
+                    dark: dark,
                     choose: { model.chooseImage(for: .logo) },
                     remove: { model.removeImage(for: .logo) })
                 if model.composition.overlays.logo.imagePath != nil {

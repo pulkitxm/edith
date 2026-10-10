@@ -72,6 +72,7 @@ struct BlitzTreePage: View {
                 )
             }
         }
+        .pageRefresh(interval: { .seconds(1) }) { await model.refreshRemote() }
     }
 
     private var folderBinding: Binding<String> {
@@ -84,9 +85,8 @@ struct BlitzTreePage: View {
     }
 
     private func folderIsValid(_ path: String) -> Bool {
-        var isDirectory: ObjCBool = false
-        return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
-            && isDirectory.boolValue
+        path.hasPrefix("/") && !path.utf8.contains(0)
+
     }
 
     private var navigation: some View {
@@ -235,7 +235,7 @@ struct BlitzTreePage: View {
     }
 
     private func reveal(_ entry: BlitzTreeReport.Entry) {
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: entry.path)])
+        model.reveal(entry.path)
     }
 
     private func bytes(_ value: UInt64) -> String {

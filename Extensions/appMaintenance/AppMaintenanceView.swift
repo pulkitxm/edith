@@ -62,18 +62,30 @@ struct AppMaintenanceView: View {
     @Environment(\.compactLayout) private var compact
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
-    @AppStorage(MaintenancePreferences.installDestination, store: SharedDefaults.store)
-    private var installDestinationRaw = AppMaintenanceInstallDestination.user.rawValue
-    @AppStorage(MaintenancePreferences.updateAutoRefresh, store: SharedDefaults.store)
-    private var updateAutoRefresh = false
-    @AppStorage(MaintenancePreferences.updateNotifications, store: SharedDefaults.store)
-    private var updateNotifications = true
-    @AppStorage(MaintenancePreferences.updateRefreshInterval, store: SharedDefaults.store)
-    private var updateRefreshInterval = 86_400.0
-    @AppStorage(MaintenancePreferences.updateConcurrency, store: SharedDefaults.store)
-    private var updateConcurrency = 2
-    @AppStorage(MaintenancePreferences.updateRetries, store: SharedDefaults.store)
-    private var updateRetries = 1
+    private var installDestinationRaw: String {
+        get { model.preferences.installDestination }
+        nonmutating set { model.updatePreferences { $0.installDestination = newValue } }
+    }
+    private var updateAutoRefresh: Bool {
+        get { model.preferences.autoRefresh }
+        nonmutating set { model.updatePreferences { $0.autoRefresh = newValue } }
+    }
+    private var updateNotifications: Bool {
+        get { model.preferences.notifications }
+        nonmutating set { model.updatePreferences { $0.notifications = newValue } }
+    }
+    private var updateRefreshInterval: Double {
+        get { model.preferences.refreshInterval }
+        nonmutating set { model.updatePreferences { $0.refreshInterval = newValue } }
+    }
+    private var updateConcurrency: Int {
+        get { model.preferences.concurrency }
+        nonmutating set { model.updatePreferences { $0.concurrency = newValue } }
+    }
+    private var updateRetries: Int {
+        get { model.preferences.retries }
+        nonmutating set { model.updatePreferences { $0.retries = newValue } }
+    }
 
     private var filteredApplications: [InstalledApplication] {
         let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -113,6 +125,7 @@ struct AppMaintenanceView: View {
         } content: {
             content
         }
+        .pageRefresh(interval: { .seconds(1) }) { await model.refreshRemote() }
         .pageTask(active: section.usesApplicationInventory, cancel: model.cancel) {
             model.refresh(interval: updateRefreshInterval)
         }
@@ -131,7 +144,7 @@ struct AppMaintenanceView: View {
         }
         .edithSheet(item: installPlanBinding, dismissible: model.phase != .installing) { plan in
             AppMaintenanceInstallReview(
-                plan: plan, installing: model.phase == .installing,
+                model: model, plan: plan, installing: model.phase == .installing,
                 onCancel: { model.cancelInstallPlan() },
                 onInstall: { replaceExisting, moveImageToTrash in
                     model.installDiskImage(
@@ -192,7 +205,12 @@ struct AppMaintenanceView: View {
                                     updateSettings
                                 }
                                 Menu {
-                                    Picker("Destination", selection: $installDestinationRaw) {
+                                    Picker(
+                                        "Destination",
+                                        selection: Binding(
+                                            get: { installDestinationRaw },
+                                            set: { installDestinationRaw = $0 })
+                                    ) {
                                         ForEach(
                                             AppMaintenanceInstallDestination.allCases,
                                             id: \.rawValue
@@ -303,7 +321,7 @@ struct AppMaintenanceView: View {
                     Button {
                         model.select(application)
                     } label: {
-                        AppMaintenanceApplicationRow(application: application)
+                        AppMaintenanceApplicationRow(model: model, application: application)
                     }
                     .buttonStyle(
                         EdithButtonStyle(
@@ -354,7 +372,7 @@ struct AppMaintenanceView: View {
                         } label: {
                             HStack(spacing: UIScale.pt(9)) {
                                 if let path = item.applicationPath {
-                                    Image(nsImage: NSWorkspace.shared.icon(forFile: path))
+                                    Image(nsImage: model.icon(for: path))
                                         .resizable()
                                         .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                                 } else {
@@ -503,7 +521,7 @@ struct AppMaintenanceView: View {
             VStack(alignment: .leading, spacing: UIScale.pt(18)) {
                 HStack(spacing: UIScale.pt(14)) {
                     if let path = item.applicationPath {
-                        Image(nsImage: NSWorkspace.shared.icon(forFile: path))
+                        Image(nsImage: model.icon(for: path))
                             .resizable()
                             .frame(width: UIScale.pt(54), height: UIScale.pt(54))
                     }
@@ -558,9 +576,7 @@ struct AppMaintenanceView: View {
                         Button("Copy Command") { copy(item.command) }
                         if let path = item.applicationPath {
                             Button("Reveal in Finder") {
-                                NSWorkspace.shared.activateFileViewerSelecting([
-                                    URL(fileURLWithPath: path)
-                                ])
+                                model.reveal(URL(fileURLWithPath: path))
                             }
                         }
                         Button("Ignore \(item.availableVersion)") { model.ignore(item) }
@@ -608,16 +624,29 @@ struct AppMaintenanceView: View {
 
     private var updateSettings: some View {
         Form {
-            Toggle("Automatic refresh", isOn: $updateAutoRefresh)
-            Picker("Refresh", selection: $updateRefreshInterval) {
+            Toggle(
+                "Automatic refresh",
+                isOn: Binding(get: { updateAutoRefresh }, set: { updateAutoRefresh = $0 }))
+            Picker(
+                "Refresh",
+                selection: Binding(
+                    get: { updateRefreshInterval }, set: { updateRefreshInterval = $0 })
+            ) {
                 Text("Hourly").tag(3_600.0)
                 Text("Daily").tag(86_400.0)
                 Text("Weekly").tag(604_800.0)
             }
             .disabled(!updateAutoRefresh)
-            Toggle("Notifications", isOn: $updateNotifications)
-            Stepper("Concurrency: \(updateConcurrency)", value: $updateConcurrency, in: 1...4)
-            Stepper("Retries: \(updateRetries)", value: $updateRetries, in: 0...3)
+            Toggle(
+                "Notifications",
+                isOn: Binding(get: { updateNotifications }, set: { updateNotifications = $0 }))
+            Stepper(
+                "Concurrency: \(updateConcurrency)",
+                value: Binding(get: { updateConcurrency }, set: { updateConcurrency = $0 }),
+                in: 1...4)
+            Stepper(
+                "Retries: \(updateRetries)",
+                value: Binding(get: { updateRetries }, set: { updateRetries = $0 }), in: 0...3)
             Button("Reset Ignored, Snoozed, and Excluded Apps") {
                 model.resetUpdatePolicies()
             }
@@ -638,7 +667,7 @@ struct AppMaintenanceView: View {
     ) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: UIScale.pt(12)) {
-                Image(nsImage: NSWorkspace.shared.icon(forFile: application.url.path))
+                Image(nsImage: model.icon(for: application.url.path))
                     .resizable()
                     .frame(width: UIScale.pt(48), height: UIScale.pt(48))
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
@@ -657,7 +686,7 @@ struct AppMaintenanceView: View {
                 }
                 Spacer()
                 Button {
-                    NSWorkspace.shared.activateFileViewerSelecting([application.url])
+                    model.reveal(application.url)
                 } label: {
                     Label("Reveal", systemImage: "folder")
                 }
@@ -671,7 +700,7 @@ struct AppMaintenanceView: View {
                         Section(category.rawValue) {
                             ForEach(items) { item in
                                 AppMaintenanceItemRow(
-                                    item: item,
+                                    model: model, item: item,
                                     selected: Binding(
                                         get: { model.selectedItemIDs.contains(item.id) },
                                         set: { model.setSelected($0, item: item) }))
@@ -718,11 +747,12 @@ struct AppMaintenanceView: View {
 }
 
 private struct AppMaintenanceApplicationRow: View {
+    let model: AppMaintenanceModel
     let application: InstalledApplication
 
     var body: some View {
         HStack(spacing: UIScale.pt(9)) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: application.url.path))
+            Image(nsImage: model.icon(for: application.url.path))
                 .resizable()
                 .frame(width: UIScale.pt(28), height: UIScale.pt(28))
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
@@ -743,6 +773,7 @@ private struct AppMaintenanceApplicationRow: View {
 }
 
 private struct AppMaintenanceItemRow: View {
+    let model: AppMaintenanceModel
     let item: AppMaintenanceItem
     @Binding var selected: Bool
 
@@ -751,7 +782,7 @@ private struct AppMaintenanceItemRow: View {
             Toggle("", isOn: $selected)
                 .labelsHidden()
                 .toggleStyle(.checkbox)
-            Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path))
+            Image(nsImage: model.icon(for: item.url.path))
                 .resizable()
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
@@ -771,7 +802,7 @@ private struct AppMaintenanceItemRow: View {
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
             Button {
-                NSWorkspace.shared.activateFileViewerSelecting([item.url])
+                model.reveal(item.url)
             } label: {
                 Image(systemName: "folder")
             }
@@ -782,6 +813,7 @@ private struct AppMaintenanceItemRow: View {
 }
 
 private struct AppMaintenanceInstallReview: View {
+    let model: AppMaintenanceModel
     let plan: AppMaintenanceDiskImagePlan
     let installing: Bool
     let onCancel: () -> Void
@@ -792,7 +824,7 @@ private struct AppMaintenanceInstallReview: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: UIScale.pt(12)) {
-                Image(nsImage: NSWorkspace.shared.icon(forFile: plan.sourceApplication.url.path))
+                Image(nsImage: model.icon(for: plan.sourceApplication.url.path))
                     .resizable()
                     .frame(width: UIScale.pt(52), height: UIScale.pt(52))
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {

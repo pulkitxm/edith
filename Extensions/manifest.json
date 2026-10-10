@@ -41,7 +41,11 @@
         "Extensions/audioMixer/Models/AudioMixerAction.swift",
         "Extensions/audioMixer/Models/AudioMixerCommand.swift",
         "Extensions/audioMixer/Runtime.swift",
-        "Extensions/audioMixer/Views/AudioMixerView.swift"
+        "Extensions/audioMixer/Views/AudioMixerView.swift",
+        "Extensions/audioMixer/AudioMixerRemoteModel.swift",
+        "Extensions/audioMixer/CLI/AudioCommands.swift",
+        "Extensions/audioMixer/CLI/AudioCLIExecution.swift",
+        "Extensions/audioMixer/CLI/AudioCLICatalog.swift"
       ]
     },
     "inputs": [
@@ -56,7 +60,7 @@
     "dependencies": [],
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "testTargets": [
       "ci-extension-audio-mixer"
     ],
@@ -382,7 +386,7 @@
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "app": [
         "Extensions/homebrew/Models/HomebrewModels.swift",
@@ -390,7 +394,13 @@
         "Extensions/homebrew/Services/HomebrewOperations.swift",
         "Extensions/homebrew/ViewModels/HomebrewPageModel.swift",
         "Extensions/homebrew/Views/HomebrewPage.swift",
-        "Extensions/homebrew/Surface.swift"
+        "Extensions/homebrew/Surface.swift",
+        "Extensions/homebrew/HomebrewPageClient.swift",
+        "Extensions/homebrew/HomebrewEngineCommands.swift",
+        "Extensions/homebrew/CLI/HomebrewCommands.swift",
+        "Extensions/homebrew/CLI/HomebrewCLIExecution.swift",
+        "Extensions/homebrew/HomebrewUIJobs.swift",
+        "Extensions/homebrew/CLI/HomebrewCLICatalog.swift"
       ]
     },
     "inputs": [
@@ -405,7 +415,10 @@
     ],
     "dependencies": [],
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-homebrew"
+    ]
   },
   {
     "id": "calendar",
@@ -464,7 +477,7 @@
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "app": [
         "Extensions/jev/Models/JevCommandPayloads.swift",
@@ -480,7 +493,10 @@
         "Extensions/jev/Services/JevSecrets.swift",
         "Extensions/jev/ViewModels/JevSettingsModel.swift",
         "Extensions/jev/Views/JevSettingsPane.swift",
-        "Extensions/jev/Surface.swift"
+        "Extensions/jev/Surface.swift",
+        "Extensions/jev/CLI/JevTerminalCommands.swift",
+        "Extensions/jev/CLI/JevCLIExecution.swift",
+        "Extensions/jev/CLI/JevCLICatalog.swift"
       ]
     },
     "inputs": [
@@ -495,7 +511,10 @@
     ],
     "dependencies": [],
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-jev"
+    ]
   },
   {
     "id": "system",
@@ -503,7 +522,7 @@
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "app": [
         "Extensions/system/Runtime.swift",
@@ -514,7 +533,11 @@
         "Extensions/system/Surface.swift",
         "Extensions/system/ViewModels/KeyboardCleaning.swift",
         "Extensions/system/Services/KeyboardCleaningHardware.swift",
-        "Extensions/system/Views/CleaningOverlay.swift"
+        "Extensions/system/Views/CleaningOverlay.swift",
+        "Extensions/system/SystemAppsSnapshot.swift",
+        "Extensions/system/CLI/AppsCommands.swift",
+        "Extensions/system/CLI/SystemCLIExecution.swift",
+        "Extensions/system/CLI/SystemCLICatalog.swift"
       ]
     },
     "inputs": [
@@ -554,7 +577,8 @@
         "Extensions/timeLapse/TimeLapseSourcePicker.swift",
         "Extensions/timeLapse/TimeLapseSources.swift",
         "Extensions/timeLapse/TimeLapseWriter.swift",
-        "Extensions/timeLapse/Surface.swift"
+        "Extensions/timeLapse/Surface.swift",
+        "Extensions/timeLapse/TimeLapseUICommands.swift"
       ]
     },
     "inputs": [
@@ -569,7 +593,10 @@
     ],
     "dependencies": [],
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-time-lapse"
+    ]
   },
   {
     "id": "cleaner",
@@ -577,7 +604,7 @@
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "app": [
         "Extensions/cleaner/CleanerCommands.swift",
@@ -588,7 +615,12 @@
         "Extensions/cleaner/CleanerViews.swift",
         "Extensions/cleaner/JunkScanner.swift",
         "Extensions/cleaner/Runtime.swift",
-        "Extensions/cleaner/Surface.swift"
+        "Extensions/cleaner/Surface.swift",
+        "Extensions/cleaner/CleanerUICommands.swift",
+        "Extensions/cleaner/CLI/CleanerCLIExecution.swift",
+        "Extensions/cleaner/CLI/CleanerTerminalCommands.swift",
+        "Extensions/cleaner/CLI/CleanerCLIProgress.swift",
+        "Extensions/cleaner/CLI/CleanerCLICatalog.swift"
       ]
     },
     "inputs": [
@@ -603,7 +635,10 @@
     ],
     "dependencies": [],
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-cleaner"
+    ]
   },
   {
     "id": "appMaintenance",
@@ -621,7 +656,12 @@
         "Extensions/appMaintenance/MaintenanceCommands.swift",
         "Extensions/appMaintenance/MaintenancePreferences.swift",
         "Extensions/appMaintenance/Runtime.swift",
-        "Extensions/appMaintenance/Surface.swift"
+        "Extensions/appMaintenance/Surface.swift",
+        "Extensions/appMaintenance/AppMaintenanceUICommands.swift",
+        "Extensions/appMaintenance/CLI/MaintenancePolicyCommands.swift",
+        "Extensions/appMaintenance/CLI/MaintenanceCLIExecution.swift",
+        "Extensions/appMaintenance/CLI/MaintenanceTerminalCommands.swift",
+        "Extensions/appMaintenance/CLI/MaintenanceCLICatalog.swift"
       ]
     },
     "inputs": [
@@ -636,9 +676,12 @@
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-app-maintenance"
+    ]
   },
   {
     "id": "blitztree",
@@ -656,7 +699,8 @@
         "Extensions/blitztree/BlitzTreeRings.swift",
         "Extensions/blitztree/BlitzTreeScanner.swift",
         "Extensions/blitztree/Runtime.swift",
-        "Extensions/blitztree/Surface.swift"
+        "Extensions/blitztree/Surface.swift",
+        "Extensions/blitztree/BlitzTreeUISnapshot.swift"
       ]
     },
     "inputs": [
@@ -673,7 +717,10 @@
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-blitztree"
+    ]
   },
   {
     "id": "plugins",
@@ -1744,7 +1791,7 @@
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "app": [
         "Extensions/lidAwake/Models/LidAwakeOperations.swift",
@@ -1761,7 +1808,11 @@
         "Extensions/lidAwake/Services/LidAwakeWorker.swift",
         "Extensions/lidAwake/Surface.swift",
         "Extensions/lidAwake/Views/LidAwakeRows.swift",
-        "Extensions/lidAwake/Views/LidAwakeSettings.swift"
+        "Extensions/lidAwake/Views/LidAwakeSettings.swift",
+        "Extensions/lidAwake/Views/LidAwakeSettingsModel.swift",
+        "Extensions/lidAwake/CLI/LidAwakeCommands.swift",
+        "Extensions/lidAwake/CLI/LidAwakeCLIExecution.swift",
+        "Extensions/lidAwake/CLI/LidAwakeCLICatalog.swift"
       ],
       "privileged": [
         "Extensions/lidAwake/Privileged/LidAwakePrivilegedController.swift",
@@ -2187,9 +2238,9 @@
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "supportProducts": {
-      "app": "EdithExtensionUI",
+      "app": "EdithExtensionCommands",
       "cameraCarrier": "EdithExtensionSupport",
       "privileged": null
     },
@@ -2201,7 +2252,6 @@
         "Extensions/virtualCamera/CameraCarrierRuntime.swift",
         "Extensions/virtualCamera/CameraCarrierSession.swift",
         "Extensions/virtualCamera/CameraContext.swift",
-        "Extensions/virtualCamera/CameraJSONValue.swift",
         "Extensions/virtualCamera/CameraNativeLibrary.swift",
         "Extensions/virtualCamera/CameraReadiness.swift",
         "Extensions/virtualCamera/CameraSurface.swift",
@@ -2265,7 +2315,14 @@
         "Extensions/virtualCamera/Views/VirtualCameraMeetingControls.swift",
         "Extensions/virtualCamera/Views/VirtualCameraPage.swift",
         "Extensions/virtualCamera/Views/VirtualCameraPageModel.swift",
-        "Extensions/virtualCamera/Views/VirtualCameraPreviewView.swift"
+        "Extensions/virtualCamera/Views/VirtualCameraPreviewView.swift",
+        "Extensions/virtualCamera/CLI/CameraExtensionCommands.swift",
+        "Extensions/virtualCamera/CLI/CameraCommands.swift",
+        "Extensions/virtualCamera/CLI/CameraMediaCommands.swift",
+        "Extensions/virtualCamera/CLI/CameraAudioCommands.swift",
+        "Extensions/virtualCamera/CLI/CameraCLICatalog.swift",
+        "Extensions/virtualCamera/CLI/CameraCLIExecution.swift",
+        "Extensions/virtualCamera/CameraUICommands.swift"
       ],
       "cameraCarrier": [
         "Extensions/virtualCamera/CameraCarrierRuntime.swift",

@@ -4,6 +4,7 @@ import ImageIO
 import SwiftUI
 
 struct CameraAssetThumbnail: View {
+    let model: VirtualCameraPageModel
     let url: URL
     var side: CGFloat = 160
     var corner: CGFloat = 10
@@ -25,21 +26,7 @@ struct CameraAssetThumbnail: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(corner)))
         .pageTask(id: url) {
-            let size = min(1024, max(1, Int(UIScale.pt(side) * 2)))
-            let loaded = await Task.detached {
-                guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-                    let thumbnail = CGImageSourceCreateThumbnailAtIndex(
-                        source, 0,
-                        [
-                            kCGImageSourceCreateThumbnailFromImageAlways: true,
-                            kCGImageSourceCreateThumbnailWithTransform: true,
-                            kCGImageSourceThumbnailMaxPixelSize: size,
-                        ] as CFDictionary)
-                else { return nil as NSImage? }
-                return NSImage(
-                    cgImage: thumbnail,
-                    size: NSSize(width: thumbnail.width, height: thumbnail.height))
-            }.value
+            let loaded = await model.assetThumbnail(url)
             guard !Task.isCancelled else { return }
             image = loaded
         }

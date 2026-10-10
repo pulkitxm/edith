@@ -36,7 +36,10 @@ final class CleanerModel {
     private let services: CleanerServices
     private var workTask: Task<Void, Never>?
     private var driveTask: Task<Void, Never>?
-    private var stopped = false
+    private var engineClient: ExtensionEngineClient?
+    private var remoteGeneration = 0
+    private var remoteTask: Task<Void, Never>?
+    private(set) var stopped = false
     private(set) var operationTitle = "Scanning…"
 
     init(
@@ -58,7 +61,63 @@ final class CleanerModel {
         }
     }
 
+    convenience init(engineClient: ExtensionEngineClient, defaults: UserDefaults) {
+        self.init(defaults: defaults)
+        self.engineClient = engineClient
+    }
+
+    var remote: Bool { engineClient != nil }
+
+    func uiSnapshot() -> CleanerUISnapshot {
+        .init(
+            previewToken: previewToken, categories: categories, scanning: scanning,
+            scanned: scanned,
+            logs: logs, lastReclaimed: lastReclaimed, drives: drives, driveOptions: driveOptions,
+            customFolders: customFolders, driveSelection: driveSelection,
+            operationTitle: operationTitle)
+    }
+
+    func refreshRemote() async {
+        guard let engineClient, !stopped, remoteTask == nil else { return }
+        let generation = remoteGeneration
+        do {
+            let data = try await engineClient.invoke("cleaner.ui.snapshot")
+            guard !stopped, !Task.isCancelled, generation == remoteGeneration else { return }
+            applyRemote(try JSONDecoder().decode(CleanerUISnapshot.self, from: data))
+        } catch is CancellationError {} catch { if !stopped { log(error.localizedDescription) } }
+    }
+
+    private func applyRemote(_ value: CleanerUISnapshot) {
+        categories = value.categories; previewToken = value.previewToken
+        scanning = value.scanning; scanned = value.scanned; logs = value.logs
+        lastReclaimed = value.lastReclaimed; drives = value.drives;
+        driveOptions = value.driveOptions
+        customFolders = value.customFolders; driveSelection = value.driveSelection
+        operationTitle = value.operationTitle
+    }
+
+    private func sendRemote(_ operation: String, value: String? = nil, item: String? = nil) {
+        guard let engineClient, !stopped else { return }
+        remoteTask?.cancel(); remoteGeneration += 1
+        let generation = remoteGeneration
+        let request = CleanerUIAction(
+            operation: operation, value: value, item: item, previewToken: previewToken)
+        remoteTask = Task {
+            defer { if generation == remoteGeneration { remoteTask = nil } }
+            do {
+                let payload = try JSONEncoder().encode(request)
+                let data = try await engineClient.invoke(
+                    "cleaner.ui.action", payload: payload, timeout: 30)
+                guard !stopped, !Task.isCancelled, generation == remoteGeneration else { return }
+                applyRemote(try JSONDecoder().decode(CleanerUISnapshot.self, from: data))
+            } catch is CancellationError {} catch {
+                if !stopped, generation == remoteGeneration { log(error.localizedDescription) }
+            }
+        }
+    }
+
     func addCustomFolder(_ path: String) {
+        if remote { sendRemote("addFolder", value: path); return }
         guard !stopped else { return }
         let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
         guard !customFolders.contains(standardizedPath) else { return }
@@ -72,6 +131,7 @@ final class CleanerModel {
     }
 
     func removeCustomFolder(_ path: String) {
+        if remote { sendRemote("removeFolder", value: path); return }
         guard !stopped else { return }
         customFolders.removeAll { $0 == path }
         defaults.set(customFolders, forKey: "cleaner.customFolders")
@@ -124,6 +184,7 @@ final class CleanerModel {
     }
 
     func loadDriveOptions() {
+        if remote { sendRemote("drives"); return }
         guard !stopped else { return }
         driveTask?.cancel()
         driveTask = Task {
@@ -139,6 +200,7 @@ final class CleanerModel {
     }
 
     func toggleDrive(_ id: String) {
+        if remote { sendRemote("drive", value: id); return }
         guard !stopped else { return }
         var selection = driveSelection ?? ["/"]
         if selection.contains(id) {
@@ -173,6 +235,7 @@ final class CleanerModel {
     }
 
     func scan() {
+        if remote { sendRemote("scan"); return }
         guard !scanning, !stopped else { return }
         cancelScan()
         scanning = true
@@ -237,6 +300,7 @@ final class CleanerModel {
     }
 
     func cancelScan() {
+        if remote { sendRemote("cancel"); return }
         scanToken?.cancel()
         workTask?.cancel()
     }
@@ -246,6 +310,8 @@ final class CleanerModel {
     func shutdown() async {
         guard !stopped else { return }
         stopped = true
+        remoteGeneration += 1; remoteTask?.cancel()
+        await remoteTask?.value; remoteTask = nil
         cancelScan()
         driveTask?.cancel()
         driveOptionsLoad.cancel()
@@ -280,6 +346,7 @@ final class CleanerModel {
     }
 
     func toggleAll() {
+        if remote { sendRemote("all"); return }
         guard !stopped else { return }
         let selectAll = overallSelection != .all
         var itemChoices = overrides
@@ -296,6 +363,7 @@ final class CleanerModel {
     }
 
     func toggleCategory(_ id: String) {
+        if remote { sendRemote("category", value: id); return }
         guard !stopped else { return }
         guard let index = categories.firstIndex(where: { $0.id == id }) else { return }
         let selectAll = categories[index].selection != .all
@@ -313,6 +381,7 @@ final class CleanerModel {
     }
 
     func toggleItem(categoryID: String, itemID: String) {
+        if remote { sendRemote("item", value: categoryID, item: itemID); return }
         guard !stopped else { return }
         guard let categoryIndex = categories.firstIndex(where: { $0.id == categoryID }),
             let itemIndex = categories[categoryIndex].items.firstIndex(where: { $0.id == itemID })
@@ -329,6 +398,7 @@ final class CleanerModel {
     }
 
     func clean(categoryID: String? = nil) {
+        if remote { sendRemote("clean", value: categoryID); return }
         guard !scanning, !stopped else { return }
         let items = CleanerOperationExecution.selectedItems(in: categories, categoryID: categoryID)
         guard !items.isEmpty else { return }

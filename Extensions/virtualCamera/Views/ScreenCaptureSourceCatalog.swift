@@ -1,4 +1,6 @@
 import AppKit
+import EdithExtensionSupport
+import ImageIO
 import EdithExtensionUI
 import Observation
 
@@ -22,7 +24,9 @@ final class ScreenCaptureSourceCatalog: ScreenCaptureSourceProviding {
     private static var instances: [WeakInstance] = []
     private var stopped = false
     @ObservationIgnored private var shutdownTask: Task<Void, Never>?
-    init() {
+    private let engineClient: ExtensionEngineClient?
+    init(engineClient: ExtensionEngineClient? = nil) {
+        self.engineClient = engineClient
         Self.instances.removeAll { $0.value == nil }
         Self.instances.append(WeakInstance(self))
     }
@@ -51,6 +55,17 @@ final class ScreenCaptureSourceCatalog: ScreenCaptureSourceProviding {
 
     func refreshCaptureSources() async {
         guard !stopped else { return }
+        if let engineClient {
+            await sourceLoad.perform(operation: {
+                let data = try await engineClient.invoke("camera.ui.screenSources")
+                return try JSONDecoder().decode(CameraUISources.self, from: data)
+            }) { [self] value in
+                guard !stopped else { return }
+                displays = value.displays; windows = value.windows; sourceRevision = value.revision;
+                thumbnails.removeAll()
+                if let error = value.error { sourceLoad.fail(sourceLoad.begin(), message: error) }
+            }; return
+        }
         await sourceLoad.perform(operation: { try await TimeLapseSources.load() }) {
             [self] sources in
             guard !stopped else { return }
@@ -63,7 +78,20 @@ final class ScreenCaptureSourceCatalog: ScreenCaptureSourceProviding {
     }
 
     func sourceThumbnail(mode: String, id: UInt32) async -> CGImage? {
-        guard !stopped, let snapshot else { return nil }
+        guard !stopped else { return nil }
+        if let engineClient {
+            let revision = sourceRevision
+            guard let payload = try? JSONEncoder().encode(CameraUIThumbnail(mode: mode, id: id)),
+                let data = try? await engineClient.invoke(
+                    "camera.ui.screenThumbnail", payload: payload),
+                !stopped, !Task.isCancelled, revision == sourceRevision,
+                let value = try? JSONDecoder().decode(CameraUIImage.self, from: data),
+                let image = value.image,
+                let source = CGImageSourceCreateWithData(image as CFData, nil)
+            else { return nil }
+            return CGImageSourceCreateImageAtIndex(source, 0, nil)
+        }
+        guard let snapshot else { return nil }
         let key = "\(mode)-\(id)"
         if let image = thumbnails[key] { return image }
         let revision = sourceRevision

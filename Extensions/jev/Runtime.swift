@@ -9,6 +9,7 @@ import SwiftUI
 final class ExtensionRuntime: NSObject {
     private var commands: JevCommands?
     private var model: JevSettingsModel?
+    private var uiClient: ExtensionEngineClient?
     private var startup: Task<Void, Never>?
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -33,9 +34,16 @@ final class ExtensionRuntime: NSObject {
             if commands == nil {
                 let commands = JevCommands()
                 self.commands = commands
-                model = JevSettingsModel(engine: commands.engine)
                 startup = Task { _ = await commands.engine.status(probe: false) }
             }
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                let client = configuration.engineClient
+            else { return ["ok": false] as NSDictionary }
+            stopUI()
+            uiClient = client
+            model = JevSettingsModel(engineClient: client)
+        case "stopUI": stopUI()
         case "view":
             guard let model else { return ["ok": false] as NSDictionary }
             return NSHostingController(
@@ -45,14 +53,24 @@ final class ExtensionRuntime: NSObject {
         case "stop":
             startup?.cancel()
             startup = nil
-            model?.shutdown()
-            model = nil
             commands?.shutdown()
             commands = nil
         case "status": return ["ok": true, "running": commands != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
+    }
+    private func stopUI() {
+        model?.shutdown(); model = nil
+        uiClient?.invalidate(); uiClient = nil
+    }
+
+    @objc(prepareToStopWithCompletion:)
+    func prepareToStop(completion: @escaping () -> Void) {
+        startup?.cancel()
+        Task {
+            await commands?.shutdownAndWait(); completion()
+        }
     }
 }
 

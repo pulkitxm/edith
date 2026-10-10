@@ -162,19 +162,19 @@ actor TimeLapseThumbnailLoader {
     }
 }
 
-struct TimeLapseDisplayChoice: Identifiable {
+struct TimeLapseDisplayChoice: Codable, Identifiable {
     let id: CGDirectDisplayID
     let width: Int
     let height: Int
 }
 
-struct TimeLapseWindowChoice: Identifiable {
+struct TimeLapseWindowChoice: Codable, Identifiable {
     let id: CGWindowID
     let application: String
     let title: String
 }
 
-struct TimeLapseMicrophoneChoice: Identifiable {
+struct TimeLapseMicrophoneChoice: Codable, Identifiable {
     let id: String
     let name: String
 

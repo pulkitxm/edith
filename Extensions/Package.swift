@@ -11,9 +11,12 @@ let package = Package(
     targets: [
         .target(
             name: "LidAwakeExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
             path: "lidAwake",
-            exclude: ["Tests", "Runtime.swift", "Privileged/LidAwakePrivilegedRuntime.swift"],
+            exclude: [
+                "Tests", "Runtime.swift", "Package.swift",
+                "Privileged/LidAwakePrivilegedRuntime.swift",
+            ],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "LidAwakeExtensionTests", dependencies: ["LidAwakeExtension"],
@@ -186,8 +189,8 @@ let package = Package(
             path: "emoji/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "HomebrewExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "homebrew", exclude: ["Tests", "Runtime.swift"],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
+            path: "homebrew", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "HomebrewExtensionTests", dependencies: ["HomebrewExtension"],
@@ -202,8 +205,8 @@ let package = Package(
             path: "calendar/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "JevExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "jev", exclude: ["Tests", "Runtime.swift"],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
+            path: "jev", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "JevExtensionTests", dependencies: ["JevExtension"],
@@ -218,7 +221,7 @@ let package = Package(
             path: "presenter/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "SystemExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
             path: "system", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
@@ -227,23 +230,23 @@ let package = Package(
         .target(
             name: "TimeLapseExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "timeLapse", exclude: ["Tests", "Runtime.swift"],
+            path: "timeLapse", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "TimeLapseExtensionTests", dependencies: ["TimeLapseExtension"],
             path: "timeLapse/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "CleanerExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "cleaner", exclude: ["Tests", "Runtime.swift"],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
+            path: "cleaner", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "CleanerExtensionTests", dependencies: ["CleanerExtension"],
             path: "cleaner/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "AppMaintenanceExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "appMaintenance", exclude: ["Tests", "Runtime.swift"],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
+            path: "appMaintenance", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "AppMaintenanceExtensionTests", dependencies: ["AppMaintenanceExtension"],
@@ -252,7 +255,7 @@ let package = Package(
         .target(
             name: "BlitzTreeExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "blitztree", exclude: ["Tests", "Runtime.swift"],
+            path: "blitztree", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "BlitzTreeExtensionTests", dependencies: ["BlitzTreeExtension"],

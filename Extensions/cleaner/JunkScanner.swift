@@ -1,7 +1,7 @@
 import Foundation
 import EdithExtensionSupport
 
-public struct JunkItem: Identifiable, Sendable {
+public struct JunkItem: Codable, Identifiable, Sendable {
     public let id: String
     public let name: String
     public let path: URL
@@ -21,7 +21,7 @@ public enum JunkSelection: Sendable {
     case all, none, some
 }
 
-public struct JunkCategory: Identifiable, Sendable {
+public struct JunkCategory: Codable, Identifiable, Sendable {
     public let id: String
     public let name: String
     public let detail: String
@@ -45,7 +45,7 @@ public struct JunkCategory: Identifiable, Sendable {
     }
 }
 
-public struct DriveInfo: Identifiable, Sendable {
+public struct DriveInfo: Codable, Identifiable, Sendable {
     public let id: String
     public let name: String
     public let totalBytes: Int64

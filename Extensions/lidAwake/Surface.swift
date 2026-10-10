@@ -20,6 +20,16 @@ import Foundation
         guard !SurfacePrivacyState.hides(.ability("lidAwake"), values: privacy()) else {
             throw ExtensionPeerError.unavailable
         }
+        if command == "lidAwake.session" {
+            struct Input: Decodable { let session: LidAwakeSession }
+            try worker.setSession(JSONDecoder().decode(Input.self, from: payload).session)
+            return try JSONEncoder().encode(worker.engine.snapshot())
+        }
+        if command == "lidAwake.approval" {
+            guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
+            try worker.requestApproval()
+            return try JSONEncoder().encode(worker.engine.snapshot())
+        }
         let request: LidAwakeRequest
         switch command {
         case "lidAwake.status": request = .status
@@ -31,6 +41,9 @@ import Foundation
             struct Input: Decodable { let threshold: Int }
             request = .setBatteryThreshold(
                 try JSONDecoder().decode(Input.self, from: payload).threshold)
+        case "lidAwake.restoreOnQuit":
+            struct Input: Decodable { let enabled: Bool }
+            request = .setRestoreOnQuit(try JSONDecoder().decode(Input.self, from: payload).enabled)
         default: throw ExtensionPeerError.invalidRequest
         }
         if request == .status || request == .off {
@@ -40,7 +53,7 @@ import Foundation
         }
         let state = try await worker.perform(
             request, requiresConfirmation: request.operation == .on)
-        return try JSONSerialization.data(withJSONObject: state.payload, options: [.sortedKeys])
+        return try JSONEncoder().encode(state)
     }
 
     private func snapshot(_ tile: SurfaceTile) async throws -> SurfaceSnapshot {

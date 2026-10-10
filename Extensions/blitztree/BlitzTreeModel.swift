@@ -16,6 +16,9 @@ final class BlitzTreeModel {
     private(set) var error: String?
     private(set) var stopped = false
     private(set) var previewToken = UUID()
+    private var engineClient: ExtensionEngineClient?
+    private var remoteTask: Task<Void, Never>?
+    private var remoteRevision = 0
     private let client: BlitzTreeClient
     private let remove: @Sendable (BlitzTreeReport.Entry, String, Progress) async throws -> Void
     @ObservationIgnored private var tasks: [UUID: Task<Void, Never>] = [:]
@@ -37,8 +40,78 @@ final class BlitzTreeModel {
         self.remove = remove
     }
 
+    convenience init(engineClient: ExtensionEngineClient) {
+        self.init()
+        self.engineClient = engineClient
+    }
+
+    func reveal(_ path: String) {
+        guard !stopped else { return }
+        if engineClient != nil {
+            guard let payload = try? JSONEncoder().encode(["path": path]) else { return }
+            remote("blitztree.ui.reveal", payload: payload); return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+    }
+    func uiSnapshot() -> BlitzTreeUISnapshot {
+        .init(
+            report: report, root: root, history: history, previewToken: previewToken,
+            scanning: scanning, removing: removing, scannedEntries: scannedEntries, error: error)
+    }
+
+    func refreshRemote() async {
+        guard let engineClient, !stopped else { return }
+        let revision = remoteRevision
+        do {
+            let data = try await engineClient.invoke("blitztree.ui.snapshot")
+            guard !stopped, !Task.isCancelled, revision == remoteRevision else { return }
+            applyRemote(try JSONDecoder().decode(BlitzTreeUISnapshot.self, from: data))
+        } catch is CancellationError {} catch {
+            if !stopped { self.error = error.localizedDescription }
+        }
+    }
+
+    private func applyRemote(_ value: BlitzTreeUISnapshot) {
+        report = value.report; root = value.root; history = value.history
+        previewToken = value.previewToken; removing = value.removing;
+        scannedEntries = value.scannedEntries; error = value.error
+        if value.scanning {
+            if !loading.isRunning { _ = loading.begin() }
+        } else if value.report != nil {
+            loading.setContent()
+        } else if let error = value.error {
+            loading.fail(loading.begin(), message: error)
+        } else {
+            loading.cancel()
+        }
+    }
+
+    private func remote(_ command: String, payload: Data = Data("{}".utf8)) {
+        guard let engineClient, !stopped else { return }
+        remoteTask?.cancel(); remoteRevision += 1
+        let revision = remoteRevision
+        remoteTask = Task {
+            defer { if revision == remoteRevision { remoteTask = nil } }
+            do {
+                _ = try await engineClient.invoke(command, payload: payload, timeout: 30)
+                guard !stopped, !Task.isCancelled, revision == remoteRevision else { return }
+                await refreshRemote()
+            } catch is CancellationError {} catch {
+                guard !stopped, revision == remoteRevision else { return }
+                self.error = error.localizedDescription; loading.fail(loading.begin(), error: error)
+            }
+        }
+    }
+
     func scan(_ path: String, remember: Bool = true) {
         guard !stopped, !removing else { return }
+        if engineClient != nil {
+            guard path.hasPrefix("/"), !path.utf8.contains(0),
+                let payload = try? JSONEncoder().encode(["path": path])
+            else { return }
+            remote("blitztree.ui.scan", payload: payload)
+            return
+        }
         cancel()
         if remember, let root, root != path { history.append(root) }
         if history.count > 100 { history.removeFirst(history.count - 100) }
@@ -72,11 +145,13 @@ final class BlitzTreeModel {
     }
 
     func back() {
+        if engineClient != nil { remote("blitztree.ui.back"); return }
         guard !stopped, !removing, let previous = history.popLast() else { return }
         scan(previous, remember: false)
     }
 
     func cancel() {
+        if engineClient != nil, !stopped { remote("blitztree.cancel"); return }
         loading.cancel()
         if let current {
             current.cancellation.cancel()
@@ -88,6 +163,14 @@ final class BlitzTreeModel {
     }
 
     func trash(_ entry: BlitzTreeReport.Entry) {
+        if engineClient != nil {
+            guard
+                let payload = try? JSONEncoder().encode(
+                    BlitzTreeUITrash(path: entry.path, confirmed: true, previewToken: previewToken))
+            else { return }
+            remote("blitztree.ui.trash", payload: payload)
+            return
+        }
         guard !stopped, !scanning, !removing, let report,
             entries(in: report).contains(where: {
                 $0.path == entry.path && $0.device == entry.device && $0.inode == entry.inode
@@ -141,6 +224,7 @@ final class BlitzTreeModel {
     func shutdown() async {
         guard !stopped else { return }
         stopped = true
+        remoteRevision += 1; remoteTask?.cancel(); await remoteTask?.value; remoteTask = nil
         cancel()
         while let task = tasks.values.first { await task.value }
         report = nil

@@ -3,7 +3,7 @@ import Darwin
 import EdithExtensionSupport
 import Foundation
 
-public struct RunningAppSnapshot: Equatable, Sendable {
+public struct RunningAppSnapshot: Codable, Equatable, Sendable {
     public let pid: pid_t
     public let name: String
     public let bundleID: String?

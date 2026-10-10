@@ -5,16 +5,13 @@ import Foundation
 import SwiftUI
 
 struct LidAwakeRows: View {
-    @AppStorage(LidAwakeState.enabledKey, store: SharedDefaults.store) private var enabled = false
-    @AppStorage(LidAwakeState.restoreOnQuitKey, store: SharedDefaults.store)
-    private var restoreOnQuit = true
-    @AppStorage(LidAwakeState.sessionKey, store: SharedDefaults.store)
-    private var sessionRaw = LidAwakeSession.indefinite.rawValue
-    @AppStorage(LidAwakeState.batteryThresholdKey, store: SharedDefaults.store)
-    private var batteryThreshold = 0
-    @State private var active = SharedDefaults.store.bool(forKey: LidAwakeState.activeKey)
+    @State private var enabled = false
+    @State private var sessionRaw = LidAwakeSession.indefinite.rawValue
+    @State private var batteryThreshold = 0
+    @State private var active = false
     @State private var confirmingActivation = false
     @ObservedObject var operations: LidAwakeOperationModel
+    var chooseSession: (LidAwakeSession) -> Void
 
     private var activeBinding: Binding<Bool> {
         Binding(
@@ -32,8 +29,8 @@ struct LidAwakeRows: View {
         Binding(
             get: { LidAwakeSession(rawValue: sessionRaw) ?? .indefinite },
             set: { session in
-                $sessionRaw.lidAwakeSetting(LidAwakeState.sessionKey).wrappedValue =
-                    session.rawValue
+                sessionRaw = session.rawValue
+                chooseSession(session)
                 if active { operations.perform(.on(session)) }
             })
     }
@@ -114,40 +111,26 @@ struct LidAwakeRows: View {
         .disabled(!enabled)
         .disabled(operations.applying)
         .opacity(enabled ? 1 : 0.5)
-        .onAppear {
-            active = SharedDefaults.store.bool(forKey: LidAwakeState.activeKey)
-            operations.refreshStatus()
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(
-                for: Notification.Name(LidAwakeNotifications.changed))
-        ) { _ in
-            active = SharedDefaults.store.bool(forKey: LidAwakeState.activeKey)
-            operations.refreshStatus()
+        .pageTask(cancel: { operations.cancel() }) { operations.refreshStatus() }
+        .onReceive(operations.$lastSnapshot) { snapshot in
+            guard let snapshot else { return }
+            enabled = snapshot.extensionEnabled
+            active = snapshot.requestedActive
+            sessionRaw = snapshot.session.rawValue
+            batteryThreshold = snapshot.batteryThreshold
         }
         .alert("Keep running with the lid closed?", isPresented: $confirmingActivation) {
             Button("Turn On") {
-                operations.perform(.on(LidAwakeState.session()))
+                operations.perform(.on((LidAwakeSession(rawValue: sessionRaw) ?? .indefinite)))
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
-                LidAwakeOperationExecution.preview(for: .on(LidAwakeState.session()))?.warning
+                LidAwakeOperationExecution.preview(
+                    for: .on((LidAwakeSession(rawValue: sessionRaw) ?? .indefinite)))?.warning
                     ?? "")
         }
     }
 
-    private func applySetting(_ request: LidAwakeRequest) {
-        guard LidAwakeOperationExecution.applySetting(request) else { return }
-        switch request {
-        case .setBatteryThreshold(let threshold):
-            batteryThreshold = threshold
-        case .setRestoreOnQuit(let enabled):
-            restoreOnQuit = enabled
-        case .status, .on, .off, .enableExtension, .disableExtension:
-            break
-        }
-        NotificationCenter.default.post(
-            name: Notification.Name("lidAwakeSettingsChanged"), object: nil)
-    }
+    private func applySetting(_ request: LidAwakeRequest) { operations.perform(request) }
 }
