@@ -93,10 +93,14 @@ public final class HostMarketplace {
         guard let executable = Bundle.main.executableURL,
             let defaults = UserDefaults(suiteName: identity.defaultsSuite)
         else { throw CocoaError(.fileNoSuchFile) }
+        let publicLauncher = try? HostPublicLauncher.capture(
+            applicationURL: Bundle.main.bundleURL, hostIdentifier: identity.identifier,
+            teamIdentifier: ExtensionCodeSignature.teamIdentifier())
         let sessions = HostExtensionSessions(defaults: defaults) { package in
             HostWorker(
                 configuration: HostWorkerConfiguration(
-                    identity: identity, extensionID: package.id, version: package.version),
+                    identity: identity, extensionID: package.id, version: package.version,
+                    publicLauncher: publicLauncher),
                 executable: executable)
         }
         return try HostMarketplace(

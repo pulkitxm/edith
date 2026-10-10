@@ -197,12 +197,16 @@ final class HostWorkerApplication {
             setenv("EDITH_EXTENSION_NATIVE_PARENT", String(getpid()), 1)
             setenv("EDITH_EXTENSION_NATIVE_TOKEN", nativeAdmission.token, 1)
             try applyAppearance(next)
-            let context: NSDictionary = [
+            var values: [String: Any] = [
                 "defaultsSuite": identity.extensionDefaultsSuite(package.id),
                 "dataDirectory": identity.extensionDirectory(package.id).path,
                 "hostIdentifier": identity.identifier,
                 "recoveryOnly": next.recoveryOnly, "hostNavigation": navigation,
             ]
+            if let launcher = try next.publicLauncherContext(teamIdentifier: team) {
+                values["publicLauncher"] = launcher
+            }
+            let context = values as NSDictionary
             for role in [ExtensionBundleRuntime.Role.helper, .agent, .app] {
                 guard
                     FileManager.default.fileExists(
