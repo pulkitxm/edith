@@ -197,6 +197,21 @@ public final class ExtensionBundleRuntime {
         }
     }
 
+    public func nativeTask(id: String, payload: Data) throws -> Int32 {
+        guard role == .app, !payload.isEmpty, payload.count <= 65_536 else {
+            throw MarketplaceError.invalidBundle
+        }
+        let instance = try load(id: id)
+        guard let symbol = dlsym(instance.handle, "edith_extension_native_task") else {
+            throw MarketplaceError.invalidBundle
+        }
+        typealias Entry = @convention(c) (UnsafePointer<UInt8>?, Int32) -> Int32
+        let entry = unsafeBitCast(symbol, to: Entry.self)
+        return payload.withUnsafeBytes { bytes in
+            entry(bytes.bindMemory(to: UInt8.self).baseAddress, Int32(bytes.count))
+        }
+    }
+
     public func snapshot(id: String) throws -> Snapshot? {
         guard let instance = loaded[id] else { return nil }
         let installed = try store.installedPackage(

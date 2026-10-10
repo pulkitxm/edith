@@ -1,14 +1,14 @@
 import Darwin
 import Foundation
 
-struct ExtensionProcessIdentity: Codable, Equatable, Sendable {
-    let pid: Int32
-    let generation: String
+public struct ExtensionProcessIdentity: Codable, Equatable, Sendable {
+    public let pid: Int32
+    public let generation: String
 
-    static var current: Self? { read(getpid()) }
-    var isAlive: Bool { self == Self.read(pid) }
+    public static var current: Self? { read(getpid()) }
+    public var isAlive: Bool { self == Self.read(pid) }
 
-    static func read(_ pid: Int32) -> Self? {
+    public static func read(_ pid: Int32) -> Self? {
         guard pid > 1 else { return nil }
         var info = proc_bsdinfo()
         let size = MemoryLayout<proc_bsdinfo>.size

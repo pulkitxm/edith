@@ -7,10 +7,13 @@ import subprocess
 from pathlib import Path
 
 
-def build_report(baseline, app, packages, definitions, index, expected_fingerprints=None):
+BUILD_FIELDS = ("sourceCommit", "configuration", "optimization", "architecture", "signature", "xcode", "sdk", "ghosttySourceCommit", "ghosttyArchive")
+
+
+def build_report(baseline, app, packages, definitions, index, expected_fingerprints=None, host_build=None):
     migrated = [entry["id"] for entry in definitions if entry.get("contractVersion") == 1]
     known = {entry["id"] for entry in index}
-    if len(known) != len(index) or len(set(migrated)) != len(migrated) or not set(migrated).issubset(known):
+    if not index or len(known) != len(index) or len(set(migrated)) != len(migrated) or not set(migrated).issubset(known):
         raise ValueError("Migrated extensions must belong to the host index")
     if expected_fingerprints is not None:
         for identifier in migrated:
@@ -21,33 +24,48 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
     measurements = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(measurements)
     measured = measurements.measure_app(app)
+    executable_hash = hashlib.sha256((app / "Contents/MacOS/Edith").read_bytes()).hexdigest()
+    if host_build is not None and host_build.get("hostExecutableSHA256") != executable_hash:
+        raise ValueError("Host build metadata must match the measured executable checksum")
     result = measurements.compare(baseline, measured, measurements.measure_packages(packages, migrated))
     result["migratedExtensionPackages"] = result.pop("allExtensionPackages")
     result["appWithMigratedExtensions"] = result.pop("appWithAllExtensions")
+    remaining = sorted(known - set(migrated))
     result["measuredAtUTC"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    result["status"] = "migration-in-progress"
+    result["status"] = "partial-package-coverage" if remaining else "all-indexed-packages-measured"
     result["migratedExtensions"] = len(migrated)
     result["indexedExtensions"] = len(index)
-    result["hostExecutableSHA256"] = hashlib.sha256((app / "Contents/MacOS/Edith").read_bytes()).hexdigest()
+    result["unmeasuredExtensions"] = remaining
+    result["hostExecutableSHA256"] = executable_hash
     result["measurement"] = {
         "baselineSourceCommit": baseline["sourceCommit"],
-        "baselineBuild": {key: baseline[key] for key in ("configuration", "architecture", "signature", "xcode", "sdk", "ghosttySourceCommit", "ghosttyArchive") if key in baseline},
-        "architecture": "arm64",
-        "signature": "development",
+        "baselineBuild": {key: baseline[key] for key in BUILD_FIELDS if key in baseline},
+        "hostBuild": {key: host_build[key] for key in BUILD_FIELDS if key in (host_build or {})},
+        "packageSource": "local-build-artifacts",
+        "artifactPublication": "not-verified",
+        "sourceFingerprintsVerified": expected_fingerprints is not None,
         "appZipMethod": "Regular files only, symlinks excluded, ZIP deflate level 9. Comparison metric, not a shipping installer.",
-        "included": ["host executable", "marketplace runtime", "Sparkle updater and its helpers", "application icon", "extension index", "Home, customization editor and shared UI", "code signatures"],
-        "outstanding": ["remaining feature migrations", "remaining feature navigation integration", "remaining feature card adapters", "required platform carriers", "shipping release packaging", "final release-host measurements"],
+        "installedMethod": "Logical regular-file bytes, excluding filesystem allocation rounding, receipts, caches, user data, retained versions and OS-managed deployment copies.",
+        "verificationScope": "Package archive size, SHA-256, expanded bytes and CRC. Source fingerprints when supplied. This report does not run lifecycle, visual, signing or cloud publication checks.",
     }
     result["surfaceCustomization"] = {
         "pullRequest": "https://github.com/pulkitxm/edith/pull/1010",
-        "reviewedCommit": "31edeb8ccf693441b1da155a6be6491981d3f08d",
         "mergedCommit": "98a0f440e161c130f7ebd12a9da5dea42c38b238",
         "layoutContractVersion": 1,
-        "implemented": ["host-owned layouts and profiles", "undo and redo", "availability for every indexed extension", "composite provider filtering", "read-only worker context", "layout retention through worker updates and app restarts", "visual editor at compact, regular and zoomed sizes in both color schemes", "shared canvas and shelf rendering", "bounded versioned snapshot and action requests", "cancellation on disable, removal, update or hidden views", "immediate Presenter privacy observation", "live cards and validated actions for every migrated worker", "native Notch renderer and explicit customization navigation", "world clock favorites, faces, city search and time differences", "bounded sliders, thumbnails and charts with native socket validation"],
-        "outstanding": ["remaining Home card data and action adapters", "final combined synthetic visual verification"],
+        "verification": "not-measured-by-size-report",
     }
     return result
 
+
+def describe_build(build):
+    labels = {
+        "sourceCommit": "source commit", "configuration": "configuration",
+        "optimization": "optimization", "architecture": "architecture",
+        "signature": "signing", "xcode": "Xcode", "sdk": "SDK",
+        "ghosttySourceCommit": "Ghostty source commit", "ghosttyArchive": "Ghostty archive",
+    }
+    values = [f"{labels[key]}: `{build[key]}`" for key in BUILD_FIELDS if key in build]
+    return "; ".join(values) if values else "Build configuration was not recorded"
 
 
 def render_markdown(report, index):
@@ -58,71 +76,64 @@ def render_markdown(report, index):
     baseline = report["baseline"]
     combined = report["appWithMigratedExtensions"]
     totals = report["migratedExtensionPackages"]
+    coverage = (
+        f"All {indexed} indexed features have measured self-contained worker packages."
+        if count == indexed
+        else f"{count} of the {indexed} indexed features have measured self-contained worker packages. Unmeasured features: "
+        + ", ".join(titles[identifier] for identifier in report["unmeasuredExtensions"]) + "."
+    )
     rows = "\n".join(
         f"| {titles[entry['id']]} | {entry['downloadBytes']:,} | {entry['installedBytes']:,} | {entry['releaseMetadataBytes']:,} |"
         for entry in report["packages"]
     )
+    fingerprint_check = (
+        "The generator also matched each package's current source fingerprint."
+        if report["measurement"]["sourceFingerprintsVerified"]
+        else "Current package source fingerprints were not checked for this measurement."
+    )
+    saved = report['savedPercent']['installedBytes']
+    savings = (
+        f"The measured host is {saved:.2f}% smaller on disk than the recorded bundled-app baseline."
+        if saved is not None else "A percentage reduction cannot be calculated from a zero-byte baseline."
+    )
     return f"""# Lightweight host rebuild measurements
 
-Measured on {report['measuredAtUTC'].split('T')[0]}. The rebuild is in progress and the PR is not ready to merge. {count} of the {indexed} indexed features have been migrated to self-contained workers. These measurements describe the current host foundation, not the final shipping app or all extension packages.
-
-The host contains its executable, marketplace runtime, Sparkle updater including its helpers, application icon, extension metadata, and signatures. It contains zero extension payloads. Feature navigation integration, required platform carriers, the remaining feature migrations, and shipping release packaging still need completion and measurement.
+Measured on {report['measuredAtUTC'].split('T')[0]}. {coverage} Package coverage describes the measured artifacts. It does not establish merge readiness, lifecycle test results, visual review, production signing, or release publication.
 
 | Measured build | Installed MB | Comparison ZIP MB |
 | --- | ---: | ---: |
-| Current main with bundled extensions | {baseline['installedBytes']/1_000_000:.2f} | {baseline['comparisonZipBytes']/1_000_000:.2f} |
-| Current host foundation with updater and shared UI | {host['installedBytes']/1_000_000:.2f} | {host['comparisonZipBytes']/1_000_000:.2f} |
-| Host plus all {count} migrated extensions | {combined['installedBytes']/1_000_000:.2f} | {combined['comparisonZipAndPackageBytes']/1_000_000:.2f} |
+| Recorded bundled-app baseline | {baseline['installedBytes']/1_000_000:.2f} | {baseline['comparisonZipBytes']/1_000_000:.2f} |
+| Measured host without extension packages | {host['installedBytes']/1_000_000:.2f} | {host['comparisonZipBytes']/1_000_000:.2f} |
+| Host plus all {count} measured extension packages | {combined['installedBytes']/1_000_000:.2f} | {combined['comparisonZipAndPackageBytes']/1_000_000:.2f} |
 
-MB means 1,000,000 bytes. The current host foundation is {report['savedPercent']['installedBytes']:.2f}% smaller on disk than the current-main bundled app. That percentage will be recalculated after the remaining shipping components are integrated. Comparison ZIPs use deflate level 9 over regular files and exclude symlinks. They are a controlled comparison, not shipping installer sizes.
+MB means 1,000,000 bytes. {savings} Comparison ZIPs use deflate level 9 over regular files and exclude symlinks. They are controlled comparison archives, not shipping installer sizes. The combined total counts the host and one installed package version per measured feature. OS-managed deployment copies, filesystem allocation rounding, receipts, caches, user data, and retained versions are excluded.
 
-| Independent release package | ZIP bytes | Installed bytes | Release metadata bytes |
+Baseline build: {describe_build(report['measurement']['baselineBuild'])}.
+
+Host build: {describe_build(report['measurement']['hostBuild'])}.
+
+| Local extension artifact | ZIP bytes | Installed package bytes | Package metadata bytes |
 | --- | ---: | ---: | ---: |
 {rows}
-| All {count} migrated packages | {totals['downloadBytes']:,} | {totals['installedBytes']:,} | {totals['releaseMetadataBytes']:,} |
+| All {count} measured packages | {totals['downloadBytes']:,} | {totals['installedBytes']:,} | {totals['releaseMetadataBytes']:,} |
 
-The {count} ZIPs plus their metadata occupy {totals['releaseAssetBytes']:,} bytes as release assets. A shared signed catalog, checksums, retained older releases, and packages that have not been migrated are outside this subtotal. These are locally built development artifacts; these particular releases have not been published.
+The {count} local ZIPs plus their JSON metadata occupy {totals['releaseAssetBytes']:,} bytes. This subtotal does not include a shared signed catalog, detached checksums, older releases, or unmeasured packages. Measuring local artifacts neither publishes them nor proves that corresponding remote release assets exist. Publication status is not verified by this report.
 
-Each enabled extension runs in a worker launched from the same Edith executable. Disabling waits for that process to exit, including a forced shutdown when it does not respond. The host also tracks commands launched into their own process groups and stops those groups on disable, crash, or unresponsive shutdown. The lifecycle test confirms that no worker process remains. Removing an extension stops it before deleting its downloaded packages. User preferences remain separate from downloaded code.
+The generator verifies each package's ZIP size, SHA-256, expanded bytes and CRC. {fingerprint_check} The recorded host executable checksum identifies the exact measured binary. The size calculation does not verify code signatures, the host dependency boundary, zero feature payload, lifecycle behavior, card adapters, platform installation, or cloud release behavior. Record those results separately from the measurement.
 
-Compatible installed extensions survive app updates without downloading them again. Enabled preferences persist, and workers restart when the updated app starts. Extension updates install immutable, verified packages and restart only the affected worker. A failed update attempts to restore the previous working version. Automatic checks run on app startup at most once every eight hours, only when extensions are installed and automatic extension updates are enabled. Users can also check and update manually. Incompatible installed packages are shown as needing a compatible update.
+Worker lifecycle verification covers the owning Edith worker, admitted same-host native tasks, and registered command or descendant process groups. Process-group teardown uses live kernel birth identities. Arbitrarily detached, unregistered feature processes are outside this ownership contract. OS-managed providers have separate retirement rules: Virtual Camera must confirm camera-provider exit after macOS deactivation, and a loaded meeting-microphone driver can require a macOS restart. Approval, failed deactivation, or restart-required retirement must remain visible and keep ownership recoverable. A worker reaching zero processes does not prove that an OS-managed provider or loaded driver has retired.
 
-Local `make ci-marketplace-host` verifies worker failure handling, package integrity and signatures, offline catalog behavior, update preferences, restored enabled extensions, and extension behavior. The real-bundle harness opens a native window, installs a newer version while the previous worker is active, replaces that worker, removes the old app, reconstructs persisted sessions and layouts in a replacement app, disables the extension, checks process exit, and removes its payloads. All {count} migrated extensions pass this flow. Visual review of the completed marketplace and cloud release testing remain outstanding.
+Home and Notch customization from merged [PR #1010](https://github.com/pulkitxm/edith/pull/1010) uses host-owned layouts and a versioned worker boundary. Size measurements do not validate live card data, actions, cancellation, privacy behavior, or visual editor layouts. Editor sample previews are labeled explicitly; live preview queries already running providers. Run and review synthetic lifecycle and visual fixtures separately for the final integrated feature set.
 
-Home and Notch customization from merged [PR #1010](https://github.com/pulkitxm/edith/pull/1010) is part of this rebuild. The visual editor, shared canvas and shelf controls, host-owned preferences, profiles, undo/redo, tab order, source filters, and read-only worker context are implemented. Native synthetic UI tests verify both editors at compact and regular widths, increased zoom, and light and dark appearance. Calendar supplies real filtered meeting data and validates Join actions in its worker. The native Notch renderer and world-clock controls are implemented. Live-card adapters for remaining extensions still need completion.
-
-A card is active only when its provider is installed, compatible, and running. Downloaded or remembered-enabled extensions do not count as running. Runtime layouts omit inactive cards without changing the saved configuration. Disabled, removed, or temporarily incompatible extensions retain their positions, filters, and profiles for later restoration. The availability planner returns no provider queries for hidden surfaces and hidden cards. A widget cannot implicitly start an extension. The shared request client cancels affected requests on disable, removal, or version changes and rejects late replies. Presenter changes clear displayed private card data and pause requests immediately. Editor sample previews are labeled explicitly and do not start workers or fetch data; live preview only queries already running providers.
-
-| Customized content | Planned data and action owner |
-| --- | --- |
-| World clocks | Lightweight host |
-| Usage activity, agent usage, rate limits | Usage extension |
-| Live agents and permission approvals | Sessions extension |
-| Now playing | Music extension |
-| Meetings | Calendar extension |
-| Code stats | Code Stats extension |
-| Focus timer | Attention extension |
-| Databases | Database extension |
-| Machines | Machines extension |
-| GitHub activity | Review extension |
-| Quick actions | Running Keep Awake, Lid Awake, Presenter, System, and Mic Mute extensions |
-| Desk tools | Running Clipboard, Color Picker, Emoji Picker, and Bifrost extensions |
-| Media tools | Running Screen Recorder, Downloads, Virtual Camera, Music, and Studio extensions |
-| Individual extension card | Its own extension worker, covering every indexed extension |
-| Notch shell, files, browser, camera preview | Downloadable Notch extension |
-| Notch Clipboard and Audio tabs | Their own running extension workers |
-
-The Notch browser and camera preview are functions of the Notch package. They do not require Review or Virtual Camera. The Notch renderer runs only while its extension is enabled. External data and actions will cross the worker command boundary as versioned, bounded data; feature models and services stay outside the base app. The existing native runtime tests now also verify that each tested worker reads the same saved Home configuration after replacement and app restart, and that disabling or removing it leaves the layout intact.
-
-Exact byte counts, package checksums, and the host executable checksum are in [the measurement data](extension-host-rebuild-size-report.json). Regenerate both reports after a fresh host build and extension builds:
+Exact byte counts, package checksums, and the host executable checksum are in [the measurement data](extension-host-rebuild-size-report.json). See [the measurement procedure](extension-host-rebuild-measurements.md) for build provenance, publication limits and platform retirement checks. After building the final integrated host and every indexed package, regenerate both reports:
 
 ```sh
 make ci-marketplace-host
 make ci-extension-workers EXTENSION=--retain-packages
-python3 -B scripts/extension-host-size-report.py --baseline local/baseline/current-main-size.json --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
+python3 -B scripts/extension-host-size-report.py --baseline local/baseline/current-main-size.json --host-build local/minimal-host/build-metadata.json --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
 ```
 
-The baseline JSON records source commit `{report['measurement']['baselineSourceCommit']}` and the current-main app measurements. The generator verifies each migrated package's ZIP size, SHA-256, expanded bytes, CRC, and current source fingerprint before producing the comparison. Installed sizes exclude filesystem allocation rounding, receipts, caches, user data, and retained versions.
+The baseline source commit is `{report['measurement']['baselineSourceCommit']}`. Host build metadata is accepted only when its executable checksum matches the measured binary. Omit `--host-build` when provenance has not been recorded; the report will say so instead of assuming a configuration or signing identity. The empty-host limit remains enforced by the build and shipping verifier, independently of this report.
 """
 
 
@@ -131,14 +142,18 @@ def main():
     parser.add_argument("--baseline", required=True, type=Path)
     parser.add_argument("--app", type=Path, default=Path("local/minimal-host/Edith.app"))
     parser.add_argument("--packages", type=Path, default=Path("dist/extensions"))
+    parser.add_argument("--host-build", type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--markdown-output", type=Path)
     arguments = parser.parse_args()
     fingerprints = json.loads(subprocess.run(["bun", str(Path(__file__).with_name("extension-artifact-fingerprints.mjs"))], check=True, capture_output=True, text=True).stdout)
-    report = build_report(json.loads(arguments.baseline.read_text()), arguments.app, arguments.packages, json.loads(Path("Extensions/manifest.json").read_text()), json.loads(Path("Packages/EdithHost/Sources/EdithHostCore/Resources/index.json").read_text()), fingerprints)
+    index = json.loads(Path("Packages/EdithHost/Sources/EdithHostCore/Resources/index.json").read_text())
+    host_build = json.loads(arguments.host_build.read_text()) if arguments.host_build else None
+    report = build_report(json.loads(arguments.baseline.read_text()), arguments.app, arguments.packages, json.loads(Path("Extensions/manifest.json").read_text()), index, fingerprints, host_build)
+    arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_text(json.dumps(report, indent=2) + "\n")
     if arguments.markdown_output:
-        index = json.loads(Path("Packages/EdithHost/Sources/EdithHostCore/Resources/index.json").read_text())
+        arguments.markdown_output.parent.mkdir(parents=True, exist_ok=True)
         arguments.markdown_output.write_text(render_markdown(report, index))
 
 

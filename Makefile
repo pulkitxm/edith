@@ -412,3 +412,8 @@ ci-extension-machines: ci-machines ci-machines-ui
 ci-extension-downloads:
 	swift format lint --strict --recursive Extensions/downloads
 	swift test --package-path Extensions/downloads --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter DownloadsExtensionTests
+
+.PHONY: ci-extension-native-tasks
+ci-extension-native-tasks:
+	swift build --package-path Packages/EdithHost --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --product HostNativeTaskHarness
+	bun scripts/test-extension-native-tasks.mjs
