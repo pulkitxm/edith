@@ -50,7 +50,7 @@ public struct WorkerFixtureAdmission: Sendable {
         let prefix = "com.pulkit.edith.tests.worker-"
         let helperIDs: Set<String> = [
             "focusDim", "micMute", "systemStats", "windowSweaters", "colorPicker",
-            "emoji", "presenter", "keystrokeHighlight",
+            "emoji", "presenter", "keystrokeHighlight", "keepAwake", "notchShelf",
         ]
         let appIDs: Set<String> = ["music", "plugins", "studio"]
         let role: WorkerFixtureRole = appIDs.contains(extensionID) ? .app : .helper

@@ -5,7 +5,7 @@ import Testing
 @Suite struct WorkerFixtureAdmissionTests {
     @Test(arguments: [
         "focusDim", "micMute", "systemStats", "windowSweaters", "colorPicker", "emoji", "presenter",
-        "keystrokeHighlight", "music", "plugins", "studio",
+        "keystrokeHighlight", "music", "plugins", "studio", "keepAwake", "notchShelf",
     ])
     func admitsBoundOwnedFixture(_ owner: String) throws {
         let fixture = try Fixture(owner: owner)
@@ -21,7 +21,7 @@ import Testing
     @Test(arguments: [
         "music", "plugins", "studio", "focusDim", "micMute", "systemStats", "windowSweaters",
         "colorPicker", "emoji",
-        "presenter", "keystrokeHighlight",
+        "presenter", "keystrokeHighlight", "keepAwake", "notchShelf",
     ])
     func rejectsWrongRole(_ owner: String) throws {
         let fixture = try Fixture(owner: owner); defer { fixture.remove() }
@@ -60,12 +60,13 @@ import Testing
         }
     }
 
-    @Test(arguments: [
-        "owner", "namespace", "suite", "data", "version", "extra", "schema", "missing", "large",
-        "homeMode", "rootMode", "markerMode", "symlink",
-    ])
-    func rejectsUnboundFixture(_ change: String) throws {
-        var fixture = try Fixture(owner: "micMute")
+    @Test(
+        arguments: [
+            "owner", "namespace", "suite", "data", "version", "extra", "schema", "missing", "large",
+            "homeMode", "rootMode", "markerMode", "symlink",
+        ], ["micMute", "keepAwake", "notchShelf"])
+    func rejectsUnboundFixture(_ change: String, owner: String) throws {
+        var fixture = try Fixture(owner: owner)
         defer { fixture.remove() }
         switch change {
         case "owner": fixture.environment["EDITH_EXTENSION_ID"] = "emoji"
