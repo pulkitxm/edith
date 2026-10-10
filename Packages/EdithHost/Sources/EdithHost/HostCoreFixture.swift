@@ -1,5 +1,6 @@
 #if EDITH_CLI_FIXTURE
 import Darwin
+import EdithExtensionSupport
 import EdithHostCore
 import Foundation
 
@@ -10,10 +11,38 @@ import Foundation
             let executable = Bundle.main.executableURL
         else { throw HostWorkerError.rejected }
         let identity = try HostIdentity(identifier: identifier, supportDirectory: directory)
+        guard let application = SharedDefaults.applicationStore(identifier: identifier) else {
+            throw HostWorkerError.rejected
+        }
         Task {
+            defer { application.removePersistentDomain(forName: identifier) }
             let service = HostCoreProcess(identity: identity, executable: executable)
+            var stage = "start"
             do {
+                application.set("synthetic-ocean", forKey: AppStorageKeys.General.theme)
+                application.synchronize()
                 let started = try await service.start()
+                stage = "export"
+                let exported = try await service.perform(.synchronize)
+                stage = "export receipt"
+                guard exported.settingsBackup?.exported == true,
+                    exported.tasks.last?.phase == .completed,
+                    FileManager.default.fileExists(
+                        atPath: exported.cloudDirectory.appendingPathComponent("settings.json").path
+                    )
+                else { throw HostWorkerError.rejected }
+                application.set("synthetic-forest", forKey: AppStorageKeys.General.theme)
+                application.synchronize()
+                stage = "restore"
+                let imported = try await service.perform(.restore)
+                application.synchronize()
+                stage = "restore receipt"
+                guard imported.settingsBackup?.restored == true,
+                    imported.settingsBackup?.exported == false,
+                    imported.tasks.last?.phase == .completed,
+                    application.string(forKey: AppStorageKeys.General.theme) == "synthetic-ocean"
+                else { throw HostWorkerError.rejected }
+                stage = "storage"
                 let data = identity.extensionDirectory("usage")
                 try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
                 try Data(repeating: 7, count: 71).write(
@@ -50,13 +79,14 @@ import Foundation
                     JSONSerialization.data(withJSONObject: [
                         "passed": true, "restartRetainedTasks": true, "stoppedProcesses": true,
                         "concurrentStatus": true,
+                        "settingsExport": true, "settingsRestore": true,
                     ]), to: directory.appendingPathComponent("result.json"))
                 exit(0)
             } catch {
                 await service.stop()
                 try? HostCoreFiles.write(
                     JSONSerialization.data(withJSONObject: [
-                        "passed": false, "failure": String(describing: error),
+                        "passed": false, "failure": String(describing: error), "stage": stage,
                     ]), to: directory.appendingPathComponent("result.json"))
                 exit(1)
             }
