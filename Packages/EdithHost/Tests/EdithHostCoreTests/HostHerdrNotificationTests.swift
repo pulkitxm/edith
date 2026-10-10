@@ -20,6 +20,9 @@ import Testing
                 "supportDirectory": "file:///tmp/synthetic-notification",
                 "extensionID": "herdr", "version": "1", "theme": "accent", "appearance": "system",
                 "zoom": 1, "recoveryOnly": false,
+                "ambientPolicy": [
+                    "pauseAmbientOnBattery": false, "subscribers": ["sessions.discover": 0],
+                ],
             ]))
     }
 

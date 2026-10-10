@@ -17,6 +17,9 @@ struct HostFolderChoiceWorkerTests {
             "identifier": "com.pulkit.edith.tests." + UUID().uuidString,
             "supportDirectory": root.absoluteString, "extensionID": "herdr", "version": "1",
             "theme": "accent", "appearance": "system", "zoom": 1, "recoveryOnly": false,
+            "ambientPolicy": [
+                "pauseAmbientOnBattery": false, "subscribers": ["sessions.discover": 0],
+            ],
         ])
         let configuration = try JSONDecoder().decode(HostWorkerConfiguration.self, from: bytes)
         let script = try #require(

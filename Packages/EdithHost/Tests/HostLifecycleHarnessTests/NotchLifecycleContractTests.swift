@@ -16,9 +16,14 @@ import Testing
         }
         #expect(operations.first == "notchShelf.cli.catalog")
         #expect(Array(operations.dropFirst()) == NotchLifecycleMetadata.declinedCommands)
-        #expect(WorkerLifecycleFixture.inertIDs.count == 13)
-        #expect(WorkerLifecycleFixture.inertIDs.contains("keepAwake"))
-        #expect(WorkerLifecycleFixture.inertIDs.contains("notchShelf"))
+        #expect(
+            WorkerLifecycleFixture.inertIDs
+                == Set([
+                    "focusDim", "windowSweaters", "micMute", "keystrokeHighlight", "presenter",
+                    "colorPicker", "systemStats", "emoji", "music", "plugins", "studio",
+                    "keepAwake", "notchShelf", "usage", "herdr", "machines", "attention",
+                    "companion", "codeStats",
+                ]))
     }
 
     @Test(arguments: ["success", "timeout", "cancelled", "foreign"])

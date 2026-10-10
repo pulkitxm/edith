@@ -12,8 +12,28 @@ import Testing
             "supportDirectory": "file:///tmp/synthetic-folder",
             "extensionID": id, "version": version, "theme": "accent", "appearance": "system",
             "zoom": 1, "recoveryOnly": false,
+            "ambientPolicy": [
+                "pauseAmbientOnBattery": false,
+                "subscribers": HostAmbientPolicy.initial(owner: id, pauseAmbientOnBattery: false)
+                    .subscribers,
+            ],
         ])
         return try JSONDecoder().decode(HostWorkerConfiguration.self, from: data)
+    }
+
+    @Test func currentConfigurationRequiresTheOwnedAmbientPolicy() throws {
+        let config = try configuration()
+        #expect(!config.ambientPolicy.pauseAmbientOnBattery)
+        #expect(config.ambientPolicy.subscribers == ["sessions.discover": 0])
+        try config.ambientPolicy.validate(owner: config.extensionID)
+        var bytes = try #require(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(config)) as? [String: Any])
+        bytes.removeValue(forKey: "ambientPolicy")
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(
+                HostWorkerConfiguration.self,
+                from: JSONSerialization.data(withJSONObject: bytes))
+        }
     }
 
     @Test func selectedPathRoundTripsThroughExactSelectorAndWire() throws {
