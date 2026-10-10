@@ -38,6 +38,14 @@ test("short literals are ignored", () => {
   expect(findLiterals('d.bool(forKey: "ab")')).toEqual([]);
 });
 
+test("dictionary removals do not create preference key findings", () => {
+  expect(
+    findLiterals(
+      'selection.removeValue(\n forKey: "card")\ndefaults.string(forKey: "card")',
+    ),
+  ).toEqual([{ literal: "card", line: 3 }]);
+});
+
 test("a literal used in only one file is not a finding", () => {
   const findings = scanFiles([
     {

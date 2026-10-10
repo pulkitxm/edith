@@ -207,7 +207,8 @@ final class HostWorkerApplication {
                             $0.role == .app && (try? $0.snapshot(id: package.id)?.active) == true
                         }),
                         UserDefaults(suiteName: identity.defaultsSuite)?.stringArray(
-                            forKey: "enabledExtensions")?.contains(package.id) == true
+                            forKey: HostExtensionSessions.enabledExtensionsKey)?.contains(
+                                package.id) == true
                     else { throw ExtensionPeerError.unavailable }
                     try self.nativeAdmission.authorize(pid, token: capability)
                     return try JSONEncoder().encode(next)

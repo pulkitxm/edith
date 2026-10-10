@@ -6,6 +6,7 @@ const FOR_KEY = /forKey:\s*"([^"\\]{3,})"/g;
 export function findLiterals(text) {
   const found = [];
   for (const m of text.matchAll(FOR_KEY)) {
+    if (/\.removeValue\(\s*$/.test(text.slice(0, m.index))) continue;
     const line = text.slice(0, m.index).split("\n").length;
     found.push({ literal: m[1], line });
   }

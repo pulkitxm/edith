@@ -45,6 +45,10 @@ from verify_shipping_host import inspect_layout
 app = Path(sys.argv[2])
 plist = dict(CFBundleIdentifier='com.pulkit.edith', CFBundleDisplayName='Edith', CFBundleExecutable='Edith', SUPublicEDKey='synthetic-key', SUFeedURL='https://github.com/pulkitxm/edith/releases/latest/download/appcast.xml')
 (app/'Contents/Info.plist').write_bytes(plistlib.dumps(plist))
+label = 'com.pulkit.edith.extensions.carrier.v1'
+daemons = app/'Contents/Library/LaunchDaemons'
+daemons.mkdir(parents=True, exist_ok=True)
+(daemons/(label+'.plist')).write_bytes(plistlib.dumps(dict(Label=label, BundleProgram='Contents/MacOS/Edith', ProgramArguments=['Edith', '--extension-carrier'], MachServices={label: True})))
 inspect_layout(app, release=True)
 `,
         resolve("scripts"),
