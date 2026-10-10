@@ -19,6 +19,15 @@ let package = Package(
             name: "LidAwakeExtensionTests", dependencies: ["LidAwakeExtension"],
             path: "lidAwake/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
+            name: "DownloadsExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "downloads", exclude: ["Tests", "Runtime.swift"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "DownloadsExtensionTests", dependencies: ["DownloadsExtension"],
+            path: "downloads/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+
+        .target(
             name: "LaTeXExtension",
             dependencies: [.product(name: "EdithExtensionArchive", package: "ExtensionSupport")],
             path: "latex", exclude: ["Tests", "Runtime.swift"], resources: [.process("Resources")],
