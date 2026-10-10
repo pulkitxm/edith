@@ -132,6 +132,13 @@ struct HostBackgroundEnvironment {
         }
     }
 
+    func lastStatus(for job: HostBackgroundJob) -> String? {
+        if let error = job.lastError { return error }
+        guard let lastRun = job.lastRun else { return nil }
+        return events.first { $0.name == job.id && $0.date >= lastRun && $0.duration != nil }?
+            .message
+    }
+
     func cancel() {
         generation = UUID()
         actionGeneration = UUID()

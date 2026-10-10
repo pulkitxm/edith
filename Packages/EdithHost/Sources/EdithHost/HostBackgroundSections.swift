@@ -44,6 +44,10 @@ struct HostBackgroundJobsSection: View {
                                 .units(allowed: [.hours, .minutes, .seconds], width: .abbreviated)))
                     }
                     LabeledContent("Runs", value: String(job.runCount))
+                    LabeledContent(
+                        "Last status",
+                        value: model.lastStatus(for: job)
+                            ?? (job.lastRun == nil ? "Not run yet" : "Not reported"))
                     if let error = job.lastError {
                         Text(error).settingsCaption().foregroundStyle(.orange).textSelection(
                             .enabled)

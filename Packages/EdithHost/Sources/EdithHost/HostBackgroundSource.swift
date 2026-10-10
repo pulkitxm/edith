@@ -7,6 +7,8 @@ import Foundation
         struct Agent: Decodable {
             let jobs: [HostBackgroundJob]
             let events: [HostBackgroundEvent]
+            let schemaVersion: Int
+            let protocolVersion: Int
         }
         let agent: Agent?
     }
@@ -40,17 +42,10 @@ import Foundation
                 guard let snapshot = services.snapshot, services.online else {
                     throw HostCLIError.unavailable
                 }
-                let core = try JSONDecoder().decode(
-                    CoreProjection.self, from: JSONEncoder().encode(snapshot))
-                guard let agent = core.agent else {
-                    return .init(
-                        jobs: [], events: [],
-                        unavailable:
-                            "This background service does not expose its job inventory or event timeline. Update Edith to use these controls."
-                    )
-                }
-                var jobs = agent.jobs
-                var events = agent.events
+                let core = try decodeCore(JSONEncoder().encode(snapshot))
+                guard core.unavailable == nil else { return core }
+                var jobs = core.jobs
+                var events = core.events
                 var missing: [String] = []
                 let states = try await HostCLIProviderRegistry.states { request in
                     try await gateway.execute(request)
@@ -130,6 +125,25 @@ import Foundation
             })
     }
 
+    static func decodeCore(_ data: Data) throws -> HostBackgroundProjection {
+        guard data.count <= HostCLIRequest.maximumPayload else {
+            throw HostCLIError.rejected("The background projection exceeds its size limit.")
+        }
+        let core = try JSONDecoder().decode(CoreProjection.self, from: data)
+        guard let agent = core.agent, agent.schemaVersion == 1, agent.protocolVersion == 1 else {
+            return .init(
+                jobs: [], events: [],
+                unavailable:
+                    "This background service does not expose a supported job inventory or event timeline. Update Edith to use these controls."
+            )
+        }
+        guard agent.jobs.count <= 128, agent.events.count <= 500 else {
+            throw HostCLIError.rejected("The background projection exceeds its item limit.")
+        }
+        try validate(jobs: agent.jobs, events: agent.events)
+        return .init(jobs: agent.jobs, events: agent.events, unavailable: nil)
+    }
+
     private static func identity(_ services: HostCoreServices) -> String? {
         guard services.online, let core = services.snapshot else { return nil }
         let marketplace = services.marketplace
@@ -146,18 +160,15 @@ import Foundation
         state: HostCLIProviderState, operation: String
     ) async throws -> T {
         let invoke: HostCLIProviderRegistry.Invoke = { try await gateway.execute($0) }
-        guard state.available, let pid = state.processIdentifier,
-            let process = ExtensionProcessIdentity.read(pid), process.isAlive,
-            try await HostCLIProviderRegistry.states(invoke: invoke).contains(state)
-        else {
+        let pin = try HostBackgroundOwnerPin(state: state)
+        guard pin.accepts(try await HostCLIProviderRegistry.states(invoke: invoke)) else {
             throw HostCLIError.rejected("The background owner changed.")
         }
         let data = try await gateway.execute(
             HostCLIRequest(action: .invoke, id: state.id, operation: operation))
         try Task.checkCancellation()
-        guard process.isAlive, ExtensionProcessIdentity.read(pid) == process,
-            data.count <= HostCLIRequest.maximumPayload,
-            try await HostCLIProviderRegistry.states(invoke: invoke).contains(state)
+        guard data.count <= HostCLIRequest.maximumPayload,
+            pin.accepts(try await HostCLIProviderRegistry.states(invoke: invoke))
         else {
             throw HostCLIError.rejected("The background owner changed before its result arrived.")
         }

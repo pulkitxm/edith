@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionUI
+import EdithHostCore
 import Foundation
 import SwiftUI
 import Testing
@@ -14,12 +15,13 @@ import Testing
                 identity: { "core:41|herdr:2:77" }, read: { projection }, control: { _, _ in }))
         await model.refresh()
         let job = try #require(model.jobs.first)
-        #expect(job.id == "sessions.discovery")
+        #expect(job.id == "sessions.discover")
         #expect(job.interval == 120)
         #expect(job.lastRun == Date(timeIntervalSince1970: 1_000))
         #expect(job.lastDuration == 3)
         #expect(job.runCount == 6)
         #expect(job.lastError == "Synthetic permission unavailable")
+        #expect(model.lastStatus(for: job) == job.lastError)
         #expect(
             model.events.first?.taskID == UUID(uuidString: "00000000-0000-0000-0000-000000000003"))
         #expect(model.current)
@@ -91,7 +93,7 @@ import Testing
         await model.refresh()
         await model.control(model.jobs[0])
         #expect(commands.count == 1)
-        #expect(commands[0].0 == "sessions.discovery" && !commands[0].1)
+        #expect(commands[0].0 == "sessions.discover" && !commands[0].1)
         projection = try fixture(phase: "running")
         await model.refresh()
         await model.control(model.jobs[0])
@@ -158,7 +160,7 @@ import Testing
         #expect(timeline.matches.count == 65 && timeline.visibleEvents.count == 50)
         timeline.search = " record 129 "
         #expect(timeline.matches.count == 1)
-        #expect(timeline.text.contains("[error] jobs.sessions.discovery"))
+        #expect(timeline.text.contains("[error] jobs.sessions.discover"))
         #expect(timeline.text.contains(sample.taskID!.uuidString))
         timeline.paused = true
         timeline.receive([])
@@ -191,7 +193,67 @@ import Testing
         }
     }
 
-    private func fixture(id: String = "sessions.discovery", phase: String = "failed") throws
+    @Test func actualProcessPinRejectsChangedVersionPIDDisabledAndPendingOwners() throws {
+        let value: [String: Any] = [
+            "id": "herdr", "installed": true, "compatible": true,
+            "enabled": true, "running": true, "version": "2", "disablePending": false,
+            "removalPending": false, "processIdentifier": getpid(),
+        ]
+        func state(_ fields: [String: Any]) throws -> HostCLIProviderState {
+            try JSONDecoder().decode(
+                HostCLIProviderState.self,
+                from: JSONSerialization.data(withJSONObject: fields))
+        }
+        let expected = try state(value)
+        let pin = try HostBackgroundOwnerPin(state: expected)
+        #expect(pin.process.pid == getpid())
+        #expect(pin.accepts([expected]))
+        #expect(!pin.accepts([]))
+        for (field, replacement) in [
+            ("version", "3" as Any), ("processIdentifier", getpid() + 1),
+            ("enabled", false), ("compatible", false), ("running", false),
+            ("disablePending", true), ("removalPending", true),
+        ] {
+            var changed = value
+            changed[field] = replacement
+            let stale = try state(changed)
+            #expect(!pin.accepts([stale]))
+            if field != "version" && field != "processIdentifier" {
+                #expect(throws: (any Error).self) { try HostBackgroundOwnerPin(state: stale) }
+            }
+        }
+    }
+
+    @Test func cancelledAndRetiredActionsCannotPublishLateFailures() async throws {
+        let projection = try fixture()
+        var continuation: CheckedContinuation<Void, any Error>?
+        var signal: CheckedContinuation<Void, Never>?
+        var identity = "core:41"
+        let model = HostBackgroundModel(
+            environment: .init(
+                identity: { identity }, read: { projection },
+                control: { _, _ in
+                    try await withCheckedThrowingContinuation { pending in
+                        continuation = pending
+                        signal?.resume()
+                        signal = nil
+                    }
+                }))
+        await model.refresh()
+        let flight = Task { await model.control(model.jobs[0]) }
+        if continuation == nil { await withCheckedContinuation { signal = $0 } }
+        #expect(model.action == "sessions.discover")
+        identity = "core:42"
+        model.cancel()
+        flight.cancel()
+        continuation?.resume(throwing: CocoaError(.fileReadUnknown))
+        await flight.value
+        #expect(model.failure == nil)
+        #expect(model.action == nil)
+        #expect(!model.current)
+    }
+
+    private func fixture(id: String = "sessions.discover", phase: String = "failed") throws
         -> HostBackgroundProjection
     {
         let decoder = JSONDecoder()
@@ -205,7 +267,7 @@ import Testing
             [HostBackgroundEvent].self,
             from: Data(
                 """
-                [{"id":"00000000-0000-0000-0000-000000000001","date":-978306197,"level":"warning","category":"jobs","name":"sessions.discovery","message":"Synthetic recurring job paused","duration":3,"taskID":"00000000-0000-0000-0000-000000000003"}]
+                [{"id":"00000000-0000-0000-0000-000000000001","date":-978306197,"level":"warning","category":"jobs","name":"sessions.discover","message":"Synthetic recurring job paused","duration":3,"taskID":"00000000-0000-0000-0000-000000000003"}]
                 """.utf8))
         return .init(jobs: jobs, events: events, unavailable: nil)
     }
