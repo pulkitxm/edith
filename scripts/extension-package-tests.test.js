@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { runExtensionPackageTests } from "./test-extension-package.mjs";
 
 test("optional test packages run only the selected extension's declared targets", () => {
@@ -45,4 +46,20 @@ test("failed isolated tests stop the extension release build", () => {
       throw failure;
     }),
   ).toThrow(failure);
+});
+
+test("Notch's actual manifest runs its standalone browser and panel tests only", () => {
+  const definitions = JSON.parse(
+    readFileSync(
+      new URL("../Extensions/manifest.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const notch = definitions.find(({ id }) => id === "notchShelf");
+  expect(notch.testTargets).toEqual(["ci-extension-notch-native"]);
+  const calls = [];
+  runExtensionPackageTests(notch, (...args) => calls.push(args));
+  expect(calls).toEqual([
+    ["make", ["ci-extension-notch-native"], { stdio: "inherit" }],
+  ]);
 });

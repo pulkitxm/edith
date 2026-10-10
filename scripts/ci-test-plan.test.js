@@ -74,6 +74,12 @@ test.each([
   ["presenter", "Tests/PresenterTests.swift", "ci-extension-presenter", false],
   ["system", "Tests/SystemTests.swift", "ci-extension-system", false],
   ["downloads", "Tests/DownloadsTests.swift", "ci-extension-downloads", false],
+  [
+    "notchShelf",
+    "Tests/BrowserCLITests.swift",
+    "ci-extension-notch-native",
+    false,
+  ],
 ])(
   "test-only edits select the exact standalone owner %s",
   (id, path, targets, ghostty) => {
@@ -93,6 +99,12 @@ test("multiple edits deduplicate each owner and the umbrella", () => {
     ]).include,
   ).toEqual([
     { lane: "feature-models", targets: "ci-extension-support" },
+    {
+      lane: "extension-notchShelf",
+      extension: "notchShelf",
+      targets: "ci-extension-notch-native",
+      ghostty: false,
+    },
     {
       lane: "extension-music",
       extension: "music",
@@ -487,4 +499,23 @@ test("every tracked standalone package declares an executable owning test target
       path,
     ).toBe(true);
   }
+});
+
+test("Notch CLI and native browser edits select their standalone owner without release builds", () => {
+  for (const paths of [
+    ["Extensions/notchShelf/CLI/BrowserCommands.swift"],
+    ["Extensions/notchShelf/Browser/Remote/NotchBrowserCommandClient.swift"],
+    [
+      "Extensions/notchShelf/Tests/BrowserCLITests.swift",
+      "Extensions/notchShelf/Tests/NotchBrowserCLIIntegrationTests.swift",
+    ],
+  ])
+    expect(planSwiftTests(paths).include).toEqual([
+      {
+        lane: "extension-notchShelf",
+        extension: "notchShelf",
+        targets: "ci-extension-notch-native",
+        ghostty: false,
+      },
+    ]);
 });

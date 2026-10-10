@@ -862,7 +862,12 @@
         "Extensions/notchShelf/Shelf/Views/NotchSettingsPage.swift",
         "Extensions/notchShelf/Shelf/Views/NotchShape.swift",
         "Extensions/notchShelf/Shelf/Views/NotchShelfView.swift",
-        "Extensions/notchShelf/TextEditingCommands.swift"
+        "Extensions/notchShelf/TextEditingCommands.swift",
+        "Extensions/notchShelf/Browser/Remote/NotchBrowserCLIContract.swift",
+        "Extensions/notchShelf/Browser/Remote/NotchBrowserCLIQueue.swift",
+        "Extensions/notchShelf/Browser/Remote/NotchBrowserCommandClient.swift",
+        "Extensions/notchShelf/CLI/BrowserCommands.swift",
+        "Extensions/notchShelf/CLI/BrowserCLIExecution.swift"
       ]
     },
     "inputs": [
@@ -879,7 +884,10 @@
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-notch-native"
+    ]
   },
   {
     "id": "clipboard",

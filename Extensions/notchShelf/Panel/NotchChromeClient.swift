@@ -28,6 +28,7 @@ import Observation
     private var browserDrains: [UUID: Task<Void, Never>] = [:]
     private var teardown: Task<Void, Never>?
     private var remoteBrowser: NotchBrowserRemoteClient?
+    private var browserCommands: NotchBrowserCommandClient?
     private var thumbnailTasks: [UUID: Task<NSImage?, Never>] = [:]
 
     init(displayID: UInt32, presentationID: UUID, namespace: String, invoke: @escaping Invoke) {
@@ -103,6 +104,7 @@ import Observation
     func stopAndWait() async { stop(); await teardown?.value }
 
     private func drainBrowser() {
+        drainBrowserCommands()
         guard let browser else { return }
         browser.shutdown()
         let id = UUID()
@@ -111,6 +113,17 @@ import Observation
             browserDrains[id] = nil
         }
         self.browser = nil; remoteBrowser = nil
+    }
+
+    private func drainBrowserCommands() {
+        guard let commands = browserCommands else { return }
+        commands.stop()
+        let id = UUID()
+        browserDrains[id] = Task {
+            await commands.stopAndWait()
+            browserDrains[id] = nil
+        }
+        browserCommands = nil
     }
 
     private func apply(_ data: Data, generation token: UUID) throws {
@@ -193,6 +206,33 @@ import Observation
             }
         } else {
             drainBrowser()
+        }
+        if next.panel.visible, next.panel.phase == .expanded, next.panel.activeTab == "browser",
+            !NotchPresenterState.shared.hides(.browser), let browser
+        {
+            if browserCommands == nil {
+                browserCommands = NotchBrowserCommandClient(
+                    request: { [weak self] operation in
+                        guard let self, let snapshot, !stopped, snapshot.panel.visible,
+                            snapshot.panel.phase == .expanded,
+                            snapshot.panel.activeTab == "browser",
+                            !NotchPresenterState.shared.hides(.browser)
+                        else { return nil }
+                        return .init(
+                            identity: snapshot.identity, displayID: displayID,
+                            presentationID: presentationID, operation: operation)
+                    },
+                    invoke: { [invoke] request in
+                        try await invoke("notch.chrome.browser", JSONEncoder().encode(request))
+                    },
+                    perform: { [weak browser] request in
+                        guard let browser else { throw ExtensionPeerError.unavailable }
+                        return try browser.perform(request)
+                    })
+            }
+            browserCommands?.refresh()
+        } else {
+            drainBrowserCommands()
         }
         error = nil
     }
