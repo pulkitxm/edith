@@ -145,14 +145,12 @@ struct HostExtensionReview: View {
     private func download() {
         guard let reviewed else { return }
         perform {
-            await marketplace.checkForUpdates()
-            guard !Task.isCancelled, marketplace.error == nil else { return }
-            guard marketplace.available[entry.id] == reviewed else {
+            await marketplace.download(id: entry.id, expectedPackage: reviewed)
+            guard !Task.isCancelled else { return }
+            if marketplace.available[entry.id] != reviewed {
                 self.reviewed = marketplace.available[entry.id]
                 notice = "The package changed. Review its version and size before downloading."
-                return
             }
-            await marketplace.download(id: entry.id)
         }
     }
 }
