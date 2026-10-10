@@ -5,6 +5,98 @@ import Testing
 @testable import QuinjetUI
 
 @MainActor @Suite(.serialized) struct QuinjetCLIExecutionTests {
+    @Test func ownedStreamsExecuteOriginalCommandsWithRetainedOwnerContext() async throws {
+        defer { QuinjetWorkOwnership.enable() }
+        let worker = QuinjetWorker(
+            client: .init(execute: { _ in Data("[]".utf8) }), automaticActions: false)
+        let request = try ExtensionCLIRequest(
+            arguments: ["new", "--json"],
+            standardInput: Data("synthetic input".utf8), workingDirectory: "/private/tmp",
+            interactive: false)
+        let data = try JSONEncoder().encode(
+            ExtensionCLIStreamStart(
+                owner: "quinjet", session: UUID(), request: request, deadline: 5))
+        let handle = try JSONDecoder().decode(
+            ExtensionCLIStreamHandle.self,
+            from: await worker.execute("quinjet.cli.start", payload: data))
+        var cursor: UInt64 = 0
+        var output = Data()
+        var errors = Data()
+        var exit: Int32?
+        for _ in 0..<100 {
+            let frame = try JSONDecoder().decode(
+                ExtensionCLIStreamFrame.self,
+                from: await worker.execute(
+                    "quinjet.cli.read",
+                    payload: JSONEncoder().encode(
+                        ExtensionCLIStreamRead(handle: handle, sequence: cursor))))
+            try frame.validate()
+            cursor = frame.nextSequence
+            for chunk in frame.chunks {
+                if chunk.channel == .stdout {
+                    output.append(chunk.data)
+                } else {
+                    errors.append(chunk.data)
+                }
+            }
+            if let code = frame.exitCode { exit = code; break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(exit == 0 && errors.isEmpty)
+        #expect(worker.model.tabs.count == 2)
+        #expect(String(decoding: output, as: UTF8.self).contains(worker.model.selected.uuidString))
+        let wrong = ExtensionCLIStreamHandle(
+            owner: "quinjet", session: handle.session, token: UUID())
+        await #expect(throws: ExtensionPeerError.self) {
+            try await worker.execute("quinjet.cli.end", payload: JSONEncoder().encode(wrong))
+        }
+        _ = try await worker.execute("quinjet.cli.end", payload: JSONEncoder().encode(handle))
+        await worker.shutdown()
+        await #expect(throws: ExtensionPeerError.self) {
+            try await worker.execute(
+                "quinjet.cli.read",
+                payload: JSONEncoder().encode(
+                    ExtensionCLIStreamRead(handle: handle, sequence: cursor)))
+        }
+        #expect(QuinjetCLIEnvironment.context == nil && ExtensionCLIContext.request == nil)
+    }
+
+    @Test func originalForegroundLaunchConsumesRequestInputAndResolvesCallerDirectory() async throws
+    {
+        defer { QuinjetWorkOwnership.enable() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let project = root.appendingPathComponent("synthetic project")
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let executable = root.appendingPathComponent("fixture-tool")
+        try Data("#!/bin/sh\n/bin/cat\nprintf 'fixture-error' >&2\nexit 17\n".utf8).write(
+            to: executable)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700], ofItemAtPath: executable.path)
+        let previous = CLIEnvironment.executableNamed
+        CLIEnvironment.executableNamed = { _ in executable }
+        defer { CLIEnvironment.executableNamed = previous }
+        let tree = QuinjetWorktree(
+            path: project.path, head: "1234567", branch: "fixture",
+            current: true, bare: false, detached: false, locked: nil, prunable: nil)
+        let client = QuinjetClient(execute: { arguments in
+            #expect(arguments == ["-C", project.path, "worktree", "list", "--json"])
+            #expect(ExtensionCLIContext.request?.workingDirectory == root.path)
+            #expect(ExtensionCLIContext.request?.interactive == false)
+            return try JSONEncoder().encode([tree])
+        })
+        let worker = QuinjetWorker(client: client, automaticActions: false)
+        let reply = try await QuinjetCLIExecution.run(
+            .init(
+                arguments: ["launch", "synthetic project", "--json"],
+                standardInput: Data("fixture-input ☃".utf8), workingDirectory: root.path),
+            worker: worker)
+        #expect(reply.exitCode == 17 && reply.stdout.isEmpty)
+        #expect(reply.stderr == "fixture-input ☃fixture-error")
+        #expect(ExtensionCLIContext.request == nil && QuinjetCLIEnvironment.context == nil)
+        await worker.shutdown()
+    }
+
     @Test func originalMachineSelectorsAcceptSavedIDsNamesTargetsAndUnambiguousPrefixes() throws {
         let first = Machine(
             id: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!,

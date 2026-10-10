@@ -124,7 +124,9 @@ struct QuinjetWorktreesCommand: AsyncParsableCommand {
             let target = try await QuinjetCLIEnvironment.resolveTarget(target.machine)
             let worktrees = try await QuinjetCLI.resolved {
                 try await QuinjetOperationExecution.worktrees(
-                    at: path, remote: target.remote, using: QuinjetCLIEnvironment.client())
+                    at: target.remote == nil
+                        ? try ExtensionCLIContext.resolvePath(path).path : path,
+                    remote: target.remote, using: QuinjetCLIEnvironment.client())
             }
             QuinjetCLI.renderWorktrees(worktrees, target: target, json: json)
         }
@@ -555,7 +557,16 @@ struct QuinjetCLIPlan: Sendable {
 enum QuinjetCLIEnvironment {
     typealias Launcher = @Sendable (QuinjetLaunchRequest, Bool) async throws -> Int32
 
-    nonisolated(unsafe) static var client: @Sendable () -> QuinjetClient = { .live }
+    struct Context: Sendable {
+        let client: QuinjetClient
+        let session: @Sendable (QuinjetSessionRequest) async throws -> QuinjetSessionResult
+    }
+    @TaskLocal static var context: Context?
+    private nonisolated(unsafe) static var defaultClient: @Sendable () -> QuinjetClient = { .live }
+    static var client: @Sendable () -> QuinjetClient {
+        get { if let client = context?.client { return { client } }; return defaultClient }
+        set { defaultClient = newValue }
+    }
     nonisolated(unsafe) static var cmuxExecutable: @Sendable () -> URL? = {
         QuinjetCMUX.executable()
     }
@@ -574,10 +585,12 @@ enum QuinjetCLIEnvironment {
         launch = { try await launchLive($0, noninteractive: $1) }
     }
 
-    nonisolated(unsafe) static var session:
-        @Sendable (QuinjetSessionRequest) async throws -> QuinjetSessionResult = { _ in
+    static var session: @Sendable (QuinjetSessionRequest) async throws -> QuinjetSessionResult {
+        if let context { return context.session }
+        return { _ in
             throw CLIFailure.unavailable("the Quinjet engine is unavailable")
         }
+    }
 
     private static func launchLive(_ request: QuinjetLaunchRequest, noninteractive: Bool)
         async throws -> Int32
@@ -598,7 +611,9 @@ enum QuinjetCLIEnvironment {
                     new
                 },
                 currentDirectoryURL: request.currentDirectory.map { URL(fileURLWithPath: $0) },
-                timeout: 300, maximumOutputBytes: ExtensionCLIReply.maximumOutputBytes)
+                timeout: 300, maximumOutputBytes: ExtensionCLIReply.maximumOutputBytes,
+                standardInputData: ExtensionCLIContext.request?.standardInput,
+                terminatesProcessGroup: true)
         ) { _ in }
         CLIOut.rawError(String(decoding: result.standardOutputData, as: UTF8.self))
         CLIOut.rawError(String(decoding: result.standardErrorData, as: UTF8.self))
@@ -615,7 +630,8 @@ enum QuinjetCLI {
         let target = try await QuinjetCLIEnvironment.resolveTarget(machine)
         let selection = try await resolved {
             try await QuinjetOperationExecution.openSelection(
-                at: path, remote: target.remote, using: QuinjetCLIEnvironment.client())
+                at: target.remote == nil ? try ExtensionCLIContext.resolvePath(path).path : path,
+                remote: target.remote, using: QuinjetCLIEnvironment.client())
         }
         guard let executable = CLIEnvironment.executableNamed("quinjet") else {
             throw missingTool()

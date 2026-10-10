@@ -5,6 +5,59 @@ import Testing
 @testable import HerdrUI
 
 @MainActor @Suite(.serialized) struct HerdrCLIExecutionTests {
+    @Test func ownedStreamsExecuteOriginalCommandsWithRetainedOwnerContext() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let worker = makeWorker()
+        let request = try ExtensionCLIRequest(
+            arguments: ["layout", "ls", "--json"],
+            standardInput: Data("synthetic input".utf8), workingDirectory: "/private/tmp",
+            interactive: false)
+        let data = try JSONEncoder().encode(
+            ExtensionCLIStreamStart(
+                owner: "herdr", session: UUID(), request: request, deadline: 5))
+        let handle = try JSONDecoder().decode(
+            ExtensionCLIStreamHandle.self,
+            from: await worker.execute("herdr.cli.start", payload: data))
+        var cursor: UInt64 = 0
+        var output = Data()
+        var errors = Data()
+        var exit: Int32?
+        for _ in 0..<100 {
+            let frame = try JSONDecoder().decode(
+                ExtensionCLIStreamFrame.self,
+                from: await worker.execute(
+                    "herdr.cli.read",
+                    payload: JSONEncoder().encode(
+                        ExtensionCLIStreamRead(handle: handle, sequence: cursor))))
+            try frame.validate()
+            cursor = frame.nextSequence
+            for chunk in frame.chunks {
+                if chunk.channel == .stdout {
+                    output.append(chunk.data)
+                } else {
+                    errors.append(chunk.data)
+                }
+            }
+            if let code = frame.exitCode { exit = code; break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(exit == 0 && errors.isEmpty)
+        #expect(String(decoding: output, as: UTF8.self).contains("arrangements"))
+        let wrong = ExtensionCLIStreamHandle(owner: "herdr", session: handle.session, token: UUID())
+        await #expect(throws: ExtensionPeerError.self) {
+            try await worker.execute("herdr.cli.end", payload: JSONEncoder().encode(wrong))
+        }
+        _ = try await worker.execute("herdr.cli.end", payload: JSONEncoder().encode(handle))
+        await worker.shutdown()
+        await #expect(throws: ExtensionPeerError.self) {
+            try await worker.execute(
+                "herdr.cli.read",
+                payload: JSONEncoder().encode(
+                    ExtensionCLIStreamRead(handle: handle, sequence: cursor)))
+        }
+        #expect(HerdrCLIEnvironment.context == nil && ExtensionCLIContext.request == nil)
+    }
+
     @Test func originalMachineSelectorsAcceptSavedIDsNamesTargetsAndUnambiguousPrefixes() throws {
         let first = Machine(
             id: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!,

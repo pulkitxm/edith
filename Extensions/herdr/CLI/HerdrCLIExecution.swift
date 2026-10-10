@@ -10,18 +10,36 @@ import Foundation
         guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
         if worker.automaticActions, worker.store.hosts.isEmpty { await worker.store.refresh() }
         try Task.checkCancellation()
-        let previousLayout = HerdrCLIEnvironment.layout
-        let previousHooks = HerdrCLIEnvironment.hooks
+        let context = makeContext(worker: worker)
+        let reply = try await HerdrCLIEnvironment.$context.withValue(context) {
+            try await ExtensionCLIExecution.run(HerdrCLICommand.self, request: request)
+        }
+        try Task.checkCancellation()
+        guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
+        return reply
+    }
+
+    static func invokeStream(
+        _ operation: String, payload: Data, worker: HerdrWorker,
+        streams: ExtensionCLIStreams
+    ) throws -> Data {
+        guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
+        return try HerdrCLIEnvironment.$context.withValue(makeContext(worker: worker)) {
+            try streams.invoke(
+                HerdrCLICommand.self, operation: operation,
+                prefix: "herdr.cli", payload: payload)
+        }
+    }
+
+    private static func makeContext(worker: HerdrWorker) -> HerdrCLIEnvironment.Context {
         let previousSend = HerdrCLIEnvironment.send
-        let previousSpace = HerdrCLIEnvironment.space
-        HerdrCLIEnvironment.hooks = worker.hooks
-        HerdrCLIEnvironment.send = { text, agent in
+        let send: HerdrCLIEnvironment.Sender = { text, agent in
             guard !Task.isCancelled, await !worker.isStopped else {
                 return .failed("The Herdr engine stopped.")
             }
             return await previousSend(text, agent)
         }
-        HerdrCLIEnvironment.layout = { request in
+        let layout: HerdrCLIEnvironment.Layout = { request in
             try await MainActor.run {
                 guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
                 try Task.checkCancellation()
@@ -29,7 +47,7 @@ import Foundation
                 return worker.store.layoutSnapshot()
             }
         }
-        HerdrCLIEnvironment.space = { action, window, side in
+        let space: HerdrCLIEnvironment.Space = { action, window, side in
             try await MainActor.run {
                 guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
                 try Task.checkCancellation()
@@ -56,39 +74,44 @@ import Foundation
                 )
             }
         }
-        defer {
-            HerdrCLIEnvironment.layout = previousLayout
-            HerdrCLIEnvironment.hooks = previousHooks
-            HerdrCLIEnvironment.space = previousSpace
-            HerdrCLIEnvironment.send = previousSend
-        }
-        let reply = try await ExtensionCLIExecution.run(
-            HerdrCLICommand.self, arguments: request.arguments)
-        try Task.checkCancellation()
-        guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
-        return reply
+        return HerdrCLIEnvironment.Context(
+            hooks: worker.hooks, send: send, layout: layout, space: space)
     }
 }
 
 enum HerdrCLIEnvironment {
+    typealias Sender = @Sendable (String, HerdrAgent) async -> HerdrPromptOutcome
+    typealias Layout = @Sendable (HerdrLayoutRequest) async throws -> HerdrLayoutSnapshot
+    typealias Space =
+        @Sendable (String, String?, String?) async throws -> (
+            windows: [[String: Any]], message: String?
+        )
+    struct Context: Sendable {
+        let hooks: AgentHookService
+        let send: Sender
+        let layout: Layout
+        let space: Space
+    }
+    @TaskLocal static var context: Context?
+
     nonisolated(unsafe) static var collect: HerdrSessionOperationExecution.Collect = {
         await HerdrSessionOperationExecution.list($0)
     }
-    nonisolated(unsafe) static var hooks = AgentHookService.shared
-    nonisolated(unsafe) static var send:
-        @Sendable (String, HerdrAgent) async -> HerdrPromptOutcome = {
-            await HerdrAgentPrompt.send($0, to: $1)
-        }
-    nonisolated(unsafe) static var layout:
-        @Sendable (HerdrLayoutRequest) async throws -> HerdrLayoutSnapshot = { _ in
+    static var hooks: AgentHookService { context?.hooks ?? AgentHookService.shared }
+    static var send: Sender {
+        if let context { return context.send }
+        return { await HerdrAgentPrompt.send($0, to: $1) }
+    }
+    static var layout: Layout {
+        if let context { return context.layout }
+        return { _ in throw CLIFailure.unavailable("the Herdr engine is unavailable") }
+    }
+    static var space: Space {
+        if let context { return context.space }
+        return { _, _, _ in
             throw CLIFailure.unavailable("the Herdr engine is unavailable")
         }
-    nonisolated(unsafe) static var space:
-        @Sendable (String, String?, String?) async throws -> (
-            windows: [[String: Any]], message: String?
-        ) = { _, _, _ in
-            throw CLIFailure.unavailable("the Herdr engine is unavailable")
-        }
+    }
     nonisolated(unsafe) static var launchTerminal:
         @Sendable (TerminalLaunchRequest) async throws -> Int32 = { _ in
             throw CLIFailure.unavailable(

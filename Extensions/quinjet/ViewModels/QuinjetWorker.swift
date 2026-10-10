@@ -1,3 +1,4 @@
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
@@ -8,6 +9,7 @@ import Foundation
     let automaticActions: Bool
     private(set) var isStopped = false
     private var started = false
+    private var cliStreams: ExtensionCLIStreams?
     private var maintenance: Task<Void, Never>?
     private let attachment = UUID()
     private struct ProjectSelection: Equatable {
@@ -129,6 +131,15 @@ import Foundation
     func execute(_ command: String, payload: Data) async throws -> Data {
         guard !isStopped else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
+        if ["quinjet.cli.start", "quinjet.cli.read", "quinjet.cli.cancel", "quinjet.cli.end"]
+            .contains(command)
+        {
+            if cliStreams == nil { cliStreams = try ExtensionCLIStreams(owner: "quinjet") }
+            guard let cliStreams else { throw ExtensionPeerError.unavailable }
+            return try QuinjetCLIExecution.invokeStream(
+                command, payload: payload,
+                worker: self, streams: cliStreams)
+        }
         if [
             "quinjet.terminal.read", "quinjet.terminal.input", "quinjet.terminal.resize",
             "quinjet.terminal.close",
@@ -258,6 +269,8 @@ import Foundation
     func shutdown() async {
         guard !isStopped else { return }
         isStopped = true
+        await cliStreams?.stopAndWait()
+        cliStreams = nil
         maintenance?.cancel()
         model.cancelDiscovery()
         model.stopAll()

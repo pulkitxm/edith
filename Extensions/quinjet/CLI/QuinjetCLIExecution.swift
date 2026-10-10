@@ -8,22 +8,35 @@ import Foundation
     {
         try request.validate()
         guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
-        let previousClient = QuinjetCLIEnvironment.client
-        let previousSession = QuinjetCLIEnvironment.session
-        let client = worker.client
-        QuinjetCLIEnvironment.client = { client }
-        QuinjetCLIEnvironment.session = { request in
-            guard await !worker.isStopped else { throw ExtensionPeerError.unavailable }
-            try Task.checkCancellation()
-            return try await worker.model.performSessionOperation(request)
+        let reply = try await QuinjetCLIEnvironment.$context.withValue(makeContext(worker: worker))
+        {
+            try await ExtensionCLIExecution.run(QuinjetCommand.self, request: request)
         }
-        defer {
-            QuinjetCLIEnvironment.client = previousClient
-            QuinjetCLIEnvironment.session = previousSession
-        }
-        let reply = try await ExtensionCLIExecution.run(
-            QuinjetCommand.self, arguments: request.arguments)
+        try Task.checkCancellation()
         guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
         return reply
+    }
+
+    static func invokeStream(
+        _ operation: String, payload: Data, worker: QuinjetWorker,
+        streams: ExtensionCLIStreams
+    ) throws -> Data {
+        guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
+        return try QuinjetCLIEnvironment.$context.withValue(makeContext(worker: worker)) {
+            try streams.invoke(
+                QuinjetCommand.self, operation: operation,
+                prefix: "quinjet.cli", payload: payload)
+        }
+    }
+
+    private static func makeContext(worker: QuinjetWorker) -> QuinjetCLIEnvironment.Context {
+        let client = worker.client
+        return .init(
+            client: client,
+            session: { request in
+                guard await !worker.isStopped else { throw ExtensionPeerError.unavailable }
+                try Task.checkCancellation()
+                return try await worker.model.performSessionOperation(request)
+            })
     }
 }

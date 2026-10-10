@@ -1,3 +1,4 @@
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
@@ -15,6 +16,7 @@ import Foundation
     private let send: @Sendable (String, HerdrAgent) async -> HerdrPromptOutcome
     private(set) var isStopped = false
     private var started = false
+    private var cliStreams: ExtensionCLIStreams?
     private var maintenance: Task<Void, Never>?
 
     init(
@@ -98,6 +100,15 @@ import Foundation
     func execute(_ command: String, payload: Data) async throws -> Data {
         guard !isStopped else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
+        if ["herdr.cli.start", "herdr.cli.read", "herdr.cli.cancel", "herdr.cli.end"].contains(
+            command)
+        {
+            if cliStreams == nil { cliStreams = try ExtensionCLIStreams(owner: "herdr") }
+            guard let cliStreams else { throw ExtensionPeerError.unavailable }
+            return try HerdrCLIExecution.invokeStream(
+                command, payload: payload,
+                worker: self, streams: cliStreams)
+        }
         if [
             "herdr.terminal.read", "herdr.terminal.input", "herdr.terminal.resize",
             "herdr.terminal.close",
@@ -254,6 +265,8 @@ import Foundation
     func shutdown() async {
         guard !isStopped else { return }
         isStopped = true
+        await cliStreams?.stopAndWait()
+        cliStreams = nil
         do { try await activity.hookFiles.suspend(activityInstaller) } catch {
             activity.hookError = error.localizedDescription
         }
