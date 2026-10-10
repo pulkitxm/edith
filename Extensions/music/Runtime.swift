@@ -115,7 +115,7 @@ final class ExtensionRuntime: NSObject {
             _ = embeddedUI.release(input)
         case "stopUI": embeddedUI.stop()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": break
+        case "synchronize": backup?.preferencesChanged()
         case "stop":
             embeddedUI.stop()
             navigation?.invalidate(); navigation = nil; MusicHostNavigation.navigate = nil;

@@ -84,7 +84,11 @@ final class ExtensionRuntime: NSObject {
                 return ["ok": false, "error": error.localizedDescription] as NSDictionary
             }
             let backup = self.backup
-            backupRestoreTask = Task { _ = await backup?.restoreOnEnable() }
+            backupRestoreTask = Task {
+                let restored = await backup?.restoreOnEnable()
+                guard !Task.isCancelled else { return }
+                backup?.startScheduling(restorePending: restored == false)
+            }
             let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
             let worker = ClipboardWorker(
                 capturesPasteboard: !fixture,
@@ -127,7 +131,7 @@ final class ExtensionRuntime: NSObject {
             worker?.panel.show()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":
-            registerHotKey(); IPC.post(IPC.Name.settingsChanged)
+            registerHotKey(); backup?.preferencesChanged(); IPC.post(IPC.Name.settingsChanged)
         case "stop":
             presentation?.stop(); presentation = nil
             commands.shutdown()
