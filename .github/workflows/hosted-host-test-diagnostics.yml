@@ -31,6 +31,7 @@ jobs:
         with:
           ref: "${{ github.sha }}"
           persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       - name: Verify pure watchdog admission and ownership contracts
         run: python3 -m unittest discover -s scripts/hosted-host-tests -p 'test_*.py'
       - name: Build then run required serial Core and UI batches
