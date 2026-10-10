@@ -290,7 +290,9 @@ import SwiftUI
         try value.validate(
             accountHome: try accountHome(), environment: ProcessInfo.processInfo.environment)
         let bytes = try JSONEncoder().encode(
-            JourneyProducerReceipt(fixture: value, phase: phase, error: error))
+            JourneyProducerReceipt(
+                fixture: value, phase: phase, error: error,
+                environment: ProcessInfo.processInfo.environment))
         guard bytes.count <= 1024 else { throw JourneyContractError.invalidMetadata }
         let path = directory.appendingPathComponent("producer.json")
         try bytes.write(to: path, options: .atomic)

@@ -53,7 +53,8 @@ private func fixture(identifier: String = identifier, directory: String = direct
 @Test func applicationEnvironmentCannotUseAmbientHomeDefaultsOrSSH() throws {
     let fixture = fixture()
     let environment = [
-        "HOME": fixture.home, "XDG_CONFIG_HOME": fixture.home + "/.config",
+        "HOME": fixture.home, "CFFIXED_USER_HOME": fixture.home, "SSH_AUTH_SOCK": "",
+        "XDG_CONFIG_HOME": fixture.home + "/.config",
         "XDG_CACHE_HOME": fixture.home + "/.cache", "XDG_DATA_HOME": fixture.home + "/.local/share",
         "EDITH_APPLICATION_IDENTIFIER": identifier,
         "EDITH_SHARED_DEFAULTS_SUITE": fixture.defaultsSuite,
@@ -148,7 +149,8 @@ private func fixture(identifier: String = identifier, directory: String = direct
     try value.validateApplicationEnvironment(application)
     #expect(application["HOME"] == value.home)
     #expect(application["XDG_CONFIG_HOME"] == value.home + "/.config")
-    #expect(application["SSH_AUTH_SOCK"] == nil)
+    #expect(application["SSH_AUTH_SOCK"] == "")
+    #expect(application["CFFIXED_USER_HOME"] == value.home)
     #expect(application["PRIVATE_TOKEN"] == nil)
     for key in [
         "EDITH_JOURNEY_ACCOUNT_HOME", "EDITH_APPLICATION_IDENTIFIER",
@@ -257,5 +259,33 @@ private func fixture(identifier: String = identifier, directory: String = direct
     }
     #expect(throws: JourneyContractError.invalidMetadata) {
         try JourneyProducerReceipt(fixture: value, phase: "arbitrary")
+    }
+}
+
+@Test func producerEnvironmentFailureReportsOnlyBooleanMatches() throws {
+    let value = fixture()
+    let environment = runner.merging([
+        "EDITH_JOURNEY_ACCOUNT_HOME": "/Users/fixture",
+        "EDITH_APPLICATION_IDENTIFIER": identifier,
+        "EDITH_SHARED_DEFAULTS_SUITE": identifier,
+        "EDITH_EXTENSION_FIXTURE_HOME": value.home,
+        "EDITH_GUI_FIXTURE_DIRECTORY": directory,
+    ]) { _, next in next }
+    let application = try value.applicationEnvironment(from: environment)
+    let ready = try JourneyProducerReceipt(fixture: value, phase: "make", environment: application)
+    #expect(ready.environmentMatches == nil)
+    for key in application.keys where !runner.keys.contains(key) {
+        var changed = application
+        changed[key] = "private-synthetic-token-or-path"
+        let receipt = try JourneyProducerReceipt(
+            fixture: value, phase: "make", error: JourneyContractError.invalidEnvironment,
+            environment: changed)
+        let matches = try #require(receipt.environmentMatches)
+        #expect(matches.count == 10)
+        #expect(matches.values.filter { !$0 }.count == 1)
+        let bytes = try JSONEncoder().encode(receipt)
+        #expect(bytes.count <= 1024)
+        #expect(!String(decoding: bytes, as: UTF8.self).contains("private-synthetic"))
+        #expect(!String(decoding: bytes, as: UTF8.self).contains("/Users/"))
     }
 }

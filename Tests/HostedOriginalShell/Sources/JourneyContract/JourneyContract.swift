@@ -90,7 +90,8 @@ public struct JourneyFixture: Codable, Equatable, Sendable {
         let result = [
             "GITHUB_ACTIONS": "true", "RUNNER_OS": "macOS",
             "RUNNER_ENVIRONMENT": "github-hosted", "EDITH_HOSTED_SHELL_JOURNEY": "1",
-            "HOME": home, "XDG_CONFIG_HOME": home + "/.config",
+            "HOME": home, "CFFIXED_USER_HOME": home, "SSH_AUTH_SOCK": "",
+            "XDG_CONFIG_HOME": home + "/.config",
             "XDG_CACHE_HOME": home + "/.cache", "XDG_DATA_HOME": home + "/.local/share",
             "EDITH_APPLICATION_IDENTIFIER": identifier,
             "EDITH_SHARED_DEFAULTS_SUITE": defaultsSuite,
@@ -101,16 +102,23 @@ public struct JourneyFixture: Codable, Equatable, Sendable {
     }
 
     public func validateApplicationEnvironment(_ environment: [String: String]) throws {
-        guard environment["HOME"] == home,
-            environment["XDG_CONFIG_HOME"] == home + "/.config",
-            environment["XDG_CACHE_HOME"] == home + "/.cache",
-            environment["XDG_DATA_HOME"] == home + "/.local/share",
-            environment["EDITH_APPLICATION_IDENTIFIER"] == identifier,
-            environment["EDITH_SHARED_DEFAULTS_SUITE"] == defaultsSuite,
-            environment["EDITH_EXTENSION_FIXTURE_HOME"] == home,
-            environment["EDITH_GUI_FIXTURE_DIRECTORY"] == directory,
-            environment["SSH_AUTH_SOCK"] == nil
+        guard applicationEnvironmentMatches(environment).values.allSatisfy({ $0 })
         else { throw JourneyContractError.invalidEnvironment }
+    }
+
+    public func applicationEnvironmentMatches(_ environment: [String: String]) -> [String: Bool] {
+        [
+            "home": environment["HOME"] == home,
+            "fixedHome": environment["CFFIXED_USER_HOME"] == home,
+            "configHome": environment["XDG_CONFIG_HOME"] == home + "/.config",
+            "cacheHome": environment["XDG_CACHE_HOME"] == home + "/.cache",
+            "dataHome": environment["XDG_DATA_HOME"] == home + "/.local/share",
+            "applicationIdentity": environment["EDITH_APPLICATION_IDENTIFIER"] == identifier,
+            "defaultsIdentity": environment["EDITH_SHARED_DEFAULTS_SUITE"] == defaultsSuite,
+            "fixtureHome": environment["EDITH_EXTENSION_FIXTURE_HOME"] == home,
+            "fixtureDirectory": environment["EDITH_GUI_FIXTURE_DIRECTORY"] == directory,
+            "sshAgentCleared": environment["SSH_AUTH_SOCK"]?.isEmpty != false,
+        ]
     }
 
     public func homeCategory(_ value: String?, accountHome: String) -> String {
@@ -226,14 +234,20 @@ public struct JourneyProducerReceipt: Encodable, Equatable, Sendable {
     public let sourceCommit: String
     public let phase: String
     public let category: String
+    public let environmentMatches: [String: Bool]?
 
-    public init(fixture: JourneyFixture, phase: String, error: (any Error)? = nil) throws {
+    public init(
+        fixture: JourneyFixture, phase: String, error: (any Error)? = nil,
+        environment: [String: String]? = nil
+    ) throws {
         guard ["make", "telemetry"].contains(phase) else {
             throw JourneyContractError.invalidMetadata
         }
         hostIdentifier = fixture.identifier
         sourceCommit = fixture.sourceCommit
         self.phase = phase
+        environmentMatches =
+            error == nil ? nil : environment.map(fixture.applicationEnvironmentMatches)
         guard let error else { category = "ready"; return }
         guard let contract = error as? JourneyContractError else {
             category = "dependency-failure"; return
