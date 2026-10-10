@@ -16,6 +16,7 @@ import SwiftUI
     private var stopped = false
     private var task: Task<Void, Never>?
     private var readAgain = false
+    private var actions: [(NotchCameraRequest.Operation, String?)] = []
     @ObservationIgnored private nonisolated(unsafe) var observer: NSObjectProtocol?
     init(namespace: String, presentationID: UUID, invoke: @escaping Invoke) {
         self.invoke = invoke
@@ -29,16 +30,26 @@ import SwiftUI
     deinit { if let observer { DistributedNotificationCenter.default().removeObserver(observer) } }
     func perform(_ operation: NotchCameraRequest.Operation, deviceID: String? = nil) {
         guard !stopped else { return }
-        if task != nil { if operation == .read { readAgain = true }; return }
+        if task != nil {
+            if operation == .read {
+                readAgain = true
+            } else if actions.count < 4 {
+                actions.append((operation, deviceID))
+            } else {
+                error = "The camera control queue is full."
+            }
+            return
+        }
         let token = generation
         task = Task { [weak self] in
             guard let self else { return }
             defer { if generation == token { task = nil } }
             var operation = operation
+            var selectedDevice = deviceID
             repeat {
                 readAgain = false
                 do {
-                    let data = try await invoke(operation, deviceID)
+                    let data = try await invoke(operation, selectedDevice)
                     try Task.checkCancellation()
                     guard !stopped, generation == token, data.count <= 786432 else { return }
                     let next = try JSONDecoder().decode(NotchCameraState.self, from: data)
@@ -53,8 +64,14 @@ import SwiftUI
                         self.error = error.localizedDescription
                     }
                 }
-                operation = .read
-            } while readAgain && !Task.isCancelled && !stopped
+                if !actions.isEmpty {
+                    (operation, selectedDevice) = actions.removeFirst()
+                } else if readAgain {
+                    operation = .read; selectedDevice = nil
+                } else {
+                    break
+                }
+            } while !Task.isCancelled && !stopped
         }
     }
     func load() async {
@@ -66,12 +83,14 @@ import SwiftUI
     }
     func cycle() {
         guard let state, state.devices.count > 1 else { return }
-        let index = state.devices.firstIndex(where: { $0.id == state.selectedID }) ?? 0
+        let desired = actions.last(where: { $0.0 == .select })?.1 ?? state.selectedID
+        let index = state.devices.firstIndex(where: { $0.id == desired }) ?? 0
         perform(.select, deviceID: state.devices[(index + 1) % state.devices.count].id)
     }
     func drain() async { await task?.value }
     func stop() {
         generation = UUID(); stopped = true; task?.cancel(); task = nil; state = nil; image = nil
+        actions = []; readAgain = false
         if let observer { DistributedNotificationCenter.default().removeObserver(observer) }
         observer = nil
     }
