@@ -105,6 +105,13 @@ test("actual synthetic ZIP has verified CRC and new digest, selected store and n
       (await stat(join(directory, "managed-route.json"))).mode & 0o7777,
     ).toBe(0o600);
     expect((await stat(result.fixtureHome)).mode & 0o7777).toBe(0o700);
+    for (const path of [
+      join(directory, "tmp"),
+      join(result.fixtureHome, ".config"),
+      join(result.fixtureHome, ".cache"),
+      join(result.fixtureHome, ".local/share"),
+    ])
+      expect((await stat(path)).mode & 0o7777).toBe(0o700);
     const location = managedStorePaths({
       directory,
       identifier: preparation.host.identifier,

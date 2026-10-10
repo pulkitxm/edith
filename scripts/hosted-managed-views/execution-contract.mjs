@@ -68,6 +68,7 @@ export function managedApplicationEnvironment(fixture, environment) {
   return {
     ...hosted,
     HOME: home,
+    TMPDIR: join(fixture.directory, "tmp"),
     XDG_CONFIG_HOME: join(home, ".config"),
     XDG_CACHE_HOME: join(home, ".cache"),
     XDG_DATA_HOME: join(home, ".local/share"),
