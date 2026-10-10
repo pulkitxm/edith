@@ -428,8 +428,13 @@ test("authenticated fixed state endpoint observes delayed synthetic producer wit
       expect((await get()).status).toBe(503);
     }
     await rm(join(value.directory, "state.json"));
+    await writeFile(
+      join(value.directory, "outside.json"),
+      JSON.stringify(state),
+      { mode: 0o600 },
+    );
     await symlink(
-      join(value.directory, "active-catalog.json"),
+      join(value.directory, "outside.json"),
       join(value.directory, "state.json"),
     );
     expect((await get()).status).toBe(503);
@@ -466,5 +471,26 @@ test("state reader rejects oversized files, different owner and replaced root be
     await expect(reader()).rejects.toThrow();
   } finally {
     await value.cleanup();
+  }
+});
+
+test("stalled state producer has a bounded response and closes the owned operator", async () => {
+  const server = await startJourneyReplacementOperator(async () => ({}), {
+    readState: () => new Promise(() => {}),
+    stateTimeoutMs: 10,
+  });
+  try {
+    const response = await fetch(
+      server.endpoint.replace(/\/replace$/, "/state"),
+      { headers: { Authorization: `Bearer ${server.token}` } },
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      schema: 1,
+      outcome: "rejected",
+      category: "state-unavailable",
+    });
+  } finally {
+    await server.close();
   }
 });

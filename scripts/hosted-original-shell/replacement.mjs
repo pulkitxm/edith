@@ -391,8 +391,13 @@ export async function createJourneyStateReader({
 
 export async function startJourneyReplacementOperator(
   replace,
-  { readState } = {},
+  { readState, stateTimeoutMs = 2000 } = {},
 ) {
+  assert(
+    Number.isInteger(stateTimeoutMs) &&
+      stateTimeoutMs > 0 &&
+      stateTimeoutMs <= 2000,
+  );
   const token = randomBytes(32).toString("hex");
   const server = createServer(async (request, response) => {
     try {
@@ -413,7 +418,22 @@ export async function startJourneyReplacementOperator(
         );
         assert(request.headers["transfer-encoding"] === undefined);
         assert.equal(typeof readState, "function");
-        const result = await readState();
+        let deadline;
+        let result;
+        try {
+          result = await Promise.race([
+            readState(),
+            new Promise((_, reject) => {
+              deadline = setTimeout(
+                () => reject(Error("State read deadline exceeded")),
+                stateTimeoutMs,
+              );
+            }),
+          ]);
+        } finally {
+          clearTimeout(deadline);
+        }
+
         const bytes = JSON.stringify(result);
         assert(Buffer.byteLength(bytes) <= 131_072);
         response.writeHead(200, {

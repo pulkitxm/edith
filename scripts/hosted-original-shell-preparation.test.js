@@ -151,7 +151,7 @@ test("runner proof admission includes every actual XCTest user interaction stage
     "utf8",
   );
   const emitted = [
-    ...testSource.matchAll(/try (?:waitState|capture)\("([^"\n]+)"/g),
+    ...testSource.matchAll(/try await (?:waitState|capture)\("([^"\n]+)"/g),
   ].map((match) => match[1]);
   const expected = runner
     .split("proof.snapshots.map((item) => item.stage),")[1]
