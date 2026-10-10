@@ -28,6 +28,21 @@ def measure_host_components(app):
     return components
 
 
+def measure_scenarios(host, packages):
+    by_id = {entry["id"]: entry for entry in packages}
+    scenarios = [
+        ("Daily tools", ["calendar", "clipboard", "systemStats", "usage"]),
+        ("Development tools", ["terminal", "database", "docs", "codeStats"]),
+        ("Media tools", ["virtualCamera", "studio", "audioMixer", "music", "timeLapse"]),
+    ]
+    return [
+        {"name": name, "extensions": identifiers,
+         "installedBytes": host["installedBytes"] + sum(by_id[identifier]["installedBytes"] for identifier in identifiers),
+         "extensionDownloadBytes": sum(by_id[identifier]["downloadBytes"] for identifier in identifiers)}
+        for name, identifiers in scenarios if all(identifier in by_id for identifier in identifiers)
+    ]
+
+
 def build_report(baseline, app, packages, definitions, index, expected_fingerprints=None, host_build=None):
     migrated = [entry["id"] for entry in definitions if entry.get("contractVersion") == 1]
     known = {entry["id"] for entry in index}
@@ -47,6 +62,7 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
         raise ValueError("Host build metadata must match the measured executable checksum")
     result = measurements.compare(baseline, measured, measurements.measure_packages(packages, migrated))
     result["hostComponents"] = measure_host_components(app)
+    result["selectedExtensionScenarios"] = measure_scenarios(measured, result["packages"])
     result["migratedExtensionPackages"] = result.pop("allExtensionPackages")
     result["appWithMigratedExtensions"] = result.pop("appWithAllExtensions")
     remaining = sorted(known - set(migrated))
@@ -122,6 +138,10 @@ def render_markdown(report, index):
     component_rows = "\n".join(
         f"| {component_labels[key]} | {value:,} |" for key, value in report["hostComponents"].items()
     )
+    scenario_rows = "\n".join(
+        f"| {entry['name']} | {', '.join(entry['extensions'])} | {entry['installedBytes']/1_000_000:.2f} | {entry['extensionDownloadBytes']/1_000_000:.2f} |"
+        for entry in report["selectedExtensionScenarios"]
+    )
     return f"""# Lightweight host rebuild measurements
 
 Measured on {report['measuredAtUTC'].split('T')[0]}. {coverage} Package coverage describes the measured artifacts. It does not establish merge readiness, lifecycle test results, visual review, production signing, or release publication.
@@ -144,6 +164,12 @@ Host build: {describe_build(report['measurement']['hostBuild'])}.
 | Total empty host | {host['installedBytes']:,} |
 
 The host contains the marketplace, window and surface layout controls, worker lifecycle and command gateway. Sparkle updates the application independently of extension updates. Downloaded feature code and resources belong to the packages below. Component sizes count each regular file once and exclude symbolic links.
+
+| Example selection | Downloaded extensions | App plus installed packages MB | Extension download MB |
+| --- | --- | ---: | ---: |
+{scenario_rows}
+
+These selections are size examples, not bundles or defaults. Each feature is downloaded separately. Installing every feature can cost more than the bundled app because independent packages duplicate shared runtime code and native libraries. The empty app and selected-package totals show the savings for people who install only the features they use.
 
 | Local extension artifact | ZIP bytes | Installed package bytes | Package metadata bytes |
 | --- | ---: | ---: | ---: |

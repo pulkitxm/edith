@@ -12,6 +12,17 @@ spec.loader.exec_module(report)
 
 
 class HostSizeReportTests(unittest.TestCase):
+    def test_selected_scenarios_count_the_host_once_and_only_the_selected_packages(self):
+        packages = [
+            {"id": identifier, "installedBytes": 100, "downloadBytes": 40}
+            for identifier in ["calendar", "clipboard", "systemStats", "usage", "unused"]
+        ]
+        measured = report.measure_scenarios({"installedBytes": 50}, packages)
+        self.assertEqual(measured, [{"name": "Daily tools",
+            "extensions": ["calendar", "clipboard", "systemStats", "usage"],
+            "installedBytes": 450, "extensionDownloadBytes": 160}])
+        self.assertEqual(report.measure_scenarios({"installedBytes": 50}, packages[:3]), [])
+
     def setUp(self):
         fixture = tempfile.TemporaryDirectory()
         self.addCleanup(fixture.cleanup)
@@ -142,8 +153,10 @@ class HostSizeReportTests(unittest.TestCase):
         result = report.build_report(self.baseline, self.app, self.packages,
             [{"id": "sample", "contractVersion": 1}], index)
         rendered = report.render_markdown(result, index)
-        self.assertIn("loaded meeting-microphone driver can require a macOS restart", rendered)
-        self.assertIn("confirm camera-provider exit after macOS deactivation", rendered)
+        self.assertIn("meeting-microphone driver has separate retirement rules and can require a macOS restart", rendered)
+        self.assertIn("independently installed OBS Virtual Camera provider", rendered)
+        self.assertIn("Edith does not install, remove, or deactivate", rendered)
+        self.assertNotIn("confirm camera-provider exit after macOS deactivation", rendered)
         self.assertIn("OS-managed deployment copies", rendered)
         self.assertIn("unregistered feature processes are outside", rendered)
         self.assertIn("does not prove that an OS-managed provider", rendered)
