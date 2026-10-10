@@ -24,7 +24,11 @@ async function ownedSources(
   for (const entry of await readdir(resolve(root, directory), {
     withFileTypes: true,
   })) {
-    if (["Tests", ".build", ".swiftpm", "vendor"].includes(entry.name))
+    if (
+      ["Tests", "EmbeddedTests", ".build", ".swiftpm", "vendor"].includes(
+        entry.name,
+      )
+    )
       continue;
     const path = `${directory}/${entry.name}`;
     if (path === excluded) continue;
@@ -120,6 +124,7 @@ test("native inventory includes compiled native languages and headers without te
       "Native/Sources/Module/Glue.mm",
       "Native/Sources/Module/Bridge.swift",
       "Native/Tests/Fixture.swift",
+      "Native/EmbeddedTests/BrowserFixture.swift",
       "Native/vendor/External.cpp",
       "Native/.build/Generated.swift",
       "Native/Package.swift",
