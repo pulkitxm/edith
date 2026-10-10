@@ -2,11 +2,10 @@ import Darwin
 import Foundation
 import Security
 
-public struct HostRemoteProcessIdentity: Equatable, Sendable {
+public struct HostRemoteKernelIdentity: Equatable, Sendable {
     public let pid: Int32
     public let generation: String
     public let executable: URL
-    public let codeHash: Data
 
     public static func read(_ pid: Int32) throws -> Self {
         var info = proc_bsdinfo()
@@ -16,6 +15,28 @@ public struct HostRemoteProcessIdentity: Equatable, Sendable {
             info.pbi_uid == getuid(), info.pbi_ruid == getuid(),
             proc_pidpath(pid, &path, UInt32(path.count)) > 0
         else { throw HostWorkerError.rejected }
+        return Self(
+            pid: pid, generation: "\(info.pbi_start_tvsec):\(info.pbi_start_tvusec)",
+            executable: URL(fileURLWithPath: String(cString: path)).resolvingSymlinksInPath())
+    }
+
+    public func verify(_ connection: NSXPCConnection) throws {
+        guard connection.effectiveUserIdentifier == getuid(),
+            connection.processIdentifier == pid, try Self.read(pid) == self
+        else { throw HostWorkerError.rejected }
+    }
+
+    public var isRunning: Bool { (try? Self.read(pid)) == self }
+}
+
+public struct HostRemoteProcessIdentity: Equatable, Sendable {
+    public let pid: Int32
+    public let generation: String
+    public let executable: URL
+    public let codeHash: Data
+
+    public static func read(_ pid: Int32) throws -> Self {
+        let kernel = try HostRemoteKernelIdentity.read(pid)
         var code: SecCode?
         guard
             SecCodeCopyGuestWithAttributes(
@@ -28,8 +49,7 @@ public struct HostRemoteProcessIdentity: Equatable, Sendable {
             throw HostWorkerError.rejected
         }
         return Self(
-            pid: pid, generation: "\(info.pbi_start_tvsec):\(info.pbi_start_tvusec)",
-            executable: URL(fileURLWithPath: String(cString: path)).resolvingSymlinksInPath(),
+            pid: pid, generation: kernel.generation, executable: kernel.executable,
             codeHash: try hash(staticCode))
     }
 
