@@ -679,15 +679,30 @@ private func renderWorkbench(
         view.displayIfNeeded()
     }
     redraw(host)
-    guard let image = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
-    host.cacheDisplay(in: host.bounds, to: image)
-    if let captureURL, let bytes = image.representation(using: .png, properties: [:]) {
+    if let captureURL {
+        window.setFrameOrigin(NSPoint(x: 100, y: 100))
+        window.orderFrontRegardless()
+        window.display()
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.5))
+        let capture = Process()
+        capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        capture.arguments = ["-x", "-o", "-l", String(window.windowNumber), captureURL.path]
         do {
             try FileManager.default.createDirectory(
-                at: captureURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try bytes.write(to: captureURL)
-        } catch { Issue.record("Unable to capture the synthetic database window: \(error)") }
+                at: captureURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true)
+            try capture.run()
+            capture.waitUntilExit()
+            if capture.terminationStatus == 0, let bytes = try? Data(contentsOf: captureURL) {
+                return NSBitmapImageRep(data: bytes)
+            }
+        } catch {
+            Issue.record("Unable to capture the synthetic database window: \(error)")
+        }
+        return nil
     }
+    guard let image = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
+    host.cacheDisplay(in: host.bounds, to: image)
     return image
 }
 
