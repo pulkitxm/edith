@@ -24,7 +24,8 @@ struct NotchWorkerOwnershipTests {
         let context = SurfaceHostContext(defaults: defaults, sharedState: state)
         return (
             NotchShelfController(
-                context: context, startsServices: false, root: root.appendingPathComponent("Shelf")),
+                context: context, startsServices: false, root: root.appendingPathComponent("Shelf"),
+                bluetoothPrivacyRequired: { false }),
             context, root, id
         )
     }

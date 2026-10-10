@@ -46,7 +46,10 @@ struct NotchNativeSlotView: View {
     }
     var body: some View {
         Color.clear
-            .frame(minHeight: client.slotHeight(tile: tile, kind: kind) ?? fallbackHeight)
+            .frame(
+                minHeight: tile.height ?? client.slotHeight(tile: tile, kind: kind)
+                    ?? fallbackHeight
+            )
             .overlay {
                 if let failure = client.slotFailure(tile: tile, kind: kind)
                     ?? (client.supportsNative(tile: tile, kind: kind)
@@ -85,6 +88,12 @@ struct NotchPanelPage: View {
                 Text(error).font(.edithText(.caption)).foregroundStyle(.orange).padding(12)
             } else {
                 Color.clear
+            }
+        }.overlay(alignment: .bottom) {
+            if let error = client.error, client.snapshot != nil {
+                Text(error).font(.edithText(.caption)).foregroundStyle(.orange)
+                    .padding(8).background(
+                        .black.opacity(0.9), in: RoundedRectangle(cornerRadius: 8))
             }
         }.task { await client.refresh() }
             .onDisappear { client.stop() }

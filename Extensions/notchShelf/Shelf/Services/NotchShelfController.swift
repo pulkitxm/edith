@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import CoreBluetooth
 import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
@@ -45,6 +46,8 @@ final class NotchShelfController {
     let layouts: SurfaceLayoutStore
     let requests: SurfaceSnapshotClient
     let privacy: SurfacePrivacyState
+    let bluetoothPrivacyRequired: () -> Bool
+    private var hostDisplaySizes: [UInt32: CGSize] = [:]
     private(set) var activeIDs: Set<String> = []
     private(set) var surfaceSnapshots: [String: SurfaceSnapshot] = [:]
     private var glanceTask: Task<Void, Never>?
@@ -101,9 +104,13 @@ final class NotchShelfController {
 
     init(
         context: SurfaceHostContext, startsServices: Bool = true, root: URL = ShelfIndex.root,
-        hostDisplays: [NotchPanelDisplay]? = nil
+        hostDisplays: [NotchPanelDisplay]? = nil,
+        bluetoothPrivacyRequired: @escaping () -> Bool = {
+            CBManager.authorization == .denied || CBManager.authorization == .restricted
+        }
     ) {
         hostOwned = hostDisplays != nil
+        self.bluetoothPrivacyRequired = bluetoothPrivacyRequired
         self.context = context
         self.startsServices = startsServices
         layouts = SurfaceLayoutStore(defaults: context.defaults) {
@@ -605,6 +612,10 @@ final class NotchShelfController {
     }
 
     func configureHostDisplays(_ displays: [NotchPanelDisplay]) {
+        hostDisplaySizes = Dictionary(
+            uniqueKeysWithValues: displays.map {
+                ($0.displayID, CGSize(width: $0.width, height: $0.height))
+            })
         collapsedSizes = Dictionary(
             uniqueKeysWithValues: displays.map { ($0.displayID, $0.collapsedSize) })
         builtinDisplayID = displays.first(where: \.isBuiltin)?.displayID
@@ -649,7 +660,6 @@ final class NotchShelfController {
                 NotchGeometry.openFrame(around: collapsedFrame).contains(point),
                 on: display.displayID)
         }
-        onPanelStateChanged?()
     }
 
     func expandedSize(on id: CGDirectDisplayID) -> CGSize {
@@ -658,12 +668,14 @@ final class NotchShelfController {
             tab: activeTab, hasMusic: false, notchHeight: base.height,
             browserSize: browserSize(on: id), layout: visibleSurfaceLayout, editing: layoutEditing,
             homeHeight: homeContentHeight)
-        guard let screen = NSScreen.screens.first(where: { $0.displayID == id }) else {
-            return requested
-        }
+        let screenSize =
+            hostDisplaySizes[id]
+            ?? (startsServices
+                ? NSScreen.screens.first(where: { $0.displayID == id })?.frame.size : nil)
+        guard let screenSize else { return requested }
         return CGSize(
-            width: min(requested.width, screen.frame.width - 48),
-            height: min(requested.height, screen.frame.height - 48))
+            width: min(requested.width, screenSize.width - 48),
+            height: min(requested.height, screenSize.height - (activeTab == .browser ? 12 : 48)))
     }
 
     private func applyExactFrame(_ panel: NSPanel, screen: NSScreen, id: CGDirectDisplayID) {
@@ -677,6 +689,17 @@ final class NotchShelfController {
                 origin: NotchGeometry.origin(screenFrame: screen.frame, panelSize: size),
                 size: size),
             display: true)
+    }
+
+    func hostCapacity(_ display: NotchPanelDisplay) -> CGSize {
+        let capacity = CGSize(
+            width: min(1200, display.width - 48),
+            height: min(display.collapsedHeight + 760, display.height - 48))
+        guard browserEngine != nil else { return capacity }
+        return NotchGeometry.union(
+            capacity,
+            NotchBrowserGeometry.shapeSize(
+                browser: browserSize(on: display.displayID), notchHeight: display.collapsedHeight))
     }
 
     private func panelShape(for id: CGDirectDisplayID) -> CGSize {
@@ -703,11 +726,13 @@ final class NotchShelfController {
     }
 
     private func browserArea(on id: CGDirectDisplayID?) -> CGSize? {
-        guard let screen = NSScreen.screens.first(where: { $0.displayID == id }) else {
-            return nil
-        }
+        let size =
+            id.flatMap { hostDisplaySizes[$0] }
+            ?? (startsServices
+                ? NSScreen.screens.first(where: { $0.displayID == id })?.frame.size : nil)
+        guard let size else { return nil }
         let notchHeight = (id.flatMap { collapsedSizes[$0] } ?? NotchGeometry.fallbackSize).height
-        return NotchBrowserGeometry.available(screen: screen.frame.size, notchHeight: notchHeight)
+        return NotchBrowserGeometry.available(screen: size, notchHeight: notchHeight)
     }
 
     private func browserScreenSize() -> CGSize? {
@@ -1130,6 +1155,11 @@ final class NotchShelfController {
     }
 
     func hostSelect(_ ids: Set<UUID>) { selectedIDs = ids }
+    func requireShelfCLIAccess() throws {
+        guard !stopped, !store.actionSelectionRetained else {
+            throw CLIFailure.unavailable("a native shelf action is still using the selected files")
+        }
+    }
     func shareCLIItems(_ ids: [UUID]) async throws {
         if let panelEngine, panelEngine.attached { try await panelEngine.shareCLI(ids); return }
         guard !stopped, !isSharing else { throw ShelfActionSelectionError.busy }

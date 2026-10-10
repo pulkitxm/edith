@@ -22,11 +22,14 @@ import Observation
     private var lastHomeHeight: Double?
     private var slotsByKey: [String: UUID] = [:]
     private var reported: [NotchPanelSlot] = []
+    private(set) var camera: NotchCameraClient?
+    private let namespace: String
     private(set) var browser: NotchBrowserStore?
     private var remoteBrowser: NotchBrowserRemoteClient?
     private var thumbnailTasks: [UUID: Task<NSImage?, Never>] = [:]
 
     init(displayID: UInt32, presentationID: UUID, namespace: String, invoke: @escaping Invoke) {
+        self.namespace = namespace
         self.displayID = displayID
         self.presentationID = presentationID
         self.invoke = invoke
@@ -80,6 +83,7 @@ import Observation
         observer = nil
         snapshot = nil; reported = []; slotsByKey = [:]
         remoteLayouts.changed = nil
+        camera?.stop(); camera = nil
         browser?.shutdown(); browser = nil
         remoteBrowser?.stop(); remoteBrowser = nil
     }
@@ -117,6 +121,16 @@ import Observation
         snapshot = next
         remoteLayouts.apply(next.layout)
         NotchPresenterState.shared.remoteValues = next.privacyValues
+        if camera == nil {
+            camera = NotchCameraClient(namespace: namespace, presentationID: presentationID) {
+                [weak self] operation, deviceID in
+                guard let self, !stopped, let snapshot else { throw ExtensionPeerError.unavailable }
+                let request = NotchCameraRequest(
+                    identity: snapshot.identity, displayID: displayID,
+                    presentationID: presentationID, operation: operation, deviceID: deviceID)
+                return try await invoke("notch.chrome.camera", JSONEncoder().encode(request))
+            }
+        }
         if let state = next.browserState {
             if let remoteBrowser {
                 remoteBrowser.apply(state)
@@ -193,6 +207,23 @@ import Observation
             id: UUID(), providerID: provider, providerVersion: "", kind: kind, tile: tile,
             rectangle: .init(x: 0, y: 0, width: 1, height: 1)
         ).section != nil
+    }
+
+    func quickActions(
+        tile: SurfaceTile, providerID: String? = nil, actionID: String? = nil,
+        session: NotchLidAwakeSession? = nil
+    ) async throws -> NotchQuickActionState {
+        guard !stopped, let snapshot else { throw ExtensionPeerError.unavailable }
+        let token = generation
+        let request = NotchQuickActionRequest(
+            identity: snapshot.identity, displayID: displayID, presentationID: presentationID,
+            tile: tile, providerID: providerID, actionID: actionID, session: session)
+        let data = try await invoke("notch.chrome.quick", JSONEncoder().encode(request))
+        try Task.checkCancellation()
+        guard !stopped, generation == token, data.count <= NotchPanelEngine.maximumBytes else {
+            throw CancellationError()
+        }
+        return try JSONDecoder().decode(NotchQuickActionState.self, from: data)
     }
 
     func slot(tile: SurfaceTile, kind: NotchPanelSlot.Kind, rectangle: CGRect) -> NotchPanelSlot? {

@@ -8,11 +8,14 @@ import Foundation
     private let defaults: UserDefaults
     private let keyProvider: @Sendable () throws -> ChromeCookieKey
     private let open: (URL, ChromeProfile?) -> Void
+    private let openURL: (URL) -> Bool
     private(set) var session: BrowserSession
     private var cookieKey: ChromeCookieKey?
     private var importTask: Task<Result<(ChromeCookieKey, ChromeProfileSnapshot), Error>, Never>?
     private var imported: (NotchBrowserImport, Data)?
     private var stopped = false
+    private let downloads: NotchBrowserDownloadEngine
+    private var importExpiry: Task<Void, Never>?
     var held = false
     var changed: (() -> Void)?
 
@@ -22,8 +25,11 @@ import Foundation
         keyProvider: @escaping @Sendable () throws -> ChromeCookieKey = {
             try ChromeSafeStorage.keychainKey()
         },
-        open: ((URL, ChromeProfile?) -> Void)? = nil
+        open: ((URL, ChromeProfile?) -> Void)? = nil, downloads: NotchBrowserDownloadEngine? = nil,
+        openURL: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) }
     ) {
+        self.openURL = openURL
+        self.downloads = downloads ?? NotchBrowserDownloadEngine()
         self.installation = installation
         self.sessionFile = sessionFile
         self.defaults = defaults
@@ -75,6 +81,22 @@ import Foundation
         guard !stopped else { throw ExtensionPeerError.unavailable }
         let encoder = JSONEncoder()
         switch request.operation {
+        case .downloadStart:
+            guard let name = request.fileName else { throw ExtensionPeerError.invalidRequest }
+            return try encoder.encode(downloads.start(name))
+        case .downloadWrite:
+            guard let id = request.downloadID, let offset = request.byteOffset,
+                let bytes = request.bytes
+            else { throw ExtensionPeerError.invalidRequest }
+            try downloads.write(id: id, offset: offset, bytes: bytes)
+            return Data("{}".utf8)
+        case .downloadCommit:
+            guard let id = request.downloadID else { throw ExtensionPeerError.invalidRequest }
+            return try encoder.encode(downloads.commit(id: id))
+        case .downloadCancel:
+            guard let id = request.downloadID else { throw ExtensionPeerError.invalidRequest }
+            downloads.cancel(id: id)
+            return Data("{}".utf8)
         case .read: break
         case .importStart: return try encoder.encode(await beginImport(request.profileID))
         case .importRead:
@@ -87,10 +109,11 @@ import Foundation
                     id: imported.0.id, offset: offset, nextOffset: end,
                     bytes: imported.1.subdata(in: offset..<end)))
         case .importEnd:
-            guard request.importID == imported?.0.id else {
+            guard let imported, request.importID == imported.0.id else {
                 throw ExtensionPeerError.invalidRequest
             }
-            imported = nil
+            self.imported = nil
+            importExpiry?.cancel(); importExpiry = nil
         case .save:
             guard let session = request.session, session.tabs.count <= 128,
                 session.tabs.allSatisfy({ $0.utf8.count <= 16384 && URL(string: $0) != nil }),
@@ -129,8 +152,14 @@ import Foundation
             }
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(link, forType: .string)
-        case .downloadChrome: open(ChromeInstallation.downloadURL, nil)
-        case .privacy: open(ChromeInstallation.privacySettingsURL, nil)
+        case .downloadChrome:
+            guard openURL(ChromeInstallation.downloadURL) else {
+                throw ExtensionPeerError.unavailable
+            }
+        case .privacy:
+            guard openURL(ChromeInstallation.privacySettingsURL) else {
+                throw ExtensionPeerError.unavailable
+            }
         case .makeDefault:
             try await withCheckedThrowingContinuation {
                 (continuation: CheckedContinuation<Void, Error>) in
@@ -190,6 +219,11 @@ import Foundation
             dataStoreID: ChromeProfileImporter.dataStoreIdentifier(
                 profile: profile, userData: userData), byteCount: data.count, session: updated)
         imported = (descriptor, data)
+        importExpiry?.cancel()
+        importExpiry = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(60)) } catch { return }
+            if self?.imported?.0.id == descriptor.id { self?.imported = nil }
+        }
         return descriptor
     }
 
@@ -201,6 +235,7 @@ import Foundation
 
     func stop() {
         stopped = true; importTask?.cancel(); imported = nil; cookieKey = nil; changed = nil
+        importExpiry?.cancel(); importExpiry = nil; downloads.stop()
     }
     func stopAndWait() async {
         let task = importTask

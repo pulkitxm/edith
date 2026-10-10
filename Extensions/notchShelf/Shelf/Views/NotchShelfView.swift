@@ -350,7 +350,12 @@ struct NotchShelfContentView: View {
         case .files: filesCanvas
         case .clipboard: providerTab(SurfaceTile(.ability("clipboard")))
         case .audio: providerTab(SurfaceTile(.ability("audioMixer")))
-        case .camera: NotchCameraTab()
+        case .camera:
+            if let client = controller as? NotchChromeClient, let camera = client.camera {
+                NotchRemoteCameraTab(model: camera)
+            } else {
+                NotchCameraTab()
+            }
         }
     }
 

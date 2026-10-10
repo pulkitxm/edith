@@ -46,6 +46,7 @@ final class ShelfStore {
     private var indexRefresh: Task<Void, Never>?
     private var mutationGeneration = 0
     private var stopped = false
+    var actionSelectionRetained: Bool { retainedActionSelection != nil }
     var onExternalChange: (@MainActor () -> Void)?
 
     init(root: URL = ShelfIndex.root) {

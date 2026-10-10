@@ -20,15 +20,44 @@ import Testing
         #expect(state.phase == .expanded)
         #expect(state.activeTab == "home")
         #expect(controller.surfaceLayout.tiles == [fixture.music, fixture.calendar])
-        #expect(throws: (any Error).self) { try fixture.attach() }
+        #expect(try fixture.attach().identity == batch.identity)
         let object = try #require(
             try JSONSerialization.jsonObject(with: JSONEncoder().encode(state)) as? [String: Any])
         #expect(
             Set(object.keys) == [
                 "contractVersion", "ownershipID", "version", "revision", "displayID",
                 "presentationID", "phase", "activeTab", "shapeWidth", "shapeHeight", "visible",
-                "acceptsPointer", "acceptsKeyFocus", "slots",
+                "acceptsPointer", "acceptsKeyFocus", "slots", "capacityWidth", "capacityHeight",
             ])
+    }
+
+    @Test func lostAttachReplyRecoversOnlyExactOwnerAndCleanupSurvivesDisable() throws {
+        let fixture = try NotchPanelFixture()
+        defer { fixture.clean() }
+        let first = try fixture.attach()
+        let controller = fixture.bind()
+        controller.expand(on: 42)
+        try fixture.publish([:])
+        #expect(try fixture.attach().identity == first.identity)
+        let display = try #require(fixture.engine.displays[42])
+        #expect(throws: (any Error).self) {
+            try fixture.engine.attach(.init(ownershipID: UUID(), version: "1", displays: [display]))
+        }
+        var stale = display
+        stale = .init(
+            displayID: 42, presentationID: UUID(), width: display.width, height: display.height,
+            collapsedWidth: 150, collapsedHeight: 28, isBuiltin: true)
+        #expect(throws: (any Error).self) {
+            try fixture.engine.attach(
+                .init(ownershipID: fixture.ownership, version: "1", displays: [stale]))
+        }
+        #expect(throws: (any Error).self) {
+            try fixture.engine.chrome(.init(displayID: 42, presentationID: fixture.presentation))
+        }
+        try fixture.engine.detach(first.identity)
+        try fixture.engine.detach(first.identity)
+        #expect(!fixture.engine.attached)
+        #expect(controller.ownedPanelCount == 0)
     }
 
     @Test func geometryAdmitsExactSavedTilesAndRejectsStaleDisabledAndOutOfBoundsSlots() throws {
@@ -194,7 +223,11 @@ import Testing
     let calendar = SurfaceTile(.calendar)
     let engine: NotchPanelEngine
     var controller: NotchShelfController?
-    init() throws {
+    init(
+        cameraFactory: @escaping @MainActor () -> NotchCameraEngine = {
+            NotchCameraEngine(hardware: NativeNotchCameraHardware())
+        }
+    ) throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent(id)
         defaults = try #require(UserDefaults(suiteName: id))
         defaults.set(false, forKey: AppStorageKeys.Notch.shelfHaptics)
@@ -202,7 +235,8 @@ import Testing
         context = SurfaceHostContext(
             defaults: defaults, sharedState: .init(root: root, namespace: id, owner: "host"))
         engine = NotchPanelEngine(
-            context: context, connectedDisplays: { [42: CGSize(width: 1280, height: 900)] })
+            context: context, connectedDisplays: { [42: CGSize(width: 1280, height: 900)] },
+            cameraFactory: cameraFactory)
         try publish(["notchShelf": "1", "music": "1", "calendar": "1"])
     }
     func publish(_ versions: [String: String]) throws {
@@ -226,7 +260,7 @@ import Testing
     func bind() -> NotchShelfController {
         let controller = NotchShelfController(
             context: context, startsServices: false, root: root.appendingPathComponent("Shelf"),
-            hostDisplays: Array(engine.displays.values))
+            hostDisplays: Array(engine.displays.values), bluetoothPrivacyRequired: { false })
         self.controller = controller
         engine.bind(controller)
         return controller

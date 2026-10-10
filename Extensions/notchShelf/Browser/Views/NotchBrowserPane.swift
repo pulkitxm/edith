@@ -7,6 +7,7 @@ import WebKit
 struct NotchBrowserPane<Leading: View>: View {
     var store: NotchBrowserStore
     @ViewBuilder var leading: Leading
+    @Environment(\.automaticViewActionsEnabled) private var automaticActions
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,7 +28,7 @@ struct NotchBrowserPane<Leading: View>: View {
             }
         }
         .overlay(alignment: .bottom) { NotchBrowserResizeHandles(store: store) }
-        .onAppear { store.appeared() }
+        .onAppear { if automaticActions { store.appeared() } }
     }
 
     private var content: some View {

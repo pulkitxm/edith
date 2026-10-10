@@ -22,7 +22,7 @@ struct NotchPanelDisplay: Codable, Equatable, Sendable {
     var collapsedSize: CGSize { CGSize(width: collapsedWidth, height: collapsedHeight) }
     var valid: Bool {
         [width, height, collapsedWidth, collapsedHeight].allSatisfy(\.isFinite)
-            && (49...32768).contains(width) && (49...32768).contains(height)
+            && (49...16384).contains(width) && (49...16384).contains(height)
             && (1...min(1200, width - 48)).contains(collapsedWidth)
             && (1...128).contains(collapsedHeight)
     }
@@ -72,7 +72,13 @@ struct NotchPanelState: Codable, Equatable, Sendable {
     let acceptsPointer: Bool
     let acceptsKeyFocus: Bool
     var slots: [NotchPanelSlot]
-    var bounds: CGRect { CGRect(x: 0, y: 0, width: shapeWidth + 24, height: shapeHeight + 10) }
+    var capacityWidth: Double? = nil
+    var capacityHeight: Double? = nil
+    var bounds: CGRect {
+        CGRect(
+            x: 0, y: 0, width: max(shapeWidth, capacityWidth ?? 0) + 24,
+            height: max(shapeHeight, capacityHeight ?? 0) + 10)
+    }
 }
 
 struct NotchPanelAttach: Codable, Sendable {

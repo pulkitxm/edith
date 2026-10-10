@@ -28,7 +28,8 @@ struct NotchBrowserImportChunk: Codable, Sendable {
 struct NotchBrowserRemoteRequest: Codable, Sendable {
     enum Operation: String, Codable, Sendable {
         case read, importStart, importRead, importEnd, save, detach, makeDefault, downloadChrome
-        case privacy, openInChrome, copyLink, held
+        case privacy, openInChrome, copyLink, held, downloadStart, downloadWrite, downloadCommit,
+            downloadCancel
     }
     let identity: NotchPanelIdentity
     let displayID: UInt32
@@ -40,4 +41,8 @@ struct NotchBrowserRemoteRequest: Codable, Sendable {
     var session: BrowserSession? = nil
     var link: String? = nil
     var held: Bool? = nil
+    var downloadID: UUID? = nil
+    var fileName: String? = nil
+    var byteOffset: UInt64? = nil
+    var bytes: Data? = nil
 }
