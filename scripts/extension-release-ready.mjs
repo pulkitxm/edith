@@ -1,47 +1,44 @@
-import { createPublicKey, verify } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeHostABI } from "./extension-host-abi.mjs";
 import { extensionFingerprint } from "./extension-release-plan.mjs";
+import { verifiedCatalogPayload } from "./verify-extension-catalog.mjs";
 
 export function verifyCatalog(envelope, publicKey) {
-  if (Buffer.byteLength(envelope) > 3_000_000)
-    throw new Error("Catalog exceeds size limit");
-  const signed = JSON.parse(envelope);
-  const payload = Buffer.from(signed.payload, "base64");
-  const key = createPublicKey({
-    key: Buffer.concat([
-      Buffer.from("302a300506032b6570032100", "hex"),
-      Buffer.from(publicKey, "base64"),
-    ]),
-    format: "der",
-    type: "spki",
-  });
-  if (!verify(null, payload, key, Buffer.from(signed.signature, "base64")))
-    throw new Error("Invalid catalog signature");
-  const catalog = JSON.parse(payload);
-  if (
-    catalog.schemaVersion !== 1 ||
-    !Number.isSafeInteger(catalog.revision) ||
-    catalog.revision <= 0 ||
-    !Array.isArray(catalog.packages)
-  )
-    throw new Error("Invalid catalog");
-  return catalog;
+  return JSON.parse(verifiedCatalogPayload(Buffer.from(envelope), publicKey));
 }
 
 export function missingPackages(expected, catalog) {
-  return expected.filter(
-    (entry) =>
-      !catalog.packages.some(
-        (published) =>
-          published.id === entry.id &&
-          published.hostABI === entry.hostABI &&
-          published.architecture === "arm64" &&
-          published.sourceFingerprint === entry.fingerprint,
-      ),
-  );
+  return expected.filter((entry) => {
+    const compatible = catalog.packages.filter(
+      (published) =>
+        published.id === entry.id &&
+        published.hostABI === entry.hostABI &&
+        published.architecture === entry.architecture,
+    );
+    const systems = new Set([
+      entry.minimumSystemVersion,
+      ...compatible
+        .map((published) => published.minimumSystemVersion)
+        .filter((system) => system >= entry.minimumSystemVersion),
+    ]);
+    return [...systems].some((system) => {
+      const selected = compatible
+        .filter((published) => published.minimumSystemVersion <= system)
+        .reduce(
+          (latest, published) =>
+            !latest ||
+            latest.version.localeCompare(published.version, undefined, {
+              numeric: true,
+            }) < 0
+              ? published
+              : latest,
+          undefined,
+        );
+      return selected?.sourceFingerprint !== entry.fingerprint;
+    });
+  });
 }
 
 export async function expectedPackages(root) {
@@ -53,6 +50,8 @@ export async function expectedPackages(root) {
     definitions.map(async (entry) => ({
       id: entry.id,
       hostABI: entry.hostABI,
+      architecture: "arm64",
+      minimumSystemVersion: entry.minimumSystemVersion,
       fingerprint: await extensionFingerprint(root, entry, definitions),
     })),
   );
