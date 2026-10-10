@@ -6,6 +6,7 @@ import { isDeepStrictEqual } from "node:util";
 import {
   catalogPointer,
   parseCatalogPointer,
+  validateCatalogPointer,
   verifyCatalogPointerData,
 } from "./extension-catalog-pointer.mjs";
 import {
@@ -279,6 +280,7 @@ export async function promoteExtensionCatalog({
   verifyAsset,
   updatePointer,
 }) {
+  validateCatalogPointer(pointer);
   const staged = await verifyState();
   const matches =
     staged?.release?.assets.filter(
@@ -288,7 +290,16 @@ export async function promoteExtensionCatalog({
     throw new Error("Catalog upload did not finish");
   await verifyAsset(matches[0], pointer);
   const current = await verifyState();
-  if (current?.release?.id !== staged.release.id)
+  const stillStaged =
+    current?.release?.assets.filter(
+      (asset) => asset.name === pointer.assetName,
+    ) ?? [];
+  if (
+    current?.release?.id !== staged.release.id ||
+    stillStaged.length !== 1 ||
+    stillStaged[0].id !== matches[0].id ||
+    stillStaged[0].size !== pointer.bytes
+  )
     throw new Error("Catalog release changed");
   await updatePointer(current.release.id, JSON.stringify(pointer));
 }

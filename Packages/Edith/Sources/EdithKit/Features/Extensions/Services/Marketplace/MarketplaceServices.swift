@@ -13,14 +13,7 @@ public enum MarketplaceServices {
     }
 
     public static var catalogClient: ExtensionCatalogClient {
-        let preview =
-            AppBuildIdentity.isDevelopment
-            ? ProcessInfo.processInfo.environment["EDITH_EXTENSION_CATALOG_URL"].flatMap(
-                URL.init(string:))
-            : nil
-        return .live(
-            cache: store.root.appendingPathComponent("catalog.json"),
-            url: preview ?? MarketplaceConfiguration.catalogURL)
+        .live(cache: store.root.appendingPathComponent("catalog.json"))
     }
 
     public static func installedPackage(id: String) -> ExtensionPackage? {

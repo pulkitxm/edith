@@ -227,3 +227,61 @@ test("signed malformed, duplicate, missing dependency and oversized catalogs rej
     ),
   ).toThrow();
 });
+
+test("production readiness resolves the immutable pointer and refuses foreign, missing or mismatched assets", async () => {
+  const { catalogPointer, catalogReleaseURL, catalogAssetURL } = await import(
+    "./extension-catalog-pointer.mjs"
+  );
+  const data = Buffer.from(signed([record]));
+  const pointer = catalogPointer(data, 2);
+  const release = {
+    tag_name: "extension-catalog-v1",
+    draft: false,
+    body: JSON.stringify(pointer),
+    assets: [{ name: pointer.assetName, size: pointer.bytes }],
+  };
+  const calls = [];
+  expect(
+    await waitForPackages({
+      expected,
+      publicKey: rawKey,
+      fetchCatalog: async (url) => {
+        calls.push(url);
+        return new Response(
+          url === catalogReleaseURL ? JSON.stringify(release) : data,
+        );
+      },
+    }),
+  ).toBe(2);
+  expect(calls).toEqual([catalogReleaseURL, catalogAssetURL(pointer)]);
+  for (const change of [
+    { draft: true },
+    { tag_name: "foreign" },
+    { body: "broken" },
+    { assets: [] },
+    { assets: [release.assets[0], release.assets[0]] },
+    { body: JSON.stringify({ ...pointer, url: "https://foreign.invalid" }) },
+    { body: JSON.stringify({ ...pointer, sha256: "a".repeat(64) }) },
+    {
+      body: JSON.stringify({
+        ...pointer,
+        revision: 3,
+        assetName: "catalog-3.json",
+      }),
+      assets: [{ name: "catalog-3.json", size: pointer.bytes }],
+    },
+  ])
+    await expect(
+      waitForPackages({
+        expected,
+        publicKey: rawKey,
+        timeout: 0,
+        fetchCatalog: async (url) =>
+          new Response(
+            url === catalogReleaseURL
+              ? JSON.stringify({ ...release, ...change })
+              : data,
+          ),
+      }),
+    ).rejects.toThrow();
+});
