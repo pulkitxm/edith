@@ -16,18 +16,132 @@ struct UsageMachinesPeer: Sendable {
     private struct Result: Encodable {
         let collectionID: UUID; let offset: Int; let maximumBytes: Int
     }
-    private struct Cancel: Encodable { let collectionID: UUID }
+    private struct Cancel: Codable { let collectionID: UUID }
     let active: @Sendable () async -> Bool
     let invoke: @Sendable (String, Data) async throws -> Data
 
-    func collect(machineID: UUID, force: Bool) async throws -> Data {
+    typealias ProgressOutput = @Sendable (Data, Bool) throws -> Void
+    enum ProgressState: String, Codable, Sendable {
+        case running, completed, cancelled, overflow, failed
+    }
+    struct ProgressChunk: Codable, Sendable {
+        let sequence: UInt64
+        let channel: String
+        let data: Data
+    }
+    struct ProgressFrame: Codable, Sendable {
+        let collectionID: UUID
+        let sequence: UInt64
+        let nextSequence: UInt64
+        let chunks: [ProgressChunk]
+        let state: ProgressState
+        let receipt: Receipt?
+        let error: String?
+    }
+    private struct ProgressRead: Encodable { let collectionID: UUID; let sequence: UInt64 }
+    var collectionTimeout: TimeInterval = 900
+
+    func collect(
+        machineID: UUID, force: Bool, onProgress: ProgressOutput? = nil
+    ) async throws -> Data {
         try Task.checkCancellation()
         guard await active() else { throw ExtensionPeerError.unavailable }
+        if let onProgress {
+            return try await collectWithProgress(
+                machineID: machineID, force: force, output: onProgress)
+        }
         let reply = try await invoke(
             "machines.usage.collect",
             JSONEncoder().encode(Collect(machineID: machineID, force: force)))
         guard reply.count <= 16_384 else { throw ExtensionPeerError.invalidRequest }
-        let receipt = try JSONDecoder().decode(Receipt.self, from: reply)
+        return try await document(JSONDecoder().decode(Receipt.self, from: reply))
+    }
+
+    private func collectWithProgress(
+        machineID: UUID, force: Bool, output: ProgressOutput
+    ) async throws -> Data {
+        guard collectionTimeout.isFinite, collectionTimeout > 0, collectionTimeout <= 1_800 else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        let started = try await invoke(
+            "machines.usage.start",
+            JSONEncoder().encode(Collect(machineID: machineID, force: force)))
+        guard started.count <= 16_384 else { throw ExtensionPeerError.invalidRequest }
+        let job = try JSONDecoder().decode(Cancel.self, from: started)
+        do {
+            let deadline = ContinuousClock.now.advanced(by: .seconds(collectionTimeout))
+            var sequence: UInt64 = 0
+            while ContinuousClock.now < deadline {
+                try Task.checkCancellation()
+                guard await active() else { throw ExtensionPeerError.unavailable }
+                let raw = try await invoke(
+                    "machines.usage.progress",
+                    JSONEncoder().encode(
+                        ProgressRead(collectionID: job.collectionID, sequence: sequence)))
+                try Task.checkCancellation()
+                guard await active() else { throw ExtensionPeerError.unavailable }
+                guard raw.count <= 400_000 else { throw ExtensionPeerError.invalidRequest }
+                let frame = try JSONDecoder().decode(ProgressFrame.self, from: raw)
+                try validate(frame, job: job.collectionID, sequence: sequence)
+                for chunk in frame.chunks {
+                    try Task.checkCancellation()
+                    try output(chunk.data, chunk.channel == "stderr")
+                }
+                sequence = frame.nextSequence
+                switch frame.state {
+                case .running: try await Task.sleep(for: .milliseconds(25))
+                case .completed:
+                    guard let receipt = frame.receipt else {
+                        throw ExtensionPeerError.invalidRequest
+                    }
+                    let data = try await document(receipt)
+                    await release(job.collectionID)
+                    return data
+                case .cancelled, .overflow, .failed:
+                    throw ExtensionPeerError.rejected(
+                        frame.error ?? "Machine usage collection ended with " + frame.state.rawValue
+                    )
+                }
+            }
+            throw ExtensionPeerError.rejected("Machine usage collection timed out.")
+        } catch {
+            await release(job.collectionID)
+            throw error
+        }
+    }
+
+    private func validate(_ frame: ProgressFrame, job: UUID, sequence: UInt64) throws {
+        guard frame.collectionID == job, frame.sequence == sequence, frame.chunks.count <= 64,
+            (frame.error?.utf8.count ?? 0) <= 4_096
+        else { throw ExtensionPeerError.invalidRequest }
+        var next = sequence
+        var bytes = 0
+        for chunk in frame.chunks {
+            guard chunk.sequence == next, next < UInt64.max,
+                chunk.channel == "stdout" || chunk.channel == "stderr",
+                (1...65_536).contains(chunk.data.count)
+            else { throw ExtensionPeerError.invalidRequest }
+            next += 1
+            bytes += chunk.data.count
+        }
+        guard frame.nextSequence == next, bytes <= 262_144 else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        switch frame.state {
+        case .running:
+            guard frame.receipt == nil, frame.error == nil else {
+                throw ExtensionPeerError.invalidRequest
+            }
+        case .completed:
+            guard frame.receipt != nil, frame.error == nil else {
+                throw ExtensionPeerError.invalidRequest
+            }
+        case .cancelled, .overflow, .failed:
+            guard frame.receipt == nil else { throw ExtensionPeerError.invalidRequest }
+        }
+    }
+
+    private func document(_ receipt: Receipt) async throws -> Data {
         do {
             guard (1...67_108_864).contains(receipt.byteCount), receipt.sha256.utf8.count == 64,
                 receipt.sha256.allSatisfy({ $0.isHexDigit }),
@@ -77,8 +191,9 @@ struct UsageMachinesPeer: Sendable {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
-    static func current() async -> UsageMachinesPeer? {
-        await MainActor.run {
+    static func current(timeout: TimeInterval = 900) async -> UsageMachinesPeer? {
+        guard timeout.isFinite, timeout > 0, timeout <= 1_800 else { return nil }
+        return await MainActor.run {
             guard let context = SurfaceHostContext.current, context.activeIDs.contains("machines"),
                 let endpoint = ExtensionPeerEndpoint.current(owner: "machines"),
                 let version = context.activeVersions["machines"]
@@ -93,8 +208,8 @@ struct UsageMachinesPeer: Sendable {
                 invoke: { command, data in
                     try await endpoint.invoke(
                         command, payload: data,
-                        timeout: command == "machines.usage.collect" ? 900 : 5)
-                })
+                        timeout: command == "machines.usage.collect" ? timeout : min(5, timeout))
+                }, collectionTimeout: timeout)
         }
     }
 
@@ -119,8 +234,8 @@ struct UsageMachinesPeer: Sendable {
             var data = try UsageDataFiles.readRegularFile(at: file, maximumBytes: 67_108_864)
             let date = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?
                 .contentModificationDate
-            let due = date.map { Date().timeIntervalSince($0) >= 900 } ?? true
-            if let peer, policy == .all || due {
+            let due = date.map { Date().timeIntervalSince($0) >= 1_800 } ?? true
+            if let peer, policy != .skip, policy == .all || due {
                 do {
                     onEvent(.note("Collecting " + String(machine.name.prefix(256))))
                     let collected = try await peer.collect(

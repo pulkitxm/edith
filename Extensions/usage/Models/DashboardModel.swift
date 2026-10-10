@@ -494,12 +494,15 @@ final class DashboardModel {
 
     private let cal = Calendar.current
     private let preferences: UserDefaults
+    private let uiClient: UsageUIClient?
+    private var remoteClient: UsageUIClient? { uiClient ?? UsageUIClient.current }
 
     init(
         preferences: UserDefaults = SharedDefaults.store,
-        homeUsageStore: HomeUsageSnapshotStore = .standard
+        homeUsageStore: HomeUsageSnapshotStore = .standard, uiClient: UsageUIClient? = nil
     ) {
         self.preferences = preferences
+        self.uiClient = uiClient
         self.homeUsageStore = homeUsageStore
         syncExtensionState()
     }
@@ -524,7 +527,8 @@ final class DashboardModel {
     }
 
     private func watchDataDir() {
-        guard extensionEnabled, observers > 0, dataDirWatch == nil else { return }
+        guard remoteClient == nil, extensionEnabled, observers > 0, dataDirWatch == nil
+        else { return }
         let fd = open(Repo.dataDir.path, O_EVTONLY)
         guard fd >= 0 else { return }
         let source = DispatchSource.makeFileSystemObjectSource(
@@ -585,6 +589,13 @@ final class DashboardModel {
     func load() async {
         syncExtensionState()
         guard extensionEnabled else { return }
+        if let client = remoteClient {
+            await contentLoad.perform(operation: { try await client.document() }) { parsed in
+                self.ingest(parsed)
+            }
+            if !Task.isCancelled { loadAttempted = true }
+            return
+        }
         await restoreCachedHomeUsage()
         let url = Repo.usageJSON
         let request = contentLoad.begin()
@@ -694,13 +705,14 @@ final class DashboardModel {
     }
 
     func restoreCachedHomeUsage() async {
-        guard !homeUsage.hasDays else { return }
+        guard remoteClient == nil, !homeUsage.hasDays else { return }
         guard let cached = await homeUsageStore.load(), cached.hasDays else { return }
         homeUsage = cached
         heatDetail = cached.heatDetail
     }
 
     private func persistHomeUsage() {
+        guard remoteClient == nil else { return }
         homeUsageStoreTask?.cancel()
         let snapshot = homeUsage
         let store = homeUsageStore
@@ -713,11 +725,25 @@ final class DashboardModel {
         await computeTask?.value
     }
 
+    private var shutdownTask: Task<Void, Never>?
+
+    func shutdownAndWait() async { shutdown(); await shutdownTask?.value }
+
     func shutdown() {
+        let previous = shutdownTask
+        let computationTask = computeTask
+        let debounce = reloadDebounce
+        let cache = homeUsageStoreTask
         observers = 0
         reloadDebounce?.cancel(); reloadDebounce = nil
         dataDirWatch?.cancel(); dataDirWatch = nil
         cancelLoading()
+        shutdownTask = Task {
+            await previous?.value
+            await computationTask?.value
+            await debounce?.value
+            await cache?.value
+        }
     }
 
     func cancelLoading() {

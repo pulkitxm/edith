@@ -5,7 +5,14 @@ import SwiftUI
 
 public struct UsageExportDeck: ExportCardDeck {
     public let snapshot: UsageShareSnapshot
-    public init(snapshot: UsageShareSnapshot) { self.snapshot = snapshot }
+    public let delivery: (@MainActor (Data, String, Bool) async throws -> String)?
+    public init(
+        snapshot: UsageShareSnapshot,
+        delivery: (@MainActor (Data, String, Bool) async throws -> String)? = nil
+    ) {
+        self.snapshot = snapshot
+        self.delivery = delivery
+    }
     public var cards: [UsageShareCard] { UsageShareCard.allCases }
     public func title(for card: UsageShareCard) -> String { card.title }
     public func filename(for card: UsageShareCard) -> String { card.filenameStem + ".png" }

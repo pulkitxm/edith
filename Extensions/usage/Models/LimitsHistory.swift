@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 public struct LimitsHistory {
-    public struct Latest: Sendable {
+    public struct Latest: Codable, Sendable {
         public let date: Date
         public let session: LimitWindow?
         public let week: LimitWindow?
@@ -235,6 +235,11 @@ public struct LimitsHistory {
         providers: Set<LimitProvider> = Set(LimitProvider.allCases),
         url: URL = LimitsHistory.url
     ) async -> [LimitProvider: Latest] {
+        if let client = await UsageUIClient.current {
+            let snapshot = try? await client.value(
+                "usage.ui.limits.latest", as: UsageUILimitsSummary.self)
+            return snapshot?.providers.filter { providers.contains($0.key) } ?? [:]
+        }
         let load = Task.detached(priority: .utility) {
             latestProviders(providers: providers, url: url)
         }
@@ -248,6 +253,15 @@ public struct LimitsHistory {
     public static func loadSnapshot(
         preferredProvider: LimitProvider, url: URL = LimitsHistory.url
     ) async -> Snapshot {
+        if let client = await UsageUIClient.current {
+            if let snapshot = try? await client.limits(provider: preferredProvider) {
+                return Snapshot(
+                    providers: LimitProvider.allCases.filter { snapshot.providers[$0] != nil },
+                    provider: snapshot.provider, latest: snapshot.providers, points: snapshot.points
+                )
+            }
+            return Snapshot(providers: [], provider: preferredProvider, latest: [:], points: [])
+        }
         let load = Task.detached(priority: .utility) {
             snapshot(preferredProvider: preferredProvider, url: url)
         }
@@ -430,7 +444,7 @@ public struct LimitsHistory {
     }
 }
 
-public struct LimitPoint: Identifiable, Equatable, Sendable {
+public struct LimitPoint: Identifiable, Codable, Equatable, Sendable {
     public let date: Date
     public let s: Double?
     public let w: Double?

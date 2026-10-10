@@ -4,6 +4,7 @@ import SwiftUI
 import UserNotifications
 
 private struct ClaudeStatusLineRow: View {
+    @Environment(\.usageUIClient) private var client
     @State private var connected: Bool?
     @State private var failure: String?
     @State private var operation: Task<Void, Never>?
@@ -24,7 +25,15 @@ private struct ClaudeStatusLineRow: View {
             operation?.cancel(); operation = nil
         }
         .pageTask {
-            let result = await ClaudeStatusLine.isConnected()
+            let result: Bool
+            if let client {
+                result =
+                    (try? await client.value(
+                        "usage.statusline.status", as: UsageStatusLineStatusResponse.self))?
+                    .installed ?? false
+            } else {
+                result = await ClaudeStatusLine.isConnected()
+            }
             guard !Task.isCancelled else { return }
             connected = result
         }
@@ -36,7 +45,17 @@ private struct ClaudeStatusLineRow: View {
         operation?.cancel()
         operation = Task {
             do {
-                let change = try await ClaudeStatusLine.setConnected(connect)
+                let change: ClaudeStatusLine.Change
+                if let client {
+                    let reply: UsageStatusLineChangeResponse = try await client.value(
+                        connect ? "usage.statusline.install" : "usage.statusline.remove")
+                    guard let value = ClaudeStatusLine.Change(rawValue: reply.change) else {
+                        throw ExtensionPeerError.invalidRequest
+                    }
+                    change = value
+                } else {
+                    change = try await ClaudeStatusLine.setConnected(connect)
+                }
                 guard !Task.isCancelled else { return }
                 connected = change != .removed && change != .restored && change != .absent
             } catch {
@@ -47,6 +66,7 @@ private struct ClaudeStatusLineRow: View {
 }
 
 struct UsageSettingsRows: View {
+    @Environment(\.usageUIClient) private var client
     private let enabled = true
     @AppStorage(AppStorageKeys.Limits.inMenuBar, store: SharedDefaults.store) private
         var limitsInMenuBar = true
@@ -392,7 +412,15 @@ struct UsageSettingsRows: View {
                     notificationTest?.cancel()
                     testSent = true
                     notificationTest = Task {
-                        let result = await LimitNotifier.shared.sendTest()
+                        let result: String
+                        if let client = client {
+                            result =
+                                (try? await client.value(
+                                    "usage.ui.notifications.test", as: String.self))
+                                ?? "Notification test failed"
+                        } else {
+                            result = await LimitNotifier.shared.sendTest()
+                        }
                         guard !Task.isCancelled else { return }
                         testMessage = result
                         do { try await Task.sleep(for: .seconds(3)) } catch { return }
@@ -420,7 +448,12 @@ struct UsageSettingsRows: View {
             notificationPermission?.cancel(); notificationPermission = nil
         }
         .pageTask(id: notifyMaster) {
-            let result = await LimitAlertInspector.previewLines()
+            let result: [String]
+            if let client {
+                result = (try? await client.value("usage.ui.alerts", as: [String].self)) ?? []
+            } else {
+                result = await LimitAlertInspector.previewLines()
+            }
             guard !Task.isCancelled else { return }
             projections = result
         }
@@ -438,8 +471,12 @@ struct UsageSettingsRows: View {
                 if enabled {
                     notificationPermission?.cancel()
                     notificationPermission = Task {
-                        _ = try? await UNUserNotificationCenter.current().requestAuthorization(
-                            options: [.alert, .sound, .badge])
+                        if let client = client {
+                            _ = try? await client.invoke("usage.ui.notifications.authorize")
+                        } else {
+                            _ = try? await UNUserNotificationCenter.current().requestAuthorization(
+                                options: [.alert, .sound, .badge])
+                        }
                     }
                 }
             })

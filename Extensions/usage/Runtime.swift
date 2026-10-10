@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
@@ -20,10 +21,52 @@ final class ExtensionRuntime: NSObject {
     private var backupRestoreTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
     private let commands = ExtensionCommandRegistry()
+    private var cliHooks: UsageCLIHookOwner?
+    private var cliStreams: ExtensionCLIStreams?
+    private var uiCommands: UsageUICommands?
+    private var navigation: UsageHostNavigation?
+    private let uiPresentations = UsageUIPresentations()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, self.controller != nil else { throw ExtensionPeerError.unavailable }
+            if command == "usage.cli.catalog" { return try UsageCLIProvider.catalog() }
+            if command == "usage.cli.complete" { return try UsageCLIProvider.complete(payload) }
+            if command == "usage.config.cli", let controller = self.controller {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                try request.validate()
+                let resources = UsageCLIResources(controller: controller)
+                let reply = try await UsageCLIEnvironment.$resources.withValue(resources) {
+                    try await ExtensionCLIExecution.run(UsageConfigCommand.self, request: request)
+                }
+                return try JSONEncoder().encode(reply)
+            }
+            if command.hasPrefix("usage.cli"), let controller = self.controller {
+                let forget: @MainActor (UUID) async throws -> Void = { id in
+                    guard let projection = self.machinesProjection else {
+                        throw ExtensionPeerError.unavailable
+                    }
+                    try await projection.forget(machineID: id)
+                }
+                if command == "usage.cli" {
+                    let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                    let reply = try await UsageCLIExecution.run(
+                        request, controller: controller, hookOwner: self.cliHooks,
+                        forgetMachine: forget)
+                    return try JSONEncoder().encode(reply)
+                }
+                guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
+                let resources = UsageCLIResources(
+                    controller: controller, hookOwner: self.cliHooks, forgetMachine: forget)
+                return try UsageCLIEnvironment.$resources.withValue(resources) {
+                    try streams.invoke(
+                        UsageCommand.self, operation: command,
+                        prefix: "usage.cli", payload: payload)
+                }
+            }
+            if command.hasPrefix("usage.ui."), let uiCommands = self.uiCommands {
+                return try await uiCommands.execute(command, payload: payload)
+            }
             if command.hasPrefix("surface."), let surface = self.surface {
                 return try await surface.execute(command, payload: payload)
             }
@@ -48,13 +91,18 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareDisableWithCompletion:)
     func prepareDisable(completion: @escaping (NSError?) -> Void) {
+        uiPresentations.stop()
         UsageWorkerOperations.statusLineCommands = nil
+        cliStreams?.stop()
         commands.shutdown()
         statusLineConnectionTask?.cancel()
         Task {
+            await uiPresentations.stopAndWait()
             await commands.shutdownAndWait()
+            await cliStreams?.stopAndWait()
             await statusLineConnectionTask?.value
             do {
+                try cliHooks?.shutdown()
                 try await statusLine?.shutdown()
                 completion(nil)
             } catch { completion(error as NSError) }
@@ -63,7 +111,13 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        uiPresentations.stop()
+        cliStreams?.stop()
         commands.shutdown()
+        let uiCommands = uiCommands; self.uiCommands = nil
+        uiCommands?.shutdown()
+        let navigation = navigation; self.navigation = nil
+        navigation?.invalidate()
         controller?.beginShutdown()
         alertsTask?.cancel()
         backupRestoreTask?.cancel()
@@ -81,6 +135,8 @@ final class ExtensionRuntime: NSObject {
         let reports = reports; self.reports = nil
         let projection = machinesProjection; machinesProjection = nil
         let statusLine = self.statusLine; self.statusLine = nil
+        let cliHooks = self.cliHooks; self.cliHooks = nil
+        let cliStreams = self.cliStreams; self.cliStreams = nil
         let connectionTask = statusLineConnectionTask; statusLineConnectionTask = nil
         let backup = self.backup; self.backup = nil
         let backupRestoreTask = self.backupRestoreTask; self.backupRestoreTask = nil
@@ -88,10 +144,15 @@ final class ExtensionRuntime: NSObject {
         recovering = false
         surface = nil; usageStore = nil
         Task {
+            await uiPresentations.stopAndWait()
             await backup?.shutdown()
             await backupRestoreTask?.value
             await commands.shutdownAndWait()
+            await navigation?.stopAndWait()
+            await uiCommands?.shutdownAndWait()
+            await cliStreams?.stopAndWait()
             await connectionTask?.value
+            try? cliHooks?.shutdown()
             try? await statusLine?.shutdown()
             await controller?.shutdown()
             await task?.value
@@ -106,6 +167,18 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(prepareUIToClose:completion:)
+    func prepareUIToClose(_ presentationID: NSString, completion: @escaping (NSString?) -> Void) {
+        guard let id = UUID(uuidString: presentationID as String),
+            let scene = uiPresentations.scenes[id]
+        else {
+            completion("Usage presentation is unavailable."); return
+        }
+        Task {
+            await scene.shutdownAndWait(); completion(nil)
+        }
+    }
+
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
         case "describe":
@@ -116,7 +189,36 @@ final class ExtensionRuntime: NSObject {
                     as? String ?? "",
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
+        case "configureUI":
+            uiPresentations.prune()
+            guard controller == nil, !recovering,
+                let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "usage",
+                let text = input["presentationID"] as? String, let id = UUID(uuidString: text),
+                let route = UsageUISceneRoute(context: input),
+                !configuration.uiOnly || route.location == .settings
+            else { return ["ok": false] as NSDictionary }
+            if let existing = uiPresentations.scenes[id] {
+                return ["ok": existing.matches(input)] as NSDictionary
+            }
+            let scene = UsageUIPresentation(
+                id: id, route: route,
+                client: configuration.engineClient.map { UsageUIClient(client: $0) },
+                readOnly: configuration.uiOnly)
+            if !uiPresentations.configure(scene) {
+                scene.shutdown(); return ["ok": false] as NSDictionary
+            }
+        case "releaseUI":
+            guard let text = input["presentationID"] as? String, let id = UUID(uuidString: text)
+            else {
+                return ["ok": false] as NSDictionary
+            }
+            uiPresentations.release(id)
+        case "stopUI": uiPresentations.stop()
         case "start":
+            guard Bundle.main.bundleURL.pathExtension != "appex", uiPresentations.isEmpty else {
+                return ["ok": false] as NSDictionary
+            }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -124,6 +226,8 @@ final class ExtensionRuntime: NSObject {
             let fixture = UsageExecutionEnvironment.fixtureHome != nil
             let statusLine = UsageStatusLineCommands()
             self.statusLine = statusLine
+            let cliHooks = UsageCLIHookOwner()
+            self.cliHooks = cliHooks
             if input["recoveryOnly"] as? Bool == true {
                 recovering = true
                 return ["ok": true] as NSDictionary
@@ -137,12 +241,23 @@ final class ExtensionRuntime: NSObject {
                 let local = try await UsageNativeCollector.collect(
                     home: UsageExecutionEnvironment.home, dataDirectory: Repo.dataDir,
                     environment: UsageExecutionEnvironment.collectorEnvironment(), onEvent: event)
-                if fixture || policy == .skip { return local }
+                if fixture { return local }
                 return try await UsageMachinesPeer.merge(
                     local: local, policy: policy, onEvent: event)
             }
+            do { cliStreams = try ExtensionCLIStreams(owner: "usage") } catch {
+                return ["ok": false, "error": error.localizedDescription] as NSDictionary
+            }
             self.controller = controller
             UsageWorkerOperations.controller = controller
+            let navigation = UsageHostNavigation(bridge: input["hostNavigation"] as? NSObject)
+            self.navigation = navigation
+            uiCommands = UsageUICommands(
+                controller: controller,
+                navigate: { [weak navigation] request in
+                    guard let navigation else { throw ExtensionPeerError.unavailable }
+                    try await navigation.navigate(request)
+                })
             let cache = SurfaceUsageStore(url: Repo.usageJSON)
             surface = UsageSurface(store: cache, controller: controller)
             UsageWorkerOperations.statusLineCommands = statusLine
@@ -153,7 +268,10 @@ final class ExtensionRuntime: NSObject {
                 controller: controller, store: cache,
                 forgetMachine: { try await projection.forget(machineID: $0) })
             usageStore = UsageStore(showMenuBar: !fixture)
-            statusLineConnectionTask = Task { try? await statusLine.resumeOwnedHook() }
+            statusLineConnectionTask = Task {
+                try? await statusLine.resumeOwnedHook()
+                try? cliHooks.resumeOwnedHooks()
+            }
             if !fixture {
                 let alerts = UsageLimitAlerts(); self.alerts = alerts
                 _ = LimitNotifier.shared
@@ -175,12 +293,10 @@ final class ExtensionRuntime: NSObject {
                 }
             }
         case "view":
-            guard controller != nil else { return ["ok": false] as NSDictionary }
-            return NSHostingController(
-                rootView: ExtensionPageHost {
-                    UsageWorkerPage().environment(
-                        \.automaticViewActionsEnabled, UsageExecutionEnvironment.fixtureHome == nil)
-                })
+            guard let text = input["presentationID"] as? String, let id = UUID(uuidString: text),
+                let scene = uiPresentations.scenes[id], scene.matches(input)
+            else { return ["ok": false] as NSDictionary }
+            return scene.controller() ?? (["ok": false] as NSDictionary)
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": usageStore?.syncStatusItem(); usageStore?.refreshMenuBarItem()
         case "stop": prepareToStop(completion: {})
@@ -188,24 +304,6 @@ final class ExtensionRuntime: NSObject {
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
-    }
-}
-
-private struct UsageWorkerPage: View {
-    @State private var settings = false
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Button("Dashboard") { settings = false }
-                Button("Settings") { settings = true }
-                Spacer()
-            }.padding(UIScale.pt(12))
-            if settings {
-                Form { UsageSettingsRows() }.formStyle(.grouped)
-            } else {
-                DashboardView()
-            }
-        }
     }
 }
 

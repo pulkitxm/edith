@@ -19,6 +19,9 @@ public final class UsageWorkerController {
     public private(set) var failure: String?
     public private(set) var notice: String?
     private var progress: UsageRefreshProgress?
+    private var refreshRecorder: UsageRefreshRecorder?
+    var refreshObservation: UsageRefreshObservation? { refreshRecorder?.snapshot }
+    var refreshRecording: UsageRefreshRecorder? { refreshRecorder }
     private var backgroundTask: Task<Void, Never>?
     private let fetchLimits: FetchLimits
     private let collect: Collect
@@ -26,6 +29,8 @@ public final class UsageWorkerController {
     private let limitsSession = LimitsRefreshSession()
     private var usageTask: Task<Void, Never>?
     private var limitsTask: Task<Void, Never>?
+    private var refreshWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
+    private var limitsWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var usageID: UUID?
     private var stopped = false
 
@@ -53,9 +58,15 @@ public final class UsageWorkerController {
         let directory = dataDirectory
         let progress = UsageRefreshProgress(directory: directory)
         self.progress = progress
+        let recorder = UsageRefreshRecorder()
+        refreshRecorder = recorder
         usageTask = Task { [weak self] in
             do {
-                let collected = try await collect(policy, { progress.record($0) })
+                let collected = try await collect(
+                    policy,
+                    {
+                        progress.record($0); recorder.record($0)
+                    })
                 try Task.checkCancellation()
                 let cache = UsageAttributionCache.load(dataDir: directory)
                 let next = await UsageAttributionAdvisor.advise(
@@ -102,6 +113,7 @@ public final class UsageWorkerController {
                 if !Task.isCancelled, let self, !self.stopped, self.usageID == id {
                     self.failure = error.localizedDescription
                     progress.record(.failure(error.localizedDescription))
+                    recorder.record(.failure(error.localizedDescription))
                 }
             }
             guard let self, self.usageID == id else { return }
@@ -110,6 +122,7 @@ public final class UsageWorkerController {
             self.usageTask = nil
             self.usageID = nil
             self.refreshing = false
+            self.finishRefreshWaiters()
             UsageEvents.post(UsageEvents.refreshFinished)
         }
         return id.uuidString
@@ -124,8 +137,27 @@ public final class UsageWorkerController {
             guard !Task.isCancelled, let self, !self.stopped else { return }
             self.latestLimits = result
             self.limitsTask = nil
+            self.finishLimitsWaiters()
             UsageEvents.post(UsageEvents.limitsUpdated)
         }
+    }
+
+    public func waitForLimitsRefresh() async throws {
+        let token = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                guard limitsTask != nil, !Task.isCancelled else {
+                    continuation.resume(); return
+                }
+                limitsWaiters[token] = continuation
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.limitsWaiters.removeValue(forKey: token)?.resume()
+            }
+        }
+        try Task.checkCancellation()
+        guard !stopped else { throw ExtensionPeerError.unavailable }
     }
 
     public func startBackgroundCollection(interval: Duration = .seconds(300)) {
@@ -154,17 +186,46 @@ public final class UsageWorkerController {
         }
     }
 
-    public func cancelRefresh() async {
+    public func cancelRefresh(matching identifier: String? = nil) async {
+        if let identifier, usageID?.uuidString != identifier { return }
+        let id = usageID
+        let task = usageTask
         progress?.close()
-        usageTask?.cancel()
-        await usageTask?.value
+        task?.cancel()
+        await task?.value
+        guard usageID == id else { return }
         usageTask = nil
         usageID = nil
         refreshing = false
+        finishRefreshWaiters()
     }
 
     public func waitForRefresh() async {
-        await usageTask?.value
+        let token = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                guard usageTask != nil, !Task.isCancelled else {
+                    continuation.resume(); return
+                }
+                refreshWaiters[token] = continuation
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.refreshWaiters.removeValue(forKey: token)?.resume()
+            }
+        }
+    }
+
+    private func finishRefreshWaiters() {
+        let pending = refreshWaiters.values
+        refreshWaiters.removeAll()
+        for continuation in pending { continuation.resume() }
+    }
+
+    private func finishLimitsWaiters() {
+        let pending = limitsWaiters.values
+        limitsWaiters.removeAll()
+        for continuation in pending { continuation.resume() }
     }
 
     public static func pricingNotice(_ data: Data) -> String? {
@@ -188,6 +249,8 @@ public final class UsageWorkerController {
         limitsTask?.cancel()
         usageID = nil
         refreshing = false
+        finishRefreshWaiters()
+        finishLimitsWaiters()
     }
 
     public func shutdown() async {
@@ -211,6 +274,14 @@ public enum UsageWorkerOperations {
     static var machinesProjection: UsageMachinesProjection?
 
     public static func forgetMachine(_ machineID: UUID) async throws {
+        if let client = UsageUIClient.current {
+            _ = try await client.invoke(
+                "usage.machines.forget",
+                payload: JSONSerialization.data(withJSONObject: [
+                    "machineID": machineID.uuidString, "confirm": true,
+                ]))
+            return
+        }
         guard let controller, let machinesProjection else { throw ExtensionPeerError.unavailable }
         await controller.cancelRefresh()
         try Task.checkCancellation()
@@ -221,11 +292,18 @@ public enum UsageWorkerOperations {
     public static func requestRefresh(machinePolicy: UsageMachineRefreshPolicy = .due) throws
         -> String
     {
+        if let client = UsageUIClient.current {
+            client.perform(
+                "usage.refresh",
+                object: ["machinePolicy": ["skip", "due", "all"][machinePolicy.rawValue]])
+            return "remote"
+        }
         guard let controller else { throw ExtensionPeerError.unavailable }
         return try controller.requestRefresh(policy: machinePolicy)
     }
 
     public static func requestLimitsRefresh() throws {
+        if let client = UsageUIClient.current { client.perform("usage.limits.refresh"); return }
         guard let controller else { throw ExtensionPeerError.unavailable }
         try controller.requestLimitsRefresh()
     }

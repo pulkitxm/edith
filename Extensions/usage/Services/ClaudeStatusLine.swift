@@ -199,6 +199,15 @@ public enum ClaudeStatusLine {
     public static func setConnected(
         _ connected: Bool, settings url: URL = settingsURL()
     ) async throws -> Change {
+        if let client = await UsageUIClient.current {
+            let change = try await client.value(
+                connected ? "usage.statusline.install" : "usage.statusline.remove",
+                as: UsageStatusLineChangeResponse.self)
+            guard let result = Change(rawValue: change.change) else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            return result
+        }
         guard let service = await UsageWorkerOperations.statusLineCommands else {
             throw ExtensionPeerError.unavailable
         }
@@ -213,7 +222,13 @@ public enum ClaudeStatusLine {
     }
 
     public static func isConnected(settings url: URL = settingsURL()) async -> Bool {
-        isInstalled(settings: url)
+        if let client = await UsageUIClient.current {
+            return
+                (try? await client.value(
+                    "usage.statusline.status", as: UsageStatusLineStatusResponse.self))?.installed
+                ?? false
+        }
+        return isInstalled(settings: url)
     }
 
     @discardableResult

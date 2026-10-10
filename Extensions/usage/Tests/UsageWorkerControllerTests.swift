@@ -4,6 +4,29 @@ import Testing
 
 @MainActor @Suite(.serialized)
 struct UsageWorkerControllerTests {
+    @Test func cancelledWaiterDetachesAndStaleRunCannotCancelCurrentCollection() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let controller = UsageWorkerController(dataDirectory: root) { _, _ in
+            try await Task.sleep(for: .seconds(30))
+            return try emptyDocument()
+        }
+        let first = try controller.requestRefresh()
+        await controller.cancelRefresh(matching: first)
+        let second = try controller.requestRefresh()
+        try #require(first != second)
+        let waiter = Task { await controller.waitForRefresh() }
+        try await Task.sleep(for: .milliseconds(10))
+        waiter.cancel()
+        await waiter.value
+        #expect(controller.refreshing)
+        await controller.cancelRefresh(matching: first)
+        #expect(controller.refreshing)
+        await controller.cancelRefresh(matching: second)
+        #expect(!controller.refreshing)
+        await controller.shutdown()
+    }
+
     @Test func refreshCoalescesPublishesValidatedHistoryAndReportsIncompletePricing() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
