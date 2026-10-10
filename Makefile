@@ -509,12 +509,12 @@ ci-extension-herdr-ui: ghostty-extension
 ci-extension-herdr: ci-extension-herdr-core ci-extension-herdr-ui
 
 .PHONY: ci-extension-quinjet-core
-ci-extension-quinjet-core:
-	@fixture=$$(mktemp -d /tmp/edith-quinjet-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.quinjet.tests.$$(uuidgen)" swift test --package-path Extensions --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter QuinjetExtensionTests
+ci-extension-quinjet-core: ghostty-extension
+	@fixture=$$(mktemp -d /tmp/edith-quinjet-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.quinjet.tests.$$(uuidgen)" swift test --package-path Extensions/quinjet --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter QuinjetExtensionTests
 
 .PHONY: ci-extension-quinjet-ui ci-extension-quinjet
 ci-extension-quinjet-ui: ghostty-extension
-	@fixture=$$(mktemp -d /tmp/edith-quinjet-ui-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.quinjet.ui.tests.$$(uuidgen)" swift test --package-path Extensions/quinjet --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+	@fixture=$$(mktemp -d /tmp/edith-quinjet-ui-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.quinjet.ui.tests.$$(uuidgen)" swift test --package-path Extensions/quinjet --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter QuinjetUITests
 ci-extension-quinjet: ci-extension-quinjet-core ci-extension-quinjet-ui
 
 .PHONY: ci-extension-music

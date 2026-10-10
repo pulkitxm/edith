@@ -14,18 +14,6 @@ let package = Package(
             path: "fixtureSupport/Tests", exclude: ["Support"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
-            name: "QuinjetExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "quinjet",
-            exclude: [
-                "Tests", "CLI", "Transport", "Views", "ViewModels",
-                "Models/QuinjetLaunchModels.swift",
-                "Services/QuinjetSessionBridge.swift", "Package.swift", "Runtime.swift",
-            ], resources: [.process("Resources")], swiftSettings: [.swiftLanguageMode(.v5)]),
-        .testTarget(
-            name: "QuinjetExtensionTests", dependencies: ["QuinjetExtension"],
-            path: "quinjet/Tests/Core", swiftSettings: [.swiftLanguageMode(.v5)]),
-        .target(
             name: "HerdrExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
             path: "herdr",
