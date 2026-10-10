@@ -50,11 +50,12 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
     }
 
     func endPresentation(id: UUID) {
-        controllers.removeValue(forKey: id)?.detach()
         guard closing[id] == nil else { return }
         closing[id] = Task { [weak self] in
             guard let self else { return }
             do {
+                try await manager.prepareToClose(id: id)
+                controllers.removeValue(forKey: id)?.detach()
                 try await manager.endPresentation(id: id)
                 failedClosures.remove(id)
             } catch {

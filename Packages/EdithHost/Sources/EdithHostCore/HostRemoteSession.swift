@@ -163,6 +163,7 @@ public final class HostRemoteSession {
 
     public func release(_ presentationID: UUID) async throws {
         guard let handle = handles[presentationID] else { return }
+        if !stopping, !stopped { try await handle.prepareToClose() }
         handle.detach()
         guard !stopping, !stopped, let channel else {
             handles[presentationID] = nil
@@ -171,6 +172,15 @@ public final class HostRemoteSession {
         _ = try await channel.request(
             HostRemoteCommand(operation: "release", payload: HostRemoteWire.encode(presentationID)))
         handles[presentationID] = nil
+    }
+
+    fileprivate func prepareToClose(_ presentationID: UUID) async throws {
+        guard !stopping, !stopped, handles[presentationID] != nil, let channel else {
+            throw HostWorkerError.exited
+        }
+        _ = try await channel.request(
+            HostRemoteCommand(operation: "flush", payload: HostRemoteWire.encode(presentationID)),
+            timeout: .seconds(3))
     }
 
     public static func stopAll(extensionID: String) async throws {
@@ -259,6 +269,7 @@ public final class HostRemoteSceneHandle {
     private var bootstrap: NSXPCConnection?
     fileprivate var closed = false
     private var presented = false
+    private var preparedToClose = false
     private var desired: HostRemotePresentation?
 
     fileprivate init(
@@ -307,6 +318,14 @@ public final class HostRemoteSceneHandle {
 
     public func close() async throws {
         try await session.release(presentationID)
+    }
+
+    public func prepareToClose() async throws {
+        guard !closed else { throw HostWorkerError.exited }
+        guard !preparedToClose else { return }
+        try await session.prepareToClose(presentationID)
+        guard !closed else { throw HostWorkerError.exited }
+        preparedToClose = true
     }
 
     fileprivate func detach() {

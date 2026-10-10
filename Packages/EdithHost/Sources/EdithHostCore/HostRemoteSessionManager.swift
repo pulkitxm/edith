@@ -129,6 +129,10 @@ public final class HostRemoteSessionManager {
         return handle
     }
 
+    public func prepareToClose(id: UUID) async throws {
+        try await presentations[id]?.prepareToClose()
+    }
+
     public func endPresentation(id: UUID) async throws {
         if let extensionID = pendingCleanup[id] {
             try await stop(extensionID: extensionID)
@@ -137,6 +141,7 @@ public final class HostRemoteSessionManager {
         }
         guard let handle = presentations[id] else { return }
         let extensionID = handle.request.extensionID
+        try await handle.prepareToClose()
         do {
             try await handle.close()
         } catch {

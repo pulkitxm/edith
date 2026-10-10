@@ -121,12 +121,26 @@ final class HostRemoteApplication {
             try slot.reserve(request, session: configuration.session)
             return try HostRemoteWire.encode(
                 HostRemoteSceneDescriptor(slot: slot.index, presentationID: request.presentationID))
+        case "flush":
+            let id = try HostRemoteWire.decode(UUID.self, from: command.payload)
+            guard slots.contains(where: { $0.request?.presentationID == id }) else {
+                throw HostWorkerError.rejected
+            }
+            for runtime in runtimes {
+                try await runtime.preparePresentationToClose(id: extensionID, presentationID: id)
+            }
+            return Data()
         case "release":
             let id = try HostRemoteWire.decode(UUID.self, from: command.payload)
             guard let slot = slots.first(where: { $0.request?.presentationID == id }) else {
                 throw HostWorkerError.rejected
             }
             slot.release()
+            for runtime in runtimes {
+                _ = try runtime.response(
+                    id: extensionID, operation: "releaseUI",
+                    context: ["presentationID": id.uuidString])
+            }
             return Data()
         case "stop":
             shutdown()
