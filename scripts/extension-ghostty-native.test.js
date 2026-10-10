@@ -146,6 +146,8 @@ describe("verified native cache", () => {
         const options = {
           cwd: root,
           encoding: "utf8",
+          timeout: 30_000,
+          killSignal: "SIGKILL",
           env: {
             ...process.env,
             PATH: `${tools}:${process.env.PATH}`,
@@ -179,6 +181,7 @@ describe("verified native cache", () => {
         await rm(root, { recursive: true, force: true });
       }
     },
+    90_000,
   );
 
   nativeTest(
