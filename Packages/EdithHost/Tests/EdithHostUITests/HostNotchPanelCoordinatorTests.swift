@@ -9,6 +9,145 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct HostNotchPanelCoordinatorTests {
+    @Test func acknowledgedNativeSceneCollapsesOnlyItsActualOwningDisplayThroughOriginalOperation()
+        async throws
+    {
+        let fixture = NotchCoordinatorFixture()
+        fixture.transport.onlyFirstDisplayExpanded = true
+        fixture.screens.append(
+            .init(
+                display: .init(
+                    id: 2,
+                    frame: .init(x: 1440, y: 0, width: 1920, height: 1080),
+                    collapsedSize: .init(width: 150, height: 28)), isBuiltin: false))
+        let coordinator = fixture.coordinator()
+        try await coordinator.start(version: "1.0.0", screens: fixture.screens)
+        await settle { coordinator.attachedSceneCount == 3 }
+        let native = try #require(fixture.leases.first { $0.request.extensionID == "music" })
+        let ticket = try #require(
+            coordinator.navigationTicket(
+                presentationID: native.request.presentationID,
+                providerID: "music", version: "1.0.0"))
+        let other = try #require(
+            fixture.transport.current?.states.first { $0.displayID != ticket.displayID })
+        let otherWindow = try #require(coordinator.window(for: other.presentationID))
+        try await coordinator.collapseAfterAcknowledgement(ticket)
+        #expect(fixture.transport.collapses.count == 1)
+        let action = try #require(fixture.transport.collapses.first)
+        #expect(action.identity == ticket.identity && action.revision == ticket.revision)
+        #expect(
+            action.displayID == ticket.displayID
+                && action.presentationID == ticket.panelPresentationID)
+        #expect(
+            action.presentationID != native.request.presentationID && action.operation == "collapse"
+        )
+        await settle { coordinator.window(for: native.request.presentationID) == nil }
+        #expect(coordinator.window(for: other.presentationID) === otherWindow)
+        #expect(
+            fixture.transport.current?.states.first { $0.displayID == other.displayID }?.phase
+                == .collapsed)
+        #expect(fixture.transport.detached == 0)
+        await #expect(throws: HostNotchPanelError.staleState) {
+            try await coordinator.collapseAfterAcknowledgement(ticket)
+        }
+        #expect(fixture.transport.collapses.count == 1)
+        try await coordinator.stop()
+        #expect(TestWindowHost.exposedWindows.isEmpty)
+    }
+
+    @Test func foreignPresentationVersionPrivacyAndChangedRevisionNeverSendCollapse() async throws {
+        let fixture = NotchCoordinatorFixture()
+        let coordinator = fixture.coordinator()
+        try await coordinator.start(version: "1.0.0", screens: fixture.screens)
+        await settle { coordinator.attachedSceneCount == 2 }
+        let native = try #require(fixture.leases.first { $0.request.extensionID == "music" })
+        #expect(
+            coordinator.navigationTicket(
+                presentationID: UUID(), providerID: "music", version: "1.0.0") == nil)
+        #expect(
+            coordinator.navigationTicket(
+                presentationID: native.request.presentationID, providerID: "usage", version: "1.0.0"
+            ) == nil)
+        #expect(
+            coordinator.navigationTicket(
+                presentationID: native.request.presentationID, providerID: "music", version: "old")
+                == nil)
+        let ticket = try #require(
+            coordinator.navigationTicket(
+                presentationID: native.request.presentationID,
+                providerID: "music", version: "1.0.0"))
+        let forged = HostNotchNavigationTicket(
+            identity: .init(ownershipID: ticket.identity.ownershipID, generation: UUID()),
+            notchVersion: ticket.notchVersion, displayID: ticket.displayID,
+            panelPresentationID: ticket.panelPresentationID, presentationID: ticket.presentationID,
+            providerID: ticket.providerID, providerVersion: ticket.providerVersion,
+            revision: ticket.revision, slot: ticket.slot, versions: ticket.versions)
+        await #expect(throws: HostNotchPanelError.staleState) {
+            try await coordinator.collapseAfterAcknowledgement(forged)
+        }
+        fixture.environment.hiddenWidgets = [.music]
+        await #expect(throws: HostNotchPanelError.staleState) {
+            try await coordinator.collapseAfterAcknowledgement(ticket)
+        }
+        fixture.environment.hiddenWidgets = []
+        fixture.transport.advanceRevision()
+        fixture.transport.respond()
+        await settle { fixture.transport.waitCalls == 2 }
+        await #expect(throws: HostNotchPanelError.staleState) {
+            try await coordinator.collapseAfterAcknowledgement(ticket)
+        }
+        #expect(fixture.transport.collapses.isEmpty)
+        try await coordinator.stop()
+    }
+
+    @Test func failedOrUnchangedOriginalCollapseReplyCannotClaimSuccess() async throws {
+        let fixture = NotchCoordinatorFixture()
+        let coordinator = fixture.coordinator()
+        try await coordinator.start(version: "1.0.0", screens: fixture.screens)
+        await settle { coordinator.attachedSceneCount == 2 }
+        let native = try #require(fixture.leases.first { $0.request.extensionID == "music" })
+        let ticket = try #require(
+            coordinator.navigationTicket(
+                presentationID: native.request.presentationID,
+                providerID: "music", version: "1.0.0"))
+        fixture.transport.failCollapse = true
+        await #expect(throws: HostWorkerError.rejected) {
+            try await coordinator.collapseAfterAcknowledgement(ticket)
+        }
+        #expect(coordinator.window(for: native.request.presentationID) != nil)
+        fixture.transport.failCollapse = false
+        fixture.transport.ignoreCollapse = true
+        await #expect(throws: HostNotchPanelError.staleState) {
+            try await coordinator.collapseAfterAcknowledgement(ticket)
+        }
+        #expect(coordinator.window(for: native.request.presentationID) != nil)
+        try await coordinator.stop()
+    }
+
+    @Test func disabledOrCancelledOriginNeverStartsPostAcknowledgementOperation() async throws {
+        let fixture = NotchCoordinatorFixture()
+        let coordinator = fixture.coordinator()
+        try await coordinator.start(version: "1.0.0", screens: fixture.screens)
+        await settle { coordinator.attachedSceneCount == 2 }
+        let native = try #require(fixture.leases.first { $0.request.extensionID == "music" })
+        let ticket = try #require(
+            coordinator.navigationTicket(
+                presentationID: native.request.presentationID,
+                providerID: "music", version: "1.0.0"))
+        let cancelled = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            try await coordinator.collapseAfterAcknowledgement(ticket)
+        }
+        cancelled.cancel()
+        _ = try? await cancelled.value
+        fixture.environment.activeVersions = [:]
+        await #expect(throws: HostNotchPanelError.staleState) {
+            try await coordinator.collapseAfterAcknowledgement(ticket)
+        }
+        #expect(fixture.transport.collapses.isEmpty)
+        try await coordinator.stop()
+    }
+
     @Test func boundedLongPollAndOwnedPointerAndMeasurementUseCurrentScreen() async throws {
         let fixture = NotchCoordinatorFixture()
         let coordinator = fixture.coordinator()
@@ -261,8 +400,19 @@ private final class NotchCoordinatorTransport {
     var pointers: [HostNotchPanelPointer] = []
     var measures: [HostNotchPanelMeasure] = []
     var failDetach = false
+    var failCollapse = false
+    var ignoreCollapse = false
+    var collapses: [CollapseRequest] = []
+    struct CollapseRequest: Decodable {
+        let identity: HostNotchPanelIdentity
+        let displayID: UInt32
+        let presentationID: UUID
+        let revision: UInt64
+        let operation: String
+    }
     var loseFirstAttachReply = false
     var invalidSecondDisplay = false
+    var onlyFirstDisplayExpanded = false
     private var attachedRequest: HostNotchPanelAttach?
     private var wait: CheckedContinuation<Data, any Error>?
     var waiting: Bool { wait != nil }
@@ -294,14 +444,54 @@ private final class NotchCoordinatorTransport {
                         return HostNotchPanelState(
                             contractVersion: 1, ownershipID: request.ownershipID,
                             version: request.version, revision: 1, displayID: display.displayID,
-                            presentationID: display.presentationID, phase: .expanded,
+                            presentationID: display.presentationID,
+                            phase: onlyFirstDisplayExpanded
+                                && display.displayID != request.displays.first?.displayID
+                                ? .collapsed : .expanded,
                             activeTab: "home", shapeWidth: 580, shapeHeight: 400, visible: true,
-                            acceptsPointer: true, acceptsKeyFocus: false, slots: [slot])
+                            acceptsPointer: true, acceptsKeyFocus: false,
+                            slots: onlyFirstDisplayExpanded
+                                && display.displayID != request.displays.first?.displayID
+                                ? [] : [slot])
                     })
             }
             #expect(current?.identity.ownershipID == request.ownershipID)
             if loseFirstAttachReply && attachCalls == 1 { throw ExtensionPeerError.timedOut }
             return try JSONEncoder().encode(current)
+        case "notch.chrome.action":
+            let action = try decoder.decode(CollapseRequest.self, from: payload)
+            collapses.append(action)
+            #expect(timeout == 5 && action.operation == "collapse")
+            let old = try #require(current)
+            #expect(action.identity == old.identity && action.revision == old.revision)
+            if failCollapse { throw HostWorkerError.rejected }
+            if !ignoreCollapse {
+                let states = old.states.map { state in
+                    HostNotchPanelState(
+                        contractVersion: state.contractVersion,
+                        ownershipID: state.ownershipID, version: state.version,
+                        revision: old.revision + 1,
+                        displayID: state.displayID, presentationID: state.presentationID,
+                        phase: state.displayID == action.displayID ? .collapsed : state.phase,
+                        activeTab: state.activeTab,
+                        shapeWidth: state.displayID == action.displayID ? 150 : state.shapeWidth,
+                        shapeHeight: state.displayID == action.displayID ? 28 : state.shapeHeight,
+                        visible: state.visible, acceptsPointer: state.acceptsPointer,
+                        acceptsKeyFocus: false,
+                        slots: state.displayID == action.displayID ? [] : state.slots)
+                }
+                current = .init(
+                    identity: old.identity, revision: old.revision + 1, states: states,
+                    transfers: old.transfers)
+                respond()
+            }
+            let panel = try #require(
+                current?.states.first {
+                    $0.displayID == action.displayID && $0.presentationID == action.presentationID
+                })
+            let reply = ChromeReply(
+                identity: old.identity, revision: current!.revision, panel: panel)
+            return try JSONEncoder().encode(reply)
         case "notch.panel.wait":
             let request = try decoder.decode(HostNotchPanelWait.self, from: payload)
             #expect(request.identity == current?.identity)
@@ -336,6 +526,28 @@ private final class NotchCoordinatorTransport {
         default: throw ExtensionPeerError.invalidRequest
         }
         return Data("{}".utf8)
+    }
+    private struct ChromeReply: Encodable {
+        let identity: HostNotchPanelIdentity
+        let revision: UInt64
+        let panel: HostNotchPanelState
+    }
+    func advanceRevision() {
+        guard let old = current else { return }
+        let states = old.states.map { state in
+            HostNotchPanelState(
+                contractVersion: state.contractVersion, ownershipID: state.ownershipID,
+                version: state.version, revision: old.revision + 1, displayID: state.displayID,
+                presentationID: state.presentationID, phase: state.phase,
+                activeTab: state.activeTab,
+                shapeWidth: state.shapeWidth, shapeHeight: state.shapeHeight,
+                visible: state.visible,
+                acceptsPointer: state.acceptsPointer, acceptsKeyFocus: state.acceptsKeyFocus,
+                slots: state.slots)
+        }
+        current = .init(
+            identity: old.identity, revision: old.revision + 1, states: states,
+            transfers: old.transfers)
     }
     func respond() {
         guard let wait else { return }

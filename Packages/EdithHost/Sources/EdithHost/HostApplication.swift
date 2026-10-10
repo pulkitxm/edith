@@ -155,6 +155,13 @@ struct HostApplication: App {
                 }
                 try manager.validateNavigationOrigin(request)
                 let notchOrigin = request.presentationID.flatMap { notch?.window(for: $0) }
+                let notchTicket =
+                    request.location == "notch"
+                    ? request.presentationID.flatMap {
+                        notch?.navigationTicket(
+                            presentationID: $0, providerID: request.extensionID,
+                            version: request.version)
+                    } : nil
                 guard request.location != "notch" || notchOrigin != nil else {
                     throw HostWorkerError.rejected
                 }
@@ -175,6 +182,10 @@ struct HostApplication: App {
                             === notchOrigin
                 else { throw HostWorkerError.rejected }
                 try manager.validateNavigationOrigin(request)
+                if let notchTicket {
+                    guard let notch else { throw HostWorkerError.rejected }
+                    try await notch.navigationAcknowledged(notchTicket)
+                }
             }
             let disable = loaded.sessions.willDisable
             loaded.sessions.willDisable = { id in

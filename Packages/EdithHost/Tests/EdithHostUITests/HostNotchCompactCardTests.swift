@@ -142,6 +142,59 @@ struct HostNotchCompactCardTests {
         await fixture.model.stop()
     }
 
+    @Test func postNavigationRunsOnlyAfterFinalAdmissionAndExpectedRetirementDoesNotInvalidateAck()
+        async throws
+    {
+        let fixture = CompactCardFixture(widget: .codeStats, versions: ["codeStats": "1"])
+        var acknowledgements = 0
+        fixture.postNavigation = { origin, provider, version in
+            #expect(fixture.navigation.count == 1)
+            #expect(origin == fixture.origin && provider == "codeStats" && version == "1")
+            #expect(fixture.model.pendingCount == 0)
+            acknowledgements += 1
+            fixture.admitted = false
+            fixture.model.invalidate()
+        }
+        try await fixture.model.open(providerID: "codeStats")
+        #expect(acknowledgements == 1)
+        fixture.admitted = true
+        fixture.replaceOnNavigation = true
+        await #expect(throws: (any Error).self) {
+            try await fixture.model.open(providerID: "codeStats")
+        }
+        #expect(acknowledgements == 1)
+        fixture.replaceOnNavigation = false
+        fixture.failNavigation = true
+        await #expect(throws: HostWindowNavigationError.routeRejected) {
+            try await fixture.model.open(providerID: "codeStats")
+        }
+        #expect(acknowledgements == 1)
+        await fixture.model.stop()
+        await #expect(throws: (any Error).self) {
+            try await fixture.model.open(providerID: "codeStats")
+        }
+        #expect(acknowledgements == 1)
+    }
+
+    @Test func duplicateOpenCannotConsumeAnotherPendingNavigationReceipt() async throws {
+        let fixture = CompactCardFixture(widget: .github, versions: ["quinjet": "1"])
+        var entered = false
+        var resume: CheckedContinuation<Void, Never>?
+        fixture.postNavigation = { _, _, _ in
+            entered = true
+            await withCheckedContinuation { resume = $0 }
+        }
+        let first = Task { try await fixture.model.open(providerID: "quinjet") }
+        await fixture.wait { entered }
+        await #expect(throws: HostNotchPanelError.capacityExceeded) {
+            try await fixture.model.open(providerID: "quinjet")
+        }
+        #expect(fixture.navigation.count == 1)
+        resume?.resume()
+        try await first.value
+        await fixture.model.stop()
+    }
+
     @Test func hiddenOrStalePanelDoesNotFetchSnapshotsOrPerformActions() async throws {
         let fixture = CompactCardFixture(widget: .machines, versions: ["machines": "1"])
         fixture.admitted = false
@@ -227,6 +280,8 @@ private final class CompactCardFixture {
     var versions: [String: String]
     var admitted = true
     var replaceOnNavigation = false
+    var failNavigation = false
+    var postNavigation: HostNotchCompactCardModel.Navigate?
     var navigation: [(HostNotchCompactOrigin, String, String)] = []
     let gate = CompactCardGate()
     lazy var requests = makeRequests()
@@ -243,7 +298,11 @@ private final class CompactCardFixture {
         admission: { [self] candidate in candidate == origin && admitted ? versions : nil },
         navigate: { [self] origin, id, version in
             navigation.append((origin, id, version))
+            if failNavigation { throw HostWindowNavigationError.routeRejected }
             if replaceOnNavigation { versions[id] = "new" }
+        },
+        postNavigation: { [self] origin, provider, version in
+            try await postNavigation?(origin, provider, version)
         })
     init(widget: SurfaceWidget, versions: [String: String], dense: Bool = false) {
         self.versions = versions

@@ -29,16 +29,20 @@ final class HostNotchCompactCardModel {
     @ObservationIgnored private let requests: SurfaceSnapshotClient
     @ObservationIgnored private let admission: Admission
     @ObservationIgnored private let navigate: Navigate
+    @ObservationIgnored private let postNavigation: Navigate?
     @ObservationIgnored private var jobs: [UUID: Task<Void, any Error>] = [:]
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var stopped = false
+    @ObservationIgnored private var opening = false
 
     init(
         origin: HostNotchCompactOrigin, requests: SurfaceSnapshotClient,
-        admission: @escaping Admission, navigate: @escaping Navigate
+        admission: @escaping Admission, navigate: @escaping Navigate,
+        postNavigation: Navigate? = nil
     ) {
         self.origin = origin; self.requests = requests
         self.admission = admission; self.navigate = navigate
+        self.postNavigation = postNavigation
     }
 
     nonisolated static func supports(_ widget: SurfaceWidget) -> Bool {
@@ -131,6 +135,9 @@ final class HostNotchCompactCardModel {
     }
 
     func open(providerID: String) async throws {
+        guard !opening else { throw HostNotchPanelError.capacityExceeded }
+        opening = true
+        defer { opening = false }
         let versions = try admitted()
         guard let version = versions[providerID] else {
             throw HostNotchPanelError.unavailableProvider
@@ -140,6 +147,8 @@ final class HostNotchCompactCardModel {
             try await navigate(origin, providerID, version)
             try validate(versions, generation: current)
         }
+        try validate(versions, generation: current)
+        try await postNavigation?(origin, providerID, version)
     }
 
     func invalidate() {

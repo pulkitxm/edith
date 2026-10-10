@@ -286,7 +286,11 @@ import Foundation
             } else {
                 controller.selectTab(tab)
             }
-        case .collapse: controller.collapseNow()
+        case .collapse:
+            guard request.revision == revision, controller.isExpanded(on: request.displayID) else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            controller.collapseNow()
         case .editing:
             guard let flag = request.flag else { throw ExtensionPeerError.invalidRequest }
             controller.layoutEditing = flag
