@@ -9,7 +9,9 @@ final class VideoEditorLiveSync {
     private var url: URL?
     private var watcher: FileSystemWatcher?
     private var task: Task<Void, Never>?
+    private var ownedTasks: [UUID: Task<Void, Never>] = [:]
     private var generation = 0
+    private var needsRefresh = false
 
     init(model: VideoEditorModel) {
         self.model = model
@@ -31,13 +33,22 @@ final class VideoEditorLiveSync {
         schedule()
     }
 
-    func stop() {
+    @discardableResult
+    func stop() -> [Task<Void, Never>] {
+        let owned = Array(ownedTasks.values)
         generation += 1
-        task?.cancel()
+        for task in owned { task.cancel() }
+        needsRefresh = false
         task = nil
         watcher?.stop()
         watcher = nil
         url = nil
+        return owned
+    }
+
+    func stopAndWait() async {
+        let owned = stop()
+        for task in owned { await task.value }
     }
 
     func refresh() {
@@ -48,7 +59,16 @@ final class VideoEditorLiveSync {
         task?.cancel()
         generation += 1
         let version = generation
-        task = Task { [weak self] in
+        let token = UUID()
+        guard ownedTasks.count < 8 else { needsRefresh = true; return }
+        let next = Task { [weak self] in
+            defer {
+                self?.ownedTasks[token] = nil
+                if let self, self.needsRefresh {
+                    self.needsRefresh = false
+                    self.schedule()
+                }
+            }
             do {
                 try await Task.sleep(for: .milliseconds(75))
                 while let self, version == self.generation {
@@ -57,6 +77,8 @@ final class VideoEditorLiveSync {
                 }
             } catch {}
         }
+        task = next
+        ownedTasks[token] = next
     }
 
     private func reload(version: Int) async -> Bool {

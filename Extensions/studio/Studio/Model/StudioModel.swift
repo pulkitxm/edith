@@ -212,6 +212,8 @@ final class StudioModel {
         projectsTask?.cancel()
         recentTask?.cancel()
         workflowsTask?.cancel()
+        commandAttachTask?.cancel()
+        commandAttachTask = nil
         engineTask = nil
         installTask = nil
         projectsTask = nil
@@ -787,8 +789,12 @@ final class StudioModel {
 
     func stopAndWait() async {
         let owned = jobs
+        let tasks =
+            [engineTask, installTask, projectsTask, recentTask, workflowsTask, commandAttachTask]
+            .compactMap { $0 } + Array(projectRemovalTasks.values)
         shutdown()
         for job in owned { await job.stopAndWait() }
+        for task in tasks { await task.value }
     }
 
     private func trimJobs() {

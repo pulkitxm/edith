@@ -65,6 +65,32 @@ import Testing
         #expect(bridge.pending == nil && bridge.activeEditor == nil)
     }
 
+    @Test func stoppingBridgeAwaitsNativeLoadingAndRejectsLateMount() async throws {
+        let url = try fixture()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let movie = try await VideoEditorServiceTests.movie(in: url.deletingLastPathComponent())
+        _ = try await VideoEditorService.apply(
+            VideoEditPlan(operations: [.addMedia(path: movie.path, name: "intro")]),
+            to: url, overwrite: true)
+        let bridge = VideoEditorOpenBridge()
+        let request = try VideoEditorService.prepareOpen(url)
+        let opening = Task { try await bridge.open(request, timeout: 5) }
+        try await waitUntil { bridge.pending != nil }
+        let presentation = try #require(bridge.pending)
+        let stopped = ContinuousClock.now
+        await bridge.stopAndWait()
+        #expect(stopped.duration(to: .now) < .seconds(5))
+        do {
+            try await opening.value
+            Issue.record("Stopped editor open completed.")
+        } catch is CancellationError {}
+        #expect(bridge.pending == nil && bridge.activeEditor == nil)
+        #expect(
+            presentation.model.player.currentItem == nil && !presentation.model.isRebuildingPreview)
+        bridge.mounted(presentation)
+        #expect(bridge.activeEditor == nil)
+    }
+
     @Test func commandPresentationHasOneOwnerAndOnlyThatOwnerClosesIt() throws {
         let url = try fixture()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }

@@ -1499,7 +1499,9 @@ final class VideoEditorModel {
         let owned = [
             rebuildTask, openTask, focusPreviewTask, audioTask, transcriptionTask, importTask,
         ].compactMap { $0 }
+        let synchronization = liveSync?.stop()
         close()
+        for task in synchronization ?? [] { await task.value }
         for task in owned { await task.value }
     }
 

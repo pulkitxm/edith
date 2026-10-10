@@ -108,6 +108,86 @@ import Testing
         }
     }
 
+    @Test func disablingRuntimeAwaitsActiveStreamExportAndPreservesExistingFiles() async throws {
+        let runtime = ExtensionRuntime()
+        let suite = try #require(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
+        let started = runtime.execute(
+            ["operation": "start", "defaultsSuite": suite] as NSDictionary)
+        #expect((started as? NSDictionary)?["ok"] as? Bool == true)
+        let root = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let movie = try await VideoEditorServiceTests.movie(in: root)
+        var project = VideoProject.create()
+        project.videoSettings = VideoSettings(width: 320, height: 180, frameRateNumerator: 30)
+        project.addAsset(movie, duration: 1, width: 64, height: 64)
+        let clip = try #require(project.clips.first?.id)
+        for _ in 0..<119 { _ = project.duplicate(clipID: clip) }
+        let source = root.appendingPathComponent("disable.openscreen")
+        try project.save(to: source)
+        let originalSource = try Data(contentsOf: source)
+        let output = root.appendingPathComponent("preserved.mp4")
+        let originalOutput = Data("Synthetic existing output".utf8)
+        try originalOutput.write(to: output)
+        let request = try ExtensionCLIRequest(
+            arguments: [
+                "edit", "render", "disable.openscreen", "--output", "preserved.mp4",
+                "--overwrite", "--progress", "--json",
+            ], workingDirectory: root.path)
+        let (bytes, failure) = await invoke(
+            runtime, command: "studio.cli.start",
+            payload: try JSONEncoder().encode(
+                ExtensionCLIStreamStart(
+                    owner: "studio", session: UUID(), request: request)))
+        #expect(failure == nil)
+        let handle = try JSONDecoder().decode(ExtensionCLIStreamHandle.self, from: #require(bytes))
+        var sequence: UInt64 = 0
+        var stderr = Data()
+        var hasProgress = false
+        let deadline = ContinuousClock.now + .seconds(15)
+        while !hasProgress, ContinuousClock.now < deadline {
+            let (data, error) = await invoke(
+                runtime, command: "studio.cli.read",
+                payload: try JSONEncoder().encode(
+                    ExtensionCLIStreamRead(handle: handle, sequence: sequence)))
+            #expect(error == nil)
+            let frame = try JSONDecoder().decode(ExtensionCLIStreamFrame.self, from: #require(data))
+            try frame.validate()
+            #expect(frame.sequence == sequence && frame.state == .running)
+            for chunk in frame.chunks where chunk.channel == .stderr { stderr.append(chunk.data) }
+            sequence = frame.nextSequence
+            hasProgress = String(decoding: stderr, as: UTF8.self).split(separator: "\n").contains {
+                line in
+                guard
+                    let object = try? JSONSerialization.jsonObject(with: Data(line.utf8))
+                        as? [String: Any],
+                    let percent = object["percent"] as? Int
+                else { return false }
+                return percent > 0 && percent < 100
+            }
+            if !hasProgress { try await Task.sleep(for: .milliseconds(5)) }
+        }
+        try #require(hasProgress)
+        let stopped = ContinuousClock.now
+        await withCheckedContinuation { continuation in
+            runtime.prepareToStop { continuation.resume() }
+        }
+        #expect(stopped.duration(to: .now) < .seconds(5))
+        let status = runtime.execute(["operation": "status"] as NSDictionary) as? NSDictionary
+        #expect(status?["running"] as? Bool == false && status?["preventsQuit"] as? Bool == false)
+        #expect(
+            try Data(contentsOf: source) == originalSource
+                && Data(contentsOf: output) == originalOutput)
+        #expect(
+            try FileManager.default.contentsOfDirectory(atPath: root.path).allSatisfy {
+                !$0.hasPrefix(".studio-video-")
+            })
+        let (lateData, lateFailure) = await invoke(
+            runtime, command: "studio.cli.read",
+            payload: try JSONEncoder().encode(
+                ExtensionCLIStreamRead(handle: handle, sequence: sequence)))
+        #expect(lateData == nil && lateFailure != nil)
+    }
+
     @Test func remoteUIContextCannotStartOwnedNativeServices() throws {
         let runtime = ExtensionRuntime()
         let suite = try #require(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])

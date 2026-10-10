@@ -101,6 +101,7 @@ final class ExtensionRuntime: NSObject {
             await work.stopAndWait()
             await videoSessions.stopAndWait()
             await commands.shutdownAndWait()
+            if hadEngine { await VideoEditorOpenBridge.shared.stopAndWait() }
             await model?.stopAndWait()
             shutdown()
             if hadEngine, #available(macOS 15.0, *) {

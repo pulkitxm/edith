@@ -39,6 +39,7 @@ final class VideoEditorOpenBridge {
     private var openWait: CheckedContinuation<Void, Error>?
     private var timeoutTask: Task<Void, Never>?
     private var loadTask: Task<Void, Never>?
+    private var ownedTasks: [UUID: Task<Void, Never>] = [:]
     private let reply: @MainActor ([String: Any]) -> Void
     private let present: @MainActor () -> Void
 
@@ -85,6 +86,10 @@ final class VideoEditorOpenBridge {
             fail(next, code: "open_timeout", message: "The project-open request expired.")
             return
         }
+        guard ownedTasks.count <= 6 else {
+            fail(next, code: "editor_busy", message: "Previous editor tasks are still stopping.")
+            return
+        }
         guard activeEditor?.blocksCommandOpen != true else {
             fail(
                 next, code: "editor_busy",
@@ -93,20 +98,20 @@ final class VideoEditorOpenBridge {
         }
         request = next
         self.deadline = deadline
-        timeoutTask = Task { [weak self] in
+        timeoutTask = ownTask { [weak self] in
             try? await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow)))
             guard !Task.isCancelled, let self, self.request == next else { return }
             self.finishFailure(
                 next, code: "open_timeout",
                 message: "The native editor did not mount this project in time.")
         }
-        loadTask = Task { [weak self] in
+        loadTask = ownTask { [weak self] in
             guard let self else { return }
             let model = VideoEditorModel()
             do {
                 try await model.loadCommandProject(next)
                 try Task.checkCancellation()
-                guard self.request == next else { model.close(); return }
+                guard self.request == next else { await model.stopAndWait(); return }
                 guard activeEditor?.blocksCommandOpen != true else {
                     throw VideoEditorService.Failure(
                         "editor_busy", "The editor has unsaved changes or an active task.")
@@ -114,7 +119,7 @@ final class VideoEditorOpenBridge {
                 pending = Presentation(request: next, model: model)
                 present()
             } catch {
-                model.close()
+                await model.stopAndWait()
                 guard self.request == next else { return }
                 finishFailure(
                     next, code: (error as? VideoEditorService.Failure)?.code ?? "open_failed",
@@ -162,6 +167,25 @@ final class VideoEditorOpenBridge {
         activeEditor?.close()
         activeEditor = nil
         clear()
+    }
+
+    func stopAndWait() async {
+        let tasks = Array(ownedTasks.values)
+        let models = [pending?.model, activeEditor].compactMap { $0 }
+        for task in tasks { task.cancel() }
+        for model in models { await model.stopAndWait() }
+        shutdown()
+        for task in tasks { await task.value }
+    }
+
+    private func ownTask(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
+        let token = UUID()
+        let task = Task { [weak self] in
+            defer { self?.ownedTasks[token] = nil }
+            await operation()
+        }
+        ownedTasks[token] = task
+        return task
     }
 
     private func clear() {
