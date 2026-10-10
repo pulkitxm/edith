@@ -107,9 +107,10 @@ final class ExtensionRuntime: NSObject {
             cliStreams = try? ExtensionCLIStreams(owner: "database")
             DatabaseWorkerClient.start(
                 root: ExtensionData.root,
-                keychainService: (ProcessInfo.processInfo.environment[
-                    "EDITH_APPLICATION_IDENTIFIER"] ?? "edith.extension.fixture")
-                    + ".database.secrets")
+                keychainService: DatabaseKeychainSecretStore.service(
+                    applicationIdentifier: ProcessInfo.processInfo.environment[
+                        "EDITH_APPLICATION_IDENTIFIER"] ?? "edith.extension.fixture",
+                    isolatedSuffix: "database.secrets"))
             DatabasePrivacy.start()
             uiCommands = DatabaseUICommands(
                 sender: DatabaseWorkerClient(),

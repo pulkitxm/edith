@@ -14,8 +14,9 @@ public enum MachineSecrets {
     private static var isFixture: Bool {
         ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
     }
-    public static let service =
-        "\(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"] ?? "edith.extension.tests").machines"
+    public static let service = MachineCredentialIdentity.service(
+        applicationIdentifier: ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"],
+        defaultsSuite: ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
 
     public static func account(machineID: UUID, kind: MachineSecretKind) -> String {
         "\(machineID.uuidString).\(kind.rawValue)"
