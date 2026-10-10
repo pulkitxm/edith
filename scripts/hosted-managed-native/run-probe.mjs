@@ -65,6 +65,23 @@ try {
     EDITH_PROBE_ROOT: root,
     EDITH_PROBE_BUN: process.execPath,
   };
+  execFileSync(
+    fixture.executable,
+    ["--extension-hosted-register-probe", directory],
+    {
+      env: { ...process.env, ...variables },
+      stdio: "inherit",
+      timeout: 15_000,
+    },
+  );
+  const registrationData = await readFile(
+    join(directory, "registration-ready.json"),
+  );
+  assert(registrationData.byteLength <= 16_384);
+  const registration = JSON.parse(registrationData.toString("utf8"));
+  assert.equal(registration.publicApplicationRegistration, true);
+  assert.equal(registration.hostIdentifier, identifier);
+  assert.equal(registration.applicationPath, fixture.app);
   const project = await writeUIProject(output, variables);
   const args = [
     "-project",

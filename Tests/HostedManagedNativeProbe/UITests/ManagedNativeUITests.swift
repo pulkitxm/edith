@@ -12,7 +12,15 @@ final class ManagedNativeUITests: XCTestCase {
             ProbeFixture.self, from: Data(contentsOf: root.appendingPathComponent("fixture.json")))
         try fixture.validate(
             home: ProbeRunner.accountHome(), environment: environment)
-        let application = XCUIApplication(url: URL(fileURLWithPath: fixture.app))
+        try fixture.validateApplicationInfo(
+            Data(
+                contentsOf: URL(fileURLWithPath: fixture.app).appendingPathComponent(
+                    "Contents/Info.plist")))
+        let registration = try readJSON(root.appendingPathComponent("registration-ready.json"))
+        XCTAssertEqual(registration["publicApplicationRegistration"] as? Bool, true)
+        XCTAssertEqual(registration["hostIdentifier"] as? String, fixture.identifier)
+        XCTAssertEqual(registration["applicationPath"] as? String, fixture.app)
+        let application = XCUIApplication(bundleIdentifier: fixture.identifier)
         application.launchArguments = ["--extension-hosted-approval-probe", directory]
         application.launchEnvironment = environment.filter {
             ["GITHUB_ACTIONS", "RUNNER_OS", "RUNNER_ENVIRONMENT", "EDITH_HOSTED_MANAGED_PROBE"]

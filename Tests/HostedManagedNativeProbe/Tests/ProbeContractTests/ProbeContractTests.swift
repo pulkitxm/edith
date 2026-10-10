@@ -169,3 +169,44 @@ private func control(_ label: String, value: String? = "0", hittable: Bool = tru
         }
     }
 }
+
+@Test func copiedDevelopmentIdentityCannotLaunchOwnedFixture() throws {
+    let selected = try fixture()
+    let info: [String: Any] = [
+        "CFBundleIdentifier": identifier, "CFBundleExecutable": "Edith",
+        "CFBundlePackageType": "APPL",
+    ]
+    try selected.validateApplicationInfo(
+        PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0))
+    for replacement in [
+        ["CFBundleIdentifier": "com.pulkit.edith.dev.edith"],
+        [
+            "CFBundleIdentifier":
+                "com.pulkit.edith.tests.remote-00000000-0000-4000-8000-000000000002"
+        ],
+        ["CFBundleExecutable": "Other"], ["CFBundlePackageType": "BNDL"],
+    ] {
+        let altered = info.merging(replacement) { _, new in new }
+        #expect(throws: ProbeContractError.invalidFixtureField("applicationInfo")) {
+            try selected.validateApplicationInfo(
+                PropertyListSerialization.data(fromPropertyList: altered, format: .xml, options: 0))
+        }
+    }
+    #expect(throws: ProbeContractError.invalidFixtureField("applicationInfo")) {
+        try selected.validateApplicationInfo(Data(repeating: 0, count: 16_385))
+    }
+}
+
+@Test func onlyUniqueOwnedRegistrationCanBeTargeted() throws {
+    let selected = try fixture()
+    let owned = URL(fileURLWithPath: selected.app)
+    try selected.validateRegisteredApplications([owned])
+    for urls in [
+        [], [owned, owned], [URL(fileURLWithPath: "/synthetic/other/Host.app")],
+        [URL(fileURLWithPath: selected.directory + "/alias/../Host.app")],
+    ] as [[URL]] {
+        #expect(throws: ProbeContractError.invalidFixtureField("ambiguousRegisteredApplication")) {
+            try selected.validateRegisteredApplications(urls)
+        }
+    }
+}

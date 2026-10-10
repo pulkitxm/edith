@@ -17,6 +17,12 @@ The generated build receipt records both entry hashes. The same signed fixture
 executable supplies the synthetic host, carrier and ExtensionKit worker. The
 original scoped Calendar roles use the strict UUID synthetic backend.
 
+The hosted-only executable registration entry validates the UUID fixture, actual
+Info.plist identity and executable hash before refreshing its application record
+through public `LSRegisterURL`. Public NSWorkspace lookup must resolve exactly
+one application at the owned path. XCTest targets that exact UUID identity.
+This registers the synthetic application; it does not approve its extension.
+
 XCTest selects a single exact Calendar toggle in the public browser. Missing,
 duplicate, inaccessible or unknown-state controls fail. The initial state must
 be disabled. Clicking the toggle is insufficient: the probe requires public

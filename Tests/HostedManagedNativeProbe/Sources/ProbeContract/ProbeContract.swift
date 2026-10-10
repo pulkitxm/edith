@@ -46,6 +46,22 @@ public struct ProbeFixture: Codable, Sendable {
 
     public var workerIdentifier: String { "\(identifier).extension.calendar.worker" }
 
+    public func validateRegisteredApplications(_ urls: [URL]) throws {
+        guard urls.count == 1, urls[0].path == app,
+            urls[0].resolvingSymlinksInPath().path == app
+        else { throw ProbeContractError.invalidFixtureField("ambiguousRegisteredApplication") }
+    }
+
+    public func validateApplicationInfo(_ data: Data) throws {
+        guard data.count <= 16_384,
+            let info = try PropertyListSerialization.propertyList(from: data, format: nil)
+                as? [String: Any],
+            info["CFBundleIdentifier"] as? String == identifier,
+            info["CFBundleExecutable"] as? String == "Edith",
+            info["CFBundlePackageType"] as? String == "APPL"
+        else { throw ProbeContractError.invalidFixtureField("applicationInfo") }
+    }
+
     public func validate(home: URL, environment: [String: String]) throws {
         guard environment["GITHUB_ACTIONS"] == "true", environment["RUNNER_OS"] == "macOS",
             environment["RUNNER_ENVIRONMENT"] == "github-hosted",

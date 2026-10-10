@@ -76,7 +76,7 @@ const entryPath = join(packageDirectory, "Sources/EdithHost/HostEntry.swift");
 const entry = await readFile(entryPath, "utf8");
 const anchor = "        #if EDITH_CLI_FIXTURE\n";
 assert.equal(entry.split(anchor).length, 2);
-const overlay = `${anchor}        if arguments.count == 2, arguments[0] == "--extension-hosted-approval-probe" {\n            do {\n                try HostedManagedApprovalProbe.run(directory: URL(fileURLWithPath: arguments[1]))\n            } catch { exit(1) }\n            return\n        }\n`;
+const overlay = `${anchor}        if arguments.count == 2, ["--extension-hosted-approval-probe", "--extension-hosted-register-probe"].contains(arguments[0]) {\n            do {\n                let directory = URL(fileURLWithPath: arguments[1])\n                if arguments[0] == "--extension-hosted-register-probe" {\n                    try HostedManagedApprovalProbe.register(directory: directory)\n                } else {\n                    try HostedManagedApprovalProbe.run(directory: directory)\n                }\n            } catch {\n                FileHandle.standardError.write(Data("Hosted probe admission failed: \\(error)\\n".utf8))\n                exit(1)\n            }\n            return\n        }\n`;
 await writeFile(entryPath, entry.replace(anchor, overlay));
 await cp(
   hostSource,

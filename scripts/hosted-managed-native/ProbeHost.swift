@@ -1,4 +1,5 @@
 import AppKit
+import CoreServices
 import CryptoKit
 import ExtensionFoundation
 import ExtensionKit
@@ -11,7 +12,7 @@ final class HostedManagedApprovalProbe: NSObject, NSApplicationDelegate {
     private var browser: EXAppExtensionBrowserViewController?
     private var observation: Task<Void, Never>?
 
-    static func run(directory: URL) throws {
+    private static func validatedFixture(directory: URL) throws -> ProbeFixture {
         let data = try Data(contentsOf: directory.appendingPathComponent("fixture.json"))
         guard data.count <= 16_384 else { throw ProbeContractError.invalidFixture }
         let fixture = try JSONDecoder().decode(ProbeFixture.self, from: data)
@@ -31,6 +32,30 @@ final class HostedManagedApprovalProbe: NSObject, NSApplicationDelegate {
                 throw ProbeContractError.invalidFixture
             }
         }
+        try fixture.validateApplicationInfo(
+            Data(
+                contentsOf: URL(fileURLWithPath: fixture.app).appendingPathComponent(
+                    "Contents/Info.plist")))
+        return fixture
+    }
+
+    static func register(directory: URL) throws {
+        let fixture = try validatedFixture(directory: directory)
+        guard LSRegisterURL(URL(fileURLWithPath: fixture.app) as CFURL, true) == noErr else {
+            throw ProbeContractError.invalidFixtureField("applicationRegistration")
+        }
+        let urls = NSWorkspace.shared.urlsForApplications(withBundleIdentifier: fixture.identifier)
+        try fixture.validateRegisteredApplications(urls)
+        try JSONSerialization.data(
+            withJSONObject: [
+                "publicApplicationRegistration": true, "hostIdentifier": fixture.identifier,
+                "applicationPath": fixture.app,
+            ], options: [.sortedKeys]
+        ).write(to: directory.appendingPathComponent("registration-ready.json"), options: .atomic)
+    }
+
+    static func run(directory: URL) throws {
+        let fixture = try validatedFixture(directory: directory)
         let delegate = HostedManagedApprovalProbe(fixture: fixture)
         let application = NSApplication.shared
         application.setActivationPolicy(.regular)
