@@ -1,0 +1,231 @@
+import EdithExtensionSupport
+import Foundation
+
+public enum QuinjetPTYTerminalMouse: String, Codable, CaseIterable, Sendable {
+    case scroll
+    case buttons
+
+    public var title: String {
+        switch self {
+        case .scroll: "Scroll only"
+        case .buttons: "Scroll and clicks"
+        }
+    }
+
+    var reportingModes: String {
+        switch self {
+        case .scroll: "\u{1B}[?1000h\u{1B}[?1006h"
+        case .buttons: "\u{1B}[?1000h\u{1B}[?1002h\u{1B}[?1006h"
+        }
+    }
+}
+
+public struct QuinjetPTYTerminalBridgeSpecification: Codable, Equatable, Sendable {
+    public enum Transport: String, Codable, Sendable {
+        case terminal
+        case records
+    }
+
+    public static let columnsToken = "{columns}"
+    public static let rowsToken = "{rows}"
+
+    public let executable: String
+    public let arguments: [String]
+    public let environment: [String]
+    public let mouse: QuinjetPTYTerminalMouse
+    public let transport: Transport
+
+    public init(
+        controller: TerminalLaunchRequest, mouse: QuinjetPTYTerminalMouse = .buttons,
+        transport: Transport = .records
+    ) {
+        executable = controller.executable
+        arguments = controller.arguments
+        environment = controller.environment
+        self.mouse = mouse
+        self.transport = transport
+    }
+
+    public init(encoded: String) throws {
+        guard let data = Data(base64Encoded: encoded) else {
+            throw QuinjetPTYTerminalBridgeError.invalidSpecification
+        }
+        do {
+            self = try JSONDecoder().decode(Self.self, from: data)
+        } catch {
+            throw QuinjetPTYTerminalBridgeError.invalidSpecification
+        }
+    }
+
+    public func encoded() throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(self).base64EncodedString()
+    }
+
+    public func request(columns: UInt16, rows: UInt16) -> TerminalLaunchRequest {
+        let replacements = [
+            Self.columnsToken: String(columns),
+            Self.rowsToken: String(rows),
+        ]
+        return TerminalLaunchRequest(
+            executable: executable,
+            arguments: arguments.map {
+                Self.replacingTokens(in: $0, replacements: replacements)
+            },
+            environment: environment)
+    }
+
+    private static func replacingTokens(
+        in argument: String, replacements: [String: String]
+    ) -> String {
+        let replaced = replacements.reduce(argument) { value, replacement in
+            value.replacingOccurrences(of: replacement.key, with: replacement.value)
+        }
+        let marker = "-EncodedCommand "
+        guard let markerRange = argument.range(of: marker, options: .caseInsensitive) else {
+            return replaced
+        }
+        let encoded = String(argument[markerRange.upperBound...])
+        guard let data = Data(base64Encoded: encoded),
+            let script = String(data: data, encoding: .utf16LittleEndian),
+            let updated = replacements.reduce(
+                script,
+                { value, replacement in
+                    value.replacingOccurrences(of: replacement.key, with: replacement.value)
+                }
+            ).data(using: .utf16LittleEndian)
+        else { return replaced }
+        return String(argument[..<markerRange.upperBound]) + updated.base64EncodedString()
+    }
+}
+
+public enum QuinjetPTYTerminalBridgeError: LocalizedError {
+    case invalidSpecification
+    case invalidRecord
+    case executableUnavailable
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidSpecification:
+            "The QuinjetPTY terminal bridge specification is invalid."
+        case .invalidRecord:
+            "QuinjetPTY returned an invalid terminal record."
+        case .executableUnavailable:
+            "The host executable is unavailable. Reinstall the app before opening this terminal."
+        }
+    }
+}
+
+public enum QuinjetPTYTerminalBridgeRecord: Equatable, Sendable {
+    case frame(Data)
+    case closed
+    case ignored
+}
+
+public enum QuinjetPTYTerminalScrollDirection: String, Sendable {
+    case up
+    case down
+}
+
+public enum QuinjetPTYTerminalBridge {
+    public static func startSequence(for mouse: QuinjetPTYTerminalMouse) -> Data {
+        Data(
+            ("\u{1B}[?1049h\u{1B}[?1006l\u{1B}[?1016l\u{1B}[?1015l\u{1B}[?1005l\u{1B}[?1003l\u{1B}[?1002l\u{1B}[?1000l"
+                + mouse.reportingModes + "\u{1B}[?2004h\u{1B}[?7l").utf8)
+    }
+
+    public static let stopSequence = Data(
+        "\u{1B}[?1006l\u{1B}[?1016l\u{1B}[?1015l\u{1B}[?1005l\u{1B}[?1003l\u{1B}[?1002l\u{1B}[?1000l\u{1B}[?2004l\u{1B}[?7h\u{1B}[?25h\u{1B}[?1049l"
+            .utf8)
+
+    public static func executable(
+        bundle: Bundle = .main, fileManager: FileManager = .default
+    ) -> URL? {
+        guard let executable = bundle.executableURL,
+            fileManager.isExecutableFile(atPath: executable.path)
+        else { return nil }
+        return executable
+    }
+
+    public static func launchRequest(
+        bridgeExecutable: URL, controller: TerminalLaunchRequest,
+        mouse: QuinjetPTYTerminalMouse = .buttons,
+        transport: QuinjetPTYTerminalBridgeSpecification.Transport = .records
+    ) throws -> TerminalLaunchRequest {
+        let specification = try QuinjetPTYTerminalBridgeSpecification(
+            controller: controller, mouse: mouse, transport: transport
+        ).encoded()
+        return TerminalLaunchRequest(
+            executable: bridgeExecutable.path,
+            arguments: ["--extension-native-task", specification],
+            environment: controller.environment)
+    }
+
+    public static func decodeRecord(_ line: Data) throws -> QuinjetPTYTerminalBridgeRecord {
+        guard
+            let object = try JSONSerialization.jsonObject(with: line) as? [String: Any],
+            let type = object["type"] as? String
+        else { throw QuinjetPTYTerminalBridgeError.invalidRecord }
+        switch type {
+        case "terminal.frame":
+            guard let encoded = object["bytes"] as? String,
+                let bytes = Data(base64Encoded: encoded)
+            else { throw QuinjetPTYTerminalBridgeError.invalidRecord }
+            return .frame(bytes)
+        case "terminal.closed":
+            return .closed
+        default:
+            return .ignored
+        }
+    }
+
+    public static func inputCommand(_ bytes: Data) throws -> Data {
+        try command([
+            "type": "terminal.input",
+            "bytes": bytes.base64EncodedString(),
+        ])
+    }
+
+    public static func scrollCommand(
+        direction: QuinjetPTYTerminalScrollDirection, lines: UInt16, column: UInt16, row: UInt16,
+        modifiers: UInt8
+    ) throws -> Data {
+        try command([
+            "type": "terminal.scroll",
+            "direction": direction.rawValue,
+            "lines": lines,
+            "source": "wheel",
+            "column": column,
+            "row": row,
+            "modifiers": modifiers,
+        ])
+    }
+
+    public static func resizeCommand(
+        columns: UInt16, rows: UInt16, cellWidth: UInt32, cellHeight: UInt32
+    ) throws -> Data {
+        try command([
+            "type": "terminal.resize",
+            "cols": columns,
+            "rows": rows,
+            "cell_width_px": cellWidth,
+            "cell_height_px": cellHeight,
+        ])
+    }
+
+    private static func command(_ object: [String: Any]) throws -> Data {
+        var data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        data.append(0x0A)
+        return data
+    }
+}
+
+public struct TerminalLaunchRequest: Equatable, Sendable {
+    public let executable: String
+    public let arguments: [String]
+    public let environment: [String]
+    public init(executable: String, arguments: [String], environment: [String]) {
+        self.executable = executable; self.arguments = arguments; self.environment = environment
+    }
+}

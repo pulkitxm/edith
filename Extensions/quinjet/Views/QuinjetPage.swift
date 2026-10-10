@@ -1,0 +1,447 @@
+import EdithExtensionSupport
+import EdithExtensionUI
+import SwiftUI
+
+struct QuinjetPage: View {
+    @Environment(\.windowRouter) private var router
+    @State private var bridgeToken = UUID()
+    @State private var model: QuinjetPageModel
+    @MainActor init(model: QuinjetPageModel) { _model = State(initialValue: model) }
+    @AppStorage(AppStorageKeys.Quinjet.terminal, store: SharedDefaults.store)
+    private var terminalName = QuinjetTerminal.embedded.rawValue
+    @AppStorage(AppStorageKeys.Quinjet.theme, store: SharedDefaults.store)
+    private var themeName = QuinjetThemePreference.app
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
+    private var appThemeName = AppTheme.accent.rawValue
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+    @Environment(\.terminalLaunchEnabled) private var launchEnabled
+
+    var body: some View {
+        PageWorkspace {
+            tabBar
+            Divider().opacity(0.45)
+        } content: {
+            ZStack {
+                ForEach(model.tabs) { tab in
+                    tabContent(tab, presented: tab.id == model.selected)
+                        .opacity(tab.id == model.selected ? 1 : 0)
+                        .allowsHitTesting(tab.id == model.selected)
+                }
+            }
+        }
+        .presenterCover(QuinjetPrivacy.shared.hidesReview, dark: scheme == .dark)
+        .navigationRoute("session", selection: sessionBinding, isValid: sessionIsValid)
+        .environment(\.quinjetLaunchConfiguration, configuration)
+        .onAppear {
+            model.setSessionLaunchEnabled(launchEnabled)
+            QuinjetSessionBridge.shared.attach(model, token: bridgeToken, router: router)
+        }
+        .pageTask(cancel: model.cancelDiscovery) {
+            await model.refreshThemes()
+            guard !Task.isCancelled else { return }
+            await model.refreshProjects()
+        }
+        .onChange(of: configuration) { _, configuration in
+            model.apply(configuration, launchEnabled: launchEnabled)
+        }
+        .onChange(of: launchEnabled) { _, enabled in
+            model.setSessionLaunchEnabled(enabled)
+        }
+        .onDisappear {
+            QuinjetSessionBridge.shared.detach(token: bridgeToken)
+        }
+    }
+
+    private var sessionBinding: Binding<String> {
+        Binding(
+            get: { model.selected.uuidString },
+            set: { raw in
+                guard let id = UUID(uuidString: raw) else { return }
+                model.selectSession(id)
+            })
+    }
+
+    private func sessionIsValid(_ raw: String) -> Bool {
+        guard let id = UUID(uuidString: raw) else { return false }
+        return model.tabs.contains { $0.id == id }
+    }
+
+    private var tabBar: some View {
+        HStack(spacing: UIScale.pt(5)) {
+            PageTabStrip(selection: model.selected) {
+                HStack(spacing: UIScale.pt(4)) {
+                    ForEach(model.tabs) { tab in
+                        QuinjetTabButton(
+                            tab: tab, selected: tab.id == model.selected,
+                            canClose: model.tabs.count > 1,
+                            select: {
+                                QuinjetWorkOwnership.start {
+                                    try? await model.performSessionOperation(
+                                        QuinjetSessionRequest(
+                                            operation: .focus, session: tab.id.uuidString))
+                                }
+                            },
+                            close: {
+                                QuinjetWorkOwnership.start {
+                                    try? await model.performSessionOperation(
+                                        QuinjetSessionRequest(
+                                            operation: .close, session: tab.id.uuidString))
+                                }
+                            }
+                        ).id(tab.id)
+                    }
+                }
+            }
+            Button {
+                QuinjetWorkOwnership.start {
+                    try? await model.performSessionOperation(
+                        QuinjetSessionRequest(operation: .create))
+                }
+            } label: {
+                Image(systemName: "plus")
+            }
+            .buttonStyle(.edith(.toolbar))
+            .help("New Quinjet review")
+            terminalMenu
+            themeMenu
+        }
+        .padding(.horizontal, UIScale.pt(12))
+        .padding(.vertical, UIScale.pt(9))
+        .background(.thinMaterial)
+    }
+
+    private var configuration: QuinjetLaunchConfiguration {
+        let storedTerminal = QuinjetTerminal(rawValue: terminalName) ?? .embedded
+        let appTheme = AppTheme(storedName: appThemeName)
+        return QuinjetLaunchConfiguration(
+            terminal: storedTerminal.isAvailable ? storedTerminal : .embedded,
+            theme: QuinjetThemePreference.resolve(themeName, appTheme: appTheme),
+            appearance: scheme == .dark ? .dark : .light,
+            hostTheme: themeName == QuinjetThemePreference.app
+                ? .edith(appTheme: appTheme) : nil)
+    }
+
+    private var terminalMenu: some View {
+        Menu {
+            ForEach(QuinjetTerminal.allCases) { terminal in
+                Button {
+                    terminalName = terminal.rawValue
+                } label: {
+                    if terminal == configuration.terminal {
+                        Label(terminal.label, systemImage: "checkmark")
+                    } else {
+                        Label(terminal.label, systemImage: terminal.icon)
+                    }
+                }
+                .disabled(!terminal.isAvailable)
+            }
+        } label: {
+            QuinjetMenuLabel(
+                icon: configuration.terminal.icon, title: configuration.terminal.label)
+        }
+        .menuIndicator(.hidden)
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Choose the terminal renderer")
+    }
+
+    private var themeMenu: some View {
+        Menu {
+            Button {
+                themeName = QuinjetThemePreference.app
+            } label: {
+                if themeName == QuinjetThemePreference.app {
+                    Label("App theme", systemImage: "checkmark")
+                } else {
+                    Text("App theme")
+                }
+            }
+            Divider()
+            ForEach(model.themes) { theme in
+                Button {
+                    themeName = theme.rawValue
+                } label: {
+                    if themeName == theme.rawValue {
+                        Label(theme.label, systemImage: "checkmark")
+                    } else {
+                        Text(theme.label)
+                    }
+                }
+            }
+        } label: {
+            QuinjetMenuLabel(
+                icon: "paintpalette",
+                title: themeName == QuinjetThemePreference.app
+                    ? "App theme" : configuration.theme.label)
+        }
+        .menuIndicator(.hidden)
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Quinjet theme")
+    }
+
+    @ViewBuilder
+    private func tabContent(_ tab: QuinjetTab, presented: Bool) -> some View {
+        if tab.worktree == nil {
+            QuinjetProjectPicker(model: model, tab: tab)
+        } else {
+            QuinjetTerminalWorkspace(
+                model: model, tab: tab, presented: presented,
+                useEmbedded: { terminalName = QuinjetTerminal.embedded.rawValue })
+        }
+    }
+}
+
+private struct QuinjetMenuLabel: View {
+    let icon: String
+    let title: String
+    @State private var hovered = false
+    @Environment(\.colorScheme) private var scheme
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        HStack(spacing: UIScale.pt(6)) {
+            Image(systemName: icon)
+                .font(.system(size: UIScale.pt(10), weight: .semibold))
+            Text(title)
+                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+            Image(systemName: "chevron.down")
+                .font(.system(size: UIScale.pt(7), weight: .bold))
+        }
+        .foregroundStyle(DashSkin.ink(dark))
+        .padding(.horizontal, UIScale.pt(9))
+        .padding(.vertical, UIScale.pt(6))
+        .background(
+            hovered ? DashSkin.inkFaint(dark).opacity(0.12) : DashSkin.paper2(dark),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: UIScale.pt(6))
+                .stroke(DashSkin.lineStrong(dark), lineWidth: UIScale.pt(1))
+        }
+        .contentShape(Rectangle())
+        .onHover { hovered = $0 }
+    }
+}
+
+private struct QuinjetTabButton: View {
+    let tab: QuinjetTab
+    let selected: Bool
+    let canClose: Bool
+    let select: () -> Void
+    let close: () -> Void
+
+    @Environment(\.colorScheme) private var scheme
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Button(action: select) {
+                HStack(spacing: UIScale.pt(6)) {
+                    Image(
+                        systemName: tab.worktree == nil
+                            ? "plus.square" : "arrow.triangle.branch"
+                    )
+                    .font(.system(size: UIScale.pt(9.5)))
+                    Text(tab.title)
+                        .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                        .lineLimit(1)
+                    if canClose {
+                        Color.clear.frame(width: UIScale.pt(16), height: UIScale.pt(16))
+                    }
+                }
+                .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
+                .padding(.horizontal, UIScale.pt(10))
+                .padding(.vertical, UIScale.pt(6))
+                .background(
+                    selected ? DashSkin.paper2(dark) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.edith(.borderless))
+            if canClose {
+                Button(action: close) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: UIScale.pt(7.5), weight: .bold))
+                }
+                .buttonStyle(.edith(.borderless))
+                .padding(.trailing, UIScale.pt(4))
+            }
+        }
+    }
+}
+
+private struct QuinjetTerminalWorkspace: View {
+    let model: QuinjetPageModel
+    @Bindable var tab: QuinjetTab
+    let presented: Bool
+    let useEmbedded: () -> Void
+
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
+
+    private var dark: Bool { scheme == .dark }
+    private var palette: TerminalPalette {
+        .quinjet(configuration: tab.launchConfiguration)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            workspaceBar
+            if let error = tab.errorMessage {
+                HStack(spacing: UIScale.pt(7)) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                    Text(error)
+                    Spacer(minLength: 0)
+                }
+                .font(.system(size: UIScale.pt(11)))
+                .foregroundStyle(DashSkin.warn)
+                .padding(.horizontal, PageMetrics.gutter(compact))
+                .padding(.vertical, UIScale.pt(7))
+                .background(DashSkin.warn.opacity(0.1))
+            }
+            if tab.launchConfiguration.terminal == .embedded {
+                TerminalPane(
+                    holder: tab.holder,
+                    palette: palette,
+                    active: presented
+                )
+                .id(tab.holder.generation)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                externalWorkspace
+            }
+        }
+        .background(Color(nsColor: palette.background))
+    }
+
+    private var workspaceBar: some View {
+        HStack(spacing: UIScale.pt(10)) {
+            Image(systemName: tab.launchConfiguration.terminal.icon)
+                .foregroundStyle(DashSkin.inkFaint(dark))
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(tab.title)
+                    .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                    .foregroundStyle(DashSkin.ink(dark))
+                Text(tab.worktree?.path ?? "")
+                    .font(DashSkin.mono(9.5))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 0)
+            if let message = tab.holder.exitMessage {
+                Text(message)
+                    .font(.system(size: UIScale.pt(10.5)))
+                    .foregroundStyle(DashSkin.warn)
+                Button("Restart", action: restart)
+                    .buttonStyle(.edith(.borderless))
+                    .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+            }
+            if let message = tab.externalLaunchMessage {
+                Text(message)
+                    .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+            }
+            Button {
+                QuinjetWorkOwnership.start { await model.presentWorktrees(for: tab) }
+            } label: {
+                Text(worktreeCount)
+                    .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                    .padding(.horizontal, UIScale.pt(11))
+                    .padding(.vertical, UIScale.pt(7))
+            }
+            .buttonStyle(QuinjetWorktreeCountButtonStyle(dark: dark))
+            .popover(isPresented: $tab.showsWorktrees, arrowEdge: .bottom) {
+                worktreePopover
+            }
+        }
+        .padding(.horizontal, PageMetrics.gutter(compact))
+        .padding(.vertical, UIScale.pt(9))
+        .background(.thinMaterial)
+    }
+
+    @ViewBuilder
+    private var worktreePopover: some View {
+        if tab.loadingWorktrees {
+            QuinjetWorktreePickerSkeleton(dark: dark)
+        } else if let error = tab.errorMessage, tab.worktrees.isEmpty {
+            ContentStatusView(
+                "Worktrees unavailable", message: error, symbol: "exclamationmark.triangle"
+            )
+            .padding(UIScale.pt(16))
+            .frame(width: UIScale.pt(360), height: UIScale.pt(220))
+        } else {
+            QuinjetWorktreePicker(
+                projectName: tab.projectName ?? "Project",
+                worktrees: model.recentWorktrees(for: tab),
+                selectedPath: tab.worktree?.path,
+                select: { worktree in
+                    QuinjetWorkOwnership.start {
+                        try? await model.performSessionOperation(
+                            QuinjetSessionRequest(
+                                operation: .switchWorktree, session: tab.id.uuidString,
+                                worktreePath: worktree.path))
+                    }
+                })
+        }
+    }
+
+    private var worktreeCount: String {
+        let count = tab.worktrees.count
+        return count == 1 ? "1 worktree" : "\(count) worktrees"
+    }
+
+    private var externalWorkspace: some View {
+        let palette = TerminalPalette.quinjet(
+            theme: tab.launchConfiguration.theme,
+            appearance: tab.launchConfiguration.appearance)
+        return ZStack {
+            Color(nsColor: palette.background)
+            VStack(spacing: UIScale.pt(18)) {
+                Image(systemName: "macwindow.on.rectangle")
+                    .font(.system(size: UIScale.pt(30), weight: .medium))
+                    .foregroundStyle(Color(nsColor: palette.caret))
+                VStack(spacing: UIScale.pt(6)) {
+                    Text("Open in cmux")
+                        .font(.system(size: UIScale.pt(22), weight: .bold))
+                    Text(tab.title)
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    Text(tab.worktree?.path ?? "")
+                        .font(DashSkin.mono(10.5))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .foregroundStyle(Color(nsColor: palette.foreground))
+                HStack(spacing: UIScale.pt(10)) {
+                    Button("Show in cmux") {
+                        QuinjetWorkOwnership.start {
+                            try? await model.performSessionOperation(
+                                QuinjetSessionRequest(
+                                    operation: .focus, session: tab.id.uuidString))
+                        }
+                    }
+                    .buttonStyle(QuinjetToolbarButtonStyle())
+                    Button("Use embedded terminal", action: useEmbedded)
+                        .buttonStyle(QuinjetToolbarButtonStyle())
+                }
+                Text("Theme: \(tab.launchConfiguration.theme.label)")
+                    .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                    .foregroundStyle(Color(nsColor: palette.foreground).opacity(0.65))
+            }
+            .padding(UIScale.pt(30))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func restart() {
+        QuinjetWorkOwnership.start {
+            try? await model.performSessionOperation(
+                QuinjetSessionRequest(operation: .restart, session: tab.id.uuidString))
+        }
+    }
+}
