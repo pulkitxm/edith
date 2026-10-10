@@ -92,6 +92,35 @@ import Testing
         #expect(hardware.stops == 2)
     }
 
+    @Test func switchActionWaitsForOwnedFrameReadAndIsNotDropped() async throws {
+        let hardware = CameraFixtureHardware()
+        hardware.authorization = AVAuthorizationStatus.authorized.rawValue
+        let engine = NotchCameraEngine(hardware: hardware)
+        var pending: CheckedContinuation<Void, Never>?
+        var hold = false
+        let client = NotchCameraClient(
+            namespace: "notch-camera-queue-" + UUID().uuidString, presentationID: UUID()
+        ) { operation, id in
+            if operation == .read, hold { await withCheckedContinuation { pending = $0 } }
+            return try await engine.execute(self.request(operation, deviceID: id))
+        }
+        await client.load()
+        #expect(client.state?.selectedID == "front")
+        hold = true
+        client.perform(.read)
+        await Task.yield()
+        let release = try #require(pending)
+        client.cycle()
+        hold = false
+        release.resume()
+        await client.drain()
+        #expect(client.state?.selectedID == "rear")
+        #expect(hardware.starts == ["front", "rear"])
+        #expect(client.error == nil)
+        client.stop()
+        await engine.shutdownAndWait()
+    }
+
     @Test func originalPromptRendersOffscreenAndLateCancelledReadCannotReturn() async throws {
         var pending: CheckedContinuation<Data, Error>?
         var operations: [NotchCameraRequest.Operation] = []
