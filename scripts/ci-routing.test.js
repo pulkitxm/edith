@@ -218,8 +218,8 @@ test("Swift lanes exercise only independent host and extension packages", () => 
   expect(JSON.stringify(job)).not.toContain("make ghostty");
   const tests = job.steps.find((step) => step.name === "Tests");
   expect(tests.run).toContain('read -r -a targets <<< "$TARGETS"');
-  expect(tests.run).toContain('make "${targets[@]}"');
-  expect(tests.env.TARGETS).toBe("${{ matrix.targets }}");
+  expect(tests.run).toContain(`make "\${targets[@]}"`);
+  expect(tests.env.TARGETS).toBe(`\${{ matrix.targets }}`);
   expect(job["timeout-minutes"]).toBeGreaterThan(tests["timeout-minutes"]);
   const cache = job.steps.find(
     (step) => step.name === "Cache independent test products",

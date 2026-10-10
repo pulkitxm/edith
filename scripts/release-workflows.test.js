@@ -241,7 +241,7 @@ test("host test lanes exclude optional terminal dependencies", () => {
   expect(JSON.stringify(job)).not.toContain("make ghostty");
   expect(JSON.stringify(job)).not.toContain("Packages/Edith/");
   expect(tests.run).toContain('read -r -a targets <<< "$TARGETS"');
-  expect(tests.run).toContain('make "${targets[@]}"');
+  expect(tests.run).toContain(`make "\${targets[@]}"`);
 });
 
 test("superseded release builds yield the lane before packaging", () => {

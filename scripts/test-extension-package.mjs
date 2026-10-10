@@ -29,7 +29,7 @@ if (import.meta.main) {
     await readFile("Extensions/manifest.json", "utf8"),
   );
   const definition = definitions.find(({ id }) => id === process.argv[2]);
-  if (!definition || definition.contractVersion !== 1)
+  if (definition?.contractVersion !== 1)
     throw new Error("Unknown native extension worker");
   runExtensionPackageTests(definition);
 }
