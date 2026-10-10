@@ -13,6 +13,7 @@ import stat
 import tempfile
 import uuid
 import zipfile
+from macho_code_identity import executable_identity
 
 
 BUILD_FIELDS = ("sourceCommit", "sourceTreeDirty", "configuration", "optimization", "linkTimeOptimization", "architecture", "signature", "xcode", "sdk", "ghosttySourceCommit", "ghosttyArchive")
@@ -74,12 +75,7 @@ def digest_file(path):
 
 
 def unsigned_executable_digest(path):
-    with tempfile.TemporaryDirectory(prefix="extension-report-code-") as directory:
-        copied = Path(directory) / "Edith"
-        shutil.copyfile(path, copied)
-        subprocess.run(["codesign", "--remove-signature", str(copied)], check=True,
-            capture_output=True, timeout=30)
-        return digest_file(copied)
+    return executable_identity(path)["normalizedUnsignedSHA256"]
 
 
 def tree_inventory(directory):
@@ -150,7 +146,7 @@ def verify_package_host(packages, metadata, definition, app, expected_commit, ho
         expected_hash = clone["executableAfterSigningSHA256"]
     host_identifier = clone["identifier"] if clone else plistlib.loads((app / "Contents/Info.plist").read_bytes())["CFBundleIdentifier"]
     result = {"sourceCommit": expected_commit, "sourceHostExecutableSHA256": host_hash,
-              "unsignedExecutableSHA256": unsigned_hash, "executables": []}
+              "unsignedExecutableSHA256": unsigned_hash, "normalizedUnsignedSHA256": unsigned_hash, "executables": []}
     if clone:
         result["syntheticHost"] = {key: clone[key] for key in ["identifier", "sourceCommit", "sourceExecutableSHA256",
             "executableBeforeSigningSHA256", "executableAfterSigningSHA256", "unsignedExecutableSHA256"]}
@@ -213,10 +209,12 @@ def verify_package_host(packages, metadata, definition, app, expected_commit, ho
                 with zipped.open(executable) as source, target.open("wb") as destination:
                     shutil.copyfileobj(source, destination, 1024 * 1024)
                 actual_hash = digest_file(target)
-                if unsigned_executable_digest(target) != unsigned_hash:
+                code_identity = executable_identity(target)
+                if code_identity["normalizedUnsignedSHA256"] != unsigned_hash:
                     raise ValueError("Contained executable code differs from the frozen host")
             copied[bundle] = {"member": executable, "sha256": actual_hash,
-                "installedBytes": zipped.getinfo(executable).file_size, "frozenExecutableProvenance": expected_hash}
+                "installedBytes": zipped.getinfo(executable).file_size, "frozenExecutableProvenance": expected_hash,
+                "codeIdentity": code_identity}
             result["executables"].append(copied[bundle])
         if not {carrier, worker}.issubset(copied):
             raise ValueError("Both sealed UI carrier executable copies are required")
@@ -295,6 +293,8 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
     result["indexedExtensions"] = len(index)
     result["unmeasuredExtensions"] = remaining
     result["hostExecutableSHA256"] = executable_hash
+    if source_mode == "final":
+        result["hostCodeIdentity"] = executable_identity(app / "Contents/MacOS/Edith")
     result["measurement"] = {
         "sourceMode": source_mode,
         "expectedSourceCommit": expected_source_commit,
@@ -306,7 +306,7 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
         "artifactPublication": "not-verified",
         "sourceFingerprintsVerified": expected_fingerprints is not None,
         "carrierHostProvenanceVerified": source_mode == "final",
-        "carrierExecutableMethod": "Sealed frozen-host provenance and SHA-256 of executable copies after signature removal in private temporary files. Actual signed checksums and expanded bytes remain recorded. Synthetic Camera hosts require a source-bound clone receipt and matching code and resources.",
+        "carrierExecutableMethod": "Sealed frozen-host provenance and SHA-256 after strictly verified signature removal and arm64 terminal LINKEDIT mapping normalization in private temporary files. Actual signed and raw unsigned checksums and expanded bytes remain recorded. Synthetic Camera hosts require a source-bound clone receipt and matching code and resources.",
         "appZipMethod": "Regular files only, symlinks excluded, ZIP deflate level 9. Comparison metric, not a shipping installer.",
         "installedMethod": "Logical regular-file bytes, excluding filesystem allocation rounding, receipts, caches, user data, retained versions and OS-managed deployment copies.",
         "verificationScope": "Package archive size, SHA-256, expanded bytes and CRC. Source fingerprints when supplied. Final reports also bind carrier code and source provenance. This report does not run lifecycle, visual, signing or cloud publication checks.",
