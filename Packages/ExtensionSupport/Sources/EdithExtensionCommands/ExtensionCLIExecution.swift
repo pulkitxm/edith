@@ -3,7 +3,8 @@ import EdithExtensionSupport
 import Foundation
 
 @MainActor public enum ExtensionCLIExecution {
-    private static var running = false
+    nonisolated public static let maximumConcurrentExecutions = 8
+    private static var activeExecutions = 0
 
     public static func run<Command: AsyncParsableCommand>(
         _ root: Command.Type, arguments: [String]
@@ -15,7 +16,8 @@ import Foundation
         _ root: Command.Type, request: ExtensionCLIRequest
     ) async throws -> ExtensionCLIReply {
         let buffer = CLIOutputBuffer()
-        let code = try await run(root, request: request, rawSink: buffer.append)
+        let code = try await run(
+            root, request: request, rawSink: { data, error in buffer.append(data, error: error) })
         return try buffer.reply(exitCode: code)
     }
 
@@ -41,12 +43,13 @@ import Foundation
         rawSink: (@Sendable (Data, Bool) -> Void)?
     ) async throws -> Int32 {
         try request.validate()
-        guard !running else {
-            throw ExtensionPeerError.rejected("Another terminal command is running.")
+        guard activeExecutions < maximumConcurrentExecutions else {
+            throw ExtensionPeerError.rejected(
+                "At most eight terminal commands may run concurrently.")
         }
         try Task.checkCancellation()
-        running = true
-        defer { running = false }
+        activeExecutions += 1
+        defer { activeExecutions -= 1 }
         return try await ExtensionCLIContext.$request.withValue(request) {
             try await ExtensionCLIContext.$outputSink.withValue(textSink) {
                 try await ExtensionCLIContext.$rawOutputSink.withValue(rawSink) {

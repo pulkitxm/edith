@@ -46,7 +46,8 @@ import Foundation
         let task = Task { [weak self] in
             do {
                 let code = try await ExtensionCLIExecution.run(
-                    root, request: request.request, rawSink: buffer.append)
+                    root, request: request.request,
+                    rawSink: { data, error in buffer.append(data, error: error) })
                 if (0...255).contains(code) {
                     buffer.finish(state: .completed, exitCode: code)
                 } else {

@@ -89,9 +89,12 @@ extension ExtensionCLIExecutionTests {
     @Test func rawSinkOverridesInheritedOutputForEveryTextAndBinaryWrite() async throws {
         let outer = RawCapture()
         let inner = RawCapture()
-        try await ExtensionCLIContext.$rawOutputSink.withValue(outer.append) {
+        try await ExtensionCLIContext.$rawOutputSink.withValue({ data, error in
+            outer.append(data, error: error)
+        }) {
             let code = try await ExtensionCLIExecution.run(
-                BinaryCommand.self, request: .init(arguments: ["mixed"]), rawSink: inner.append)
+                BinaryCommand.self, request: .init(arguments: ["mixed"]),
+                rawSink: { data, error in inner.append(data, error: error) })
             #expect(code == 0)
             #expect(inner.stdout == BinaryCommand.stdout + Data("text-output".utf8))
             #expect(inner.stderr == BinaryCommand.stderr + Data("text-error".utf8))
