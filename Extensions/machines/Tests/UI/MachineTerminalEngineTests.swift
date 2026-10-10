@@ -85,7 +85,7 @@ import Testing
         _ = try await engine.execute(registration)
         first.handle = try await engine.execute(first).handle
         let plan = try MachineBroadcastOperationExecution.plan(command: "echo synthetic").get()
-        let reply = try engine.broadcast(
+        let reply = try await engine.broadcast(
             machineID: session.id, plan: plan, requestID: UUID().uuidString)
         #expect(reply[MachineTerminalBroadcastIPC.tabCountKey] as? Int == 1)
         #expect(reply[MachineTerminalBroadcastIPC.unavailableTabCountKey] as? Int == 1)
@@ -94,11 +94,55 @@ import Testing
                 == MachineTerminalBroadcastIPC.partialDeliveryCode)
         var hide = registration; hide.operation = .unregister
         _ = try await engine.execute(hide)
-        let hidden = try engine.broadcast(
+        let hidden = try await engine.broadcast(
             machineID: session.id, plan: plan, requestID: UUID().uuidString)
         #expect(
             hidden[MachineTerminalBroadcastIPC.errorCodeKey] as? String
                 == MachineTerminalBroadcastIPC.noOpenTabsCode)
+        await engine.shutdown()
+    }
+
+    @Test func originalLongBroadcastDeliversEveryByteThroughBoundedPTYChunks() async throws {
+        let session = MachineSession(machine: .local, local: true, synthetic: true)
+        let plan = try MachineBroadcastOperationExecution.plan(
+            command: String(repeating: "synthetic", count: 4096)
+        ).get()
+        let count = plan.terminalInput.utf8.count
+        let engine = MachineTerminalEngine(
+            session: { _ in session },
+            launch: { _, _ in
+                launch("stty raw -echo; printf ready; dd bs=1 count=\(count) 2>/dev/null | wc -c")
+            })
+        let presentation = UUID()
+        var request = MachineTerminalRequest(
+            operation: .open, machineID: session.id, presentationID: presentation)
+        let registration = MachineTerminalRequest(
+            operation: .register, machineID: session.id, tabID: UUID(),
+            presentationID: presentation, tabIDs: [request.tabID])
+        _ = try await engine.execute(registration)
+        request.handle = try await engine.execute(request).handle
+        request.operation = .read
+        var output = Data()
+        for _ in 0..<100 {
+            let frame = try await engine.execute(request)
+            output += frame.bytes; request.offset = frame.nextOffset
+            if String(decoding: output, as: UTF8.self).contains("ready") { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(String(decoding: output, as: UTF8.self).contains("ready"))
+        let reply = try await engine.broadcast(
+            machineID: session.id, plan: plan, requestID: UUID().uuidString)
+        #expect(reply[MachineTerminalBroadcastIPC.okKey] as? Bool == true)
+        var code: Int32?
+        for _ in 0..<300 {
+            let frame = try await engine.execute(request)
+            output += frame.bytes; request.offset = frame.nextOffset; code = frame.exitCode
+            if code != nil { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(code == 0)
+        #expect(String(decoding: output, as: UTF8.self).contains(String(count)))
+        #expect(!String(decoding: output, as: UTF8.self).contains("synthetic"))
         await engine.shutdown()
     }
 

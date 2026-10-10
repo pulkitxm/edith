@@ -166,7 +166,7 @@ import Foundation
                 return MachineTerminalFrame(
                     handle: handle, bytes: output.bytes, nextOffset: output.nextOffset,
                     exitCode: output.exitCode, canonical: output.canonical, echo: output.echo)
-            case .input: try terminal.pty.send(request.bytes)
+            case .input: try await send(request.bytes, to: terminal.pty)
             case .resize: try terminal.pty.resize(columns: request.columns, rows: request.rows)
             case .close:
                 terminals.removeValue(forKey: handle)
@@ -177,7 +177,7 @@ import Foundation
         }
     }
 
-    func broadcast(machineID: UUID, plan: MachineBroadcastPlan, requestID: String) throws
+    func broadcast(machineID: UUID, plan: MachineBroadcastPlan, requestID: String) async throws
         -> [String: Any]
     {
         let tabs = Set(registrations.values.filter { $0.machineID == machineID }.flatMap(\.tabIDs))
@@ -197,7 +197,7 @@ import Foundation
         for terminal in matches {
             try terminal.pty.poll()
             if terminal.pty.exitCode == nil {
-                try terminal.pty.send(Data((plan.command + "\n").utf8)); sent += 1
+                try await send(Data(plan.terminalInput.utf8), to: terminal.pty); sent += 1
             }
         }
         let unavailable = tabs.count - sent
@@ -214,6 +214,24 @@ import Foundation
                 : MachineTerminalBroadcastIPC.partialDeliveryCode,
             MachineTerminalBroadcastIPC.errorKey: TerminalTabRegistry.failureMessage(for: delivery),
         ]
+    }
+
+    private func send(_ bytes: Data, to pty: MachinePTY) async throws {
+        guard bytes.count <= 262_144 else { throw MachineUIError.invalidRequest }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(25))
+        var offset = 0
+        while offset < bytes.count {
+            try Task.checkCancellation()
+            guard !stopped, ContinuousClock.now < deadline else { throw MachineUIError.unavailable }
+            try pty.poll()
+            guard pty.exitCode == nil else { throw MachineUIError.unavailable }
+            let count = min(pty.inputCapacity, bytes.count - offset)
+            if count > 0 {
+                try pty.send(bytes.subdata(in: offset..<offset + count)); offset += count
+            } else {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+        }
     }
 
     func runCLI(machine: Machine, arguments: [String], environment: [String]) async throws -> Int32

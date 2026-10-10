@@ -135,6 +135,17 @@ final class TerminalSessionHolder {
     }
 
     private func enqueueInput(_ bytes: Data) {
+        guard !bytes.isEmpty else { return }
+        let chunks = (bytes.count + 16_383) / 16_384
+        guard inputBytes + queuedExternalInput.count + bytes.count <= 262_144,
+            inputEvents + chunks <= 256
+        else { fail("The terminal input queue is full."); return }
+        for offset in stride(from: 0, to: bytes.count, by: 16_384) {
+            enqueueInputChunk(bytes.subdata(in: offset..<min(offset + 16_384, bytes.count)))
+        }
+    }
+
+    private func enqueueInputChunk(_ bytes: Data) {
         guard !bytes.isEmpty, bytes.count <= 16_384,
             inputBytes + queuedExternalInput.count + bytes.count <= 262_144, inputEvents < 256
         else { fail("The terminal input queue is full."); return }
@@ -266,6 +277,10 @@ final class TerminalSessionHolder {
         if let ghosttyView, queuedGhosttyInput.isEmpty, deliverGhosttyInput(ghosttyView, text) {
             return
         }
+        guard
+            queuedGhosttyInput.utf8.count + text.utf8.count + queuedExternalInput.count
+                + inputBytes <= 262_144
+        else { fail("The terminal input queue is full."); return }
         queuedGhosttyInput += text
         if let ghosttyView { flushQueuedInput(to: ghosttyView) }
     }
