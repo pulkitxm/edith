@@ -317,3 +317,39 @@ test("signed retained catalogs must pass actual native selection before package 
   );
   expect(workflow.jobs.tests.needs).toContain("frozen-host");
 });
+
+test("PR planning fetches the exact trusted base while releases retain signed catalog planning", () => {
+  const checkout = plan.steps.find((step) =>
+    step.uses?.startsWith("actions/checkout@"),
+  );
+  expect(checkout.with["fetch-depth"]).toBe(0);
+  expect(checkout.with["persist-credentials"]).toBe(false);
+  const planning = plan.steps.find((step) => step.id === "plan");
+  expect(planning.env.PR_BASE_SHA).toMatch(
+    /^\$\{\{ github\.event\.pull_request\.base\.sha \}\}$/,
+  );
+  expect(planning.run).toContain('[[ "$PR_BASE_SHA" =~ ^[a-f0-9]{40}$ ]]');
+  expect(planning.run).toContain('git fetch --no-tags origin "$PR_BASE_SHA"');
+  const pr = planning.run.slice(0, planning.run.indexOf("else\n"));
+  expect(planning.run).toContain(
+    'if [ "$GITHUB_EVENT_NAME" = pull_request ]; then',
+  );
+  expect(planning.run.indexOf("git fetch")).toBeLessThan(
+    planning.run.indexOf("--pull-request-base"),
+  );
+  expect(pr).toContain('--pull-request-base "$PR_BASE_SHA"');
+  expect(pr).not.toContain("--read-catalog");
+  expect(planning.run).toContain("else\n");
+  expect(planning.run.slice(planning.run.indexOf("else\n"))).toContain(
+    "extension-publish.mjs --read-catalog",
+  );
+  expect(planning.run.slice(planning.run.indexOf("else\n"))).toContain(
+    "extension-release-plan.mjs dist/extensions/previous.json",
+  );
+  expect(planning.run).toContain("draft=false");
+  expect(planning.run).toContain('echo "draft=$draft"');
+  const source = readFileSync("scripts/extension-release-plan.mjs", "utf8");
+  expect(source).toContain('process.env.GITHUB_EVENT_NAME !== "pull_request"');
+  expect(publish.if).toContain("github.event_name != 'pull_request'");
+  expect(publish.if).toContain("github.ref == 'refs/heads/main'");
+});
