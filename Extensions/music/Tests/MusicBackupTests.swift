@@ -267,6 +267,24 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: fixture.cloud.path))
     }
 
+    @Test @MainActor func cancelBeforeSchedulingPreventsLateBootstrapWork() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try FileManager.default.createDirectory(
+            at: fixture.local, withIntermediateDirectories: true)
+        try Data("selected".utf8).write(to: fixture.local.appendingPathComponent("selected.mp3"))
+        fixture.defaults.set(true, forKey: AppStorageKeys.Music.backup)
+        let provider = fixture.provider()
+        _ = try await provider.execute("backup.cancel", payload: Data())
+        provider.startScheduling(debounce: .zero, restorePending: true)
+        let status =
+            try JSONSerialization.jsonObject(
+                with: await provider.execute("backup.status", payload: Data())) as? [String: Any]
+        #expect(status?["scheduled"] as? Bool == false)
+        await provider.shutdown()
+        #expect(!FileManager.default.fileExists(atPath: fixture.cloud.path))
+    }
+
     @MainActor private func wait(_ ready: () -> Bool) async {
         let deadline = ContinuousClock.now.advanced(by: .seconds(3))
         while !ready(), ContinuousClock.now < deadline {

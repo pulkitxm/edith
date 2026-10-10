@@ -12,6 +12,7 @@ import Foundation
     private var stopping = false
     private var events: ClipboardBackupEventQueue?
     private var observers: [NSObjectProtocol] = []
+    private var bootstrapCancelled = false
     private var observedCloudEnabled = false
     private var needsRestore = false
     private let cloudAvailable: () -> Bool
@@ -134,7 +135,7 @@ import Foundation
             IPC.observe(IPC.Name.settingsChanged) { [weak self] in
                 MainActor.assumeIsolated { self?.preferencesChanged() }
             })
-        events?.changed()
+        if !bootstrapCancelled { events?.changed() }
     }
 
     func preferencesChanged() {
@@ -163,6 +164,7 @@ import Foundation
     }
 
     private func cancel() async {
+        bootstrapCancelled = true
         cancellation?.cancel()
         work?.cancel()
         _ = try? await work?.value

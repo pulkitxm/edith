@@ -229,6 +229,26 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: cloud.path))
     }
 
+    @Test @MainActor func cancelBeforeSchedulingPreventsLateBootstrapWork() async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "com.pulkit.edith.tests.usage-bootstrap-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: AppStorageKeys.Backup.icloud)
+        let cloud = root.appendingPathComponent("cloud")
+        try usage("2026-08-20", tokens: 23).write(to: root.appendingPathComponent("usage.json"))
+        let provider = UsageBackupProvider(directory: root, cloud: cloud, defaults: defaults)
+        _ = try await provider.execute("backup.cancel", payload: Data())
+        provider.startScheduling(debounce: .zero, restorePending: true)
+        let status =
+            try JSONSerialization.jsonObject(
+                with: await provider.execute("backup.status", payload: Data())) as? [String: Any]
+        #expect(status?["scheduled"] as? Bool == false)
+        await provider.shutdown()
+        #expect(!FileManager.default.fileExists(atPath: cloud.path))
+    }
+
     @MainActor private func wait(_ ready: () -> Bool) async {
         let deadline = ContinuousClock.now.advanced(by: .seconds(3))
         while !ready(), ContinuousClock.now < deadline {
