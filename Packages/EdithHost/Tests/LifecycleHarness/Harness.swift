@@ -46,6 +46,7 @@ struct HostLifecycleHarness {
         let executable = app.appendingPathComponent("Contents/MacOS/Edith")
         let identity = try HostIdentity(identifier: identifier, supportDirectory: fixture)
         let store = ExtensionPackageStore(root: identity.root.appendingPathComponent("Extensions"))
+        if extensionID == "machines" { try MachinesFixture.seed(identity: identity, home: fixture) }
         let suite = identity.defaultsSuite
         UserDefaults(suiteName: identity.extensionDefaultsSuite(extensionID))?.set(
             false, forKey: "windowSweatersActive")
@@ -113,6 +114,27 @@ struct HostLifecycleHarness {
             }
         }
         var sessions = makeSessions(executable: executable)
+        func verifyMachines() async throws {
+            let usageReleases = releases.appendingPathComponent("usage-peer")
+            let usage = try record(usageReleases, id: "usage", version: "1.0.0")
+            try await install(usage, releases: usageReleases, store: store)
+            try await sessions.enable(usage)
+            guard let usagePID = sessions.processIdentifiers["usage"] else {
+                throw HostWorkerError.invalidResponse
+            }
+            do {
+                try await MachinesFixture.verify(endpoint, identity: identity)
+                try await sessions.disable(id: "usage")
+                guard kill(usagePID, 0) == -1, try store.requestRemoval(id: "usage") else {
+                    throw HostWorkerError.invalidResponse
+                }
+                UserDefaults(suiteName: identity.extensionDefaultsSuite("usage"))?
+                    .removePersistentDomain(forName: identity.extensionDefaultsSuite("usage"))
+            } catch {
+                try? await sessions.disable(id: "usage")
+                throw error
+            }
+        }
         var surfaces = try HostSurfaces(
             identity: identity, entries: HostIndex.bundled(), sessions: sessions)
         surfaces.layouts.update(.home) { $0.tiles = [.init(.ability(extensionID))] }
@@ -153,6 +175,8 @@ struct HostLifecycleHarness {
                 try await verifyCompanion(endpoint, server: companionServer)
             } else if extensionID == "terminal" {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: oldPID)
+            } else if extensionID == "machines" {
+                try await verifyMachines()
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: true)
             } else if extensionID == "studio" {
@@ -206,6 +230,8 @@ struct HostLifecycleHarness {
                 try await verifyCompanion(endpoint, server: companionServer)
             } else if extensionID == "terminal" {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: newPID)
+            } else if extensionID == "machines" {
+                try await verifyMachines()
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: false)
             } else if extensionID == "studio" {
@@ -283,6 +309,8 @@ struct HostLifecycleHarness {
                 try await verifyCompanion(endpoint, server: companionServer)
             } else if extensionID == "terminal" {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: restoredPID)
+            } else if extensionID == "machines" {
+                try await verifyMachines()
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: false)
             } else if extensionID == "studio" {
@@ -350,7 +378,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"machinesDataValidated\":\(extensionID == "machines")}"
             )
         } catch {
             if extensionID == "jev" {
