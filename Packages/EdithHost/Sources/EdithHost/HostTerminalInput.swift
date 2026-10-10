@@ -55,6 +55,32 @@ final class HostTerminalInput {
         }
     }
 
+    static func tabAction(characters: String?, modifiers: NSEvent.ModifierFlags)
+        -> HostTerminalUIAction?
+    {
+        let flags = modifiers.intersection([.command, .control, .option, .shift])
+        if flags == .command, characters?.lowercased() == "t" { return .newTab }
+        guard flags == [.command, .shift] else { return nil }
+        switch characters {
+        case "w", "W": return .closeTab
+        case "]", "}": return .nextTab
+        case "[", "{": return .previousTab
+        default: return nil
+        }
+    }
+
+    func consumeTabKey(characters: String?, modifiers: NSEvent.ModifierFlags) -> Bool {
+        guard let action = Self.tabAction(characters: characters, modifiers: modifiers), !stopped,
+            !closing, available(),
+            let window = window(), window.isVisible, window.isKeyWindow, NSApp.isActive, visible(),
+            ownsResponder(window)
+        else { return false }
+        guard zooms.count < 8 else { return true }
+        zooms.append(Zoom(action: action, fallback: {}))
+        drain()
+        return true
+    }
+
     func stateChanged() {
         guard !stopped, !closing else { return }
         observe(window())
@@ -105,6 +131,13 @@ final class HostTerminalInput {
                         guard let current = window(), current.isVisible, current.isKeyWindow,
                             NSApp.isActive, visible(), ownsResponder(current)
                         else { continue }
+                        if [.newTab, .closeTab, .nextTab, .previousTab].contains(zoom.action) {
+                            let event = try event(action: zoom.action)
+                            guard try await client.update(event) else {
+                                throw HostWorkerError.rejected
+                            }
+                            continue
+                        }
                         let status = try await client.status()
                         try Task.checkCancellation()
                         guard !closing, !stopped, available(), window() === current,

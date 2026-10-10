@@ -416,7 +416,16 @@ struct HostWorkspace: View {
             let code = event.keyCode
             let modifiers = event.modifierFlags
             let handled = MainActor.assumeIsolated {
-                guard NSApp.keyWindow?.identifier?.rawValue == "EdithMainWindow",
+                guard NSApp.keyWindow?.identifier?.rawValue == "EdithMainWindow" else {
+                    return false
+                }
+                if let remote = presenter as? HostRemoteContentPresenter,
+                    remote.consumeTerminalTabKey(
+                        characters: characters, modifiers: modifiers, window: NSApp.keyWindow)
+                {
+                    return true
+                }
+                guard
                     let command = WindowKeyCommand.resolve(
                         characters: characters, keyCode: code, modifiers: modifiers)
                 else { return false }

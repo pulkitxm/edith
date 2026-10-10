@@ -15,6 +15,25 @@ struct HostTerminalInputTests {
         #expect(HostTerminalInput.fontZoom(.select(1)) == nil)
     }
 
+    @Test func originalTabShortcutsAreClosedAndDoNotStealGlobalNavigation() {
+        #expect(HostTerminalInput.tabAction(characters: "t", modifiers: .command) == .newTab)
+        #expect(
+            HostTerminalInput.tabAction(characters: "W", modifiers: [.command, .shift]) == .closeTab
+        )
+        #expect(
+            HostTerminalInput.tabAction(characters: "]", modifiers: [.command, .shift]) == .nextTab)
+        #expect(
+            HostTerminalInput.tabAction(characters: "{", modifiers: [.command, .shift])
+                == .previousTab)
+        for modifiers: NSEvent.ModifierFlags in [
+            .option, .control, [.command, .option], [.command, .shift],
+        ] {
+            #expect(HostTerminalInput.tabAction(characters: "t", modifiers: modifiers) == nil)
+        }
+        #expect(HostTerminalInput.tabAction(characters: "1", modifiers: .option) == nil)
+        #expect(HostTerminalInput.tabAction(characters: "w", modifiers: .command) == nil)
+    }
+
     @Test func neverVisibleWindowStateAndNativeCloseArePinnedToExactPresentation() async throws {
         let fixture = TerminalInputFixture()
         let input = fixture.input()
@@ -50,6 +69,7 @@ struct HostTerminalInputTests {
         var fallback = 0
         input.stateChanged()
         #expect(!input.consumeZoom(.zoomIn) { fallback += 1 })
+        #expect(!input.consumeTabKey(characters: "t", modifiers: .command))
         await Task.yield()
         #expect(fixture.events.isEmpty && fixture.focusQueries == 0)
         fixture.available = true
