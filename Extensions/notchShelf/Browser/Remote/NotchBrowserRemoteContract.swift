@@ -8,6 +8,8 @@ struct NotchBrowserClientState: Codable, Sendable {
     let session: BrowserSession
     let searchEngine: String
     let dataStoreID: UUID?
+    var leaseRevision: UInt64 = 0
+    var leaseIDs: [UUID] = []
 }
 
 struct NotchBrowserImport: Codable, Sendable {
@@ -26,6 +28,7 @@ struct NotchBrowserLease: Codable, Sendable, Equatable {
     let displayID: UInt32
     let generation: UUID
     let revision: UInt64
+    let stateRevision: UInt64
     let profileID: String
     let expiresAt: Date
 }

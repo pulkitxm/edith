@@ -176,6 +176,7 @@ final class NotchBrowserStore {
             download.delegate = nil
             let id = UUID()
             storeDrains[id] = Task {
+                defer { storeDrains[id] = nil }
                 await withCheckedContinuation { continuation in
                     download.cancel { _ in continuation.resume() }
                 }
@@ -195,6 +196,7 @@ final class NotchBrowserStore {
     private func drain(_ store: WKWebsiteDataStore, after task: Task<Void, Never>? = nil) {
         let id = UUID()
         storeDrains[id] = Task {
+            defer { storeDrains[id] = nil }
             await task?.value
             let cookies = await store.httpCookieStore.allCookies()
             for cookie in cookies { await store.httpCookieStore.deleteCookie(cookie) }
@@ -269,7 +271,10 @@ final class NotchBrowserStore {
         if remote != nil {
             revokePresentation()
             let id = UUID()
-            storeDrains[id] = Task { await remote?.endLease() }
+            storeDrains[id] = Task {
+                defer { storeDrains[id] = nil }
+                await remote?.endLease()
+            }
         } else {
             closeAllTabs()
         }
@@ -513,7 +518,7 @@ final class NotchBrowserStore {
             closedTabs.append(url)
             if closedTabs.count > Self.closedTabLimit { closedTabs.removeFirst() }
         }
-        faviconTasks.removeValue(forKey: tab.id)?.cancel()
+        if let task = faviconTasks.removeValue(forKey: tab.id) { retireFavicon(task) }
         retire(tab)
         tabs.remove(at: index)
         if selectedTabID == tab.id {
@@ -589,6 +594,7 @@ final class NotchBrowserStore {
     }
 
     func handleKeyEquivalent(_ event: NSEvent) -> Bool {
+        guard permitsNativeNavigation else { return false }
         guard
             let shortcut = BrowserShortcut.match(
                 characters: event.charactersIgnoringModifiers ?? "", modifiers: event.modifierFlags)
@@ -848,6 +854,7 @@ final class NotchBrowserStore {
     }
 
     func showToast(_ message: String) {
+        guard !stopped else { return }
         toast = message
         toastTask?.cancel()
         toastTask = Task { [weak self] in
@@ -872,12 +879,27 @@ final class NotchBrowserStore {
             let fallback = URL(string: "/favicon.ico", relativeTo: url)?.absoluteURL
             guard let iconURL = href.flatMap({ URL(string: $0) }) ?? fallback,
                 Self.permittedURL(iconURL, remote: remote != nil),
-                let (data, _) = try? await faviconSession.data(from: iconURL), data.count <= 262144
+                let data = try? await faviconBytes(iconURL)
             else { return }
             guard !Task.isCancelled, let image = NSImage(data: data) else { return }
+            if faviconCache.count >= 128 { faviconCache = [:] }
             faviconCache[host] = image
             tab?.favicon = image
         }
+    }
+
+    private func faviconBytes(_ url: URL) async throws -> Data {
+        let (bytes, response) = try await faviconSession.bytes(from: url)
+        guard response.expectedContentLength <= 262144 else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        var data = Data()
+        for try await byte in bytes {
+            try Task.checkCancellation()
+            guard data.count < 262144 else { throw ExtensionPeerError.invalidRequest }
+            data.append(byte)
+        }
+        return data
     }
 
     private static let faviconScript = """
@@ -898,9 +920,14 @@ final class NotchBrowserStore {
 
     private func closeAllTabs() {
         dialog?.resolve(false, nil)
-        for task in faviconTasks.values { task.cancel() }
+        for task in faviconTasks.values { retireFavicon(task) }
         faviconTasks = [:]
         for tab in tabs { retire(tab) }
+        for controller in contentControllers.values {
+            controller.removeAllUserScripts()
+            controller.removeScriptMessageHandler(forName: LocalStorageSeed.messageName)
+        }
+        contentControllers = [:]
         tabs = []
         selectedTabID = nil
     }
@@ -916,7 +943,19 @@ final class NotchBrowserStore {
         }
         let task = tab.close()
         let id = UUID()
-        storeDrains[id] = Task { await task.value }
+        storeDrains[id] = Task {
+            defer { storeDrains[id] = nil }
+            await task.value
+        }
+    }
+
+    private func retireFavicon(_ task: Task<Void, Never>) {
+        task.cancel()
+        let id = UUID()
+        storeDrains[id] = Task {
+            defer { storeDrains[id] = nil }
+            await task.value
+        }
     }
 
     private func saveSession() {
