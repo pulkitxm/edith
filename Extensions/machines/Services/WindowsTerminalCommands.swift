@@ -1,7 +1,7 @@
 import EdithExtensionSupport
 import Foundation
 
-public enum WindowsTerminalShell: String, CaseIterable, Identifiable, Sendable {
+public enum WindowsTerminalShell: String, Codable, CaseIterable, Identifiable, Sendable {
     case automatic
     case gitBash
     case powerShell

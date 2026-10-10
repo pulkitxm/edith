@@ -140,13 +140,7 @@ struct MachinePowerControls: View {
 
     private func runPower(_ operation: MachinePowerOperation) {
         Task {
-            let outcome = await MachinePowerOperationExecution.perform(
-                operation, machine: session.machine,
-                learnedMACAddress: session.facts.macAddress,
-                platform: session.remotePlatform ?? .linux,
-                run: { command, stdin, timeout in
-                    await session.runCommand(command, stdin: stdin, timeout: timeout)
-                })
+            let outcome = await session.performPower(operation)
             switch outcome {
             case let .success(result):
                 report(result)

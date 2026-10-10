@@ -54,7 +54,7 @@ public enum MountHealth: String, Codable, Equatable, Sendable {
     }
 }
 
-public enum MountRepair: Equatable, Sendable {
+public enum MountRepair: Codable, Equatable, Sendable {
     case nothingToDo
     case healthy(MachineMount)
     case remounted(MachineMount)

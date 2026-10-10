@@ -80,7 +80,7 @@ struct MachineToolsTab: View {
             Button("Remove", role: .destructive) {
                 guard let snippet = pendingSnippetRemoval else { return }
                 pendingSnippetRemoval = nil
-                removeSnippet(snippet)
+                Task { await removeSnippet(snippet) }
             }
             Button("Cancel", role: .cancel) { pendingSnippetRemoval = nil }
         } message: {
@@ -118,25 +118,18 @@ struct MachineToolsTab: View {
                         }
                         .accessibilityLabel("Reconnecting disk")
                     }
-                    Button("Reveal") {
-                        RemoteFileOperationExecution.present(
-                            [URL(fileURLWithPath: mount.mountPoint)], action: .reveal
-                        ) { urls, _ in
-                            NSWorkspace.shared.activateFileViewerSelecting(urls)
-                            return true
-                        }
-                    }
-                    .disabled(session.mountHealth != .mounted)
+                    Button("Reveal") { session.revealMount() }
+                        .disabled(session.mountHealth != .mounted)
                     Button("Unmount") { unmountDisk() }
                         .disabled(mounting || session.isRemounting)
                 } else {
                     Text(
-                        MachineMounts.isAvailable
-                            ? MachineMounts.mountPoint(for: session.machine).path
+                        session.mountsAvailable
+                            ? session.defaultMountPath
                             : "sshfs is not installed on this Mac"
                     )
                     .font(
-                        MachineMounts.isAvailable
+                        session.mountsAvailable
                             ? DashSkin.mono(11) : .system(size: UIScale.pt(11.5))
                     )
                     .foregroundStyle(DashSkin.inkFaint(dark))
@@ -151,7 +144,7 @@ struct MachineToolsTab: View {
                     }
                     Button("Mount") { mountDisk() }
                         .disabled(
-                            mounting || !MachineMounts.isAvailable || !session.state.isConnected
+                            mounting || !session.mountsAvailable || !session.state.isConnected
                         )
                 }
             }
@@ -181,9 +174,7 @@ struct MachineToolsTab: View {
         mounting = true
         message = nil
         Task {
-            let result = await MachineMountOperationExecution.perform(
-                .mount, machine: session.machine,
-                platform: session.remotePlatform ?? .linux)
+            let result = await session.performMount(.mount)
             switch result {
             case let .success(outcome):
                 message = "Mounted at \(outcome.mount.mountPoint)."
@@ -202,8 +193,7 @@ struct MachineToolsTab: View {
         mounting = true
         message = nil
         Task {
-            switch await MachineMountOperationExecution.perform(
-                .unmount, machine: session.machine)
+            switch await session.performMount(.unmount)
             {
             case let .success(outcome):
                 message = "Unmounted \(outcome.mount.mountPoint)."
@@ -235,13 +225,7 @@ struct MachineToolsTab: View {
                         Spacer(minLength: 0)
                         if session.activeForwards.contains(forward.id) {
                             Button("Open") {
-                                if let url = PortForwardBrowserOperationExecution.url(
-                                    forward: forward)
-                                {
-                                    RemoteFileOperationExecution.present(
-                                        [url], action: .open
-                                    ) { urls, _ in NSWorkspace.shared.open(urls[0]) }
-                                }
+                                session.openForward(forward)
                             }
                             .font(.system(size: UIScale.pt(11)))
                         }
@@ -323,7 +307,7 @@ struct MachineToolsTab: View {
                         .frame(width: UIScale.pt(140))
                     TextField("Command", text: $snippetCommand)
                         .textFieldStyle(.roundedBorder)
-                    Button("Save") { saveSnippet() }
+                    Button("Save") { Task { await saveSnippet() } }
                         .disabled(
                             snippetTitle.trimmingCharacters(in: .whitespaces).isEmpty
                                 || snippetCommand.trimmingCharacters(in: .whitespaces).isEmpty
@@ -447,12 +431,12 @@ struct MachineToolsTab: View {
         }
     }
 
-    private func saveSnippet() {
+    private func saveSnippet() async {
         let snippet = CommandSnippet(
             machineID: session.machine.id,
             title: snippetTitle.trimmingCharacters(in: .whitespaces),
             command: snippetCommand.trimmingCharacters(in: .whitespaces))
-        switch model.performSnippet(.add, snippet: snippet) {
+        switch await model.performSnippet(.add, snippet: snippet) {
         case .success:
             snippetTitle = ""
             snippetCommand = ""
@@ -461,8 +445,8 @@ struct MachineToolsTab: View {
         }
     }
 
-    private func removeSnippet(_ snippet: CommandSnippet) {
-        switch model.performSnippet(.remove, snippet: snippet) {
+    private func removeSnippet(_ snippet: CommandSnippet) async {
+        switch await model.performSnippet(.remove, snippet: snippet) {
         case .success:
             message = "Removed \(snippet.title)."
         case let .failure(error):
@@ -513,15 +497,7 @@ struct MachineToolsTab: View {
     private func runService(_ action: String, unit: String) {
         guard let operation = MachineServiceOperation(rawValue: action) else { return }
         Task {
-            let machineID = session.machine.id
-            let platform = session.remotePlatform ?? .linux
-            let stdin = platform == .windows ? nil : SudoPassword.stdin(machineID: machineID)
-            let result = await MachineServiceOperationExecution.perform(
-                operation, unit: unit, sudoPassword: stdin,
-                platform: platform,
-                using: { command, stdin, timeout in
-                    await session.runCommand(command, stdin: stdin, timeout: timeout)
-                })
+            let result = await session.performService(operation, unit: unit)
             if case let .failure(error) = result {
                 message = PowerOutcome.explain(error)
             } else {

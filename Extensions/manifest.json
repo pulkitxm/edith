@@ -1966,9 +1966,7 @@
   },
   {
     "id": "machines",
-    "testTargets": [
-      "ci-extension-machines"
-    ],
+    "testTargets": ["ci-extension-machines"],
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -1976,18 +1974,14 @@
     "supportProduct": "EdithExtensionDocuments",
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
-    "nativeResources": [
-      "TerminalNative_GhosttyTerminal.bundle"
-    ],
+    "nativeResources": ["TerminalNative_GhosttyTerminal.bundle"],
     "nativeLicenses": [
       {
         "source": "Extensions/terminal/Native/LICENSE-GHOSTTY",
         "destination": "Ghostty-LICENSE"
       }
     ],
-    "inputs": [
-      "Extensions/machines"
-    ],
+    "inputs": ["Extensions/machines"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
@@ -2000,12 +1994,46 @@
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
+        "Extensions/machines/CLI/CLIProgress.swift",
+        "Extensions/machines/CLI/CommandTree.swift",
+        "Extensions/machines/CLI/CompletionEngine.swift",
+        "Extensions/machines/CLI/ConfigCatalog.swift",
+        "Extensions/machines/CLI/ConfigCommands.swift",
+        "Extensions/machines/CLI/ConfigStore.swift",
+        "Extensions/machines/CLI/ConfigurationExecutor.swift",
+        "Extensions/machines/CLI/MachineCLICatalog.swift",
+        "Extensions/machines/CLI/MachineCLIService.swift",
+        "Extensions/machines/CLI/MachineCommands.swift",
+        "Extensions/machines/CLI/MachineControlCommands.swift",
+        "Extensions/machines/CLI/MachineCrudCommands.swift",
+        "Extensions/machines/CLI/MachineDirectory.swift",
+        "Extensions/machines/CLI/MachineDockerCommands.swift",
+        "Extensions/machines/CLI/MachineFileCommands.swift",
+        "Extensions/machines/CLI/MachineFileOpsCommands.swift",
+        "Extensions/machines/CLI/MachineFileTransferCommands.swift",
+        "Extensions/machines/CLI/MachineMountCommands.swift",
+        "Extensions/machines/CLI/MachinePowerCommands.swift",
+        "Extensions/machines/CLI/MachineReports.swift",
+        "Extensions/machines/CLI/MachineThermalCommands.swift",
+        "Extensions/machines/CLI/MachinesCLIExecution.swift",
+        "Extensions/machines/CLI/RemoteCompletion.swift",
+        "Extensions/machines/CLI/RemoteRunner.swift",
+        "Extensions/machines/CLI/WorkspaceCommands.swift",
         "Extensions/machines/Models/DockerModels.swift",
         "Extensions/machines/Models/DockerRemovalPlans.swift",
         "Extensions/machines/Models/FileEntries.swift",
         "Extensions/machines/Models/FleetSummary.swift",
+        "Extensions/machines/Models/MachineClipboardState.swift",
+        "Extensions/machines/Models/MachineDirectoryExportRequest.swift",
+        "Extensions/machines/Models/MachineFileRequest.swift",
+        "Extensions/machines/Models/MachineHealthSnapshot.swift",
+        "Extensions/machines/Models/MachineHostWindowRequest.swift",
+        "Extensions/machines/Models/MachineLogRequest.swift",
         "Extensions/machines/Models/MachineModels.swift",
+        "Extensions/machines/Models/MachinePreviewRequest.swift",
         "Extensions/machines/Models/MachineReach.swift",
+        "Extensions/machines/Models/MachineTerminalRequest.swift",
+        "Extensions/machines/Models/MachineUIState.swift",
         "Extensions/machines/Models/MetricsModels.swift",
         "Extensions/machines/Models/TransferProgress.swift",
         "Extensions/machines/Models/WorkspaceLayout.swift",
@@ -2027,16 +2055,19 @@
         "Extensions/machines/Services/MachineConnectionRecipe.swift",
         "Extensions/machines/Services/MachineControlCenter.swift",
         "Extensions/machines/Services/MachineDetailOperations.swift",
+        "Extensions/machines/Services/MachineExecutionOwner.swift",
         "Extensions/machines/Services/MachineFacts.swift",
         "Extensions/machines/Services/MachineFileOperations.swift",
         "Extensions/machines/Services/MachineFleetOperations.swift",
+        "Extensions/machines/Services/MachineHealthMonitor.swift",
+        "Extensions/machines/Services/MachineHealthNotifications.swift",
         "Extensions/machines/Services/MachineHealthProbe.swift",
+        "Extensions/machines/Services/MachineLogEngine.swift",
         "Extensions/machines/Services/MachineMounts.swift",
+        "Extensions/machines/Services/MachinePTY.swift",
         "Extensions/machines/Services/MachinePaths.swift",
         "Extensions/machines/Services/MachinePeerService.swift",
         "Extensions/machines/Services/MachinePeerTransport.swift",
-        "Extensions/machines/Services/MachineUsageSnapshotStore.swift",
-        "Extensions/machines/Services/MachineUsageFixtureSnapshot.swift",
         "Extensions/machines/Services/MachineReconnect.swift",
         "Extensions/machines/Services/MachineRegistry.swift",
         "Extensions/machines/Services/MachineResourcePolicy.swift",
@@ -2048,7 +2079,11 @@
         "Extensions/machines/Services/MachineSystemOperations.swift",
         "Extensions/machines/Services/MachineThermalControls.swift",
         "Extensions/machines/Services/MachineToolOperations.swift",
+        "Extensions/machines/Services/MachineUIClient.swift",
+        "Extensions/machines/Services/MachineUIEngine.swift",
         "Extensions/machines/Services/MachineUsageCollectionService.swift",
+        "Extensions/machines/Services/MachineUsageFixtureSnapshot.swift",
+        "Extensions/machines/Services/MachineUsageSnapshotStore.swift",
         "Extensions/machines/Services/MachineWorkingDirectory.swift",
         "Extensions/machines/Services/RemoteDirectoryOperations.swift",
         "Extensions/machines/Services/RemoteMachinePlatform.swift",
@@ -2085,7 +2120,12 @@
         "Extensions/machines/UI/Services/FinderKeyboard.swift",
         "Extensions/machines/UI/Services/FinderUndoBridge.swift",
         "Extensions/machines/UI/Services/LogTextView.swift",
+        "Extensions/machines/UI/Services/MachineDirectoryExport.swift",
+        "Extensions/machines/UI/Services/MachineFilesEngine.swift",
+        "Extensions/machines/UI/Services/MachinePreviewEngine.swift",
         "Extensions/machines/UI/Services/MachineTerminalBroadcastBridge.swift",
+        "Extensions/machines/UI/Services/MachineTerminalDropEngine.swift",
+        "Extensions/machines/UI/Services/MachineTerminalEngine.swift",
         "Extensions/machines/UI/Services/MachineViewActivity.swift",
         "Extensions/machines/UI/Services/TerminalDropTransfer.swift",
         "Extensions/machines/UI/Terminal/TerminalLaunchPlan.swift",
@@ -2119,10 +2159,12 @@
         "Extensions/machines/UI/Views/MachineSkeletons.swift",
         "Extensions/machines/UI/Views/MachineTerminalTab.swift",
         "Extensions/machines/UI/Views/MachineToolsTab.swift",
+        "Extensions/machines/UI/Views/MachinesHostWindowPage.swift",
         "Extensions/machines/UI/Views/MachinesPage.swift",
         "Extensions/machines/UI/Views/SelectableChipRow.swift",
         "Extensions/machines/UI/Views/TerminalDropTransferStatus.swift",
-        "Extensions/machines/UI/Views/TerminalLoadingSkeleton.swift"
+        "Extensions/machines/UI/Views/TerminalLoadingSkeleton.swift",
+        "Extensions/machines/Services/MachineUsageProgress.swift"
       ]
     },
     "resources": {
@@ -2132,7 +2174,10 @@
         "Extensions/machines/Resources/machine-collector.sh"
       ]
     },
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "supportProducts": {
+      "app": ["EdithExtensionDocuments", "EdithExtensionCommands"]
+    }
   },
   {
     "id": "downloads",

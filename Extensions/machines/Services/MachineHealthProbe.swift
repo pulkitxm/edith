@@ -183,13 +183,14 @@ public enum MachineHealthProbe {
         machine: Machine, threshold: Double, timeout: TimeInterval = 30
     ) async -> (health: MachineHealth, disks: [MachineFilesystem], failure: String?) {
         let connection = SSHConnection(machine: machine)
-        defer { Task { await connection.disconnect() } }
         do {
             try await connection.connect()
             let platform = await connection.remotePlatform ?? .linux
             let result = try await connection.run(command(for: platform), timeout: timeout)
+            await connection.disconnect()
             return outcome(result, platform: platform, threshold: threshold)
         } catch {
+            await connection.disconnect()
             return (MachineHealth(reachable: false, fullMounts: []), [], error.localizedDescription)
         }
     }

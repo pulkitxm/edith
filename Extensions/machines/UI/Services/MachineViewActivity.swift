@@ -42,6 +42,18 @@ final class MachineActivityLease {
     func release() { update([], active: false) }
 
     private func change(_ session: MachineSession, active: Bool) {
+        if let client = session.uiClient {
+            let operation: MachineUIAction.Operation
+            switch kind {
+            case .metrics: operation = .observe
+            case .docker: operation = .dockerObserve
+            case .internetSpeed: operation = .speedObserve
+            }
+            var value = MachineUIAction(operation: operation, machineID: session.id)
+            value.token = token; value.active = active
+            client.enqueue(value)
+            return
+        }
         switch kind {
         case .metrics:
             session.setForegroundObservation(token, active: active)

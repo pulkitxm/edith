@@ -15,7 +15,7 @@ public struct FilePlace: Identifiable, Equatable, Codable, Sendable {
     }
 }
 
-public struct FilePlaceSection: Identifiable, Equatable, Sendable {
+public struct FilePlaceSection: Codable, Identifiable, Equatable, Sendable {
     public var title: String
     public var places: [FilePlace]
 
@@ -102,12 +102,12 @@ public enum FilePlaces {
     }
 }
 
-public enum FileClipboardOperation: String, Equatable, Sendable {
+public enum FileClipboardOperation: String, Codable, Equatable, Sendable {
     case copy
     case move
 }
 
-public struct FileClipboard: Equatable, Sendable {
+public struct FileClipboard: Codable, Equatable, Sendable {
     public var paths: [String]
     public var machineID: UUID
     public var operation: FileClipboardOperation

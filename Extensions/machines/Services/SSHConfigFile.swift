@@ -1,7 +1,7 @@
 import EdithExtensionSupport
 import Foundation
 
-public struct SSHConfigHost: Identifiable, Equatable, Sendable {
+public struct SSHConfigHost: Codable, Identifiable, Equatable, Sendable {
     public let alias: String
     public var hostName: String?
     public var user: String?

@@ -98,33 +98,6 @@ public enum SSHControlSocketMode: Equatable, Sendable {
     case shared
 }
 
-private final class ResumeGate: @unchecked Sendable {
-    private let lock = NSLock()
-    private var claimed = false
-    private var timeoutWorkItem: DispatchWorkItem?
-
-    func install(_ workItem: DispatchWorkItem) {
-        lock.lock()
-        if claimed {
-            lock.unlock()
-            workItem.cancel()
-            return
-        }
-        timeoutWorkItem = workItem
-        lock.unlock()
-    }
-
-    func claim() -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        guard !claimed else { return false }
-        claimed = true
-        timeoutWorkItem?.cancel()
-        timeoutWorkItem = nil
-        return true
-    }
-}
-
 final class PipeBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private var data = Data()
@@ -293,15 +266,19 @@ public actor SSHConnection {
     @discardableResult
     public func run(
         _ command: String, stdin: Data? = nil, timeout: TimeInterval = 60,
-        maximumOutputBytes: Int = 64 * 1_024 * 1_024
+        maximumOutputBytes: Int = 64 * 1_024 * 1_024,
+        onStandardErrorLine: (@Sendable (String) -> Void)? = nil
     ) async throws -> SSHExecResult {
 
-        let result = try await CLICommandRunner.run(
+        let result = try await CLICommandRunner.runSeparated(
             CLICommandRequest(
                 executableURL: Self.executable, arguments: execArguments(command: command),
                 environment: environment(), timeout: timeout,
                 maximumOutputBytes: maximumOutputBytes,
-                standardInputData: stdin, terminatesProcessGroup: true), onLine: { _ in })
+                standardInputData: stdin, terminatesProcessGroup: true),
+            streamsWhileRunning: onStandardErrorLine != nil,
+            onStandardOutputLine: { _ in },
+            onStandardErrorLine: onStandardErrorLine ?? { _ in })
         return SSHExecResult(
             status: result.terminationStatus, stdout: result.standardOutputData,
             stderr: result.standardErrorData)
@@ -732,30 +709,26 @@ public actor SSHConnection {
     static func waitForExit(
         _ process: Process, timeout: TimeInterval, killDelay: TimeInterval = 2
     ) async -> Int32 {
-        await withCheckedContinuation { continuation in
-            let gate = ResumeGate()
-            let resumeOnce: @Sendable (Int32) -> Void = { status in
-                guard gate.claim() else { return }
-                continuation.resume(returning: status)
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(max(0, timeout)))
+        var killAt: ContinuousClock.Instant?
+        var killed = false
+        while process.isRunning {
+            if killAt == nil, clock.now >= deadline {
+                process.terminate()
+                killAt = clock.now.advanced(by: .seconds(max(0, killDelay)))
             }
-            process.terminationHandler = { resumeOnce($0.terminationStatus) }
-            if !process.isRunning {
-                resumeOnce(process.terminationStatus)
-                return
+            if let killAt, !killed, clock.now >= killAt, process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+                killed = true
             }
-            let timeoutWorkItem = DispatchWorkItem {
-                if process.isRunning {
-                    process.terminate()
-                    processTimeoutQueue.asyncAfter(deadline: .now() + killDelay) {
-                        if process.isRunning {
-                            kill(process.processIdentifier, SIGKILL)
-                        }
-                    }
+            await withCheckedContinuation { continuation in
+                processTimeoutQueue.asyncAfter(deadline: .now() + 0.02) {
+                    continuation.resume()
                 }
             }
-            gate.install(timeoutWorkItem)
-            processTimeoutQueue.asyncAfter(deadline: .now() + timeout, execute: timeoutWorkItem)
         }
+        return process.terminationStatus
     }
 
     static func friendlyConnectError(_ stderr: String) -> SSHConnectFailure {

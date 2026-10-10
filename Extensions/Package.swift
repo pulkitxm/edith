@@ -94,7 +94,10 @@ let package = Package(
 
         .target(
             name: "MachinesExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            dependencies: [
+                .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
+            ],
             path: "machines", exclude: ["Tests", "Runtime.swift", "UI", "Package.swift"],
             resources: [.process("Resources")], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(

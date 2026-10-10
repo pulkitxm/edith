@@ -33,7 +33,7 @@ public struct RemoteDirectoryListing: Equatable, Sendable {
     }
 }
 
-public struct RemoteDirectoryCreation: Equatable, Sendable {
+public struct RemoteDirectoryCreation: Codable, Equatable, Sendable {
     public let machineName: String
     public let path: String
 

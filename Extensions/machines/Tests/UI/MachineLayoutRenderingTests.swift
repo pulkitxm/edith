@@ -11,6 +11,7 @@ import Testing
             Issue.record("Layout rendering requires an isolated synthetic fixture."); return
         }
         _ = NSApplication.shared
+        NSApp.setActivationPolicy(.prohibited)
         let directory = URL(
             fileURLWithPath: ProcessInfo.processInfo.environment["EDITH_MACHINES_LAYOUT_DIR"]
                 ?? FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -37,7 +38,7 @@ import Testing
                             })
                     view.sizingOptions = []
                     let window = NSWindow(
-                        contentRect: NSRect(x: 0, y: 0, width: width, height: 900),
+                        contentRect: NSRect(x: -20000, y: -20000, width: width, height: 900),
                         styleMask: [.borderless], backing: .buffered, defer: false)
                     window.isReleasedWhenClosed = false
                     window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)

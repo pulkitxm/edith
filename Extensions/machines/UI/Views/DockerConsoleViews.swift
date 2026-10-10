@@ -73,7 +73,7 @@ struct DockerContainerList: View {
                     Section {
                         ForEach(group.containers) { container in
                             DockerContainerRow(
-                                container: container, machine: session.machine, dark: dark,
+                                container: container, session: session, dark: dark,
                                 busy: busyIDs.contains(container.id),
                                 onOpen: { onOpen(container) },
                                 onAction: { onAction(container, $0) },
@@ -154,7 +154,8 @@ struct DockerContainerList: View {
 
 private struct DockerContainerRow: View {
     let container: DockerContainer
-    let machine: Machine
+    let session: MachineSession
+    private var machine: Machine { session.machine }
     let dark: Bool
     let busy: Bool
     let onOpen: () -> Void
@@ -268,10 +269,10 @@ private struct DockerContainerRow: View {
     private var portsView: some View {
         HStack(spacing: UIScale.pt(4)) {
             ForEach(browserPorts.prefix(2), id: \.self) { port in
-                if let url = DockerBrowserOperationExecution.url(for: port, machine: machine) {
+                if DockerBrowserOperationExecution.url(for: port, machine: machine) != nil {
                     Button {
-                        RemoteFileOperationExecution.present([url], action: .open) { urls, _ in
-                            NSWorkspace.shared.open(urls[0])
+                        if let number = port.hostPort {
+                            session.openDockerPort(containerID: container.id, port: number)
                         }
                     } label: {
                         Text(port.displayName)

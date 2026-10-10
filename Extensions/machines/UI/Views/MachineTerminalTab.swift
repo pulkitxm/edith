@@ -22,6 +22,7 @@ struct MachineTerminalTab: View {
     var wantsFocus = true
     var allowsShellLaunch = true
     var onFocus: (() -> Void)?
+    var hostTabAction: ((MachineTerminalUIEvent.Action) -> Bool)?
     @State private var ownHolder = TerminalSessionHolder()
     @State private var selectedWindowsShell = WindowsTerminalShell.automatic
     @State private var availableWindowsShells = [WindowsTerminalShell.automatic]
@@ -35,6 +36,7 @@ struct MachineTerminalTab: View {
         context: MachineTerminalContext? = nil,
         showsStatusBar: Bool = true,
         onFocus: (() -> Void)? = nil,
+        hostTabAction: ((MachineTerminalUIEvent.Action) -> Bool)? = nil,
         holder: TerminalSessionHolder? = nil,
         allowsShellLaunch: Bool = true
     ) {
@@ -46,6 +48,7 @@ struct MachineTerminalTab: View {
         self.context = context
         self.showsStatusBar = showsStatusBar
         self.onFocus = onFocus
+        self.hostTabAction = hostTabAction
     }
 
     private var holder: TerminalSessionHolder { injectedHolder ?? ownHolder }
@@ -67,7 +70,7 @@ struct MachineTerminalTab: View {
                 TerminalPane(
                     holder: holder, palette: .edith(dark: dark), active: active,
                     wantsFocus: wantsFocus,
-                    onDropFiles: session.isLocal ? nil : uploadDrop,
+                    onDropFiles: uploadDrop,
                     onFocus: onFocus
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -77,8 +80,12 @@ struct MachineTerminalTab: View {
             }
         }
         .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
-        .onAppear(perform: startIfPossible)
+        .onAppear {
+            holder.hostTabAction = hostTabAction; holder.presented = active
+            startIfPossible()
+        }
         .onChange(of: active) { _, active in
+            holder.presented = active; holder.hostTabAction = hostTabAction
             if active { startIfPossible() }
         }
         .onChange(of: session.state.isConnected) { _, connected in
@@ -87,7 +94,10 @@ struct MachineTerminalTab: View {
         .task(id: session.state.isConnected) {
             await detectWindowsShells()
         }
-        .onDisappear { if injectedHolder == nil { holder.stop() } }
+        .onDisappear {
+            holder.presented = false; holder.hostTabAction = nil
+            if injectedHolder == nil { holder.stop() }
+        }
     }
 
     private func statusBar(_ presentation: MachineTerminalPresentation) -> some View {
@@ -185,77 +195,23 @@ struct MachineTerminalTab: View {
                 active: active, launchEnabled: shellLaunchEnabled, started: holder.started,
                 isLocal: session.isLocal, connected: session.state.isConnected)
         else { return }
-        guard let context else {
-            if !session.isLocal, session.remotePlatform == .windows {
-                startWindowsShell()
-                return
-            }
-            startStandardShell()
-            return
-        }
-        let connection = session.isLocal ? nil : session.connectionRef
-        guard
-            let launch = MachineTerminalLaunchPlan.make(
-                isLocal: session.isLocal, connection: connection,
-                environment: TerminalLaunchPlan.environment(
-                    base: ProcessInfo.processInfo.environment, shell: "/bin/zsh"),
-                context: context, platform: session.remotePlatform ?? .linux,
-                windowsShell: selectedWindowsShell)
-        else { return }
-        holder.start(
-            executable: launch.executable, arguments: launch.arguments,
-            environment: launch.environment, currentDirectory: launch.currentDirectory,
-            allowsLocalFileLinks: session.isLocal)
-    }
-
-    private func startStandardShell() {
-        if session.isLocal {
-            holder.start(
-                executable: "/bin/zsh", arguments: ["-l"],
-                environment: TerminalLaunchPlan.environment(
-                    base: ProcessInfo.processInfo.environment, shell: "/bin/zsh"))
-            return
-        }
-        guard session.state.isConnected, let connection = session.connectionRef else { return }
-        holder.start(
-            executable: SSHConnection.executable.path,
-            arguments: connection.terminalArguments(),
-            environment: TerminalLaunchPlan.environment(
-                base: ProcessInfo.processInfo.environment, shell: "/bin/zsh")
-                + connection.terminalEnvironment(),
-            allowsLocalFileLinks: false)
-    }
-
-    private func startWindowsShell() {
-        guard session.state.isConnected, let connection = session.connectionRef else { return }
-        let command = WindowsTerminalCommands.interactiveShell(selectedWindowsShell)
-        holder.start(
-            executable: SSHConnection.executable.path,
-            arguments: connection.terminalArguments(remoteCommand: command),
-            environment: TerminalLaunchPlan.environment(
-                base: ProcessInfo.processInfo.environment, shell: "/bin/zsh")
-                + connection.terminalEnvironment(),
-            allowsLocalFileLinks: false)
+        holder.hostTabAction = hostTabAction; holder.presented = active
+        holder.start(session: session, context: context, windowsShell: selectedWindowsShell)
     }
 
     private func detectWindowsShells() async {
         guard session.state.isConnected, session.remotePlatform == .windows,
-            let connection = session.connectionRef
+            let client = session.uiClient
         else {
-            availableWindowsShells = [.automatic]
-            detectingWindowsShells = false
-            return
+            availableWindowsShells = [.automatic]; detectingWindowsShells = false; return
         }
         detectingWindowsShells = true
         defer { detectingWindowsShells = false }
-        guard
-            let result = try? await connection.run(
-                WindowsTerminalCommands.availableShells(), timeout: 10),
-            result.succeeded
-        else { return }
-        availableWindowsShells =
-            [.automatic]
-            + WindowsTerminalCommands.parseAvailableShells(result.stdoutText)
+        do {
+            availableWindowsShells = try await client.terminal(
+                MachineTerminalRequest(operation: .shells, machineID: session.id)
+            ).shells
+        } catch { availableWindowsShells = [.automatic] }
     }
 
     private func selectWindowsShell(_ shell: WindowsTerminalShell) {
@@ -275,12 +231,8 @@ struct MachineTerminalTab: View {
     }
 
     private func uploadDrop(_ payload: TerminalDropPayload) -> Bool {
-        guard let connection = session.connectionRef else { return false }
-        Task {
-            await holder.deliverRemoteDrop(payload) { files in
-                try await TerminalDropTransfer.upload(files, over: connection)
-            }
-        }
+        guard session.uiClient != nil else { return false }
+        Task { await holder.deliverOwnedDrop(payload) }
         return true
     }
 
@@ -470,13 +422,6 @@ struct ContainerTerminalSheet: View {
 
     private func start() {
         guard launchEnabled else { return }
-        guard let connection = session.connectionRef else { return }
-        let launch = MachineExecOperationExecution.dockerShellLaunch(
-            containerID: container.id, connection: connection,
-            environment: TerminalLaunchPlan.environment(
-                base: ProcessInfo.processInfo.environment, shell: "/bin/zsh"))
-        holder.start(
-            executable: launch.executable, arguments: launch.arguments,
-            environment: launch.environment, allowsLocalFileLinks: session.isLocal)
+        holder.start(session: session, containerID: container.id)
     }
 }

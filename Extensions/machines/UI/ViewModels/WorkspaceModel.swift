@@ -13,16 +13,21 @@ final class WorkspaceModel {
     var store: WorkspaceStore
     var operationError: String?
 
+    private let uiClient: MachineUIClient?
     private let file: URL
     private var loadTask: Task<Void, Never>?
     private var mutationGeneration = 0
+    private var remoteSaveTask: Task<Void, Never>?
+    private var pendingRemoteSaves = 0
 
     init(machines: MachinesModel, file: URL = MachinePaths.workspacesFile) {
         self.file = file
+        uiClient = machines.uiClient
         let fallback = WorkspaceLayout.single(
             machineID: machines.allMachines.first?.id ?? MachinesModel.localMachineID)
         store = WorkspaceStore(layouts: [fallback], currentID: fallback.id)
         layout = fallback
+        guard uiClient == nil else { return }
         let generation = mutationGeneration
         loadTask?.cancel()
         loadTask = Task.detached(priority: .utility) { [weak self] in
@@ -33,6 +38,9 @@ final class WorkspaceModel {
     }
 
     func shutdown() async {
+        remoteSaveTask?.cancel()
+        await remoteSaveTask?.value
+        remoteSaveTask = nil
         loadTask?.cancel()
         await loadTask?.value
         loadTask = nil
@@ -41,10 +49,39 @@ final class WorkspaceModel {
     func persist() {
         mutationGeneration += 1
         store.upsert(layout)
+        if let uiClient {
+            _ = uiClient
+            saveRemote(store)
+            return
+        }
         guard let data = try? JSONEncoder().encode(store) else { return }
         try? FileManager.default.createDirectory(
             at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: file, options: .atomic)
+    }
+
+    private func saveRemote(_ value: WorkspaceStore) {
+        guard let uiClient else { return }
+        let predecessor = remoteSaveTask
+        pendingRemoteSaves += 1
+        remoteSaveTask = Task { [weak self] in
+            await predecessor?.value
+            guard let self else { return }
+            defer { pendingRemoteSaves -= 1 }
+            do {
+                try Task.checkCancellation()
+                _ = try await uiClient.workspace(value)
+                operationError = nil
+            } catch {
+                if !Task.isCancelled { operationError = error.localizedDescription }
+            }
+        }
+    }
+
+    func applyUIState(_ value: WorkspaceStore) {
+        guard uiClient != nil, loadTask == nil, pendingRemoteSaves == 0 else { return }
+        store = value
+        if let current = value.current { layout = current }
     }
 
     private func applyLoaded(_ data: Data?, generation: Int) {
@@ -84,7 +121,13 @@ final class WorkspaceModel {
         var updated = store
         do {
             let result = try WorkspaceOperationExecution.perform(request, in: &updated)
-            if result.changed { try WorkspaceStore.save(updated, to: file) }
+            if result.changed {
+                if let uiClient {
+                    uiClient.enqueue { _ = try await uiClient.workspace(updated) }
+                } else {
+                    try WorkspaceStore.save(updated, to: file)
+                }
+            }
             store = updated
             if let current = updated.current { layout = current }
             let live = Set(layout.root.panes.flatMap { $0.tabs.map(\.id) })
@@ -127,6 +170,21 @@ final class WorkspaceModel {
                 pane.tabs.append(tab)
                 pane.selected = tab.id
             }
+        }
+    }
+
+    func performHostTabAction(
+        _ action: MachineTerminalUIEvent.Action, paneID: UUID, target: PaneTarget
+    ) -> Bool {
+        guard layout.root.pane(paneID) != nil, target.screen == .terminal else { return false }
+        switch action {
+        case .newTab:
+            addTab(to: paneID, target: target); return true
+        case .closeTab, .nextTab, .previousTab:
+            apply { $0.focused = paneID }
+            if action == .closeTab { return closeFocusedTab() }
+            return cycleTab(backwards: action == .previousTab)
+        default: return false
         }
     }
 
@@ -392,7 +450,6 @@ struct WorkspaceNodeView: View {
         switch node {
         case let .pane(pane):
             WorkspacePaneView(pane: pane, model: model, machines: machines, dark: dark)
-                .environment(\.compactLayout, size.width < UIScale.pt(640))
                 .frame(width: size.width, height: size.height)
         case let .split(split):
             splitBody(split)

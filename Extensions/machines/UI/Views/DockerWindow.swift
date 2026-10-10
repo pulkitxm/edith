@@ -498,54 +498,11 @@ struct DockerUnavailableView: View {
 
 @MainActor
 enum DockerWindow {
-    static func shutdown() {
-        let owned = Array(windows.values)
-        windows = [:]
-        for window in owned { window.close() }
-    }
-
-    private static var windows: [UUID: NSWindow] = [:]
-
     static func open(session: MachineSession) {
-        if let existing = windows[session.machine.id] {
-            WindowPresentation.present(existing)
+        guard let client = session.uiClient else {
+            MachinesModel.shared.operationError = "The owning app window bridge is unavailable."
             return
         }
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1020, height: 660),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
-            backing: .buffered, defer: false)
-        window.title = "Docker · \(session.machine.name)"
-        window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 720, height: 460)
-        window.tabbingMode = .automatic
-        window.tabbingIdentifier = "EdithDocker"
-        let router = WindowRouter()
-        let hosting = NSHostingController(
-            rootView: ExtensionPageHost {
-                NavigationRouteHost(router: router) { DockerConsoleView(session: session) }
-            })
-        hosting.sizingOptions = []
-        window.contentViewController = hosting
-        window.setContentSize(NSSize(width: 1020, height: 660))
-        window.setFrameAutosaveName("EdithDockerWindow")
-        if window.frame.origin == .zero { window.center() }
-        window.delegate = DockerWindowDelegate.shared
-        windows[session.machine.id] = window
-        WindowPresentation.present(window)
-    }
-
-    static func forget(_ window: NSWindow) {
-        windows = windows.filter { $0.value !== window }
-    }
-}
-
-@MainActor
-final class DockerWindowDelegate: NSObject, NSWindowDelegate {
-    static let shared = DockerWindowDelegate()
-
-    func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else { return }
-        DockerWindow.forget(window)
+        client.enqueue { try await client.openWindow(.init(kind: .docker, machineID: session.id)) }
     }
 }

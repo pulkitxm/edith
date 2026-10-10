@@ -10,6 +10,7 @@ import urllib.parse
 import signal
 import sqlite3
 import stat
+import sys
 import tempfile
 import time
 
@@ -101,6 +102,11 @@ def admitted(path):
     return True
 
 
+def progress(message):
+    print(message, file=sys.stderr, flush=True)
+
+
+progress('Discovering supported receipt sources')
 files = []
 seen = set()
 total = 0
@@ -195,6 +201,7 @@ with (contextlib.nullcontext(None) if windows else tempfile.TemporaryDirectory(p
                 break
         if not safe:
             raise ValueError('A supported receipt root is a symbolic link or Windows junction; select a regular receipt home')
+        progress('Scanning receipt source ' + relative)
         if not root.is_dir():
             raise ValueError('A supported receipt root is not a directory; check its saved machine path')
         def enumeration_error(error):
@@ -229,6 +236,7 @@ with (contextlib.nullcontext(None) if windows else tempfile.TemporaryDirectory(p
             return None
         return None
 
+    progress('Snapshot contains ' + str(len(files)) + ' receipts (' + str(total) + ' bytes)')
     projects = []
     for cwd in sorted(workdirs):
         root = git(cwd, ['rev-parse', '--show-toplevel']) or cwd
@@ -250,6 +258,7 @@ with (contextlib.nullcontext(None) if windows else tempfile.TemporaryDirectory(p
         if branch:
             project['worktree'] = branch
         projects.append(project)
+    progress('Resolved ' + str(len(projects)) + ' receipt projects')
     context = {'projects': projects, 'timeZone': 'UTC'}
     if len(json.dumps(context).encode('utf-8')) > 4194304 or len(files) > MAX_COUNT:
         raise ValueError('Receipt context exceeds its bounded capacity')

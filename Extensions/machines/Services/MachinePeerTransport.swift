@@ -106,6 +106,7 @@ import Foundation
         }
         let command = try MachineRemoteUsageOperation.command(platform: platform, force: force)
         let input = try MachineRemoteUsageOperation.input()
+        let progress = MachineUsageProgressContext.output
         let result: SSHExecResult
         if let usageRun {
             result = try await usageRun(
@@ -114,7 +115,8 @@ import Foundation
             guard let connection else { throw ExtensionPeerError.unavailable }
             result = try await connection.run(
                 command, stdin: input, timeout: 900,
-                maximumOutputBytes: MachineUsageCollectionService.maximumDocumentBytes)
+                maximumOutputBytes: MachineUsageCollectionService.maximumDocumentBytes,
+                onStandardErrorLine: progress.map { output in { line in output(line, true) } })
         }
         try Task.checkCancellation()
         guard result.succeeded else { throw ExtensionPeerError.rejected(result.stderrText) }

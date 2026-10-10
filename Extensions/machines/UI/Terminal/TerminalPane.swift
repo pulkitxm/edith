@@ -31,12 +31,12 @@ struct TerminalPane: View {
     private var preferredFontSize = TerminalSettings.fontSizeDefault
 
     var body: some View {
-        if let launch = holder.ghosttyLaunch {
+        if holder.hasTerminal {
             GhosttyPane(
-                holder: holder, launch: launch,
+                holder: holder,
                 theme: GhosttyTheme(
                     palette: palette,
-                    fontSize: TerminalSettings.clampedFontSize(preferredFontSize)),
+                    fontSize: TerminalSettings.clampedFontSize(preferredFontSize) * UIScale.current),
                 active: active, wantsFocus: wantsFocus, onDropFiles: onDropFiles, onFocus: onFocus
             )
             .id(holder.generation)
@@ -46,7 +46,6 @@ struct TerminalPane: View {
 
 struct GhosttyPane: NSViewRepresentable {
     let holder: TerminalSessionHolder
-    let launch: GhosttyLaunch
     let theme: GhosttyTheme
     var active = true
     var wantsFocus = true
@@ -54,6 +53,7 @@ struct GhosttyPane: NSViewRepresentable {
     var onFocus: (() -> Void)?
 
     final class Coordinator {
+        weak var holder: TerminalSessionHolder?
         private var requested = false
 
         func shouldRequest(active: Bool, wantsFocus: Bool) -> Bool {
@@ -66,14 +66,21 @@ struct GhosttyPane: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> GhosttyTerminalView {
-        let view = holder.retainedGhosttyView(launch: launch, theme: theme)
+        context.coordinator.holder = holder
+        holder.presented = active
+        let view = holder.retainedGhosttyView(theme: theme)
         view.onFocus = onFocus
         view.onDropFiles = onDropFiles
         view.setRenderingActive(active)
         return view
     }
 
+    static func dismantleNSView(_ view: GhosttyTerminalView, coordinator: Coordinator) {
+        coordinator.holder?.presented = false
+    }
+
     func updateNSView(_ view: GhosttyTerminalView, context: Context) {
+        holder.presented = active
         view.apply(theme: theme)
         view.onFocus = onFocus
         view.onDropFiles = onDropFiles

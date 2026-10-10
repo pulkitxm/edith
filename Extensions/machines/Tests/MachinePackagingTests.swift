@@ -4,7 +4,8 @@ import Testing
 
 @Suite struct MachinePackagingTests {
     @Test func nativeManifestPackagesEveryOwnedSourceAndResourceWithoutHostPayload() throws {
-        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let root = URL(fileURLWithPath: #filePath).resolvingSymlinksInPath()
+            .deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let manifestURL = root.appendingPathComponent("Extensions/manifest.json")
         let definitions = try #require(

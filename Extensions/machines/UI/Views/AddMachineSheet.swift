@@ -101,7 +101,7 @@ struct AddMachineSheet: View {
         }
         .frame(width: PresentationMetrics.width(560), height: PresentationMetrics.height(690))
         .background(DashSkin.paper(dark))
-        .onAppear(perform: load)
+        .pageTask { await load() }
         .onDisappear { testTask?.cancel() }
     }
 
@@ -339,14 +339,24 @@ struct AddMachineSheet: View {
         return !host.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    private func load() {
-        configHosts = SSHConfigFile.concreteHosts()
-        guard let editing else {
-            if configHosts.isEmpty { mode = .manual }
+    private func load() async {
+        guard let client = MachinesModel.shared.uiClient else {
+            testState = .failure(MachineUIError.unavailable.localizedDescription)
             return
         }
+        do {
+            let configuration = try await client.configuration()
+            guard !Task.isCancelled else { return }
+            configHosts = configuration.hosts
+            sudoPasswordStored =
+                editing.map { configuration.sudoPasswordStored.contains($0.id) } ?? false
+            if editing == nil, configHosts.isEmpty { mode = .manual }
+        } catch {
+            guard !Task.isCancelled else { return }
+            testState = .failure(error.localizedDescription)
+        }
+        guard let editing else { return }
         mode = .manual
-        sudoPasswordStored = SudoPassword.isStored(machineID: editing.id)
         name = editing.name
         host = editing.host
         port = String(editing.port)
@@ -420,34 +430,24 @@ struct AddMachineSheet: View {
         let machine = makeMachine()
         let secretValue = secret
         testTask = Task {
-            if !secretValue.isEmpty {
-                let kind: MachineSecretKind = machine.auth == .password ? .password : .passphrase
-                MachineSecrets.set(secretValue, machineID: machine.id, kind: kind)
+            guard let client = MachinesModel.shared.uiClient else {
+                testState = .failure(MachineUIError.unavailable.localizedDescription)
+                return
             }
-            let connection = SSHConnection(machine: machine)
             do {
-                try await connection.connect()
-                let platform = await connection.remotePlatform ?? .linux
-                let result = try await connection.run(
-                    MachineConnectionProbe.command(platform: platform), timeout: 20)
-                await connection.disconnect()
+                let output = try await client.probe(
+                    machine,
+                    secrets: MachineSecretChanges(
+                        login: secretValue.isEmpty ? nil : secretValue))
                 guard !Task.isCancelled else { return }
-                guard result.succeeded else {
-                    let detail = result.stderrText.trimmingCharacters(
-                        in: .whitespacesAndNewlines)
-                    testState = .failure(detail.isEmpty ? "The connection probe failed." : detail)
-                    return
-                }
-                let facts = MachineConnectionProbe.parse(result.stdoutText)
+                let facts = MachineConnectionProbe.parse(output)
                 var message = "Connected"
                 if !facts.system.isEmpty { message += " to \(facts.system)" }
                 if !facts.user.isEmpty { message += " as \(facts.user)" }
                 if facts.dockerAvailable { message += ". Docker found." }
                 testState = .success(message)
             } catch {
-                await connection.disconnect()
-                guard !Task.isCancelled else { return }
-                testState = .failure(error.localizedDescription)
+                if !Task.isCancelled { testState = .failure(error.localizedDescription) }
             }
         }
     }

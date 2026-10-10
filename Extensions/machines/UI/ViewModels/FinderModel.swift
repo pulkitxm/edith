@@ -60,6 +60,7 @@ final class FinderModel {
         didSet { FinderDefaults.iconSize = iconSize }
     }
 
+    let remoteViewID = UUID()
     let session: MachineSession
     private let entryProjection = FinderEntryProjection()
     private var shallowSearchTask: Task<[RemoteFileEntry], Never>?
@@ -95,12 +96,16 @@ final class FinderModel {
     private var folderCounts: [String: Int] = [:]
     private var resolvedHome: String?
     private var undoStack: [FinderUndoStep] = []
+    private var remoteTransferTask: Task<MachineFileState, Error>?
     private var transferTask: Task<RemoteTransferOutcome, Error>?
     private var transferCommandTask: Task<Result<String, Error>, Never>?
 
-    var canCancelTransfer: Bool { transferTask != nil || transferCommandTask != nil }
+    var canCancelTransfer: Bool {
+        transferTask != nil || transferCommandTask != nil || remoteTransferTask != nil
+    }
 
     func cancelTransfer() {
+        remoteTransferTask?.cancel()
         transferTask?.cancel()
         transferCommandTask?.cancel()
     }
@@ -136,7 +141,8 @@ final class FinderModel {
             }
         self.path =
             path
-            ?? (session.isLocal ? FileManager.default.homeDirectoryForCurrentUser.path : "~")
+            ?? (session.isLocal && session.uiClient == nil
+                ? FileManager.default.homeDirectoryForCurrentUser.path : "~")
     }
 
     var viewMode: FileViewMode {
@@ -204,6 +210,7 @@ final class FinderModel {
     }
 
     func loadPlaces() async {
+        if session.uiClient != nil { await remotePerform(.places); return }
         if session.isLocal {
             let volumes =
                 FileManager.default.mountedVolumeURLs(
@@ -281,10 +288,22 @@ final class FinderModel {
     }
 
     func load() async {
-        await scheduleLoad().value
+        if session.uiClient != nil { await remotePerform(.load); return }
+        let task = scheduleLoad()
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     private func scheduleLoad() -> Task<Void, Never> {
+        if session.uiClient != nil {
+            loadWorkerTask?.cancel()
+            let task = Task { await remotePerform(.load) }
+            loadWorkerTask = task
+            return task
+        }
         pendingLoad = LoadRequest(
             generation: listingLoad.begin(preservingContent: !entries.isEmpty), path: path)
         activeLoadTask?.cancel()
@@ -307,7 +326,11 @@ final class FinderModel {
                 await self?.loadDirectory(request.path)
             }
             activeLoadTask = operation
-            let outcome = await operation.value
+            let outcome = await withTaskCancellationHandler {
+                await operation.value
+            } onCancel: {
+                operation.cancel()
+            }
             guard workerGeneration == loadWorkerGeneration else { return }
             activeLoadTask = nil
             guard !operation.isCancelled, listingLoad.isCurrent(request.generation), let outcome
@@ -358,6 +381,20 @@ final class FinderModel {
             selection = selection.filter { path in items.contains { $0.path == path } }
         case let .failure(failure):
             errorMessage = failure.localizedDescription
+        }
+    }
+
+    func cancelAndDrain() -> Task<Void, Never> {
+        let worker = loadWorkerTask, active = activeLoadTask
+        let search = searchTask, shallow = shallowSearchTask
+        let transfer = transferTask, command = transferCommandTask, remote = remoteTransferTask
+        let projection = entryProjection.cancelAndDrain()
+        cancelTransfer(); stopLoading()
+        return Task {
+            await worker?.value; _ = await active?.value
+            await search?.value; _ = await shallow?.value
+            _ = try? await transfer?.value; _ = await command?.value; _ = try? await remote?.value
+            await projection.value
         }
     }
 
@@ -415,6 +452,7 @@ final class FinderModel {
     }
 
     func goHome() {
+        if session.uiClient != nil { Task { await remotePerform(.home) }; return }
         let target =
             session.isLocal
             ? FileManager.default.homeDirectoryForCurrentUser.path
@@ -427,6 +465,9 @@ final class FinderModel {
     }
 
     func open(_ entry: RemoteFileEntry) {
+        if session.uiClient != nil, !entry.isDirectory, entry.kind != .symlink {
+            Task { await remotePerform(.open, text: entry.path) }; return
+        }
         if entry.isDirectory || entry.kind == .symlink {
             navigate(to: entry.path)
             return
@@ -493,6 +534,7 @@ final class FinderModel {
     }
 
     func measure(_ entry: RemoteFileEntry) async {
+        if session.uiClient != nil { await remotePerform(.measure, text: entry.path); return }
         guard entry.isDirectory, folderSizes[entry.path] == nil else { return }
         folderSizes[entry.path] = -1
         if session.isLocal {
@@ -626,6 +668,7 @@ final class FinderModel {
     }
 
     func undoLastOperation() async {
+        if session.uiClient != nil { await remotePerform(.undo); return }
         guard let step = undoStack.popLast() else {
             flash("Nothing to undo")
             return
@@ -653,6 +696,10 @@ final class FinderModel {
     }
 
     func commitRename() async {
+        if session.uiClient != nil {
+            await remotePerform(.rename, text: renameText, paths: renaming.map { [$0] } ?? []);
+            return
+        }
         guard let renaming else { return }
         let pool = searchResults ?? entries
         guard let entry = pool.first(where: { $0.path == renaming }) else {
@@ -703,6 +750,7 @@ final class FinderModel {
     }
 
     func newFolder() async {
+        if session.uiClient != nil { await remotePerform(.mkdir); return }
         let name = FileOperations.newFolderName(existing: entries)
         let target = FileListing.join(parent: path, name: name)
         if case let .failure(error) = await session.createDirectory(path: target) {
@@ -722,6 +770,7 @@ final class FinderModel {
     }
 
     func duplicate(paths: [String]) async {
+        if session.uiClient != nil { await remotePerform(.duplicate, paths: paths); return }
         guard !paths.isEmpty else { return }
         var taken = entries
         for source in paths {
@@ -745,6 +794,7 @@ final class FinderModel {
     }
 
     func trashSelection(permanently: Bool) async {
+        if session.uiClient != nil { await remotePerform(.trash, permanently: permanently); return }
         let paths = selectedEntries.map(\.path)
         guard !paths.isEmpty else { return }
         let plan = MachineFileRemovalPlan(paths: paths, permanently: permanently)
@@ -796,6 +846,7 @@ final class FinderModel {
     }
 
     func revealInFinder() async {
+        if session.uiClient != nil { await remotePerform(.reveal); return }
         errorMessage = nil
         let projection = await FinderRevealProjection.make(
             entries: selectedEntries, isLocal: session.isLocal)
@@ -836,6 +887,9 @@ final class FinderModel {
     }
 
     func download(to destination: URL) async {
+        if session.uiClient != nil {
+            await remotePerform(.download, text: destination.path); return
+        }
         guard progress == nil else { return }
         let sources = selectedEntries.filter { !$0.isDirectory }
         guard !sources.isEmpty else { return }
@@ -862,10 +916,15 @@ final class FinderModel {
     }
 
     func upload(_ urls: [URL]) async {
+        if session.uiClient != nil { await remotePerform(.upload, paths: urls.map(\.path)); return }
         await uploadPaths(urls, into: path, resolutions: [:])
     }
 
     func searchQueryChanged() {
+        if session.uiClient != nil {
+            searchTask?.cancel();
+            searchTask = Task { await remotePerform(.search, text: searchQuery) }; return
+        }
         invalidateSearch()
         let trimmed = searchQuery.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else {
@@ -1004,6 +1063,9 @@ final class FinderModel {
     }
 
     func perform(intent: DropIntent, destination: String) async {
+        if session.uiClient != nil {
+            await remotePerform(.drop, text: destination, intent: intent); return
+        }
         guard DropResolver.isDropAllowed(paths: intent.paths, destination: destination) else {
             return
         }
@@ -1023,6 +1085,11 @@ final class FinderModel {
         intent: DropIntent, destination: String,
         resolutions: [String: NameConflictResolution]
     ) async {
+        if session.uiClient != nil {
+            await remotePerform(
+                .commitDrop, text: destination, intent: intent, resolutions: resolutions);
+            return
+        }
         guard progress == nil else { return }
         switch intent {
         case .moveWithinMachine, .copyWithinMachine:
@@ -1235,6 +1302,35 @@ final class FinderModel {
     }
 
     func itemProvider(for entry: RemoteFileEntry) -> NSItemProvider {
+        if let client = session.uiClient {
+            let provider = NSItemProvider()
+            provider.suggestedName = entry.name
+            let type =
+                entry.isDirectory
+                ? .folder : UTType(filenameExtension: entry.fileExtension) ?? .data
+            let machineID = session.id
+            provider.registerFileRepresentation(
+                forTypeIdentifier: type.identifier, fileOptions: [], visibility: .all
+            ) { completion in
+                let progress = Progress(totalUnitCount: max(1, entry.sizeBytes))
+                let task = Task { @MainActor in
+                    do {
+                        let url =
+                            entry.isDirectory
+                            ? try await client.materializeDirectory(
+                                entry: entry, machineID: machineID)
+                            : try await client.materialize(
+                                entry: entry, machineID: machineID,
+                                maximumBytes: RemoteFileOperationExecution.cacheLimitBytes)
+                        completion(url, false, nil)
+                        progress.completedUnitCount = progress.totalUnitCount
+                    } catch { completion(nil, false, error) }
+                }
+                progress.cancellationHandler = { task.cancel() }
+                return progress
+            }
+            return provider
+        }
         if session.isLocal {
             return NSItemProvider(contentsOf: URL(fileURLWithPath: entry.path))
                 ?? NSItemProvider()
@@ -1320,6 +1416,79 @@ extension NSItemProvider {
             _ = loadDataRepresentation(forTypeIdentifier: identifier) { data, _ in
                 continuation.resume(returning: data)
             }
+        }
+    }
+}
+
+extension FinderModel {
+    func fileState() -> MachineFileState {
+        MachineFileState(
+            path: path, entries: entries, selection: selection,
+            freeSpaceKB: freeSpaceKB, places: places, searchResults: searchResults,
+            error: errorMessage, status: statusMessage, undoSteps: undoStack,
+            folderSizes: folderSizes, folderCounts: folderCounts, renaming: renaming,
+            renameText: renameText,
+            conflict: pendingConflict.map {
+                .init(intent: $0.intent, destination: $0.destination, names: $0.names)
+            })
+    }
+
+    func openOwnedFile(_ entry: RemoteFileEntry) async {
+        if session.isLocal { open(entry) } else { await openRemote(entry) }
+    }
+
+    func runOwnedSearch() async {
+        searchQueryChanged()
+        await searchTask?.value
+    }
+
+    private func remotePerform(
+        _ operation: MachineFileRequest.Operation, text: String = "", paths: [String] = [],
+        permanently: Bool = false, intent: DropIntent? = nil,
+        resolutions: [String: NameConflictResolution] = [:]
+    ) async {
+        guard let client = session.uiClient else { return }
+        let requestedPath = path
+        let request = listingLoad.begin()
+        let value = MachineFileRequest(
+            viewID: remoteViewID, machineID: session.id, operation: operation,
+            path: path, selection: selection, text: text, paths: paths, permanently: permanently,
+            intent: intent, resolutions: resolutions)
+        do {
+            let task = Task {
+                try await client.files(value) { [weak self] progress in
+                    guard let self, listingLoad.isCurrent(request), path == requestedPath else {
+                        return
+                    }
+                    self.progress = progress
+                }
+            }
+            let transferring = [.download, .upload, .drop, .commitDrop].contains(operation)
+            if transferring { remoteTransferTask = task }
+            defer { if transferring { remoteTransferTask = nil; progress = nil } }
+            let result = try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
+            try Task.checkCancellation()
+            guard listingLoad.isCurrent(request), path == requestedPath else { return }
+            path = result.path; entries = result.entries; selection = result.selection
+            freeSpaceKB = result.freeSpaceKB; places = result.places;
+            searchResults = result.searchResults
+            errorMessage = result.error; statusMessage = result.status; undoStack = result.undoSteps
+            folderSizes = result.folderSizes; folderCounts = result.folderCounts
+            renaming = result.renaming; renameText = result.renameText
+            pendingConflict = result.conflict.map {
+                PendingConflict(intent: $0.intent, destination: $0.destination, names: $0.names)
+            }
+            listingLoad.complete(request)
+        } catch {
+            guard !Task.isCancelled, listingLoad.isCurrent(request) else {
+                listingLoad.cancel(request); return
+            }
+            errorMessage = error.localizedDescription
+            listingLoad.fail(request, message: error.localizedDescription)
         }
     }
 }

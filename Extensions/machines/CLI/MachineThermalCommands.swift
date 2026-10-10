@@ -1,0 +1,179 @@
+import ArgumentParser
+import EdithExtensionSupport
+import EdithExtensionCommands
+import Foundation
+
+struct MachinesThermalCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "thermal",
+        abstract: "Inspect and switch the platform thermal profile.",
+        discussion: """
+            `ed machines thermal` inspects and controls the Linux kernel platform
+            profile or Windows power scheme exposed by a machine.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed machines thermal status box
+            """,
+        subcommands: [MachinesThermalStatusCommand.self, MachinesThermalSetCommand.self],
+        defaultSubcommand: MachinesThermalStatusCommand.self)
+}
+
+enum MachineThermalBridge {
+    static func status(runner: RemoteRunner) async throws -> MachinePlatformProfile {
+        let platform = await runner.ssh.remotePlatform ?? .linux
+        let result = await MachineThermalOperationExecution.status(platform: platform) {
+            command, _, timeout in
+            do {
+                let output = try await runner.run(command, timeout: timeout)
+                guard output.succeeded else {
+                    return .failure(MachineThermalOperationError.unavailable)
+                }
+                return .success(output.stdoutText)
+            } catch {
+                return .failure(error)
+            }
+        }
+        switch result {
+        case let .success(profile):
+            return profile
+        case .failure(MachineThermalOperationError.unavailable):
+            throw CLIFailure.unavailable(
+                "\(runner.machine.name) does not expose platform power profiles")
+        case let .failure(error):
+            throw error
+        }
+    }
+}
+
+struct MachinesThermalStatusCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "status", abstract: "Show the active and available thermal profiles.",
+        discussion: """
+            `ed machines thermal status <machine>` reports the active Linux platform
+            profile or Windows power scheme and every choice offered by the machine.
+
+            Reads the current state. Does not change it.
+
+            ed machines thermal status box
+            ed machines thermal status box --json
+            """, )
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Machine name, ssh alias or id.")
+    var machine: String
+
+    func run() async throws {
+        try await execute {
+            let runner = try await MachineResolver.runner(machine)
+            let profile = try await MachineThermalBridge.status(runner: runner)
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "machine": .string(runner.machine.name),
+                        "current": .string(profile.current),
+                        "choices": .strings(profile.choices),
+                    ]))
+                return
+            }
+            CLIOut.out(
+                TextTable.render(
+                    headers: ["MACHINE", "CURRENT", "AVAILABLE"],
+                    rows: [
+                        [
+                            runner.machine.name, profile.current,
+                            profile.choices.joined(separator: ", "),
+                        ]
+                    ]))
+        }
+    }
+}
+
+struct MachinesThermalSetCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "set", abstract: "Switch the thermal profile permanently or for a while.",
+        discussion: """
+            `ed machines thermal set <machine> <profile>` changes the Linux platform
+            profile or Windows power scheme.
+
+            Changes the saved setting to the value you pass.
+
+            ed machines thermal set box balanced
+            ed machines thermal set box balanced --json
+            """, )
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Option(help: "Revert after this many minutes. Zero keeps the profile until changed.")
+    var minutes = 0
+
+    @Argument(help: "Machine name, ssh alias or id.")
+    var machine: String
+
+    @Argument(help: "A profile exposed by the machine, such as quiet, balanced or performance.")
+    var profile: String
+
+    func run() async throws {
+        try await execute {
+            guard minutes >= 0, minutes <= 10_080 else {
+                throw CLIFailure.usage(
+                    "--minutes must be between 0 and 10080",
+                    hint: "zero keeps the profile until it is changed again")
+            }
+            let runner = try await MachineResolver.runner(machine)
+            let platform = await runner.ssh.remotePlatform ?? .linux
+            let available = try await MachineThermalBridge.status(runner: runner)
+            guard available.choices.contains(profile) else {
+                throw CLIFailure.notFound(
+                    "\(runner.machine.name) has no thermal profile named \(profile)",
+                    hint: "profiles: " + available.choices.joined(separator: ", "))
+            }
+            let result = await MachineThermalOperationExecution.set(
+                profile: profile, durationSeconds: minutes * 60,
+                machineID: runner.machine.id, platform: platform
+            ) { command, stdin, timeout in
+                do {
+                    let output = try await runner.run(
+                        command, stdin: stdin, timeout: timeout)
+                    let detail = output.combinedText.trimmingCharacters(
+                        in: .whitespacesAndNewlines)
+                    guard output.succeeded else {
+                        return .failure(
+                            CLIFailure(
+                                "could not switch \(runner.machine.name) to \(profile)"
+                                    + (detail.isEmpty ? "" : ": \(detail)"),
+                                hint: SudoPassword.hint(forRefusal: detail)))
+                    }
+                    return .success(output.stdoutText)
+                } catch {
+                    return .failure(error)
+                }
+            }
+            switch result {
+            case .success:
+                break
+            case .failure(MachineThermalOperationError.invalidProfile(_)):
+                throw CLIFailure("could not build a safe profile command")
+            case let .failure(error):
+                throw error
+            }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "machine": .string(runner.machine.name),
+                        "profile": .string(profile),
+                        "temporary": .bool(minutes > 0),
+                        "minutes": .int(minutes),
+                    ]))
+                return
+            }
+            CLIOut.out(
+                minutes > 0
+                    ? "switched \(runner.machine.name) to \(profile) for \(minutes) minutes"
+                    : "switched \(runner.machine.name) to \(profile) until changed")
+        }
+    }
+}
