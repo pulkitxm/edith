@@ -158,6 +158,11 @@ import Foundation
     }
 
     private func reject(_ token: UUID, error: Error) {
+        if let operation = pending[token]?.0, operation != .status,
+            error is CancellationError || (error as? HostWorkerError) == .timedOut
+        {
+            cancelCurrentTask()
+        }
         guard let pending = pending.removeValue(forKey: token) else { return }
         abandoned.insert(token)
         pending.2.cancel()

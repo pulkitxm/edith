@@ -12,6 +12,9 @@ import Foundation
     private var cancellation: WorkCancellation?
     private let journal: URL
     private var stopping = false
+    private let settings: HostSettingsArchive
+    private var backup: Task<HostSettingsBackupResult, Error>?
+    private var backupResult: HostSettingsBackupResult?
 
     public init(identity: HostIdentity, cloudDirectory: URL? = nil) throws {
         self.identity = identity
@@ -26,6 +29,7 @@ import Foundation
             metadata.st_mode & 0o077 == 0
         else { throw CocoaError(.fileReadNoPermission) }
         journal = directory.appendingPathComponent("tasks.json")
+        settings = try HostSettingsArchive(identity: identity, cloudDirectory: cloud)
         if lstat(journal.path, &metadata) == 0 {
             guard metadata.st_mode & S_IFMT == S_IFREG, metadata.st_uid == getuid(),
                 metadata.st_nlink == 1, metadata.st_mode & 0o077 == 0,
@@ -54,11 +58,12 @@ import Foundation
             residentBytes: valid ? info.pti_resident_size : 0,
             cpuSeconds: valid ? Double(info.pti_total_user + info.pti_total_system) / 1e9 : 0,
             storage: storage, tasks: tasks, cloudDirectory: cloud,
-            cloudAvailable: HostCoreCloud.available(identity: identity, directory: cloud))
+            cloudAvailable: HostCoreCloud.available(identity: identity, directory: cloud),
+            settingsBackup: backupResult)
     }
 
     public func inspect() async throws -> HostCoreSnapshot {
-        guard !stopping else { throw HostWorkerError.rejected }
+        guard !stopping, backup == nil else { throw HostWorkerError.rejected }
         if let inspection { storage = try await inspection.value; return snapshot() }
         let id = UUID()
         tasks.append(
@@ -95,12 +100,48 @@ import Foundation
         }
     }
 
-    public func cancel() { cancellation?.cancel(); inspection?.cancel() }
+    public func synchronizeSettings(restoreOnly: Bool = false) async throws -> HostCoreSnapshot {
+        guard !stopping, inspection == nil, backup == nil else { throw HostWorkerError.rejected }
+        let id = UUID()
+        tasks.append(
+            HostCoreTaskSnapshot(
+                id: id,
+                title: restoreOnly ? "Restoring settings from iCloud" : "Backing up settings",
+                startedAt: Date(), finishedAt: nil, phase: .running, message: nil))
+        tasks = Array(tasks.suffix(32))
+        try saveTasks()
+        let settings = settings
+        let work = Task { try await settings.synchronize(restoreOnly: restoreOnly) }
+        backup = work
+        defer { backup = nil }
+        do {
+            backupResult = try await withTaskCancellationHandler {
+                try await work.value
+            } onCancel: {
+                work.cancel()
+            }
+            try finish(id, phase: .completed, message: nil)
+            return snapshot()
+        } catch {
+            try finish(
+                id, phase: error is CancellationError ? .cancelled : .failed,
+                message: error is CancellationError
+                    ? "Cancelled." : "Settings backup could not finish.")
+            throw error
+        }
+    }
+
+    public func cancel() {
+        cancellation?.cancel(); inspection?.cancel()
+        settings.cancel(); backup?.cancel()
+    }
 
     public func shutdown() async {
         stopping = true
         cancel()
         _ = try? await inspection?.value
+        await settings.shutdown()
+        _ = try? await backup?.value
     }
 
     private func finish(_ id: UUID, phase: HostCoreTaskSnapshot.Phase, message: String?) throws {
