@@ -9,12 +9,13 @@ public final class MusicNativePlayer: @unchecked Sendable {
         @convention(c) (UnsafePointer<UInt8>?, Int, UnsafeMutableRawPointer?) -> Void
     private typealias Start =
         @convention(c) (
-            UnsafePointer<CChar>?, UnsafePointer<CChar>?, Int32, Callback?, UnsafeMutableRawPointer?
+            UnsafePointer<CChar>?, Int, UnsafePointer<CChar>?, Int, Int32, Callback?,
+            UnsafeMutableRawPointer?
         ) -> UnsafeMutableRawPointer?
     private typealias Send =
         @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<UInt8>?, Int) -> Bool
     private typealias Stop = @convention(c) (UnsafeMutableRawPointer?) -> Void
-    private typealias Forget = @convention(c) (UnsafePointer<CChar>?) -> Bool
+    private typealias Forget = @convention(c) (UnsafePointer<CChar>?, Int) -> Bool
 
     private final class Receiver {
         let receive: @Sendable (Data) -> Void
@@ -47,6 +48,9 @@ public final class MusicNativePlayer: @unchecked Sendable {
         receive: @escaping @Sendable (Data) -> Void,
         onExit: @escaping @Sendable () -> Void
     ) throws {
+        guard Self.validText(service, maximum: 256), Self.validText(name, maximum: 128) else {
+            throw CocoaError(.executableLoad)
+        }
         guard let library = dlopen(libraryURL.path, RTLD_NOW | RTLD_LOCAL) else {
             throw CocoaError(.executableNotLoadable)
         }
@@ -75,8 +79,13 @@ public final class MusicNativePlayer: @unchecked Sendable {
             }
         }
         let startFunction = unsafeBitCast(start, to: Start.self)
+        let serviceLength = service.utf8.count
+        let nameLength = name.utf8.count
         handle = service.withCString { service in
-            name.withCString { name in startFunction(service, name, resume ? 1 : 0, callback, box) }
+            name.withCString { name in
+                startFunction(
+                    service, serviceLength, name, nameLength, resume ? 1 : 0, callback, box)
+            }
         }
         guard handle != nil else {
             Unmanaged<Receiver>.fromOpaque(box).release()
@@ -109,11 +118,16 @@ public final class MusicNativePlayer: @unchecked Sendable {
         }
     }
 
+    private static func validText(_ value: String, maximum: Int) -> Bool {
+        (1...maximum).contains(value.utf8.count) && !value.utf8.contains(0)
+    }
+
     public static func forget(libraryURL: URL, service: String) -> Bool {
+        guard validText(service, maximum: 256) else { return false }
         guard let library = dlopen(libraryURL.path, RTLD_NOW | RTLD_LOCAL) else { return false }
         defer { dlclose(library) }
         guard let function = dlsym(library, "edith_music_player_forget") else { return false }
         let forget = unsafeBitCast(function, to: Forget.self)
-        return service.withCString { forget($0) }
+        return service.withCString { forget($0, service.utf8.count) }
     }
 }

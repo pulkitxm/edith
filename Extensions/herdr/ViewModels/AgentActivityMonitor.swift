@@ -97,7 +97,7 @@ final class AgentActivityMonitor {
 
     func save(_ settings: AgentActivitySettings) async {
         guard !stopped else { return }
-        defaults.set(settings.normalized().encoded, forKey: "agentActivityProviders")
+        defaults.set(settings.normalized().encoded, forKey: AgentActivitySettings.defaultsKey)
         await refresh()
     }
 

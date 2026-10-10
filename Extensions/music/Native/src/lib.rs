@@ -13,7 +13,7 @@ use librespot::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::ffi::{CStr, c_char, c_void};
+use std::ffi::{c_char, c_void};
 use std::sync::{
     Mutex,
     atomic::{AtomicBool, Ordering},
@@ -93,7 +93,7 @@ fn emit(value: Value) {
 }
 
 struct PlayerHandle {
-    commands: mpsc::UnboundedSender<String>,
+    commands: mpsc::Sender<String>,
     cancellation: Option<oneshot::Sender<()>>,
     thread: Option<thread::JoinHandle<()>>,
 }
@@ -103,13 +103,8 @@ fn launch(
     name: String,
     mode: Option<String>,
     sink: EventSink,
-    session: impl FnOnce(
-        String,
-        String,
-        Option<String>,
-        mpsc::UnboundedReceiver<String>,
-        oneshot::Receiver<()>,
-    ) + Send
+    session: impl FnOnce(String, String, Option<String>, mpsc::Receiver<String>, oneshot::Receiver<()>)
+    + Send
     + 'static,
 ) -> Option<Box<PlayerHandle>> {
     if ACTIVE
@@ -119,7 +114,7 @@ fn launch(
         return None;
     }
     *EVENT_SINK.lock().ok()? = Some(sink);
-    let (commands, receiver) = mpsc::unbounded_channel();
+    let (commands, receiver) = mpsc::channel(32);
     let (cancellation, cancelled) = oneshot::channel();
     let thread = thread::Builder::new()
         .name("music.spotify".into())
@@ -162,12 +157,12 @@ impl Drop for PlayerHandle {
     }
 }
 
-unsafe fn bounded_text(value: *const c_char, maximum: usize) -> Option<String> {
-    if value.is_null() {
+unsafe fn bounded_text(value: *const c_char, length: usize, maximum: usize) -> Option<String> {
+    if value.is_null() || length == 0 || length > maximum {
         return None;
     }
-    let bytes = unsafe { CStr::from_ptr(value) }.to_bytes();
-    if bytes.is_empty() || bytes.len() > maximum {
+    let bytes = unsafe { std::slice::from_raw_parts(value.cast::<u8>(), length) };
+    if bytes.contains(&0) {
         return None;
     }
     std::str::from_utf8(bytes).ok().map(String::from)
@@ -176,15 +171,17 @@ unsafe fn bounded_text(value: *const c_char, maximum: usize) -> Option<String> {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn edith_music_player_start(
     service: *const c_char,
+    service_length: usize,
     name: *const c_char,
+    name_length: usize,
     mode: i32,
     callback: Option<EventCallback>,
     context: *mut c_void,
 ) -> *mut c_void {
-    let Some(service) = (unsafe { bounded_text(service, 256) }) else {
+    let Some(service) = (unsafe { bounded_text(service, service_length, 256) }) else {
         return std::ptr::null_mut();
     };
-    let Some(name) = (unsafe { bounded_text(name, 128) }) else {
+    let Some(name) = (unsafe { bounded_text(name, name_length, 128) }) else {
         return std::ptr::null_mut();
     };
     let Some(callback) = callback else {
@@ -228,8 +225,11 @@ pub unsafe extern "C" fn edith_music_player_start(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn edith_music_player_forget(service: *const c_char) -> bool {
-    let Some(service) = (unsafe { bounded_text(service, 256) }) else {
+pub unsafe extern "C" fn edith_music_player_forget(
+    service: *const c_char,
+    service_length: usize,
+) -> bool {
+    let Some(service) = (unsafe { bounded_text(service, service_length, 256) }) else {
         return false;
     };
     if catalog::Library::forget(&service).is_err() {
@@ -262,7 +262,7 @@ pub unsafe extern "C" fn edith_music_player_send(
     }
     unsafe { &*handle.cast::<PlayerHandle>() }
         .commands
-        .send(command.into())
+        .try_send(command.into())
         .is_ok()
 }
 
@@ -340,7 +340,7 @@ async fn run(
     service: &str,
     name: &str,
     mode: Option<&str>,
-    mut commands: mpsc::UnboundedReceiver<String>,
+    mut commands: mpsc::Receiver<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let entry = keyring::Entry::new(service, "spotify")?;
     if mode == Some("--forget") {
@@ -574,7 +574,9 @@ mod tests {
             unsafe {
                 edith_music_player_start(
                     std::ptr::null(),
+                    0,
                     std::ptr::null(),
+                    0,
                     0,
                     Some(callback),
                     std::ptr::null_mut(),
@@ -585,6 +587,50 @@ mod tests {
         assert!(!unsafe {
             edith_music_player_send(std::ptr::null_mut(), command.as_ptr(), command.len())
         });
+        let (release, blocked) = std::sync::mpsc::channel::<()>();
+        let queued = launch(
+            "test.service".into(),
+            "Mock music".into(),
+            None,
+            EventSink {
+                callback,
+                context: 0,
+            },
+            move |_, _, _, _commands, _cancelled| {
+                blocked.recv().unwrap();
+            },
+        )
+        .unwrap();
+        let pointer = Box::into_raw(queued).cast();
+        for _ in 0..32 {
+            assert!(unsafe { edith_music_player_send(pointer, command.as_ptr(), command.len()) });
+        }
+        assert!(!unsafe { edith_music_player_send(pointer, command.as_ptr(), command.len()) });
+        release.send(()).unwrap();
+        unsafe { edith_music_player_stop(pointer) };
+        assert!(!ACTIVE.load(Ordering::Acquire));
+        assert!(EVENT_SINK.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn bridge_text_uses_exact_owned_lengths_and_rejects_invalid_bytes() {
+        let text = b"synthetic";
+        assert_eq!(
+            unsafe { bounded_text(text.as_ptr().cast(), text.len(), text.len()) },
+            Some("synthetic".into())
+        );
+        assert!(
+            unsafe { bounded_text(text.as_ptr().cast(), text.len(), text.len() - 1) }.is_none()
+        );
+        assert!(unsafe { bounded_text(text.as_ptr().cast(), 0, 256) }.is_none());
+        assert!(unsafe { bounded_text(std::ptr::null(), 1, 256) }.is_none());
+        let invalid = [b'a', 0, b'b'];
+        assert!(unsafe { bounded_text(invalid.as_ptr().cast(), invalid.len(), 256) }.is_none());
+        let invalid = [0xff];
+        assert!(unsafe { bounded_text(invalid.as_ptr().cast(), invalid.len(), 256) }.is_none());
+        let maximum = [b'x'; 256];
+        assert!(unsafe { bounded_text(maximum.as_ptr().cast(), 256, 256) }.is_some());
+        assert!(!unsafe { edith_music_player_forget(std::ptr::null(), 0) });
     }
 
     #[test]
