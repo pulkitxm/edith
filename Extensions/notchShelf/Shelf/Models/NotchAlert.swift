@@ -1,14 +1,14 @@
 import EdithExtensionSupport
 import Foundation
 
-enum NotchAlertPriority: Int, Comparable, Sendable {
+enum NotchAlertPriority: Int, Comparable, Sendable, Codable {
     case low, medium, high, critical
     static func < (lhs: NotchAlertPriority, rhs: NotchAlertPriority) -> Bool {
         lhs.rawValue < rhs.rawValue
     }
 }
 
-struct NotchAlert: Equatable, Identifiable, Sendable {
+struct NotchAlert: Equatable, Identifiable, Sendable, Codable {
     let id: String
     let icon: String
     let tint: String

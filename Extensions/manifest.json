@@ -824,6 +824,8 @@
         "Extensions/notchShelf/BrowserContract/ChromeSafeStorage.swift",
         "Extensions/notchShelf/BrowserContract/NotchBrowserCommand.swift",
         "Extensions/notchShelf/CLI/ByteFormatter.swift",
+        "Extensions/notchShelf/Panel/NotchPanelContract.swift",
+        "Extensions/notchShelf/Panel/NotchPanelEngine.swift",
         "Extensions/notchShelf/CLI/ShelfCLIExecution.swift",
         "Extensions/notchShelf/CLI/ShelfCommands.swift",
         "Extensions/notchShelf/Files/ShelfIndex.swift",

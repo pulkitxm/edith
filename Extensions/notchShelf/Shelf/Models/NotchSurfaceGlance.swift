@@ -2,7 +2,7 @@ import CoreGraphics
 import EdithExtensionSupport
 import Foundation
 
-struct NotchSurfaceGlance: Equatable {
+struct NotchSurfaceGlance: Equatable, Codable, Sendable {
     let source: SurfaceGlanceSource
     let title: String
     let value: String
