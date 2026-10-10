@@ -71,14 +71,15 @@ import Foundation
         return snapshot
     }
 
-    public func cancelCurrentTask() {
+    @discardableResult public func cancelCurrentTask() -> Bool {
         guard ready, pending.values.contains(where: { $0.0 != .status }), abandoned.count < 63
-        else { return }
+        else { return false }
         let request = HostCoreRequest(operation: .cancel)
         abandoned.insert(request.token)
         do {
             try input.fileHandleForWriting.write(contentsOf: HostWorkerFrames.encode(request))
-        } catch { terminate(); finish() }
+            return true
+        } catch { terminate(); finish(); return false }
     }
 
     public func stop() async {
@@ -138,7 +139,9 @@ import Foundation
                             throw HostWorkerError.invalidResponse
                         }
                         pending.2.cancel()
-                        if response.failure != nil {
+                        if response.cancelled {
+                            pending.1.resume(throwing: CancellationError())
+                        } else if response.failure != nil {
                             pending.1.resume(throwing: HostWorkerError.rejected)
                         } else {
                             pending.1.resume(returning: response.snapshot)

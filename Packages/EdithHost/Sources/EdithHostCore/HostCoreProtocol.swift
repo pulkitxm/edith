@@ -20,11 +20,16 @@ public struct HostCoreResponse: Codable, Sendable {
     public let token: UUID
     public let snapshot: HostCoreSnapshot?
     public let failure: String?
+    public let cancelled: Bool
 
-    public init(token: UUID, snapshot: HostCoreSnapshot? = nil, failure: String? = nil) {
+    public init(
+        token: UUID, snapshot: HostCoreSnapshot? = nil, failure: String? = nil,
+        cancelled: Bool = false
+    ) {
         self.token = token
         self.snapshot = snapshot
         self.failure = failure
+        self.cancelled = cancelled
     }
 }
 

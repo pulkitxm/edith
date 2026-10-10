@@ -42,6 +42,8 @@ import Foundation
                     imported.tasks.last?.phase == .completed,
                     application.string(forKey: AppStorageKeys.General.theme) == "synthetic-ocean"
                 else { throw HostWorkerError.rejected }
+                stage = "queued cancellation"
+                try await queuedCancellation(service)
                 stage = "storage"
                 let data = identity.extensionDirectory("usage")
                 try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
@@ -80,6 +82,7 @@ import Foundation
                         "passed": true, "restartRetainedTasks": true, "stoppedProcesses": true,
                         "concurrentStatus": true,
                         "settingsExport": true, "settingsRestore": true,
+                        "queuedCancellation": true,
                     ]), to: directory.appendingPathComponent("result.json"))
                 exit(0)
             } catch {
@@ -92,6 +95,31 @@ import Foundation
             }
         }
         dispatchMain()
+    }
+
+    private static func queuedCancellation(_ service: HostCoreProcess) async throws {
+        guard let pid = service.processIdentifier, kill(pid, SIGSTOP) == 0 else {
+            throw HostWorkerError.rejected
+        }
+        defer { kill(pid, SIGCONT) }
+        let operation = Task { try await service.perform(.synchronize) }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(1))
+        var sent = false
+        while !sent, ContinuousClock.now < deadline {
+            await Task.yield()
+            sent = service.cancelCurrentTask()
+        }
+        guard sent, kill(pid, SIGCONT) == 0 else {
+            operation.cancel()
+            throw HostWorkerError.rejected
+        }
+        do {
+            _ = try await operation.value
+            throw HostWorkerError.rejected
+        } catch is CancellationError {}
+        guard try await service.perform(.status).pid == pid else {
+            throw HostWorkerError.rejected
+        }
     }
 }
 #endif

@@ -177,6 +177,7 @@ try {
         "concurrentStatus",
         "settingsExport",
         "settingsRestore",
+        "queuedCancellation",
       ]) {
         assert.equal(result[key], true, key);
       }
@@ -186,7 +187,7 @@ try {
     corePID = undefined;
   }
   console.log(
-    "HostCore: signed settings export/restore, concurrent status, journal restart, normal shutdown, and owner-exit cleanup passed",
+    "HostCore: signed settings export/restore, concurrent status, queued cancellation, journal restart, normal shutdown, and owner-exit cleanup passed",
   );
 } finally {
   owner?.kill("SIGKILL");
