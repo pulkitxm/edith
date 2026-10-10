@@ -780,7 +780,7 @@
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "inputs": [
       "Extensions/clipboard"
     ],
@@ -791,7 +791,8 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
     "roles": {
@@ -839,7 +840,13 @@
         "Extensions/clipboard/ClipboardThumbnailSnapshot.swift",
         "Extensions/clipboard/ClipboardTimeline.swift",
         "Extensions/clipboard/ClipboardWorker.swift",
-        "Extensions/clipboard/Runtime.swift"
+        "Extensions/clipboard/Runtime.swift",
+        "Extensions/clipboard/CLI/CLIDestructivePlan.swift",
+        "Extensions/clipboard/CLI/ClipboardCLIExecution.swift",
+        "Extensions/clipboard/CLI/ClipboardCommands.swift",
+        "Extensions/clipboard/ClipboardPreferences.swift",
+        "Extensions/clipboard/ClipboardPresentation.swift",
+        "Extensions/clipboard/ClipboardShortcutRecorder.swift"
       ]
     },
     "minimumSystemVersion": 14,

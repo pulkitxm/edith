@@ -18,21 +18,35 @@ final class ClipboardHistoryModel {
     @ObservationIgnored private var mutationTailID: UUID?
     @ObservationIgnored private var pendingRefresh = false
     @ObservationIgnored private var generation = 0
+    private var started = false
     let client: ClipboardClient
+    private let observesNotifications: Bool
+    private let copyRecord: (@MainActor (String) async throws -> Void)?
     @ObservationIgnored private var history = ClipboardHistoryProjection()
 
-    init(client: ClipboardClient) { self.client = client }
+    init(
+        client: ClipboardClient, observesNotifications: Bool = true,
+        copyRecord: (@MainActor (String) async throws -> Void)? = nil
+    ) {
+        self.client = client
+        self.observesNotifications = observesNotifications
+        self.copyRecord = copyRecord
+    }
 
     func start() {
-        guard observer == nil else { return }
+        guard !started else { return }
+        started = true
         generation += 1
-        observer = IPC.observe(IPC.Name.clipboardChanged) { [weak self] in
-            Task { @MainActor in self?.reload() }
+        if observesNotifications {
+            observer = IPC.observe(IPC.Name.clipboardChanged) { [weak self] in
+                Task { @MainActor in self?.reload() }
+            }
         }
         reload()
     }
 
     func stop() {
+        started = false
         generation += 1
         refreshTask?.cancel()
         refreshTask = nil
@@ -84,6 +98,14 @@ final class ClipboardHistoryModel {
     }
 
     func copy(_ entry: ClipboardEntry) {
+        if let copyRecord {
+            run { [weak self] _ in
+                try await copyRecord(entry.id)
+                try Task.checkCancellation()
+                self?.copiedID = entry.id
+            }
+            return
+        }
         let plain = SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.pastePlainText)
         run { [weak self] client in
             let payload = try await client.copy(id: entry.id, plainTextOnly: plain)
@@ -109,7 +131,7 @@ final class ClipboardHistoryModel {
         mutations[id] = Task { [weak self] in
             var succeeded = false
             defer {
-                if let self {
+                if let self, self.generation == generation {
                     self.history.finish(id, succeeded: succeeded)
                     self.entries = self.history.entries
                 }
