@@ -82,6 +82,10 @@ import Foundation
         if process.isRunning { _ = try? await request(.stop, timeout: .seconds(5)) }
         try? input.fileHandleForWriting.close()
         if process.isRunning { terminate() }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while process.isRunning, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
         finish()
     }
 

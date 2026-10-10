@@ -104,6 +104,7 @@ import Foundation
         runtime?.cancel()
         FileHandle.standardInput.readabilityHandler = nil
         watcher?.cancel()
-        exit(0)
+        kill(-getpid(), SIGKILL)
+        exit(1)
     }
 }
