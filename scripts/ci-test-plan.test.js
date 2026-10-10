@@ -18,6 +18,30 @@ const standaloneOwners = definitions
   .filter((definition) => definition.testTargets?.length)
   .map(({ id }) => id);
 
+function declaredSupportConsumers(product) {
+  const consumes = (definition, seen = new Set()) => {
+    if (seen.has(definition.id)) return false;
+    seen.add(definition.id);
+    const products = [
+      definition.supportProduct,
+      definition.nativeSupportProduct,
+      ...Object.values(definition.supportProducts ?? {}),
+    ].flat();
+    return (
+      products.includes(product) ||
+      (definition.dependencies ?? []).some((id) => {
+        const dependency = definitions.find((candidate) => candidate.id === id);
+        return dependency && consumes(dependency, seen);
+      })
+    );
+  };
+  return definitions
+    .filter(
+      (definition) => definition.testTargets?.length && consumes(definition),
+    )
+    .map(({ id }) => id);
+}
+
 test("unscoped features run their owning models without unrelated host lanes", () => {
   expect(planSwiftTests(["Extensions/calendar/Runtime.swift"]).include).toEqual(
     [{ lane: "feature-models", targets: "ci-extension-support" }],
@@ -135,8 +159,9 @@ test("shared support changes select consumers while commands stay outside the em
   });
   const commandOwners = commands.slice(1).map((lane) => lane.extension);
   expect(commandOwners).toContain("attention");
-  expect(commandOwners).not.toContain("audioMixer");
-  expect(commandOwners).not.toContain("studio");
+  expect(commandOwners).toEqual(
+    declaredSupportConsumers("EdithExtensionCommands"),
+  );
   const documents = planSwiftTests([
     "Packages/ExtensionSupport/Sources/EdithExtensionDocuments/DocumentView.swift",
   ]).include;
@@ -147,8 +172,9 @@ test("shared support changes select consumers while commands stay outside the em
   const documentOwners = documents.slice(1).map((lane) => lane.extension);
   for (const owner of ["machines", "herdr", "quinjet"])
     expect(documentOwners).toContain(owner);
-  expect(documentOwners).not.toContain("audioMixer");
-  expect(documentOwners).not.toContain("studio");
+  expect(documentOwners).toEqual(
+    declaredSupportConsumers("EdithExtensionDocuments"),
+  );
   expect(
     planSwiftTests([
       "Packages/ExtensionSupport/Tests/UITests/DeliveryTests.swift",
