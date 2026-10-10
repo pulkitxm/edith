@@ -466,8 +466,6 @@ ci-tools:
 	brew install yamllint lychee gitleaks trivy osv-scanner actionlint zizmor semgrep go zig fish || true
 	cargo install cargo-audit --locked || true
 
-endif
-
 .PHONY: ghostty-extension ci-extension-terminal
 ghostty-extension:
 	bash scripts/build-ghostty.sh --extension-only
@@ -543,3 +541,5 @@ ci-extension-presenter:
 .PHONY: ci-extension-usage-native
 ci-extension-usage-native:
 	$(MAKE) -C Extensions/usage format-check test $(if $(FILTER),FILTER='$(FILTER)')
+
+endif
