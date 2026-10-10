@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
@@ -8,6 +11,9 @@ import SwiftUI
 @MainActor
 @objc(EdithStudioExtensionRuntime)
 final class ExtensionRuntime: NSObject {
+    private var fixture: StudioFixtureTools?
+    private let admitFixture: (NSDictionary) throws -> WorkerFixtureAdmission?
+    private let fixtureDefaults: (String) -> UserDefaults?
     private var model: StudioModel?
     private var uiScenes: [UUID: StudioUIScene] = [:]
     private var navigation: StudioSettingsNavigation?
@@ -18,14 +24,23 @@ final class ExtensionRuntime: NSObject {
     private let videoSessions = StudioUIVideoSessions()
     private let resources = StudioUIResources()
     private let work = StudioUILongOperations()
-    private let streams = try! ExtensionCLIStreams(owner: "studio")
+    private var streams: ExtensionCLIStreams?
 
     override convenience init() {
         self.init(uiConfiguration: { ExtensionUIConfiguration(context: $0) })
     }
 
-    init(uiConfiguration: @escaping (NSDictionary) -> ExtensionUIConfiguration?) {
+    init(
+        uiConfiguration: @escaping (NSDictionary) -> ExtensionUIConfiguration?,
+        admitFixture: @escaping (NSDictionary) throws -> WorkerFixtureAdmission? = {
+            try WorkerFixtureAdmission.current(
+                extensionID: "studio", context: $0,
+                roleBundle: Bundle(for: ExtensionRuntime.self))
+        }, fixtureDefaults: @escaping (String) -> UserDefaults? = { UserDefaults(suiteName: $0) }
+    ) {
         self.uiConfiguration = uiConfiguration
+        self.admitFixture = admitFixture
+        self.fixtureDefaults = fixtureDefaults
         super.init()
         work.onChange = { [weak self] state in self?.videoSessions.recordExport(state) }
         videoSessions.onExport = { [weak self] state in self?.model?.exportState = state }
@@ -34,8 +49,24 @@ final class ExtensionRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let model = self.model else { throw ExtensionPeerError.unavailable }
+            if self.fixture != nil {
+                if command == "surface.snapshot" {
+                    return try await SurfaceCommandService.execute(
+                        providerID: "studio", command: command,
+                        payload: payload,
+                        snapshot: { tile in
+                            StudioSurface.snapshot(model, files: [], projects: [], tile: tile)
+                        }, perform: { _ in throw ExtensionPeerError.unavailable })
+                }
+                guard
+                    ["studio.tools.list", "studio.tools.schema", "studio.ui.settings.snapshot"]
+                        .contains(command)
+                else { throw ExtensionPeerError.unavailable }
+            }
             if command.hasPrefix("studio.cli.") {
-                return try self.streams.invoke(
+                if self.streams == nil { self.streams = try ExtensionCLIStreams(owner: "studio") }
+                guard let streams = self.streams else { throw ExtensionPeerError.unavailable }
+                return try streams.invoke(
                     StudioCommand.self, operation: command, prefix: "studio.cli", payload: payload)
             }
             if command.hasPrefix("studio.ui.") {
@@ -106,11 +137,11 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        let hadEngine = model != nil
+        let hadEngine = model != nil && fixture == nil
         commands.shutdown()
-        streams.stop()
+        streams?.stop()
         Task {
-            await streams.stopAndWait()
+            await streams?.stopAndWait()
             await work.stopAndWait()
             await videoSessions.stopAndWait()
             await commands.shutdownAndWait()
@@ -137,21 +168,40 @@ final class ExtensionRuntime: NSObject {
         case "start":
             guard Bundle.main.bundleURL.pathExtension != "appex",
                 input["remoteUI"] as? Bool != true,
-                let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                let suite = input["defaultsSuite"] as? String
             else { return ["ok": false] as NSDictionary }
-            if model == nil {
-                model = StudioModel()
-                if let channel = ExtensionSharedState.current {
-                    privacy = SurfacePrivacyState(channel: channel)
+            do {
+                let admission = try admitFixture(input)
+                guard
+                    admission != nil
+                        || suite
+                            == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                else { return ["ok": false] as NSDictionary }
+                if model == nil {
+                    if let admission {
+                        let tools = try StudioFixtureTools(admission: admission)
+                        guard let defaults = fixtureDefaults(suite) else {
+                            return ["ok": false] as NSDictionary
+                        }
+                        model = tools.makeModel(defaults: defaults)
+                        fixture = tools
+                    } else {
+                        model = StudioModel()
+                        if let channel = ExtensionSharedState.current {
+                            privacy = SurfacePrivacyState(channel: channel)
+                        }
+                    }
                 }
-            }
-            if navigation == nil {
+            } catch { return ["ok": false] as NSDictionary }
+            if fixture == nil, navigation == nil {
                 navigation = StudioSettingsNavigation(bridge: input["hostNavigation"] as? NSObject)
             }
             model?.start()
-            TextEditingCommands.install()
+            if fixture == nil { TextEditingCommands.install() }
         case "configureUI":
+            do {
+                guard try admitFixture(input) == nil else { return ["ok": false] as NSDictionary }
+            } catch { return ["ok": false] as NSDictionary }
             guard let configuration = uiConfiguration(input),
                 configuration.extensionID == "studio", !configuration.uiOnly,
                 configuration.defaultsSuite
@@ -198,14 +248,14 @@ final class ExtensionRuntime: NSObject {
     }
 
     private func shutdown() {
-        let hadEngine = model != nil
-        streams.stop()
+        let hadEngine = model != nil && fixture == nil
+        streams?.stop()
         resources.shutdown()
         Task {
             await work.stopAndWait(); await videoSessions.stopAndWait()
         }
         commands.shutdown()
-        TextEditingCommands.shutdown()
+        if hadEngine || !uiScenes.isEmpty { TextEditingCommands.shutdown() }
         for scene in uiScenes.values { scene.stop() }
         uiScenes.removeAll()
         navigation?.invalidate()
@@ -215,6 +265,7 @@ final class ExtensionRuntime: NSObject {
         privacy?.shutdown()
         privacy = nil
         if hadEngine { VideoEditorOpenBridge.shared.shutdown() }
+        fixture = nil
     }
 }
 

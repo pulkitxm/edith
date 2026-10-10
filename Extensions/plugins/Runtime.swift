@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionCommands
@@ -8,6 +11,27 @@ import SwiftUI
 
 @MainActor @objc(EdithPluginsExtensionRuntime)
 final class ExtensionRuntime: NSObject {
+    private var fixture: PluginsFixtureTools?
+    private let admitFixture: (NSDictionary) throws -> WorkerFixtureAdmission?
+    private let fixtureDefaults: (String) -> UserDefaults?
+
+    override convenience init() {
+        self.init(admitFixture: {
+            try WorkerFixtureAdmission.current(
+                extensionID: "plugins", context: $0,
+                roleBundle: Bundle(for: ExtensionRuntime.self))
+        })
+    }
+
+    init(
+        admitFixture: @escaping (NSDictionary) throws -> WorkerFixtureAdmission?,
+        fixtureDefaults: @escaping (String) -> UserDefaults? = { UserDefaults(suiteName: $0) }
+    ) {
+        self.admitFixture = admitFixture
+        self.fixtureDefaults = fixtureDefaults
+        super.init()
+    }
+
     private var model: SkillsModel?
     private var uiModel: SkillsModel?
     private var engineClient: ExtensionEngineClient?
@@ -18,6 +42,9 @@ final class ExtensionRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let model = self.model, !model.isStopped else {
+                throw ExtensionPeerError.unavailable
+            }
+            if self.fixture != nil && !["surface.snapshot", "surface.perform"].contains(command) {
                 throw ExtensionPeerError.unavailable
             }
             if command.hasPrefix("plugins.cli.") {
@@ -64,6 +91,9 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
+            do {
+                guard try admitFixture(input) == nil else { return ["ok": false] as NSDictionary }
+            } catch { return ["ok": false] as NSDictionary }
             guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "plugins", let client = configuration.engineClient,
                 DocumentRenderer.isAvailable
@@ -77,13 +107,38 @@ final class ExtensionRuntime: NSObject {
             Task { await model?.shutdown() }
             TextEditingCommands.shutdown()
         case "start":
-            guard let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+            guard let suite = input["defaultsSuite"] as? String
             else { return ["ok": false] as NSDictionary }
-            guard DocumentRenderer.isAvailable else { return ["ok": false] as NSDictionary }
-            if model == nil { model = SkillsModel() }
-            if let model, surface == nil { surface = PluginsSurface(model: model) }
-            TextEditingCommands.install()
+            do {
+                let admission = try admitFixture(input)
+                guard
+                    admission != nil
+                        || suite
+                            == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                else { return ["ok": false] as NSDictionary }
+                if model == nil {
+                    if let admission {
+                        let tools = try PluginsFixtureTools(admission: admission)
+                        guard let defaults = fixtureDefaults(suite) else {
+                            return ["ok": false] as NSDictionary
+                        }
+                        model = tools.makeModel(defaults: defaults)
+                        fixture = tools
+                    } else {
+                        guard DocumentRenderer.isAvailable else {
+                            return ["ok": false] as NSDictionary
+                        }
+                        model = SkillsModel()
+                    }
+                }
+            } catch { return ["ok": false] as NSDictionary }
+            if let model, surface == nil {
+                surface =
+                    fixture == nil
+                    ? PluginsSurface(model: model)
+                    : PluginsSurface(model: model, hidden: { false })
+            }
+            if fixture == nil { TextEditingCommands.install() }
         case "view":
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(rootView: ExtensionPageHost { PluginsPage(model: model) })
@@ -95,8 +150,11 @@ final class ExtensionRuntime: NSObject {
             commands.shutdown()
             let stopping = model; model = nil; surface = nil
             Task { await stopping?.shutdown() }
-            SkillBrand.shutdown()
-            TextEditingCommands.shutdown()
+            if fixture == nil && stopping != nil {
+                SkillBrand.shutdown()
+                TextEditingCommands.shutdown()
+            }
+            fixture = nil
         case "status": return ["ok": true, "running": model != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }

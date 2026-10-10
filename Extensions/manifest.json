@@ -741,12 +741,17 @@
   },
   {
     "id": "plugins",
-    "testTargets": ["ci-extension-plugins-native"],
+    "testTargets": [
+      "ci-extension-plugins-native"
+    ],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
-    "supportProduct": ["EdithExtensionDocuments", "EdithExtensionCommands"],
+    "supportProduct": [
+      "EdithExtensionDocuments",
+      "EdithExtensionCommands"
+    ],
     "roles": {
       "app": [
         "Extensions/plugins/CLI/CLIDestructivePlan.swift",
@@ -764,7 +769,9 @@
         "Extensions/plugins/SkillInstallSheet.swift",
         "Extensions/plugins/SkillInstaller.swift",
         "Extensions/plugins/SkillPreviewSheet.swift",
-        "Extensions/plugins/SkillsModel.swift"
+        "Extensions/plugins/SkillsModel.swift",
+        "Extensions/plugins/PluginsFixtureTools.swift",
+        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
       ]
     },
     "resources": {
@@ -793,7 +800,9 @@
         "Extensions/plugins/Resources/qwen.svg"
       ]
     },
-    "inputs": ["Extensions/plugins"],
+    "inputs": [
+      "Extensions/plugins"
+    ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
@@ -803,7 +812,8 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionDocuments",
       "scripts/build-extension-ui-carrier.mjs",
       "scripts/build-contained-host-runtime.mjs",
-      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands",
+      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
     ],
     "dependencies": [],
     "surfaceContractVersion": 1,
@@ -1569,7 +1579,9 @@
         "Extensions/studio/UIBridge/StudioUIVideoClient.swift",
         "Extensions/studio/UIBridge/StudioUIScene.swift",
         "Extensions/studio/UIBridge/StudioSettingsNavigation.swift",
-        "Extensions/studio/Studio/Views/StudioSettingsRows.swift"
+        "Extensions/studio/Studio/Views/StudioSettingsRows.swift",
+        "Extensions/studio/StudioFixtureTools.swift",
+        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
       ]
     },
     "nativeSources": [
@@ -1644,7 +1656,8 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-contained-host-runtime.mjs"
+      "scripts/build-contained-host-runtime.mjs",
+      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
     ],
     "dependencies": [],
     "testTargets": [
