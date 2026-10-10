@@ -270,4 +270,74 @@ import Testing
         #expect(!waiting.refreshing)
         await waiting.shutdown()
     }
+
+    @Test func concurrentCLIFollowDetachesWithoutCancellingOriginalNativeRefresh() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let home = root.appendingPathComponent("home")
+        let project = home.appendingPathComponent("projects/sample")
+        try FileManager.default.createDirectory(
+            at: project.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        try Data("[remote \"origin\"]\n url = https://github.com/example/sample.git\n".utf8)
+            .write(to: project.appendingPathComponent(".git/config"))
+        let journal = home.appendingPathComponent(".claude/projects/sample/session.jsonl")
+        try FileManager.default.createDirectory(
+            at: journal.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let row = try JSONSerialization.data(withJSONObject: [
+            "timestamp": "2026-10-09T01:00:00Z", "sessionId": "sample-session",
+            "requestId": "sample-request", "costUSD": 2, "cwd": project.path,
+            "message": [
+                "id": "sample-message", "model": "claude-sonnet-4-5",
+                "usage": ["input_tokens": 120, "output_tokens": 30],
+                "content": "Sample fixture prompt",
+            ],
+        ])
+        try (row + Data("\n".utf8)).write(to: journal)
+        let gate = UsageCLINativeRefreshGate()
+        defer { gate.resume() }
+        let controller = UsageWorkerController(
+            dataDirectory: Repo.dataDir,
+            collect: { _, event in
+                await gate.pause()
+                try Task.checkCancellation()
+                return try await UsageNativeCollector.collect(
+                    home: home, dataDirectory: root.appendingPathComponent("collector-data"),
+                    environment: ["EDITH_USAGE_OFFLINE": "1", "TZ": "UTC"], onEvent: event)
+            })
+        let refresh = Task {
+            try await run(["refresh", "--no-machines", "--json"], controller: controller)
+        }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while !gate.waiting && ContinuousClock.now < deadline { await Task.yield() }
+        try #require(gate.waiting && controller.refreshing)
+        let follow = Task {
+            try await run(["refresh", "--follow", "--json"], controller: controller)
+        }
+        try await Task.sleep(for: .milliseconds(30))
+        follow.cancel()
+        await #expect(throws: CancellationError.self) { try await follow.value }
+        #expect(controller.refreshing && !refresh.isCancelled)
+        gate.resume()
+        let reply = try await refresh.value
+        try #require(reply.exitCode == 0, Comment(rawValue: reply.stderr))
+        let result = try #require(
+            try JSONSerialization.jsonObject(with: Data(reply.stdout.utf8)) as? [String: Any])
+        #expect(result["completed"] as? Bool == true && result["followed"] as? Bool == false)
+        #expect((result["summary"] as? [String: String])?["journals"] == "1")
+        #expect(UsageHistory.isValidDocument(try Data(contentsOf: Repo.usageJSON)))
+        await controller.shutdown()
+    }
+}
+
+@MainActor private final class UsageCLINativeRefreshGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    var waiting: Bool { continuation != nil }
+
+    func pause() async {
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func resume() {
+        continuation?.resume(); continuation = nil
+    }
 }
