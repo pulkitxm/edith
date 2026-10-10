@@ -166,7 +166,17 @@ final class HostRemoteApplication {
             "location": presentation.request.location,
             "presentationID": presentation.request.presentationID.uuidString,
             "defaultsSuite": Bundle.main.bundleIdentifier!, "hostIdentifier": hostIdentifier,
+            "extensionID": extensionID,
         ])
+        if !configuration.uiOnly {
+            guard
+                let slot = slots.first(where: {
+                    $0.request?.presentationID == presentation.request.presentationID
+                }), let endpoint = slot.endpoint
+            else { throw HostWorkerError.rejected }
+            input["engineClient"] = HostRemoteEngineBridge(
+                endpoint: endpoint, presentationID: presentation.request.presentationID)
+        }
         input["section"] = presentation.request.section
         if let surface = presentation.request.surface {
             input["tile"] = try JSONEncoder().encode(surface.tile)

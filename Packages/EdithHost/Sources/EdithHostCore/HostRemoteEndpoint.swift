@@ -1,4 +1,5 @@
 import Darwin
+import EdithExtensionSupport
 import Foundation
 import Security
 
@@ -15,6 +16,7 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
     private let lock = NSLock()
     private var connections: [NSXPCConnection] = []
     private var invalidated = false
+    private var receivers: [Exchange] = []
 
     public init(
         executable: URL, requirement: String, execute: @escaping Execute,
@@ -65,6 +67,7 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
         else { return false }
         let receiver = Exchange(
             connection: connection, peer: peer, execute: execute, didDisconnect: didDisconnect)
+        lock.withLock { receivers.append(receiver) }
         connection.setCodeSigningRequirement(requirement)
         connection.exportedInterface = NSXPCInterface(with: HostRemoteControl.self)
         connection.exportedObject = receiver
@@ -79,11 +82,28 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
         return true
     }
 
+    @MainActor public func invokeEngine(_ request: ExtensionEngineRequest) async throws -> Data {
+        let receivers = lock.withLock { self.receivers }
+        var selected: Exchange?
+        for receiver in receivers where receiver.isAuthenticated {
+            guard selected == nil else { throw HostWorkerError.rejected }
+            selected = receiver
+        }
+        guard let selected else { throw HostWorkerError.rejected }
+        return try await selected.engineCalls.request(request)
+    }
+
+    @MainActor public func cancelEngine(_ token: UUID) {
+        let receivers = lock.withLock { self.receivers }
+        receivers.forEach { $0.engineCalls.cancel(token) }
+    }
+
     public func invalidate() {
         let values = lock.withLock {
             invalidated = true
             let values = connections
             connections.removeAll()
+            receivers.removeAll()
             return values
         }
         listener.invalidate()
@@ -99,17 +119,27 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
     }
 
     private func remove(_ connection: NSXPCConnection) {
-        lock.withLock { connections.removeAll { $0 === connection } }
+        lock.withLock {
+            connections.removeAll { $0 === connection }
+            receivers.removeAll { $0.connection === connection }
+        }
     }
 
     private final class Exchange: NSObject, HostRemoteControl, @unchecked Sendable {
-        private let connection: NSXPCConnection
+        let connection: NSXPCConnection
         private let peer: HostRemoteKernelIdentity
         private let execute: Execute
         private let didDisconnect: @MainActor @Sendable () -> Void
         @MainActor private var pending: [UUID: Task<Void, Never>] = [:]
         @MainActor private var authenticated = false
         @MainActor private var invalidated = false
+        @MainActor var isAuthenticated: Bool {
+            authenticated && !invalidated && (try? peer.verify(connection)) != nil
+        }
+        @MainActor lazy var engineCalls = HostRemoteEngineCalls(connection: connection) {
+            [weak self] in
+            self?.isAuthenticated == true
+        }
 
         init(
             connection: NSXPCConnection, peer: HostRemoteKernelIdentity, execute: @escaping Execute,
@@ -166,6 +196,7 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
             invalidated = true
             pending.values.forEach { $0.cancel() }
             pending.removeAll()
+            engineCalls.invalidate()
             if authenticated { didDisconnect() }
         }
     }
