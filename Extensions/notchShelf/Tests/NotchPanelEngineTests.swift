@@ -28,7 +28,35 @@ import Testing
                 "contractVersion", "ownershipID", "version", "revision", "displayID",
                 "presentationID", "phase", "activeTab", "shapeWidth", "shapeHeight", "visible",
                 "acceptsPointer", "acceptsKeyFocus", "slots", "capacityWidth", "capacityHeight",
+                "layoutEditing",
             ])
+    }
+
+    @Test func panelStateMirrorsOriginalLayoutEditingAndInvalidatesHost() async throws {
+        let fixture = try NotchPanelFixture()
+        defer { fixture.clean() }
+        let attached = try fixture.attach()
+        #expect(attached.states[0].layoutEditing == nil)
+        let controller = fixture.bind()
+        controller.expand(on: 42)
+        let initial = try fixture.engine.batch()
+        #expect(initial.states[0].layoutEditing == false)
+        let pending = Task {
+            try await fixture.engine.wait(
+                .init(identity: initial.identity, revision: initial.revision, timeout: 1))
+        }
+        await Task.yield()
+        controller.layoutEditing = true
+        let editing = try await pending.value
+        #expect(editing.revision > initial.revision)
+        #expect(editing.states[0].layoutEditing == true)
+        let encoded = try JSONEncoder().encode(editing)
+        #expect(
+            try JSONDecoder().decode(NotchPanelBatch.self, from: encoded).states[0].layoutEditing
+                == true)
+        controller.layoutEditing = false
+        #expect(try fixture.engine.batch().states[0].layoutEditing == false)
+        #expect(controller.ownedPanelCount == 0)
     }
 
     @Test func lostAttachReplyRecoversOnlyExactOwnerAndCleanupSurvivesDisable() throws {

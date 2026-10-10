@@ -640,7 +640,8 @@ import Foundation
             visible: visible, acceptsPointer: accepts,
             acceptsKeyFocus: expanded && controller?.activeTab == .browser, slots: [],
             capacityWidth: min(display.width - 48, max(size.width, capacity.width)),
-            capacityHeight: min(display.height - 12, max(size.height, capacity.height)))
+            capacityHeight: min(display.height - 12, max(size.height, capacity.height)),
+            layoutEditing: controller?.layoutEditing)
         result.slots =
             visible
             ? (slots[id] ?? []).filter {

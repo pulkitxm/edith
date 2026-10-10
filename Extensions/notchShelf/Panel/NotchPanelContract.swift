@@ -74,6 +74,7 @@ struct NotchPanelState: Codable, Equatable, Sendable {
     var slots: [NotchPanelSlot]
     var capacityWidth: Double? = nil
     var capacityHeight: Double? = nil
+    var layoutEditing: Bool? = nil
     var bounds: CGRect {
         CGRect(
             x: 0, y: 0, width: max(shapeWidth, capacityWidth ?? 0) + 24,
