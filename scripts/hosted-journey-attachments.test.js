@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -16,7 +23,13 @@ import {
 } from "./hosted-original-shell/attachments.mjs";
 
 function attachment(name, file = `${name}.export`) {
-  return { suggestedHumanReadableName: name, exportedFileName: file };
+  return {
+    suggestedHumanReadableName: name.replace(
+      /\.(json|png)$/,
+      "_0_10000000-0000-4000-8000-000000000001.$1",
+    ),
+    exportedFileName: file,
+  };
 }
 function manifest(attachments) {
   return [{ testIdentifier: journeyTestIdentifier, attachments }];
@@ -262,7 +275,7 @@ test("asynchronous official export validates the supported schema and reads gene
               testIdentifier: journeyTestIdentifier,
               attachments: [
                 {
-                  suggestedHumanReadableName: "edith-journey-outcome-0001.json",
+                  ...first,
                   exportedFileName: "D43B.json",
                   isAssociatedWithFailure: false,
                   configurationName: "Debug",
@@ -604,4 +617,117 @@ test("directory and manifest failures retain safe diagnostics without weakening 
       await rm(root, { recursive: true, force: true });
     }
   }
+});
+
+test("observed schema 0.1.0 exports recover eight UUID-suffixed outcomes and only the two owned window names", async () => {
+  const schema = await readFile(
+    new URL(
+      "./fixtures/xcresulttool-attachments-schema-0.1.0.txt",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const exported = JSON.parse(
+    await readFile(
+      new URL(
+        "./fixtures/xcresulttool-attachments-manifest-0.1.0.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  expect(validateAttachmentToolSchema(schema)).toBe(
+    "0aff89937ec708ad61624d771c622b04032cc9f8baf594578e978faa85a2c715",
+  );
+  const selected = selectJourneyAttachments(exported);
+  expect(selected.outcomes.map(({ sequence }) => sequence)).toEqual([
+    1, 2, 3, 4, 5, 6, 7, 8,
+  ]);
+  expect(selected.images.map(({ name }) => name).sort()).toEqual([
+    "marketplace-installed-calendar.png",
+    "storage-distribution.png",
+  ]);
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "journey-observed-export-")),
+  );
+  try {
+    const outputDirectory = join(root, "journey-attachments");
+    const result = await exportJourneyAttachments({
+      resultBundle: join(root, "HostedShellJourney.xcresult"),
+      outputDirectory,
+      run: async (_, args) => {
+        if (args[1] === "version")
+          return {
+            stdout: "xcresulttool version 24757, schema version: 0.1.0\n",
+          };
+        if (args.includes("--schema")) return { stdout: schema };
+        await writeFile(
+          join(outputDirectory, "manifest.json"),
+          JSON.stringify(exported),
+          { mode: 0o600 },
+        );
+        for (const { file, sequence } of selected.outcomes)
+          await writeFile(
+            join(outputDirectory, file),
+            JSON.stringify({
+              schema: 1,
+              sequence,
+              startup: { synthetic: true },
+              snapshots: [],
+            }),
+            { mode: 0o600 },
+          );
+        return { stdout: "" };
+      },
+    });
+    expect(result.proof.sequence).toBe(8);
+    expect(result.images).toHaveLength(2);
+    expect(result.diagnostic.toolSchemaVersion).toBe("0.1.0");
+    expect(result.diagnostic.category).toBe("validated");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("only observed exporter suffixes normalize and duplicate canonical names stay rejected", () => {
+  const valid = first.suggestedHumanReadableName;
+  for (const name of [
+    "edith-journey-outcome-0001.json",
+    valid.replace("_0_", "_1_"),
+    valid.replace("_0_", "_00_"),
+    valid.replace(
+      "10000000-0000-4000-8000-000000000001",
+      "10000000-0000-4000-8000-00000000000a",
+    ),
+    valid.replace(
+      "10000000-0000-4000-8000-000000000001",
+      "10000000000040008000000000000001",
+    ),
+    valid.replace("0001_0_", "0001-extra_0_"),
+    valid.replace(".json", ".png"),
+    `${valid}.json`,
+    valid.replace("_0_", "_0_../../"),
+    attachment("edith-journey-storage-distribution.json")
+      .suggestedHumanReadableName,
+  ])
+    expect(() =>
+      selectJourneyAttachments(
+        manifest([{ ...first, suggestedHumanReadableName: name }]),
+      ),
+    ).toThrow();
+  expect(() =>
+    selectJourneyAttachments(
+      manifest([
+        first,
+        {
+          ...first,
+          exportedFileName: "other.json",
+          suggestedHumanReadableName: valid.replace(
+            "000000000001",
+            "000000000002",
+          ),
+        },
+      ]),
+    ),
+  ).toThrow();
 });
