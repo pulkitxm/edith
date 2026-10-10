@@ -23,15 +23,6 @@ import Testing
             ]))
     }
 
-    private func descriptor() throws -> Data {
-        try JSONSerialization.data(withJSONObject: [
-            "version": 1, "owner": "herdr", "location": "herdr.agent",
-            "target": "synthetic-host.synthetic-agent.diff",
-            "token": UUID().uuidString, "title": "Synthetic agent", "width": 900, "height": 600,
-            "minimumWidth": 400, "minimumHeight": 300, "presented": false,
-        ])
-    }
-
     @Test func originalScalarOpenRequestIsClosed() throws {
         let request = try HostHerdrNotificationRequest(userInfo: userInfo)
         #expect(request.agentID == "synthetic-agent")
@@ -57,41 +48,29 @@ import Testing
         }
     }
 
-    @Test func exactCurrentDescriptorAndRealOpenAreRequiredForSuccess() async throws {
+    @Test func exactMainAcknowledgmentPreservesOriginalAgentAndDiffSelection() async throws {
         let config = try configuration()
-        let descriptor = try descriptor()
-        let target = try HostHerdrWindowTarget.decode(descriptor)
-        let inventory = try JSONSerialization.data(withJSONObject: [
-            "presentations": [
-                try JSONSerialization.jsonObject(with: descriptor)
-            ]
-        ])
         var operations: [String] = []
-        var opened: HostWorkerNavigationRequest?
-        let presentation = UUID()
+        var validations = 0
         let router = HostHerdrNotificationRouter(currentVersion: { "1" }) { version in
             #expect(version == "1")
             return HostHerdrNotificationLease(
-                configuration: config, presentationID: presentation, enginePID: 42,
-                engineGeneration: "synthetic",
-                validateOrigin: {},
+                configuration: config, presentationID: UUID(), enginePID: 42,
+                engineGeneration: "synthetic", validateOrigin: { validations += 1 },
                 invoke: { operation, payload in
                     operations.append(operation)
-                    if operation == "herdr.ui.notification.open" {
-                        let object = try #require(
-                            JSONSerialization.jsonObject(with: payload) as? [String: String])
-                        #expect(Set(object.keys) == ["agentID", "hostID", "view"])
-                        return descriptor
-                    }
-                    #expect(operation == "herdr.ui.read")
-                    return inventory
-                }, open: { opened = $0 })
+                    let object = try #require(
+                        JSONSerialization.jsonObject(with: payload) as? [String: String])
+                    #expect(Set(object.keys) == ["agentID", "hostID", "view"])
+                    #expect(object["view"] == "diff")
+                    #expect(object["agentID"] == "synthetic-agent")
+                    #expect(object["hostID"] == "synthetic-host")
+                    return Data("{\"ok\":true}".utf8)
+                })
         }
         try await router.receive(HostHerdrNotificationRequest(userInfo: userInfo))
-        #expect(operations == ["herdr.ui.notification.open", "herdr.ui.read"])
-        #expect(opened?.presentationID == presentation)
-        #expect(opened?.herdrWindow == target)
-        #expect(router.pendingCount == 0)
+        #expect(operations == ["herdr.ui.notification.open"])
+        #expect(validations >= 3 && router.pendingCount == 0)
     }
 
     @Test func disabledHerdrNeverPreparesOrEnables() async throws {
@@ -105,39 +84,42 @@ import Testing
         #expect(prepares == 0)
     }
 
-    @Test func staleReadyOwnerOrMissingDescriptorFailsBeforeOpen() async throws {
-        for failure in ["prepare", "engine", "descriptor", "open"] {
+    @Test func staleMainLeaseOrMalformedAcknowledgmentCannotSucceed() async throws {
+        for reply in [
+            Data(), Data("{\"ok\":false}".utf8), Data("{\"ok\":1}".utf8),
+            Data("{\"ok\":true,\"location\":\"herdr.agent\"}".utf8),
+            Data(repeating: 32, count: 1025), Data("{\"presentations\":[]}".utf8),
+        ] {
+            let lease = HostHerdrNotificationLease(
+                configuration: try configuration(), presentationID: UUID(), enginePID: 42,
+                engineGeneration: "synthetic", validateOrigin: {}, invoke: { _, _ in reply })
+            await #expect(throws: (any Error).self) {
+                try await lease.apply(
+                    HostHerdrNotificationRequest(userInfo: userInfo), version: "1")
+            }
+        }
+        for failure in ["prepare", "engine", "renderer", "version"] {
             let config = try configuration()
-            let descriptor = try descriptor()
             var current: String? = "1"
             var admitted = true
-            var opens = 0
+            var invokes = 0
             let router = HostHerdrNotificationRouter(currentVersion: { current }) { _ in
                 if failure == "prepare" { current = "2" }
                 return HostHerdrNotificationLease(
                     configuration: config, presentationID: UUID(), enginePID: 42,
                     engineGeneration: "synthetic",
                     validateOrigin: { guard admitted else { throw HostWorkerError.rejected } },
-                    invoke: { operation, _ in
-                        if operation == "herdr.ui.notification.open" {
-                            if failure == "engine" { admitted = false }
-                            return descriptor
-                        }
-                        if failure == "descriptor" { return Data("{\"presentations\":[]}".utf8) }
-                        return try JSONSerialization.data(withJSONObject: [
-                            "presentations": [
-                                try JSONSerialization.jsonObject(with: descriptor)
-                            ]
-                        ])
-                    },
-                    open: { _ in
-                        opens += 1; throw HostWorkerError.rejected
+                    invoke: { _, _ in
+                        invokes += 1
+                        if failure == "engine" || failure == "renderer" { admitted = false }
+                        if failure == "version" { current = "2" }
+                        return Data("{\"ok\":true}".utf8)
                     })
             }
             await #expect(throws: HostWorkerError.rejected) {
                 try await router.receive(HostHerdrNotificationRequest(userInfo: userInfo))
             }
-            #expect(opens == (failure == "open" ? 1 : 0))
+            #expect(invokes == (failure == "prepare" ? 0 : 1))
             #expect(router.pendingCount == 0)
         }
     }
@@ -146,7 +128,6 @@ import Testing
         let config = try configuration()
         var admitted = true
         var began = false
-        var opens = 0
         let router = HostHerdrNotificationRouter(currentVersion: { "1" }) { _ in
             HostHerdrNotificationLease(
                 configuration: config, presentationID: UUID(), enginePID: 42,
@@ -156,7 +137,7 @@ import Testing
                     began = true
                     try await Task.sleep(for: .seconds(10))
                     throw HostWorkerError.rejected
-                }, open: { _ in opens += 1 })
+                })
         }
         let request = try HostHerdrNotificationRequest(userInfo: userInfo)
         let task = Task { try await router.receive(request) }
@@ -164,7 +145,6 @@ import Testing
         admitted = false
         await #expect(throws: CancellationError.self) { try await task.value }
         await router.drain()
-        #expect(opens == 0)
         #expect(router.pendingCount == 0)
     }
 

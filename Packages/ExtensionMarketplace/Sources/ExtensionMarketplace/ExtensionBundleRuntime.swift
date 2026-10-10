@@ -47,6 +47,7 @@ public final class ExtensionBundleRuntime {
     private let verify: (URL) throws -> Void
     private let readOnlyPackage: (package: ExtensionPackage, directory: URL)?
     private var loaded: [String: Loaded] = [:]
+    private var rendererCallbacks = RendererCallbacks()
     private var retainedImages: [(Bundle, UnsafeMutableRawPointer, PackageFileLock?)] = []
     private var failedLoads = Set<String>()
 
@@ -173,11 +174,13 @@ public final class ExtensionBundleRuntime {
     public func response(id: String, operation: String, context: NSDictionary = [:]) throws
         -> NSDictionary
     {
-        guard
-            readOnlyPackage == nil
-                || ["describe", "configureUI", "releaseUI", "stopUI"].contains(operation)
-        else {
-            throw MarketplaceError.invalidBundle
+        if let selected = readOnlyPackage {
+            guard id == selected.package.id else { throw MarketplaceError.invalidBundle }
+            return try rendererCallbacks.response(
+                id: id, role: role, operation: operation, context: context,
+                execute: {
+                    try self.execute(self.load(id: id), operation: operation, context: context)
+                })
         }
         return try execute(load(id: id), operation: operation, context: context)
     }
@@ -259,7 +262,7 @@ public final class ExtensionBundleRuntime {
     }
 
     public func nativeTask(id: String, payload: Data) throws -> Int32 {
-        guard role == .app, !payload.isEmpty, payload.count <= 65_536 else {
+        guard readOnlyPackage == nil, role == .app, !payload.isEmpty, payload.count <= 65_536 else {
             throw MarketplaceError.invalidBundle
         }
         let instance = try load(id: id)
@@ -317,6 +320,132 @@ public final class ExtensionBundleRuntime {
             ], factory: factory)
         if let failure { throw failure }
         return result
+    }
+
+    struct RendererCallbacks {
+        private struct Binding: Equatable {
+            let owner: String
+            let location: String
+            let target: String?
+            let token: String?
+        }
+        private struct Event: Decodable {
+            let version: Int
+            let presentationID: UUID
+            let sequence: UInt64
+            let active: Bool
+            let key: Bool
+            let visible: Bool
+            let action: String?
+        }
+        private var bindings: [UUID: Binding] = [:]
+        private var sequences: [UUID: UInt64] = [:]
+
+        mutating func response(
+            id: String, role: Role, operation: String, context: NSDictionary,
+            execute: () throws -> NSDictionary
+        ) throws -> NSDictionary {
+            switch operation {
+            case "describe": return try execute()
+            case "configureUI":
+                if let rawID = context["presentationID"] as? String,
+                    let presentation = UUID(uuidString: rawID), let binding = bindings[presentation]
+                {
+                    guard binding.owner == id, role == .app,
+                        context["remoteUI"] as? Bool == true, context["uiOnly"] as? Bool == false,
+                        context["extensionID"] as? String == id,
+                        context["engineClient"] as? NSObject != nil,
+                        context["location"] as? String == binding.location,
+                        context["target"] as? String == binding.target,
+                        context["herdrPresentationToken"] as? String == binding.token
+                    else { throw MarketplaceError.invalidBundle }
+                }
+                let result = try execute()
+                if result["ok"] as? Bool == true,
+                    role == .app, context["remoteUI"] as? Bool == true,
+                    context["uiOnly"] as? Bool == false,
+                    context["extensionID"] as? String == id,
+                    context["engineClient"] as? NSObject != nil,
+                    let rawID = context["presentationID"] as? String,
+                    let presentation = UUID(uuidString: rawID),
+                    let location = context["location"] as? String, Self.accepts(id, location)
+                {
+                    let binding = Binding(
+                        owner: id, location: location, target: context["target"] as? String,
+                        token: context["herdrPresentationToken"] as? String)
+                    if location.hasPrefix("herdr.") {
+                        guard let target = binding.target, !target.isEmpty,
+                            target.utf8.count <= 4096,
+                            !target.utf8.contains(0), let token = binding.token,
+                            UUID(uuidString: token) != nil
+                        else { throw MarketplaceError.invalidBundle }
+                    }
+                    guard bindings.count < 64 || bindings[presentation] != nil,
+                        bindings[presentation].map({ $0 == binding }) ?? true
+                    else { throw MarketplaceError.invalidBundle }
+                    bindings[presentation] = binding
+                } else if let rawID = context["presentationID"] as? String,
+                    let presentation = UUID(uuidString: rawID)
+                {
+                    bindings[presentation] = nil
+                }
+                return result
+            case "releaseUI":
+                if let rawID = context["presentationID"] as? String,
+                    let presentation = UUID(uuidString: rawID)
+                {
+                    bindings[presentation] = nil; sequences[presentation] = nil
+                }
+                return try execute()
+            case "stopUI":
+                bindings.removeAll(); sequences.removeAll()
+                return try execute()
+            case "terminalUI", "terminalUIStatus":
+                guard role == .app, let rawID = context["presentationID"] as? String,
+                    let presentation = UUID(uuidString: rawID),
+                    let binding = bindings[presentation],
+                    binding.owner == id, Self.accepts(id, binding.location)
+                else { throw MarketplaceError.invalidBundle }
+                if operation == "terminalUIStatus" {
+                    guard Set(context.allKeys.compactMap { $0 as? String }) == ["presentationID"]
+                    else { throw MarketplaceError.invalidBundle }
+                } else {
+                    guard
+                        Set(context.allKeys.compactMap { $0 as? String }) == [
+                            "presentationID", "payload",
+                        ],
+                        let data = context["payload"] as? Data, !data.isEmpty, data.count <= 1024,
+                        let fields = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                        Set(fields.keys).isSubset(of: [
+                            "version", "presentationID", "sequence", "active", "key", "visible",
+                            "action",
+                        ])
+                    else { throw MarketplaceError.invalidBundle }
+                    let event = try JSONDecoder().decode(Event.self, from: data)
+                    guard event.version == 1, event.presentationID == presentation,
+                        event.sequence > (sequences[presentation] ?? 0),
+                        event.action.map({
+                            [
+                                "fontZoomIn", "fontZoomOut", "fontZoomReset", "newTab", "closeTab",
+                                "nextTab", "previousTab", "windowClosed",
+                            ].contains($0)
+                        }) ?? true
+                    else { throw MarketplaceError.invalidBundle }
+                    sequences[presentation] = event.sequence
+                }
+                return try execute()
+            default: throw MarketplaceError.invalidBundle
+            }
+        }
+
+        private static func accepts(_ id: String, _ location: String) -> Bool {
+            switch (id, location) {
+            case ("terminal", "main"), ("herdr", "main"), ("herdr", "herdr.agent"),
+                ("herdr", "herdr.space"), ("quinjet", "main"):
+                true
+            default: false
+            }
+        }
     }
 
     private func load(id: String) throws -> Loaded {

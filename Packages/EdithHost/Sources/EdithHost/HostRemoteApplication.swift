@@ -25,6 +25,7 @@ final class HostRemoteApplication {
     private var configuration: HostRemoteConfiguration?
     private var runtimes: [ExtensionBundleRuntime] = []
     private var presentationRuntimes: [UUID: ExtensionBundleRuntime] = [:]
+    private var terminalRenderer = HostRemoteTerminalRenderer()
     private var stopping = false
 
     private init() throws {
@@ -151,6 +152,7 @@ final class HostRemoteApplication {
             }
             slot.release()
             presentationRuntimes[id] = nil
+            terminalRenderer.release(id)
             for runtime in runtimes {
                 _ = try runtime.response(
                     id: extensionID, operation: "releaseUI",
@@ -237,27 +239,18 @@ final class HostRemoteApplication {
     }
 
     private func terminal(_ request: HostTerminalUIRequest) throws -> Data {
-        guard !stopping, let configuration, !configuration.uiOnly, extensionID == "terminal",
+        guard !stopping, let configuration, !configuration.uiOnly,
+            request.request.extensionID == extensionID,
+            HostTerminalUIRequest.accepts(request.request),
+            slots.contains(where: { $0.request == request.request }),
             let runtime = presentationRuntimes[request.request.presentationID]
         else { throw HostWorkerError.rejected }
-        try request.validate(
-            session: configuration.session, request: request.request,
-            operation: request.operation.rawValue)
-        let context = NSMutableDictionary(dictionary: [
-            "presentationID": request.request.presentationID.uuidString
-        ])
-        if let event = request.event {
-            context["payload"] = try event.encoded(presentationID: request.request.presentationID)
+        return try terminalRenderer.response(
+            request, session: configuration.session, owner: extensionID,
+            configuredRequest: slots.first { $0.request == request.request }?.request
+        ) { operation, context in
+            try runtime.response(id: extensionID, operation: operation, context: context)
         }
-        let result = try runtime.response(
-            id: extensionID, operation: request.operation.rawValue, context: context)
-        let data = try JSONSerialization.data(withJSONObject: result)
-        guard data.count <= 1024 else { throw HostWorkerError.invalidResponse }
-        if request.operation == .status {
-            _ = try HostTerminalUIStatus.decode(
-                data, presentationID: request.request.presentationID)
-        }
-        return data
     }
 
     private func shutdown() {
@@ -265,6 +258,7 @@ final class HostRemoteApplication {
         stopping = true
         slots.forEach { $0.release() }
         presentationRuntimes.removeAll()
+        terminalRenderer = HostRemoteTerminalRenderer()
         for runtime in runtimes { _ = try? runtime.response(id: extensionID, operation: "stopUI") }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [self] in
             endpoint.invalidate()
@@ -441,4 +435,46 @@ private struct HostRemoteSceneView: NSViewControllerRepresentable {
         HostRemoteSceneController(slot: slot)
     }
     func updateNSViewController(_ controller: HostRemoteSceneController, context: Context) {}
+}
+
+struct HostRemoteTerminalRenderer {
+    private var sequences: [UUID: UInt64] = [:]
+
+    mutating func release(_ presentationID: UUID) { sequences[presentationID] = nil }
+
+    mutating func response(
+        _ request: HostTerminalUIRequest, session: UUID, owner: String,
+        configuredRequest: HostExtensionContentRequest?,
+        execute: (String, NSDictionary) throws -> NSDictionary
+    ) throws -> Data {
+        guard let configuredRequest, configuredRequest.extensionID == owner else {
+            throw HostWorkerError.rejected
+        }
+        try request.validate(
+            session: session, request: configuredRequest, operation: request.operation.rawValue)
+        let context = NSMutableDictionary(dictionary: [
+            "presentationID": request.request.presentationID.uuidString
+        ])
+        if let event = request.event {
+            guard event.sequence > (sequences[request.request.presentationID] ?? 0) else {
+                throw HostWorkerError.rejected
+            }
+            sequences[request.request.presentationID] = event.sequence
+            context["payload"] = try event.encoded(presentationID: request.request.presentationID)
+        }
+        let result = try execute(request.operation.rawValue, context)
+        let data = try JSONSerialization.data(withJSONObject: result)
+        guard !data.isEmpty, data.count <= 1024 else { throw HostWorkerError.invalidResponse }
+        if request.operation == .status {
+            _ = try HostTerminalUIStatus.decode(
+                data, presentationID: request.request.presentationID)
+        } else {
+            struct Reply: Decodable { let ok: Bool }
+            guard Set(result.allKeys.compactMap { $0 as? String }) == ["ok"] else {
+                throw HostWorkerError.invalidResponse
+            }
+            _ = try JSONDecoder().decode(Reply.self, from: data)
+        }
+        return data
+    }
 }
