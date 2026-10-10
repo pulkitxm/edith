@@ -7,6 +7,11 @@ const workflow = Bun.YAML.parse(
 const { plan, build, publish } = workflow.jobs;
 const text = (value) => JSON.stringify(value).replaceAll("\\n", "\n");
 
+test("release asset helper changes run the extension checks", () => {
+  expect(workflow.on.pull_request.paths).toContain("scripts/release-asset-*");
+  expect(workflow.on.push.paths).toContain("scripts/release-asset-*");
+});
+
 test("extension builds consume independent fingerprints without a feature framework host", () => {
   expect(plan.outputs.matrix).toContain("steps.plan.outputs.matrix");
   expect(text(plan)).toContain("extension-release-plan.mjs");
