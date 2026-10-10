@@ -47,6 +47,15 @@ final class ExtensionRuntime: NSObject {
             TextEditingCommands.install()
         case "view":
             guard worker != nil else { return ["ok": false] as NSDictionary }
+            if input["location"] as? String == "home" {
+                guard input["section"] as? String == "music",
+                    let data = input["tile"] as? Data, data.count <= 65_536,
+                    let tile = try? JSONDecoder().decode(SurfaceTile.self, from: data),
+                    tile.widget == .music
+                else { return ["ok": false] as NSDictionary }
+                return NSHostingController(
+                    rootView: ExtensionPageHost { MusicHomeScene(tile: tile) })
+            }
             return NSHostingController(rootView: ExtensionPageHost { MusicRootView() })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break

@@ -13,6 +13,7 @@ public final class AttentionExtensionController: NSObject {
     private var model: AttentionPageModel?
     private var favicon: FaviconService?
     private var surface: AttentionSurface?
+    private var repository: AttentionRepository?
     private var startup: Task<Void, Never>?
     private var stopped = false
     private var stoppingTask: Task<Void, Never>?
@@ -73,6 +74,7 @@ public final class AttentionExtensionController: NSObject {
             while self.activeCalls > 0 { await Task.yield() }
             try? self.database?.close()
             self.database = nil
+            self.repository = nil
         }
         stoppingTask = task
         Task {
@@ -116,6 +118,7 @@ public final class AttentionExtensionController: NSObject {
                 self.service = service
                 let repository = AttentionRepository(
                     eventSink: AttentionEventStore(store: database))
+                self.repository = repository
                 model = AttentionPageModel(repository: repository)
                 favicon = FaviconService(allowsNetwork: !fixture)
                 if fixture, try !AttentionEventStore(store: database).hasEvents() {
@@ -130,6 +133,19 @@ public final class AttentionExtensionController: NSObject {
             } catch { return ["ok": false, "message": error.localizedDescription] as NSDictionary }
         case "view":
             guard !stopped, let model else { return ["ok": false] as NSDictionary }
+            if input["location"] as? String == "home" {
+                guard input["section"] as? String == "focus", let repository,
+                    let data = input["tile"] as? Data, data.count <= 65_536,
+                    let tile = try? JSONDecoder().decode(SurfaceTile.self, from: data),
+                    tile.widget == .focus
+                else { return ["ok": false] as NSDictionary }
+                return NSHostingController(
+                    rootView: ExtensionPageHost {
+                        AttentionHomeFocusCard(tile: tile, repository: repository) { _ in
+                            ExtensionPresentation.showWindow()
+                        }
+                    })
+            }
             return NSHostingController(rootView: ExtensionPageHost { AttentionPage(model: model) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":

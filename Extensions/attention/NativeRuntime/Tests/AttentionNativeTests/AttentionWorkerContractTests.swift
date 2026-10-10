@@ -1,12 +1,99 @@
 import Foundation
 import Testing
 import EdithExtensionSupport
+import EdithExtensionUI
+import AppKit
+import SwiftUI
 
 @testable import AttentionNative
 
 @MainActor
 @Suite(.serialized)
 struct AttentionWorkerContractTests {
+    @Test func originalHomeFocusControlsWriteOnlyTheOwnedRepository() async throws {
+        let fixture = try AttentionWorkerFixture()
+        defer { fixture.remove() }
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
+            NSAccessibility.Attribute(rawValue: $0)
+        }
+        let previous = attributes.map { NSApp.accessibilityAttributeValue($0) }
+        for attribute in attributes { NSApp.accessibilitySetValue(true, forAttribute: attribute) }
+        defer {
+            for (attribute, value) in zip(attributes, previous) {
+                NSApp.accessibilitySetValue(value ?? false, forAttribute: attribute)
+            }
+        }
+        var opened = 0
+        var tile = SurfaceTile(.focus)
+        tile.focusMinutes = 25
+        let host = NSHostingView(rootView: AnyView(EmptyView()))
+        let window = AttentionHomeTestWindow(
+            contentRect: .init(x: -10000, y: -10000, width: 360, height: 260),
+            styleMask: .borderless, backing: .buffered, defer: false)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        func settle() async {
+            for _ in 0..<8 {
+                window.layoutIfNeeded(); host.layoutSubtreeIfNeeded()
+                try? await Task.sleep(for: .milliseconds(25))
+            }
+        }
+        func render(visible: Bool) async {
+            host.rootView = AnyView(
+                AttentionHomeFocusCard(
+                    tile: tile, repository: fixture.repository, open: { _ in opened += 1 }
+                )
+                .environment(\.windowVisible, visible)
+                .transaction { $0.animation = nil })
+            await settle()
+        }
+        await render(visible: true)
+        let start = try #require(find(host, label: "Start focus"))
+        _ = (start as AnyObject).accessibilityPerformPress?()
+        await settle()
+        #expect(fixture.repository.activeFocus()?.plannedDuration == 1500)
+        #expect(find(host, label: "Deep work") != nil)
+        #expect(find(host, label: "Finish") != nil)
+        let open = try #require(find(host, label: "Open Focus timer"))
+        _ = (open as AnyObject).accessibilityPerformPress?()
+        #expect(opened == 1)
+        tile.showActions = false
+        await render(visible: false)
+        #expect(find(host, label: "Start focus") == nil)
+        #expect(find(host, label: "Finish") == nil)
+        #expect(find(host, label: "Open Focus timer") == nil)
+        #expect(fixture.repository.activeFocus()?.plannedDuration == 1500)
+        tile.showActions = true
+        await render(visible: true)
+        let finish = try #require(find(host, label: "Finish"))
+        _ = (finish as AnyObject).accessibilityPerformPress?()
+        await settle()
+        #expect(fixture.repository.activeFocus() == nil)
+        #expect(find(host, label: "Start focus") != nil)
+        #expect(!NSScreen.screens.contains { $0.frame.intersects(window.frame) })
+        await fixture.service.stop()
+        try fixture.database.close()
+    }
+
+    private func find(_ node: NSObject, label: String, depth: Int = 0) -> NSObject? {
+        guard depth < 64 else { return nil }
+        if (node as AnyObject).accessibilityLabel?() == label { return node }
+        let selector = NSSelectorFromString("accessibilityValue")
+        if node.responds(to: selector),
+            node.perform(selector)?.takeUnretainedValue() as? String == label
+        {
+            return node
+        }
+        for child in (node as AnyObject).accessibilityChildren?() as? [NSObject] ?? [] {
+            if let found = find(child, label: label, depth: depth + 1) { return found }
+        }
+        for child in (node as? NSView)?.subviews ?? [] {
+            if let found = find(child, label: label, depth: depth + 1) { return found }
+        }
+        return nil
+    }
+
     @Test func sourceSelectionAndHiddenFieldsBoundTheRenderedActivity() async throws {
         let fixture = try AttentionWorkerFixture()
         defer { fixture.remove() }
@@ -118,6 +205,12 @@ struct AttentionWorkerContractTests {
         }
         await fixture.service.stop()
         try fixture.database.close()
+    }
+}
+
+private final class AttentionHomeTestWindow: NSWindow {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        frameRect
     }
 }
 

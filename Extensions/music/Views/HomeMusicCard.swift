@@ -9,13 +9,18 @@ struct HomeMusicCard: View {
     let dark: Bool
     @State private var remote: MusicRemote
     @State private var accounts: MusicAccounts
+    private let open: () -> Void
 
-    init(dark: Bool, remote: MusicRemote = .shared, accounts: MusicAccounts = .shared) {
+    init(
+        dark: Bool, remote: MusicRemote = .shared, accounts: MusicAccounts = .shared,
+        open: @escaping () -> Void = { ExtensionPresentation.showWindow() }
+    ) {
         self.dark = dark
         _remote = State(initialValue: remote)
         _accounts = State(initialValue: accounts)
+        self.open = open
     }
-    @ObservedObject private var visibility = WindowVisibility.shared
+    @Environment(\.windowVisible) private var visible
 
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
@@ -57,7 +62,7 @@ struct HomeMusicCard: View {
                 } else {
                     streaming
                 }
-                HomeMusicJumpLink(dark: dark)
+                HomeMusicJumpLink(dark: dark, open: open)
             }
         }
         .onAppear {
@@ -141,7 +146,7 @@ struct HomeMusicCard: View {
                     .foregroundStyle(DashSkin.ink(dark))
                     .presenterBlur(blur)
                 if presentation?.tile.shows("progress") != false {
-                    if remote.isPlaying, visibility.visible {
+                    if remote.isPlaying, visible, automaticActionsEnabled {
                         TimelineView(.periodic(from: MusicTick.epoch, by: 1)) { _ in
                             elapsedText
                         }
@@ -162,6 +167,7 @@ struct HomeMusicCard: View {
                         .foregroundStyle(theme)
                 }
                 .buttonStyle(.edith(.toolbar))
+                .accessibilityLabel("Play or pause music")
                 Button {
                     remote.next()
                 } label: {
@@ -170,6 +176,7 @@ struct HomeMusicCard: View {
                         .foregroundStyle(theme)
                 }
                 .buttonStyle(.edith(.toolbar))
+                .accessibilityLabel("Next music track")
             }
         }
     }
@@ -254,12 +261,11 @@ struct MusicHomeScene: View {
 private struct HomeMusicJumpLink: View {
     @Environment(\.surfacePresentation) private var presentation
     let dark: Bool
+    let open: () -> Void
 
     var body: some View {
         if presentation?.tile.showActions != false {
-            Button {
-                ExtensionPresentation.showWindow()
-            } label: {
+            Button(action: open) {
                 HStack(spacing: UIScale.pt(4)) {
                     Text("Open Music")
                     Image(systemName: "arrow.right")
