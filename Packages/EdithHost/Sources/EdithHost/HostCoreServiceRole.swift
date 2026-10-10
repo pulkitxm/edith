@@ -95,8 +95,10 @@ import Foundation
         switch request.operation {
         case .status: return runtime.snapshot()
         case .inspect: return try await runtime.inspect()
+        case .synchronize: return try await runtime.synchronizeSettings()
+        case .restore: return try await runtime.synchronizeSettings(restoreOnly: true)
         case .stop: await runtime.shutdown(); return runtime.snapshot()
-        case .synchronize, .start, .cancel: throw HostWorkerError.rejected
+        case .start, .cancel: throw HostWorkerError.rejected
         }
     }
 

@@ -1,4 +1,5 @@
 import Darwin
+import EdithExtensionSupport
 import Foundation
 import Testing
 
@@ -76,6 +77,40 @@ import Testing
 }
 
 @Suite @MainActor struct HostCoreRuntimeTests {
+    @Test func settingsBackupPersistsActualCompletionAndFailureAcrossRestarts() async throws {
+        let directory = try fixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let identity = try HostIdentity(
+            identifier: "com.pulkit.edith.tests.core-" + UUID().uuidString,
+            supportDirectory: directory)
+        let application = try #require(
+            SharedDefaults.applicationStore(identifier: identity.identifier))
+        defer { application.removePersistentDomain(forName: identity.identifier) }
+        application.set("synthetic", forKey: AppStorageKeys.General.theme)
+        let cloud = directory.appendingPathComponent("cloud")
+        let runtime = try HostCoreRuntime(identity: identity, cloudDirectory: cloud)
+        let completed = try await runtime.synchronizeSettings()
+        #expect(completed.settingsBackup?.exported == true)
+        #expect(completed.tasks.last?.phase == .completed)
+        #expect(completed.tasks.last?.finishedAt != nil)
+        #expect(
+            FileManager.default.fileExists(
+                atPath: cloud.appendingPathComponent("settings.json").path))
+        await runtime.shutdown()
+        let reopened = try HostCoreRuntime(identity: identity, cloudDirectory: cloud)
+        #expect(reopened.snapshot().tasks.last?.id == completed.tasks.last?.id)
+        try Data("invalid".utf8).write(to: cloud.appendingPathComponent("settings.json"))
+        await #expect(throws: (any Error).self) {
+            try await reopened.synchronizeSettings(restoreOnly: true)
+        }
+        #expect(reopened.snapshot().tasks.last?.phase == .failed)
+        #expect(application.string(forKey: AppStorageKeys.General.theme) == "synthetic")
+        await reopened.shutdown()
+        let failed = try HostCoreRuntime(identity: identity, cloudDirectory: cloud)
+        #expect(failed.snapshot().tasks.last?.phase == .failed)
+        await failed.shutdown()
+    }
+
     @Test func realInspectionPersistsTasksAndReopensTheJournal() async throws {
         let directory = try fixture()
         defer { try? FileManager.default.removeItem(at: directory) }
