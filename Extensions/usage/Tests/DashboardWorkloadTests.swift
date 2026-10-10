@@ -155,6 +155,9 @@ import Testing
         #expect(!model.loaded)
         #expect(model.homeUsage.calendarDays.map(\.id) == ["2026-01-01"])
         #expect(model.homeUsage.heatDetail["2026-01-01"]?.tokens == 9)
+        #expect(model.heatDetail["2026-01-01"]?.tokens == 9)
+        #expect(model.heatDetail["2026-01-01"]?.cost == 2)
+        #expect(model.heatDetail["2026-01-01"]?.models.map(\.name) == ["Cached"])
 
         model.ingest(try usage())
         #expect(model.loaded)

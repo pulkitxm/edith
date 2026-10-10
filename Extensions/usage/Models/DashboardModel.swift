@@ -697,6 +697,7 @@ final class DashboardModel {
         guard !homeUsage.hasDays else { return }
         guard let cached = await homeUsageStore.load(), cached.hasDays else { return }
         homeUsage = cached
+        heatDetail = cached.heatDetail
     }
 
     private func persistHomeUsage() {
