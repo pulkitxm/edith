@@ -25,6 +25,8 @@ public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
     }
 }
 
+private final class HostIndexResourceAnchor: NSObject {}
+
 public enum HostIndex {
     public static func load(data: Data) throws -> [HostExtension] {
         let entries = try JSONDecoder().decode([HostExtension].self, from: data)
@@ -39,11 +41,49 @@ public enum HostIndex {
     }
 
     public static func bundled() throws -> [HostExtension] {
-        let bundle = Bundle.main.bundleURL.pathExtension == "app" ? Bundle.main : Bundle.module
-        guard let url = bundle.url(forResource: "index", withExtension: "json") else {
+        guard let executableURL = Bundle.main.executableURL else {
             throw CocoaError(.fileNoSuchFile)
         }
+        let main = Bundle.main.bundleURL
+        let owner = Bundle(for: HostIndexResourceAnchor.self).bundleURL
+        let bundle =
+            !["app", "appex"].contains(main.pathExtension)
+                && owner.pathExtension == "xctest" ? owner : main
+        let url = try resourceURL(bundleURL: bundle, executableURL: executableURL)
         return try load(data: Data(contentsOf: url))
+    }
+
+    static func resourceURL(bundleURL: URL, executableURL: URL) throws -> URL {
+        let resource: URL
+        if ["app", "appex"].contains(bundleURL.pathExtension) {
+            resource = bundleURL.appendingPathComponent("Contents/Resources/index.json")
+        } else {
+            var directory = executableURL.deletingLastPathComponent()
+            if bundleURL.pathExtension == "xctest" {
+                directory = bundleURL.deletingLastPathComponent()
+            } else {
+                for _ in 0..<3 {
+                    if directory.pathExtension == "xctest" {
+                        directory = directory.deletingLastPathComponent()
+                        break
+                    }
+                    if directory.lastPathComponent != "MacOS"
+                        && directory.lastPathComponent != "Contents"
+                    {
+                        break
+                    }
+                    directory.deleteLastPathComponent()
+                }
+            }
+            resource = directory.appendingPathComponent("EdithHost_EdithHostCore.bundle/index.json")
+        }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: resource.path, isDirectory: &isDirectory),
+            !isDirectory.boolValue
+        else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        return resource
     }
 }
 
