@@ -17,6 +17,7 @@ final class ExtensionRuntime: NSObject {
     private var logEngine: MachineLogEngine?
     private var terminalEngine: MachineTerminalEngine?
     private var uiEngine: MachineUIEngine?
+    private var windowNavigation: MachineHostWindowNavigationClient?
     private var uiClient: MachineUIClient?
     private var health: MachineHealthLifecycle?
     private let commands = ExtensionCommandRegistry()
@@ -222,6 +223,10 @@ final class ExtensionRuntime: NSObject {
                     try await terminals.broadcast(machineID: id, plan: plan, requestID: requestID)
                 }
                 MachinesCLIEnvironment.undo = { id in try await files.undo(machineID: id) }
+                let windowNavigation = (input["hostNavigation"] as? NSObject).flatMap {
+                    MachineHostWindowNavigationClient(bridge: $0)
+                }
+                self.windowNavigation = windowNavigation
                 uiEngine = MachineUIEngine(
                     session: { id in
                         guard MachinesModel.shared.knows(id) else {
@@ -259,6 +264,13 @@ final class ExtensionRuntime: NSObject {
                     observe: { _, active in
                         if active, !fixture { MachinesModel.shared.reconcileSSHClipboards() }
                     }, files: { value in try await files.execute(value) },
+                    openWindow: { request in
+                        guard let windowNavigation else {
+                            throw MachineUIFailure(
+                                message: "The owning app window bridge is unavailable.")
+                        }
+                        try await windowNavigation.open(request)
+                    },
                     directoryExport: { value in try await directoryExport.execute(value) },
                     preview: { value in try await previews.execute(value) },
                     logs: { value in try logs.execute(value) },
@@ -319,6 +331,7 @@ final class ExtensionRuntime: NSObject {
     }
     private func shutdown() async {
         running = false
+        windowNavigation?.invalidate(); windowNavigation = nil
         await uiEngine?.shutdown(); uiEngine = nil
         await filesEngine?.shutdownAndWait(); filesEngine = nil
         previewEngine?.shutdown(); previewEngine = nil
