@@ -1,0 +1,142 @@
+import { expect, test } from "bun:test";
+import { createPublicKey, verify } from "node:crypto";
+import {
+  admitHostedJourney,
+  journeyEnvelope,
+} from "./hosted-original-shell/prepare-journey.mjs";
+
+const identifier =
+  "com.pulkit.edith.tests.remote-00000000-0000-4000-8000-000000000001";
+const directory =
+  "/Users/fixture/Applications/Edith Remote Fixture Journey 00000000-0000-4000-8000-000000000001";
+const environment = {
+  GITHUB_ACTIONS: "true",
+  RUNNER_OS: "macOS",
+  RUNNER_ENVIRONMENT: "github-hosted",
+  EDITH_HOSTED_SHELL_JOURNEY: "1",
+};
+
+test("journey preparation rejects local runners and any unowned application namespace before signing or building", () => {
+  admitHostedJourney(environment, directory, identifier, "/Users/fixture");
+  for (const key of Object.keys(environment))
+    expect(() =>
+      admitHostedJourney(
+        { ...environment, [key]: "false" },
+        directory,
+        identifier,
+        "/Users/fixture",
+      ),
+    ).toThrow();
+  expect(() =>
+    admitHostedJourney(
+      environment,
+      directory,
+      "com.pulkit.edith",
+      "/Users/fixture",
+    ),
+  ).toThrow();
+  expect(() =>
+    admitHostedJourney(
+      environment,
+      `${directory}/../other`,
+      identifier,
+      "/Users/fixture",
+    ),
+  ).toThrow();
+  expect(() =>
+    admitHostedJourney(environment, directory, identifier, "/Users/other"),
+  ).toThrow();
+});
+
+test("isolated catalog versions are signed envelopes with distinct monotonic revisions", () => {
+  const packages = [
+    { id: "calendar", version: "1.0.0" },
+    { id: "calendar", version: "1.1.0" },
+  ];
+  const first = journeyEnvelope(packages.slice(0, 1), 1);
+  const next = journeyEnvelope(packages, 2);
+  const seed = Buffer.alloc(32, 90);
+  const key = createPublicKey({
+    key: Buffer.concat([
+      Buffer.from("302e020100300506032b657004220420", "hex"),
+      seed,
+    ]),
+    format: "der",
+    type: "pkcs8",
+  });
+  for (const [revision, envelope] of [
+    [1, first],
+    [2, next],
+  ]) {
+    const payload = Buffer.from(envelope.payload, "base64");
+    expect(
+      verify(null, payload, key, Buffer.from(envelope.signature, "base64")),
+    ).toBe(true);
+    expect(JSON.parse(payload.toString()).revision).toBe(revision);
+    expect(JSON.parse(payload.toString()).packages.length).toBe(revision);
+    expect(
+      verify(
+        null,
+        Buffer.concat([payload, Buffer.from("x")]),
+        key,
+        Buffer.from(envelope.signature, "base64"),
+      ),
+    ).toBe(false);
+  }
+  expect(() => journeyEnvelope(packages, 1)).toThrow();
+});
+
+test("test plan construction uses original journey sources and rejects ambient SSH injection", async () => {
+  const { mkdtemp, readFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { writeUIProject, configureUITestRun } = await import(
+    "./hosted-original-shell/ui-project.mjs"
+  );
+  const directory = await mkdtemp(join(tmpdir(), "edith-shell-plan-"));
+  try {
+    const project = await writeUIProject(directory, {
+      EDITH_HOSTED_SHELL_JOURNEY: "1",
+    });
+    const source = await readFile(join(project, "project.pbxproj"), "utf8");
+    expect(source).toContain(
+      "Tests/HostedOriginalShell/UITests/OriginalShellJourneyTests.swift",
+    );
+    expect(source).toContain(
+      "Tests/HostedOriginalShell/Sources/JourneyContract/JourneyContract.swift",
+    );
+    expect(source).not.toContain("HostedManagedNativeProbe");
+    expect(() =>
+      configureUITestRun(join(directory, "missing-plan"), {
+        SSH_AUTH_SOCK: "/ambient/socket",
+      }),
+    ).toThrow();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("runner proof admission includes every actual XCTest user interaction stage in order", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const testSource = await readFile(
+    "Tests/HostedOriginalShell/UITests/OriginalShellJourneyTests.swift",
+    "utf8",
+  );
+  const runner = await readFile(
+    "scripts/hosted-original-shell/run-journey.mjs",
+    "utf8",
+  );
+  const emitted = [
+    ...testSource.matchAll(/try (?:waitState|capture)\("([^"\n]+)"/g),
+  ].map((match) => match[1]);
+  const expected = runner
+    .split("proof.snapshots.map((item) => item.stage),")[1]
+    ?.split("],")[0];
+  expect(expected).toBeDefined();
+  const admitted = [...expected.matchAll(/"([^"\n]+)"/g)].map(
+    (match) => match[1],
+  );
+  expect(admitted).toEqual(emitted);
+  expect(emitted.length).toBe(13);
+  expect(new Set(emitted).size).toBe(emitted.length);
+});

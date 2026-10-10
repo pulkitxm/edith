@@ -6,6 +6,11 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      hosted_shell_journey_sha:
+        description: "Reviewed synthetic original shell journey commit."
+        type: string
+        required: false
+        default: ""
       release:
         description: "Run every product check, then cut a release from main."
         type: boolean
@@ -31,12 +36,22 @@ permissions:
   contents: read
 
 jobs:
+  hosted-original-shell:
+    if: github.event_name == 'workflow_dispatch' && inputs.hosted_shell_journey_sha != '' && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && github.ref == 'refs/heads/feat/hosted-original-shell-journey' && inputs.hosted_shell_journey_sha == github.sha
+    uses: ./.github/workflows/hosted-original-shell.yml
+    with:
+      expected_sha: ${{ inputs.hosted_shell_journey_sha }}
+    secrets:
+      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+
   changes:
     name: changes
     if: >-
-      github.event_name != 'push'
+      !(github.event_name == 'workflow_dispatch' && inputs.hosted_shell_journey_sha != '')
+      && (github.event_name != 'push'
       || (!startsWith(github.event.head_commit.message, 'Release v')
-      && !startsWith(github.event.head_commit.message, 'Refresh the contributor list'))
+      && !startsWith(github.event.head_commit.message, 'Refresh the contributor list')))
     runs-on: ubuntu-latest
     outputs:
       swift: ${{ steps.areas.outputs.swift }}
