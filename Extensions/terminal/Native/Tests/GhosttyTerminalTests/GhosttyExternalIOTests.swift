@@ -65,9 +65,15 @@ import Testing
         for _ in 0..<30 { try await Task.sleep(for: .milliseconds(10)) }
         #expect(writes == Data("user-bytes".utf8))
         #expect(view.selectedText()?.contains("user-bytes") == false)
+        #expect(!NSApp.isActive)
         #expect(view.setTermios(canonical: true, echo: false))
+        #expect(view.secureInputRequested)
         #expect(view.setTermios(canonical: false, echo: false))
+        #expect(!view.secureInputRequested)
+        #expect(view.setTermios(canonical: true, echo: false))
+        #expect(view.secureInputRequested)
         #expect(view.processExited(9))
+        #expect(!view.secureInputRequested)
         let count = sizes.count
         _ = view.insertText("ignored")
         view.setFrameSize(NSSize(width: 800, height: 600))
@@ -107,4 +113,42 @@ import Testing
         for _ in 0..<10 { await Task.yield() }
         #expect(delivered == 0 && failed == 1)
     }
+    @Test func originalPaneBindingsAndFontZoomStayNativeWithoutNewProcesses() async throws {
+        #expect(renderer_audit_probe())
+        renderer_audit_begin()
+        defer { renderer_audit_end() }
+        var actions: [GhosttyPaneAction] = []
+        let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400))
+        var io: GhosttyExternalIO? = TestWindowHost.inertIO()
+        weak var releasedIO = io
+        let view = GhosttyTerminalView(externalIO: try #require(io))
+        io = nil
+        view.onPaneAction = { actions.append($0) }
+        view.frame = window.contentLayoutRect
+        window.contentView = view
+        defer { view.shutdown(); window.contentView = nil }
+        let surface = try #require(view.surface)
+        let before = ghostty_surface_size(surface)
+        #expect(view.fontZoom(.increase))
+        try await Task.sleep(for: .milliseconds(100))
+        let enlarged = ghostty_surface_size(surface)
+        #expect(enlarged.cell_height_px > before.cell_height_px)
+        #expect(view.fontZoom(.reset))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(ghostty_surface_size(surface).cell_height_px == before.cell_height_px)
+        #expect(view.performBindingAction("new_split:right"))
+        #expect(view.performBindingAction("goto_split:next"))
+        for _ in 0..<10 { await Task.yield() }
+        #expect(actions == [.split(.right), .focus(.next)])
+        view.setHostWindowState(active: false, key: true)
+        #expect(!view.owningApplicationActive && view.owningWindowKey)
+        _ = view.performBindingAction("new_split:down")
+        view.shutdown()
+        for _ in 0..<10 { await Task.yield() }
+        #expect(actions == [.split(.right), .focus(.next)])
+        #expect(releasedIO == nil)
+        #expect(renderer_audit_process_calls() == 0 && renderer_audit_pty_calls() == 0)
+        #expect(TestWindowHost.exposedWindows.isEmpty)
+    }
+
 }

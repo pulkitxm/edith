@@ -23,17 +23,21 @@ import Observation
     private var offset: UInt64 = 0
     private let client: TerminalRemoteClient
     private let onClose: @MainActor () -> Void
+    private let onPaneAction: @MainActor (GhosttyPaneAction) -> Void
+    private var hostWindowState: (active: Bool, key: Bool)?
     var fontSize = TerminalSettings.fontSizeDefault
     var generation: UUID { session.generation }
     var started: Bool { !stopped && error == nil }
 
     init(
         session: TerminalEngine.Session, client: TerminalRemoteClient,
-        onClose: @escaping @MainActor () -> Void
+        onClose: @escaping @MainActor () -> Void,
+        onPaneAction: @escaping @MainActor (GhosttyPaneAction) -> Void = { _ in }
     ) {
         self.session = session
         self.client = client
         self.onClose = onClose
+        self.onPaneAction = onPaneAction
         currentTitle = session.title
         currentWorkingDirectory = session.directory
     }
@@ -80,6 +84,13 @@ import Observation
         let view = GhosttyTerminalView(
             externalIO: io, workingDirectory: session.directory, theme: theme)
         ghosttyView = view
+        if let hostWindowState {
+            view.setHostWindowState(active: hostWindowState.active, key: hostWindowState.key)
+        }
+        view.onPaneAction = { [weak self] action in
+            guard let self, !self.stopped, self.generation == generation else { return }
+            self.onPaneAction(action)
+        }
         view.onClose = { [weak self] _ in
             guard let self, !self.stopped, self.generation == generation else { return }
             let completion = self.closeCompletion
@@ -98,6 +109,11 @@ import Observation
         }
         view.onReady = { [weak self] in self?.startReading(generation: generation) }
         return view
+    }
+
+    func setHostWindowState(active: Bool, key: Bool) {
+        hostWindowState = (active, key)
+        ghosttyView?.setHostWindowState(active: active, key: key)
     }
 
     private func startReading(generation: UUID) {

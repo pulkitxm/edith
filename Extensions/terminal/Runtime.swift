@@ -11,6 +11,7 @@ final class ExtensionRuntime: NSObject {
     private struct Presentation {
         let model: TerminalTabsModel
         var controller: NSViewController?
+        var events: TerminalUIEventTracker
     }
     private var presentations: [UUID: Presentation] = [:]
     private let commands = ExtensionCommandRegistry()
@@ -78,7 +79,8 @@ final class ExtensionRuntime: NSObject {
             }
             presentations[id]?.model.stopAll()
             presentations[id] = Presentation(
-                model: TerminalTabsModel(client: TerminalRemoteClient(client: client)))
+                model: TerminalTabsModel(client: TerminalRemoteClient(client: client)),
+                events: TerminalUIEventTracker(presentationID: id))
             TextEditingCommands.install()
         case "view":
             guard let value = input["presentationID"] as? String, let id = UUID(uuidString: value),
@@ -93,6 +95,24 @@ final class ExtensionRuntime: NSObject {
             presentation.controller = controller
             presentations[id] = presentation
             return controller
+        case "terminalUI":
+            guard let data = input["payload"] as? Data,
+                let value = input["presentationID"] as? String, let id = UUID(uuidString: value),
+                var presentation = presentations[id],
+                let event = try? presentation.events.accept(data)
+            else { return ["ok": false] as NSDictionary }
+            presentations[id] = presentation
+            return ["ok": presentation.model.applyUIEvent(event)] as NSDictionary
+        case "terminalUIStatus":
+            guard let value = input["presentationID"] as? String, let id = UUID(uuidString: value),
+                let presentation = presentations[id]
+            else { return ["ok": false] as NSDictionary }
+            return [
+                "ok": true,
+                "focused": presentation.model.selectedTab?.holder.ghosttyView?.hasInputFocus
+                    == true,
+                "presentationID": id.uuidString,
+            ] as NSDictionary
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":
             for presentation in presentations.values { presentation.model.synchronize() }

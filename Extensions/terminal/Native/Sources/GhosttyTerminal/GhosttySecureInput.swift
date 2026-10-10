@@ -10,6 +10,7 @@ final class GhosttySecureInput: NSObject {
     private let center: NotificationCenter
     private let transition: Transition
     private var scoped: [ObjectIdentifier: Bool] = [:]
+    private var hostActive: [ObjectIdentifier: Bool] = [:]
     private var applicationActive: Bool
     private(set) var enabled = false
 
@@ -38,22 +39,23 @@ final class GhosttySecureInput: NSObject {
         if enabled { _ = transition(false) }
     }
 
-    func setScoped(_ object: ObjectIdentifier, focused: Bool) {
+    func setScoped(_ object: ObjectIdentifier, focused: Bool, applicationActive: Bool? = nil) {
         scoped[object] = focused
+        hostActive[object] = applicationActive
         apply()
     }
 
     func removeScoped(_ object: ObjectIdentifier) {
         scoped[object] = nil
+        hostActive[object] = nil
         apply()
     }
 
     private var desired: Bool {
-        scoped.values.contains(true)
+        scoped.contains { object, focused in focused && (hostActive[object] ?? applicationActive) }
     }
 
     private func apply() {
-        guard applicationActive else { return }
         let desired = desired
         guard enabled != desired else { return }
         if transition(desired) { enabled = desired }
@@ -61,8 +63,7 @@ final class GhosttySecureInput: NSObject {
 
     @objc private func applicationDidResign() {
         applicationActive = false
-        guard enabled, transition(false) else { return }
-        enabled = false
+        apply()
     }
 
     @objc private func applicationDidBecomeActive() {

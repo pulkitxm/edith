@@ -122,7 +122,7 @@ extension GhosttyTerminalView {
         window.makeFirstResponder(self)
         guard
             Self.shouldConsumeFocusClick(
-                appActive: NSApp.isActive, keyWindow: window.isKeyWindow,
+                appActive: owningApplicationActive, keyWindow: owningWindowKey,
                 focused: focused, hitSurface: true,
                 activatesTerminalLink: activatesTerminalLink)
         else { return event }

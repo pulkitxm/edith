@@ -5,6 +5,8 @@ public final class GhosttyTerminalView: NSView {
     public var onClose: ((Int32?) -> Void)?
     public var onDropFiles: ((TerminalDropPayload) -> Bool)?
     public var onFocus: (() -> Void)?
+    public var onFocusChange: ((Bool) -> Void)?
+    public var onPaneAction: ((GhosttyPaneAction) -> Void)?
     public var onTitleChange: ((String) -> Void)?
     public var onWorkingDirectoryChange: ((String) -> Void)?
     public var onReady: (() -> Void)?
@@ -23,7 +25,9 @@ public final class GhosttyTerminalView: NSView {
     private var pendingExitCode: Int32?
     private var drawScheduled = false
     private(set) var renderingActive = true
-    private var secureInputRequested = false
+    private(set) var secureInputRequested = false
+    private var hostApplicationActive: Bool?
+    private var hostWindowKey: Bool?
     var terminalCursor = NSCursor.iBeam
     var mouseOverSurface = false
     var commandClickOpenedTarget = false
@@ -180,6 +184,8 @@ public final class GhosttyTerminalView: NSView {
         closed = true
         removeWindowObservers()
         externalIO?.invalidate()
+        onFocusChange?(false)
+        GhosttyRuntime.shared.setHostFocus(ObjectIdentifier(self), active: nil)
         if let surface {
             GhosttyRuntime.shared.drainPendingWork()
             ghostty_surface_free(surface)
@@ -412,7 +418,8 @@ public final class GhosttyTerminalView: NSView {
 
     private func syncFocus() {
         let focused = Self.shouldFocus(
-            active: renderingActive, keyWindow: window?.isKeyWindow == true,
+            active: renderingActive && (hostApplicationActive ?? true),
+            keyWindow: hostWindowKey ?? (window?.isKeyWindow == true),
             firstResponder: window?.firstResponder === self)
         if !focused { suppressNextLeftMouseUp = false }
         if let surface { ghostty_surface_set_focus(surface, focused) }
@@ -432,14 +439,16 @@ public final class GhosttyTerminalView: NSView {
         }
         syncSecureInput(
             focused: Self.shouldFocus(
-                active: renderingActive, keyWindow: window?.isKeyWindow == true,
+                active: renderingActive && (hostApplicationActive ?? true),
+                keyWindow: hostWindowKey ?? (window?.isKeyWindow == true),
                 firstResponder: window?.firstResponder === self))
     }
 
     private func syncSecureInput(focused: Bool) {
         let identifier = ObjectIdentifier(self)
         if secureInputRequested {
-            GhosttySecureInput.shared.setScoped(identifier, focused: focused)
+            GhosttySecureInput.shared.setScoped(
+                identifier, focused: focused, applicationActive: hostApplicationActive)
         } else {
             GhosttySecureInput.shared.removeScoped(identifier)
         }
@@ -457,6 +466,41 @@ public final class GhosttyTerminalView: NSView {
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         ghostty_surface_set_color_scheme(
             surface, dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
+    }
+
+    var owningApplicationActive: Bool { hostApplicationActive ?? NSApp.isActive }
+    var owningWindowKey: Bool { hostWindowKey ?? (window?.isKeyWindow == true) }
+
+    public var hasInputFocus: Bool {
+        !closed && renderingActive && window?.firstResponder === self
+    }
+
+    public func setHostWindowState(active: Bool, key: Bool) {
+        guard !closed else { return }
+        hostApplicationActive = active
+        hostWindowKey = key
+        GhosttyRuntime.shared.setHostFocus(ObjectIdentifier(self), active: active)
+        syncFocus()
+        onFocusChange?(hasInputFocus && active && key)
+    }
+
+    @discardableResult
+    public func fontZoom(_ action: GhosttyFontZoom) -> Bool {
+        guard !closed else { return false }
+        switch action {
+        case .increase: return performBindingAction("increase_font_size:1")
+        case .decrease: return performBindingAction("decrease_font_size:1")
+        case .reset: return performBindingAction("reset_font_size")
+        }
+    }
+
+    func dispatchPaneAction(_ action: GhosttyPaneAction) -> Bool {
+        guard !closed, onPaneAction != nil else { return false }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.closed else { return }
+            self.onPaneAction?(action)
+        }
+        return true
     }
 
     static func shouldRender(active: Bool, hidden: Bool, windowVisible: Bool) -> Bool {
@@ -481,9 +525,12 @@ public final class GhosttyTerminalView: NSView {
 
     public override func becomeFirstResponder() -> Bool {
         guard super.becomeFirstResponder() else { return false }
-        let focused = renderingActive && window?.isKeyWindow == true
+        let focused =
+            renderingActive && (hostWindowKey ?? (window?.isKeyWindow == true))
+            && (hostApplicationActive ?? true)
         if let surface { ghostty_surface_set_focus(surface, focused) }
         syncSecureInput(focused: focused)
+        onFocusChange?(hasInputFocus)
         onFocus?()
         return true
     }
@@ -494,6 +541,7 @@ public final class GhosttyTerminalView: NSView {
         cancelSelectionGesture()
         if let surface { ghostty_surface_set_focus(surface, false) }
         syncSecureInput(focused: false)
+        onFocusChange?(false)
         return true
     }
 }

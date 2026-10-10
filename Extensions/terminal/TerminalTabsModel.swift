@@ -1,4 +1,5 @@
 import Foundation
+import GhosttyTerminal
 import Observation
 
 struct TerminalBroadcastPlan: Equatable, Sendable {
@@ -66,6 +67,7 @@ struct TerminalBroadcastDelivery: Equatable, Sendable {
     private var actions: [UUID: Task<Void, Never>] = [:]
     private var didEnsureFirstTab = false
     private var preferenceRevision = 0
+    private var hostWindowState: (active: Bool, key: Bool)?
 
     init(client: TerminalRemoteClient) { self.client = client }
 
@@ -107,14 +109,40 @@ struct TerminalBroadcastDelivery: Equatable, Sendable {
                 previous.holder.fontSize = settings.fontSize
                 return previous
             }
-            let holder = TerminalSessionHolder(session: session, client: client) { [weak self] in
-                self?.closeTab(session.id, confirm: false)
+            let holder = TerminalSessionHolder(
+                session: session, client: client,
+                onClose: { [weak self] in self?.closeTab(session.id, confirm: false) },
+                onPaneAction: { [weak self] action in
+                    guard let self else { return }
+                    switch action {
+                    case .newTab: self.addTab()
+                    case let .selectTab(index):
+                        if index == -1 {
+                            self.selectNext(backwards: true)
+                        } else if index == -2 {
+                            self.selectNext(backwards: false)
+                        } else if index == -3, let last = self.tabs.last {
+                            self.select(last.id)
+                        } else if index > 0, Int(index) <= self.tabs.count {
+                            self.select(self.tabs[Int(index) - 1].id)
+                        }
+                    default: break
+                    }
+                })
+            if let hostWindowState {
+                holder.setHostWindowState(active: hostWindowState.active, key: hostWindowState.key)
             }
             holder.fontSize = settings.fontSize
             return Tab(id: session.id, holder: holder)
         }
         selected = sessions.first(where: \.selected)?.id
         error = client.error
+    }
+
+    func applyHostWindowState(active: Bool, key: Bool) {
+        guard !stopped else { return }
+        hostWindowState = (active, key)
+        for tab in tabs { tab.holder.setHostWindowState(active: active, key: key) }
     }
 
     func addTab() {
