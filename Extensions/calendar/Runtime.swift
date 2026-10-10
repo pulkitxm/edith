@@ -182,6 +182,7 @@ final class ExtensionRuntime: NSObject {
     }
 }
 
+#if !SWIFT_PACKAGE
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
@@ -189,6 +190,7 @@ public func createExtension() -> UnsafeMutableRawPointer? {
             UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
         })
 }
+#endif
 
 struct CalendarFixtureAdmission {
     let home: URL
