@@ -1,6 +1,7 @@
 import Darwin
 import EdithExtensionSupport
 import Foundation
+import IOKit.ps
 
 @MainActor final class MusicBackupProvider {
     static let restorePendingKey = "restorePending.music"
@@ -17,12 +18,17 @@ import Foundation
     private var observedCloudEnabled = false
     private var needsRestore = false
     private let cloudAvailable: () -> Bool
+    private let onBattery: () -> Bool
+    private let sleep: @Sendable (Duration) async throws -> Void
     private(set) var failure: String?
 
     init(
         directory: @escaping @MainActor () -> URL, ownedDirectory: URL, cloud: URL,
         applicationDefaults: UserDefaults, defaults: UserDefaults,
-        cloudAvailable: @escaping () -> Bool = { true }
+        cloudAvailable: @escaping () -> Bool = { true }, onBattery: @escaping () -> Bool,
+        sleep: @escaping @Sendable (Duration) async throws -> Void = {
+            try await Task.sleep(for: $0)
+        }
     ) {
         self.directory = directory
         self.ownedDirectory = ownedDirectory
@@ -30,6 +36,14 @@ import Foundation
         self.applicationDefaults = applicationDefaults
         self.defaults = defaults
         self.cloudAvailable = cloudAvailable
+        self.onBattery = onBattery
+        self.sleep = sleep
+    }
+
+    private static func isOnBattery() -> Bool {
+        guard let sources = IOPSCopyPowerSourcesInfo()?.takeRetainedValue() else { return false }
+        return IOPSGetProvidingPowerSourceType(sources).takeUnretainedValue() as String
+            == kIOPMBatteryPowerKey
     }
 
     static func live(environment: [String: String] = ProcessInfo.processInfo.environment) throws
@@ -50,6 +64,9 @@ import Foundation
                 identifier != "com.pulkit.edith"
                     || FileManager.default.fileExists(
                         atPath: cloud.deletingLastPathComponent().deletingLastPathComponent().path)
+            },
+            onBattery: {
+                environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil && Self.isOnBattery()
             })
     }
 
@@ -82,6 +99,7 @@ import Foundation
         case "backup.status":
             return try JSONSerialization.data(withJSONObject: [
                 "running": work != nil, "scheduled": events?.scheduled ?? false,
+                "pausedOnBattery": events?.pausedOnBattery ?? false,
                 "failure": failure as Any? ?? NSNull(),
                 "restorePending": defaults.integer(forKey: Self.restorePendingKey),
             ])
@@ -117,7 +135,7 @@ import Foundation
         observedCloudEnabled = cloudEnabled
         needsRestore = restorePending && cloudEnabled
         events = MusicBackupEventQueue(
-            debounce: debounce,
+            debounce: debounce, onBattery: onBattery, sleep: sleep,
             enabled: { [weak self] in
                 guard let self else { return false }
                 return cloudEnabled && (exportEnabled || needsRestore)
@@ -320,6 +338,8 @@ import Foundation
 
 @MainActor final class MusicBackupEventQueue {
     private let enabled: () -> Bool
+    private let onBattery: () -> Bool
+    private let sleep: @Sendable (Duration) async throws -> Void
     private let transfer: () async throws -> Void
     private let debounce: Duration
     private let retry: Duration
@@ -328,15 +348,21 @@ import Foundation
     private var cancelling = false
     private var deadline = ContinuousClock.now
     private var task: Task<Void, Never>?
+    private(set) var pausedOnBattery = false
     var scheduled: Bool { pending || task != nil }
 
     init(
-        debounce: Duration, retry: Duration = .seconds(3), enabled: @escaping () -> Bool,
+        debounce: Duration, retry: Duration = .seconds(3), onBattery: @escaping () -> Bool,
+        sleep: @escaping @Sendable (Duration) async throws -> Void = {
+            try await Task.sleep(for: $0)
+        }, enabled: @escaping () -> Bool,
         transfer: @escaping () async throws -> Void
     ) {
         self.debounce = max(.zero, debounce)
         self.retry = max(.milliseconds(1), retry)
         self.enabled = enabled
+        self.onBattery = onBattery
+        self.sleep = sleep
         self.transfer = transfer
     }
 
@@ -350,12 +376,19 @@ import Foundation
             guard let self else { return }
             defer {
                 task = nil
+                pausedOnBattery = false
                 if pending, !stopping, enabled() { changed() }
             }
             while pending, !stopping, enabled(), !Task.isCancelled {
+                if onBattery() {
+                    pausedOnBattery = true
+                    do { try await sleep(.seconds(60)) } catch { return }
+                    continue
+                }
+                pausedOnBattery = false
                 let delay = ContinuousClock.now.duration(to: deadline)
                 if delay > .zero {
-                    do { try await Task.sleep(for: delay) } catch { return }
+                    do { try await sleep(delay) } catch { return }
                     continue
                 }
                 pending = false
