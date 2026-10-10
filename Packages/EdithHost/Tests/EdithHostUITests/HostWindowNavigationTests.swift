@@ -32,13 +32,14 @@ struct HostWindowNavigationTests {
         let gate = NavigationGate()
         var acknowledged = false
         let navigation = fixture.navigation(didApply: { _ in acknowledged = true })
-        navigation.register(
+        let registration = navigation.register(
             window: fixture.window,
             apply: { route in
                 await gate.wait()
                 try Task.checkCancellation()
                 fixture.selected = route.page
             }, selected: { fixture.selected })
+        #expect(navigation.workspaceRegistration(for: fixture.window) == registration)
         let task = Task {
             try await navigation.navigate(extensionID: "calendar", version: "1.0.0")
         }
@@ -145,8 +146,9 @@ struct HostWindowNavigationTests {
             defaults: fixture.defaults, activeVersions: { fixture.versions },
             originatingWindow: { $0 == origin ? fixture.window : nil })
         fixture.register(navigation)
-        navigation.register(
+        let registration = navigation.register(
             window: second, apply: { secondSelection = $0.page }, selected: { secondSelection })
+        #expect(navigation.workspaceRegistration(for: second) == registration)
         try await navigation.navigate(
             extensionID: "calendar", version: "1.0.0", presentationID: origin, location: "home")
         #expect(fixture.selected == "calendar")
@@ -276,9 +278,10 @@ private final class NavigationFixture {
             originatingWindow: originatingWindow, didApply: didApply)
     }
     func register(_ navigation: HostWindowNavigation) {
-        navigation.register(
+        let registration = navigation.register(
             window: window, apply: { [self] in selected = $0.page },
             selected: { [self] in selected })
+        #expect(navigation.workspaceRegistration(for: window) == registration)
     }
     func finish() { window.close(); defaults.removePersistentDomain(forName: suite) }
 }
