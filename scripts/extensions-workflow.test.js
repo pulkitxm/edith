@@ -104,7 +104,7 @@ test("extension builds consume independent fingerprints without a feature framew
   expect(text(plan)).toContain("extension-release-plan.mjs");
   expect(workflow.jobs.host).toBeUndefined();
   expect(plan.outputs.host).toBeUndefined();
-  expect(build.needs).toEqual(["tests", "plan", "frozen-host"]);
+  expect(build.needs).toEqual(["plan", "frozen-host"]);
   expect(text(build)).not.toContain("host-interfaces");
   expect(text(build)).not.toContain("EXTENSION_HOST_PRODUCTS");
   const cache = build.steps.find(
@@ -146,9 +146,11 @@ test("every extension passes native lifecycle checks before release signing", ()
 
 test("changed packages require successful builds before publication", () => {
   expect(build.if).toContain("!cancelled()");
-  expect(build.if).toContain("needs.tests.result == 'success'");
+  expect(build.if).toContain("needs.plan.result == 'success'");
+  expect(build.if).toContain("needs['frozen-host'].result == 'success'");
   expect(build.if).toContain("needs.plan.outputs.changed == 'true'");
-  expect(publish.needs).toEqual(["plan", "build"]);
+  expect(publish.needs).toEqual(["plan", "build", "tests"]);
+  expect(publish.if).toContain("needs.tests.result == 'success'");
   expect(publish.if).toContain("github.event_name != 'pull_request'");
   expect(publish.if).toContain("github.ref == 'refs/heads/main'");
   expect(publish.if).toContain("needs.plan.outputs.changed == 'true'");
@@ -418,5 +420,194 @@ test("every package checkout binds artifacts to the API run head instead of a me
     expect(checkout).toHaveLength(1);
     expect(checkout[0].with.ref).toBe(expected);
     expect(checkout[0].with["persist-credentials"]).toBe(false);
+  }
+});
+
+function routingContext(changes = {}) {
+  return {
+    needs: {
+      plan: {
+        result: "success",
+        outputs: { changed: "true", draft: "false" },
+      },
+      "frozen-host": { result: "success" },
+      tests: { result: "success" },
+      build: { result: "success" },
+      ...changes.needs,
+    },
+    github: {
+      repository: "pulkitxm/edith",
+      event_name: "push",
+      ref: "refs/heads/main",
+      ...changes.github,
+    },
+    inputs: { publish: true, ...changes.inputs },
+    cancelled: changes.cancelled ?? false,
+  };
+}
+
+function jobAdmitted(job, context) {
+  const needs = Object.fromEntries(
+    (job.needs ?? []).map((name) => [name, context.needs[name]]),
+  );
+  const succeeded = Object.values(needs).every(
+    (dependency) => dependency.result === "success",
+  );
+  const explicitStatus = /\b(always|cancelled|failure|success)\s*\(/.test(
+    job.if,
+  );
+  if (!explicitStatus && (context.cancelled || !succeeded)) return false;
+  return Boolean(
+    new Function(
+      "needs",
+      "github",
+      "inputs",
+      "cancelled",
+      "success",
+      `return (${job.if});`,
+    )(
+      needs,
+      context.github,
+      context.inputs,
+      () => context.cancelled,
+      () => succeeded,
+    ),
+  );
+}
+
+test("changed worker builds overlap global tests but require the successful frozen plan", () => {
+  for (const result of ["success", "failure", "skipped", "cancelled"]) {
+    const context = routingContext({ needs: { tests: { result } } });
+    expect(jobAdmitted(build, context)).toBe(true);
+    expect(jobAdmitted(publish, context)).toBe(result === "success");
+  }
+  for (const dependency of ["plan", "frozen-host"]) {
+    for (const result of ["failure", "skipped", "cancelled"]) {
+      const context = routingContext({
+        needs: {
+          [dependency]: {
+            result,
+            outputs: { changed: "true", draft: "false" },
+          },
+        },
+      });
+      expect(jobAdmitted(build, context)).toBe(false);
+    }
+  }
+  expect(jobAdmitted(build, routingContext({ cancelled: true }))).toBe(false);
+});
+
+test("unchanged draft resumes freeze and test the host before publication", () => {
+  const context = routingContext({
+    needs: {
+      plan: {
+        result: "success",
+        outputs: { changed: "false", draft: "true" },
+      },
+      build: { result: "skipped" },
+    },
+  });
+  expect(jobAdmitted(frozen, context)).toBe(true);
+  expect(jobAdmitted(workflow.jobs.tests, context)).toBe(true);
+  expect(jobAdmitted(build, context)).toBe(false);
+  expect(jobAdmitted(publish, context)).toBe(true);
+  context.needs.plan.outputs.draft = "false";
+  expect(jobAdmitted(frozen, context)).toBe(false);
+  expect(jobAdmitted(publish, context)).toBe(false);
+});
+
+test("both publication paths require successful independent tests and their exact build outcome", () => {
+  for (const changed of ["true", "false"]) {
+    for (const result of ["failure", "skipped", "cancelled"]) {
+      for (const dependency of ["plan", "tests"]) {
+        const context = routingContext({
+          needs: {
+            plan: {
+              result: "success",
+              outputs: { changed, draft: "true" },
+            },
+            build: {
+              result: changed === "true" ? "success" : "skipped",
+            },
+          },
+        });
+        context.needs[dependency].result = result;
+        expect(jobAdmitted(publish, context)).toBe(false);
+      }
+    }
+    for (const result of ["success", "failure", "skipped", "cancelled"]) {
+      const context = routingContext({
+        needs: {
+          plan: {
+            result: "success",
+            outputs: { changed, draft: "true" },
+          },
+          build: { result },
+        },
+      });
+      expect(jobAdmitted(publish, context)).toBe(
+        result === (changed === "true" ? "success" : "skipped"),
+      );
+      context.cancelled = true;
+      expect(jobAdmitted(publish, context)).toBe(false);
+    }
+  }
+});
+
+test("failed frozen or planning gates prevent real tests on changed and draft paths", () => {
+  for (const changed of ["true", "false"]) {
+    for (const result of ["failure", "skipped", "cancelled"]) {
+      const context = routingContext({
+        needs: {
+          plan: {
+            result,
+            outputs: { changed, draft: "true" },
+          },
+          "frozen-host": { result },
+          tests: { result: "skipped" },
+          build: { result: "skipped" },
+        },
+      });
+      expect(jobAdmitted(frozen, context)).toBe(false);
+      expect(jobAdmitted(workflow.jobs.tests, context)).toBe(false);
+      expect(jobAdmitted(build, context)).toBe(false);
+      expect(jobAdmitted(publish, context)).toBe(false);
+    }
+  }
+});
+
+test("publication rejects untrusted repositories refs and implicit manual publishing", () => {
+  for (const changed of ["true", "false"]) {
+    const context = routingContext({
+      needs: {
+        plan: {
+          result: "success",
+          outputs: { changed, draft: "true" },
+        },
+        build: { result: changed === "true" ? "success" : "skipped" },
+      },
+    });
+    for (const github of [
+      { repository: "synthetic/edith" },
+      { ref: "refs/heads/feature" },
+      { ref: "refs/tags/v1.2.3" },
+      { event_name: "pull_request" },
+      { event_name: "workflow_run" },
+    ]) {
+      expect(
+        jobAdmitted(publish, {
+          ...context,
+          github: { ...context.github, ...github },
+        }),
+      ).toBe(false);
+    }
+    const manual = {
+      ...context,
+      github: { ...context.github, event_name: "workflow_dispatch" },
+    };
+    expect(jobAdmitted(publish, manual)).toBe(true);
+    expect(
+      jobAdmitted(publish, { ...manual, inputs: { publish: false } }),
+    ).toBe(false);
   }
 });

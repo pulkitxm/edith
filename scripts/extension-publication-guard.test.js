@@ -593,14 +593,18 @@ test("unchanged source retries finalize an authenticated draft once without pack
   }
 });
 
-test("zero-matrix workflow skips macOS builds and admits only trusted draft finalization", () => {
+test("zero-matrix workflow verifies the frozen runtime before trusted draft finalization", () => {
   const workflow = Bun.YAML.parse(
     readFileSync(".github/workflows/extensions.yml", "utf8"),
   );
   const run = (
     job,
     needs,
-    github = { event_name: "push", ref: "refs/heads/main" },
+    github = {
+      event_name: "push",
+      ref: "refs/heads/main",
+      repository: "pulkitxm/edith",
+    },
     cancelled = false,
   ) =>
     new Function(
@@ -613,11 +617,11 @@ test("zero-matrix workflow skips macOS builds and admits only trusted draft fina
   const needs = {
     plan: { result: "success", outputs: { changed: "false", draft: "true" } },
     build: { result: "skipped" },
-    tests: { result: "skipped" },
-    "frozen-host": { result: "skipped" },
+    tests: { result: "success" },
+    "frozen-host": { result: "success" },
   };
-  expect(run(workflow.jobs["frozen-host"], needs)).toBe(false);
-  expect(run(workflow.jobs.tests, needs)).toBe(false);
+  expect(run(workflow.jobs["frozen-host"], needs)).toBe(true);
+  expect(run(workflow.jobs.tests, needs)).toBe(true);
   expect(run(workflow.jobs.build, needs)).toBe(false);
   expect(run(workflow.jobs.publish, needs)).toBe(true);
   for (const change of [
@@ -632,6 +636,9 @@ test("zero-matrix workflow skips macOS builds and admits only trusted draft fina
     },
     { build: { result: "failure" } },
     { build: { result: "cancelled" } },
+    { tests: { result: "failure" } },
+    { tests: { result: "skipped" } },
+    { tests: { result: "cancelled" } },
     {
       plan: { result: "success", outputs: { changed: "true", draft: "true" } },
     },
