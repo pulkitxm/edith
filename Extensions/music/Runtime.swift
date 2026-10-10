@@ -8,11 +8,16 @@ import SwiftUI
 final class ExtensionRuntime: NSObject {
     private var worker: MusicWorker?
     private var surface: MusicSurface?
+    private var backup: MusicBackupLifecycle?
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let surface = self?.surface else { throw ExtensionPeerError.unavailable }
+            guard let self, self.worker != nil else { throw ExtensionPeerError.unavailable }
+            if command.hasPrefix("backup."), let backup = self.backup {
+                return try await backup.execute(command, payload: payload)
+            }
+            guard let surface = self.surface else { throw ExtensionPeerError.unavailable }
             return try await surface.execute(command, payload: payload)
         }
     }
@@ -20,8 +25,14 @@ final class ExtensionRuntime: NSObject {
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         commands.shutdown()
+        backup?.beginShutdown()
         Task {
-            await worker?.shutdown(); completion()
+            await backup?.shutdown()
+            await commands.shutdownAndWait()
+            await worker?.shutdown()
+            backup = nil; worker = nil; surface = nil
+            TextEditingCommands.shutdown(); InputFocus.uninstall()
+            completion()
         }
     }
 
@@ -40,7 +51,13 @@ final class ExtensionRuntime: NSObject {
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
                 SurfaceHostContext.current != nil
             else { return ["ok": false] as NSDictionary }
-            if worker == nil { worker = MusicWorker() }
+            if worker == nil {
+                do { backup = MusicBackupLifecycle(provider: try MusicBackupProvider.live()) } catch
+                {
+                    return ["ok": false, "error": error.localizedDescription] as NSDictionary
+                }
+                worker = MusicWorker()
+            }
             if let worker, surface == nil {
                 surface = MusicSurface(read: worker.read, perform: worker.perform)
             }
@@ -61,6 +78,7 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
+            backup?.beginShutdown()
             commands.shutdown(); worker?.stop(); worker = nil; surface = nil
             TextEditingCommands.shutdown(); InputFocus.uninstall()
         case "status": return ["ok": true, "running": worker != nil] as NSDictionary

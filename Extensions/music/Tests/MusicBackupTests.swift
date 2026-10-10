@@ -104,6 +104,63 @@ import Testing
         }
     }
 
+    @Test @MainActor func lifecycleKeepsStatusAndCancelAvailableDuringEnableRestore() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try FileManager.default.createDirectory(
+            at: fixture.cloud, withIntermediateDirectories: true)
+        let placeholder = fixture.cloud.appendingPathComponent(".waiting.mp3.icloud")
+        try Data("placeholder".utf8).write(to: placeholder)
+        let lifecycle = MusicBackupLifecycle(provider: fixture.provider())
+        for _ in 0..<100
+        where fixture.defaults.integer(forKey: MusicBackupProvider.restorePendingKey) == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let status =
+            try JSONSerialization.jsonObject(
+                with: await lifecycle.execute("backup.status", payload: Data())) as? [String: Any]
+        #expect(status?["running"] as? Bool == true)
+        #expect(status?["restorePending"] as? Int == 1)
+        _ = try await lifecycle.execute("backup.cancel", payload: Data())
+        #expect(!FileManager.default.fileExists(atPath: fixture.local.path))
+        try FileManager.default.removeItem(at: placeholder)
+        try FileManager.default.createDirectory(
+            at: fixture.local, withIntermediateDirectories: true)
+        try Data("selected".utf8).write(to: fixture.local.appendingPathComponent("track.mp3"))
+        fixture.defaults.set(true, forKey: AppStorageKeys.Backup.icloud)
+        fixture.defaults.set(true, forKey: AppStorageKeys.Music.backup)
+        _ = try await lifecycle.execute("backup.synchronize", payload: Data())
+        #expect(
+            try Data(contentsOf: fixture.cloud.appendingPathComponent("track.mp3"))
+                == Data("selected".utf8))
+        await lifecycle.shutdown()
+        await #expect(throws: ExtensionPeerError.self) {
+            try await lifecycle.execute("backup.status", payload: Data())
+        }
+    }
+
+    @Test @MainActor func lifecycleShutdownDrainsRestoreAndQueuedExport() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try FileManager.default.createDirectory(
+            at: fixture.cloud, withIntermediateDirectories: true)
+        try Data("placeholder".utf8).write(
+            to: fixture.cloud.appendingPathComponent(".waiting.mp3.icloud"))
+        fixture.defaults.set(true, forKey: AppStorageKeys.Backup.icloud)
+        fixture.defaults.set(true, forKey: AppStorageKeys.Music.backup)
+        let lifecycle = MusicBackupLifecycle(provider: fixture.provider())
+        for _ in 0..<100
+        where fixture.defaults.integer(forKey: MusicBackupProvider.restorePendingKey) == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let export = Task { try await lifecycle.execute("backup.synchronize", payload: Data()) }
+        await Task.yield()
+        await lifecycle.shutdown()
+        await #expect(throws: ExtensionPeerError.self) { try await export.value }
+        #expect(fixture.defaults.double(forKey: AppStorageKeys.Music.lastBackupAt) == 0)
+        #expect(!FileManager.default.fileExists(atPath: fixture.local.path))
+    }
+
     private struct Fixture {
         let root: URL
         let defaults: UserDefaults
