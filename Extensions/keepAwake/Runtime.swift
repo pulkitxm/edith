@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
@@ -9,6 +12,31 @@ import SwiftUI
 final class KeepAwakeRuntime: NSObject {
     private var store: KeepAwakeStore?
     private var defaults: UserDefaults?
+    private var defaultsSuite: String?
+    private let admitFixture: (NSDictionary) throws -> WorkerFixtureAdmission?
+    private let makeDefaults: (String) -> UserDefaults?
+    private let makeProductionStore: @MainActor (UserDefaults) -> KeepAwakeStore
+
+    override convenience init() {
+        self.init(admitFixture: {
+            try WorkerFixtureAdmission.current(
+                extensionID: "keepAwake", context: $0,
+                roleBundle: Bundle(for: KeepAwakeRuntime.self))
+        })
+    }
+
+    init(
+        admitFixture: @escaping (NSDictionary) throws -> WorkerFixtureAdmission?,
+        makeDefaults: @escaping (String) -> UserDefaults? = { UserDefaults(suiteName: $0) },
+        makeProductionStore: @escaping @MainActor (UserDefaults) -> KeepAwakeStore = {
+            KeepAwakeStore(defaults: $0)
+        }
+    ) {
+        self.admitFixture = admitFixture
+        self.makeDefaults = makeDefaults
+        self.makeProductionStore = makeProductionStore
+        super.init()
+    }
 
     private var presentation: ControlPresentation?
 
@@ -83,16 +111,23 @@ final class KeepAwakeRuntime: NSObject {
         case "start":
             guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
             else { return ["ok": false] as NSDictionary }
-            guard let suite = input["defaultsSuite"] as? String,
-                let defaults = UserDefaults(suiteName: suite)
-            else {
-                return ["ok": false] as NSDictionary
-            }
-            self.defaults = defaults
-            if store == nil { store = KeepAwakeStore(defaults: defaults) }
-            defaults.set(true, forKey: KeepAwakeKeys.enabled)
-            store?.syncPreventSleep()
-            return ["ok": true] as NSDictionary
+            do {
+                let fixture = try admitFixture(input)
+                guard let suite = input["defaultsSuite"] as? String,
+                    defaultsSuite == nil || defaultsSuite == suite,
+                    let defaults = makeDefaults(suite)
+                else { return ["ok": false] as NSDictionary }
+                if store == nil {
+                    store =
+                        fixture == nil
+                        ? makeProductionStore(defaults) : KeepAwakeStore.fixture(defaults: defaults)
+                }
+                self.defaults = defaults
+                defaultsSuite = suite
+                defaults.set(true, forKey: KeepAwakeKeys.enabled)
+                store?.syncPreventSleep()
+                return ["ok": true] as NSDictionary
+            } catch { return ["ok": false] as NSDictionary }
         case "view":
             guard let presentation else { return ["ok": false] as NSDictionary }
             return NSHostingController(
@@ -115,6 +150,7 @@ final class KeepAwakeRuntime: NSObject {
             store?.shutdown()
             store = nil
             defaults = nil
+            defaultsSuite = nil
             return ["ok": true] as NSDictionary
         case "status":
             return [
@@ -127,6 +163,7 @@ final class KeepAwakeRuntime: NSObject {
     }
 }
 
+#if !SWIFT_PACKAGE
 @_cdecl("edith_extension_create")
 public func createKeepAwakeExtension() -> UnsafeMutableRawPointer? {
     let address = MainActor.assumeIsolated {
@@ -134,3 +171,4 @@ public func createKeepAwakeExtension() -> UnsafeMutableRawPointer? {
     }
     return UnsafeMutableRawPointer(bitPattern: address)
 }
+#endif

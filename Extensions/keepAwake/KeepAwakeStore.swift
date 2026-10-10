@@ -30,7 +30,7 @@ final class KeepAwakeStore {
         defaults: UserDefaults,
         notificationCenter: NotificationCenter = .default,
         workspaceNotifications: NotificationCenter = NSWorkspace.shared.notificationCenter,
-        reconciliationInterval: TimeInterval = 30,
+        reconciliationInterval: TimeInterval? = 30,
         createAssertion: @escaping () -> IOPMAssertionID? = KeepAwakeStore.createDisplayAssertion,
         assertionIsActive: @escaping (IOPMAssertionID) -> Bool = KeepAwakeStore
             .displayAssertionIsActive,
@@ -52,13 +52,31 @@ final class KeepAwakeStore {
         ) { [weak self] _ in
             Task { @MainActor in self?.syncPreventSleep() }
         }
-        let timer = Timer(timeInterval: reconciliationInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.syncPreventSleep() }
+        if let reconciliationInterval {
+            let timer = Timer(timeInterval: reconciliationInterval, repeats: true) {
+                [weak self] _ in
+                Task { @MainActor in self?.syncPreventSleep() }
+            }
+            timer.tolerance = reconciliationInterval / 5
+            reconciliationTimer = timer
+            RunLoop.main.add(timer, forMode: .common)
         }
-        timer.tolerance = reconciliationInterval / 5
-        reconciliationTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
         syncPreventSleep()
+    }
+
+    static func fixture(defaults: UserDefaults) -> KeepAwakeStore {
+        var nextAssertion: IOPMAssertionID = 0
+        var activeAssertions: Set<IOPMAssertionID> = []
+        return KeepAwakeStore(
+            defaults: defaults, notificationCenter: NotificationCenter(),
+            workspaceNotifications: NotificationCenter(), reconciliationInterval: nil,
+            createAssertion: {
+                nextAssertion += 1
+                activeAssertions.insert(nextAssertion)
+                return nextAssertion
+            },
+            assertionIsActive: { activeAssertions.contains($0) },
+            releaseAssertion: { activeAssertions.remove($0) })
     }
 
     func syncPreventSleep() {

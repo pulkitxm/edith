@@ -10,7 +10,8 @@
         "Extensions/keepAwake/Presentation.swift",
         "Extensions/keepAwake/Runtime.swift",
         "Extensions/keepAwake/Surface.swift",
-        "Extensions/keepAwake/Views/KeepAwakeSettings.swift"
+        "Extensions/keepAwake/Views/KeepAwakeSettings.swift",
+        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
       ]
     },
     "inputs": [
@@ -21,7 +22,8 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-contained-host-runtime.mjs"
+      "scripts/build-contained-host-runtime.mjs",
+      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
     ],
     "dependencies": [],
     "contractVersion": 1,
