@@ -18,6 +18,54 @@ import Testing
         #expect(HostCLIProviderCatalog.prefixes["colorPicker"] == ["color", "colour"])
     }
 
+    @Test func originalMachineAliasAdmitsLiveInputOnlyFromDeclaredEnabledStream() async throws {
+        let catalog = HostCLIProviderCatalog(
+            owner: "machines",
+            commands: [
+                HostCLIProviderCommand(
+                    route: ["machines"], operation: "machines.cli", summary: "Machine commands.")
+            ], acceptsInput: true, machineAliases: ["synthetic-box"],
+            aliasOperation: "machines.cli.alias",
+            aliasStreamOperation: "machines.cli.alias.stream", aliasStreamDeadline: 30)
+        try catalog.validate(owner: "machines")
+        let data = try JSONEncoder().encode(catalog)
+        let wire = LiveInputFixture()
+        let invoke: HostCLIProviderRegistry.Invoke = { request in
+            if request.action == .ls {
+                return Data(
+                    "[{\"id\":\"machines\",\"installed\":true,\"compatible\":true,\"enabled\":true,\"running\":true,\"disablePending\":false,\"removalPending\":false,\"version\":\"1\"}]"
+                        .utf8)
+            }
+            if request.operation == "machines.cli.catalog" { return data }
+            return try await wire.invoke(request)
+        }
+        #expect(
+            try await HostCommandCLI.liveInputForCommand(["synthetic-box", "vim"], invoke: invoke))
+        #expect(
+            !(try await HostCommandCLI.liveInputForCommand(["machines", "ls"], invoke: invoke)))
+        let registry = try await HostCLIProviderRegistry.load(invoke: invoke)
+        let reply = try await registry.execute(["synthetic-box", "vim"], invoke: invoke)
+        #expect(reply.exitCode == 7 && reply.stdout == "alias complete\n" && reply.stderr.isEmpty)
+        #expect(await wire.context()?.arguments == ["synthetic-box", "vim"])
+
+        let off: HostCLIProviderRegistry.Invoke = { _ in Data("[]".utf8) }
+        #expect(!(try await HostCommandCLI.liveInputForCommand(["synthetic-box"], invoke: off)))
+        let wrong = HostCLIProviderCatalog(
+            owner: "calendar",
+            commands: [
+                HostCLIProviderCommand(
+                    route: ["calendar"], operation: "calendar.cli", summary: "Calendar.")
+            ], acceptsInput: true, machineAliases: ["synthetic-box"],
+            aliasOperation: "calendar.cli.alias",
+            aliasStreamOperation: "calendar.cli.stream", aliasStreamDeadline: 30)
+        #expect(throws: HostCLIError.self) { try wrong.validate(owner: "calendar") }
+        let reserved = HostCLIProviderCatalog(
+            owner: "machines", commands: catalog.commands,
+            machineAliases: ["agent"], aliasOperation: "machines.cli.alias")
+        #expect(throws: HostCLIError.self) { try reserved.validate(owner: "machines") }
+
+    }
+
     @Test func pipeBytesEOFCancellationAndFlagsStayOwned() async throws {
         var fds: [Int32] = [-1, -1]
         #expect(pipe(&fds) == 0)
@@ -105,11 +153,13 @@ import Testing
 
 private actor LiveInputFixture {
     private var handle: HostCLIStreamHandle?
+    private var invocation: HostCLIInvocationContext?
     private var cursor: [UInt64] = []
     private var received: [HostCLIInputEvent] = []
     private var ended = false
     private let stale: Bool
     init(stale: Bool = false) { self.stale = stale }
+    func context() -> HostCLIInvocationContext? { invocation }
     func sequences() -> [UInt64] { cursor }
     func events() -> [HostCLIInputEvent] { received }
     func eof() -> Bool { ended }
@@ -117,9 +167,26 @@ private actor LiveInputFixture {
         let object = try JSONDecoder().decode(HostCLIJSON.self, from: request.payload).object ?? [:]
         if request.operation?.hasSuffix(".start") == true {
             let session = try #require(object["session"]?.string.flatMap(UUID.init(uuidString:)))
+            invocation = try JSONDecoder().decode(
+                HostCLIInvocationContext.self, from: (object["request"] ?? .null).encoded())
             let created = HostCLIStreamHandle(owner: "machines", session: session, token: UUID())
             handle = created
             return try JSONEncoder().encode(created)
+        }
+        if request.operation?.hasSuffix(".read") == true {
+            let current = try #require(handle)
+            let sequence = UInt64(try #require(object["sequence"]?.integer))
+            let chunks: [HostCLIStreamFrame.Chunk] =
+                ended
+                ? [
+                    .init(sequence: sequence, channel: .stdout, data: Data("alias complete\n".utf8))
+                ] : []
+            return try JSONEncoder().encode(
+                HostCLIStreamFrame(
+                    handle: current, sequence: sequence,
+                    nextSequence: sequence + UInt64(chunks.count),
+                    chunks: chunks, state: ended ? .completed : .running, exitCode: ended ? 7 : nil)
+            )
         }
         if request.operation?.hasSuffix(".write") == true
             || request.operation?.hasSuffix(".resize") == true

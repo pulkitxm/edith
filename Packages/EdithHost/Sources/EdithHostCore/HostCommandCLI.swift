@@ -554,6 +554,11 @@ public struct HostCommandCLI: Sendable {
         guard let first = arguments.first, !Self.coreCommands.contains(first) else { return false }
         let registry = try? await HostCLIProviderRegistry.load(invoke: invoke)
         try Task.checkCancellation()
+        if let alias = registry?.providers.first(where: {
+            ($0.catalog.machineAliases ?? []).contains(first)
+        }) {
+            return alias.catalog.acceptsInput == true && alias.catalog.aliasStreamOperation != nil
+        }
         let matching = registry?.providers.flatMap { provider in
             provider.catalog.commands.filter { arguments.starts(with: $0.route) }
                 .map { (provider.catalog, $0) }

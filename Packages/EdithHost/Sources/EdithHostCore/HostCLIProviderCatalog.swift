@@ -94,18 +94,23 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
     public let completionOperation: String?
     public let machineAliases: [String]?
     public let aliasOperation: String?
+    public let aliasStreamOperation: String?
+    public let aliasStreamDeadline: Double?
     public let parserHelp: [HostCLIJSON]?
 
     public init(
         owner: String, commands: [HostCLIProviderCommand], settings: [HostCLISetting] = [],
         acceptsInput: Bool = false, nativeTools: [HostCLINativeTool] = [],
         completionOperation: String? = nil, machineAliases: [String] = [],
-        aliasOperation: String? = nil, parserHelp: [HostCLIJSON] = []
+        aliasOperation: String? = nil, aliasStreamOperation: String? = nil,
+        aliasStreamDeadline: Double? = nil, parserHelp: [HostCLIJSON] = []
     ) {
         version = 1; self.owner = owner; self.commands = commands; self.settings = settings
         self.acceptsInput = acceptsInput
         self.nativeTools = nativeTools; self.completionOperation = completionOperation
         self.machineAliases = machineAliases; self.aliasOperation = aliasOperation
+        self.aliasStreamOperation = aliasStreamOperation;
+        self.aliasStreamDeadline = aliasStreamDeadline
         self.parserHelp = parserHelp
     }
 
@@ -121,6 +126,10 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
             String.self, forKey: .completionOperation)
         machineAliases = try container.decodeIfPresent([String].self, forKey: .machineAliases)
         aliasOperation = try container.decodeIfPresent(String.self, forKey: .aliasOperation)
+        aliasStreamOperation = try container.decodeIfPresent(
+            String.self, forKey: .aliasStreamOperation)
+        aliasStreamDeadline = try container.decodeIfPresent(
+            Double.self, forKey: .aliasStreamDeadline)
         parserHelp = try container.decodeIfPresent([HostCLIJSON].self, forKey: .parserHelp)
     }
 
@@ -198,9 +207,20 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
                     && ![
                         "guide", "schema", "version", "status", "completions", "install",
                         "uninstall", "config", "app", "permissions", "extensions", "invoke", "mcp",
+                        "agent",
                     ].contains(alias)
             })
         else { throw HostCLIError.rejected("Invalid machine aliases.") }
+        if let aliasStreamOperation {
+            guard owner == "machines", !aliases.isEmpty, acceptsInput == true,
+                let duration = aliasStreamDeadline, duration.isFinite,
+                (1...21600).contains(duration)
+            else { throw HostCLIError.rejected("Invalid machine alias stream.") }
+            _ = try HostCLIRequest(
+                action: .invoke, id: owner, operation: aliasStreamOperation + ".start")
+        } else if aliasStreamDeadline != nil {
+            throw HostCLIError.rejected("Missing machine alias stream operation.")
+        }
         if !aliases.isEmpty {
             guard owner == "machines", let aliasOperation else {
                 throw HostCLIError.rejected("Missing machine alias operation.")
@@ -358,10 +378,13 @@ public struct HostCLIProviderRegistry: Sendable {
         guard input.isEmpty || provider.catalog.acceptsInput == true else {
             throw HostCLIError.usage("The command provider does not accept stdin.")
         }
-        if let operation = command.streamOperation {
+        let streamOperation =
+            isAlias ? provider.catalog.aliasStreamOperation : command.streamOperation
+        let readsInput = isAlias ? streamOperation != nil : command.readsInput == true
+        if let operation = streamOperation {
             guard
                 liveInput == nil
-                    || provider.catalog.acceptsInput == true && command.readsInput == true
+                    || provider.catalog.acceptsInput == true && readsInput
             else {
                 throw HostCLIError.usage("The command does not accept live stdin.")
             }
@@ -370,10 +393,12 @@ public struct HostCLIProviderRegistry: Sendable {
                 workingDirectory: workingDirectory, interactive: liveInput?.interactive ?? false)
             let stream = try await HostCLIStream.start(
                 owner: provider.state.id, operation: operation, request: context,
-                maximumDuration: command.streamDeadline ?? 1800, invoke: invoke)
+                maximumDuration: (isAlias
+                    ? provider.catalog.aliasStreamDeadline : command.streamDeadline) ?? 1800,
+                invoke: invoke)
             let streamInput =
                 liveInput
-                ?? (command.readsInput == true
+                ?? (readsInput
                     ? HostCLILiveInput(interactive: false, receive: { nil }, cancel: {}) : nil)
             if let streamWrite {
                 let code = try await stream.consume(input: streamInput, write: streamWrite)
