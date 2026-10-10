@@ -85,6 +85,14 @@ for (const [name, source] of [
     "HostedManagedViewRoute+Package.swift",
     "Tests/HostedManagedViews/FixtureSources/HostedManagedViewRoute+Package.swift",
   ],
+  [
+    "HostedManagedApprovalContract.swift",
+    "Tests/HostedManagedViews/ApprovalSources/HostedManagedApprovalContract.swift",
+  ],
+  [
+    "HostedManagedApprovalHost.swift",
+    "Tests/HostedManagedViews/ApprovalSources/HostedManagedApprovalHost.swift",
+  ],
 ]) {
   const bytes = await readFile(join(root, source));
   await writeFile(join(sources, name), bytes);

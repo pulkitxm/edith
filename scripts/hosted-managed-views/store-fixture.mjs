@@ -163,10 +163,23 @@ export async function installManagedFixture({
       package_,
     });
   else await mkdir(paths.fixtureHome, { mode: 0o700 });
-  for (const path of [paths.fixtureHome, join(directory, "xdg")]) {
-    if (path.endsWith("/xdg")) await mkdir(path, { mode: 0o700 });
+  for (const path of [
+    paths.fixtureHome,
+    join(paths.fixtureHome, ".config"),
+    join(paths.fixtureHome, ".cache"),
+    join(paths.fixtureHome, ".local"),
+    join(paths.fixtureHome, ".local/share"),
+    join(directory, "tmp"),
+  ]) {
+    if (path !== paths.fixtureHome) await mkdir(path, { mode: 0o700 });
     assert.equal(await realpath(path), path);
-    assert.equal((await lstat(path)).mode & 0o7777, 0o700);
+    const status = await lstat(path);
+    assert(
+      status.isDirectory() &&
+        !status.isSymbolicLink() &&
+        status.uid === process.getuid(),
+    );
+    assert.equal(status.mode & 0o7777, 0o700);
   }
   const result = {
     schema: 1,

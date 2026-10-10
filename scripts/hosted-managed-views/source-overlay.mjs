@@ -66,11 +66,110 @@ export function managedFixtureOverlay(source) {
   );
   result = replaceExact(
     result,
+    `                let handle = try await manager.scene(
+                    for: EdithHostCore.HostExtensionContentRequest(
+                        extensionID: package.id, location: route.location, section: route.section))`,
+    `                let request = EdithHostCore.HostExtensionContentRequest(
+                    extensionID: package.id, location: route.location, section: route.section)
+                let handle: HostRemoteSceneHandle
+                do {
+                    handle = try await manager.scene(for: request)
+                } catch HostRemoteAvailabilityError.approvalRequired {
+                    guard uiProcesses.isEmpty else { throw HostWorkerError.rejected }
+                    _ = try await awaitHostedManagedApproval(
+                        directory: directory, hostIdentifier: identity.identifier,
+                        extensionID: package.id,
+                        workerIdentifier: identity.identifier + ".extension." + package.id + ".worker")
+                    handle = try await manager.scene(for: request)
+                }`,
+  );
+  result = replaceExact(
+    result,
     '                "originalDownloadedRole": true, "readonlyControlVerified": true,',
     `                "schema": 1, "location": route.location, "section": route.section,
                 "factoryOverlay": route.factoryOverlay, "functionalActionsValidated": false,
                 "featurePayloadUnchanged": !route.factoryOverlay,
                 "productionExecutableUnchangedProof": false, "visible": false, "presentations": 2,`,
+  );
+  result = replaceExact(
+    result,
+    "    private var previousUI: HostRemoteProcessIdentity?",
+    `    private var previousUI: HostRemoteProcessIdentity?
+    private var managedVerification: Task<Void, Never>?
+    private var managedTermination = false
+    private var managedSignal: DispatchSourceSignal?
+    private var managedPeers: [[String: Any]] = []
+
+    private func recordManagedPeer(pid: Int32, role: String) async throws {
+        guard pid > 1, ["engine", "ui"].contains(role), managedPeers.count < 8,
+            !managedPeers.contains(where: { ($0["pid"] as? Int32) == pid })
+        else { throw HostWorkerError.rejected }
+        managedPeers.append(["pid": pid, "role": role])
+        let url = directory.appendingPathComponent("managed-peers.json")
+        try JSONSerialization.data(withJSONObject: managedPeers, options: .sortedKeys)
+            .write(to: url, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        let acknowledgement = directory.appendingPathComponent("managed-peer-ack.json")
+        let deadline = ContinuousClock.now + .seconds(10)
+        repeat {
+            try Task.checkCancellation()
+            if let attributes = try? FileManager.default.attributesOfItem(atPath: acknowledgement.path),
+                attributes[.type] as? FileAttributeType == .typeRegular,
+                attributes[.ownerAccountID] as? UInt32 == getuid(),
+                attributes[.posixPermissions] as? Int == 0o600,
+                (attributes[.size] as? Int ?? 16385) <= 16384,
+                let data = try? Data(contentsOf: acknowledgement),
+                let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                object["sourceCommit"] as? String == managedRoute?.sourceCommit,
+                object["extensionID"] as? String == package.id,
+                let processes = object["processes"] as? [[String: Any]],
+                processes.contains(where: { ($0["pid"] as? Int32) == pid && $0["role"] as? String == role })
+            { return }
+            try await Task.sleep(for: .milliseconds(20))
+        } while ContinuousClock.now < deadline
+        throw HostWorkerError.timedOut
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard managedShipping else { return .terminateNow }
+        guard !managedTermination else { return .terminateCancel }
+        managedTermination = true
+        managedVerification?.cancel()
+        Task { [self] in
+            await managedVerification?.value
+            activation?.cancel()
+            try? await manager.stop(extensionID: package.id)
+            let stopped = await marketplace.sessions.shutdown()
+            managedSignal?.cancel()
+            managedSignal = nil
+            sender.reply(toApplicationShouldTerminate: stopped)
+        }
+        return .terminateLater
+    }`,
+  );
+  result = replaceExact(
+    result,
+    `        if registrationOnly {
+            Task {`,
+    `        if registrationOnly {
+            if managedShipping {
+                signal(SIGTERM, SIG_IGN)
+                let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+                source.setEventHandler { Task { @MainActor in NSApp.terminate(nil) } }
+                source.resume()
+                managedSignal = source
+            }
+            managedVerification = Task {`,
+  );
+  result = replaceExact(
+    result,
+    "            var uiProcesses: [HostRemoteProcessIdentity] = []",
+    '            try await recordManagedPeer(pid: enginePID, role: "engine")\n            var uiProcesses: [HostRemoteProcessIdentity] = []',
+  );
+  result = replaceExact(
+    result,
+    "                uiProcesses.append(peer)",
+    '                try await recordManagedPeer(pid: peer.pid, role: "ui")\n                uiProcesses.append(peer)',
   );
   return result;
 }

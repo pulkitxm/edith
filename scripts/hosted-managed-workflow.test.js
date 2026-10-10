@@ -1,0 +1,114 @@
+import { expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
+
+const ci = await readFile(".github/workflows/ci.yml", "utf8");
+const workflow = await readFile(
+  ".github/workflows/hosted-managed-views.yml",
+  "utf8",
+);
+const route = ci.split("  hosted-managed-views:\n")[1].split("  changes:\n")[0];
+const routeAllows = new Function(
+  "github",
+  "inputs",
+  `return Boolean(${route.match(/ {4}if: ([^\n]+)/)[1]})`,
+);
+const calledAllows = new Function(
+  "github",
+  "inputs",
+  `return Boolean(${workflow.match(/ {4}if: ([^\n]+)/)[1]})`,
+);
+const github = {
+  repository: "pulkitxm/edith",
+  event_name: "workflow_dispatch",
+  actor_id: "65671483",
+  ref: "refs/heads/feat/hosted-managed-view-execution",
+  sha: "a".repeat(40),
+};
+const inputs = {
+  hosted_managed_views_sha: github.sha,
+  hosted_managed_artifacts_run: "42",
+  hosted_managed_artifacts_sha: "b".repeat(40),
+  hosted_shell_journey_sha: "",
+  hosted_host_tests_sha: "",
+  expected_sha: github.sha,
+  artifact_run: "42",
+  artifact_source: "b".repeat(40),
+  release: false,
+  rebuild: "",
+};
+test("hosted managed route requires exact reviewed source, closed actor refs and independent original CI inputs", () => {
+  for (const ref of [
+    "refs/heads/main",
+    "refs/heads/feat/extension-marketplace",
+    github.ref,
+  ]) {
+    expect(routeAllows({ ...github, ref }, inputs)).toBe(true);
+    expect(calledAllows({ ...github, ref }, inputs)).toBe(true);
+  }
+  for (const changed of [
+    { actor_id: "foreign" },
+    { repository: "foreign/repository" },
+    { event_name: "pull_request" },
+    { ref: "refs/heads/other" },
+    { sha: "c".repeat(40) },
+  ]) {
+    expect(routeAllows({ ...github, ...changed }, inputs)).toBe(false);
+    expect(calledAllows({ ...github, ...changed }, inputs)).toBe(false);
+  }
+  for (const changed of [
+    { release: true },
+    { rebuild: "v1" },
+    { hosted_managed_views_sha: "" },
+    { hosted_managed_artifacts_run: "" },
+    { hosted_managed_artifacts_sha: "" },
+    { hosted_shell_journey_sha: github.sha },
+    { hosted_host_tests_sha: github.sha },
+  ])
+    expect(routeAllows(github, { ...inputs, ...changed })).toBe(false);
+  for (const changed of [
+    { release: true },
+    { rebuild: "v1" },
+    { artifact_run: "" },
+    { artifact_source: "" },
+    { expected_sha: "c".repeat(40) },
+  ])
+    expect(calledAllows(github, { ...inputs, ...changed })).toBe(false);
+  expect(workflow).toContain(`ref: "\${{ github.sha }}"`);
+  expect(workflow).toContain("actions: read");
+  expect(workflow).not.toContain("contents: write");
+  expect(workflow).not.toContain("*.xcresult");
+});
+test("managed request excludes ordinary builds and other hosted fixtures rather than accidentally publishing", () => {
+  for (const name of ["hosted-host-tests", "hosted-original-shell"]) {
+    const expression = ci.split(`  ${name}:\n`)[1].match(/ {4}if: ([^\n]+)/)[1];
+    const allows = new Function(
+      "github",
+      "inputs",
+      `return Boolean(${expression})`,
+    );
+    const prior = {
+      ...inputs,
+      hosted_host_tests_sha: github.sha,
+      hosted_shell_journey_sha: "",
+      hosted_managed_views_sha: "",
+      hosted_managed_artifacts_run: "",
+      hosted_managed_artifacts_sha: "",
+    };
+    expect(
+      allows(
+        { ...github, ref: "refs/heads/main" },
+        { ...prior, hosted_managed_views_sha: github.sha },
+      ),
+    ).toBe(false);
+    expect(
+      allows(
+        { ...github, ref: "refs/heads/main" },
+        { ...prior, hosted_managed_artifacts_run: "42" },
+      ),
+    ).toBe(false);
+  }
+  const change = ci.split("  changes:\n")[1].split("    runs-on:")[0];
+  expect(change).toContain("inputs.hosted_managed_views_sha != ''");
+  expect(change).toContain("inputs.hosted_managed_artifacts_run != ''");
+  expect(change).toContain("inputs.hosted_managed_artifacts_sha != ''");
+});
