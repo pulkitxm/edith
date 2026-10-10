@@ -16,36 +16,77 @@ import { buildExtensionPackage } from "./build-extension-package.mjs";
 import { validateWorkerLifecycleScope } from "./extension-worker-proof.mjs";
 
 export const unsupportedFixtureWorkers = new Set([
-  "focusDim", "windowSweaters", "micMute", "keystrokeHighlight", "presenter",
-  "colorPicker", "systemStats", "emoji", "music", "plugins", "studio",
+  "focusDim",
+  "windowSweaters",
+  "micMute",
+  "keystrokeHighlight",
+  "presenter",
+  "colorPicker",
+  "systemStats",
+  "emoji",
+  "music",
+  "plugins",
+  "studio",
 ]);
 
 export const supportedFixtureWorkers = new Set([
-  "keepAwake", "audioMixer", "homebrew", "calendar", "jev", "system", "timeLapse",
-  "cleaner", "appMaintenance", "blitztree", "notchShelf", "clipboard", "docs",
-  "latex", "companion", "terminal", "usage", "bifrost", "lidAwake", "attention",
-  "machines", "downloads", "seoAudit", "virtualCamera", "codeStats", "herdr",
-  "quinjet", "database",
+  "keepAwake",
+  "audioMixer",
+  "homebrew",
+  "calendar",
+  "jev",
+  "system",
+  "timeLapse",
+  "cleaner",
+  "appMaintenance",
+  "blitztree",
+  "notchShelf",
+  "clipboard",
+  "docs",
+  "latex",
+  "companion",
+  "terminal",
+  "usage",
+  "bifrost",
+  "lidAwake",
+  "attention",
+  "machines",
+  "downloads",
+  "seoAudit",
+  "virtualCamera",
+  "codeStats",
+  "herdr",
+  "quinjet",
+  "database",
 ]);
 
 export function validateWorkerFixtureSelection(definitions, requested) {
   const workers = definitions.filter((entry) => entry.contractVersion === 1);
-  const selected = requested.length === 0 ? workers : requested.map((id) => {
-    const entry = workers.find((worker) => worker.id === id);
-    assert(entry, `Unknown worker extension ${id}`);
-    return entry;
-  });
+  const selected =
+    requested.length === 0
+      ? workers
+      : requested.map((id) => {
+          const entry = workers.find((worker) => worker.id === id);
+          assert(entry, `Unknown worker extension ${id}`);
+          return entry;
+        });
   for (const { id } of selected)
-    assert(supportedFixtureWorkers.has(id) && !unsupportedFixtureWorkers.has(id),
-      `Worker ${id} has no admitted inert fixture on this parent; startup rejected`);
+    assert(
+      supportedFixtureWorkers.has(id) && !unsupportedFixtureWorkers.has(id),
+      `Worker ${id} has no admitted inert fixture on this parent; startup rejected`,
+    );
   return selected;
 }
 
 async function run() {
-  const definitions = JSON.parse(await readFile("Extensions/manifest.json", "utf8"));
-  const requested = process.argv.slice(2).filter(
-    (value) => !["--retain-packages", "--headless-cli"].includes(value),
+  const definitions = JSON.parse(
+    await readFile("Extensions/manifest.json", "utf8"),
   );
+  const requested = process.argv
+    .slice(2)
+    .filter(
+      (value) => !["--retain-packages", "--headless-cli"].includes(value),
+    );
   validateWorkerFixtureSelection(definitions, requested);
   await mkdir(resolve("local"), { recursive: true });
   const root = await realpath(
@@ -133,8 +174,10 @@ async function run() {
       }
       const fixtureRoot = join(root, `${id}-host`);
       await mkdir(fixtureRoot, { mode: 0o700 });
-      const fixtureHome = id === "calendar" ? fixtureRoot : join(fixtureRoot, `${id}-home`);
-      if (fixtureHome !== fixtureRoot) await mkdir(fixtureHome, { mode: 0o700 });
+      const fixtureHome =
+        id === "calendar" ? fixtureRoot : join(fixtureRoot, `${id}-home`);
+      if (fixtureHome !== fixtureRoot)
+        await mkdir(fixtureHome, { mode: 0o700 });
       const result = JSON.parse(
         execFileSync(
           resolve(
@@ -239,7 +282,6 @@ async function run() {
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-
 }
 
 if (resolve(process.argv[1] ?? "") === resolve(fileURLToPath(import.meta.url)))
