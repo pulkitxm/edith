@@ -10,7 +10,8 @@ struct MachinePTYLaunch: Equatable, Sendable {
 
 struct MachineTerminalRequest: Codable, Sendable {
     enum Operation: String, Codable, Sendable {
-        case open, read, input, resize, close, upload, shells, register, unregister, heartbeat
+        case open, read, input, resize, close, upload, shells, register, unregister, heartbeat,
+            resolveLink, openLink
     }
     var operation: Operation
     var machineID: UUID
@@ -26,16 +27,22 @@ struct MachineTerminalRequest: Codable, Sendable {
     var containerID: String?
     var windowsShell = WindowsTerminalShell.automatic
     var paths: [String] = []
+    var target: String = ""
+    var untrusted = false
+    var linkID: UUID?
 
     func validate() throws {
         guard (1...1000).contains(columns), (1...1000).contains(rows), bytes.count <= 16_384,
+            target.utf8.count <= 4096, !target.utf8.contains(0),
             tabIDs.count <= 64, Set(tabIDs).count == tabIDs.count, paths.count <= 128,
             paths.allSatisfy({ $0.hasPrefix("/") && $0.utf8.count <= 4096 && !$0.utf8.contains(0) }
             ),
             directory.map({ $0.utf8.count <= 4096 && !$0.utf8.contains(0) }) ?? true,
             containerID.map({ !$0.isEmpty && $0.utf8.count <= 256 && !$0.utf8.contains(0) }) ?? true
         else { throw MachineUIError.invalidRequest }
-        if [.read, .input, .resize, .close].contains(operation), handle == nil {
+        if [.read, .input, .resize, .close, .resolveLink, .openLink].contains(operation),
+            handle == nil
+        {
             throw MachineUIError.invalidRequest
         }
     }
@@ -50,4 +57,6 @@ struct MachineTerminalFrame: Codable, Sendable {
     var echo = false
     var paths: [String] = []
     var shells: [WindowsTerminalShell] = []
+    var linkID: UUID?
+    var link: Data?
 }

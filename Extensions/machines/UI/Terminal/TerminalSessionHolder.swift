@@ -35,6 +35,7 @@ final class TerminalSessionHolder {
 
     private(set) var transferringDrop = false
     private(set) var dropTransferError: String?
+    private var linkTask: Task<Void, Never>?
     private var dropTask: Task<Void, Never>?
     private var queuedGhosttyInput = ""
     private var pendingUserClose: PendingUserClose?
@@ -231,6 +232,7 @@ final class TerminalSessionHolder {
         dropTask?.cancel(); dropTask = nil
         engineTask?.cancel(); closingTask = engineTask; engineTask = nil
         inputTask?.cancel(); inputTask = nil
+        linkTask?.cancel(); linkTask = nil
         externalIO?.invalidate(); externalIO = nil
         engineRequest = nil; engineClient = nil
         pendingUserClose = nil
@@ -316,6 +318,41 @@ final class TerminalSessionHolder {
                 self?.setCurrentWorkingDirectory(directory, generation: viewGeneration)
             }
         }
+        view.onOpenTarget = { [weak self, weak view] target, untrusted in
+            guard let self, let view, generation == viewGeneration, ghosttyView === view,
+                let client = engineClient, var request = engineRequest, request.handle != nil
+            else { return false }
+            linkTask?.cancel()
+            request.operation = .resolveLink
+            request.target = target; request.untrusted = untrusted
+            request.directory = currentWorkingDirectory
+            linkTask = Task { [weak self, weak view] in
+                do {
+                    let frame = try await client.terminal(request)
+                    guard !Task.isCancelled, let self, let view, generation == viewGeneration,
+                        ghosttyView === view, let encoded = frame.link, let id = frame.linkID
+                    else { return }
+                    let resolution = try JSONDecoder().decode(
+                        TerminalLinkResolution.self, from: encoded)
+                    view.presentLink(resolution) { [weak self, weak view] in
+                        guard let self, let view, generation == viewGeneration,
+                            ghosttyView === view
+                        else { return }
+                        var open = request; open.operation = .openLink; open.linkID = id
+                        linkTask = Task { [weak self] in
+                            do { _ = try await client.terminal(open) } catch {
+                                if !Task.isCancelled {
+                                    self?.dropTransferError = error.localizedDescription
+                                }
+                            }
+                        }
+                    }
+                } catch {
+                    if !Task.isCancelled { self?.dropTransferError = error.localizedDescription }
+                }
+            }
+            return true
+        }
         view.onReady = { [weak self, weak view] in
             guard let self, let view, self.generation == viewGeneration else { return }
             self.startEngine()
@@ -329,6 +366,7 @@ final class TerminalSessionHolder {
         let closeCompletion = takeUserCloseCompletion(for: view)
         engineTask?.cancel(); closingTask = engineTask; engineTask = nil
         inputTask?.cancel(); inputTask = nil
+        linkTask?.cancel(); linkTask = nil
         externalIO?.invalidate(); externalIO = nil
         queuedGhosttyInput = ""
         view.shutdown()

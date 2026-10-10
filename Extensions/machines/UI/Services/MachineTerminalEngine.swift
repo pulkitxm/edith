@@ -1,6 +1,8 @@
+import AppKit
 import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
+import GhosttyTerminal
 
 @MainActor final class MachineTerminalEngine {
     private struct Terminal {
@@ -9,6 +11,7 @@ import Foundation
         let tabID: UUID
         let pty: MachinePTY
         var touched = ContinuousClock.now
+        var link: (UUID, TerminalLinkResolution)?
     }
     private struct Registration {
         let machineID: UUID
@@ -17,6 +20,7 @@ import Foundation
         var touched = ContinuousClock.now
     }
     private var registrations: [UUID: Registration] = [:]
+    private let openURL: (URL) -> Bool
     private let session: (UUID) throws -> MachineSession
     private let launch:
         @MainActor (MachineSession, MachineTerminalRequest) throws -> MachinePTYLaunch
@@ -30,6 +34,7 @@ import Foundation
 
     init(
         session: @escaping (UUID) throws -> MachineSession,
+        openURL: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
         launch:
             @escaping @MainActor (MachineSession, MachineTerminalRequest) throws -> MachinePTYLaunch =
             MachineTerminalEngine.originalLaunch,
@@ -43,6 +48,7 @@ import Foundation
                     currentDirectory: NSHomeDirectory(), startupCommand: nil)
             }
     ) {
+        self.openURL = openURL
         self.session = session
         self.launch = launch
         self.interactiveLaunch = interactiveLaunch
@@ -153,7 +159,7 @@ import Foundation
             ).get()
             return MachineTerminalFrame(
                 shells: [.automatic] + WindowsTerminalCommands.parseAvailableShells(text))
-        case .read, .input, .resize, .close:
+        case .read, .input, .resize, .close, .resolveLink, .openLink:
             guard let handle = request.handle, var terminal = terminals[handle],
                 terminal.machineID == request.machineID, terminal.tabID == request.tabID,
                 terminal.presentationID == request.presentationID
@@ -166,6 +172,24 @@ import Foundation
                 return MachineTerminalFrame(
                     handle: handle, bytes: output.bytes, nextOffset: output.nextOffset,
                     exitCode: output.exitCode, canonical: output.canonical, echo: output.echo)
+            case .resolveLink:
+                let owner = try session(request.machineID)
+                let resolution = TerminalLinkResolution.resolve(
+                    request.target, directory: request.directory ?? NSHomeDirectory(),
+                    untrusted: request.untrusted, allowsLocalFiles: owner.isLocal)
+                let id = UUID()
+                terminals[handle]?.link = (id, resolution)
+                return MachineTerminalFrame(
+                    handle: handle, linkID: id, link: try JSONEncoder().encode(resolution))
+            case .openLink:
+                guard let id = request.linkID, let (expected, resolution) = terminal.link,
+                    id == expected, resolution.disposition != .deny,
+                    let url = URL(string: resolution.target)
+                else { throw MachineUIError.invalidRequest }
+                terminals[handle]?.link = nil
+                guard openURL(url) else {
+                    throw MachineUIFailure(message: "The terminal target could not be opened.")
+                }
             case .input: try await send(request.bytes, to: terminal.pty)
             case .resize: try terminal.pty.resize(columns: request.columns, rows: request.rows)
             case .close:

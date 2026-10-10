@@ -146,6 +146,59 @@ import Testing
         await engine.shutdown()
     }
 
+    @Test func originalTerminalLinksResolveInEngineAndRejectStaleOrRemoteFileTargets() async throws
+    {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("synthetic.txt")
+        try Data("synthetic terminal link".utf8).write(to: file)
+        let local = MachineSession(machine: .local, local: true, synthetic: true)
+        let remote = MachineSession(
+            machine: Machine(name: "fixture", host: "fixture.invalid"), synthetic: true)
+        var opened: [URL] = []
+        let engine = MachineTerminalEngine(
+            session: { $0 == local.id ? local : remote },
+            openURL: {
+                opened.append($0); return true
+            }, launch: { _, _ in launch("exec cat") })
+        var request = MachineTerminalRequest(operation: .open, machineID: local.id)
+        request.handle = try await engine.execute(request).handle
+        request.operation = .resolveLink; request.target = "./synthetic.txt"
+        request.directory = root.path
+        let first = try await engine.execute(request)
+        let resolution = try JSONDecoder().decode(
+            TerminalLinkResolution.self, from: #require(first.link))
+        #expect(resolution.disposition == .allow)
+        #expect(resolution.target == file.standardizedFileURL.absoluteString)
+        request.operation = .openLink; request.linkID = first.linkID
+        _ = try await engine.execute(request)
+        #expect(opened.map(\.absoluteString) == [resolution.target])
+        await #expect(throws: MachineUIError.self) { try await engine.execute(request) }
+        request.operation = .resolveLink; request.target = "fixture-app:synthetic";
+        request.untrusted = true
+        let confirmation = try await engine.execute(request)
+        #expect(
+            try JSONDecoder().decode(TerminalLinkResolution.self, from: #require(confirmation.link))
+                .disposition == .confirm)
+        request.target = "https://fixture.invalid/\u{1b}"
+        let denied = try await engine.execute(request)
+        #expect(
+            try JSONDecoder().decode(TerminalLinkResolution.self, from: #require(denied.link))
+                .disposition == .deny)
+        request.operation = .openLink; request.linkID = denied.linkID
+        await #expect(throws: MachineUIError.self) { try await engine.execute(request) }
+        var other = MachineTerminalRequest(operation: .open, machineID: remote.id)
+        other.handle = try await engine.execute(other).handle
+        other.operation = .resolveLink; other.target = "file:///private/tmp/synthetic.txt"
+        let remoteFile = try await engine.execute(other)
+        #expect(
+            try JSONDecoder().decode(TerminalLinkResolution.self, from: #require(remoteFile.link))
+                .disposition == .deny)
+        #expect(opened.count == 1)
+        await engine.shutdown()
+    }
+
     @Test func originalTTYCliRunsARealPTYAndPreservesOutputAndExit() async throws {
         let machine = Machine(name: "fixture-box", host: "fixture.invalid")
         let owner = MachineSession(machine: machine, synthetic: true)

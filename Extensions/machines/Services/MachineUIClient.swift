@@ -218,6 +218,7 @@ import Foundation
         try value.validate()
         let frame: MachineTerminalFrame = try await request("machines.ui.terminal", value: value)
         guard frame.bytes.count <= 32_768, frame.paths.count <= 128,
+            frame.link.map({ $0.count <= 16_384 }) ?? true,
             frame.paths.allSatisfy({ $0.utf8.count <= 4096 && !$0.utf8.contains(0) }),
             frame.shells.count <= WindowsTerminalShell.allCases.count + 1
         else { throw MachineUIError.invalidRequest }
