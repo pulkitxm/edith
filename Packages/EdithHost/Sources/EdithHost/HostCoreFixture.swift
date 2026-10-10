@@ -1,0 +1,62 @@
+#if EDITH_CLI_FIXTURE
+import Darwin
+import EdithHostCore
+import Foundation
+
+@MainActor enum HostCoreFixture {
+    static func run(directory: URL, orphan: Bool) throws {
+        guard let identifier = Bundle.main.bundleIdentifier,
+            identifier.hasPrefix("com.pulkit.edith.tests.core-"),
+            let executable = Bundle.main.executableURL
+        else { throw HostWorkerError.rejected }
+        let identity = try HostIdentity(identifier: identifier, supportDirectory: directory)
+        Task {
+            let service = HostCoreProcess(identity: identity, executable: executable)
+            do {
+                let started = try await service.start()
+                let data = identity.extensionDirectory("usage")
+                try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+                try Data(repeating: 7, count: 71).write(
+                    to: data.appendingPathComponent("synthetic"))
+                let measured = try await service.perform(.inspect)
+                guard measured.storage?.footprints.first(where: { $0.id == "usage" })?.bytes == 71,
+                    measured.tasks.last?.phase == .completed,
+                    let pid = service.processIdentifier
+                else { throw HostWorkerError.rejected }
+                try HostCoreFiles.write(
+                    JSONSerialization.data(withJSONObject: [
+                        "ownerPID": getpid(), "corePID": pid, "measuredBytes": 71,
+                        "residentBytes": started.residentBytes, "processGroup": getpgid(pid),
+                        "mode": orphan ? "owner-exit" : "normal",
+                    ]), to: directory.appendingPathComponent("ready.json"))
+                if orphan {
+                    while true { try await Task.sleep(for: .seconds(1)) }
+                }
+                await service.stop()
+                guard !service.ready, service.processIdentifier == nil else {
+                    throw HostWorkerError.rejected
+                }
+                let restarted = HostCoreProcess(identity: identity, executable: executable)
+                let restored = try await restarted.start()
+                guard restored.tasks.last?.id == measured.tasks.last?.id else {
+                    throw HostWorkerError.rejected
+                }
+                await restarted.stop()
+                try HostCoreFiles.write(
+                    JSONSerialization.data(withJSONObject: [
+                        "passed": true, "restartRetainedTasks": true, "stoppedProcesses": true,
+                    ]), to: directory.appendingPathComponent("result.json"))
+                exit(0)
+            } catch {
+                await service.stop()
+                try? HostCoreFiles.write(
+                    JSONSerialization.data(withJSONObject: [
+                        "passed": false, "failure": String(describing: error),
+                    ]), to: directory.appendingPathComponent("result.json"))
+                exit(1)
+            }
+        }
+        dispatchMain()
+    }
+}
+#endif

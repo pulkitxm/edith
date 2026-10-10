@@ -17,6 +17,16 @@ struct HostEntry {
             exit(HostCLI.run(arguments))
         }
         #if EDITH_CLI_FIXTURE
+        if arguments.count == 3, arguments[0] == "--extension-core-fixture",
+            ["normal", "owner-exit"].contains(arguments[2])
+        {
+            do {
+                try HostCoreFixture.run(
+                    directory: URL(fileURLWithPath: arguments[1]),
+                    orphan: arguments[2] == "owner-exit")
+            } catch { exit(1) }
+            return
+        }
         if arguments.count == 2, arguments[0] == "--cli-fixture",
             Bundle.main.bundleIdentifier?.hasPrefix("com.pulkit.edith.tests.cli-") == true
         {
@@ -64,6 +74,10 @@ struct HostEntry {
         }
         if arguments == ["--extension-command"] {
             do { try ExtensionCommandSpecification.runWrapper() } catch { exit(1) }
+        }
+        if arguments == ["--extension-core"] {
+            do { try HostCoreServiceRole.run() } catch { exit(1) }
+            return
         }
         if arguments == ["--extension-worker"] {
             setenv("EDITH_EXTENSION_WORKER", "1", 1)
