@@ -26,7 +26,14 @@ func dispatchHostEntry() {
 
 @main
 struct HostEntry: AppExtension {
-    init() { edith_host_bootstrap_anchor() }
+    init() {
+        edith_host_bootstrap_anchor()
+        #if EDITH_FUNCTIONAL_FIXTURE_ENTRY
+        MainActor.assumeIsolated {
+            do { try FunctionalHostApplication.installHooks() } catch { exit(1) }
+        }
+        #endif
+    }
 
     var configuration: AppExtensionSceneConfiguration {
         HostRemoteApplication.shared.sceneConfiguration
@@ -34,6 +41,9 @@ struct HostEntry: AppExtension {
 
     @MainActor static func runHost() {
         signal(SIGPIPE, SIG_IGN)
+        #if EDITH_FUNCTIONAL_FIXTURE_ENTRY
+        do { try FunctionalHostApplication.installHooks() } catch { exit(1) }
+        #endif
         let arguments = Array(CommandLine.arguments.dropFirst())
         if ProcessInfo.processInfo.environment["EDITH_CLI"] == "1"
             || (!arguments.isEmpty && !arguments[0].hasPrefix("--extension-")
@@ -142,7 +152,11 @@ struct HostEntry: AppExtension {
             return
         }
         guard arguments.isEmpty else { HostCommandCLI.main(arguments: arguments) }
+        #if EDITH_FUNCTIONAL_FIXTURE_ENTRY
+        do { try FunctionalHostApplication.run() } catch { exit(1) }
+        #else
         HostApplication.main()
+        #endif
     }
 }
 
