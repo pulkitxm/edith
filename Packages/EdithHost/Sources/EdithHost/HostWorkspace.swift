@@ -36,7 +36,8 @@ struct HostWorkspace: View {
     @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
     @AppStorage(AppStorageKeys.AppMaintenance.section, store: SharedDefaults.store) private
         var maintenanceSection = "Updates"
-    @State private var requestedSettings: String?
+    @State private var requestedSettings: HostSettingsNavigation?
+    @State private var workspaceWindow: NSWindow?
     @State private var router = WindowRouter()
     @State private var expansionRevision = 0
     @State private var liveSidebarWidth: Double?
@@ -146,22 +147,26 @@ struct HostWorkspace: View {
                     apply: { route in
                         try Task.checkCancellation()
                         if route.restoreOnly { return }
-                        if let id = route.settingsExtensionID { requestedSettings = id }
+                        if let id = route.settingsExtensionID {
+                            guard let workspaceWindow,
+                                let version = marketplace.sessions.versions[id]
+                            else { throw HostWindowNavigationError.unavailable }
+                            requestedSettings?.delivery.reject()
+                            requestedSettings = .init(
+                                delivery: HostPresentationDelivery(extensionID: id, version: version),
+                                window: workspaceWindow)
+                        }
                         if let section = route.section {
                             if route.page == "settings" { settings = section }
                             if route.page == "appMaintenance" { maintenanceSection = section }
                         }
                         binding.wrappedValue = route.page
                         await Task.yield()
-                        if route.settingsExtensionID != nil {
-                            for _ in 0..<100 {
-                                try Task.checkCancellation()
-                                if requestedSettings == nil { break }
-                                try await Task.sleep(for: .milliseconds(20))
-                            }
-                            guard requestedSettings == nil else {
-                                throw HostWindowNavigationError.routeRejected
-                            }
+                        if let id = route.settingsExtensionID {
+                            guard let request = requestedSettings,
+                                request.delivery.extensionID == id
+                            else { throw HostWindowNavigationError.routeRejected }
+                            try await request.delivery.wait()
                         }
                         guard binding.wrappedValue == route.page,
                             route.page != "settings" || route.section == nil
@@ -171,11 +176,20 @@ struct HostWorkspace: View {
                         else {
                             throw HostWindowNavigationError.routeRejected
                         }
-                    }, selected: { binding.wrappedValue })
+                    }, selected: { binding.wrappedValue },
+                    delivered: { route in
+                        if let id = route.settingsExtensionID {
+                            guard let request = requestedSettings,
+                                request.delivery.extensionID == id
+                            else { throw HostWindowNavigationError.routeRejected }
+                            try request.delivery.validate()
+                        }
+                    }, captured: { workspaceWindow = $0 })
             }
         }
         .onAppear { installKeys() }
         .onDisappear {
+            requestedSettings?.delivery.reject()
             removeKeys(); musicSlots?.setVisible(musicWindowID, visible: false)
         }
         .onChange(of: musicAdmission, initial: true) {

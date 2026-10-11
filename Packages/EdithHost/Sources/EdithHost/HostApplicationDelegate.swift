@@ -41,6 +41,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
         if let window = ownedWindow ?? mainWindow() {
             if window.isMiniaturized { window.deminiaturize(nil) }
             window.makeKeyAndOrderFront(nil)
+            window.attachedSheet?.makeKeyAndOrderFront(nil)
         } else {
             openMainWindow?()
         }

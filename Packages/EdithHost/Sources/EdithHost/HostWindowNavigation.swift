@@ -63,13 +63,14 @@ final class HostWindowNavigation {
     }
 
     func register(
-        window: NSWindow, apply: @escaping Apply, selected: @escaping @MainActor () -> String
+        window: NSWindow, apply: @escaping Apply, selected: @escaping @MainActor () -> String,
+        delivered: @escaping @MainActor (HostWindowRoute) throws -> Void = { _ in }
     ) -> UUID {
         registrations = registrations.filter { $0.value.window != nil }
         sequence &+= 1
         let token = UUID()
         let registration = Registration(
-            window: window, order: sequence, apply: apply, selected: selected)
+            window: window, order: sequence, apply: apply, selected: selected, delivered: delivered)
         registrations[token] = registration
         registration.closeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: window, queue: .main
@@ -156,6 +157,11 @@ final class HostWindowNavigation {
             visible: { self.visible($0) })
         try owner.validate()
         try Task.checkCancellation()
+        if route.settingsExtensionID != nil {
+            try await showWindow(window)
+            try Task.checkCancellation()
+            try owner.validate()
+        }
         if !route.restoreOnly { try await registration.apply(route) }
         try Task.checkCancellation()
         try HostWorkerNavigationRouting.validateApplied(
@@ -169,6 +175,7 @@ final class HostWindowNavigation {
             current: registration.selected() == route.page,
             windowPresented: windowIsPresented(window))
         try owner.validate()
+        try registration.delivered(route)
         try await didApply(route)
         try Task.checkCancellation()
         try HostWorkerNavigationRouting.validateApplied(
@@ -177,6 +184,7 @@ final class HostWindowNavigation {
             windowPresented: windowIsPresented(window),
             visible: visible(route.page))
         try owner.validate()
+        try registration.delivered(route)
     }
 
     private func visible(_ page: String) -> Bool {
@@ -273,15 +281,18 @@ final class HostWindowNavigation {
         let order: UInt64
         let apply: Apply
         let selected: @MainActor () -> String
+        let delivered: @MainActor (HostWindowRoute) throws -> Void
         var closeObserver: NSObjectProtocol?
         deinit {
             if let closeObserver { NotificationCenter.default.removeObserver(closeObserver) }
         }
         init(
             window: NSWindow, order: UInt64, apply: @escaping Apply,
-            selected: @escaping @MainActor () -> String
+            selected: @escaping @MainActor () -> String,
+            delivered: @escaping @MainActor (HostWindowRoute) throws -> Void
         ) {
             self.window = window; self.order = order; self.apply = apply; self.selected = selected
+            self.delivered = delivered
         }
     }
 }
@@ -290,11 +301,16 @@ struct HostWindowNavigationAnchor: NSViewRepresentable {
     let navigation: HostWindowNavigation
     let apply: HostWindowNavigation.Apply
     let selected: @MainActor () -> String
+    var delivered: @MainActor (HostWindowRoute) throws -> Void = { _ in }
+    var captured: @MainActor (NSWindow) -> Void = { _ in }
     func makeNSView(context: Context) -> HostWindowNavigationView {
-        HostWindowNavigationView(navigation: navigation, apply: apply, selected: selected)
+        HostWindowNavigationView(
+            navigation: navigation, apply: apply, selected: selected, delivered: delivered,
+            captured: captured)
     }
     func updateNSView(_ view: HostWindowNavigationView, context: Context) {
         view.apply = apply; view.selected = selected
+        view.delivered = delivered; view.captured = captured
     }
     static func dismantleNSView(_ view: HostWindowNavigationView, coordinator: ()) {
         view.detach()
@@ -307,11 +323,16 @@ final class HostWindowNavigationView: NSView {
     private var token: UUID?
     var apply: HostWindowNavigation.Apply
     var selected: @MainActor () -> String
+    var delivered: @MainActor (HostWindowRoute) throws -> Void
+    var captured: @MainActor (NSWindow) -> Void
     init(
         navigation: HostWindowNavigation, apply: @escaping HostWindowNavigation.Apply,
-        selected: @escaping @MainActor () -> String
+        selected: @escaping @MainActor () -> String,
+        delivered: @escaping @MainActor (HostWindowRoute) throws -> Void,
+        captured: @escaping @MainActor (NSWindow) -> Void
     ) {
         self.navigation = navigation; self.apply = apply; self.selected = selected
+        self.delivered = delivered; self.captured = captured
         super.init(frame: .zero)
     }
     required init?(coder: NSCoder) { nil }
@@ -322,13 +343,18 @@ final class HostWindowNavigationView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard let window, let navigation else { return }
+        captured(window)
         token = navigation.register(
             window: window,
             apply: { [weak self] route in
                 guard let self else { throw HostWindowNavigationError.unavailable }
                 try await apply(route)
             },
-            selected: { [weak self] in self?.selected() ?? "" })
+            selected: { [weak self] in self?.selected() ?? "" },
+            delivered: { [weak self] route in
+                guard let self else { throw HostWindowNavigationError.unavailable }
+                try delivered(route)
+            })
     }
     func detach() {
         if let token { navigation?.unregister(token) }

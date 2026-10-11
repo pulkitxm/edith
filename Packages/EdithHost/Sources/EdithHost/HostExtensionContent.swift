@@ -21,6 +21,7 @@ struct HostExtensionContent: View {
     let openMarketplace: () -> Void
     var surface: SurfaceSnapshotRequest? = nil
     var initialHeight: Double? = nil
+    var navigation: HostSettingsNavigation? = nil
     @State private var controller: NSViewController?
     @State private var presentationID = UUID()
     @State private var error: String?
@@ -83,11 +84,11 @@ struct HostExtensionContent: View {
             id: Request(
                 version: marketplace.installed[extensionID]?.version, active: active,
                 location: location,
-                section: section, surface: surface, retry: retry),
+                section: section, surface: surface, retry: retry, deliveryID: navigation?.delivery.id),
             active: eligible && presenter != nil, cancel: clear
         ) {
             guard let presenter else { return }
-            let token = UUID()
+            let token = navigation?.delivery.id ?? UUID()
             presentationID = token
             do {
                 let loaded = try await presenter.controller(
@@ -102,7 +103,43 @@ struct HostExtensionContent: View {
                     contentHeight = remote.contentHeight
                 }
                 controller = loaded
+                if let navigation {
+                    let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+                    guard let remote = loaded as? HostRemoteViewController else {
+                        throw HostWorkerError.rejected
+                    }
+                    while !remote.isViewLoaded || remote.view.window == nil {
+                        try Task.checkCancellation()
+                        guard presentationID == token, navigation.delivery.pending,
+                            remote.failure == nil, !remote.detached, ContinuousClock.now < deadline
+                        else { throw HostWorkerError.rejected }
+                        try await Task.sleep(for: .milliseconds(10))
+                    }
+                    guard let window = remote.view.window else { throw HostWorkerError.rejected }
+                    try navigation.validate(window: window)
+                    try await remote.waitUntilConnected(window: window)
+                    try navigation.delivery.receive(
+                        presentationID: token, extensionID: extensionID,
+                        version: marketplace.installed[extensionID]?.version ?? "",
+                        validate: { [weak remote] in
+                            guard let remote, presentationID == token, controller === loaded,
+                                remote.request.presentationID == token,
+                                remote.request.extensionID == extensionID,
+                                remote.request.location == location, remote.request.section == section,
+                                marketplace.installed[extensionID]?.version == navigation.delivery.version,
+                                marketplace.sessions.versions[extensionID] == navigation.delivery.version,
+                                marketplace.surfaceAvailability.activeIDs.contains(extensionID),
+                                !marketplace.pendingRemovalIDs.contains(extensionID),
+                                !marketplace.sessions.pendingDisableIDs.contains(extensionID),
+                                let owner = presenter as? HostRemoteContentPresenter,
+                                owner.owns(remote, presentationID: token)
+                            else { throw HostWorkerError.rejected }
+                            try navigation.validate(window: window)
+                            try remote.validateConnected(window: window)
+                        })
+                }
             } catch {
+                navigation?.delivery.reject(error)
                 guard !Task.isCancelled else { return }
                 approvalRequired = error is HostRemoteAvailabilityError
                 self.error =
@@ -119,8 +156,10 @@ struct HostExtensionContent: View {
     private struct Request: Equatable {
         let version: String?; let active: Bool; let location: String; let section: String?
         let surface: SurfaceSnapshotRequest?; let retry: Int
+        let deliveryID: UUID?
     }
     private func clear() {
+        navigation?.delivery.reject()
         presenter?.endPresentation(id: presentationID); controller = nil; error = nil
         contentHeight = nil; approvalRequired = false
     }

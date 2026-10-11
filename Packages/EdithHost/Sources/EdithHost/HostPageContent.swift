@@ -10,7 +10,7 @@ struct HostPageContent: View {
     let destination: HostNavigationPage
     @Binding var settings: String
     @Binding var maintenanceSection: String
-    var requestedSettings: Binding<String?> = .constant(nil)
+    var requestedSettings: Binding<HostSettingsNavigation?> = .constant(nil)
     var presenter: (any HostExtensionContentPresenting)? = nil
     var showWelcome: (() -> Void)? = nil
     var panelShortcutChanged: () -> Void = {}

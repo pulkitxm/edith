@@ -154,7 +154,8 @@ struct HostApplication: App {
                     await Task.yield()
                 },
                 windowIsPresented: { window in
-                    window.isVisible && !window.isMiniaturized && window.isKeyWindow
+                    window.isVisible && !window.isMiniaturized
+                        && (window.isKeyWindow || window.attachedSheet === NSApp.keyWindow)
                         && NSApp.isActive
                 }
             )
