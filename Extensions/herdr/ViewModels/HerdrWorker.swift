@@ -611,7 +611,7 @@ import WorkerFixtureSupport
         cliStreams?.stop()
         agentCLIStreams?.stop()
         HerdrWorkOwnership.cancel()
-        activity.cancelFolderChoice()
+        activity.beginCommandDrain()
     }
 
     func cancelPendingWork() async {
@@ -630,7 +630,7 @@ import WorkerFixtureSupport
         await terminalSessions.stopAllAndWait()
         maintenance?.cancel()
         await maintenance?.value
-        await activity.shutdown()
+        await activity.cancelPendingWorkAndWait()
         await hooks.stop()
         await HerdrWorkOwnership.shutdown()
         await store.drain()

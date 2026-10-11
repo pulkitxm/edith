@@ -20,6 +20,9 @@ final class AgentActivityMonitor {
     private var surfaceUntil = Date.distantPast
     private var stopped = false
     private var started = false
+    private var workSuspended = false
+    private var ownedWork: [UUID: Task<Void, Never>] = [:]
+    private var pendingDrain: Task<Void, Never>?
     let terminals = AgentTerminalActivity()
     let hookFiles: AgentActivityHookFiles
     var hookError: String?
@@ -43,7 +46,8 @@ final class AgentActivityMonitor {
         HerdrAttentionSettings(defaults: defaults).stuckMinutes
     }
     var isListening: Bool {
-        !stopped && !PresenterState.shared.hidesAgents && (observers > 0 || surfaceUntil > Date())
+        !stopped && !workSuspended && !PresenterState.shared.hidesAgents
+            && (observers > 0 || surfaceUntil > Date())
     }
     var service: AgentActivityService {
         precondition(uiClient == nil && Bundle.main.bundleURL.pathExtension != "appex")
@@ -57,7 +61,11 @@ final class AgentActivityMonitor {
     }
 
     func start() async {
-        guard !started, !stopped else { return }
+        await runOwned { [self] in await startOwned() }
+    }
+
+    private func startOwned() async {
+        guard !started, !stopped, !workSuspended else { return }
         if uiClient != nil { await refresh(); return }
         started = true
         await service.start { [weak self] data in
@@ -70,7 +78,7 @@ final class AgentActivityMonitor {
     }
 
     func receive(_ value: AgentActivitySnapshot) {
-        guard !stopped else { return }
+        guard !stopped, !workSuspended else { return }
         now = Date()
         activity = value
         let live = Set(value.approvals.map(\.id))
@@ -78,14 +86,20 @@ final class AgentActivityMonitor {
     }
 
     func observe() async {
-        guard !stopped else { return }
+        await runOwned { [self] in await observeOwned() }
+    }
+
+    private func observeOwned() async {
+        guard !stopped, !workSuspended else { return }
         observers += 1
         await refresh()
         defer {
             observers = max(0, observers - 1)
-            if uiClient == nil { HerdrWorkOwnership.start { await self.service.tick() } }
+            if uiClient == nil, !stopped, !workSuspended {
+                HerdrWorkOwnership.start { await self.service.tick() }
+            }
         }
-        while !Task.isCancelled, !stopped {
+        while !Task.isCancelled, !stopped, !workSuspended {
             do { try await Task.sleep(for: .seconds(1)) } catch { break }
             now = Date()
         }
@@ -98,7 +112,11 @@ final class AgentActivityMonitor {
     }
 
     func refresh() async {
-        guard !stopped else { return }
+        await runOwned { [self] in await refreshOwned() }
+    }
+
+    private func refreshOwned() async {
+        guard !stopped, !workSuspended else { return }
         if let uiClient {
             do {
                 receive(
@@ -113,7 +131,11 @@ final class AgentActivityMonitor {
     }
 
     func save(_ settings: AgentActivitySettings) async {
-        guard !stopped else { return }
+        await runOwned { [self] in await saveOwned(settings) }
+    }
+
+    private func saveOwned(_ settings: AgentActivitySettings) async {
+        guard !stopped, !workSuspended else { return }
         if let uiClient {
             do {
                 let data = try await uiClient.perform(
@@ -128,7 +150,11 @@ final class AgentActivityMonitor {
     }
 
     func decide(_ request: AgentApprovalRequest, choice: AgentApprovalChoice) async {
-        guard !stopped, !PresenterState.shared.hidesAgents,
+        await runOwned { [self] in await decideOwned(request, choice: choice) }
+    }
+
+    private func decideOwned(_ request: AgentApprovalRequest, choice: AgentApprovalChoice) async {
+        guard !stopped, !workSuspended, !PresenterState.shared.hidesAgents,
             activity.approvals.contains(where: { $0.id == request.id && $0.nonce == request.nonce }
             ),
             deciding.insert(request.id).inserted
@@ -155,7 +181,7 @@ final class AgentActivityMonitor {
     }
 
     func adoptUI(_ state: HerdrUIState) {
-        guard !stopped else { return }
+        guard !stopped, !workSuspended else { return }
         defaults.set(state.activitySettings.encoded, forKey: AgentActivitySettings.defaultsKey)
         state.attention.save(in: defaults)
         defaults.set(state.discovery, forKey: Self.discoveryKey)
@@ -164,7 +190,13 @@ final class AgentActivityMonitor {
     }
 
     func saveMonitoring(discovery: Bool, stuckMinutes: Int) async {
-        guard !stopped else { return }
+        await runOwned { [self] in
+            await saveMonitoringOwned(discovery: discovery, stuckMinutes: stuckMinutes)
+        }
+    }
+
+    private func saveMonitoringOwned(discovery: Bool, stuckMinutes: Int) async {
+        guard !stopped, !workSuspended else { return }
         let minutes = min(120, max(2, stuckMinutes))
         if let uiClient {
             do {
@@ -180,7 +212,8 @@ final class AgentActivityMonitor {
     }
 
     func chooseProjectFolder() async throws -> URL? {
-        guard !stopped, folderChoice == nil, let uiClient, let folderPresentationID else {
+        guard !stopped, !workSuspended, folderChoice == nil, let uiClient, let folderPresentationID
+        else {
             throw ExtensionPeerError.unavailable
         }
         let task = Task {
@@ -203,11 +236,46 @@ final class AgentActivityMonitor {
         return path.map { URL(fileURLWithPath: $0, isDirectory: true) }
     }
 
+    private func runOwned(_ operation: @escaping @MainActor () async -> Void) async {
+        guard !stopped, !workSuspended else { return }
+        let id = UUID()
+        let task = Task { [self] in
+            defer { ownedWork[id] = nil }
+            guard !Task.isCancelled else { return }
+            await operation()
+        }
+        ownedWork[id] = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    func beginCommandDrain() {
+        workSuspended = true
+        folderChoice?.cancel()
+        for task in ownedWork.values { task.cancel() }
+    }
+
+    func cancelPendingWorkAndWait() async {
+        beginCommandDrain()
+        if let pendingDrain { await pendingDrain.value; return }
+        let pending = Array(ownedWork.values)
+        let folder = folderChoice
+        let task = Task { [self, folder] in
+            _ = await folder?.result
+            for task in pending { await task.value }
+            await serviceValue?.stop()
+        }
+        pendingDrain = task
+        await task.value
+    }
+
     func cancelFolderChoice() { folderChoice?.cancel() }
 
     func shutdown() async {
-        cancelFolderChoice()
-        _ = await folderChoice?.result
+        await cancelPendingWorkAndWait()
         guard !stopped else { return }
         stopped = true
         surfaceUntil = .distantPast

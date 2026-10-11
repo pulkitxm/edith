@@ -92,7 +92,7 @@ final class ExtensionRuntime: NSObject {
         let sessionSettings = sessionSettingsModel
         let settings = settingsModel
         store?.cancelPendingWork()
-        activity?.cancelFolderChoice()
+        activity?.beginCommandDrain()
         sessionSettings?.shutdown()
         settings?.shutdown()
         startup?.cancel()
@@ -107,7 +107,7 @@ final class ExtensionRuntime: NSObject {
                 await store?.drain()
                 await sessionSettings?.stopAndWait()
                 await settings?.stopAndWait()
-                await activity?.shutdown()
+                await activity?.cancelPendingWorkAndWait()
                 for task in retired { await task.value }
             }
         }
@@ -334,7 +334,7 @@ final class ExtensionRuntime: NSObject {
         let store = uiStore
         let activity = uiActivity
         store?.stopRendering()
-        activity?.cancelFolderChoice()
+        activity?.beginCommandDrain()
         uiClient?.invalidate()
         uiClient = nil
         uiStore = nil
