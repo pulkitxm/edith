@@ -29,9 +29,10 @@ final class QuinjetActionCase: HostedFunctionalActionCase {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
         let baseline = try await readState(context: context, theme: QuinjetThemePreference.app)
         await model.read()
+        let temporary = QuinjetTheme.quinjet.rawValue
         guard model.error == nil, let state = model.state,
             state.preference.theme == QuinjetThemePreference.app,
-            let temporary = state.themes.first(where: { $0 != state.preference.theme })
+            state.themes.contains(temporary), temporary != state.preference.theme
         else { throw HostedFunctionalActionError.invalid }
         try await save(theme: temporary)
         let changed = try await readState(context: context, theme: temporary)
