@@ -13,6 +13,7 @@ final class ExtensionRuntime: NSObject {
     private var uiCommands: DatabaseUICommands?
     private var uiSessions: [UUID: (DatabaseUIClient, DatabasePageSession)] = [:]
     private var commandDrain: Task<Void, Never>?
+    private var resourceStop: Task<Void, Never>?
     private var commandsSuspended = false
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private let uiWork = DatabaseTaskOwner()
@@ -83,6 +84,7 @@ final class ExtensionRuntime: NSObject {
         let drain = beginCommandDrain()
         Task { [self] in
             await drain.value
+            await resourceStop?.value
             withExtendedLifetime(self) { completion() }
         }
     }
@@ -101,6 +103,7 @@ final class ExtensionRuntime: NSObject {
             client.cancelPendingCommands(); owner.cancelPendingCommands()
         }
         streams?.stop()
+        if let commandDrain { return commandDrain }
         let task = Task { [self] in
             await engine?.cancelPendingRequests()
             _ = await commands.suspendAndWait()
@@ -119,22 +122,32 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        let owner = session
-        let ownedSurface = surface
-        let drain = beginCommandDrain()
+        let stop = beginResourceStop()
         Task { [self] in
+            await stop.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginResourceStop() -> Task<Void, Never> {
+        if let resourceStop { return resourceStop }
+        let owner = session
+        let originalSurface = surface
+        let drain = beginCommandDrain()
+        if let resourceStop { return resourceStop }
+        for (client, owner) in uiSessions.values { retireUI(client, owner) }
+        uiSessions.removeAll()
+        session = nil; surface = nil; uiCommands = nil; cliStreams = nil
+        let task = Task { [self] in
             await drain.value
             await commands.shutdownAndWait()
             await DatabaseWorkerClient.shutdown()
             DatabasePrivacy.shutdown()
             owner?.shutdown()
-            ownedSurface?.shutdown()
-            surface = nil
-            uiCommands = nil
-            session = nil
-            cliStreams = nil
-            completion()
+            originalSurface?.shutdown()
         }
+        resourceStop = task
+        return task
     }
 
     private func retireUI(_ client: DatabaseUIClient, _ owner: DatabasePageSession) {
@@ -187,6 +200,7 @@ final class ExtensionRuntime: NSObject {
             self.session = session
             surface = DatabaseSurface(session: session)
         case "view":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             if let value = input["presentationID"] as? String, let id = UUID(uuidString: value),
                 let (client, session) = uiSessions[id]
             {
@@ -222,8 +236,11 @@ final class ExtensionRuntime: NSObject {
             for (client, session) in uiSessions.values { retireUI(client, session) }
             uiSessions.removeAll()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": DatabasePrivacy.refresh()
-        case "stop": prepareToStop(completion: {})
+        case "synchronize":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
+            DatabasePrivacy.refresh()
+        case "stop":
+            _ = beginResourceStop()
         case "status": return ["ok": true, "running": session != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
