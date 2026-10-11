@@ -56,8 +56,13 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
 
     public static func validateUIContext(
         _ context: NSDictionary, environment: [String: String], owner: String,
-        workerIdentifier: String, role: WorkerFixtureRole = .app
+        workerIdentifier: String, role: WorkerFixtureRole = .app,
+        settingsService: WorkerFixtureEngineContract? = nil
     ) throws {
+        let client = context["engineClient"] as? NSObject
+        let validServiceClient =
+            client?.responds(to: NSSelectorFromString("invoke:completion:")) == true
+            && client?.responds(to: NSSelectorFromString("cancel:")) == true
         guard Self.owners.contains(owner),
             let host = context["hostIdentifier"] as? String,
             host.hasPrefix("com.pulkit.edith.tests.worker-"),
@@ -66,7 +71,8 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
             let remote = context["remoteUI"] as? NSNumber,
             CFGetTypeID(remote) == CFBooleanGetTypeID(), remote.boolValue,
             let only = context["uiOnly"] as? NSNumber,
-            CFGetTypeID(only) == CFBooleanGetTypeID(), only.boolValue == (role == .helper),
+            CFGetTypeID(only) == CFBooleanGetTypeID(),
+            only.boolValue == (role == .helper && settingsService == nil),
             context["extensionID"] as? String == owner,
             let location = context["location"] as? String,
             ["main", "settings"].contains(location),
@@ -74,10 +80,21 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
             section == owner
                 || (location == "settings"
                     && ["general", "appearance", "extensions"].contains(section)),
+            settingsService == nil
+                || (role == .helper && owner == "notchShelf"
+                    && settingsService?.owner == owner && settingsService?.role == "helper"
+                    && settingsService?.operations == [
+                        "notch.settings.read", "notch.settings.write",
+                    ]
+                    && settingsService?.inputs.isEmpty == true
+                    && settingsService?.outputs.isEmpty == true
+                    && settingsService?.hostIdentifier == host),
             role != .helper
                 || (helperOwners.contains(owner) && location == "settings"
                     && section == owner && context["operation"] as? String == "configureUI"
-                    && context["engineClient"] == nil
+                    && ((settingsService == nil && owner != "notchShelf"
+                        && context["engineClient"] == nil)
+                        || (settingsService != nil && validServiceClient))
                     && context["tile"] == nil && context["target"] == nil),
             let presentation = context["presentationID"] as? String,
             uuid(presentation.lowercased()),
@@ -173,6 +190,22 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
         try producer.validate(uid: uid)
         try engine.validate(uid: uid)
         try ui.validate(uid: uid)
+    }
+
+    public func validateSettingsService(_ service: WorkerFixtureEngineContract) throws {
+        guard owner == "notchShelf", location == "settings", section == owner,
+            rolePath == workerPath + "/Contents/Resources/Payload/notchShelf/helper.bundle",
+            service.schema == schema, service.sourceCommit == sourceCommit,
+            service.session == session, service.owner == owner, service.phase == phase,
+            service.capabilitySHA256 == capabilitySHA256, service.root == root,
+            service.hostIdentifier == hostIdentifier, service.home == home,
+            service.dataDirectory == dataDirectory, service.workerPath == workerPath,
+            service.rolePath == rolePath, service.role == "helper", service.version == version,
+            service.hostABI == hostABI, service.packageSHA256 == packageSHA256,
+            service.producer == producer, service.engine == engine,
+            service.operations == ["notch.settings.read", "notch.settings.write"],
+            service.inputs.isEmpty, service.outputs.isEmpty
+        else { throw WorkerFixtureError.invalid }
     }
 
     static func canonicalJSON(_ object: [String: Any]) throws -> Data {

@@ -54,9 +54,9 @@ public final class WorkerFixtureUIAdmission {
         } else {
             throw WorkerFixtureError.invalid
         }
-        try WorkerFixtureUIContract.validateUIContext(
-            context, environment: environment, owner: extensionID,
-            workerIdentifier: workerBundle.bundleIdentifier ?? "", role: roleKind)
+        let usesSettingsService =
+            roleKind == .helper && extensionID == "notchShelf"
+            && (context["uiOnly"] as? NSNumber)?.boolValue == false
         guard let trust = WorkerFixtureUITrustAnchor.admitted,
             WorkerFixtureUIContract.owners.contains(extensionID),
             let hostIdentifier = suppliedHost,
@@ -64,7 +64,8 @@ public final class WorkerFixtureUIAdmission {
             let remote = context["remoteUI"] as? NSNumber,
             CFGetTypeID(remote) == CFBooleanGetTypeID(), remote.boolValue,
             let only = context["uiOnly"] as? NSNumber,
-            CFGetTypeID(only) == CFBooleanGetTypeID(), only.boolValue == (roleKind == .helper),
+            CFGetTypeID(only) == CFBooleanGetTypeID(),
+            only.boolValue == (roleKind == .helper && !usesSettingsService),
             context["extensionID"] as? String == extensionID,
             let location = context["location"] as? String,
             let section = context["section"] as? String,
@@ -79,7 +80,8 @@ public final class WorkerFixtureUIAdmission {
             let phase = marker["phase"],
             let capabilitySHA256 = marker["capabilitySHA256"],
             marker["descriptorPath"] == trust.root + "/functional-ui-" + extensionID + ".json",
-            roleKind == .helper || Self.validEngineClient(context["engineClient"]),
+            (roleKind == .helper && !usesSettingsService)
+                || Self.validEngineClient(context["engineClient"]),
             workerBundle.bundleIdentifier == hostIdentifier + ".extension." + extensionID
                 + ".worker",
             context["defaultsSuite"] as? String == workerBundle.bundleIdentifier,
@@ -170,6 +172,23 @@ public final class WorkerFixtureUIAdmission {
         guard descriptor.producer.executable == trust.producerExecutable,
             descriptor.producer.executableSHA256 == trust.producerExecutableSHA256
         else { throw WorkerFixtureError.invalid }
+        var settingsService: WorkerFixtureEngineContract?
+        if usesSettingsService {
+            let engineDocument = try WorkerFixtureUIOpenedPath(
+                root.appendingPathComponent("functional-engine-notchShelf.json"), directory: false,
+                mode: 0o600, maximum: 131_072)
+            paths.append(engineDocument)
+            let service = try WorkerFixtureEngineContract.verify(
+                engineDocument.read(), issuerKey: trust.issuerKey)
+            try service.validate(
+                trust: trust, owner: "notchShelf", uid: getuid(), expectedRole: .helper)
+            try descriptor.validateSettingsService(service)
+            settingsService = service
+        }
+        try WorkerFixtureUIContract.validateUIContext(
+            context, environment: environment, owner: extensionID,
+            workerIdentifier: workerBundle.bundleIdentifier ?? "", role: roleKind,
+            settingsService: settingsService)
         let producer = descriptor.producer
         let observedProducer = try observe(producer)
         let engine = try observe(descriptor.engine)
@@ -221,7 +240,7 @@ public final class WorkerFixtureUIAdmission {
         try paths.forEach { try $0.validate() }
     }
 
-    private static func validEngineClient(_ value: Any?) -> Bool {
+    static func validEngineClient(_ value: Any?) -> Bool {
         guard let client = value as? NSObject else { return false }
         return client.responds(to: NSSelectorFromString("invoke:completion:"))
             && client.responds(to: NSSelectorFromString("cancel:"))

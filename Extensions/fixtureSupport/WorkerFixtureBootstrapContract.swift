@@ -8,15 +8,19 @@ public enum WorkerFixtureBootstrapContract: Sendable {
 
     public static func verify(
         _ data: Data, purpose: WorkerFixtureBootstrapPurpose, trust: WorkerFixtureBootstrapTrust,
-        owner: String, expectedRole: WorkerFixtureRole, uid: UInt32
+        owner: String, expectedRole: WorkerFixtureRole, uid: UInt32,
+        engineDescriptorData: Data? = nil
     ) throws -> Self {
         try trust.validate()
         switch purpose {
         case .engine:
+            guard engineDescriptorData == nil else { throw WorkerFixtureError.invalid }
             let value = try WorkerFixtureEngineContract.verify(data, issuerKey: trust.issuerKey)
             try value.validate(trust: trust, owner: owner, uid: uid, expectedRole: expectedRole)
             return .engine(value)
         case .ui:
+            guard owner != "notchShelf" || expectedRole != .helper || engineDescriptorData != nil
+            else { throw WorkerFixtureError.invalid }
             let value = try WorkerFixtureUIContract.verify(data, issuerKey: trust.issuerKey)
             guard value.producer.executable == trust.producerExecutable,
                 value.producer.executableSHA256 == trust.producerExecutableSHA256
@@ -30,6 +34,15 @@ public enum WorkerFixtureBootstrapContract: Sendable {
                 rolePath: value.workerPath + "/Contents/Resources/Payload/" + owner + "/"
                     + expectedRole.rawValue + ".bundle", version: value.version, uid: uid,
                 producer: value.producer, engine: value.engine, ui: value.ui)
+            if let engineDescriptorData {
+                guard owner == "notchShelf", expectedRole == .helper else {
+                    throw WorkerFixtureError.invalid
+                }
+                let service = try WorkerFixtureEngineContract.verify(
+                    engineDescriptorData, issuerKey: trust.issuerKey)
+                try service.validate(trust: trust, owner: owner, uid: uid, expectedRole: .helper)
+                try value.validateSettingsService(service)
+            }
             return .ui(value)
         }
     }
@@ -38,7 +51,29 @@ public enum WorkerFixtureBootstrapContract: Sendable {
         _ context: NSDictionary, environment: [String: String],
         purpose: WorkerFixtureBootstrapPurpose,
         trust: WorkerFixtureBootstrapTrust, owner: String, expectedRole: WorkerFixtureRole,
-        workerIdentifier: String
+        workerIdentifier: String, settingsService: WorkerFixtureEngineContract? = nil
+    ) throws {
+        try validateIsolationContext(
+            context, environment: environment, trust: trust, owner: owner,
+            workerIdentifier: workerIdentifier)
+        switch purpose {
+        case .engine:
+            guard settingsService == nil else { throw WorkerFixtureError.invalid }
+            try WorkerFixtureEngineContract.validateContext(
+                context, environment: environment, owner: owner, workerIdentifier: workerIdentifier)
+        case .ui:
+            guard context["operation"] as? String == "configureUI" else {
+                throw WorkerFixtureError.invalid
+            }
+            try WorkerFixtureUIContract.validateUIContext(
+                context, environment: environment, owner: owner, workerIdentifier: workerIdentifier,
+                role: expectedRole, settingsService: settingsService)
+        }
+    }
+
+    public static func validateIsolationContext(
+        _ context: NSDictionary, environment: [String: String], trust: WorkerFixtureBootstrapTrust,
+        owner: String, workerIdentifier: String
     ) throws {
         try trust.validate()
         guard WorkerFixtureUIContract.owners.contains(owner),
@@ -50,18 +85,6 @@ public enum WorkerFixtureBootstrapContract: Sendable {
             environment["EDITH_EXTENSION_DATA_ROOT"] == context["dataDirectory"] as? String,
             workerIdentifier == trust.hostIdentifier + ".extension." + owner + ".worker"
         else { throw WorkerFixtureError.invalid }
-        switch purpose {
-        case .engine:
-            try WorkerFixtureEngineContract.validateContext(
-                context, environment: environment, owner: owner, workerIdentifier: workerIdentifier)
-        case .ui:
-            guard context["operation"] as? String == "configureUI" else {
-                throw WorkerFixtureError.invalid
-            }
-            try WorkerFixtureUIContract.validateUIContext(
-                context, environment: environment, owner: owner, workerIdentifier: workerIdentifier,
-                role: expectedRole)
-        }
     }
 
     public func validateMarker(_ marker: NSDictionary) throws {

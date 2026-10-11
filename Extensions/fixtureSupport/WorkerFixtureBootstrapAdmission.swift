@@ -42,9 +42,8 @@ import Foundation
             throw WorkerFixtureError.invalid
         }
         try trust.validate()
-        try WorkerFixtureBootstrapContract.validateContext(
-            context, environment: environment, purpose: purpose, trust: trust,
-            owner: extensionID, expectedRole: expectedRole,
+        try WorkerFixtureBootstrapContract.validateIsolationContext(
+            context, environment: environment, trust: trust, owner: extensionID,
             workerIdentifier: workerBundle.bundleIdentifier ?? "")
         guard
             let version = workerBundle.object(forInfoDictionaryKey: "EdithExtensionVersion")
@@ -68,9 +67,31 @@ import Foundation
         let document = try WorkerFixtureUIOpenedPath(
             URL(fileURLWithPath: documentPath), directory: false, mode: 0o600, maximum: 131_072)
         paths.append(document)
+        var engineDescriptorData: Data?
+        var settingsService: WorkerFixtureEngineContract?
+        if purpose == .ui, expectedRole == .helper, extensionID == "notchShelf",
+            (context["uiOnly"] as? NSNumber)?.boolValue == false
+        {
+            let engineDocument = try WorkerFixtureUIOpenedPath(
+                root.appendingPathComponent("functional-engine-notchShelf.json"), directory: false,
+                mode: 0o600, maximum: 131_072)
+            paths.append(engineDocument)
+            let data = try engineDocument.read()
+            let service = try WorkerFixtureEngineContract.verify(data, issuerKey: trust.issuerKey)
+            try service.validate(
+                trust: trust, owner: extensionID, uid: getuid(), expectedRole: .helper)
+            engineDescriptorData = data; settingsService = service
+            guard WorkerFixtureUIAdmission.validEngineClient(context["engineClient"]) else {
+                throw WorkerFixtureError.invalid
+            }
+        }
         let contract = try WorkerFixtureBootstrapContract.verify(
             document.read(), purpose: purpose, trust: trust, owner: extensionID,
-            expectedRole: expectedRole, uid: getuid())
+            expectedRole: expectedRole, uid: getuid(), engineDescriptorData: engineDescriptorData)
+        try WorkerFixtureBootstrapContract.validateContext(
+            context, environment: environment, purpose: purpose, trust: trust, owner: extensionID,
+            expectedRole: expectedRole, workerIdentifier: workerBundle.bundleIdentifier ?? "",
+            settingsService: settingsService)
         guard contract.workerPath == workerBundle.bundleURL.path, contract.rolePath == roleURL.path,
             contract.version == version, contract.currentProcess.pid == getpid(),
             contract.currentProcess.executable == workerBundle.executableURL?.path

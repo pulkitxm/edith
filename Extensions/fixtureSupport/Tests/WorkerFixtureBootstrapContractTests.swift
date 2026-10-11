@@ -192,6 +192,141 @@ import Testing
         }
     }
 
+    @Test func originalNotchHelperUIBindsSignedSettingsEngineCapabilityAndOriginalBridge() throws {
+        let key = Curve25519.Signing.PrivateKey()
+        let trusted = try trust(key.publicKey.rawRepresentation)
+        func notch(_ ui: Bool) -> [String: Any] {
+            var value = object(ui)
+            for field in ["owner", "home", "dataDirectory", "workerPath", "rolePath"] {
+                value[field] = (value[field] as! String).replacingOccurrences(
+                    of: "plugins", with: "notchShelf"
+                )
+                .replacingOccurrences(of: "app.bundle", with: "helper.bundle")
+            }
+            for field in ui ? ["engine", "ui"] : ["engine"] {
+                var peer = value[field] as! [String: Any]
+                peer["executable"] = (peer["executable"] as! String).replacingOccurrences(
+                    of: "plugins", with: "notchShelf")
+                value[field] = peer
+            }
+            if ui {
+                value["location"] = "settings"; value["section"] = "notchShelf"
+            } else {
+                value["role"] = "helper";
+                value["operations"] = ["notch.settings.read", "notch.settings.write"]
+            }
+            return value
+        }
+        let uiObject = notch(true); let engineObject = notch(false)
+        let uiBytes = try seal(uiObject, key); let engineBytes = try seal(engineObject, key)
+        let contract = try WorkerFixtureBootstrapContract.verify(
+            uiBytes, purpose: .ui, trust: trusted, owner: "notchShelf", expectedRole: .helper,
+            uid: 501, engineDescriptorData: engineBytes)
+        let service = try WorkerFixtureEngineContract.verify(
+            engineBytes, issuerKey: trusted.issuerKey)
+        try service.validate(trust: trusted, owner: "notchShelf", uid: 501, expectedRole: .helper)
+        #expect(contract.contextMarker["capabilitySHA256"] == service.capabilitySHA256)
+        #expect(throws: (any Error).self) {
+            try WorkerFixtureBootstrapContract.verify(
+                uiBytes, purpose: .ui, trust: trusted, owner: "notchShelf", expectedRole: .helper,
+                uid: 501)
+        }
+        for patch: [String: Any] in [
+            ["owner": "keepAwake"],
+            ["operations": ["notch.settings.read", "notch.settings.write", "notch.panel.render"]],
+            ["capabilitySHA256": String(repeating: "c", count: 64)], ["phase": "updated"],
+            ["role": "app"],
+            [
+                "rolePath": (engineObject["rolePath"] as! String).replacingOccurrences(
+                    of: "helper.bundle", with: "app.bundle")
+            ],
+            ["workerPath": worker],
+            [
+                "inputs": [
+                    [
+                        "name": "outside", "path": "/private/outside", "sha256": hash,
+                        "maximumBytes": 1,
+                    ]
+                ]
+            ],
+        ] {
+            var changed = engineObject; changed.merge(patch) { _, new in new }
+            #expect(throws: (any Error).self) {
+                try WorkerFixtureBootstrapContract.verify(
+                    uiBytes, purpose: .ui, trust: trusted, owner: "notchShelf",
+                    expectedRole: .helper, uid: 501, engineDescriptorData: seal(changed, key))
+            }
+        }
+        for patch: [String: Any] in [
+            ["pid": 14], ["birthSeconds": 2000], ["birthMicroseconds": 12],
+            ["executableSHA256": String(repeating: "c", count: 64)],
+            ["executable": worker + "/Contents/MacOS/Edith"],
+        ] {
+            var changed = engineObject; var peer = changed["engine"] as! [String: Any]
+            peer.merge(patch) { _, new in new }; changed["engine"] = peer
+            #expect(throws: (any Error).self) {
+                try WorkerFixtureBootstrapContract.verify(
+                    uiBytes, purpose: .ui, trust: trusted, owner: "notchShelf",
+                    expectedRole: .helper, uid: 501, engineDescriptorData: seal(changed, key))
+            }
+        }
+        for patch: [String: Any] in [
+            ["location": "main"], ["section": "panel.1"], ["presentationID": "foreign"],
+            ["rolePath": worker + "/Contents/Resources/Payload/plugins/app.bundle"],
+        ] {
+            var changed = uiObject; changed.merge(patch) { _, new in new }
+            #expect(throws: (any Error).self) {
+                try WorkerFixtureBootstrapContract.verify(
+                    seal(changed, key), purpose: .ui, trust: trusted, owner: "notchShelf",
+                    expectedRole: .helper, uid: 501, engineDescriptorData: engineBytes)
+            }
+        }
+        let identifier = host + ".extension.notchShelf.worker"
+        let context: [String: Any] = [
+            "operation": "configureUI", "remoteUI": true, "uiOnly": false,
+            "hostIdentifier": host, "extensionID": "notchShelf", "defaultsSuite": identifier,
+            "dataDirectory": root + "/data/notchShelf", "location": "settings",
+            "section": "notchShelf",
+            "presentationID": session, "engineClient": BootstrapInertClient(),
+        ]
+        let environment = [
+            "HOME": root + "/notchShelf-home", "CFFIXED_USER_HOME": root + "/notchShelf-home",
+            "EDITH_EXTENSION_FIXTURE_HOME": root + "/notchShelf-home",
+            "EDITH_EXTENSION_DATA_ROOT": root + "/data/notchShelf",
+            "EDITH_APPLICATION_IDENTIFIER": host, "EDITH_EXTENSION_ID": "notchShelf",
+            "EDITH_SHARED_DEFAULTS_SUITE": identifier,
+        ]
+        try WorkerFixtureBootstrapContract.validateContext(
+            context as NSDictionary, environment: environment, purpose: .ui, trust: trusted,
+            owner: "notchShelf", expectedRole: .helper, workerIdentifier: identifier,
+            settingsService: service)
+        #expect(throws: (any Error).self) {
+            try WorkerFixtureBootstrapContract.validateContext(
+                context as NSDictionary, environment: environment, purpose: .ui, trust: trusted,
+                owner: "notchShelf", expectedRole: .helper, workerIdentifier: identifier)
+        }
+        var missingBridge = context; missingBridge["engineClient"] = nil
+        #expect(throws: (any Error).self) {
+            try WorkerFixtureBootstrapContract.validateContext(
+                missingBridge as NSDictionary, environment: environment, purpose: .ui,
+                trust: trusted, owner: "notchShelf", expectedRole: .helper,
+                workerIdentifier: identifier, settingsService: service)
+        }
+        for patch: [String: Any] in [
+            ["engineClient": NSObject()], ["uiOnly": true], ["uiOnly": 0], ["location": "notch"],
+            ["section": "panel.1"],
+            ["extensionID": "keepAwake"], ["target": "panel"], ["operation": "start"],
+        ] {
+            var changed = context; changed.merge(patch) { _, new in new }
+            #expect(throws: (any Error).self) {
+                try WorkerFixtureBootstrapContract.validateContext(
+                    changed as NSDictionary, environment: environment, purpose: .ui, trust: trusted,
+                    owner: "notchShelf", expectedRole: .helper, workerIdentifier: identifier,
+                    settingsService: service)
+            }
+        }
+    }
+
     @Test func heldInputReaderRejectsRepointedMutatedUnboundedAndForeignSignedInput() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             UUID().uuidString)
@@ -231,4 +366,12 @@ import Testing
         try handle.write(contentsOf: Data(" ".utf8)); try handle.close()
         #expect(throws: (any Error).self) { try input.read(fresh) }
     }
+}
+
+private final class BootstrapInertClient: NSObject {
+    @objc(invoke:completion:)
+    func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
+        completion(nil, "inert")
+    }
+    @objc func cancel(_ token: String) {}
 }
