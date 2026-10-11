@@ -66,7 +66,12 @@ import Security
             Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String
                 == value.feedURL.absoluteString,
             Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-                == (version == "1.0.0" ? "1" : "2")
+                == (version == "1.0.0" ? "1" : "2"),
+            let transport = Bundle.main.object(forInfoDictionaryKey: "NSAppTransportSecurity")
+                as? NSDictionary,
+            transport.isEqual(to: [
+                "NSExceptionDomains": ["127.0.0.1": ["NSExceptionAllowsInsecureHTTPLoads": true]]
+            ])
         else { throw SparkleFixtureError.rejected }
         var code: SecStaticCode?
         var requirement: SecRequirement?
@@ -76,7 +81,10 @@ import Security
                 == errSecSuccess,
             let code, let requirement,
             SecStaticCodeCheckValidity(
-                code, SecCSFlags(rawValue: kSecCSStrictValidate), requirement)
+                code,
+                SecCSFlags(
+                    rawValue: kSecCSStrictValidate | kSecCSCheckNestedCode
+                        | kSecCSCheckAllArchitectures), requirement)
                 == errSecSuccess,
             try observeProducer(value.producer) == first
         else { throw SparkleFixtureError.rejected }
@@ -94,11 +102,32 @@ import Security
         guard let value = descriptor,
             ["downloaded", "extracted", "installing", "relaunching"].contains(category)
         else { exit(1) }
+        append([
+            "schema": 1, "sourceCommit": value.sourceCommit, "session": value.session,
+            "category": category, "pid": getpid(),
+        ])
+    }
+
+    static func recordRejection(_ error: any Error) {
+        guard let value = descriptor else { exit(1) }
+        var errors: [[String: Any]] = []
+        var current: NSError? = error as NSError
+        while let observed = current, errors.count < 4 {
+            errors.append([
+                "domain": observed.domain == "SUSparkleErrorDomain"
+                    ? "SUSparkleErrorDomain" : "other", "code": observed.code,
+            ])
+            current = observed.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        append([
+            "schema": 1, "sourceCommit": value.sourceCommit, "session": value.session,
+            "category": "rejected", "pid": getpid(), "errors": errors,
+        ])
+    }
+
+    private static func append(_ document: [String: Any]) {
+        guard let value = descriptor else { exit(1) }
         do {
-            let document: [String: Any] = [
-                "schema": 1, "sourceCommit": value.sourceCommit, "session": value.session,
-                "category": category, "pid": getpid(),
-            ]
             let data =
                 try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
                 + Data([10])
@@ -110,7 +139,7 @@ import Security
             var state = stat()
             guard fstat(descriptor, &state) == 0, state.st_uid == getuid(), state.st_nlink == 1,
                 state.st_mode & S_IFMT == S_IFREG, state.st_mode & 0o777 == 0o600,
-                state.st_size <= 8192
+                state.st_size + off_t(data.count) <= 8192
             else { throw SparkleFixtureError.rejected }
             let count = data.withUnsafeBytes { write(descriptor, $0.baseAddress, $0.count) }
             guard count == data.count, fsync(descriptor) == 0 else {
@@ -235,9 +264,12 @@ import Security
         }
 
         private static func equal(_ lhs: stat, _ rhs: stat) -> Bool {
-            lhs.st_dev == rhs.st_dev && lhs.st_ino == rhs.st_ino && lhs.st_uid == rhs.st_uid
-                && lhs.st_mode == rhs.st_mode && lhs.st_nlink == rhs.st_nlink
-                && lhs.st_size == rhs.st_size
+            guard
+                lhs.st_dev == rhs.st_dev && lhs.st_ino == rhs.st_ino && lhs.st_uid == rhs.st_uid
+                    && lhs.st_mode == rhs.st_mode
+            else { return false }
+            if lhs.st_mode & S_IFMT == S_IFDIR { return true }
+            return lhs.st_nlink == rhs.st_nlink && lhs.st_size == rhs.st_size
                 && lhs.st_mtimespec.tv_sec == rhs.st_mtimespec.tv_sec
                 && lhs.st_mtimespec.tv_nsec == rhs.st_mtimespec.tv_nsec
                 && lhs.st_ctimespec.tv_sec == rhs.st_ctimespec.tv_sec

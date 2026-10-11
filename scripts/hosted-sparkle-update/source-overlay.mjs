@@ -95,5 +95,10 @@ export function sparkleUpdaterOverlay(source) {
 
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {`,
   );
+  result = replaceExact(
+    result,
+    "        if let error {\n            let code = (error as NSError).code",
+    "        if let error {\n            if HostSparkleBootstrap.admitted { HostSparkleBootstrap.recordRejection(error) }\n            let code = (error as NSError).code",
+  );
   return result;
 }
