@@ -104,8 +104,9 @@ final class StudioJob: Identifiable {
         let report: @Sendable (StudioProgress) -> Void = { updates.continuation.yield($0) }
         StudioRunRegistry.track(self)
         task = Task { [weak self] in
+            let progressOwner = self
             defer { if let self { self.task = nil; StudioRunRegistry.release(self) } }
-            async let progressUpdates: Void = Self.consumeProgress(updates.stream, job: self)
+            async let progressUpdates: Void = Self.consumeProgress(updates.stream, job: progressOwner)
             let outcome: Result<StudioRunResult, Error>
             do {
                 let value = try await StudioRunner.run(
