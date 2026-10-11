@@ -141,7 +141,8 @@ final class HostWorkerApplication {
         navigation?.cancelPending()
         Task { [self] in
             do {
-                try await preparation.prepare {
+                try await preparation.prepare(token: request.token) {
+                    for runtime in self.runtimes { try await runtime.suspendCommandsAll() }
                     for runtime in self.runtimes { try await runtime.prepareDisableAll() }
                 }
                 try control.send(
@@ -160,8 +161,7 @@ final class HostWorkerApplication {
     }
 
     private func prepareApplicationQuit(_ request: HostWorkerRequest) {
-        guard !preparingDisable, !preparedApplicationQuit,
-            request.stopReason == .applicationQuit, let configuration,
+        guard request.stopReason == .applicationQuit, let configuration,
             configuration.extensionID == "lidAwake", !configuration.recoveryOnly,
             let engine = runtimes.first(where: { $0.role == .app })
         else {
@@ -174,7 +174,8 @@ final class HostWorkerApplication {
         peerServer = nil
         Task { [self] in
             do {
-                try await preparation.prepare {
+                try await preparation.prepare(token: request.token, operation: "applicationQuit") {
+                    for runtime in self.runtimes { try await runtime.suspendCommandsAll() }
                     guard let host = ExtensionProcessIdentity.read(getppid()) else {
                         throw HostWorkerError.rejected
                     }
@@ -185,11 +186,11 @@ final class HostWorkerApplication {
                             "hostPID": host.pid, "hostGeneration": host.generation,
                         ])
                     guard response["ok"] as? Bool == true else { throw HostWorkerError.rejected }
-                    for runtime in runtimes where runtime !== engine {
+                    for runtime in self.runtimes where runtime !== engine {
                         try await runtime.prepareDisableAll()
                     }
                     try await engine.prepareToStopAll()
-                    guard !stopping, host.isAlive else { throw HostWorkerError.rejected }
+                    guard !self.stopping, host.isAlive else { throw HostWorkerError.rejected }
                     self.preparedApplicationQuit = true
                 }
                 try control.send(
@@ -207,6 +208,9 @@ final class HostWorkerApplication {
     }
 
     private func execute(_ request: HostWorkerRequest) throws {
+        guard !preparingDisable || request.operation == "status" else {
+            throw HostWorkerError.rejected
+        }
         if request.operation == "start" {
             guard configuration == nil, let next = request.configuration,
                 next.identifier == Bundle.main.bundleIdentifier
@@ -321,7 +325,17 @@ final class HostWorkerApplication {
                 directory: identity.root.appendingPathComponent("ExtensionState/Commands"))
             let server = ExtensionPeerServer(endpoint: endpoint) {
                 [weak self] token, command, payload in
-                guard let self, !self.stopping else { throw ExtensionPeerError.unavailable }
+                guard let self else { throw ExtensionPeerError.unavailable }
+                if command == "extension.process.register" {
+                    guard payload.count <= 128,
+                        let object = try JSONSerialization.jsonObject(with: payload)
+                            as? [String: Any],
+                        Set(object.keys) == ["pid"], let pid = object["pid"] as? Int32
+                    else { throw ExtensionPeerError.invalidRequest }
+                    try self.nativeAdmission.registerDescendant(pid)
+                    return Data("{\"registered\":true}".utf8)
+                }
+                guard !self.stopping else { throw ExtensionPeerError.unavailable }
                 if command == "extension.native.authorize" {
                     guard !self.preparingDisable, payload.count <= 512,
                         let object = try JSONSerialization.jsonObject(with: payload)
@@ -337,15 +351,6 @@ final class HostWorkerApplication {
                     else { throw ExtensionPeerError.unavailable }
                     try self.nativeAdmission.authorize(pid, token: capability)
                     return try JSONEncoder().encode(next)
-                }
-                if command == "extension.process.register" {
-                    guard payload.count <= 128,
-                        let object = try JSONSerialization.jsonObject(with: payload)
-                            as? [String: Any],
-                        Set(object.keys) == ["pid"], let pid = object["pid"] as? Int32
-                    else { throw ExtensionPeerError.invalidRequest }
-                    try self.nativeAdmission.registerDescendant(pid)
-                    return Data("{\"registered\":true}".utf8)
                 }
                 if command == "surface.context" {
                     guard payload.isEmpty, let context = SurfaceHostContext.current else {
@@ -412,26 +417,35 @@ final class HostWorkerApplication {
         guard !stopping else { return }
         stopping = true
         navigation?.invalidate()
-        peerServer?.shutdown()
-        peerServer = nil
         FileHandle.standardInput.readabilityHandler = nil
         parentWatcher?.cancel()
         parentWatcher = nil
         if let windowObserver { NotificationCenter.default.removeObserver(windowObserver) }
         windowObserver = nil
         shutdownTask = Task { [self] in
-            if preparation.isClosed {
-                try? await preparation.join()
-            } else if reason != .applicationQuit || !preparedApplicationQuit {
-                try? await preparation.prepare {
-                    for runtime in self.runtimes { try await runtime.prepareDisableAll() }
+            var failure: Error?
+            do {
+                if preparation.isClosed {
+                    try await preparation.join()
+                } else if reason != .applicationQuit || !preparedApplicationQuit {
+                    try await preparation.prepare {
+                        for runtime in self.runtimes { try await runtime.suspendCommandsAll() }
+                        for runtime in self.runtimes { try await runtime.prepareDisableAll() }
+                    }
                 }
+            } catch { failure = error }
+            for runtime in runtimes {
+                do { try await runtime.prepareToStopAll() } catch { failure = error }
             }
-            for runtime in runtimes { try? await runtime.prepareToStopAll() }
-            for runtime in runtimes { try? runtime.stopAll() }
+            peerServer?.shutdown()
+            peerServer = nil
+            for runtime in runtimes {
+                do { try runtime.stopAll() } catch { failure = error }
+            }
             if let token {
                 try? control.send(
-                    HostWorkerResponse(token: token, ok: true, version: configuration?.version))
+                    HostWorkerResponse(
+                        token: token, ok: failure == nil, version: configuration?.version))
             }
             resourceObservers.forEach(NotificationCenter.default.removeObserver)
             resourceObservers.removeAll()

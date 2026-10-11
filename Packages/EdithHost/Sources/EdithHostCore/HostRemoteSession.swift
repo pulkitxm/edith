@@ -25,12 +25,17 @@ public final class HostRemoteSession {
     private var rejectedPeer: HostRemoteProcessIdentity?
     #if EDITH_CLI_FIXTURE
     fileprivate var fixtureRejectedPeers: [HostRemoteProcessIdentity] = []
+    public static var fixtureBeforeLaunch: @MainActor () async -> Void = {}
+    public static var fixtureAfterLaunch: @MainActor () async -> Void = {}
     #endif
     private var bootstrap: NSXPCConnection?
     private var channel: HostRemoteChannel?
     private var handles: [UUID: HostRemoteSceneHandle] = [:]
     private var stopping = false
     private var stopped = false
+    private var nativeProcesses = HostWorkerProcessGroups()
+    private var nativeRefresh: Task<Void, Never>?
+    private var unresolvedLaunch = false
     public static var extensionIDs: Set<String> {
         Set(retained.values.map { $0.configuration.package.id })
     }
@@ -146,18 +151,64 @@ public final class HostRemoteSession {
         if let launching { return try await launching.value }
         let selected = identity.id
         let task = Task { [self] in
-            let process = try await AppExtensionProcess(
-                configuration: AppExtensionProcess.Configuration(appExtensionIdentity: identity))
+            let birth = Task {
+                #if EDITH_CLI_FIXTURE
+                await Self.fixtureBeforeLaunch()
+                #endif
+                let process = try await AppExtensionProcess(
+                    configuration: AppExtensionProcess.Configuration(appExtensionIdentity: identity)
+                )
+                #if EDITH_CLI_FIXTURE
+                await Self.fixtureAfterLaunch()
+                #endif
+                return process
+            }
+            let process = try await birth.value
+            self.process = process
             guard isAvailable, identity.id == selected, !Task.isCancelled else {
-                process.invalidate()
+                let retirement = Task { await self.retireUnconfiguredProcess(process) }
+                await retirement.value
                 throw HostWorkerError.exited
             }
-            self.process = process
             return process
         }
         launching = task
         defer { launching = nil }
         return try await task.value
+    }
+
+    private func recordNativePeer(_ peer: HostRemoteProcessIdentity) throws {
+        guard self.peer == nil || self.peer == peer else { throw HostWorkerError.rejected }
+        self.peer = peer
+        guard peer.isRunning, let birth = ExtensionProcessIdentity.read(peer.pid) else {
+            throw HostWorkerError.rejected
+        }
+        try nativeProcesses.captureWorker(birth)
+        if nativeRefresh == nil {
+            nativeRefresh = Task { [weak self] in
+                while !Task.isCancelled {
+                    guard let self, let peer = self.peer else { return }
+                    self.nativeProcesses.refresh(owner: peer.pid)
+                    do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+                }
+            }
+        }
+    }
+
+    private func retireUnconfiguredProcess(_ process: AppExtensionProcess) async {
+        unresolvedLaunch = true
+        do {
+            let bootstrap = try process.makeXPCConnection()
+            self.bootstrap = bootstrap
+            let channel = try await HostRemoteChannel.connect(
+                through: bootstrap, executable: executable,
+                rejectedPeer: { [weak self] peer in self?.rejectedPeer = peer })
+            defer { channel.invalidate() }
+            guard let peer = channel.peer else { throw HostWorkerError.rejected }
+            try recordNativePeer(peer)
+            unresolvedLaunch = false
+        } catch {}
+        process.invalidate()
     }
 
     private func configure(peer: HostRemoteProcessIdentity) async throws {
@@ -167,6 +218,7 @@ public final class HostRemoteSession {
         self.peer = peer
         if channel != nil { return }
         if let configuring { return try await configuring.value }
+        try recordNativePeer(peer)
         let task = Task { [self] in
             let process = try await prepareProcess()
             guard isAvailable, self.peer == peer else {
@@ -237,9 +289,18 @@ public final class HostRemoteSession {
         stopping = true
         activationExpiry?.cancel()
         activationExpiry = nil
-        configuring?.cancel()
-        launching?.cancel()
+        let configuring = self.configuring
+        let launching = self.launching
         defer { stopping = false }
+        await HostRemoteTaskRetirement.cancelAndJoin(
+            cancel: {
+                configuring?.cancel()
+                launching?.cancel()
+            },
+            joinLaunch: {
+                if let launching, let process = try? await launching.value { process.invalidate() }
+            },
+            joinConfiguration: { _ = try? await configuring?.value })
         handles.values.forEach { $0.detach() }
         handles.removeAll()
         if let channel {
@@ -254,10 +315,18 @@ public final class HostRemoteSession {
         process?.invalidate()
         process = nil
         if let peer {
+            nativeProcesses.refresh(owner: peer.pid)
             for _ in 0..<30 where peer.isRunning { try? await Task.sleep(for: .milliseconds(100)) }
-            if peer.isRunning { _ = kill(peer.pid, SIGKILL) }
+            nativeProcesses.terminate(owner: peer.pid)
             for _ in 0..<20 where peer.isRunning { try? await Task.sleep(for: .milliseconds(100)) }
             guard !peer.isRunning else { throw HostWorkerError.stillRunning }
+            let until = ContinuousClock.now + .seconds(3)
+            while true {
+                nativeProcesses.refresh(owner: peer.pid)
+                if nativeProcesses.isEmpty { break }
+                guard ContinuousClock.now < until else { throw HostWorkerError.stillRunning }
+                try await Task.sleep(for: .milliseconds(20))
+            }
         }
         if let rejectedPeer {
             let until = ContinuousClock.now + .seconds(3)
@@ -267,6 +336,9 @@ public final class HostRemoteSession {
             guard !rejectedPeer.isRunning else { throw HostWorkerError.stillRunning }
             self.rejectedPeer = nil
         }
+        guard !unresolvedLaunch else { throw HostWorkerError.stillRunning }
+        nativeRefresh?.cancel()
+        nativeRefresh = nil
         stopped = true
         lease?.close()
         lease = nil

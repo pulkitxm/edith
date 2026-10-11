@@ -134,7 +134,7 @@ import Testing
         #expect(fixture.sessions.pendingDisableIDs == ["sample"])
         #expect(fixture.sessions.automaticallyEnabledIDs.isEmpty)
         #expect(fixture.sessions.activeIDs.isEmpty)
-        #expect(fixture.sessions.states["sample"] == .active)
+        #expect(fixture.sessions.states["sample"] == .failed)
         #expect(fixture.sessions.processIdentifiers["sample"] == pid)
         #expect(fixture.sessions.versions["sample"] == "1.0.0")
         try await fixture.sessions.disable(id: "sample")
@@ -162,7 +162,7 @@ import Testing
         try await fixture.sessions.enable(fixture.package("1.0.0"))
         let pid = fixture.sessions.processIdentifiers["sample"]
         #expect(await fixture.sessions.shutdown() == false)
-        #expect(fixture.sessions.states["sample"] == .active)
+        #expect(fixture.sessions.states["sample"] == .failed)
         #expect(fixture.sessions.enabledIDs == ["sample"])
         #expect(fixture.sessions.processIdentifiers["sample"] == pid)
         #expect(await fixture.sessions.shutdown())

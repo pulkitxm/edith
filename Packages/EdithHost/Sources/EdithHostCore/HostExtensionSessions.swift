@@ -106,6 +106,11 @@ public final class HostExtensionSessions {
                 return
             }
         }
+        if let worker = workers[id] {
+            try await worker.stop()
+            guard worker.isStopped else { throw HostWorkerError.stillRunning }
+            workers[id] = nil
+        }
         pendingDisableIDs.remove(id)
         states[id] = .starting
         failures.remove(id)
@@ -160,9 +165,10 @@ public final class HostExtensionSessions {
             save(enabledIDs.union([id]))
             ambientPolicyCoordinator.invalidate()
         } catch {
-            if let worker = workers[id] { try? await worker.stop() }
-            workers[id] = nil
-            versions[id] = nil
+            if let worker = workers[id] {
+                try? await worker.stop()
+                if worker.isStopped { workers[id] = nil; versions[id] = nil }
+            }
             states[id] = .failed
             failures.insert(id)
             throw error
@@ -182,8 +188,9 @@ public final class HostExtensionSessions {
         ambientPolicyCoordinator.release(owner: id)
         ambientPolicyCoordinator.invalidate()
         do {
+            if let worker = workers[id] { try await worker.prepareStop(reason: reason) }
             try await willDisable(id)
-            if workers[id]?.ready != true, pendingDisableIDs.contains(id) {
+            if workers[id] == nil, pendingDisableIDs.contains(id) {
                 guard let package = packages[id] else { throw HostWorkerError.rejected }
                 let worker = try package.admitting(
                     hostABI: HostContract.compatibility, architecture: "arm64",
@@ -194,9 +201,7 @@ public final class HostExtensionSessions {
             }
             if let worker = workers[id] { try await worker.stop(reason: reason) }
         } catch {
-            states[id] =
-                workers[id]?.ready == true && workers[id]?.configuration.recoveryOnly != true
-                ? .active : .failed
+            states[id] = .failed
             failures.insert(id)
             throw error
         }

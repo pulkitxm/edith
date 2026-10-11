@@ -48,4 +48,26 @@ import Testing
         #expect(preparation.isClosed)
         #expect(preparation.isPrepared)
     }
+    @Test func lostAcknowledgementRetryUsesTheSameCleanupOutcome() async throws {
+        let preparation = HostWorkerPreparation()
+        let token = UUID()
+        var calls = 0
+        for _ in 0..<2 {
+            await #expect(throws: CocoaError.self) {
+                try await preparation.prepare(token: token) {
+                    calls += 1
+                    throw CocoaError(.userCancelled)
+                }
+            }
+        }
+        #expect(calls == 1)
+        #expect(preparation.isClosed)
+        try await preparation.prepare(token: UUID()) { calls += 1 }
+        #expect(calls == 2)
+        await #expect(throws: HostWorkerPreparation.Failure.self) {
+            try await preparation.prepare(operation: "applicationQuit") { calls += 1 }
+        }
+        #expect(calls == 2)
+    }
+
 }
