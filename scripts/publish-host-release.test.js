@@ -56,19 +56,21 @@ test("retries identical assets without uploading again", async () => {
   }
 });
 
-test("rebuild replaces changed assets but requires an existing release", async () => {
+test("rebuild rejects changed existing assets and requires an existing release", async () => {
   const value = fixture(true);
   try {
     value.release.assets = [value.asset("Edith.dmg", 9, Buffer.from("old"))];
-    await publish(value, { rebuild: true });
+    await expect(publish(value, { rebuild: true })).rejects.toThrow(
+      "Publish a new version",
+    );
     expect(
       value.calls.some((args) => args[0] === "gh" && args.includes("DELETE")),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       value.calls
         .filter((args) => args[0] === "pukbot" && !args.includes("--dry-run"))
         .map((args) => args[2]),
-    ).toEqual([...assetNames.map(() => "upload-asset"), "edit"]);
+    ).toEqual([]);
   } finally {
     value.clean();
   }
@@ -591,22 +593,35 @@ test("successful promotion response must expose the exact public release", async
   }
 });
 
-test("draft asset deletion has bounded control output and deadline", async () => {
-  const value = fixture(true);
-  value.release.assets = [value.asset("Edith.dmg", 9, Buffer.from("old"))];
-  let deletes = 0;
+test("validated host uploads and control requests have bounded output and deadlines", async () => {
+  const value = fixture();
+  const mutations = [];
   try {
     const execute = (command, args, options) => {
-      if (command === "gh" && args.includes("DELETE")) {
-        expect(options.timeout).toBe(60_000);
-        expect(options.maxBuffer).toBe(1024 ** 2);
+      if (command === "pukbot" && !args.includes("--dry-run")) {
+        expect(options.timeout).toBeGreaterThan(0);
+        expect(options.timeout).toBeLessThanOrEqual(30 * 60_000);
+        expect(options.maxBuffer).toBe(2 * 1024 ** 2);
         expect(options.killSignal).toBe("SIGKILL");
-        deletes += 1;
+        mutations.push(args[1]);
+      }
+      if (command === "gh" && args[0] === "api") {
+        expect(options.timeout).toBeLessThanOrEqual(60_000);
+        expect(options.maxBuffer).toBeLessThanOrEqual(4 * 1024 ** 2);
       }
       return value.execute(command, args, options);
     };
-    await publish(value, { execute, rebuild: true });
-    expect(deletes).toBe(1);
+    await publish(value, { execute });
+    expect(mutations).toEqual([
+      "create",
+      ...assetNames.map(() => "upload-asset"),
+      "edit",
+    ]);
+    expect(
+      value.calls.some(
+        (args) => args.includes("DELETE") || args.includes("--clobber"),
+      ),
+    ).toBe(false);
   } finally {
     value.clean();
   }
