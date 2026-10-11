@@ -96,6 +96,7 @@ struct ClipboardHistoryView: View {
                     .foregroundStyle(entry.pinned ? themeColor(themeName) : .secondary)
             }
             .buttonStyle(.edith(.borderless))
+            .accessibilityLabel(entry.pinned ? "Unpin" : "Pin")
             Button(role: .destructive) {
                 model.mutate(.init(.delete, ids: [entry.id]))
             } label: {
