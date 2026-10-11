@@ -354,6 +354,11 @@ test("independent peer observation acknowledges exact source and owned generatio
     { ...host, pid: 103, role: "ui", executable: paths.ui },
   ];
   let running = false;
+  let auditCalls = 0;
+  let acknowledgedBeforeHostObservation = false;
+  const commandStarted = Promise.withResolvers();
+  const firstSampleCompleted = Promise.withResolvers();
+  const continueObservation = Promise.withResolvers();
   try {
     const result = await runManagedOwner({
       fixture,
@@ -362,38 +367,68 @@ test("independent peer observation acknowledges exact source and owned generatio
       resultBundle: "result",
       environment,
       configure: () => {},
-      pause: async () => new Promise((resolve) => setTimeout(resolve, 1)),
-      audit: async () => (running ? [host] : []),
+      pause: async () => {
+        firstSampleCompleted.resolve();
+        await continueObservation.promise;
+        await new Promise((resolve) => setImmediate(resolve));
+      },
+      audit: async () => {
+        const snapshot = running ? [host] : [];
+        if (++auditCalls === 2) await commandStarted.promise;
+        return snapshot;
+      },
       inspectOwned: async () => (running ? peers : []),
       cleanupControl: async () => [],
       runCommand: async () => {
         running = true;
-        const deadline = Date.now() + 1000;
-        let acknowledgement;
-        while (Date.now() < deadline) {
+        try {
+          commandStarted.resolve();
+          await firstSampleCompleted.promise;
           try {
-            acknowledgement = JSON.parse(
-              await readFile(join(fixture.directory, "managed-peer-ack.json")),
-            );
-            break;
+            await readFile(join(fixture.directory, "managed-peer-ack.json"));
+            acknowledgedBeforeHostObservation = true;
           } catch (error) {
             if (error.code !== "ENOENT") throw error;
-            await new Promise((resolve) => setTimeout(resolve, 1));
+            continueObservation.resolve();
           }
+          const deadline = Date.now() + 1000;
+          let acknowledgement;
+          while (Date.now() < deadline) {
+            try {
+              acknowledgement = JSON.parse(
+                await readFile(
+                  join(fixture.directory, "managed-peer-ack.json"),
+                ),
+              );
+              break;
+            } catch (error) {
+              if (error.code !== "ENOENT") throw error;
+              await new Promise((resolve) => setTimeout(resolve, 1));
+            }
+          }
+          expect(acknowledgement.sourceCommit).toBe(source);
+          expect(acknowledgement.extensionID).toBe("music");
+          expect(acknowledgement.processes).toEqual(
+            peers.map(({ pid, generation, role }) => ({
+              pid,
+              generation,
+              role,
+            })),
+          );
+          await writeFile(
+            join(fixture.directory, "result-managed-shipping.json"),
+            JSON.stringify(proof),
+            { mode: 0o600 },
+          );
+          running = false;
+        } finally {
+          running = false;
+          continueObservation.resolve();
         }
-        expect(acknowledgement.sourceCommit).toBe(source);
-        expect(acknowledgement.extensionID).toBe("music");
-        expect(acknowledgement.processes).toEqual(
-          peers.map(({ pid, generation, role }) => ({ pid, generation, role })),
-        );
-        await writeFile(
-          join(fixture.directory, "result-managed-shipping.json"),
-          JSON.stringify(proof),
-          { mode: 0o600 },
-        );
-        running = false;
       },
     });
+    expect(acknowledgedBeforeHostObservation).toBe(false);
+    expect(result.hostObservations).toHaveLength(1);
     expect(result.observedOwnedProcesses).toHaveLength(3);
     expect(result.cleanup.independentlyPinnedGenerationsExited).toBe(true);
     expect(result.cleanup.actions).toEqual([]);
