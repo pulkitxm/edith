@@ -267,3 +267,164 @@ test("pair preparation binds all compiled policy bytes to independently frozen m
     assert.throws(() => functionalPairBuildPlan(f));
   }
 });
+
+function syntheticFileScope() {
+  return {
+    name: "synthetic-state",
+    kind: "file",
+    purpose: "mutable-state",
+    root: "owner-outputs",
+    components: [{ phase: true }, { literal: "synthetic-state.bin" }],
+    maximumBytes: 4096,
+    maximumEntries: 1,
+    initialState: "present",
+    allowedStates: ["present", "absent"],
+    immutableFiles: [],
+    mutableFiles: [],
+  };
+}
+
+function replacePolicyBytes(f, policies) {
+  f.policyBytes = Buffer.from(functionalCanonicalJSON(policies));
+  f.admittedPolicies.policySHA256 = createHash("sha256")
+    .update(f.policyBytes)
+    .digest("hex");
+}
+
+test("pair preparation carries admitted synthetic file scopes into the generated trust anchor", () => {
+  const f = fixture();
+  const originalDigest = f.admittedPolicies.policySHA256;
+  const policies = JSON.parse(f.policyBytes.toString("utf8"));
+  policies.find((policy) => policy.owner === f.owner).fileScopes = [
+    syntheticFileScope(),
+  ];
+  replacePolicyBytes(f, policies);
+  const plan = functionalPairBuildPlan(f);
+  assert.notEqual(plan.policySHA256, originalDigest);
+  assert.equal(plan.policySHA256, f.admittedPolicies.policySHA256);
+  assert(
+    plan.anchor.source.includes(
+      'WorkerFixtureFileScope(name: "synthetic-state", kind: .file, purpose: .mutableState, root: .ownerOutputs',
+    ),
+  );
+  assert(
+    plan.anchor.source.includes(
+      'components: [.phase, .literal("synthetic-state.bin")]',
+    ),
+  );
+});
+
+test("pair preparation rejects omitted and malformed file scopes even with matching policy digests", () => {
+  for (const [name, mutate] of [
+    [
+      "omitted field",
+      (policy) => {
+        delete policy.fileScopes;
+      },
+    ],
+    [
+      "null scopes",
+      (policy) => {
+        policy.fileScopes = null;
+      },
+    ],
+    [
+      "object scopes",
+      (policy) => {
+        policy.fileScopes = {};
+      },
+    ],
+    [
+      "incomplete scope",
+      (policy) => {
+        policy.fileScopes = [{ name: "synthetic-state" }];
+      },
+    ],
+    [
+      "foreign authority",
+      (policy) => {
+        policy.fileScopes[0].root = "shared-root";
+      },
+    ],
+    [
+      "traversal",
+      (policy) => {
+        policy.fileScopes[0].components = [{ literal: ".." }];
+      },
+    ],
+    [
+      "unbounded bytes",
+      (policy) => {
+        policy.fileScopes[0].maximumBytes = 268435457;
+      },
+    ],
+    [
+      "invalid entries",
+      (policy) => {
+        policy.fileScopes[0].maximumEntries = 2;
+      },
+    ],
+    [
+      "widened states",
+      (policy) => {
+        policy.fileScopes[0].allowedStates.push("foreign");
+      },
+    ],
+    [
+      "duplicate scopes",
+      (policy) => {
+        policy.fileScopes.push(structuredClone(policy.fileScopes[0]));
+      },
+    ],
+    [
+      "extra authority",
+      (policy) => {
+        policy.fileScopes[0].unrestricted = true;
+      },
+    ],
+  ]) {
+    const f = fixture();
+    const policies = JSON.parse(f.policyBytes.toString("utf8"));
+    const policy = policies.find((entry) => entry.owner !== f.owner);
+    policy.fileScopes = [syntheticFileScope()];
+    mutate(policy);
+    replacePolicyBytes(f, policies);
+    assert.throws(
+      () => functionalPairBuildPlan(f),
+      { code: "ERR_ASSERTION" },
+      name,
+    );
+  }
+});
+
+test("pair preparation requires every admitted policy source pin and matching source bytes", () => {
+  for (const mutate of [
+    (f) => {
+      f.admittedPolicies.manifest.bytes = Buffer.from("[]");
+    },
+    (f) => {
+      f.admittedPolicies.cases.pop();
+    },
+    (f) => {
+      f.admittedPolicies.cases[0].path = "Tests/foreign.swift";
+    },
+    ...[
+      "scripts/hosted-functional-actions/fixture-trust.mjs",
+      "Extensions/fixtureSupport/WorkerFixtureRolePolicy.swift",
+      "Extensions/manifest.json",
+    ].map((path) => (f) => {
+      f.sourcePins.files = f.sourcePins.files.filter(
+        (entry) => entry.path !== path,
+      );
+    }),
+    (f) => {
+      f.sourcePins.files = f.sourcePins.files.filter(
+        (entry) => entry.path !== f.admittedPolicies.cases.at(-1).path,
+      );
+    },
+  ]) {
+    const f = fixture();
+    mutate(f);
+    assert.throws(() => functionalPairBuildPlan(f), { code: "ERR_ASSERTION" });
+  }
+});
