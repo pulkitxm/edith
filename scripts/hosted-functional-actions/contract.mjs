@@ -71,7 +71,7 @@ export function verifyFunctionalEnvelope(envelope, compiledIssuerPublicKeyDER) {
   assert.equal(envelope.schema, 1);
   assert(
     typeof envelope.payload === "string" &&
-      Buffer.byteLength(envelope.payload) <= 131072,
+      Buffer.byteLength(envelope.payload) <= 1_048_576,
   );
   assert.match(envelope.signature, /^[A-Za-z0-9+/]{86}==$/);
   const signature = Buffer.from(envelope.signature, "base64");
@@ -224,7 +224,12 @@ export function validateFunctionalCaseDefinition(value) {
     ),
   );
   const fields = value.activation.mutation.payloadKeys;
-  assert(Array.isArray(fields) && fields.length >= 1 && fields.length <= 32);
+  assert(Array.isArray(fields) && fields.length <= 32);
+  assert(
+    fields.length > 0 ||
+      (value.owner === "terminal" &&
+        value.activation.operation === "terminal.open"),
+  );
   for (const field of fields)
     assert.match(field, /^[A-Za-z][A-Za-z0-9_]{0,63}$/);
   assert.equal(new Set(fields).size, fields.length);
@@ -348,6 +353,181 @@ export function validateFunctionalRequest(request, capability) {
   return request;
 }
 
+function mutationPayload(encoded, request, fields) {
+  assert(typeof encoded === "string" && encoded.length <= 1_398_104);
+  const bytes = Buffer.from(encoded, "base64");
+  assert(bytes.length > 0 && bytes.length <= 1_048_576);
+  assert.equal(bytes.toString("base64"), encoded);
+  assert.equal(
+    createHash("sha256").update(bytes).digest("hex"),
+    request.payloadSHA256,
+  );
+  const payload = uniqueJSON(bytes.toString("utf8"));
+  if (fields !== undefined) keys(payload, fields);
+  return payload;
+}
+
+export function validateFunctionalMutationJournal(
+  envelope,
+  capability,
+  definition,
+  issuer,
+  stage,
+) {
+  const journal = verifyFunctionalEnvelope(envelope, issuer);
+  keys(journal, [
+    "schema",
+    "sourceCommit",
+    "session",
+    "owner",
+    "phase",
+    "capabilitySHA256",
+    "presentationID",
+    "baseline",
+    "loadSequence",
+    "records",
+    "sealedThroughSequence",
+  ]);
+  assert.equal(journal.schema, 1);
+  for (const field of ["sourceCommit", "session", "owner", "phase"])
+    assert.equal(journal[field], capability[field]);
+  assert.equal(journal.capabilitySHA256, functionalDigest(capability));
+  assert.match(journal.presentationID, uuid);
+  const baseline = journal.baseline;
+  keys(baseline, [
+    "reader",
+    "observationID",
+    "sequence",
+    "readbackSHA256",
+    "expectedSHA256",
+  ]);
+  assert.equal(baseline.reader, "independent-hosted-producer");
+  assert.match(baseline.observationID, uuid);
+  positiveSequence(baseline.sequence);
+  positiveSequence(journal.loadSequence);
+  assert(baseline.sequence < journal.loadSequence);
+  if (definition.persistence.applicable) {
+    assert.match(baseline.readbackSHA256, hash);
+    assert.equal(baseline.expectedSHA256, baseline.readbackSHA256);
+  } else {
+    assert.equal(baseline.readbackSHA256, null);
+    assert.equal(baseline.expectedSHA256, null);
+  }
+  assert(
+    Array.isArray(journal.records) &&
+      journal.records.length > 0 &&
+      journal.records.length <= 128,
+  );
+  const identifiers = new Set([baseline.observationID]);
+  let sequence = journal.loadSequence;
+  let selected;
+  for (const record of journal.records) {
+    keys(record, [
+      "request",
+      "activationID",
+      "origin",
+      "ui",
+      "engine",
+      "payload",
+      "sendSequence",
+      "acknowledgement",
+      "transition",
+    ]);
+    validateFunctionalRequest(record.request, capability);
+    assert(
+      !record.request.operation
+        .split(".")
+        .some((part) =>
+          [
+            "read",
+            "snapshot",
+            "state",
+            "list",
+            "schema",
+            "get",
+            "poll",
+          ].includes(part),
+        ),
+    );
+    assert(!identifiers.has(record.request.requestID));
+    identifiers.add(record.request.requestID);
+    assert.match(record.activationID, uuid);
+    assert.equal(record.origin, "authenticated-original-control");
+    assert.deepEqual(record.ui, capability.ui);
+    assert.deepEqual(record.engine, capability.engine);
+    mutationPayload(
+      record.payload,
+      record.request,
+      record.request.operation === definition.activation.operation
+        ? definition.activation.mutation.payloadKeys
+        : undefined,
+    );
+    positiveSequence(record.sendSequence);
+    const ack = record.acknowledgement;
+    keys(ack, ["request", "engine", "success", "responseSHA256", "sequence"]);
+    assert.deepEqual(ack.request, record.request);
+    assert.deepEqual(ack.engine, capability.engine);
+    assert.equal(ack.success, true);
+    assert.match(ack.responseSHA256, hash);
+    positiveSequence(ack.sequence);
+    assert(record.sendSequence < ack.sequence);
+    const transition = record.transition;
+    keys(transition, [
+      "kind",
+      "reader",
+      "capabilitySHA256",
+      "requestID",
+      "before",
+      "after",
+    ]);
+    assert(["state-transition", "owned-output"].includes(transition.kind));
+    assert.equal(transition.reader, "independent-hosted-producer");
+    assert.equal(transition.capabilitySHA256, journal.capabilitySHA256);
+    assert.equal(transition.requestID, record.request.requestID);
+    for (const observation of [transition.before, transition.after]) {
+      keys(observation, [
+        "observationID",
+        "sequence",
+        "observationSHA256",
+        "expectedSHA256",
+      ]);
+      assert.match(observation.observationID, uuid);
+      assert(!identifiers.has(observation.observationID));
+      identifiers.add(observation.observationID);
+      positiveSequence(observation.sequence);
+      assert.match(observation.observationSHA256, hash);
+      assert.equal(observation.expectedSHA256, observation.observationSHA256);
+    }
+    assert(sequence < transition.before.sequence);
+    assert(transition.before.sequence < record.sendSequence);
+    assert(ack.sequence < transition.after.sequence);
+    sequence = transition.after.sequence;
+    if (record.request.requestID === stage.activation.request.requestID) {
+      assert.equal(selected, undefined);
+      selected = record;
+    }
+  }
+  positiveSequence(journal.sealedThroughSequence);
+  assert(journal.sealedThroughSequence > sequence);
+  assert(journal.sealedThroughSequence >= stage.persistence.sequence);
+  assert(
+    selected,
+    "Selected original action must belong to the admitted mutation journal",
+  );
+  assert.deepEqual(selected.request, stage.activation.request);
+  assert.equal(selected.payload, stage.activation.payload);
+  assert.equal(selected.sendSequence, stage.activation.sequence);
+  assert.deepEqual(selected.acknowledgement, stage.acknowledgement);
+  assert.deepEqual(selected.transition, stage.transition);
+  assert.equal(selected.transition.kind, definition.activation.mutation.kind);
+  assert.equal(
+    selected,
+    journal.records.at(-1),
+    "Final selected action must close the mutation journal",
+  );
+  return journal;
+}
+
 export function validateFunctionalActionProof(
   proof,
   definition,
@@ -407,6 +587,7 @@ export function validateFunctionalActionProof(
       "retired",
       "persistence",
       "transition",
+      "mutationJournal",
     ]);
     const capability = validateFunctionalCapability(
       stage.capability,
@@ -477,21 +658,17 @@ export function validateFunctionalActionProof(
     );
     assert(!requests.has(stage.activation.request.requestID));
     requests.add(stage.activation.request.requestID);
-    assert(
-      typeof stage.activation.payload === "string" &&
-        stage.activation.payload.length <= 1_398_104,
+    mutationPayload(
+      stage.activation.payload,
+      stage.activation.request,
+      definition.activation.mutation.payloadKeys,
     );
-    const payloadBytes = Buffer.from(stage.activation.payload, "base64");
-    assert(payloadBytes.length > 0 && payloadBytes.length <= 1_048_576);
-    assert.equal(payloadBytes.toString("base64"), stage.activation.payload);
-    assert.equal(
-      createHash("sha256").update(payloadBytes).digest("hex"),
-      stage.activation.request.payloadSHA256,
-    );
-    const payload = uniqueJSON(payloadBytes.toString("utf8"));
-    assert.deepEqual(
-      Object.keys(payload).sort(),
-      [...definition.activation.mutation.payloadKeys].sort(),
+    const journal = validateFunctionalMutationJournal(
+      stage.mutationJournal,
+      capability,
+      definition,
+      compiledIssuerPublicKeyDER,
+      stage,
     );
     positiveSequence(stage.activation.sequence);
     keys(stage.acknowledgement, [
@@ -608,7 +785,6 @@ export function validateFunctionalActionProof(
           "capabilitySHA256",
           "engine",
           "ui",
-          "beforeFirstMutation",
           "beforeRequestID",
           "sequence",
           "readbackSHA256",
@@ -621,10 +797,20 @@ export function validateFunctionalActionProof(
         assert.equal(prior.capabilitySHA256, functionalDigest(capability));
         assert.deepEqual(prior.engine, capability.engine);
         assert.deepEqual(prior.ui, capability.ui);
-        assert.equal(prior.beforeFirstMutation, true);
-        assert.equal(prior.beforeRequestID, stage.activation.request.requestID);
+        assert.equal(
+          prior.beforeRequestID,
+          journal.records[0].request.requestID,
+        );
+        for (const field of [
+          "reader",
+          "observationID",
+          "sequence",
+          "readbackSHA256",
+          "expectedSHA256",
+        ])
+          assert.equal(prior[field], journal.baseline[field]);
         positiveSequence(prior.sequence);
-        assert(prior.sequence < stage.transition.before.sequence);
+        assert(prior.sequence < journal.loadSequence);
         assert.equal(
           prior.readbackSHA256,
           observed.stages[0].persistence.readbackSHA256,
