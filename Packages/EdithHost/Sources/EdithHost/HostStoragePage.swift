@@ -171,10 +171,10 @@ struct HostStoragePage: View {
                             HostStorageSizeLine(
                                 title: "Version total", bytes: version.bytes(in: measurement))
                             HostStorageSizeLine(
-                                title: "Included carrier and worker executables",
+                                title: "Included carrier, worker and role executables",
                                 bytes: measurement.sum(version.executableScopeIDs))
                             HostStorageSizeLine(
-                                title: "Included packaged frameworks",
+                                title: "Included carrier, worker and role frameworks",
                                 bytes: measurement.sum(version.frameworkScopeIDs))
                         }
                     }
