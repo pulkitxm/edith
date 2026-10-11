@@ -26,6 +26,10 @@ final class TerminalSessionHolder {
     private(set) var terminalLaunch: OwnedTerminalLaunch?
     private(set) var descriptor: OwnedTerminalDescriptor?
     private var engineSession: OwnedTerminalSession?
+    private var creationTask: Task<Void, Never>?
+    private var retirementTask: Task<Void, Never>?
+    private var retirementID: UUID?
+    private var rendererReady = false
     private var client: OwnedTerminalClient?
     private var dropTask: Task<Void, Never>?
     private var linkResolveTask: Task<Void, Never>?
@@ -67,7 +71,7 @@ final class TerminalSessionHolder {
         currentDirectory: String? = nil, allowsLocalFileLinks: Bool = true,
         resetTerminalAfterInterrupt: Bool = false
     ) {
-        guard !started else { return }
+        guard !started, creationTask == nil, !HerdrWorkOwnership.stopped else { return }
         queuedGhosttyInput = ""
         started = true
         exitMessage = nil
@@ -77,17 +81,36 @@ final class TerminalSessionHolder {
             executable: executable, arguments: arguments, environment: environment,
             currentDirectory: currentDirectory ?? "/", allowsLocalFileLinks: allowsLocalFileLinks,
             resetTerminalAfterInterrupt: resetTerminalAfterInterrupt)
-        do {
-            let session = try OwnedTerminalSession(launch: launch)
-            engineSession = session
-            terminalLaunch = launch
-            bind(
-                try OwnedTerminalClient(descriptor: session.descriptor) { operation, payload in
-                    try await session.execute(operation, payload: payload)
-                })
-        } catch {
-            started = false
-            exitMessage = error.localizedDescription
+        terminalLaunch = launch
+        let current = generation
+        let previous = retirementTask
+        creationTask = HerdrWorkOwnership.start { [self] in
+            defer { if generation == current { creationTask = nil } }
+            do {
+                await previous?.value
+                try Task.checkCancellation()
+                guard generation == current, started else { throw CancellationError() }
+                let session = try await OwnedTerminalSession(launch: launch)
+                guard !Task.isCancelled, generation == current, started else {
+                    await session.stopAndWait()
+                    return
+                }
+                do {
+                    let client = try OwnedTerminalClient(descriptor: session.descriptor) {
+                        operation, payload in
+                        try await session.execute(operation, payload: payload)
+                    }
+                    engineSession = session
+                    bind(client)
+                } catch {
+                    await session.stopAndWait()
+                    throw error
+                }
+            } catch {
+                guard generation == current, !Task.isCancelled else { return }
+                started = false
+                exitMessage = error.localizedDescription
+            }
         }
     }
     func insertText(_ text: String) { sendInput(text) }
@@ -115,7 +138,7 @@ final class TerminalSessionHolder {
 
     func handleDropFiles(_ payload: TerminalDropPayload, generation expected: Int? = nil) -> Bool {
         if let expected, expected != generation { payload.removeTemporaryFiles(); return true }
-        guard dropTask == nil else {
+        guard retirementTask == nil, dropTask == nil else {
             dropTransferError = "A terminal file transfer is already in progress."
             payload.removeTemporaryFiles(); return true
         }
@@ -175,6 +198,7 @@ final class TerminalSessionHolder {
     }
 
     func reset() {
+        retirePendingWork(closeSession: true)
         dropTask?.cancel(); dropTask = nil
         linkResolveTask?.cancel(); linkResolveTask = nil; linkOpenTask?.cancel();
         linkOpenTask = nil; linkRequest = nil
@@ -203,6 +227,7 @@ final class TerminalSessionHolder {
         exitMessage = nil
         currentTitle = nil
         currentWorkingDirectory = nil
+        rendererReady = false
         ghosttyView?.shutdown()
         ghosttyView = nil
         terminalLaunch = nil
@@ -210,6 +235,64 @@ final class TerminalSessionHolder {
 
     func stop() {
         reset()
+    }
+
+    func waitForCreation() async throws {
+        let current = generation
+        let pending = creationTask
+        await withTaskCancellationHandler {
+            await pending?.value
+        } onCancel: {
+            pending?.cancel()
+        }
+        try Task.checkCancellation()
+        guard generation == current else { throw CancellationError() }
+        guard descriptor != nil else { throw ExtensionPeerError.unavailable }
+    }
+
+    func stopAndWait() async {
+        stop()
+        await retirementTask?.value
+    }
+
+    func stopRenderingAndWait() async {
+        stopRendering()
+        await retirementTask?.value
+    }
+
+    private func retirePendingWork(closeSession: Bool) {
+        let pending = [
+            creationTask, dropTask, linkResolveTask, linkOpenTask, readTask, deliveryTask,
+        ]
+        .compactMap { $0 }
+        let client = client
+        let session = closeSession ? engineSession : nil
+        guard !pending.isEmpty || client != nil || session != nil else { return }
+        for task in pending { task.cancel() }
+        creationTask = nil
+        dropTask = nil
+        linkResolveTask = nil
+        linkOpenTask = nil
+        readTask = nil
+        deliveryTask = nil
+        client?.stop()
+        session?.stop()
+        let previous = retirementTask
+        let id = UUID()
+        retirementID = id
+        retirementTask = Task { [self] in
+            await previous?.value
+            for task in pending { await task.value }
+            await client?.stopAndWait()
+            await session?.stopAndWait()
+            guard retirementID == id else { return }
+            retirementTask = nil
+            retirementID = nil
+            if rendererReady { startReading(generation: generation) }
+            deliverEvents()
+            if let ghosttyView { flushQueuedInput(to: ghosttyView) }
+        }
+        if let retirementTask { HerdrWorkOwnership.retain(retirementTask) }
     }
 
     func requestUserClose(_ completion: @escaping @MainActor (Bool) -> Void) {
@@ -234,7 +317,7 @@ final class TerminalSessionHolder {
     }
 
     func sendInput(_ text: String) {
-        guard !text.isEmpty, descriptor != nil else { return }
+        guard !text.isEmpty, started, descriptor != nil || creationTask != nil else { return }
         if let ghosttyView, queuedGhosttyInput.isEmpty, deliverGhosttyInput(ghosttyView, text) {
             return
         }
@@ -262,9 +345,12 @@ final class TerminalSessionHolder {
                 self.enqueue(.resize(columns, rows, width, height), bytes: 0)
             }, failure: { [weak self] in self?.failStream("The terminal input queue is full.") })
         let view = GhosttyTerminalView(
-            externalIO: io, workingDirectory: descriptor?.directory,
-            allowsLocalFileLinks: descriptor?.allowsLocalFileLinks ?? false,
-            resetTerminalAfterInterrupt: descriptor?.resetTerminalAfterInterrupt ?? false,
+            externalIO: io,
+            workingDirectory: descriptor?.directory ?? terminalLaunch?.currentDirectory,
+            allowsLocalFileLinks: descriptor?.allowsLocalFileLinks
+                ?? terminalLaunch?.allowsLocalFileLinks ?? false,
+            resetTerminalAfterInterrupt: descriptor?.resetTerminalAfterInterrupt
+                ?? terminalLaunch?.resetTerminalAfterInterrupt ?? false,
             theme: theme)
         if let hostWindowState {
             view.setHostWindowState(
@@ -300,6 +386,7 @@ final class TerminalSessionHolder {
         }
         view.onReady = { [weak self, weak view] in
             guard let self, let view, self.generation == viewGeneration else { return }
+            self.rendererReady = true
             self.flushQueuedInput(to: view)
             self.startReading(generation: viewGeneration)
         }
@@ -309,7 +396,8 @@ final class TerminalSessionHolder {
     }
 
     private func openTarget(_ value: String, untrusted: Bool, view: GhosttyTerminalView) -> Bool {
-        guard let client, linkResolveTask == nil, linkOpenTask == nil else { return false }
+        guard retirementTask == nil, let client, linkResolveTask == nil, linkOpenTask == nil
+        else { return false }
         let current = generation
         let request = UUID()
         linkRequest = request
@@ -354,12 +442,21 @@ final class TerminalSessionHolder {
     }
 
     func bind(_ client: OwnedTerminalClient) {
-        self.client?.stop()
+        if self.client != nil {
+            if retirementTask == nil {
+                retirePendingWork(closeSession: false)
+            } else {
+                self.client?.stop()
+            }
+        }
         self.client = client
         descriptor = client.descriptor
         currentWorkingDirectory = client.descriptor.directory
         started = true
         exitMessage = nil
+        if rendererReady { startReading(generation: generation) }
+        deliverEvents()
+        if let ghosttyView { flushQueuedInput(to: ghosttyView) }
     }
 
     func executeTerminal(_ operation: String, payload: Data) async throws -> Data {
@@ -368,6 +465,7 @@ final class TerminalSessionHolder {
     }
 
     func stopRendering() {
+        retirePendingWork(closeSession: false)
         dropTask?.cancel(); dropTask = nil
         linkResolveTask?.cancel(); linkResolveTask = nil; linkOpenTask?.cancel();
         linkOpenTask = nil; linkRequest = nil
@@ -381,12 +479,13 @@ final class TerminalSessionHolder {
         queuedBytes = 0
         client?.stop()
         client = nil
+        rendererReady = false
         ghosttyView?.shutdown()
         ghosttyView = nil
     }
 
     private func startReading(generation: Int) {
-        guard readTask == nil, let client else { return }
+        guard retirementTask == nil, readTask == nil, let client else { return }
         readTask = Task { [weak self] in
             var cursor: UInt64 = 0
             while !Task.isCancelled {
@@ -417,17 +516,25 @@ final class TerminalSessionHolder {
     }
 
     private func enqueue(_ event: Event, bytes: Int) {
-        guard started, exitMessage == nil, client != nil else { return }
+        guard started, retirementTask == nil, exitMessage == nil,
+            client != nil || creationTask != nil
+        else { return }
         guard events.count < 256, queuedBytes + bytes <= 262144 else {
             failStream("The terminal input queue is full."); return
         }
         events.append(event)
         queuedBytes += bytes
-        guard deliveryTask == nil else { return }
+        deliverEvents()
+    }
+
+    private func deliverEvents() {
+        guard retirementTask == nil, deliveryTask == nil, client != nil, !events.isEmpty else {
+            return
+        }
         let generation = generation
         deliveryTask = Task { [weak self] in
             guard let self else { return }
-            defer { self.deliveryTask = nil }
+            defer { if self.generation == generation { self.deliveryTask = nil } }
             while !Task.isCancelled, self.generation == generation, !self.events.isEmpty {
                 guard let client = self.client else { return }
                 let event = self.events.removeFirst()

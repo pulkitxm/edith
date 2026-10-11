@@ -24,11 +24,11 @@ import Testing
     @Test func exactEngineRegistryRetainsAllSessionsAndCannotCloseAnotherOwnerScope() async throws {
         let first = OwnedTerminalSessionRegistry()
         let second = OwnedTerminalSessionRegistry()
-        let a = try OwnedTerminalContext.$registry.withValue(first) {
-            try OwnedTerminalSession(launch: launch("sleep 30"))
+        let a = try await OwnedTerminalContext.$registry.withValue(first) {
+            try await OwnedTerminalSession(launch: launch("sleep 30"))
         }
-        let b = try OwnedTerminalContext.$registry.withValue(second) {
-            try OwnedTerminalSession(launch: launch("printf alive; sleep 30"))
+        let b = try await OwnedTerminalContext.$registry.withValue(second) {
+            try await OwnedTerminalSession(launch: launch("printf alive; sleep 30"))
         }
         defer { first.stopAll(); second.stopAll() }
         #expect(first.find(a.descriptor.handle) === a)
@@ -39,15 +39,15 @@ import Testing
         let surviving = try client(b)
         let output = try await surviving.read(after: 0)
         #expect(String(decoding: output.bytes, as: UTF8.self).contains("alive"))
-        #expect(throws: ExtensionPeerError.self) {
-            try OwnedTerminalContext.$registry.withValue(first) {
-                try OwnedTerminalSession(launch: launch("sleep 30"))
+        await #expect(throws: ExtensionPeerError.self) {
+            try await OwnedTerminalContext.$registry.withValue(first) {
+                try await OwnedTerminalSession(launch: launch("sleep 30"))
             }
         }
     }
 
     @Test func actualOwnedPTYPreservesInputResizeUTF8TermiosAndExit() async throws {
-        let session = try OwnedTerminalSession(
+        let session = try await OwnedTerminalSession(
             launch: launch(
                 "stty icanon -echo; printf 'ready:'; read value; printf '\\033[32m%s ☃\\033[0m:' \"$value\"; stty size; exit 7"
             ))
@@ -124,7 +124,7 @@ import Testing
     }
 
     @Test func capabilitiesAreOwnerBoundAndCloseReapsOnlyOwnedChild() async throws {
-        let session = try OwnedTerminalSession(launch: launch("printf '%s' $$; exec cat"))
+        let session = try await OwnedTerminalSession(launch: launch("printf '%s' $$; exec cat"))
         defer { session.stop() }
         let client = try client(session)
         let output = try await client.read(after: 0)
@@ -159,7 +159,7 @@ import Testing
     }
 
     @Test func exitRetainsOutputAndCloseStopsBackgroundJobInSeparateGroup() async throws {
-        let session = try OwnedTerminalSession(
+        let session = try await OwnedTerminalSession(
             launch: launch(
                 "set -m; (trap '' HUP; exec /bin/sleep 60) & printf '%s %s\\n' $$ $!; /bin/sleep 0.1; printf final-output; exit 9"
             ))
@@ -202,7 +202,7 @@ import Testing
     @Test func outputBeyondBufferCapacityIsBackpressuredWithoutLosingVTBytes() async throws {
         let script =
             "import os; data = b'\\x1b[32m' + b'x' * (1024 * 1024) + b'\\x1b[0m';\nwhile data:\n data = data[os.write(1, data):]\n"
-        let session = try OwnedTerminalSession(
+        let session = try await OwnedTerminalSession(
             launch: .init(
                 executable: "/usr/bin/python3", arguments: ["-c", script],
                 environment: ["PATH=/usr/bin:/bin", "TERM=xterm-256color"],
@@ -230,7 +230,7 @@ import Testing
     @Test func largeNativePasteWaitsForRealPTYInputBackpressure() async throws {
         let script =
             "import os, tty, time; tty.setraw(0); os.write(1, b'ready'); time.sleep(0.2); data = b'';\nwhile len(data) < 65536:\n data += os.read(0, 65536-len(data))\nwhile data:\n data = data[os.write(1, data):]\n"
-        let session = try OwnedTerminalSession(
+        let session = try await OwnedTerminalSession(
             launch: .init(
                 executable: "/usr/bin/python3", arguments: ["-c", script],
                 environment: ["PATH=/usr/bin:/bin", "TERM=xterm-256color"],
@@ -265,7 +265,7 @@ import Testing
     @Test func resizeCarriesNativePixelGeometryAndClampsOnlyPixelRange() async throws {
         let script =
             "import os, fcntl, termios, struct; os.write(1, b'ready'); os.read(0, 4096); size = struct.unpack('HHHH', fcntl.ioctl(0, termios.TIOCGWINSZ, bytes(8))); os.write(1, ','.join(str(n) for n in size).encode())"
-        let session = try OwnedTerminalSession(
+        let session = try await OwnedTerminalSession(
             launch: .init(
                 executable: "/usr/bin/python3", arguments: ["-c", script],
                 environment: ["PATH=/usr/bin:/bin", "TERM=xterm-256color"],

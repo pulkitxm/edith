@@ -43,12 +43,50 @@ enum OwnedTerminalContext {
     let links = OwnedTerminalLinks()
     private var sessions: [UUID: OwnedTerminalSession] = [:]
     private var retired: [UUID: Task<Void, Never>] = [:]
+    private var creating: [UUID: Task<OwnedTerminalPTY, Error>] = [:]
     private var drainTask: Task<Void, Never>?
     private var stopped = false
-    var acceptsSession: Bool { !stopped && sessions.count + retired.count < 512 }
+    var acceptsSession: Bool { !stopped && sessions.count + retired.count + creating.count < 512 }
 
-    func register(_ session: OwnedTerminalSession) {
+    func createTerminal(_ launch: OwnedTerminalLaunch) async throws
+        -> (id: UUID, terminal: OwnedTerminalPTY)
+    {
+        guard acceptsSession else { throw ExtensionPeerError.unavailable }
+        try Task.checkCancellation()
+        let id = UUID()
+        let task = Task {
+            try await OwnedTerminalPTY(launch: launch) {
+                guard !self.stopped else { throw ExtensionPeerError.unavailable }
+            }
+        }
+        creating[id] = task
+        do {
+            let terminal = try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
+            guard !stopped, !Task.isCancelled, !task.isCancelled else {
+                await terminal.closeAndWait()
+                throw CancellationError()
+            }
+            return (id, terminal)
+        } catch {
+            creating[id] = nil
+            throw error
+        }
+    }
+
+    func register(_ session: OwnedTerminalSession, creation: UUID?) throws {
+        guard !stopped, let creation, creating[creation] != nil else {
+            throw ExtensionPeerError.unavailable
+        }
         sessions[session.descriptor.handle.id] = session
+        creating[creation] = nil
+    }
+
+    func finishCreation(_ id: UUID?) {
+        if let id { creating[id] = nil }
     }
 
     func find(_ handle: OwnedTerminalHandle) -> OwnedTerminalSession? {
@@ -70,8 +108,12 @@ enum OwnedTerminalContext {
         stopAll()
         if let drainTask { await drainTask.value; return }
         let pending = Array(retired.values)
+        let creating = Array(creating.values)
         let files = files
         let task = Task {
+            for task in creating {
+                if let terminal = try? await task.value { await terminal.closeAndWait() }
+            }
             for task in pending { await task.value }
             await files.stopAndWait()
         }
@@ -81,6 +123,7 @@ enum OwnedTerminalContext {
 
     func stopAll() {
         stopped = true
+        for task in creating.values { task.cancel() }
         files.stop()
         links.stop()
         let owned = Array(sessions.values)
@@ -99,7 +142,7 @@ enum OwnedTerminalContext {
     private var writing = false
     private var drainTask: Task<Void, Never>?
 
-    init(launch: OwnedTerminalLaunch) throws {
+    init(launch: OwnedTerminalLaunch) async throws {
         guard Bundle.main.bundleURL.pathExtension != "appex" else {
             throw ExtensionPeerError.rejected("Only the owning engine can launch a terminal.")
         }
@@ -107,13 +150,28 @@ enum OwnedTerminalContext {
         guard registry?.acceptsSession != false else { throw ExtensionPeerError.unavailable }
         files = registry?.files ?? OwnedTerminalFiles()
         links = registry?.links ?? OwnedTerminalLinks()
-        terminal = try OwnedTerminalPTY(launch: launch)
+        let creation: UUID?
+        if let registry {
+            let created = try await registry.createTerminal(launch)
+            terminal = created.terminal
+            creation = created.id
+        } else {
+            terminal = try await OwnedTerminalPTY(launch: launch) {}
+            creation = nil
+        }
         descriptor = .init(
             handle: .init(owner: Self.owner, id: UUID(), generation: UUID()),
             directory: launch.currentDirectory, allowsLocalFileLinks: launch.allowsLocalFileLinks,
             resetTerminalAfterInterrupt: launch.resetTerminalAfterInterrupt)
         self.registry = registry
-        registry?.register(self)
+        do {
+            try Task.checkCancellation()
+            try registry?.register(self, creation: creation)
+        } catch {
+            await terminal.closeAndWait()
+            registry?.finishCreation(creation)
+            throw error
+        }
     }
 
     func execute(_ operation: String, payload: Data) async throws -> Data {

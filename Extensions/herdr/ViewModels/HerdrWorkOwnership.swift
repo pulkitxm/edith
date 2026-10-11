@@ -54,6 +54,13 @@ private final class HerdrCallbackWork: @unchecked Sendable {
         tasks[id] = task
         return task
     }
+    static func retain(_ task: Task<Void, Never>) {
+        let id = UUID()
+        tasks[id] = Task {
+            await task.value
+            tasks.removeValue(forKey: id)
+        }
+    }
     static func enable() {
         stopped = false
         callbacks.enable()

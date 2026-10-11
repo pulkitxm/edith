@@ -606,6 +606,8 @@ import WorkerFixtureSupport
 
     func requestWorkCancellation() {
         workSuspended = true
+        terminalSessions.stopAll()
+        for selection in shells.values { selection.holder.stopRendering() }
         store.cancelPendingWork()
         maintenance?.cancel()
         cliStreams?.stop()
@@ -651,7 +653,7 @@ import WorkerFixtureSupport
         spaces.stopAll()
         uiHookPlans.shutdown()
         await catalogs.shutdown()
-        for selection in shells.values { selection.holder.stop() }
+        for selection in shells.values { await selection.holder.stopAndWait() }
         shells.removeAll()
         await cliStreams?.stopAndWait()
         await agentCLIStreams?.stopAndWait()

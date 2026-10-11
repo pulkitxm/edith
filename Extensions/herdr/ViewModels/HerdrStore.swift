@@ -645,6 +645,7 @@ final class HerdrStore {
 
     func drain() async {
         cancelPendingWork()
+        let holders = terminalHolders
         let polling = Array(uiRetirements.values)
         let requests = Array(uiRequests.values)
         let spaces = Array(uiSpaceTasks.values)
@@ -654,6 +655,7 @@ final class HerdrStore {
         for task in requests { _ = await task.result }
         for task in spaces { await task.value }
         for task in presentations { await task.value }
+        for holder in holders { await holder.stopRenderingAndWait() }
         await HerdrWorkOwnership.shutdown()
     }
 
@@ -679,11 +681,11 @@ final class HerdrStore {
         HerdrIPC.stopObserving(machinesObserver)
         machinesObserver = nil
         for tab in sessions + Array(detachedTabs.values) {
-            tab.holder.stop()
+            await tab.holder.stopAndWait()
             tab.quinjet.stop()
         }
         for terminal in terminalPanels.terminals.values {
-            terminal.holder.stop()
+            await terminal.holder.stopAndWait()
             await terminal.scroll.shutdownAndWait()
         }
         await watcher?.value

@@ -8,9 +8,10 @@ import Testing
     @Test func actualSDKQueuesTwelvePTYReadersAndReservesInputResizeAndUIControls() async throws {
         let registry = OwnedTerminalSessionRegistry()
         defer { registry.stopAll() }
-        let sessions = try (0..<12).map { _ in
-            try OwnedTerminalContext.$registry.withValue(registry) {
-                try OwnedTerminalSession(
+        var sessions: [OwnedTerminalSession] = []
+        for _ in 0..<12 {
+            let session = try await OwnedTerminalContext.$registry.withValue(registry) {
+                try await OwnedTerminalSession(
                     launch: .init(
                         executable: "/bin/sh",
                         arguments: [
@@ -21,6 +22,7 @@ import Testing
                         currentDirectory: "/private/tmp", allowsLocalFileLinks: true,
                         resetTerminalAfterInterrupt: false))
             }
+            sessions.append(session)
         }
         let bridge = SyntheticPTYEngineBridge(registry: registry)
         let sdk = try #require(
@@ -74,8 +76,8 @@ import Testing
     @Test func stoppingOwnerQueueCancelsUnadmittedActualSDKRequests() async throws {
         let registry = OwnedTerminalSessionRegistry()
         defer { registry.stopAll() }
-        let session = try OwnedTerminalContext.$registry.withValue(registry) {
-            try OwnedTerminalSession(
+        let session = try await OwnedTerminalContext.$registry.withValue(registry) {
+            try await OwnedTerminalSession(
                 launch: .init(
                     executable: "/bin/sh", arguments: ["-c", "exec sleep 30"],
                     environment: ["PATH=/usr/bin:/bin", "TERM=xterm-256color"],
