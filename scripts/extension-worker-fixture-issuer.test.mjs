@@ -21,6 +21,7 @@ import {
   validateCameraFixtureHost,
   validateWorkerFixtureProof,
   validateWorkerFixtureSelection,
+  validateWorkerLifecycleResult,
   workerFixtureEnvironment,
   workerFixtureHome,
 } from "./test-extension-workers.mjs";
@@ -453,4 +454,89 @@ test("tracked Camera host rejects missing resources, symlink trees and malformed
       assert.equal(verified, false);
     });
   }
+});
+
+function lifecycleResult(worker, headlessCLI = false) {
+  const { id, surfaceContractVersion } = worker;
+  return {
+    downloadedBundle: true,
+    updateWithoutAppRestart: true,
+    restoreAfterAppUpdate: true,
+    freshHostSessionRestored: true,
+    pendingDisableRecoveryValidated: true,
+    removedPayloads: true,
+    isolatedSupportTypes: true,
+    surfaceLayoutRestored: true,
+    engineLifecycleValidated: true,
+    managedNativeViewValidated: false,
+    nativeWindow: false,
+    headlessCLI,
+    headlessLifecycle: true,
+    disabledProcesses: 0,
+    surfaceDataValidated:
+      surfaceContractVersion === 1 && !["music", "notchShelf"].includes(id),
+    inertFeatureDeclineValidated: ["music", "notchShelf"].includes(id),
+    notchMetadataValidated: id === "notchShelf",
+    studioDataValidated: false,
+    studioMetadataValidated: id === "studio",
+    clipboardDataValidated: id === "clipboard",
+    latexDataValidated: id === "latex",
+    companionDataValidated: id === "companion",
+    terminalDataValidated: id === "terminal",
+    audioMixerDataValidated: id === "audioMixer",
+    usageDataValidated: id === "usage",
+    usageHookLifecycleValidated: id === "usage",
+    cameraDataValidated: id === "virtualCamera",
+    databaseDataValidated: id === "database",
+    calendarFixtureLifecycleValidated: id === "calendar",
+    agentActivityValidated: id === "herdr",
+    machinesDataValidated: id === "machines",
+    codeStatsDataValidated: id === "codeStats",
+  };
+}
+
+test("lifecycle result rejects every missing or falsified original observation for all39", () => {
+  for (const worker of workers) {
+    const result = lifecycleResult(worker);
+    const options = { ...worker, headlessCLI: false };
+    validateWorkerLifecycleResult(result, options);
+    for (const [field, value] of Object.entries(result)) {
+      const missing = { ...result };
+      delete missing[field];
+      assert.throws(
+        () => validateWorkerLifecycleResult(missing, options),
+        `${worker.id}: missing ${field}`,
+      );
+      for (const incorrect of [
+        null,
+        typeof value === "boolean" ? !value : 1,
+        String(value),
+      ])
+        assert.throws(
+          () =>
+            validateWorkerLifecycleResult(
+              { ...result, [field]: incorrect },
+              options,
+            ),
+          `${worker.id}: falsified ${field}`,
+        );
+    }
+  }
+});
+
+test("lifecycle result preserves Database CLI and refuses native UI promotion", () => {
+  const worker = workers.find(({ id }) => id === "database");
+  const options = { ...worker, headlessCLI: true };
+  const result = lifecycleResult(worker, true);
+  validateWorkerLifecycleResult(result, options);
+  assert.throws(() =>
+    validateWorkerLifecycleResult(result, { ...options, headlessCLI: false }),
+  );
+  for (const field of ["managedNativeViewValidated", "nativeWindow"])
+    assert.throws(() =>
+      validateWorkerLifecycleResult({ ...result, [field]: true }, options),
+    );
+  assert.throws(() =>
+    validateWorkerLifecycleResult(result, { ...options, id: "futureWorker" }),
+  );
 });
