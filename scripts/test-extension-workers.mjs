@@ -154,6 +154,22 @@ export function validateWorkerLifecycleResult(
   assert.equal(result.agentActivityValidated, id === "herdr");
   assert.equal(result.machinesDataValidated, id === "machines");
   assert.equal(result.codeStatsDataValidated, id === "codeStats");
+  assert.equal(result.systemCleaningValidated, id === "system");
+}
+
+export function validatePrivilegedWorkerLifecycleResult(privileged) {
+  for (const key of [
+    "signedPayload",
+    "sameExecutable",
+    "isolatedPrivilegedWorkers",
+    "restoredBeforeExit",
+    "connectionLossExited",
+  ])
+    assert.equal(privileged[key], true);
+  assert.equal(privileged.disabledProcesses, 0);
+  assert.equal(privileged.productionSystemEffects, 0);
+  assert.equal(privileged.lifecycleScope, "synthetic-restoration-callback");
+  assert.equal(privileged.shippingPrivilegedRoleExecuted, false);
 }
 
 export function workerFixtureHome(root, id) {
@@ -467,21 +483,7 @@ async function run() {
             { encoding: "utf8", timeout: 60_000 },
           ).trim(),
         );
-        for (const key of [
-          "signedPayload",
-          "sameExecutable",
-          "isolatedPrivilegedWorkers",
-          "restoredBeforeExit",
-          "connectionLossExited",
-        ])
-          assert.equal(privileged[key], true);
-        assert.equal(privileged.disabledProcesses, 0);
-        assert.equal(privileged.productionSystemEffects, 0);
-        assert.equal(
-          privileged.lifecycleScope,
-          "synthetic-restoration-callback",
-        );
-        assert.equal(privileged.shippingPrivilegedRoleExecuted, false);
+        validatePrivilegedWorkerLifecycleResult(privileged);
         result.privilegedWorkerLifetimeValidated = true;
         result.privilegedShippingPayloadValidated = true;
         result.privilegedShippingRoleExecuted = false;

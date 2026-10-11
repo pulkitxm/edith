@@ -22,6 +22,7 @@ import {
   validateWorkerFixtureProof,
   validateWorkerFixtureSelection,
   validateWorkerLifecycleResult,
+  validatePrivilegedWorkerLifecycleResult,
   workerFixtureEnvironment,
   workerFixtureHome,
 } from "./test-extension-workers.mjs";
@@ -492,6 +493,7 @@ function lifecycleResult(worker, headlessCLI = false) {
     agentActivityValidated: id === "herdr",
     machinesDataValidated: id === "machines",
     codeStatsDataValidated: id === "codeStats",
+    systemCleaningValidated: id === "system",
   };
 }
 
@@ -539,4 +541,43 @@ test("lifecycle result preserves Database CLI and refuses native UI promotion", 
   assert.throws(() =>
     validateWorkerLifecycleResult(result, { ...options, id: "futureWorker" }),
   );
+});
+
+test("privileged lifecycle rejects every dropped observation and shipping execution claim", () => {
+  const result = {
+    signedPayload: true,
+    sameExecutable: true,
+    isolatedPrivilegedWorkers: true,
+    restoredBeforeExit: true,
+    connectionLossExited: true,
+    disabledProcesses: 0,
+    productionSystemEffects: 0,
+    lifecycleScope: "synthetic-restoration-callback",
+    shippingPrivilegedRoleExecuted: false,
+  };
+  validatePrivilegedWorkerLifecycleResult(result);
+  for (const [field, value] of Object.entries(result)) {
+    const missing = { ...result };
+    delete missing[field];
+    assert.throws(
+      () => validatePrivilegedWorkerLifecycleResult(missing),
+      `missing ${field}`,
+    );
+    for (const incorrect of [
+      null,
+      typeof value === "boolean"
+        ? !value
+        : typeof value === "number"
+          ? 1
+          : "shipping",
+    ])
+      assert.throws(
+        () =>
+          validatePrivilegedWorkerLifecycleResult({
+            ...result,
+            [field]: incorrect,
+          }),
+        `falsified ${field}`,
+      );
+  }
 });
