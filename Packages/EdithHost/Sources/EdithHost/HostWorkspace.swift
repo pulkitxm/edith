@@ -144,10 +144,18 @@ struct HostWorkspace: View {
                     navigation: windowNavigation,
                     apply: { route in
                         try Task.checkCancellation()
-                        if let section = route.section { maintenanceSection = section }
+                        if let section = route.section {
+                            if route.page == "settings" { settings = section }
+                            if route.page == "appMaintenance" { maintenanceSection = section }
+                        }
                         binding.wrappedValue = route.page
                         await Task.yield()
-                        guard binding.wrappedValue == route.page else {
+                        guard binding.wrappedValue == route.page,
+                            route.page != "settings" || route.section == nil
+                                || settings == route.section,
+                            route.page != "appMaintenance" || route.section == nil
+                                || maintenanceSection == route.section
+                        else {
                             throw HostWindowNavigationError.routeRejected
                         }
                     }, selected: { binding.wrappedValue })

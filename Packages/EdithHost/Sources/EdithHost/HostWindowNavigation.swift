@@ -3,21 +3,6 @@ import EdithExtensionSupport
 import Foundation
 import SwiftUI
 
-struct HostWindowRoute: Equatable {
-    let page: String
-    let section: String?
-    let relativePath: String?
-    let presentationID: UUID?
-    let location: String?
-}
-
-enum HostWindowNavigationError: Error, Equatable {
-    case unavailable
-    case invalidDestination
-    case inactiveOwner
-    case routeRejected
-}
-
 @MainActor
 final class HostWindowNavigation {
     typealias Apply = @MainActor (HostWindowRoute) async throws -> Void
@@ -122,37 +107,15 @@ final class HostWindowNavigation {
         relativePath: String? = nil, presentationID: UUID? = nil, location: String? = nil
     ) async throws {
         try Task.checkCancellation()
-        guard activeVersions()[extensionID] == version else {
-            throw HostWindowNavigationError.inactiveOwner
-        }
-        guard let owned = HostNavigationCatalog.route(extensionID: extensionID) else {
-            throw HostWindowNavigationError.invalidDestination
-        }
-        let page = section ?? owned.page
-        guard page == owned.page || (extensionID == "music" && page == "downloads"),
-            HostNavigationCatalog.pages.contains(where: { $0.id == page }),
-            HostNavigationCatalog.visible(
-                HostNavigationCatalog.page(page), active: Set(activeVersions().keys),
-                defaults: defaults),
-            location.map({
-                [
-                    "main", "settings", "home", "notch", "sidebar.utility", "music.footer",
-                    "music.sidebar", "music.detail", "machines.window",
-                ]
-                .contains($0)
-            }) ?? true,
-            (presentationID == nil) == (location == nil),
-            !(location?.hasPrefix("music.") ?? false) || extensionID == "music"
-        else { throw HostWindowNavigationError.invalidDestination }
-        if let relativePath {
-            guard extensionID == "music", page == "music", relativePath.utf8.count <= 4096,
-                !relativePath.isEmpty, !relativePath.hasPrefix("/"), !relativePath.hasPrefix("~"),
-                !relativePath.utf8.contains(0), !relativePath.contains("\\"),
-                relativePath.split(separator: "/", omittingEmptySubsequences: false).allSatisfy({
-                    !$0.isEmpty && $0 != "." && $0 != ".."
-                })
-            else { throw HostWindowNavigationError.invalidDestination }
-        }
+        let route = try HostWorkerNavigationRouting.resolve(
+            extensionID: extensionID, version: version, section: section,
+            relativePath: relativePath, presentationID: presentationID, location: location,
+            activeVersions: activeVersions(),
+            visible: {
+                HostNavigationCatalog.visible(
+                    HostNavigationCatalog.page($0), active: Set(activeVersions().keys),
+                    defaults: defaults)
+            })
         registrations = registrations.filter { $0.value.window != nil }
         let origin = presentationID.flatMap(originatingWindow)
         guard presentationID == nil || origin != nil else {
@@ -179,30 +142,23 @@ final class HostWindowNavigation {
         guard let (token, registration) = chosen else {
             throw HostWindowNavigationError.unavailable
         }
-        let route = HostWindowRoute(
-            page: page, section: page == owned.page ? owned.section : nil,
-            relativePath: relativePath, presentationID: presentationID, location: location)
         try Task.checkCancellation()
         try await registration.apply(route)
         try Task.checkCancellation()
-        guard activeVersions()[extensionID] == version else {
-            throw HostWindowNavigationError.inactiveOwner
-        }
-        guard currentOrigin(presentationID, window: origin, relationship: relationship),
-            registrations[token] === registration, registration.window != nil,
-            registration.selected() == route.page
-        else { throw HostWindowNavigationError.routeRejected }
+        try HostWorkerNavigationRouting.validateApplied(
+            extensionID: extensionID, version: version, activeVersions: activeVersions(),
+            current: currentOrigin(presentationID, window: origin, relationship: relationship)
+                && registrations[token] === registration && registration.window != nil
+                && registration.selected() == route.page)
         try await didApply(route)
         try Task.checkCancellation()
-        guard activeVersions()[extensionID] == version else {
-            throw HostWindowNavigationError.inactiveOwner
-        }
-        guard currentOrigin(presentationID, window: origin, relationship: relationship),
-            registrations[token] === registration, registration.selected() == route.page,
-            HostNavigationCatalog.visible(
-                HostNavigationCatalog.page(page), active: Set(activeVersions().keys),
-                defaults: defaults)
-        else { throw HostWindowNavigationError.routeRejected }
+        try HostWorkerNavigationRouting.validateApplied(
+            extensionID: extensionID, version: version, activeVersions: activeVersions(),
+            current: currentOrigin(presentationID, window: origin, relationship: relationship)
+                && registrations[token] === registration && registration.selected() == route.page,
+            visible: HostNavigationCatalog.visible(
+                HostNavigationCatalog.page(route.page), active: Set(activeVersions().keys),
+                defaults: defaults))
     }
 
     private func currentOrigin(_ id: UUID?, window: NSWindow?, relationship: WindowRelationship?)

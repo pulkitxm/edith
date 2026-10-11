@@ -41,7 +41,7 @@ import Testing
         #expect(!HostExtensionSettingsPolicy.canPresent(id: "database", active: false))
     }
 
-    @Test func maintenanceNavigationPreservesItsOriginalChildAndHelpersUseReview() throws {
+    @Test func maintenanceAndUtilityNavigationPreserveTheirOwnedDestinations() throws {
         let route = try #require(HostNavigationCatalog.route(extensionID: "homebrew"))
         #expect(route.page == "appMaintenance" && route.section == "Packages")
         var pages: [String] = [], details: [String] = []
@@ -54,8 +54,10 @@ import Testing
         HostExtensionActions.open(
             try entry("database"), active: false, openPage: { pages.append($0) },
             showDetails: { details.append($0.id) })
-        #expect(pages == ["homebrew"])
-        #expect(details == ["emoji", "database"])
+        #expect(pages == ["homebrew", "emoji"])
+        #expect(details == ["database"])
+        #expect(HostNavigationCatalog.route(extensionID: "emoji")?.page == "settings")
+        #expect(HostNavigationCatalog.route(extensionID: "emoji")?.section == "emoji")
     }
 
     @Test func settingsAdmissionMatchesExplicitPreferencesAndActiveOnlyContracts() {

@@ -133,9 +133,11 @@ struct HostApplication: App {
             weak var ownedNotch: HostNotchStartup?
             let navigation = HostWindowNavigation(
                 activeVersions: {
-                    loaded.sessions.versions.filter {
-                        loaded.surfaceAvailability.activeIDs.contains($0.key)
-                    }
+                    HostWorkerNavigationRouting.activeVersions(
+                        installed: loaded.installed, states: loaded.sessions.states,
+                        versions: loaded.sessions.versions,
+                        pendingDisable: loaded.sessions.pendingDisableIDs,
+                        pendingRemoval: loaded.pendingRemovalIDs)
                 },
                 originatingWindow: { [weak presenter] in
                     presenter?.window(for: $0) ?? ownedNotch?.window(for: $0)
