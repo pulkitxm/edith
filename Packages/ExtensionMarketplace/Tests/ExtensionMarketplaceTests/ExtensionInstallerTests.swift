@@ -1,4 +1,5 @@
 import CryptoKit
+import Darwin
 import Foundation
 import Testing
 @testable import ExtensionMarketplace
@@ -20,7 +21,8 @@ struct PackageFixture {
 
     func archive(
         _ version: String = "1.0.0", hostABI: String = "host-1", id: String = "keepAwake",
-        unsafePath: String? = nil, symlink: Bool = false, carrier: Bool = false
+        unsafePath: String? = nil, symlink: Bool = false, carrier: Bool = false,
+        runtime: String? = nil
     ) throws -> (ExtensionPackage, URL) {
         let placeholder = fixturePackage(id, version: version, hostABI: hostABI)
         let manifest = try JSONEncoder().encode(ExtensionPayloadManifest(package: placeholder))
@@ -31,7 +33,7 @@ struct PackageFixture {
             ("\(id)/package.json", manifest),
             (
                 unsafePath ?? "\(id)/helper.bundle/Contents/MacOS/Runtime",
-                Data("fixture runtime \(version)".utf8)
+                Data((runtime ?? "fixture runtime \(version)").utf8)
             ),
         ]
         if carrier {
@@ -373,4 +375,248 @@ func unsafeArchivesNeverWriteOutsideTheStagingArea(_ path: String) async throws 
     }
     #expect(try fixture.store.installedPackages().isEmpty)
     #expect(!FileManager.default.fileExists(atPath: fixture.store.directory(for: package).path))
+}
+
+private func replacementRuntimeURL(
+    _ fixture: PackageFixture, _ package: ExtensionPackage
+) -> URL {
+    fixture.store.directory(for: package).appendingPathComponent(
+        package.id + "/helper.bundle/Contents/MacOS/Runtime")
+}
+
+private func replacementFileIdentity(_ url: URL) throws -> UInt64 {
+    let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+    return try #require((attributes[.systemFileNumber] as? NSNumber)?.uint64Value)
+}
+
+private func replacementBackups(_ fixture: PackageFixture, _ package: ExtensionPackage) throws
+    -> [String]
+{
+    try FileManager.default.contentsOfDirectory(
+        atPath: fixture.store.directory(for: package).deletingLastPathComponent().path
+    ).filter { $0.hasPrefix(".backup-") || $0.hasPrefix(".payload-") }
+}
+
+@Test func sameVersionReplacementRestoresOriginalAfterDependencyFailure() async throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let (original, originalArchive) = try fixture.archive(runtime: "original runtime")
+    _ = try await fixture.installer(archives: [original.downloadURL: originalArchive]).install(
+        [original], repository: "example/app")
+    let (replacement, replacementArchive) = try fixture.archive(runtime: "replaced runtime")
+    let (dependency, _) = try fixture.archive(id: "calendar")
+    #expect(original != replacement)
+    #expect(ExtensionPayloadManifest(package: original) == ExtensionPayloadManifest(package: replacement))
+    let runtime = replacementRuntimeURL(fixture, original)
+    let oldBytes = try Data(contentsOf: runtime)
+    let oldIdentity = try replacementFileIdentity(fixture.store.directory(for: original))
+    let state = fixture.store.root.appendingPathComponent("installed.json")
+    let oldState = try Data(contentsOf: state)
+    await #expect(throws: MarketplaceError.downloadFailed) {
+        try await fixture.installer(archives: [
+            replacement.downloadURL: replacementArchive
+        ]).install([replacement, dependency], repository: "example/app")
+    }
+    #expect(try Data(contentsOf: runtime) == oldBytes)
+    #expect(try replacementFileIdentity(fixture.store.directory(for: original)) == oldIdentity)
+    #expect(try Data(contentsOf: state) == oldState)
+    #expect(try fixture.store.installedPackages() == [original])
+    #expect(try replacementBackups(fixture, original).isEmpty)
+}
+
+@Test func sameVersionReplacementRestoresOriginalAfterTaskCancellation() async throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let (original, originalArchive) = try fixture.archive(runtime: "original runtime")
+    _ = try await fixture.installer(archives: [original.downloadURL: originalArchive]).install(
+        [original], repository: "example/app")
+    let (replacement, replacementArchive) = try fixture.archive(runtime: "replaced runtime")
+    let runtime = replacementRuntimeURL(fixture, original)
+    let oldBytes = try Data(contentsOf: runtime)
+    let oldIdentity = try replacementFileIdentity(fixture.store.directory(for: original))
+    let state = fixture.store.root.appendingPathComponent("installed.json")
+    let oldState = try Data(contentsOf: state)
+    let installer = fixture.installer(archives: [
+        replacement.downloadURL: replacementArchive
+    ])
+    let task = Task {
+        try await installer.install([replacement], repository: "example/app") { _ in
+            withUnsafeCurrentTask { $0?.cancel() }
+        }
+    }
+    await #expect(throws: CancellationError.self) { try await task.value }
+    #expect(try Data(contentsOf: runtime) == oldBytes)
+    #expect(try replacementFileIdentity(fixture.store.directory(for: original)) == oldIdentity)
+    #expect(try Data(contentsOf: state) == oldState)
+    #expect(try fixture.store.installedPackages() == [original])
+    #expect(try replacementBackups(fixture, original).isEmpty)
+}
+
+@Test func failedDestinationRenameRestoresOriginalDirectory() async throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let (original, originalArchive) = try fixture.archive(runtime: "original runtime")
+    _ = try await fixture.installer(archives: [original.downloadURL: originalArchive]).install(
+        [original], repository: "example/app")
+    let (replacement, replacementArchive) = try fixture.archive(runtime: "replaced runtime")
+    let runtime = replacementRuntimeURL(fixture, original)
+    let oldBytes = try Data(contentsOf: runtime)
+    let oldIdentity = try replacementFileIdentity(fixture.store.directory(for: original))
+    let state = fixture.store.root.appendingPathComponent("installed.json")
+    let oldState = try Data(contentsOf: state)
+    let staging = fixture.directory.appendingPathComponent("rename-staging")
+    try ExtensionArchive.extract(replacementArchive, package: replacement, to: staging)
+    let lease = try PackageFileLock(url: fixture.store.leaseURL(for: original), exclusive: true)
+    defer { lease.close() }
+    let authority = try PackageDirectory(fixture.store.root, create: true)
+    #expect(throws: POSIXError.self) {
+        try authority.install(replacement, from: staging) { sourceFD, name, destinationFD, target in
+            if name.hasPrefix(".payload-") {
+                errno = EIO
+                return -1
+            }
+            return renameat(sourceFD, name, destinationFD, target)
+        }
+    }
+    #expect(try Data(contentsOf: runtime) == oldBytes)
+    #expect(try replacementFileIdentity(fixture.store.directory(for: original)) == oldIdentity)
+    #expect(try Data(contentsOf: state) == oldState)
+    #expect(try replacementBackups(fixture, original).isEmpty)
+}
+
+@Test func sameVersionReplacementDoesNotDeleteLiveLeasedOriginal() async throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let (original, originalArchive) = try fixture.archive(runtime: "original runtime")
+    _ = try await fixture.installer(archives: [original.downloadURL: originalArchive]).install(
+        [original], repository: "example/app")
+    let (replacement, replacementArchive) = try fixture.archive(runtime: "replaced runtime")
+    let runtime = replacementRuntimeURL(fixture, original)
+    let oldBytes = try Data(contentsOf: runtime)
+    let lease = try fixture.store.lease(original)
+    defer { lease.close() }
+    await #expect(throws: MarketplaceError.packageBusy) {
+        try await fixture.installer(archives: [
+            replacement.downloadURL: replacementArchive
+        ]).install([replacement], repository: "example/app")
+    }
+    #expect(try Data(contentsOf: runtime) == oldBytes)
+    #expect(try fixture.store.installedPackages() == [original])
+    #expect(try replacementBackups(fixture, original).isEmpty)
+}
+
+@Test func successfulSameVersionReplacementCommitsNewPayloadAndRemovesBackup() async throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let (original, originalArchive) = try fixture.archive(runtime: "original runtime")
+    _ = try await fixture.installer(archives: [original.downloadURL: originalArchive]).install(
+        [original], repository: "example/app")
+    let (replacement, replacementArchive) = try fixture.archive(runtime: "replaced runtime")
+    let installed = try await fixture.installer(archives: [
+        replacement.downloadURL: replacementArchive
+    ]).install([replacement], repository: "example/app")
+    #expect(installed == [replacement])
+    #expect(try fixture.store.installedPackages() == [replacement])
+    #expect(
+        try Data(contentsOf: replacementRuntimeURL(fixture, replacement))
+            == Data("replaced runtime".utf8))
+    #expect(try replacementBackups(fixture, replacement).isEmpty)
+}
+
+@Test func earlierReplacementLeaseRemainsHeldThroughLaterPlanDownload() async throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let (original, originalArchive) = try fixture.archive(runtime: "original runtime")
+    _ = try await fixture.installer(archives: [original.downloadURL: originalArchive]).install(
+        [original], repository: "example/app")
+    let (replacement, replacementArchive) = try fixture.archive(runtime: "replaced runtime")
+    let (dependency, _) = try fixture.archive(id: "calendar")
+    let installer = ExtensionPackageInstaller(
+        store: fixture.store,
+        download: { url, _ in
+            if url == dependency.downloadURL {
+                #expect(throws: MarketplaceError.packageBusy) {
+                    try fixture.store.lease(replacement)
+                }
+                throw MarketplaceError.downloadFailed
+            }
+            let copy = fixture.directory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.copyItem(at: replacementArchive, to: copy)
+            return copy
+        }, verify: { _ in })
+    await #expect(throws: MarketplaceError.downloadFailed) {
+        try await installer.install([replacement, dependency], repository: "example/app")
+    }
+    #expect(try fixture.store.installedPackages() == [original])
+    #expect(
+        try Data(contentsOf: replacementRuntimeURL(fixture, original))
+            == Data("original runtime".utf8))
+}
+
+@Test func failedMetadataCommitRestoresEveryCompletedReplacement() async throws {
+    try #require(geteuid() != 0)
+    let fixture = try PackageFixture()
+    defer {
+        _ = chmod(fixture.store.root.path, 0o700)
+        fixture.clean()
+    }
+    let (first, firstArchive) = try fixture.archive(runtime: "first original")
+    let (second, secondArchive) = try fixture.archive(id: "calendar", runtime: "second original")
+    _ = try await fixture.installer(archives: [
+        first.downloadURL: firstArchive, second.downloadURL: secondArchive
+    ]).install([first, second], repository: "example/app")
+    let (nextFirst, nextFirstArchive) = try fixture.archive(runtime: "first replacement")
+    let (nextSecond, nextSecondArchive) = try fixture.archive(
+        id: "calendar", runtime: "second replacement")
+    let originals = [first, second]
+    let oldBytes = try originals.map { try Data(contentsOf: replacementRuntimeURL(fixture, $0)) }
+    let oldIdentities = try originals.map {
+        try replacementFileIdentity(fixture.store.directory(for: $0))
+    }
+    let state = fixture.store.root.appendingPathComponent("installed.json")
+    let oldState = try Data(contentsOf: state)
+    let installer = fixture.installer(archives: [
+        nextFirst.downloadURL: nextFirstArchive, nextSecond.downloadURL: nextSecondArchive
+    ])
+    await #expect(throws: POSIXError.self) {
+        try await installer.install([nextFirst, nextSecond], repository: "example/app") { progress in
+            if progress == 1 { #expect(chmod(fixture.store.root.path, 0o500) == 0) }
+        }
+    }
+    #expect(chmod(fixture.store.root.path, 0o700) == 0)
+    for (index, package) in originals.enumerated() {
+        #expect(try Data(contentsOf: replacementRuntimeURL(fixture, package)) == oldBytes[index])
+        #expect(
+            try replacementFileIdentity(fixture.store.directory(for: package)) == oldIdentities[index])
+        #expect(try replacementBackups(fixture, package).isEmpty)
+    }
+    #expect(try Data(contentsOf: state) == oldState)
+    #expect(try fixture.store.installedPackages() == originals)
+}
+
+@Test func failedBackupCleanupDoesNotRollBackCommittedPayloads() async throws {
+    try #require(geteuid() != 0)
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let (original, originalArchive) = try fixture.archive(runtime: "original runtime")
+    _ = try await fixture.installer(archives: [
+        original.downloadURL: originalArchive
+    ]).install([original], repository: "example/app")
+    let (replacement, replacementArchive) = try fixture.archive(runtime: "replaced runtime")
+    let parent = fixture.store.directory(for: original).deletingLastPathComponent()
+    defer { _ = chmod(parent.path, 0o700) }
+    let installer = fixture.installer(archives: [
+        replacement.downloadURL: replacementArchive
+    ])
+    await #expect(throws: POSIXError.self) {
+        try await installer.install([replacement], repository: "example/app") { _ in
+            #expect(chmod(parent.path, 0o500) == 0)
+        }
+    }
+    #expect(chmod(parent.path, 0o700) == 0)
+    #expect(try fixture.store.installedPackages() == [replacement])
+    #expect(
+        try Data(contentsOf: replacementRuntimeURL(fixture, replacement))
+            == Data("replaced runtime".utf8))
+    #expect(try replacementBackups(fixture, replacement).count == 1)
 }

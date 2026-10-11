@@ -166,7 +166,10 @@ public actor ExtensionPackageInstaller {
         let original = try store.installedPackages()
         var resulting = original
         let authority = try PackageDirectory(store.root, create: true)
-        var added: [ExtensionPackage] = []
+        var installations: [PackageInstallation] = []
+        var replacementLeases: [PackageFileLock] = []
+        var committed = false
+        defer { replacementLeases.forEach { $0.close() } }
         let temporaryRoot = URL(
             fileURLWithPath: ProcessInfo.processInfo.environment["TMPDIR"]
                 ?? FileManager.default.temporaryDirectory.path)
@@ -187,11 +190,9 @@ public actor ExtensionPackageInstaller {
                 if existing == package, present {
                     try verify(directory.appendingPathComponent(package.id))
                 } else {
-                    let replacementLease =
-                        present
-                        ? try PackageFileLock(url: store.leaseURL(for: package), exclusive: true)
-                        : nil
-                    defer { replacementLease?.close() }
+                    let replacementLease = try PackageFileLock(
+                        url: store.leaseURL(for: package), exclusive: true)
+                    replacementLeases.append(replacementLease)
                     if present {
                         let stale = directory.appendingPathComponent(package.id)
                             .appendingPathComponent("package.json")
@@ -214,8 +215,7 @@ public actor ExtensionPackageInstaller {
                     let staging = temporary.appendingPathComponent(package.id)
                     try ExtensionArchive.extract(archive, package: package, to: staging)
                     try verify(staging.appendingPathComponent(package.id))
-                    try authority.install(package, from: staging)
-                    added.append(package)
+                    installations.append(try authority.install(package, from: staging))
                 }
                 resulting.removeAll {
                     $0.id == package.id && $0.hostABI == package.hostABI
@@ -226,9 +226,17 @@ public actor ExtensionPackageInstaller {
             }
             try Task.checkCancellation()
             try store.commit(resulting)
+            committed = true
+            for installation in installations { try installation.commit() }
             return resulting
         } catch {
-            for package in added { try? authority.remove(package) }
+            if !committed {
+                var rollbackError: Error?
+                for installation in installations.reversed() {
+                    do { try installation.rollback() } catch { rollbackError = error }
+                }
+                if let rollbackError { throw rollbackError }
+            }
             throw error
         }
     }

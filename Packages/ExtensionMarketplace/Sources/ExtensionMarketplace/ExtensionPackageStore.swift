@@ -255,6 +255,36 @@ public final class PackageFileLock: @unchecked Sendable {
     deinit { close() }
 }
 
+final class PackageInstallation {
+    private let parent: PackageDirectory
+    private let version: String
+    private let backup: String?
+    private var finished = false
+
+    init(parent: PackageDirectory, version: String, backup: String?) {
+        self.parent = parent
+        self.version = version
+        self.backup = backup
+    }
+
+    func commit() throws {
+        guard !finished else { return }
+        if let backup { try parent.removeTree(backup) }
+        finished = true
+    }
+
+    func rollback() throws {
+        guard !finished else { return }
+        try parent.removeTree(version)
+        if let backup {
+            guard renameat(parent.descriptor, backup, parent.descriptor, version) == 0 else {
+                throw PackageDirectory.failure()
+            }
+        }
+        finished = true
+    }
+}
+
 final class PackageDirectory {
     let descriptor: Int32
 
@@ -419,7 +449,12 @@ final class PackageDirectory {
         guard renameat(descriptor, temporary, descriptor, name) == 0 else { throw Self.failure() }
     }
 
-    func install(_ package: ExtensionPackage, from source: URL) throws {
+    func install(
+        _ package: ExtensionPackage, from source: URL,
+        rename: (Int32, String, Int32, String) -> Int32 = {
+            renameat($0, $1, $2, $3)
+        }
+    ) throws -> PackageInstallation {
         guard let parent = try parent(package, create: true) else {
             throw MarketplaceError.invalidArchive
         }
@@ -429,10 +464,26 @@ final class PackageDirectory {
         }
         defer { try? parent.removeTree(temporary) }
         try destination.copy(from: PackageDirectory(source, create: false))
-        try parent.removeTree(package.version)
-        guard renameat(parent.descriptor, temporary, parent.descriptor, package.version) == 0 else {
-            throw Self.failure()
+        let backup = try parent.child(package.version) == nil
+            ? nil : ".backup-\(UUID().uuidString)"
+        if let backup {
+            guard rename(parent.descriptor, package.version, parent.descriptor, backup) == 0 else {
+                throw Self.failure()
+            }
         }
+        do {
+            guard rename(parent.descriptor, temporary, parent.descriptor, package.version) == 0 else {
+                throw Self.failure()
+            }
+        } catch {
+            if let backup {
+                guard renameat(parent.descriptor, backup, parent.descriptor, package.version) == 0 else {
+                    throw Self.failure()
+                }
+            }
+            throw error
+        }
+        return PackageInstallation(parent: parent, version: package.version, backup: backup)
     }
 
     private func copy(from source: PackageDirectory) throws {
