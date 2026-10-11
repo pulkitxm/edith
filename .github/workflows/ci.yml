@@ -117,6 +117,18 @@ jobs:
       MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
       MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
 
+  hosted-public-release-verification:
+    if: github.event_name == 'workflow_dispatch' && inputs.public_release_validation_sha != '' && inputs.public_release_validation != '' && inputs.public_release_validation_sha == github.sha && inputs.hosted_host_tests_sha == '' && inputs.hosted_shell_journey_sha == '' && inputs.hosted_managed_views_sha == '' && inputs.hosted_managed_artifacts_run == '' && inputs.hosted_managed_artifacts_sha == '' && inputs.hosted_sparkle_update_sha == '' && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/hosted-public-release-verification.yml
+    with:
+      expected_sha: ${{ inputs.public_release_validation_sha }}
+      request: ${{ inputs.public_release_validation }}
+      release: ${{ inputs.release }}
+      rebuild: ${{ inputs.rebuild }}
+
   changes:
     name: changes
     if: >-

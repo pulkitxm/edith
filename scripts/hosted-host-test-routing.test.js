@@ -117,6 +117,8 @@ test("maintained diagnostics admit only reviewed nonpublishing owner refs and im
   };
   const inputs = {
     hosted_sparkle_update_sha: "",
+    public_release_validation_sha: "",
+    public_release_validation: "",
     hosted_host_tests_sha: github.sha,
     hosted_shell_journey_sha: "",
     expected_sha: github.sha,
@@ -199,6 +201,8 @@ test("original journey remains callable at reviewed final refs without changing 
   };
   const inputs = {
     hosted_sparkle_update_sha: "",
+    public_release_validation_sha: "",
+    public_release_validation: "",
     hosted_shell_journey_sha: github.sha,
     hosted_host_tests_sha: "",
     expected_sha: github.sha,

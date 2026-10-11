@@ -8,7 +8,9 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 
-def unpack_frozen_host(archive, output):
+def unpack_frozen_host(archive, output, tree="minimal-host"):
+    if tree not in ("minimal-host", "extension-release-host"):
+        raise ValueError("Unknown frozen host tree")
     archive, output = Path(archive), Path(output)
     for path in (archive, output):
         if path.is_symlink() or path.resolve() != path.absolute():
@@ -50,7 +52,7 @@ def unpack_frozen_host(archive, output):
                     continue
                 if len(parts) < 2 or parts[0] != 'local' or parts[1] not in ('minimal-host', 'extension-tools', 'extension-release-host'):
                     raise ValueError('Frozen tar contains an unexpected source tree')
-                if parts[1] != 'minimal-host':
+                if parts[1] != tree:
                     continue
                 destination = output.joinpath(*parts[2:])
                 if destination == output:
@@ -97,5 +99,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('artifact_zip')
     parser.add_argument('output')
+    parser.add_argument('--tree', choices=('minimal-host', 'extension-release-host'), default='minimal-host')
     args = parser.parse_args()
-    print(json.dumps(unpack_frozen_host(args.artifact_zip, args.output), sort_keys=True))
+    print(json.dumps(unpack_frozen_host(args.artifact_zip, args.output, args.tree), sort_keys=True))

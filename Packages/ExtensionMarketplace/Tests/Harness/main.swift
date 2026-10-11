@@ -7,6 +7,11 @@ struct MarketplaceHarness {
     @MainActor
     static func main() async throws {
         let arguments = Array(CommandLine.arguments.dropFirst())
+        if arguments.first == "verify-public-release" {
+            guard arguments.count == 2 else { throw MarketplaceError.invalidCatalog }
+            try await verifyPublicRelease(arguments[1])
+            return
+        }
         if arguments.first == "verify-catalog-selection" {
             do {
                 guard arguments.count == 7, let publicKey = Data(base64Encoded: arguments[2]),

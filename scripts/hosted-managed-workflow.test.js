@@ -90,6 +90,8 @@ test("managed request excludes ordinary builds and other hosted fixtures rather 
     const prior = {
       ...inputs,
       hosted_sparkle_update_sha: "",
+      public_release_validation_sha: "",
+      public_release_validation: "",
       hosted_host_tests_sha: github.sha,
       hosted_shell_journey_sha: "",
       hosted_managed_views_sha: "",
