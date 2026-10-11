@@ -4,11 +4,6 @@ import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
 
-enum HostSurfaceEditorKeys {
-    static let target = "surfaceEditorTarget"
-    static let widget = "surfaceEditorWidget"
-}
-
 struct HostSurfaceEditor: View {
     @Bindable var marketplace: HostMarketplace
     private var store: SurfaceLayoutStore { marketplace.surfaceLayouts }

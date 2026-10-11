@@ -544,9 +544,13 @@ import Testing
         defer { restore() }
         fixture.marketplace.surfaceLayouts.update(.home) { $0.balancedRows = false }
         var editorOpened = false
+        var requestedTile: String? = "previous-tile"
         let host = NSHostingView(
             rootView: HostHomePage(
-                marketplace: fixture.marketplace, customize: { editorOpened = true }, extensions: {}
+                marketplace: fixture.marketplace,
+                customize: {
+                    requestedTile = $0; editorOpened = true
+                }, extensions: {}
             ).environment(\.automaticViewActionsEnabled, false).environment(
                 \.surfaceSampleContent, true))
         host.frame = CGRect(x: 0, y: 0, width: 1240, height: 850)
@@ -565,8 +569,54 @@ import Testing
         let editor = try #require(find(host, label: "Widget editor"))
         #expect((editor as AnyObject).accessibilityPerformPress?() == true)
         #expect(editorOpened)
+        #expect(requestedTile == nil)
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.requests.count == 0)
+    }
+
+    @Test func originalHomeEditorEntryOverridesPreviousNotchSelectionAndPreservesLayouts()
+        async throws
+    {
+        let restore = enableAccessibility()
+        defer { restore() }
+        for inspectingTile in [false, true] {
+            let fixture = try Fixture()
+            defer { fixture.clean() }
+            let preferences = fixture.marketplace.surfaces.preferences
+            let tile = SurfaceTile(.clocks)
+            fixture.marketplace.surfaceLayouts.update(.home) { $0.tiles = [tile] }
+            let home = fixture.marketplace.surfaceLayouts.home
+            let notch = fixture.marketplace.surfaceLayouts.notch
+            HostSurfaceEditorRequest(target: .notch, tileID: "previous-notch-tile").save(
+                to: preferences)
+            let host = NSHostingView(
+                rootView: HostWorkspace(marketplace: fixture.marketplace, defaults: preferences)
+                    .environment(\.automaticViewActionsEnabled, false)
+                    .environment(\.surfaceSampleContent, true))
+            host.frame = CGRect(x: 0, y: 0, width: 1240, height: 850)
+            let window = TestWindowHost.window(contentRect: host.frame)
+            window.contentView = host
+            defer { window.close() }
+            await settle(window, host: host)
+            if inspectingTile {
+                let edit = try #require(find(host, label: "Edit layout"))
+                #expect((edit as AnyObject).accessibilityPerformPress?() == true)
+                await settle(window, host: host)
+            }
+            let button = try #require(
+                find(host, label: inspectingTile ? "Configure" : "Widget editor"))
+            #expect((button as AnyObject).accessibilityPerformPress?() == true)
+            await settle(window, host: host)
+            #expect(preferences.string(forKey: HostSurfaceEditorKeys.target) == "home")
+            #expect(
+                preferences.string(forKey: HostSurfaceEditorKeys.widget)
+                    == (inspectingTile ? tile.id : ""))
+            #expect(fixture.marketplace.surfaceLayouts.home == home)
+            #expect(fixture.marketplace.surfaceLayouts.notch == notch)
+            #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
+            #expect(await fixture.requests.count == 0)
+            #expect(!TestWindowHost.isExposedOnDesktop(window))
+        }
     }
 
     @Test func emptyHomeRendersOnlyTheBuiltInClockAndOffersExtensionDiscovery() async throws {
@@ -575,10 +625,12 @@ import Testing
         let restore = enableAccessibility()
         defer { restore() }
         let host = NSHostingView(
-            rootView: HostHomePage(marketplace: fixture.marketplace, customize: {}, extensions: {})
-                .environment(\.surfaceSampleContent, true)
-                .environment(\.compactLayout, false).environment(
-                    \.automaticViewActionsEnabled, false))
+            rootView: HostHomePage(
+                marketplace: fixture.marketplace, customize: { _ in }, extensions: {}
+            )
+            .environment(\.surfaceSampleContent, true)
+            .environment(\.compactLayout, false).environment(
+                \.automaticViewActionsEnabled, false))
         host.frame = CGRect(x: 0, y: 0, width: 1200, height: 900)
         let window = TestWindowHost.window(contentRect: host.frame)
         window.contentView = host; window.orderBack(nil)

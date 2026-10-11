@@ -202,8 +202,7 @@ struct HostWorkspace: View {
         .onExitCommand { NSApp.keyWindow?.makeFirstResponder(nil) }
         .onChange(of: marketplace.surfaces.navigation.editorRequest, initial: true) {
             guard let request = marketplace.surfaces.navigation.editorRequest else { return }
-            defaults.set(request.target.rawValue, forKey: HostSurfaceEditorKeys.target)
-            defaults.set(request.tileID ?? "", forKey: HostSurfaceEditorKeys.widget)
+            request.save(to: defaults)
             customize()
         }
     }

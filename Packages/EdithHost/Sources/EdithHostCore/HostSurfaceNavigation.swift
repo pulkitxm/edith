@@ -2,12 +2,6 @@ import EdithExtensionSupport
 import Foundation
 import Observation
 
-public struct HostSurfaceEditorRequest: Equatable, Sendable {
-    public let token: UUID
-    public let target: SurfaceTarget
-    public let tileID: String?
-}
-
 @MainActor @Observable
 public final class HostSurfaceNavigation {
     public private(set) var editorRequest: HostSurfaceEditorRequest?
