@@ -93,8 +93,10 @@ public enum MeetingAudioDevices {
         let expectedSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
         var size = expectedSize
         let status = withUnsafeMutablePointer(to: &value) { property(&size, $0) }
-        guard status == noErr, size == expectedSize, let value else { return nil }
-        return value.takeRetainedValue() as String
+        guard status == noErr, let value else { return nil }
+        defer { value.release() }
+        guard size == expectedSize else { return nil }
+        return value.takeUnretainedValue() as String
     }
 
     private static func channels(_ id: AudioDeviceID, scope: AudioObjectPropertyScope) -> Int {
