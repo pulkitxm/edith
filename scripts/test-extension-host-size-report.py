@@ -73,7 +73,7 @@ class HostSizeReportTests(unittest.TestCase):
         self.package(identifier)
         path = self.packages / f"{identifier}.json"
         metadata = json.loads(path.read_text())
-        metadata.update(hostABI="edith-host-2", architecture="arm64", dependencies=[])
+        metadata.update(hostABI="edith-host-2", architecture="arm64", dependencies=[], minimumSystemVersion="14.0.0")
         carrier = f"{identifier}/ExtensionCarrier.app"
         worker = f"{carrier}/Contents/Extensions/ExtensionWorker.appex"
         nested = f"{worker}/Contents/Resources/Payload/{identifier}"
@@ -82,7 +82,7 @@ class HostSizeReportTests(unittest.TestCase):
             "EdithExtensionVersion": metadata["version"], "EdithHostIdentifier": "com.example.fixture",
             "EdithExecutableProvenance": provenance or host_hash}
         entries = {f"{nested}/package.json": json.dumps({key: metadata[key]
-            for key in ["id", "version", "hostABI", "architecture", "dependencies"]}).encode()}
+            for key in ["id", "version", "hostABI", "architecture", "dependencies", "minimumSystemVersion"]}).encode()}
         for number, bundle in enumerate([carrier, worker]):
             entries[f"{bundle}/Contents/Info.plist"] = plistlib.dumps(info)
             entries[f"{bundle}/Contents/MacOS/Edith"] = executable or self.executable.read_bytes() + f"|signature:{number}".encode()
@@ -106,7 +106,7 @@ class HostSizeReportTests(unittest.TestCase):
 
     def verify_host(self, identifier="sample", definition=None):
         return report.verify_package_host(self.packages, json.loads((self.packages / f"{identifier}.json").read_text()),
-            definition or {"id": identifier}, self.app, "a" * 40, report.digest_file(self.executable),
+            definition or {"id": identifier, "minimumSystemVersion": "14.0.0"}, self.app, "a" * 40, report.digest_file(self.executable),
             hashlib.sha256(self.executable.read_bytes()).hexdigest())
 
     def test_partial_coverage_lists_unmeasured_features_without_shipping_or_test_claims(self):
@@ -257,7 +257,7 @@ class HostSizeReportTests(unittest.TestCase):
         commit = "a" * 40
         source = {"sourceCommit": commit, "sourceTreeDirty": False}
         host = {**source, "hostExecutableSHA256": hashlib.sha256(self.executable.read_bytes()).hexdigest()}
-        return index, [{"id": entry["id"], "contractVersion": 1} for entry in index], fingerprints, source, host
+        return index, [{"id": entry["id"], "contractVersion": 1, "minimumSystemVersion": "14.0.0"} for entry in index], fingerprints, source, host
 
     def test_final_requires_exact_clean_expected_source_without_rewriting_the_baseline(self):
         index, definitions, fingerprints, source, host = self.final_fixture()
@@ -408,7 +408,7 @@ class HostSizeReportTests(unittest.TestCase):
             "roles": [{"role": "cameraCarrier", "executableBeforeSigningSHA256": receipt["executableAfterSigningSHA256"],
                 "executableAfterSigningSHA256": hashlib.sha256(entries[f"{camera}/Contents/MacOS/Edith"]).hexdigest()}]}
         (self.packages / "virtualCamera.carrier-provenance.json").write_text(json.dumps(role_receipt))
-        definition = {"id": "virtualCamera", "roles": ["cameraCarrier"], "systemExtensionCarrier": {"transport": "obs"}}
+        definition = {"id": "virtualCamera", "minimumSystemVersion": "14.0.0", "roles": ["cameraCarrier"], "systemExtensionCarrier": {"transport": "obs"}}
         return clone, receipt, role_receipt, definition
 
     def test_camera_rejects_carrier_moved_inside_worker_payload(self):
