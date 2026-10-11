@@ -43,13 +43,14 @@ final class QuinjetPageModel {
     var terminalUI: OwnedTerminalUIPresentation?
     private var uiClient: QuinjetUIClient?
     private var uiActions: [UUID: Task<Void, Never>] = [:]
+    private var folderActions: [UUID: Task<Void, Never>] = [:]
+    private var sessionActions: [UUID: Task<QuinjetSessionResult, Error>] = [:]
     private enum ReadKey: Hashable {
         case ui(String, UUID?)
         case projects
         case remoteProjects(UUID)
         case themes
         case worktrees(UUID)
-        case folder(UUID)
     }
     private var reads: [ReadKey: Task<Void, Never>] = [:]
     private var readEpochs: [ReadKey: UUID] = [:]
@@ -271,16 +272,14 @@ final class QuinjetPageModel {
     }
 
     private func performUI(_ operation: String, object: [String: Any]) async {
-        let identity = (object["tabID"] as? String ?? object["machineID"] as? String).flatMap(
-            UUID.init(uuidString:))
-        await performRead(.ui(operation, identity)) { [self] in
-            guard !stopped, let uiClient else { return }
-            do {
-                if let state = try await uiClient.state(operation, object: object) {
-                    try adoptUI(state)
-                }
-            } catch is CancellationError {} catch { projectError = error.localizedDescription }
-        }
+        guard !stopped, !draining, let uiClient else { return }
+        do {
+            if let state = try await uiClient.state(operation, object: object) {
+                try Task.checkCancellation()
+                guard !stopped, !draining else { return }
+                try adoptUI(state)
+            }
+        } catch is CancellationError {} catch { projectError = error.localizedDescription }
     }
 
     private func configurationObject(_ configuration: QuinjetLaunchConfiguration) -> [String: Any] {
@@ -504,7 +503,7 @@ final class QuinjetPageModel {
         _ path: String, remote: QuinjetRemote? = nil, in tab: QuinjetTab,
         launchEnabled: Bool, configuration: QuinjetLaunchConfiguration = .default
     ) async {
-        await performRead(.folder(tab.id)) { [self] in
+        await performFolderAction { [self] in
             if isRemote {
                 await performUI(
                     "quinjet.ui.open",
@@ -602,11 +601,30 @@ final class QuinjetPageModel {
     func performSessionOperation(
         _ request: QuinjetSessionRequest
     ) async throws -> QuinjetSessionResult {
-        guard !stopped else { throw ExtensionPeerError.unavailable }
+        guard !stopped, !draining else { throw ExtensionPeerError.unavailable }
+        try Task.checkCancellation()
+        let identifier = UUID()
+        let task = Task { [self] in try await performSessionOperationOwned(request) }
+        sessionActions[identifier] = task
+        defer { sessionActions[identifier] = nil }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func performSessionOperationOwned(
+        _ request: QuinjetSessionRequest
+    ) async throws -> QuinjetSessionResult {
+        guard !stopped, !draining else { throw ExtensionPeerError.unavailable }
+        try Task.checkCancellation()
         if let uiClient {
             let data = try JSONEncoder().encode(request)
             let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
             if let state = try await uiClient.state("quinjet.ui.session", object: object) {
+                try Task.checkCancellation()
+                guard !stopped, !draining else { throw ExtensionPeerError.unavailable }
                 try adoptUI(state)
             }
             return sessionResult(for: request.operation, affected: selected)
@@ -656,6 +674,19 @@ final class QuinjetPageModel {
         }
     }
 
+    private func performFolderAction(_ operation: @escaping @MainActor () async -> Void) async {
+        guard !stopped, !draining, !Task.isCancelled else { return }
+        let identifier = UUID()
+        let task = Task { await operation() }
+        folderActions[identifier] = task
+        defer { folderActions[identifier] = nil }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
     private func performRead(_ key: ReadKey, operation: @escaping @MainActor () async -> Void) async
     {
         guard !stopped, !draining, !Task.isCancelled else { return }
@@ -683,6 +714,8 @@ final class QuinjetPageModel {
     func beginSuspension() {
         draining = true
         preferences.shutdown()
+        for task in folderActions.values { task.cancel() }
+        for task in sessionActions.values { task.cancel() }
         cancelDiscovery()
         for task in reads.values { task.cancel() }
     }
@@ -690,9 +723,12 @@ final class QuinjetPageModel {
     func cancelAndWait() async {
         beginSuspension()
         let actions = Array(uiActions.values), pendingReads = Array(reads.values)
+        let folders = Array(folderActions.values), sessions = Array(sessionActions.values)
         await preferences.shutdownAndWait()
         for task in actions { await task.value }
         for task in pendingReads { await task.value }
+        for task in folders { await task.value }
+        for task in sessions { _ = await task.result }
     }
 
     func stopRendering() {
