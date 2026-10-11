@@ -80,7 +80,7 @@ class ExtensionSizeReportTests(unittest.TestCase):
             duplicate = root / "duplicate"
             duplicate.mkdir()
             self.package(duplicate)
-            with self.assertRaisesRegex(ValueError, "Duplicate package"):
+            with self.assertRaisesRegex(ValueError, "Unexpected artifact"):
                 report.measure_packages(root, ["sample"])
 
     def test_totals_show_no_extensions_and_all_extensions(self):

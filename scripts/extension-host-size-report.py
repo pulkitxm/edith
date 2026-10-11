@@ -10,20 +10,22 @@ import os
 import plistlib
 import shutil
 import stat
+import struct
 import tempfile
 import uuid
 import zipfile
 from macho_code_identity import executable_identity
+from size_report_filesystem import TreeSnapshot, digest_file, read_bytes, stable_file
 
 
 BUILD_FIELDS = ("sourceCommit", "sourceTreeDirty", "configuration", "optimization", "linkTimeOptimization", "architecture", "signature", "xcode", "sdk", "ghosttySourceCommit", "ghosttyArchive")
 
 
 def measure_host_components(app):
+    app = Path(app).absolute()
     components = dict.fromkeys(("hostAndCLI", "appUpdater", "resources", "bundleMetadata"), 0)
-    for path in app.rglob("*"):
-        if not path.is_file() or path.is_symlink():
-            continue
+    snapshot = TreeSnapshot(app)
+    for path in snapshot.files:
         parts = path.relative_to(app).parts
         if parts[:2] == ("Contents", "MacOS"):
             component = "hostAndCLI"
@@ -34,7 +36,32 @@ def measure_host_components(app):
         else:
             component = "bundleMetadata"
         components[component] += path.stat().st_size
+    snapshot.verify()
     return components
+
+
+def measure_package_components(archive, identifier):
+    carrier = f"{identifier}/ExtensionCarrier.app/Contents"
+    worker = f"{carrier}/Extensions/ExtensionWorker.appex/Contents"
+    payload = f"{worker}/Resources/Payload/{identifier}"
+    bundles = {"carrier": carrier, "worker": worker, "cameraCarrier": f"{identifier}/CameraCarrier.app/Contents"}
+    bundles.update({f"cameraCarrier:role:{role}": f"{bundles['cameraCarrier']}/PlugIns/{role}.bundle/Contents"
+                    for role in ["cameraCarrier", "privileged"]})
+    bundles.update({f"role:{role}": f"{payload}/{role}.bundle/Contents"
+                    for role in ["app", "helper", "agent", "cli", "privileged"]})
+    prefixes = {f"{root}/{folder}/": f"{name}:{category}" for name, root in bundles.items()
+                for folder, category in [("MacOS", "executables"), ("Frameworks", "frameworks")]}
+    totals = {category: {"installedBytes": 0, "compressedMemberBytes": 0} for category in prefixes.values()}
+    totals["otherPayloadAndMetadata"] = {"installedBytes": 0, "compressedMemberBytes": 0}
+    with stable_file(archive) as source, zipfile.ZipFile(source) as zipped:
+        for entry in zipped.infolist():
+            if entry.is_dir():
+                continue
+            category = next((prefixes[prefix] for prefix in sorted(prefixes, key=len, reverse=True)
+                             if entry.filename.startswith(prefix)), "otherPayloadAndMetadata")
+            totals[category]["installedBytes"] += entry.file_size
+            totals[category]["compressedMemberBytes"] += entry.compress_size
+    return totals
 
 
 def measure_scenarios(host, packages):
@@ -66,21 +93,17 @@ def validate_final_source(expected_commit, source_state, host_build):
             raise ValueError(f"{name} must match the expected source commit and be clean")
 
 
-def digest_file(path):
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def unsigned_executable_digest(path):
     return executable_identity(path)["normalizedUnsignedSHA256"]
 
 
 def tree_inventory(directory):
+    directory = Path(directory).absolute()
     inventory = {}
-    for path in sorted(directory.rglob("*")):
+    snapshot = TreeSnapshot(directory)
+    for path in sorted(snapshot.entries):
+        if path == snapshot.root:
+            continue
         relative = path.relative_to(directory).as_posix()
         if path.is_symlink():
             inventory[relative] = {"symlink": os.readlink(path)}
@@ -88,6 +111,7 @@ def tree_inventory(directory):
             inventory[relative] = {"sha256": digest_file(path), "mode": stat.S_IMODE(path.stat().st_mode)}
         elif not path.is_dir():
             raise ValueError("Host provenance contains a nonregular resource")
+    snapshot.verify()
     return inventory
 
 
@@ -166,9 +190,16 @@ def verify_package_host(packages, metadata, definition, app, expected_commit, ho
                     or stat.S_IFMT(info.external_attr >> 16) == stat.S_IFLNK):
                 raise ValueError("Package archive contains an unsafe member")
         manifest = read_archive_document(zipped, f"{nested}/package.json", json.loads)
-        for key in ["id", "version", "hostABI", "architecture", "dependencies"]:
+        for key in ["id", "version", "hostABI", "architecture", "dependencies", "minimumSystemVersion"]:
             if manifest.get(key) != metadata.get(key):
                 raise ValueError("Sealed payload manifest differs from package metadata")
+        minimum = metadata.get("minimumSystemVersion")
+        if (not isinstance(minimum, str) or not re.fullmatch(r"(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})", minimum)
+                or any(int(part) > 2147483647 for part in minimum.split("."))
+                or tuple(map(int, minimum.split("."))) < (14, 0, 0)
+                or minimum != definition.get("minimumSystemVersion")):
+            raise ValueError("Package minimum system version differs from current definition or schema")
+        result["minimumSystemVersion"] = minimum
         if metadata.get("hostABI") != "edith-host-2" or metadata.get("architecture") != "arm64":
             raise ValueError("Final packages require current host ABI and architecture")
         if metadata.get("dependencies") != definition.get("dependencies", []):
@@ -265,11 +296,18 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
     specification = importlib.util.spec_from_file_location("size_measurements", Path(__file__).with_name("extension-size-report.py"))
     measurements = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(measurements)
+    app_snapshot = TreeSnapshot(app)
+    package_snapshot = TreeSnapshot(packages)
     measured = measurements.measure_app(app)
     executable_hash = digest_file(app / "Contents/MacOS/Edith")
     if host_build is not None and host_build.get("hostExecutableSHA256") != executable_hash:
         raise ValueError("Host build metadata must match the measured executable checksum")
     result = measurements.compare(baseline, measured, measurements.measure_packages(packages, migrated))
+    result["releaseArtifactInventory"] = measurements.artifact_inventory(packages, migrated)
+    result["releaseArtifactBytesByCategory"] = {}
+    for asset in result["releaseArtifactInventory"]:
+        category = asset["category"]
+        result["releaseArtifactBytesByCategory"][category] = result["releaseArtifactBytesByCategory"].get(category, 0) + asset["bytes"]
     result["packageHostProvenance"] = {}
     if source_mode == "final":
         unsigned_hash = unsigned_executable_digest(app / "Contents/MacOS/Edith")
@@ -281,7 +319,11 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
             raise ValueError("Measured host executable changed during provenance verification")
     result["sourceFingerprints"] = {identifier: metadata_by_id[identifier].get("sourceFingerprint") for identifier in sorted(migrated)}
     for package in result["packages"]:
+        for field in ["hostABI", "architecture", "dependencies", "minimumSystemVersion", "downloadURL"]:
+            if field in metadata_by_id[package["id"]]:
+                package[field] = metadata_by_id[package["id"]][field]
         package["sourceFingerprint"] = result["sourceFingerprints"][package["id"]]
+    result["packageComponents"] = {identifier: measure_package_components(packages / f"{identifier}.zip", identifier) for identifier in migrated}
     result["hostComponents"] = measure_host_components(app)
     result["selectedExtensionScenarios"] = measure_scenarios(measured, result["packages"])
     result["migratedExtensionPackages"] = result.pop("allExtensionPackages")
@@ -308,7 +350,7 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
         "carrierHostProvenanceVerified": source_mode == "final",
         "carrierExecutableMethod": "Sealed frozen-host provenance and SHA-256 after strictly verified signature removal and arm64 terminal LINKEDIT mapping normalization in private temporary files. Actual signed and raw unsigned checksums and expanded bytes remain recorded. Synthetic Camera hosts require a source-bound clone receipt and matching code and resources.",
         "appZipMethod": "Regular files only, symlinks excluded, ZIP deflate level 9. Comparison metric, not a shipping installer.",
-        "installedMethod": "Logical regular-file bytes, excluding filesystem allocation rounding, receipts, caches, user data, retained versions and OS-managed deployment copies.",
+        "installedMethod": "Logical regular-file bytes including packaged models, excluding filesystem allocation rounding, external downloaded models, receipts, caches, user data, retained versions and OS-managed deployment copies.",
         "verificationScope": "Package archive size, SHA-256, expanded bytes and CRC. Source fingerprints when supplied. Final reports also bind carrier code and source provenance. This report does not run lifecycle, visual, signing or cloud publication checks.",
     }
     result["surfaceCustomization"] = {
@@ -317,6 +359,22 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
         "layoutContractVersion": 1,
         "verification": "not-measured-by-size-report",
     }
+    app_snapshot.verify()
+    package_snapshot.verify()
+    result["hostTreeInventory"] = tree_inventory(app)
+    if source_mode == "final":
+        result["resourceCodeIdentities"] = {}
+        for path in app_snapshot.files:
+            name = path.relative_to(app_snapshot.root).as_posix()
+            if name == "Contents/MacOS/Edith":
+                continue
+            with path.open("rb") as binary:
+                header = binary.read(16)
+            if len(header) == 16 and header[:4] == b"\xcf\xfa\xed\xfe":
+                filetype = struct.unpack_from("<I", header, 12)[0]
+                result["resourceCodeIdentities"][name] = {**executable_identity(path, filetype=filetype), "filetype": filetype}
+        app_snapshot.verify()
+        result["hostInfo"] = plistlib.loads(read_bytes(app / "Contents/Info.plist"))
     return result
 
 
@@ -404,7 +462,7 @@ These selections are size examples, not bundles or defaults. Each feature is dow
 {rows}
 | All {count} measured packages | {totals['downloadBytes']:,} | {totals['installedBytes']:,} | {totals['releaseMetadataBytes']:,} |
 
-The {count} local ZIPs plus their JSON metadata occupy {totals['releaseAssetBytes']:,} bytes. This subtotal does not include a shared signed catalog, detached checksums, older releases, or unmeasured packages. Measuring local artifacts neither publishes them nor proves that corresponding remote release assets exist. Publication status is not verified by this report.
+The {count} local ZIPs plus their JSON metadata occupy {totals['releaseAssetBytes']:,} bytes. This ZIP-plus-package-metadata subtotal does not include receipts, a shared signed catalog, detached checksums, older releases, or unmeasured packages. The JSON separately inventories allowed receipts and detached checksums by category. Measuring local artifacts neither publishes them nor proves that corresponding remote release assets exist. Publication status is not verified by this report.
 
 The generator verifies each package's ZIP size, SHA-256, expanded bytes and CRC. {fingerprint_check} The recorded host executable checksum identifies the exact measured binary. Final reports bind sealed carrier metadata and signature-independent executable code to that frozen host and preserve each current package source fingerprint. Re-signed copies retain their actual signed checksums and expanded byte counts; these copies are already included in package totals. The size calculation does not verify code signatures, the host dependency boundary, zero feature payload, lifecycle behavior, card adapters, platform installation, or cloud release behavior. Record those results separately from the measurement.
 

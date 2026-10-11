@@ -73,7 +73,7 @@ class HostSizeReportTests(unittest.TestCase):
         self.package(identifier)
         path = self.packages / f"{identifier}.json"
         metadata = json.loads(path.read_text())
-        metadata.update(hostABI="edith-host-2", architecture="arm64", dependencies=[])
+        metadata.update(hostABI="edith-host-2", architecture="arm64", dependencies=[], minimumSystemVersion="14.0.0")
         carrier = f"{identifier}/ExtensionCarrier.app"
         worker = f"{carrier}/Contents/Extensions/ExtensionWorker.appex"
         nested = f"{worker}/Contents/Resources/Payload/{identifier}"
@@ -82,7 +82,7 @@ class HostSizeReportTests(unittest.TestCase):
             "EdithExtensionVersion": metadata["version"], "EdithHostIdentifier": "com.example.fixture",
             "EdithExecutableProvenance": provenance or host_hash}
         entries = {f"{nested}/package.json": json.dumps({key: metadata[key]
-            for key in ["id", "version", "hostABI", "architecture", "dependencies"]}).encode()}
+            for key in ["id", "version", "hostABI", "architecture", "dependencies", "minimumSystemVersion"]}).encode()}
         for number, bundle in enumerate([carrier, worker]):
             entries[f"{bundle}/Contents/Info.plist"] = plistlib.dumps(info)
             entries[f"{bundle}/Contents/MacOS/Edith"] = executable or self.executable.read_bytes() + f"|signature:{number}".encode()
@@ -106,7 +106,7 @@ class HostSizeReportTests(unittest.TestCase):
 
     def verify_host(self, identifier="sample", definition=None):
         return report.verify_package_host(self.packages, json.loads((self.packages / f"{identifier}.json").read_text()),
-            definition or {"id": identifier}, self.app, "a" * 40, report.digest_file(self.executable),
+            definition or {"id": identifier, "minimumSystemVersion": "14.0.0"}, self.app, "a" * 40, report.digest_file(self.executable),
             hashlib.sha256(self.executable.read_bytes()).hexdigest())
 
     def test_partial_coverage_lists_unmeasured_features_without_shipping_or_test_claims(self):
@@ -257,7 +257,7 @@ class HostSizeReportTests(unittest.TestCase):
         commit = "a" * 40
         source = {"sourceCommit": commit, "sourceTreeDirty": False}
         host = {**source, "hostExecutableSHA256": hashlib.sha256(self.executable.read_bytes()).hexdigest()}
-        return index, [{"id": entry["id"], "contractVersion": 1} for entry in index], fingerprints, source, host
+        return index, [{"id": entry["id"], "contractVersion": 1, "minimumSystemVersion": "14.0.0"} for entry in index], fingerprints, source, host
 
     def test_final_requires_exact_clean_expected_source_without_rewriting_the_baseline(self):
         index, definitions, fingerprints, source, host = self.final_fixture()
@@ -298,6 +298,54 @@ class HostSizeReportTests(unittest.TestCase):
             self.interim_report(self.baseline, self.app, self.packages,
                 [{"id": identifier, "contractVersion": 1} for identifier in ["first", "second"]],
                 [{"id": identifier} for identifier in ["first", "second"]], {"first": "current-first", "second": "current-second"})
+
+    def test_minimum_system_version_sealed_manifest_schema_and_definition_are_equal(self):
+        self.final_fixture()
+        original = self.sealed_package("sample")
+        nested = "sample/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/sample/package.json"
+        for minimum in [None, "14.0", "014.0.0", "13.9.9", "14.0.2147483648", "15.0.0"]:
+            entries = dict(original)
+            metadata = json.loads((self.packages / "sample.json").read_text())
+            metadata["minimumSystemVersion"] = minimum
+            payload = json.loads(entries[nested])
+            payload["minimumSystemVersion"] = minimum
+            entries[nested] = json.dumps(payload).encode()
+            self.write_package_entries("sample", entries, metadata)
+            with self.subTest(minimum=minimum), self.assertRaisesRegex(ValueError, "minimum system"):
+                self.verify_host()
+        self.sealed_package("sample")
+        entries = dict(original)
+        payload = json.loads(entries[nested])
+        payload["minimumSystemVersion"] = "15.0.0"
+        entries[nested] = json.dumps(payload).encode()
+        self.write_package_entries("sample", entries)
+        with self.assertRaisesRegex(ValueError, "Sealed payload manifest"):
+            self.verify_host()
+
+    def test_package_component_scopes_include_role_runtime_and_camera_copies_once(self):
+        self.final_fixture()
+        entries = self.sealed_package("sample")
+        payload = "sample/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/sample"
+        entries.update({f"{payload}/app.bundle/Contents/MacOS/Runtime": b"r" * 37,
+                        "sample/CameraCarrier.app/Contents/MacOS/Edith": b"c" * 43,
+                        "sample/CameraCarrier.app/Contents/Frameworks/Code.framework/Code": b"f" * 53,
+                        "sample/CameraCarrier.app/Contents/PlugIns/cameraCarrier.bundle/Contents/MacOS/Runtime": b"r" * 61,
+                        "sample/CameraCarrier.app/Contents/PlugIns/cameraCarrier.bundle/Contents/Frameworks/Code.framework/Code": b"f" * 67,
+                        "sample/CameraCarrier.app/Contents/PlugIns/privileged.bundle/Contents/MacOS/Runtime": b"r" * 71,
+                        "sample/CameraCarrier.app/Contents/PlugIns/privileged.bundle/Contents/Frameworks/Code.framework/Code": b"f" * 73})
+        self.write_package_entries("sample", entries)
+        totals = report.measure_package_components(self.packages / "sample.zip", "sample")
+        self.assertEqual(totals["role:app:executables"]["installedBytes"], 37)
+        self.assertEqual(totals["cameraCarrier:executables"]["installedBytes"], 43)
+        self.assertEqual(totals["cameraCarrier:frameworks"]["installedBytes"], 53)
+        self.assertEqual(totals["cameraCarrier:role:cameraCarrier:executables"]["installedBytes"], 61)
+        self.assertEqual(totals["cameraCarrier:role:cameraCarrier:frameworks"]["installedBytes"], 67)
+        self.assertEqual(totals["cameraCarrier:role:privileged:executables"]["installedBytes"], 71)
+        self.assertEqual(totals["cameraCarrier:role:privileged:frameworks"]["installedBytes"], 73)
+        self.assertEqual(sum(row["installedBytes"] for row in totals.values()), sum(map(len, entries.values())))
+        with zipfile.ZipFile(self.packages / "sample.zip") as archive:
+            self.assertEqual(sum(row["compressedMemberBytes"] for row in totals.values()),
+                             sum(entry.compress_size for entry in archive.infolist() if not entry.is_dir()))
 
     def test_current_source_reader_includes_untracked_files_and_uses_owned_root(self):
         outputs = [type("Result", (), {"stdout": "a" * 40 + "\n"})(), type("Result", (), {"stdout": "?? pending-source.swift\n"})()]
@@ -408,7 +456,7 @@ class HostSizeReportTests(unittest.TestCase):
             "roles": [{"role": "cameraCarrier", "executableBeforeSigningSHA256": receipt["executableAfterSigningSHA256"],
                 "executableAfterSigningSHA256": hashlib.sha256(entries[f"{camera}/Contents/MacOS/Edith"]).hexdigest()}]}
         (self.packages / "virtualCamera.carrier-provenance.json").write_text(json.dumps(role_receipt))
-        definition = {"id": "virtualCamera", "roles": ["cameraCarrier"], "systemExtensionCarrier": {"transport": "obs"}}
+        definition = {"id": "virtualCamera", "minimumSystemVersion": "14.0.0", "roles": ["cameraCarrier"], "systemExtensionCarrier": {"transport": "obs"}}
         return clone, receipt, role_receipt, definition
 
     def test_camera_rejects_carrier_moved_inside_worker_payload(self):
