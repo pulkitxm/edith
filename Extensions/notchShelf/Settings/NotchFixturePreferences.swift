@@ -19,7 +19,7 @@ enum NotchFixturePreferencesError: Error { case invalid, unavailable }
     ) throws {
         try requireCurrent()
         let prefix = "com.pulkit.edith.tests.worker-"
-        let suffix = ".extensions.notchShelf"
+        let suffix = ".extension.notchShelf.worker"
         guard suite == expectedSuite, suite.hasPrefix(prefix), suite.hasSuffix(suffix),
             UUID(uuidString: String(suite.dropFirst(prefix.count).dropLast(suffix.count))) != nil,
             !schema.isEmpty, schema.allSatisfy({ accepts($0.key, $0.value) }),
@@ -37,24 +37,13 @@ enum NotchFixturePreferencesError: Error { case invalid, unavailable }
 
     func execute(_ command: String, payload: Data) throws -> [String: String] {
         try current()
-        guard payload.count <= 4096,
-            let fields = try? WorkerFixtureJSON.object(payload, maximumBytes: 4096)
-        else { throw NotchFixturePreferencesError.invalid }
-        switch command {
-        case "notch.settings.read":
-            guard fields.isEmpty else { throw NotchFixturePreferencesError.invalid }
-        case "notch.settings.write":
-            guard Set(fields.keys) == ["key", "value"],
-                let key = fields["key"] as? String, let value = fields["value"] as? String,
-                schema[key] != nil, accepts(key, value)
-            else { throw NotchFixturePreferencesError.invalid }
+        if let update = try Self.request(command, payload: payload, schema: schema, accepts: accepts) {
             try current()
-            if isString(key) {
-                defaults.set(value, forKey: key)
+            if isString(update.key) {
+                defaults.set(update.value, forKey: update.key)
             } else {
-                defaults.set(value == "1", forKey: key)
+                defaults.set(update.value == "1", forKey: update.key)
             }
-        default: throw NotchFixturePreferencesError.invalid
         }
         var preferences = schema
         for (key, fallback) in schema {
@@ -68,6 +57,34 @@ enum NotchFixturePreferencesError: Error { case invalid, unavailable }
         }
         try current()
         return preferences
+    }
+
+    static func validate(
+        _ command: String, payload: Data, schema: [String: String],
+        accepts: (String, String) -> Bool
+    ) throws {
+        _ = try request(command, payload: payload, schema: schema, accepts: accepts)
+    }
+
+    private static func request(
+        _ command: String, payload: Data, schema: [String: String],
+        accepts: (String, String) -> Bool
+    ) throws -> (key: String, value: String)? {
+        guard let fields = try? WorkerFixtureJSON.object(payload, maximumBytes: 4096) else {
+            throw NotchFixturePreferencesError.invalid
+        }
+        switch command {
+        case "notch.settings.read":
+            guard fields.isEmpty else { throw NotchFixturePreferencesError.invalid }
+            return nil
+        case "notch.settings.write":
+            guard Set(fields.keys) == ["key", "value"],
+                let key = fields["key"] as? String, let value = fields["value"] as? String,
+                schema[key] != nil, accepts(key, value)
+            else { throw NotchFixturePreferencesError.invalid }
+            return (key, value)
+        default: throw NotchFixturePreferencesError.invalid
+        }
     }
 
     private func current() throws {

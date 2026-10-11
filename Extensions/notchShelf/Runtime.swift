@@ -11,15 +11,20 @@ import SwiftUI
 @MainActor
 final class ExtensionRuntime: NSObject {
     private var startRequested = false
-    private var fixture: WorkerFixtureAdmission?
+    private var fixture: WorkerFixtureEngineAdmission?
+    private var fixtureContext: NSDictionary?
+    private var fixturePreferences: NotchFixturePreferences?
     private var fixtureRejected = false
+    private var fixtureUI = false
     private var stopped = false
-    private let fixtureAdmission: @MainActor (NSDictionary) throws -> WorkerFixtureAdmission?
+    private let fixtureAdmission: @MainActor (NSDictionary) throws -> WorkerFixtureEngineAdmission?
     private var controller: NotchShelfController?
     private struct UIScene {
         let client: ExtensionEngineClient?
         let settings: NotchSettingsModel?
         let chrome: NotchChromeClient?
+        let admission: WorkerFixtureUIAdmission?
+        let generation: UUID
     }
     private var uiScenes: [UUID: UIScene] = [:]
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
@@ -35,10 +40,10 @@ final class ExtensionRuntime: NSObject {
         @MainActor (SurfaceHostContext, [NotchPanelDisplay]) -> NotchShelfController
 
     init(
-        fixtureAdmission: @escaping @MainActor (NSDictionary) throws -> WorkerFixtureAdmission? = {
-            try WorkerFixtureAdmission.current(
+        fixtureAdmission: @escaping @MainActor (NSDictionary) throws -> WorkerFixtureEngineAdmission? = {
+            try WorkerFixtureEngineAdmission.current(
                 extensionID: "notchShelf", context: $0,
-                roleBundle: Bundle(for: ExtensionRuntime.self))
+                roleBundle: Bundle(for: ExtensionRuntime.self), expectedRole: .helper)
         },
         contextSource: @escaping @MainActor () -> SurfaceHostContext? = {
             SurfaceHostContext.current
@@ -69,6 +74,32 @@ final class ExtensionRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, !stopped, !fixtureRejected else { throw ExtensionPeerError.unavailable }
+            if fixture != nil {
+                guard startRequested, let preferences = fixturePreferences,
+                    ["notch.settings.read", "notch.settings.write"].contains(command)
+                else { throw ExtensionPeerError.unavailable }
+                do {
+                    guard let token = (request["token"] as? String).flatMap(UUID.init(uuidString:)),
+                        let fixture
+                    else { throw WorkerFixtureError.invalid }
+                    try NotchFixturePreferences.validate(
+                        command, payload: payload, schema: NotchSettingsSchema.defaults,
+                        accepts: NotchSettingsSchema.accepts)
+                    let ticket = try fixture.beginRequest(token: token, operation: command, payload: payload)
+                    defer { fixture.cancelRequest(ticket) }
+                    let values = try preferences.execute(command, payload: payload)
+                    let snapshot = NotchSettingsSnapshot(
+                        preferences: values, activeIDs: [], browserProfile: nil,
+                        bluetoothPrivacyRequired: false)
+                    try snapshot.validate()
+                    try requireCurrentFixture()
+                    let response = try JSONEncoder().encode(snapshot)
+                    try fixture.completeRequest(ticket)
+                    return response
+                } catch NotchFixturePreferencesError.invalid {
+                    throw ExtensionPeerError.invalidRequest
+                }
+            }
             if command == "notchShelf.cli.catalog" {
                 return try NotchCLIProviderCatalog.encode(payload)
             }
@@ -140,6 +171,33 @@ final class ExtensionRuntime: NSObject {
             }
             return try await controller.execute(command, payload: payload)
         }
+    }
+
+    private func requireCurrentFixture() throws {
+        guard !stopped, !fixtureRejected, let fixture else { throw WorkerFixtureError.invalid }
+        try fixture.requireCurrent()
+    }
+
+    private func invokeSettingsUI(
+        _ operation: String, payload: Data, presentation: UUID, generation: UUID,
+        client: ExtensionEngineClient, admission: WorkerFixtureUIAdmission
+    ) async throws -> Data {
+        guard !stopped, !fixtureRejected,
+            let scene = uiScenes[presentation], scene.generation == generation,
+            scene.client === client, scene.admission === admission
+        else { throw WorkerFixtureError.invalid }
+        try Task.checkCancellation()
+        try admission.requireCurrent()
+        try NotchFixturePreferences.validate(
+            operation, payload: payload, schema: NotchSettingsSchema.defaults,
+            accepts: NotchSettingsSchema.accepts)
+        let response = try await client.invoke(operation, payload: payload)
+        try Task.checkCancellation()
+        guard !stopped, !fixtureRejected,
+            uiScenes[presentation]?.generation == generation
+        else { throw WorkerFixtureError.invalid }
+        try admission.requireCurrent()
+        return response
     }
 
     private func executePanel(_ command: String, payload: Data) async throws -> Data {
@@ -244,7 +302,17 @@ final class ExtensionRuntime: NSObject {
     func prepareToStop(completion: @escaping () -> Void) {
         startRequested = false
         stopped = true
+        fixturePreferences?.stop()
         commands.shutdown()
+        if fixture != nil || fixtureUI {
+            stopUI()
+            Task {
+                for task in Array(uiDrains.values) { await task.value }
+                await commands.shutdownAndWait()
+                completion()
+            }
+            return
+        }
         if controller == nil, panelEngine == nil, uiScenes.isEmpty, uiDrains.isEmpty,
             cliStreams == nil, browserStreams == nil
         {
@@ -280,10 +348,11 @@ final class ExtensionRuntime: NSObject {
             guard let scene = uiScenes.removeValue(forKey: key) else { continue }
             scene.settings?.stop()
             scene.chrome?.stop()
+            scene.client?.invalidate()
             let drainID = UUID()
             uiDrains[drainID] = Task {
+                await scene.settings?.stopAndWait()
                 await scene.chrome?.stopAndWait()
-                scene.client?.invalidate()
                 uiDrains[drainID] = nil
             }
         }
@@ -306,6 +375,19 @@ final class ExtensionRuntime: NSObject {
             guard !stopped, !fixtureRejected, fixture == nil else {
                 return ["ok": false] as NSDictionary
             }
+            let admission: WorkerFixtureUIAdmission?
+            do {
+                admission = try WorkerFixtureUIAdmission.current(
+                    extensionID: "notchShelf", context: input,
+                    roleBundle: Bundle(for: ExtensionRuntime.self))
+                try admission?.requireCurrent()
+                if let admission {
+                    guard input["location"] as? String == "settings",
+                        admission.descriptor.rolePath.hasSuffix("/notchShelf/app.bundle"),
+                        input["engineClient"] != nil
+                    else { throw WorkerFixtureError.invalid }
+                }
+            } catch { return ["ok": false] as NSDictionary }
             guard let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "notchShelf", input["tile"] == nil,
                 input["target"] == nil,
@@ -318,11 +400,23 @@ final class ExtensionRuntime: NSObject {
             guard uiScenes.count < 16 || uiScenes[presentation] != nil else {
                 return ["ok": false] as NSDictionary
             }
+            let generation = UUID()
             let scene: UIScene
             if location == "settings" {
+                let model: NotchSettingsModel
+                if let admission, let client = configuration.engineClient {
+                    model = NotchSettingsModel(invoke: { [weak self] operation, payload in
+                        guard let self else { throw WorkerFixtureError.invalid }
+                        return try await self.invokeSettingsUI(
+                            operation, payload: payload, presentation: presentation,
+                            generation: generation, client: client, admission: admission)
+                    })
+                } else {
+                    model = NotchSettingsModel(client: configuration.engineClient)
+                }
                 scene = UIScene(
-                    client: configuration.engineClient,
-                    settings: NotchSettingsModel(client: configuration.engineClient), chrome: nil)
+                    client: configuration.engineClient, settings: model, chrome: nil,
+                    admission: admission, generation: generation)
             } else if location == "notch", let section = input["section"] as? String,
                 section.hasPrefix("panel."), let id = UInt32(section.dropFirst(6)),
                 section == "panel." + String(id), let client = configuration.engineClient
@@ -333,12 +427,15 @@ final class ExtensionRuntime: NSObject {
                 ) {
                     operation, payload in try await client.invoke(operation, payload: payload)
                 }
-                scene = UIScene(client: client, settings: nil, chrome: chrome)
+                scene = UIScene(
+                    client: client, settings: nil, chrome: chrome, admission: nil,
+                    generation: generation)
             } else {
                 return ["ok": false] as NSDictionary
             }
             stopUI(presentation)
             uiScenes[presentation] = scene
+            fixtureUI = fixtureUI || admission != nil
             selectedPresentation = presentation
         case "stopUI":
             stopUI((input["presentationID"] as? String).flatMap(UUID.init(uuidString:)))
@@ -347,15 +444,35 @@ final class ExtensionRuntime: NSObject {
             do {
                 let admitted = try fixtureAdmission(input)
                 if let admitted {
-                    guard admitted.extensionID == "notchShelf", admitted.role == .helper,
+                    guard admitted.descriptor.owner == "notchShelf", admitted.descriptor.role == "helper",
                         controller == nil, panelEngine == nil, uiScenes.isEmpty
                     else { throw WorkerFixtureError.invalid }
                     if let fixture {
-                        guard fixture.home == admitted.home,
-                            fixture.dataDirectory == admitted.dataDirectory
+                        guard fixture.descriptor == admitted.descriptor
                         else { throw WorkerFixtureError.invalid }
                     }
                     fixture = admitted
+                    if fixturePreferences == nil {
+                        guard let suite = input["defaultsSuite"] as? String,
+                            let identifier = input["hostIdentifier"] as? String
+                        else { throw WorkerFixtureError.invalid }
+                        fixtureContext = input.copy() as? NSDictionary
+                        fixturePreferences = try NotchFixturePreferences(
+                            suite: suite, expectedSuite: identifier + ".extension.notchShelf.worker",
+                            schema: NotchSettingsSchema.defaults,
+                            isString: NotchSettingsSchema.isString,
+                            accepts: NotchSettingsSchema.accepts,
+                            requireCurrent: { [weak self] in
+                                guard let self else { throw WorkerFixtureError.invalid }
+                                try self.requireCurrentFixture()
+                            })
+                    } else {
+                        guard
+                            input["defaultsSuite"] as? String
+                                == fixtureContext?["defaultsSuite"] as? String
+                        else { throw WorkerFixtureError.invalid }
+                        try requireCurrentFixture()
+                    }
                     startRequested = true
                     return ["ok": true] as NSDictionary
                 }
@@ -381,6 +498,8 @@ final class ExtensionRuntime: NSObject {
                     ?? selectedPresentation,
                 let scene = uiScenes[key]
             else { return ["ok": false] as NSDictionary }
+            do { try scene.admission?.requireCurrent() }
+            catch { return ["ok": false] as NSDictionary }
             if let chrome = scene.chrome {
                 return NSHostingController(
                     rootView: ExtensionPageHost { NotchPanelPage(client: chrome) })
