@@ -17,6 +17,9 @@ final class ExtensionRuntime: NSObject {
 
     private var fixture: WorkerFixtureAdmission?
     private let commands = ExtensionCommandRegistry()
+    private var suspended = false
+    private var suspension: Task<Void, Never>?
+    private var retiredServices: [UUID: Task<Void, Never>] = [:]
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -63,12 +66,35 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        commands.suspend()
+        suspended = true
+        let service = service
+        service?.shutdown()
+        if suspension == nil {
+            let retired = Array(retiredServices.values)
+            suspension = Task { [self, service] in
+                await commands.suspendAndWait()
+                await service?.shutdownAndWait()
+                for task in retired { await task.value }
+            }
+        }
+        let pending = suspension
+        Task { [self] in
+            await pending?.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        Task {
-            await commands.shutdownAndWait()
-            _ = execute(["operation": "stop"])
-            completion()
+        suspendCommands { [self] in
+            Task { [self] in
+                await commands.shutdownAndWait()
+                _ = execute(["operation": "stop"])
+                completion()
+            }
         }
     }
 
@@ -146,8 +172,7 @@ final class ExtensionRuntime: NSObject {
             presentation?.stop()
             presentation = nil
             commands.shutdown()
-            service?.shutdown()
-            service = nil
+            retireService()
             IPC.stopObserving(observer)
             observer = nil
             HotKeyRegistrar.shutdown()
@@ -157,7 +182,18 @@ final class ExtensionRuntime: NSObject {
         }
         return ["ok": true] as NSDictionary
     }
+    private func retireService() {
+        guard let service else { return }
+        self.service = nil
+        service.shutdown()
+        let id = UUID()
+        retiredServices[id] = Task { [self, service] in
+            await service.shutdownAndWait()
+            retiredServices[id] = nil
+        }
+    }
     private func synchronize() {
+        guard !suspended else { return }
         if fixture == nil {
             HotKeyRegistrar.install(HotKeyCatalog.keystrokeHighlight) { [weak self] in
                 let defaults = SharedDefaults.store
@@ -171,8 +207,7 @@ final class ExtensionRuntime: NSObject {
             if service == nil { service = KeystrokeHighlightRuntime(fixture: fixture) }
             service?.syncSettings()
         } else {
-            service?.shutdown()
-            service = nil
+            retireService()
         }
     }
 }

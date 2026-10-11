@@ -17,7 +17,9 @@ final class KeystrokeHighlightRuntime: FeatureModule {
     private var runLoopSource: CFRunLoopSource?
     private var healthTimer: Timer?
     private var panel: KeystrokeHighlightPanel?
-    private var expiryTasks: [UUID: Task<Void, Never>] = [:]
+    private var expiryTasks: [UUID: UUID] = [:]
+    private var tasks: [UUID: Task<Void, Never>] = [:]
+    private var stopped = false
 
     private let fixture: WorkerFixtureAdmission?
     var systemResourceCount: Int {
@@ -36,6 +38,7 @@ final class KeystrokeHighlightRuntime: FeatureModule {
     var entries: [KeystrokeHighlightEntry] { queue.entries }
 
     func syncSettings() {
+        guard !stopped else { return }
         guard fixture == nil else { return }
         if eventTap == nil { start() }
         guard !entries.isEmpty else { return }
@@ -43,11 +46,12 @@ final class KeystrokeHighlightRuntime: FeatureModule {
     }
 
     func shutdown() {
+        guard !stopped else { return }
+        stopped = true
         uninstallEventTap()
         healthTimer?.invalidate()
         healthTimer = nil
-        expiryTasks.values.forEach { $0.cancel() }
-        expiryTasks.removeAll()
+        tasks.values.forEach { $0.cancel() }
         queue = KeystrokeHighlightQueue(
             maximumVisible: KeystrokeHighlightSettings.maximumVisible)
         panel?.orderOut(nil)
@@ -56,6 +60,7 @@ final class KeystrokeHighlightRuntime: FeatureModule {
     }
 
     private func start() {
+        guard !stopped else { return }
         if fixture != nil { setRuntimeState(active: true, error: ""); return }
         guard CGPreflightListenEventAccess() else {
             setRuntimeState(
@@ -72,11 +77,8 @@ final class KeystrokeHighlightRuntime: FeatureModule {
         }
         setRuntimeState(active: true, error: "")
         healthTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard let self, let eventTap = self.eventTap else { return }
-                if !CGEvent.tapIsEnabled(tap: eventTap) {
-                    CGEvent.tapEnable(tap: eventTap, enable: true)
-                }
+            MainActor.assumeIsolated {
+                self?.startWork { [weak self] in self?.reenableEventTap() }
             }
         }
         healthTimer?.tolerance = 2
@@ -89,7 +91,9 @@ final class KeystrokeHighlightRuntime: FeatureModule {
             let runtime = Unmanaged<KeystrokeHighlightRuntime>.fromOpaque(refcon)
                 .takeUnretainedValue()
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-                Task { @MainActor in runtime.reenableEventTap() }
+                MainActor.assumeIsolated {
+                    runtime.startWork { runtime.reenableEventTap() }
+                }
                 return Unmanaged.passUnretained(event)
             }
             guard type == .keyDown, !IsSecureEventInputEnabled() else {
@@ -102,8 +106,8 @@ final class KeystrokeHighlightRuntime: FeatureModule {
             else {
                 return Unmanaged.passUnretained(event)
             }
-            Task { @MainActor in
-                runtime.show(labels: labels)
+            MainActor.assumeIsolated {
+                runtime.startWork { runtime.show(labels: labels) }
             }
             return Unmanaged.passUnretained(event)
         }
@@ -133,7 +137,7 @@ final class KeystrokeHighlightRuntime: FeatureModule {
     }
 
     private func reenableEventTap() {
-        guard let eventTap else { return }
+        guard !stopped, let eventTap else { return }
         CGEvent.tapEnable(tap: eventTap, enable: true)
     }
 
@@ -172,20 +176,40 @@ final class KeystrokeHighlightRuntime: FeatureModule {
     private func scheduleExpiry(_ entry: KeystrokeHighlightEntry) {
         let delay = max(0, entry.expiresAt.timeIntervalSinceNow)
         let id = entry.id
-        expiryTasks[id]?.cancel()
-        expiryTasks[id] = Task { @MainActor [weak self] in
+        if let token = expiryTasks[id] { tasks[token]?.cancel() }
+        let token = UUID()
+        expiryTasks[id] = token
+        tasks[token] = Task { @MainActor [self] in
+            defer {
+                tasks[token] = nil
+                if expiryTasks[id] == token { expiryTasks[id] = nil }
+            }
             do {
                 try await Task.sleep(for: .seconds(delay))
             } catch {
                 return
             }
-            guard let self else { return }
+            guard !stopped, !Task.isCancelled, expiryTasks[id] == token else { return }
             withAnimation(.easeOut(duration: 0.22)) {
                 self.queue.remove(id: id)
             }
-            self.expiryTasks[id] = nil
             if self.entries.isEmpty { self.panel?.orderOut(nil) }
         }
+    }
+
+    private func startWork(_ operation: @escaping @MainActor () -> Void) {
+        guard !stopped else { return }
+        let id = UUID()
+        tasks[id] = Task { [self] in
+            defer { tasks[id] = nil }
+            guard !stopped, !Task.isCancelled else { return }
+            operation()
+        }
+    }
+
+    func shutdownAndWait() async {
+        shutdown()
+        for task in Array(tasks.values) { await task.value }
     }
 
     private func setRuntimeState(active: Bool, error: String) {
