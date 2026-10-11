@@ -39,11 +39,26 @@ final class CommandFixtureRuntime: NSObject {
         return Data("ready".utf8)
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        commands.suspend()
+        let pending = task
+        pending?.cancel()
+        Task {
+            await commands.suspendAndWait()
+            await pending?.value
+            completion()
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         commands.shutdown()
-        task?.cancel()
+        let pending = task
+        pending?.cancel()
         Task {
+            await commands.shutdownAndWait()
+            await pending?.value
             if mode == "asyncHang" { try? await Task.sleep(for: .seconds(30)) }
             if mode == "asyncStop" {
                 try? await Task.sleep(for: .milliseconds(300))
