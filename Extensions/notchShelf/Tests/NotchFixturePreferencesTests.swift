@@ -6,7 +6,8 @@ import Testing
 
 @MainActor enum NotchFixturePreferencesChecks {
     static func run() throws {
-        let suite = "com.pulkit.edith.tests.worker-" + UUID().uuidString + ".extension.notchShelf.worker"
+        let suite =
+            "com.pulkit.edith.tests.worker-" + UUID().uuidString + ".extension.notchShelf.worker"
         guard let defaults = UserDefaults(suiteName: suite) else { throw CheckFailure.defaults }
         defer { defaults.removePersistentDomain(forName: suite) }
         let schema = ["synthetic.boolean": "1", "synthetic.string": "forever"]

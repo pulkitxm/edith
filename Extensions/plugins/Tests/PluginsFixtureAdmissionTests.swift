@@ -57,6 +57,49 @@ import WorkerFixtureTestSupport
         }
     }
 
+    @MainActor @Test func admittedOriginalControlsPersistWithoutDiscoveryOrInstallation()
+        async throws
+    {
+        let suite =
+            "com.pulkit.edith.tests.worker-" + UUID().uuidString + ".extension.plugins.worker"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let data = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let agents = try PluginsFixtureTools.admittedAgents(Data("{\"agentIDs\":[\"amp\"]}".utf8))
+        func makeModel() -> SkillsModel {
+            PluginsFixtureTools.makeAdmittedModel(
+                defaults: defaults, dataDirectory: data, agents: agents)
+        }
+        func action(_ value: PluginsUIAction, model: SkillsModel) async throws -> PluginsUISnapshot
+        {
+            try JSONDecoder().decode(
+                PluginsUISnapshot.self,
+                from: await PluginsUIBridge.execute(
+                    "plugins.ui.action", payload: JSONEncoder().encode(value), model: model))
+        }
+        let model = makeModel()
+        let discovered = try await action(.init(action: "discover"), model: model)
+        #expect(discovered.agents.map(\.id) == ["amp"] && !discovered.installerAvailable)
+        let skill = EdithSkillLibrary.skills[0]
+        let presented = try await action(.init(action: "present", skillID: skill.id), model: model)
+        #expect(presented.selectedAgentIDs == ["amp"])
+        let selected = try await action(
+            .init(action: "select", agentID: "amp", enabled: false), model: model)
+        #expect(selected.selectedAgentIDs.isEmpty)
+        #expect(
+            defaults.dictionary(forKey: "plugins.agentSelections") as? [String: Bool] == [
+                "amp": false
+            ])
+        await model.shutdown()
+        let recreated = makeModel()
+        _ = try await action(.init(action: "discover"), model: recreated)
+        let restored = try await action(
+            .init(action: "present", skillID: skill.id), model: recreated)
+        #expect(restored.selectedAgentIDs.isEmpty)
+        await recreated.shutdown()
+        #expect(!FileManager.default.fileExists(atPath: data.path))
+    }
+
     @MainActor @Test func strictMarkerConstructsOnlyOwnedUnavailableToolsAndRealInertModel()
         async throws
     {
