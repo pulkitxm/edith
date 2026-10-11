@@ -1,3 +1,4 @@
+#if EDITH_HOSTED_SPARKLE_FIXTURE
 import CryptoKit
 import Darwin
 import Foundation
@@ -244,3 +245,4 @@ import Security
         }
     }
 }
+#endif

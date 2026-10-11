@@ -82,3 +82,48 @@ test("foreign routes methods ranges request bodies and host headers cannot serve
     await server.close();
   }
 });
+
+test("negative recipes serve predetermined altered bytes to the actual client without calling parser rejection update proof", async () => {
+  const { reserveSparkleServer } = await import(
+    "./hosted-sparkle-update/server.mjs"
+  );
+  const { verifySparkleArchive } = await import(
+    "./hosted-sparkle-update/contract.mjs"
+  );
+  for (const recipe of ["wrong-signature", "tampered-archive"]) {
+    const server = await reserveSparkleServer();
+    const archive = Buffer.from("Fresh synthetic immutable archive");
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    const fixture = {
+      session: "00000000-0000-4000-8000-000000000001",
+      port: server.port,
+      archiveBytes: archive.length,
+      archiveSHA256: createHash("sha256").update(archive).digest("hex"),
+      publicKey: publicKey
+        .export({ type: "spki", format: "der" })
+        .subarray(-32)
+        .toString("base64"),
+    };
+    const signature = sign(null, archive, privateKey).toString("base64");
+    try {
+      const base = `http://127.0.0.1:${server.port}/${fixture.session}`;
+      expect((await fetch(`${base}/Edith.zip`)).status).toBe(403);
+      server.configure({ fixture, archive, signature, recipe });
+      const xml = await (await fetch(`${base}/appcast.xml`)).text();
+      const received = Buffer.from(
+        await (await fetch(`${base}/Edith.zip`)).arrayBuffer(),
+      );
+      const signed = xml.match(/sparkle:edSignature="([^"]+)"/)[1];
+      expect(() => verifySparkleArchive(fixture, received, signed)).toThrow();
+      expect(server.recipe().recipe).toBe(recipe);
+      expect(server.recipe().actualSparkleRejectionValidated).toBe(false);
+      expect(server.recipe().baselineArchiveSHA256).toBe(fixture.archiveSHA256);
+      expect(() => server.configure({ fixture, archive, signature })).toThrow();
+      expect(server.observations().every((row) => row.complete)).toBe(true);
+      if (recipe === "wrong-signature") expect(received).toEqual(archive);
+      else expect(received).not.toEqual(archive);
+    } finally {
+      await server.close();
+    }
+  }
+});

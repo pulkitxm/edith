@@ -1,30 +1,35 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { createSignedAppcast, verifySparkleArchive } from "./contract.mjs";
 
-export async function startSparkleServer({ fixture, archive, signature }) {
-  verifySparkleArchive(fixture, archive, signature);
-  const appcast = createSignedAppcast(fixture, signature);
-  assert(appcast.length <= 16384);
+export async function reserveSparkleServer(port = 0) {
+  assert(
+    Number.isInteger(port) && (port === 0 || (port >= 1024 && port <= 65535)),
+  );
+  let configured;
+  let recipeReceipt;
   const sockets = new Set();
   const requests = [];
   let closed = false;
   const server = createServer((request, response) => {
     const address = request.socket.remoteAddress;
-    const expectedHost = `127.0.0.1:${fixture.port}`;
+    const expectedHost = `127.0.0.1:${server.address().port}`;
+    const { fixture, archive, appcast } = configured ?? {};
     const resources = new Map([
       [
-        `/${fixture.session}/appcast.xml`,
+        `/${fixture?.session}/appcast.xml`,
         [appcast, "application/rss+xml", "appcast"],
       ],
       [
-        `/${fixture.session}/Edith.zip`,
+        `/${fixture?.session}/Edith.zip`,
         [archive, "application/zip", "archive"],
       ],
     ]);
     const resource = resources.get(request.url);
     if (
       closed ||
+      !configured ||
       address !== "127.0.0.1" ||
       request.method !== "GET" ||
       request.headers.host !== expectedHost ||
@@ -62,9 +67,39 @@ export async function startSparkleServer({ fixture, archive, signature }) {
   });
   await new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(fixture.port, "127.0.0.1", resolve);
+    server.listen(port, "127.0.0.1", resolve);
   });
   return {
+    port: server.address().port,
+    configure: ({ fixture, archive, signature, recipe = "valid" }) => {
+      assert(!configured && !closed);
+      assert.equal(fixture.port, server.address().port);
+      assert(["valid", "wrong-signature", "tampered-archive"].includes(recipe));
+      verifySparkleArchive(fixture, archive, signature);
+      const bytes = Buffer.from(archive);
+      let signed = signature;
+      if (recipe === "wrong-signature") {
+        const altered = Buffer.from(signature, "base64");
+        altered[0] ^= 1;
+        signed = altered.toString("base64");
+      }
+      if (recipe === "tampered-archive") {
+        bytes[bytes.length - 1] ^= 1;
+      }
+      const appcast = createSignedAppcast(fixture, signed);
+      assert(appcast.length <= 16384);
+      configured = { fixture: { ...fixture }, archive: bytes, appcast };
+      recipeReceipt = {
+        recipe,
+        baselineArchiveSHA256: fixture.archiveSHA256,
+        servedArchiveSHA256: createHash("sha256").update(bytes).digest("hex"),
+        servedSignatureSHA256: createHash("sha256")
+          .update(Buffer.from(signed, "base64"))
+          .digest("hex"),
+        actualSparkleRejectionValidated: false,
+      };
+    },
+    recipe: () => (recipeReceipt ? { ...recipeReceipt } : null),
     observations: () => requests.map((row) => ({ ...row })),
     close: async () => {
       if (closed) return;
@@ -76,4 +111,15 @@ export async function startSparkleServer({ fixture, archive, signature }) {
       assert.equal(sockets.size, 0);
     },
   };
+}
+
+export async function startSparkleServer({ fixture, archive, signature }) {
+  const server = await reserveSparkleServer(fixture.port);
+  try {
+    server.configure({ fixture, archive, signature });
+    return server;
+  } catch (error) {
+    await server.close();
+    throw error;
+  }
 }
