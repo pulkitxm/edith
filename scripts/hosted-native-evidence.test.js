@@ -8,7 +8,11 @@ import {
   managedNativeBuildSteps,
   managedNativeTestSteps,
 } from "./hosted-managed-views/native-ci-contract.mjs";
-import { digest } from "./hosted-public-release/contract.mjs";
+import {
+  digest,
+  ownedDraftResume,
+  productionRun,
+} from "./hosted-public-release/contract.mjs";
 import {
   admitEvidence,
   admitOriginalEvidence,
@@ -641,4 +645,132 @@ test("fresh evidence drafts preserve an exact lightweight source tag before rele
       createTag: async () => {},
     }),
   ).rejects.toThrow();
+});
+
+function emptyDraftFixture() {
+  const value = fixture();
+  const definitions = Object.keys(value.fingerprints).map((id) => ({
+    id,
+    hostABI: "edith-host-2",
+    minimumSystemVersion: "14.0.0",
+    dependencies: [],
+  }));
+  const packages = definitions.map((definition) => ({
+    ...definition,
+    version: "1.0.0",
+    architecture: "arm64",
+    sha256: "d".repeat(64),
+    sourceFingerprint: value.fingerprints[definition.id],
+    downloadBytes: 1,
+    installedBytes: 1,
+    downloadURL: `https://github.com/pulkitxm/edith/releases/download/${encodeURIComponent(`extensions/${definition.id}/1.0.0-${value.fingerprints[definition.id].slice(0, 20)}`)}/${definition.id}.zip`,
+  }));
+  value.plannedIDs = [];
+  value.jobs[3] = {
+    id: 204,
+    run_id: 101,
+    name: "build",
+    status: "completed",
+    conclusion: "skipped",
+    steps: [],
+  };
+  value.artifacts = value.artifacts.slice(0, 2);
+  value.definitions = definitions;
+  value.resume = {
+    plan: { include: [] },
+    previous: { schemaVersion: 1, revision: 1, packages },
+    state: { draft: true },
+    definitions,
+    fingerprints: value.fingerprints,
+  };
+  return value;
+}
+
+test("an exact owned full draft can resume without rebuilding while retaining every global native gate", () => {
+  const value = emptyDraftFixture();
+  expect(ownedDraftResume(value.resume)).toHaveLength(39);
+  const payload = stagedEvidence(value);
+  expect(verifiedEvidence(envelope(payload), publicKey)).toEqual(payload);
+  const success = completed(value);
+  success.jobs.find(({ name }) => name === "build").conclusion = "skipped";
+  expect(admitEvidence(payload, success)).toEqual(payload);
+  expect(productionRun(success)).toEqual([]);
+  expect(() =>
+    nativeLineage(value.resume.previous.packages[0], payload, {
+      bytes: 100,
+      sha256: "c".repeat(64),
+    }),
+  ).toThrow();
+  expect(() => admitOriginalEvidence(payload, success, [])).toThrow();
+  for (const mutate of [
+    (v) => {
+      delete v.resume;
+    },
+    (v) => {
+      v.resume.state.draft = false;
+    },
+    (v) => {
+      v.resume.state.extra = true;
+    },
+    (v) => {
+      v.resume.previous.packages.pop();
+    },
+    (v) => {
+      v.resume.previous.packages[0].sourceFingerprint = "e".repeat(64);
+    },
+    (v) => {
+      v.resume.previous.packages[0].hostABI = "foreign-ABI";
+    },
+    (v) => {
+      v.fingerprints = { ...v.fingerprints, owner0: "e".repeat(64) };
+    },
+    (v) => {
+      v.run.head_sha = "f".repeat(40);
+    },
+    (v) => {
+      v.jobs[3].conclusion = "success";
+    },
+    (v) => {
+      v.jobs[3].name = "build (owner0)";
+    },
+    (v) => {
+      v.jobs[3].steps = [
+        {
+          name: "unexpected native step",
+          number: 1,
+          status: "completed",
+          conclusion: "skipped",
+        },
+      ];
+    },
+    (v) => {
+      v.jobs[1].conclusion = "failure";
+    },
+    (v) => {
+      v.jobs[2].steps[0].conclusion = "skipped";
+    },
+  ]) {
+    const changed = structuredClone(value);
+    mutate(changed);
+    expect(() => stagedEvidence(changed)).toThrow();
+  }
+  for (const mutate of [
+    (v) => {
+      v.run.conclusion = "failure";
+    },
+    (v) => {
+      v.jobs.find(({ name }) => name === "publish").steps.at(-1).conclusion =
+        "failure";
+    },
+    (v) => {
+      v.jobs[1].conclusion = "skipped";
+    },
+    (v) => {
+      delete v.resume;
+    },
+  ]) {
+    const changed = structuredClone(success);
+    mutate(changed);
+    expect(() => admitEvidence(payload, changed)).toThrow();
+  }
 });

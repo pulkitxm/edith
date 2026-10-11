@@ -9,6 +9,7 @@ import {
   managedNativeTestSteps,
 } from "../hosted-managed-views/native-ci-contract.mjs";
 import { validateCIArtifactSet } from "../hosted-managed-views/package-preparation.mjs";
+import { validateCatalog } from "../verify-extension-catalog.mjs";
 
 export const repository = "pulkitxm/edith";
 const hash = /^[a-f0-9]{64}$/;
@@ -147,6 +148,7 @@ export function productionRun({
   fingerprints,
   plannedIDs = definitions.map(({ id }) => id),
   resolveArtifact = (name) => artifact(artifacts, name, run, source),
+  resume,
 }) {
   successfulRun(run, source, ".github/workflows/extensions.yml");
   assert(["push", "workflow_dispatch"].includes(run.event));
@@ -157,7 +159,12 @@ export function productionRun({
     Object.keys(fingerprints).sort(),
     definitions.map(({ id }) => id).sort(),
   );
-  assert(plannedIDs.length > 0 && plannedIDs.length <= 39);
+  assert(plannedIDs.length <= 39);
+  if (!plannedIDs.length) {
+    ownedDraftResume(resume);
+    assert.deepEqual(resume.definitions, definitions);
+    assert.deepEqual(resume.fingerprints, fingerprints);
+  }
   assert.equal(new Set(plannedIDs).size, plannedIDs.length);
   assert(
     plannedIDs.every((id) =>
@@ -169,16 +176,23 @@ export function productionRun({
     "frozen-host",
     "tests",
     "publish",
-    ...plannedIDs.map((id) => `build (${id})`),
+    ...(plannedIDs.length
+      ? plannedIDs.map((id) => `build (${id})`)
+      : ["build"]),
   ];
-  assert.equal(jobs.length, plannedIDs.length + 4);
-  assert.equal(new Set(jobs.map(({ id }) => id)).size, plannedIDs.length + 4);
+  assert.equal(jobs.length, expected.length);
+  assert.equal(new Set(jobs.map(({ id }) => id)).size, expected.length);
   assert.deepEqual(jobs.map(({ name }) => name).sort(), expected.sort());
   for (const job of jobs) {
     integer(job.id);
+    if (!plannedIDs.length && job.name === "build")
+      assert.deepEqual(job.steps, []);
     assert.equal(job.run_id, run.id);
     assert.equal(job.status, "completed");
-    assert.equal(job.conclusion, "success");
+    assert.equal(
+      job.conclusion,
+      !plannedIDs.length && job.name === "build" ? "skipped" : "success",
+    );
     const names =
       job.name === "tests"
         ? managedNativeTestSteps
@@ -281,6 +295,21 @@ export function currentPackages(catalog, definitions, fingerprints) {
     return row;
   });
 }
+export function ownedDraftResume(value) {
+  assert(value && typeof value === "object");
+  const { plan, previous, state, definitions, fingerprints } = value;
+  assert.deepEqual(plan, { include: [] });
+  assert.deepEqual(state, { draft: true });
+  validateCatalog(previous);
+  assert.equal(definitions.length, 39);
+  assert.equal(new Set(definitions.map(({ id }) => id)).size, 39);
+  assert.deepEqual(
+    Object.keys(fingerprints).sort(),
+    definitions.map(({ id }) => id).sort(),
+  );
+  return currentPackages(previous, definitions, fingerprints);
+}
+
 export function publicURL(value, initial = true) {
   const url = new URL(value);
   assert.equal(url.protocol, "https:");

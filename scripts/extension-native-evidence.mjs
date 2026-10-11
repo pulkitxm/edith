@@ -19,6 +19,7 @@ import {
 import {
   closedJSON,
   digest,
+  ownedDraftResume,
   repository,
 } from "./hosted-public-release/contract.mjs";
 import {
@@ -299,12 +300,44 @@ export async function publishNativeEvidence({
       ]),
     ),
   );
+  let resume;
+  if (!include.length) {
+    resume = {
+      plan: closedJSON(
+        await readFile(resolve(directory, "plan.json"), "utf8"),
+        1024 ** 2,
+      ),
+      previous: closedJSON(
+        await readFile(resolve(directory, "previous.json"), "utf8"),
+        1024 ** 2,
+      ),
+      state: closedJSON(
+        await readFile(resolve(directory, "previous-state.json"), "utf8"),
+        4096,
+      ),
+      definitions,
+      fingerprints,
+    };
+    ownedDraftResume(resume);
+    const { publicationPlanningState } = await import(
+      "./extension-publish.mjs"
+    );
+    assert.deepEqual(
+      await publicationPlanningState({
+        repository,
+        catalogTag: process.env.EXTENSION_CATALOG_TAG ?? "extension-catalog-v1",
+        publicKey,
+      }),
+      { catalog: resume.previous, draft: true },
+    );
+  }
   const payload = stagedEvidence({
     ...value,
     source: target,
     plannedIDs: include.map(({ id }) => id),
     fingerprints,
     environment,
+    resume,
   });
   const work = await realpath(
     await mkdtemp(
@@ -346,6 +379,13 @@ export async function publishNativeEvidence({
   const plan = python("document", join(planDirectory, "plan.json"));
   const previous = python("document", join(planDirectory, "previous.json"));
   assert.deepEqual(plan, { include });
+  if (resume) {
+    assert.deepEqual(previous, resume.previous);
+    assert.deepEqual(
+      python("document", join(planDirectory, "previous-state.json")),
+      resume.state,
+    );
+  }
   assert.deepEqual(
     include,
     await planUnpublishedExtensions(root, definitions, previous.packages),
@@ -444,6 +484,7 @@ export async function publishNativeEvidence({
       plannedIDs: payload.plannedIDs,
       fingerprints,
       environment,
+      resume,
     }),
     payload,
   );
@@ -551,6 +592,26 @@ export async function preparedNativeEvidence({
   );
   for (const entry of include)
     assert.equal(payload.fingerprints[entry.id], entry.fingerprint);
+  if (!include.length)
+    ownedDraftResume({
+      plan: closedJSON(
+        await readFile(resolve(directory, "plan.json"), "utf8"),
+        1024 ** 2,
+      ),
+      previous: closedJSON(
+        await readFile(resolve(directory, "previous.json"), "utf8"),
+        1024 ** 2,
+      ),
+      state: closedJSON(
+        await readFile(resolve(directory, "previous-state.json"), "utf8"),
+        4096,
+      ),
+      definitions: closedJSON(
+        await readFile(resolve("Extensions/manifest.json"), "utf8"),
+        1024 ** 2,
+      ),
+      fingerprints: payload.fingerprints,
+    });
   const expected = {
     tag: evidenceTag(target, payload.runID, payload.runAttempt),
     sourceCommit: target,
@@ -581,26 +642,25 @@ if (import.meta.main) {
     await readFile(resolve(directory, "plan.json"), "utf8"),
     1024 ** 2,
   );
-  if (include.length)
-    await publishNativeEvidence({
-      directory,
-      target: process.env.GITHUB_SHA,
-      include,
-      publicKey: process.env.EXTENSION_CATALOG_PUBLIC_KEY,
-      publishFiles: publishExtensionAssets,
-      lookupRelease: (repository, tag) => lookupRelease({ repository, tag }),
-      mutate: (...args) => executeReleaseMutation(args),
-      publishDraft: (id) =>
-        executeReleaseMutation([
-          "release",
-          "edit",
-          "--repo",
-          repository,
-          String(id),
-          "--draft",
-          "false",
-          "--make-latest",
-          "false",
-        ]),
-    });
+  await publishNativeEvidence({
+    directory,
+    target: process.env.GITHUB_SHA,
+    include,
+    publicKey: process.env.EXTENSION_CATALOG_PUBLIC_KEY,
+    publishFiles: publishExtensionAssets,
+    lookupRelease: (repository, tag) => lookupRelease({ repository, tag }),
+    mutate: (...args) => executeReleaseMutation(args),
+    publishDraft: (id) =>
+      executeReleaseMutation([
+        "release",
+        "edit",
+        "--repo",
+        repository,
+        String(id),
+        "--draft",
+        "false",
+        "--make-latest",
+        "false",
+      ]),
+  });
 }

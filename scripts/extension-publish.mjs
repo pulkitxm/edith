@@ -709,10 +709,6 @@ export async function publishExtensions({
       "--make-latest",
       "false",
     );
-  if (include.length === 0) {
-    await finalizeDraftCatalog({ verifyState, publish: publishDraft });
-    return { published: [], revision: old.revision };
-  }
   await preflightExtensionBuilds({ repository, directory, include });
   const nativeEvidence = await publishEvidence({
     directory,
@@ -724,6 +720,27 @@ export async function publishExtensions({
     mutate,
     publishDraft,
   });
+  if (include.length === 0) {
+    const current = await verifyState();
+    if (current?.release?.draft !== true || !current.asset)
+      throw new Error(
+        "A verified owned draft catalog is required for an empty publication resume",
+      );
+    await publishComposition({
+      repository,
+      directory,
+      target,
+      include,
+      publicKey,
+      next: old,
+      nativeEvidence,
+      verifyState,
+      verifyOriginal,
+    });
+    await finalizeDraftCatalog({ verifyState, publish: publishDraft });
+    await verifyState();
+    return { published: [], revision: old.revision, nativeEvidence };
+  }
   const records = [];
   const originalAdmissions = new Map();
   const admitOriginal = async (value) => {

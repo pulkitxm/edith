@@ -34,6 +34,7 @@ import {
   downloadPublic,
   hosted,
   hostRun,
+  ownedDraftResume,
   productionRun,
   repository,
   request,
@@ -416,12 +417,23 @@ export async function run() {
       previous.packages,
     );
     assert.deepEqual(actual, { include: expected });
+    const resume = expected.length
+      ? undefined
+      : {
+          plan: actual,
+          previous,
+          state: document(join(directory, "previous-state.json")),
+          definitions,
+          fingerprints,
+        };
+    if (resume) ownedDraftResume(resume);
     const parameters = {
       ...value,
       source,
       definitions,
       fingerprints,
       plannedIDs: expected.map(({ id }) => id),
+      resume,
     };
     const qualification = origin
       ? admitOriginalEvidence(

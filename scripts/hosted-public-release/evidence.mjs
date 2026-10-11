@@ -7,6 +7,7 @@ import {
 import {
   artifact,
   closedJSON,
+  ownedDraftResume,
   repository,
   successfulRun,
 } from "./contract.mjs";
@@ -64,7 +65,9 @@ function jobsIdentity(jobs, plannedIDs, runID, staging) {
     "frozen-host",
     "tests",
     "publish",
-    ...plannedIDs.map((id) => `build (${id})`),
+    ...(plannedIDs.length
+      ? plannedIDs.map((id) => `build (${id})`)
+      : ["build"]),
   ];
   assert.equal(jobs.length, expected.length);
   assert.equal(new Set(jobs.map(({ id }) => id)).size, expected.length);
@@ -73,9 +76,18 @@ function jobsIdentity(jobs, plannedIDs, runID, staging) {
     .map((job) => {
       integer(job.id);
       assert.equal(job.run_id, runID);
+      if (!plannedIDs.length && job.name === "build")
+        assert.deepEqual(job.steps, []);
       const active = staging && job.name === "publish";
       assert.equal(job.status, active ? "in_progress" : "completed");
-      assert.equal(job.conclusion, active ? null : "success");
+      assert.equal(
+        job.conclusion,
+        active
+          ? null
+          : !plannedIDs.length && job.name === "build"
+            ? "skipped"
+            : "success",
+      );
       const steps = requiredSteps(job.name).map((name) => {
         const found = job.steps.filter((step) => step.name === name);
         assert.equal(found.length, 1);
@@ -111,11 +123,7 @@ export function validateEvidence(payload) {
   assert.equal(payload.workflowPath, ".github/workflows/extensions.yml");
   assert(["push", "workflow_dispatch"].includes(payload.event));
   evidenceTag(payload.sourceCommit, payload.runID, payload.runAttempt);
-  assert(
-    Array.isArray(payload.plannedIDs) &&
-      payload.plannedIDs.length > 0 &&
-      payload.plannedIDs.length <= 39,
-  );
+  assert(Array.isArray(payload.plannedIDs) && payload.plannedIDs.length <= 39);
   assert.equal(new Set(payload.plannedIDs).size, payload.plannedIDs.length);
   assert.equal(Object.keys(payload.fingerprints).length, 39);
   for (const [id, value] of Object.entries(payload.fingerprints)) {
@@ -161,7 +169,10 @@ export function validateEvidence(payload) {
       ...job,
       run_id: payload.runID,
       status: "completed",
-      conclusion: "success",
+      conclusion:
+        !payload.plannedIDs.length && job.name === "build"
+          ? "skipped"
+          : "success",
       steps: job.steps.map((step) => ({
         ...step,
         status: "completed",
@@ -187,6 +198,7 @@ export function stagedEvidence({
   plannedIDs,
   fingerprints,
   environment,
+  resume,
 }) {
   assert.equal(environment.GITHUB_ACTIONS, "true");
   assert.equal(environment.RUNNER_ENVIRONMENT, "github-hosted");
@@ -203,6 +215,10 @@ export function stagedEvidence({
   assert.equal(run.head_branch, "main");
   assert.equal(run.status, "in_progress");
   assert.equal(run.conclusion, null);
+  if (!plannedIDs.length) {
+    ownedDraftResume(resume);
+    assert.deepEqual(resume.fingerprints, fingerprints);
+  }
   const names = [
     "extension-plan",
     "frozen-extension-host",
@@ -453,6 +469,10 @@ export function verifiedComposition(
 }
 
 export function admitOriginalEvidence(payload, value, publisherNames) {
+  assert(
+    payload.plannedIDs.length > 0,
+    "Empty resume evidence cannot qualify a package origin",
+  );
   if (value.run?.conclusion === "success")
     return {
       payload: admitEvidence(payload, value),
@@ -572,8 +592,12 @@ export function admitOriginalEvidence(payload, value, publisherNames) {
 
 export function admitEvidence(
   payload,
-  { run, jobs, artifacts, source, plannedIDs, fingerprints },
+  { run, jobs, artifacts, source, plannedIDs, fingerprints, resume },
 ) {
+  if (!plannedIDs.length) {
+    ownedDraftResume(resume);
+    assert.deepEqual(resume.fingerprints, fingerprints);
+  }
   validateEvidence(payload);
   successfulRun(run, source, ".github/workflows/extensions.yml");
   assert.equal(run.head_branch, "main");
