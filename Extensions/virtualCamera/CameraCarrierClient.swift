@@ -69,7 +69,7 @@ import Foundation
             try Task.checkCancellation()
             try await connect()
             try Task.checkCancellation()
-            return try await withCheckedThrowingContinuation {
+            let status = try await withCheckedThrowingContinuation {
                 (continuation: CheckedContinuation<CameraCarrierStatus, Error>) in
                 pending[token] = continuation
                 timeouts[token] = Task { [weak self, timeout] in
@@ -84,6 +84,8 @@ import Foundation
                     finish(token, .failure(error))
                 }
             }
+            try Task.checkCancellation()
+            return status
         } onCancel: {
             Task { @MainActor [weak self] in self?.cancel(token, error: CancellationError()) }
         }

@@ -154,6 +154,24 @@ private final class CameraControlProbe: CameraCarrierControlling {
         #expect(fixture.preparations == 0)
     }
 
+    @Test func cancellationDuringReplyPublicationCannotReturnSuccess() async throws {
+        let fixture = try Fixture(mode: "cancel")
+        let client = fixture.client()
+        let activation = Task { try await client.activate() }
+        try await wait { fixture.admitted }
+        client.changed = { status in
+            if status.phase == "active" { activation.cancel() }
+        }
+        try fixture.releaseReply()
+        await #expect(throws: CancellationError.self) { try await activation.value }
+        #expect(client.currentStatus?.ownsProvider == true)
+        #expect(client.currentStatus?.pending == false)
+        client.changed = nil
+        try await client.prepareDisable(providerVisible: true)
+        #expect(client.currentStatus?.ownsProvider == false)
+        #expect(fixture.drained)
+    }
+
     @Test func timedOutRequestPreservesOwnershipAndCleanupCanStillComplete() async throws {
         let fixture = try Fixture(mode: "timeout")
         let client = fixture.client(timeout: .milliseconds(100))
