@@ -41,6 +41,7 @@ struct SEOAuditUIResult: Codable {
 
 @MainActor struct SEOAuditUIBridge {
     let invoke: (String, Data) async throws -> Data
+    private let cleanup = SEOAuditBridgeTasks()
     init(client: ExtensionEngineClient) { invoke = { try await client.invoke($0, payload: $1) } }
     init(invoke: @escaping (String, Data) async throws -> Data) { self.invoke = invoke }
     func call<T: Decodable>(
@@ -57,7 +58,7 @@ struct SEOAuditUIResult: Codable {
             transfer.kind == "seo-ui-transfer"
         {
             defer {
-                Task {
+                cleanup.start {
                     _ = try? await invoke(
                         "seoAudit.ui.release",
                         JSONEncoder().encode(SEOAuditUIChunk(id: transfer.id, offset: 0)))
@@ -88,11 +89,14 @@ struct SEOAuditUIResult: Codable {
     static func hash(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
+    func drain() async { await cleanup.wait() }
+
     func state() async throws -> SEOAuditUIState { try await call("state") }
     func job(_ launch: SEOAuditUIJob) -> SEOAuditJob {
         let task = Task<SEOAuditJobResult, Error> {
-            try await withTaskCancellationHandler {
-                while !Task.isCancelled {
+            do {
+                while true {
+                    try Task.checkCancellation()
                     let result: SEOAuditUIResult = try await call("job", id: launch.id)
                     if let error = result.error { throw SEOAuditInputError(error) }
                     if let draft = result.draft { return .draft(draft) }
@@ -100,9 +104,22 @@ struct SEOAuditUIResult: Codable {
                     guard !result.done else { throw ExtensionPeerError.invalidRequest }
                     try await Task.sleep(for: .milliseconds(500))
                 }
-                throw CancellationError()
-            } onCancel: {
-                Task { @MainActor in let _: Bool? = try? await call("cancel", id: launch.id) }
+            } catch {
+                if Task.isCancelled {
+                    let cancellation = cleanup.start {
+                        let _: Bool? = try? await call("cancel", id: launch.id)
+                        while true {
+                            if let result: SEOAuditUIResult = try? await call("job", id: launch.id),
+                                result.done
+                            {
+                                return
+                            }
+                            try? await Task.sleep(for: .milliseconds(500))
+                        }
+                    }
+                    await cancellation.value
+                }
+                throw error
             }
         }
         return .init(id: launch.id, projectID: launch.projectID, kind: launch.kind, task: task)
@@ -114,19 +131,36 @@ struct SEOAuditUIResult: Codable {
     private var pending: [UUID: SEOAuditJob] = [:]
     private var results: [UUID: Data] = [:]
     private var expiry: [UUID: Task<Void, Never>] = [:]
+    private var stopped = false
     init(service: SEOAuditService) { self.service = service }
     func shutdown() {
-        pending.removeAll(); results.removeAll(); for task in expiry.values { task.cancel() };
-        expiry.removeAll()
+        stopped = true
+        for job in pending.values { job.task.cancel() }
+        for task in expiry.values { task.cancel() }
+    }
+
+    func suspendAndWait() async {
+        shutdown()
+        let jobs = Array(pending.values), timers = Array(expiry.values)
+        for job in jobs { _ = await job.task.result }
+        for task in timers { await task.value }
+    }
+
+    func shutdownAndWait() async {
+        await suspendAndWait()
+        pending.removeAll()
+        results.removeAll()
     }
     private func transport(_ data: Data) throws -> Data {
         guard data.count <= 67_108_864 else { throw ExtensionPeerError.invalidRequest }
         if data.count <= 3_000_000 { return data }
         guard results.count < 4 else { throw ExtensionPeerError.unavailable }
         let id = UUID(); results[id] = data
-        expiry[id] = Task { [weak self] in
+        expiry[id] = Task { [self] in
+            defer { expiry[id] = nil }
             do { try await Task.sleep(for: .seconds(60)) } catch { return }
-            self?.results[id] = nil; self?.expiry[id] = nil
+            guard !stopped else { return }
+            results[id] = nil
         }
         return try JSONEncoder().encode(
             SEOAuditUITransfer(
@@ -135,6 +169,7 @@ struct SEOAuditUIResult: Codable {
     }
 
     func execute(_ command: String, payload: Data) async throws -> Data {
+        guard !stopped else { throw ExtensionPeerError.unavailable }
         if ["seoAudit.ui.chunk", "seoAudit.ui.release"].contains(command) {
             guard !service.isStopped, payload.count <= 1024 else {
                 throw ExtensionPeerError.invalidRequest
@@ -264,6 +299,29 @@ struct SEOAuditUIResult: Codable {
             return try encode(
                 await service.run(id(), runID: request.runID, offset: request.offset ?? 0))
         default: throw ExtensionPeerError.invalidRequest
+        }
+    }
+}
+
+@MainActor private final class SEOAuditBridgeTasks {
+    private var tasks: [UUID: Task<Void, Never>] = [:]
+
+    @discardableResult func start(_ operation: @escaping @MainActor () async -> Void) -> Task<
+        Void, Never
+    > {
+        let id = UUID()
+        let task = Task { [self] in
+            defer { tasks[id] = nil }
+            await operation()
+        }
+        tasks[id] = task
+        return task
+    }
+
+    func wait() async {
+        while !tasks.isEmpty {
+            let pending = Array(tasks.values)
+            for task in pending { await task.value }
         }
     }
 }
