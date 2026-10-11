@@ -28,6 +28,7 @@ import {
 } from "../hosted-managed-views/package-preparation.mjs";
 import { verifiedCatalogPayload } from "../verify-extension-catalog.mjs";
 import {
+  closedJSON,
   currentPackages,
   digest,
   downloadPublic,
@@ -159,7 +160,7 @@ export async function run() {
     } finally {
       await reader.cancel();
     }
-    return JSON.parse(Buffer.concat(chunks));
+    return closedJSON(Buffer.concat(chunks).toString("utf8"), 8 * 1024 ** 2);
   }
   async function inventory(runID) {
     const run = await api(`/actions/runs/${runID}`);
