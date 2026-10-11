@@ -2,15 +2,23 @@ import CryptoKit
 import EdithExtensionSupport
 import EdithHostCore
 import Foundation
+import WorkerLifecycleFixtureSupport
 
 extension HostLifecycleHarness {
-    static func prepareUsageFixture() throws {
-        guard let path = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"],
-            !path.isEmpty,
-            URL(fileURLWithPath: path).standardizedFileURL
-                != FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
+    static func usageFixtureHome(
+        _ fixture: WorkerLifecycleFixture?,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) throws -> URL {
+        guard let fixture else { throw HostWorkerError.rejected }
+        let home = try fixture.home(for: "usage")
+        guard environment["EDITH_EXTENSION_FIXTURE_HOME"] == home.path,
+            environment["HOME"] == home.path, environment["CFFIXED_USER_HOME"] == home.path
         else { throw HostWorkerError.rejected }
-        let home = URL(fileURLWithPath: path, isDirectory: true)
+        return home
+    }
+
+    static func prepareUsageFixture(_ fixture: WorkerLifecycleFixture?) throws {
+        let home = try usageFixtureHome(fixture)
         let receipts = home.appendingPathComponent(".claude/projects/sample", isDirectory: true)
         let project = home.appendingPathComponent("synthetic-project", isDirectory: true)
         try FileManager.default.createDirectory(at: receipts, withIntermediateDirectories: true)
@@ -35,35 +43,33 @@ extension HostLifecycleHarness {
 
     private static let usagePreviousStatusLine = "printf 'synthetic previous status'"
 
-    private static func usageSettings() throws -> URL {
-        guard let path = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"],
-            path.hasPrefix("/"), path != FileManager.default.homeDirectoryForCurrentUser.path
-        else { throw HostWorkerError.rejected }
-        return URL(fileURLWithPath: path).appendingPathComponent(".claude/settings.json")
+    private static func usageSettings(_ fixture: WorkerLifecycleFixture?) throws -> URL {
+        try usageFixtureHome(fixture).appendingPathComponent(".claude/settings.json")
     }
 
-    static func usageStatusLineCommand() throws -> String? {
-        let data = try Data(contentsOf: usageSettings())
+    static func usageStatusLineCommand(_ fixture: WorkerLifecycleFixture?) throws -> String? {
+        let data = try Data(contentsOf: usageSettings(fixture))
         guard data.count <= 1_048_576,
             let document = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { throw HostWorkerError.invalidResponse }
         return (document["statusLine"] as? [String: Any])?["command"] as? String
     }
 
-    static func verifyUsageStoppedHook() throws {
-        guard try usageStatusLineCommand() == usagePreviousStatusLine else {
+    static func verifyUsageStoppedHook(_ fixture: WorkerLifecycleFixture?) throws {
+        guard try usageStatusLineCommand(fixture) == usagePreviousStatusLine else {
             throw HostWorkerError.invalidResponse
         }
     }
 
-    @MainActor static func verifyUsageHook(_ endpoint: ExtensionPeerEndpoint, restored: Bool)
-        async throws
-    {
+    @MainActor static func verifyUsageHook(
+        _ endpoint: ExtensionPeerEndpoint, restored: Bool, fixture: WorkerLifecycleFixture?
+    ) async throws {
         if !restored {
             _ = try await endpoint.invoke("usage.statusline.install", payload: Data("{}".utf8))
         }
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
-        while try usageStatusLineCommand()?.contains("usage.statusline.hook --json - --raw") != true
+        while try usageStatusLineCommand(fixture)?.contains("usage.statusline.hook --json - --raw")
+            != true
         {
             guard ContinuousClock.now < deadline else { throw HostWorkerError.invalidResponse }
             try await Task.sleep(for: .milliseconds(20))
@@ -81,9 +87,9 @@ extension HostLifecycleHarness {
     }
 
     @MainActor static func verifyUsageDisableFailure(
-        sessions: HostExtensionSessions
+        sessions: HostExtensionSessions, fixture: WorkerLifecycleFixture?
     ) async throws {
-        let settings = try usageSettings()
+        let settings = try usageSettings(fixture)
         let original = try Data(contentsOf: settings)
         defer { try? original.write(to: settings, options: .atomic) }
         try Data("{synthetic malformed settings".utf8).write(to: settings, options: .atomic)
@@ -94,10 +100,10 @@ extension HostLifecycleHarness {
         else { throw HostWorkerError.invalidResponse }
     }
 
-    @MainActor static func verifyUsage(_ endpoint: ExtensionPeerEndpoint, restored: Bool)
-        async throws
-    {
-        try await verifyUsageHook(endpoint, restored: restored)
+    @MainActor static func verifyUsage(
+        _ endpoint: ExtensionPeerEndpoint, restored: Bool, fixture: WorkerLifecycleFixture?
+    ) async throws {
+        try await verifyUsageHook(endpoint, restored: restored, fixture: fixture)
         func object(_ command: String, _ input: [String: Any] = [:]) async throws -> Any {
             let data = try await endpoint.invoke(
                 command, payload: JSONSerialization.data(withJSONObject: input), timeout: 5)

@@ -65,6 +65,7 @@ public struct WorkerLifecycleFixture {
     }
 
     public func home(for id: String) throws -> URL {
+        try Self.validateDirectory(root, mode: 0o700)
         try Self.requireSupported(id)
         guard Self.validComponent(id) else { throw WorkerLifecycleFixtureError.identity }
         let home = root.appendingPathComponent(id + "-home", isDirectory: true)
