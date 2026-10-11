@@ -23,6 +23,40 @@ extension MusicExtensionTests {
             owner.shutdown()
         }
 
+        @Test func concurrentShutdownWaitsForCancelledWorkToActuallyReturn() async throws {
+            let owner = MusicTaskOwner()
+            var entered = false
+            var returned = false
+            var joined = false
+            var joinedAgain = false
+            var continuation: CheckedContinuation<Void, Never>?
+            let actual = owner.start {
+                entered = true
+                await withCheckedContinuation { continuation = $0 }
+                returned = true
+            }
+            try await eventually { entered && continuation != nil }
+            guard let held = continuation else {
+                Issue.record("The owned task did not enter its held operation.")
+                owner.shutdown()
+                return
+            }
+            owner.shutdown()
+            #expect(actual?.isCancelled == true)
+            #expect(owner.start { Issue.record("Shutdown admitted new work.") } == nil)
+            let first = Task { await owner.shutdownAndWait(); joined = true }
+            let second = Task { await owner.shutdownAndWait(); joinedAgain = true }
+            for _ in 0..<30 { await Task.yield() }
+            #expect(!joined && !joinedAgain && !returned)
+            held.resume()
+            continuation = nil
+            await first.value
+            await second.value
+            #expect(joined && joinedAgain && returned)
+            await actual?.value
+            await owner.shutdownAndWait()
+        }
+
         private func eventually(_ predicate: () -> Bool) async throws {
             for _ in 0..<100 {
                 if predicate() { return }
