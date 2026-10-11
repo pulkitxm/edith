@@ -279,7 +279,7 @@ import Testing
             "codebuff": ".config/manicode/projects/mock/chats/session/chat-messages.json",
         ]
         for (source, name) in files { try write(receipt(source), name) }
-        func assistant(_ id: String) -> [String: Any] {
+        @Sendable func assistant(_ id: String) -> [String: Any] {
             [
                 "type": "assistant", "timestamp": "2026-09-05T01:00:00Z", "sessionId": "mock-" + id,
                 "requestId": id,
