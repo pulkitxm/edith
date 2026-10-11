@@ -1,160 +1,13 @@
 import { expect, test } from "bun:test";
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import {
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { createHash, generateKeyPairSync } from "node:crypto";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  preflightHostRelease,
-  publishHostRelease,
-} from "./publish-host-release.mjs";
+import { preflightHostRelease } from "./publish-host-release.mjs";
 
-const assetNames = [
-  "Edith.dmg",
-  "appcast.xml",
-  "host-release-proof.json",
-  "build-metadata.json",
-  "toolchain-provenance.json",
-];
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
-function fixture(existing = false) {
-  const directory = mkdtempSync(join(tmpdir(), "edith-host-publication-"));
-  writeFileSync(join(directory, "Edith.dmg"), Buffer.alloc(50_000, 42));
-  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
-  const signature = sign(
-    null,
-    readFileSync(join(directory, "Edith.dmg")),
-    privateKey,
-  ).toString("base64");
-  writeFileSync(
-    join(directory, "appcast.xml"),
-    `<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><item><sparkle:version>123</sparkle:version><sparkle:shortVersionString>1.2.3</sparkle:shortVersionString><enclosure url="https://github.com/synthetic/fixture/releases/download/v1.2.3/Edith.dmg" length="50000" sparkle:edSignature="${signature}" /></item></channel></rss>`,
-  );
-  const sourceCommit = "a".repeat(40);
-  const hostExecutableSHA256 = "b".repeat(64);
-  const metadata = {
-    sourceCommit,
-    sourceTreeDirty: false,
-    configuration: "Release",
-    optimization: "Osize",
-    linkTimeOptimization: "full",
-    architecture: "arm64",
-    hostExecutableSHA256,
-  };
-  const toolchain = {
-    schema: 1,
-    sourceCommit,
-    hostExecutableSHA256,
-    xcode: "Xcode 26.0\nBuild version 17A400",
-    sdk: "26.0",
-    builderSignature: "ad-hoc",
-  };
-  const proof = {
-    schema: 1,
-    sourceCommit,
-    version: "1.2.3",
-    build: "123",
-    installedBytes: 1234,
-    extensionPayloadBytes: 0,
-    indexedExtensions: 39,
-    indexSHA256: "c".repeat(64),
-    hostExecutableSHA256,
-    certificateCategory: "Apple Development",
-    teamIdentifier: "ABCDEFGHIJ",
-    verifiedDesignatedRequirement:
-      'identifier "com.pulkit.edith" and anchor apple generic and certificate leaf[subject.OU] = "ABCDEFGHIJ"',
-    deepStrictSignatureVerified: true,
-    dmgBytes: 50000,
-    dmgSHA256: hash(readFileSync(join(directory, "Edith.dmg"))),
-    dmgURL:
-      "https://github.com/synthetic/fixture/releases/download/v1.2.3/Edith.dmg",
-    appcastSHA256: hash(readFileSync(join(directory, "appcast.xml"))),
-    sparklePublicKey: publicKey
-      .export({ format: "der", type: "spki" })
-      .subarray(-32)
-      .toString("base64"),
-    sparkleEd25519Verified: true,
-    notarization: "skipped",
-    publicationVerified: false,
-    managedViewsVerified: false,
-    hardwareVerified: false,
-    sourceQualification: "clean",
-    workflowSourceCommit: sourceCommit,
-    sourceMode: "current-workflow-source",
-  };
-  for (const [name, content] of [
-    ["host-release-proof.json", proof],
-    ["build-metadata.json", metadata],
-    ["toolchain-provenance.json", toolchain],
-  ])
-    writeFileSync(join(directory, name), JSON.stringify(content));
-  const calls = [];
-  let release = existing
-    ? { id: 7, tag_name: "v1.2.3", draft: true, assets: [] }
-    : undefined;
-  const execute = (command, args) => {
-    calls.push([command, ...args]);
-    if (command === "gh" && args[1].endsWith("git/ref/heads/main"))
-      return JSON.stringify({
-        ref: "refs/heads/main",
-        object: { type: "commit", sha: "a".repeat(40) },
-      });
-    if (command === "gh" && args[1].includes("/tags/")) {
-      if (release && !release.draft) return JSON.stringify(release);
-      throw Object.assign(new Error("Missing release"), { stderr: "HTTP 404" });
-    }
-    if (command === "gh" && args[1].includes("/releases?"))
-      return JSON.stringify(release ? [release] : []);
-    if (command === "gh" && args.includes("Accept: application/octet-stream")) {
-      const id = Number(args.at(-1).split("/").at(-1));
-      return release.assets.find((asset) => asset.id === id).bytes;
-    }
-    if (command === "pukbot" && args[1] === "create")
-      release = { id: 7, tag_name: "v1.2.3", draft: true, assets: [] };
-    if (command === "pukbot" && args[1] === "edit") release.draft = false;
-    return "{}";
-  };
-  return {
-    directory,
-    proof,
-    metadata,
-    toolchain,
-    calls,
-    execute,
-    matchesAsset: async ({ asset, file }) =>
-      Buffer.from(asset.bytes.data ?? asset.bytes).equals(readFileSync(file)),
-    get release() {
-      return release;
-    },
-    clean() {
-      rmSync(directory, { force: true, recursive: true });
-    },
-  };
-}
-function publish(value, options = {}) {
-  if (options.rebuild) {
-    value.proof.sourceMode = "tag-rebuild";
-    writeFileSync(
-      join(value.directory, "host-release-proof.json"),
-      JSON.stringify(value.proof),
-    );
-  }
-  return publishHostRelease({
-    directory: value.directory,
-    repository: "synthetic/fixture",
-    tag: "v1.2.3",
-    target: "a".repeat(40),
-    execute: value.execute,
-    matchesAsset: value.matchesAsset,
-    ...options,
-  });
-}
+import { assetNames, fixture, publish } from "./host-release-test-fixture.mjs";
+import "./host-release-races.test.js";
 
 test("publishes the host DMG signed appcast and three closed receipts through the release client", async () => {
   const value = fixture();
@@ -184,18 +37,16 @@ test("publishes the host DMG signed appcast and three closed receipts through th
 test("retries identical assets without uploading again", async () => {
   const value = fixture(true);
   try {
-    value.release.assets = assetNames.map((name, index) => ({
-      id: index + 1,
-      name,
-      bytes: readFileSync(join(value.directory, name)),
-    }));
+    value.release.assets = assetNames.map((name, index) =>
+      value.asset(name, index + 1),
+    );
     await publish(value);
     expect(
       value.calls
         .filter((args) => args[0] === "pukbot" && !args.includes("--dry-run"))
         .map((args) => args[2]),
     ).toEqual(["edit"]);
-    value.release.assets[0].bytes = Buffer.from("different");
+    value.remoteBytes.set(value.release.assets[0].id, Buffer.from("different"));
     await expect(publish(value)).rejects.toThrow(
       "Published host assets are immutable",
     );
@@ -208,9 +59,7 @@ test("retries identical assets without uploading again", async () => {
 test("rebuild replaces changed assets but requires an existing release", async () => {
   const value = fixture(true);
   try {
-    value.release.assets = [
-      { id: 9, name: "Edith.dmg", bytes: Buffer.from("old") },
-    ];
+    value.release.assets = [value.asset("Edith.dmg", 9, Buffer.from("old"))];
     await publish(value, { rebuild: true });
     expect(
       value.calls.some((args) => args[0] === "gh" && args.includes("DELETE")),
@@ -306,7 +155,7 @@ test("capacity fallback preflights every host asset without creating a release",
 test("failed existing asset verification never deletes or replaces an asset", async () => {
   const value = fixture(true);
   try {
-    value.release.assets = [{ id: 9, name: "Edith.dmg" }];
+    value.release.assets = [value.asset("Edith.dmg", 9)];
     await expect(
       publish(value, {
         rebuild: true,
@@ -409,8 +258,8 @@ test("publication accepts only the exact intentional release child of the built 
 test("duplicate remote asset names stop resumable publication before mutation", async () => {
   const value = fixture(true);
   value.release.assets = [
-    { id: 1, name: "Edith.dmg" },
-    { id: 2, name: "Edith.dmg" },
+    value.asset("Edith.dmg", 1),
+    value.asset("Edith.dmg", 2),
   ];
   try {
     await expect(publish(value, { rebuild: true })).rejects.toThrow(
@@ -428,21 +277,38 @@ test("duplicate remote asset names stop resumable publication before mutation", 
 });
 
 test("source advance during actual upload or immediately before promotion leaves the new release draft", async () => {
-  for (const failAt of [5, 14]) {
+  for (const stage of ["upload", "promotion"]) {
     const value = fixture();
-    let reads = 0;
+    let changed = false;
     try {
       const execute = (command, args, options) => {
-        if (command === "gh" && args[1].endsWith("git/ref/heads/main")) {
-          if (++reads === failAt)
-            return JSON.stringify({
-              ref: "refs/heads/main",
-              object: { type: "commit", sha: "b".repeat(40) },
-            });
-        }
-        return value.execute(command, args, options);
+        if (
+          changed &&
+          command === "gh" &&
+          args[1].endsWith("git/ref/heads/main")
+        )
+          return JSON.stringify({
+            ref: "refs/heads/main",
+            object: { type: "commit", sha: "b".repeat(40) },
+          });
+        const result = value.execute(command, args, options);
+        if (
+          stage === "upload" &&
+          command === "pukbot" &&
+          args[1] === "upload-asset" &&
+          !args.includes("--dry-run")
+        )
+          changed = true;
+        return result;
       };
-      await expect(publish(value, { execute })).rejects.toThrow("superseded");
+      const matchesAsset = async (options) => {
+        if (stage === "promotion" && options.asset.name === assetNames.at(-1))
+          changed = true;
+        return value.matchesAsset(options);
+      };
+      await expect(publish(value, { execute, matchesAsset })).rejects.toThrow(
+        "superseded",
+      );
       expect(value.release.draft).toBe(true);
       expect(
         value.calls.some((args) => args[0] === "pukbot" && args[2] === "edit"),
@@ -453,8 +319,8 @@ test("source advance during actual upload or immediately before promotion leaves
             args[0] === "pukbot" &&
             args[2] === "upload-asset" &&
             !args.includes("--dry-run"),
-        ).length,
-      ).toBe(failAt === 5 ? 1 : 5);
+        ),
+      ).toHaveLength(stage === "upload" ? 1 : 5);
     } finally {
       value.clean();
     }
@@ -463,7 +329,7 @@ test("source advance during actual upload or immediately before promotion leaves
 
 test("source advance during existing asset comparison never deletes or replaces the draft", async () => {
   const value = fixture(true);
-  value.release.assets = [{ id: 9, name: "Edith.dmg" }];
+  value.release.assets = [value.asset("Edith.dmg", 9)];
   let changed = false;
   try {
     await expect(
@@ -501,11 +367,9 @@ test("published host assets stay immutable and identical rebuilds never change l
     JSON.stringify(value.proof),
   );
   value.release.draft = false;
-  value.release.assets = assetNames.map((name, index) => ({
-    id: index + 1,
-    name,
-    bytes: readFileSync(join(value.directory, name)),
-  }));
+  value.release.assets = assetNames.map((name, index) =>
+    value.asset(name, index + 1),
+  );
   try {
     expect(await publish(value, { rebuild: true })).toEqual({
       tag: "v1.2.3",
@@ -517,7 +381,7 @@ test("published host assets stay immutable and identical rebuilds never change l
         (args) => args[0] === "pukbot" && !args.includes("--dry-run"),
       ),
     ).toBe(false);
-    value.release.assets[0].bytes = Buffer.from("changed");
+    value.remoteBytes.set(value.release.assets[0].id, Buffer.from("changed"));
     await expect(publish(value, { rebuild: true })).rejects.toThrow(
       "Publish a new version",
     );
@@ -724,9 +588,7 @@ test("successful promotion response must expose the exact public release", async
 
 test("draft asset deletion has bounded control output and deadline", async () => {
   const value = fixture(true);
-  value.release.assets = [
-    { id: 9, name: "Edith.dmg", bytes: Buffer.from("old") },
-  ];
+  value.release.assets = [value.asset("Edith.dmg", 9, Buffer.from("old"))];
   let deletes = 0;
   try {
     const execute = (command, args, options) => {
@@ -847,14 +709,15 @@ test("every public asset including provenance is immutable and required on retri
         JSON.stringify(value.proof),
       );
       value.release.draft = false;
-      value.release.assets = assetNames.map((asset, index) => ({
-        id: index + 1,
-        name: asset,
-        bytes: readFileSync(join(value.directory, asset)),
-      }));
+      value.release.assets = assetNames.map((asset, index) =>
+        value.asset(asset, index + 1),
+      );
       const asset = value.release.assets.find((item) => item.name === name);
       if (mode === "changed")
-        asset.bytes = Buffer.from("changed synthetic receipt");
+        value.remoteBytes.set(
+          asset.id,
+          Buffer.from("changed synthetic receipt"),
+        );
       if (mode === "missing")
         value.release.assets = value.release.assets.filter(
           (item) => item.name !== name,
@@ -879,11 +742,14 @@ test("every public asset including provenance is immutable and required on retri
 
 test("a later receipt comparison failure prevents every draft upload and replacement", async () => {
   const value = fixture(true);
-  value.release.assets = assetNames.map((name, index) => ({
-    id: index + 1,
-    name,
-    bytes: Buffer.from("old synthetic bytes"),
-  }));
+  value.proof.sourceMode = "tag-rebuild";
+  writeFileSync(
+    join(value.directory, "host-release-proof.json"),
+    JSON.stringify(value.proof),
+  );
+  value.release.assets = assetNames.map((name, index) =>
+    value.asset(name, index + 1),
+  );
   const compared = [];
   try {
     await expect(
@@ -893,7 +759,7 @@ test("a later receipt comparison failure prevents every draft upload and replace
           compared.push(asset.name);
           if (asset.name === "toolchain-provenance.json")
             throw new Error("Receipt comparison timed out");
-          return false;
+          return true;
         },
       }),
     ).rejects.toThrow("timed out");

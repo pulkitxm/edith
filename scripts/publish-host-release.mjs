@@ -1,9 +1,15 @@
 import { execFileSync } from "node:child_process";
-import { createHash, createPublicKey, verify } from "node:crypto";
-import { lstatSync, readFileSync } from "node:fs";
+import { createPublicKey, verify } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { verifyCurrentMain } from "./extension-release-ready.mjs";
+import {
+  assetSnapshot,
+  hostAssets,
+  privateHostAssets,
+  requireAssetSnapshot,
+} from "./host-release-snapshot.mjs";
 import { releaseAssetMatchesFile } from "./release-asset-read.mjs";
 import {
   executeReleaseMutation,
@@ -12,34 +18,28 @@ import {
 } from "./release-asset-upload.mjs";
 import { lookupRelease } from "./release-lookup.mjs";
 
-const hostAssets = [
-  "Edith.dmg",
-  "appcast.xml",
-  "host-release-proof.json",
-  "build-metadata.json",
-  "toolchain-provenance.json",
-];
-
-function assetSnapshot(directory) {
-  return hostAssets
-    .map((name) => {
-      const file = resolve(directory, name);
-      const status = lstatSync(file);
-      if (
-        !status.isFile() ||
-        status.nlink !== 1 ||
-        status.size < 1 ||
-        status.size > (name === "Edith.dmg" ? 1024 ** 3 : 1024 ** 2)
-      )
-        throw new Error("Invalid bounded release asset");
-      return createHash("sha256").update(readFileSync(file)).digest("hex");
-    })
-    .join(":");
-}
-
-function requireAssetSnapshot(directory, snapshot) {
-  if (assetSnapshot(directory) !== snapshot)
-    throw new Error("Host release assets changed after preflight");
+function releaseInventory(release) {
+  const names = new Set();
+  const ids = new Set();
+  for (const asset of release.assets) {
+    if (names.has(asset.name) || ids.has(asset.id))
+      throw new Error("Ambiguous host release asset");
+    if (
+      !hostAssets.includes(asset.name) ||
+      !Number.isSafeInteger(asset.id) ||
+      asset.id < 1 ||
+      !Number.isSafeInteger(asset.size) ||
+      asset.size < 1 ||
+      asset.size > (asset.name === "Edith.dmg" ? 1024 ** 3 : 1024 ** 2) ||
+      asset.state !== "uploaded"
+    )
+      throw new Error("Invalid host release inventory. Publish a new version.");
+    names.add(asset.name);
+    ids.add(asset.id);
+  }
+  return release.assets
+    .map(({ id, name, size, state }) => [id, name, size, state])
+    .sort((left, right) => left[1].localeCompare(right[1]));
 }
 
 export function preflightHostRelease({
@@ -137,111 +137,212 @@ export async function publishHostRelease({
   },
 }) {
   if (!/^[0-9a-f]{40}$/.test(target)) throw new Error("Invalid release target");
-  const snapshot = assetSnapshot(directory);
-  const assets = preflightHostRelease({
-    directory,
-    repository,
-    tag,
-    source: sourceTarget,
-    rebuild,
-    execute,
-  });
-  const verifyInputs = async () => {
-    await verifySource();
-    requireAssetSnapshot(directory, snapshot);
-  };
-  const gh = (...args) =>
-    execute("gh", args, {
-      encoding: "utf8",
-      timeout: 60_000,
-      killSignal: "SIGKILL",
-      maxBuffer: 1024 ** 2,
-    });
-  const mutate = (...args) =>
-    executeReleaseMutation([...args, "--repo", repository], { execute });
-  await verifyInputs();
-  let release = lookupRelease({ repository, tag, execute });
-  if (!release) {
-    if (rebuild) throw new Error("Cannot rebuild a missing release");
-    await verifyInputs();
-    mutate(
-      "release",
-      "create",
-      tag,
-      "--name",
-      `Edith ${tag}`,
-      "--target",
-      target,
-      "--draft",
-      "--generate-notes",
-    );
-    await verifyInputs();
-    release = lookupRelease({ repository, tag, execute });
-    if (!release) throw new Error("Created host release is not available");
-  }
-  const changes = [];
-  for (const name of assets) {
-    const file = resolve(directory, name);
-    const matches = release.assets.filter((asset) => asset.name === name);
-    if (matches.length > 1)
-      throw new Error(`Ambiguous host release asset: ${name}`);
-    const existing = matches[0];
-    if (existing) {
-      const identical = await matchesAsset({
-        repository,
-        asset: existing,
-        file,
-      });
-      await verifyInputs();
-      if (identical) continue;
-      if (!release.draft)
-        throw new Error(
-          `Published host assets are immutable: ${name}. Publish a new version.`,
-        );
-      if (!rebuild) throw new Error(`Existing release asset differs: ${name}`);
-    }
-    if (!release.draft)
-      throw new Error(
-        `Published host asset is missing: ${name}. Publish a new version.`,
-      );
-    changes.push({ name, file, existing });
-  }
-  for (const { file, existing } of changes) {
-    await verifyInputs();
-    if (existing) {
-      gh(
-        "api",
-        "--method",
-        "DELETE",
-        `repos/${repository}/releases/assets/${existing.id}`,
-      );
-      await verifyInputs();
-    }
-    await uploadReleaseAsset({
+  const copies = privateHostAssets(directory);
+  try {
+    const assets = preflightHostRelease({
+      directory: copies.directory,
       repository,
-      releaseID: release.id,
       tag,
-      file,
+      source: sourceTarget,
+      rebuild,
       execute,
     });
+    const verifyFiles = () => {
+      requireAssetSnapshot(directory, copies.original);
+      requireAssetSnapshot(copies.directory, copies.snapshot);
+    };
+    const verifyInputs = async () => {
+      await verifySource();
+      verifyFiles();
+    };
+    const readRelease = () => lookupRelease({ repository, tag, execute });
+    const requireIdentity = (value, draft, id) => {
+      if (
+        !value ||
+        value.id !== id ||
+        value.tag_name !== tag ||
+        value.target_commitish !== target ||
+        value.draft !== draft
+      )
+        throw new Error("Host release identity or draft state changed");
+      releaseInventory(value);
+      return value;
+    };
+    const requireStable = (expected) => {
+      const current = requireIdentity(
+        readRelease(),
+        expected.draft,
+        expected.id,
+      );
+      if (
+        JSON.stringify(releaseInventory(current)) !==
+        JSON.stringify(releaseInventory(expected))
+      )
+        throw new Error("Host release inventory changed concurrently");
+      return current;
+    };
+    const guardSource = () => {
+      const reference = JSON.parse(
+        execute("gh", ["api", `repos/${repository}/git/ref/heads/main`], {
+          encoding: "utf8",
+          timeout: 60_000,
+          killSignal: "SIGKILL",
+          maxBuffer: 1024 ** 2,
+        }),
+      );
+      if (
+        reference.ref !== "refs/heads/main" ||
+        reference.object?.type !== "commit" ||
+        reference.object.sha !== target
+      )
+        throw new Error(
+          "App publication superseded: main moved after the release build",
+        );
+    };
     await verifyInputs();
+    let release = readRelease();
+    if (!release) {
+      if (rebuild) throw new Error("Cannot rebuild a missing release");
+      await verifyInputs();
+      executeReleaseMutation(
+        [
+          "release",
+          "create",
+          tag,
+          "--name",
+          `Edith ${tag}`,
+          "--target",
+          target,
+          "--draft",
+          "--generate-notes",
+          "--repo",
+          repository,
+        ],
+        {
+          execute: (command, args, options) => {
+            if (command === "pukbot") {
+              guardSource();
+              verifyFiles();
+              if (readRelease())
+                throw new Error("Host release appeared concurrently");
+            }
+            return execute(command, args, options);
+          },
+        },
+      );
+      await verifyInputs();
+      release = readRelease();
+      if (!release) throw new Error("Created host release is not available");
+    }
+    requireIdentity(release, release.draft, release.id);
+    const compareAsset = async (expected, existing) => {
+      const local = copies.snapshot.find(
+        (asset) => asset.name === existing.name,
+      );
+      const identical =
+        existing.size === local.size &&
+        (await matchesAsset({
+          repository,
+          asset: existing,
+          file: resolve(copies.directory, existing.name),
+        }));
+      await verifyInputs();
+      requireStable(expected);
+      if (!identical)
+        throw new Error(
+          `Published host assets are immutable: ${existing.name}. Publish a new version.`,
+        );
+    };
+    const compare = async (expected, complete) => {
+      if (complete && expected.assets.length !== assets.length)
+        throw new Error(
+          "Host release asset is missing. Publish a new version.",
+        );
+      for (const name of assets) {
+        const existing = expected.assets.find((asset) => asset.name === name);
+        if (existing) await compareAsset(expected, existing);
+      }
+      await verifyInputs();
+      requireStable(expected);
+    };
+    await compare(release, !release.draft);
+    if (!release.draft) return { tag, assets, unchanged: true };
+    for (const name of assets) {
+      if (release.assets.some((asset) => asset.name === name)) continue;
+      await verifyInputs();
+      requireStable(release);
+      await uploadReleaseAsset({
+        repository,
+        releaseID: release.id,
+        tag,
+        file: resolve(copies.directory, name),
+        execute: (command, args, options) => {
+          if (
+            (command === "pukbot" && !args.includes("--dry-run")) ||
+            (command === "gh" && args[0] === "release" && args[1] === "upload")
+          ) {
+            guardSource();
+            verifyFiles();
+            requireStable(release);
+          }
+          return execute(command, args, options);
+        },
+      });
+      await verifyInputs();
+      const current = requireIdentity(readRelease(), true, release.id);
+      const appended = current.assets.find((asset) => asset.name === name);
+      if (
+        !appended ||
+        current.assets.length !== release.assets.length + 1 ||
+        JSON.stringify(
+          releaseInventory({
+            assets: current.assets.filter((asset) => asset.name !== name),
+          }),
+        ) !== JSON.stringify(releaseInventory(release))
+      )
+        throw new Error("Host release inventory changed concurrently");
+      await compareAsset(current, appended);
+      release = current;
+    }
+    await compare(release, true);
+    executeReleaseMutation(
+      [
+        "release",
+        "edit",
+        String(release.id),
+        "--draft",
+        "false",
+        "--make-latest",
+        "true",
+        "--repo",
+        repository,
+      ],
+      {
+        execute: (command, args, options) => {
+          if (command === "pukbot") {
+            guardSource();
+            verifyFiles();
+            requireStable(release);
+          }
+          return execute(command, args, options);
+        },
+      },
+    );
+    await verifyInputs();
+    const published = readRelease();
+    if (!published || published.draft || published.id !== release.id)
+      throw new Error("Published host release state was not confirmed");
+    requireIdentity(published, false, release.id);
+    if (
+      JSON.stringify(releaseInventory(published)) !==
+      JSON.stringify(releaseInventory(release))
+    )
+      throw new Error("Host release inventory changed concurrently");
+    await compare(published, true);
+    return { tag, assets };
+  } finally {
+    copies.cleanup();
   }
-  await verifyInputs();
-  if (!release.draft) return { tag, assets, unchanged: true };
-  mutate(
-    "release",
-    "edit",
-    String(release.id),
-    "--draft",
-    "false",
-    "--make-latest",
-    "true",
-  );
-  await verifyInputs();
-  const published = lookupRelease({ repository, tag, execute });
-  if (!published || published.draft || published.id !== release.id)
-    throw new Error("Published host release state was not confirmed");
-  return { tag, assets };
 }
 
 if (
