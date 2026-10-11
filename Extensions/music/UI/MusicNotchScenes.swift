@@ -48,8 +48,10 @@ struct EmbeddedNotchNowPlaying: Equatable {
     private let detailed: Bool
     private(set) var state: EmbeddedMusicNotchState?
     private var requestError: String?
+    private var actionError: String?
+    private var actionRevision: UInt64 = 0
     var nowPlayingControlError: String? {
-        requestError ?? (nowPlaying?.source == .local ? nil : state?.controlError)
+        actionError ?? requestError ?? (nowPlaying?.source == .local ? nil : state?.controlError)
     }
     private(set) var closed = false
     @ObservationIgnored private let invoke: (String, Data) async throws -> Data
@@ -102,8 +104,8 @@ struct EmbeddedNotchNowPlaying: Equatable {
         guard let image = try? thumbnail?.decodedImage() else { return nil }
         return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
     }
-    func refresh(retry: Bool = false) async {
-        guard !closed, reading == nil else { return }
+    @discardableResult func refresh(retry: Bool = false) async -> Bool {
+        guard !closed, reading == nil else { return false }
         let token = revision
         let task = Task {
             let payload = try request.encoded(providerID: "music")
@@ -119,7 +121,7 @@ struct EmbeddedNotchNowPlaying: Equatable {
             let value = try await withTaskCancellationHandler(
                 operation: { try await task.value }, onCancel: { task.cancel() })
             try Task.checkCancellation()
-            guard !closed, revision == token else { return }
+            guard !closed, revision == token else { return false }
             guard expectedVersion == nil || value.version == expectedVersion else {
                 state = nil; selectedSource = nil
                 throw ExtensionPeerError.invalidRequest
@@ -141,10 +143,12 @@ struct EmbeddedNotchNowPlaying: Equatable {
                 selectedSource = local?.sourceID
             }
             state = value; requestError = nil
+            return true
         } catch {
             if !closed, revision == token, !Task.isCancelled, !task.isCancelled {
                 requestError = error.localizedDescription
             }
+            return false
         }
     }
     func suspend() {
@@ -168,6 +172,8 @@ struct EmbeddedNotchNowPlaying: Equatable {
                 ? action(kind)?.id : slider(kind == "seek" ? "progress" : kind)?.id
         else { return }
         let token = revision
+        actionRevision &+= 1
+        let actionToken = actionRevision
         let id = UUID()
         actions[id] = Task { [weak self] in
             guard let self else { return }
@@ -185,10 +191,11 @@ struct EmbeddedNotchNowPlaying: Equatable {
                 }
                 try Task.checkCancellation()
                 guard !closed, token == revision else { return }
+                if actionRevision == actionToken { actionError = nil }
                 await refresh()
             } catch {
-                if !Task.isCancelled, !closed, token == revision {
-                    requestError = error.localizedDescription
+                if !Task.isCancelled, !closed, token == revision, actionRevision == actionToken {
+                    actionError = error.localizedDescription
                 }
             }
         }
@@ -205,9 +212,13 @@ struct EmbeddedNotchNowPlaying: Equatable {
     func skipNowPlaying(_ seconds: Double) { perform(seconds < 0 ? "backward" : "forward") }
     func retryNowPlayingControls() {
         guard !closed else { return }
+        actionRevision &+= 1
+        let actionToken = actionRevision
         let id = UUID()
         actions[id] = Task { [weak self] in
-            await self?.refresh(retry: true); self?.actions[id] = nil
+            guard let self else { return }
+            if await refresh(retry: true), actionRevision == actionToken { actionError = nil }
+            actions[id] = nil
         }
     }
 }

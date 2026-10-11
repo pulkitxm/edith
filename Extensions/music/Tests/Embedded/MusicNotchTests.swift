@@ -118,6 +118,26 @@ import Testing
         #expect(model.nowPlaying == nil)
     }
 
+    @Test func rejectedControlRemainsVisibleAcrossSnapshotRefreshUntilExplicitRetry() async throws {
+        let service = engine(states: { [playback()] })
+        let route = try #require(EmbeddedMusicNotchRoute(context: context(.card)))
+        let model = EmbeddedMusicNotchModel(request: route.request) { operation, payload in
+            if operation == "surface.perform" { throw ExtensionPeerError.invalidRequest }
+            return try await service.execute(operation, payload: payload)
+        }
+        await model.refresh()
+        model.nowPlayingPlayPause()
+        for _ in 0..<50 where model.nowPlayingControlError == nil { await Task.yield() }
+        let failure = try #require(model.nowPlayingControlError)
+        await model.refresh()
+        #expect(model.nowPlaying?.title == "Mock Garden")
+        #expect(model.nowPlayingControlError == failure)
+        model.retryNowPlayingControls()
+        for _ in 0..<50 where model.nowPlayingControlError != nil { await Task.yield() }
+        #expect(model.nowPlayingControlError == nil)
+        model.shutdown()
+    }
+
     @Test func pausedSelectionPrivacyAndTileActionsMatchOriginalNotchOwnership() async throws {
         var values = [playback(), playback("external.music", playing: false)]
         var hidden = false
@@ -167,7 +187,7 @@ import Testing
         for _ in 0..<50 where pending == nil { await Task.yield() }
         #expect(pending != nil)
         model.shutdown(); pending?.resume(returning: encoded)
-        await read.value
+        #expect(await read.value == false)
         #expect(model.closed && model.state == nil)
         #expect(model.nowPlayingControlError == nil)
         var invalid = try EmbeddedMusicNotchState.decode(encoded)
