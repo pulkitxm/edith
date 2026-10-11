@@ -55,7 +55,9 @@ final class FocusDimEngine: FeatureModule {
     private var repositionToken: UUID?
     private var repositionJoin: Task<Void, Never>?
     private var animations: Set<UUID> = []
-    private var animationWaiters: [CheckedContinuation<Void, Never>] = []
+    private var animationEpoch = UUID()
+    private var animationWaiter: (UUID, CheckedContinuation<Void, Never>)?
+    private var animationDrain: Task<Void, Never>?
 
     private let fixture: WorkerFixtureAdmission?
     var systemResourceCount: Int {
@@ -304,15 +306,19 @@ final class FocusDimEngine: FeatureModule {
         completionHandler: @escaping () -> Void
     ) {
         let id = UUID()
+        if animations.isEmpty {
+            animationEpoch = UUID()
+            animationDrain = nil
+        }
         animations.insert(id)
         NSAnimationContext.runAnimationGroup(changes) { [self] in
             MainActor.assumeIsolated {
                 completionHandler()
                 animations.remove(id)
                 if animations.isEmpty {
-                    let waiters = animationWaiters
-                    animationWaiters.removeAll()
-                    for waiter in waiters { waiter.resume() }
+                    let waiter = animationWaiter
+                    animationWaiter = nil
+                    if let waiter, waiter.0 == animationEpoch { waiter.1.resume() }
                 }
             }
         }
@@ -324,9 +330,14 @@ final class FocusDimEngine: FeatureModule {
         let joined = repositionJoin
         await task?.value
         await joined?.value
-        if !animations.isEmpty {
-            await withCheckedContinuation { animationWaiters.append($0) }
+        if animationDrain == nil, !animations.isEmpty {
+            let epoch = animationEpoch
+            animationDrain = Task { [self] in
+                guard !animations.isEmpty, animationEpoch == epoch else { return }
+                await withCheckedContinuation { animationWaiter = (epoch, $0) }
+            }
         }
+        await animationDrain?.value
     }
 
     private func applyOrder(_ overlay: NSWindow, below windowNumber: Int?) {

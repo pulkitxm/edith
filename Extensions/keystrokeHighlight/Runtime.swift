@@ -16,7 +16,9 @@ final class ExtensionRuntime: NSObject {
     private var presentation: ControlPresentation?
 
     private var fixture: WorkerFixtureAdmission?
+    #if EDITH_FUNCTIONAL_FIXTURE
     private var engineAdmission: WorkerFixtureEngineAdmission?
+    #endif
     private let commands = ExtensionCommandRegistry()
     private var suspended = false
     private var suspension: Task<Void, Never>?
@@ -24,10 +26,14 @@ final class ExtensionRuntime: NSObject {
     private var retiredServices: [UUID: Task<Void, Never>] = [:]
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
+        #if EDITH_FUNCTIONAL_FIXTURE
         let token = (request["token"] as? String).flatMap { UUID(uuidString: $0) }
         let admission = engineAdmission
+        #endif
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self, let token, self.engineAdmission === admission else {
+            guard let self else { throw ExtensionPeerError.unavailable }
+            #if EDITH_FUNCTIONAL_FIXTURE
+            guard let token, self.engineAdmission === admission else {
                 throw ExtensionPeerError.unavailable
             }
             let admitted = try admission?.beginRequest(
@@ -35,8 +41,11 @@ final class ExtensionRuntime: NSObject {
             defer {
                 if let admitted { admission?.cancelRequest(admitted) }
             }
+            #endif
             let reply = try await self.executeCommand(command, payload: payload)
+            #if EDITH_FUNCTIONAL_FIXTURE
             if let admitted { try admission?.completeRequest(admitted) }
+            #endif
             return reply
         }
     }
@@ -122,6 +131,12 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    private func requireEngineCurrent() throws {
+        #if EDITH_FUNCTIONAL_FIXTURE
+        try engineAdmission?.requireCurrent()
+        #endif
+    }
+
     private func startService(_ input: NSDictionary) -> Bool {
         guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
         else { return false }
@@ -188,6 +203,7 @@ final class ExtensionRuntime: NSObject {
         case "start":
             guard !suspended else { return ["ok": false] as NSDictionary }
             do {
+                #if EDITH_FUNCTIONAL_FIXTURE
                 let admission = try WorkerFixtureEngineAdmission.current(
                     extensionID: "keystrokeHighlight", context: input,
                     roleBundle: Bundle(for: ExtensionRuntime.self), expectedRole: .helper)
@@ -205,6 +221,15 @@ final class ExtensionRuntime: NSObject {
                     started = startService(input)
                 }
                 return ["ok": started] as NSDictionary
+                #else
+                guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+                    input["hostedFunctionalFixture"] == nil
+                else { return ["ok": false] as NSDictionary }
+                fixture = try WorkerFixtureAdmission.current(
+                    extensionID: "keystrokeHighlight", context: input,
+                    roleBundle: Bundle(for: ExtensionRuntime.self))
+                return ["ok": startService(input)] as NSDictionary
+                #endif
             } catch { return ["ok": false] as NSDictionary }
         case "view":
             guard let presentation else { return ["ok": false] as NSDictionary }
@@ -220,7 +245,7 @@ final class ExtensionRuntime: NSObject {
                     }
                 })
         case "synchronize":
-            do { try engineAdmission?.requireCurrent() } catch {
+            do { try requireEngineCurrent() } catch {
                 return ["ok": false] as NSDictionary
             }
             synchronize()
