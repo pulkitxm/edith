@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "reviewedSource": "d8abf44dc6806caf656b3cd71457bb3a83beac2a",
+  "reviewedSource": "a9b55f11c0785d299b05e35aeb694175504c02ef",
   "owners": [
     {
       "id": "keepAwake",
@@ -20,7 +20,7 @@
         },
         {
           "path": "Extensions/keepAwake/Presentation.swift",
-          "sha256": "05080da07a2dcacde3d2623fe2684aacfb21954ae08f68954f5d363d629f332c"
+          "sha256": "63065ce8edc1d813eff0fe7b148ff959d96499569f1584418a988e0d0b9c1f8a"
         }
       ]
     },
