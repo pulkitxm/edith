@@ -29,30 +29,42 @@ import WorkerFixtureTestSupport
         #expect(!FileManager.default.fileExists(atPath: root.path))
     }
 
-    @Test func suspensionClosesStartupAndCommandAdmissionSynchronously() async throws {
-        let suite = try #require(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
-        let runtime = ExtensionRuntime()
-        await withCheckedContinuation { continuation in
-            runtime.suspendCommands { continuation.resume() }
-            #expect(
-                (runtime.execute(["operation": "start", "defaultsSuite": suite]) as? NSDictionary)?[
-                    "ok"] as? Bool == false)
-            var replies = 0
-            runtime.invoke([
-                "token": UUID().uuidString, "command": "systemStats.ui.read",
-                "payload": Data("{}".utf8),
-            ]) { data, error in
-                replies += 1
-                #expect(data == nil && error != nil)
-            }
-            #expect(replies == 1)
+    @Test func presentationDrainJoinsOriginalReadAndClosesAdmission() async throws {
+        let suite = "edith.tests.owned-control-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let fence = ControlReadReturnFence()
+        var reads = 0
+        let presentation = ControlPresentation(
+            client: nil, defaults: defaults,
+            invoke: { operation, _ in
+                #expect(operation == "systemStats.ui.read")
+                reads += 1
+                await fence.enterAndWait()
+                return Data("{}".utf8)
+            })
+        let read = Task { await presentation.refresh() }
+        await fence.waitForEntry()
+        presentation.stop()
+        #expect(!presentation.running)
+        await presentation.refresh()
+        #expect(reads == 1)
+        var started = 0, returned = 0
+        let first = Task {
+            started += 1; await presentation.stopAndWait(); returned += 1
         }
-        await withCheckedContinuation { continuation in
-            runtime.suspendCommands { continuation.resume() }
+        let second = Task {
+            started += 1; await presentation.stopAndWait(); returned += 1
         }
-        #expect(
-            (runtime.execute(["operation": "start", "defaultsSuite": suite]) as? NSDictionary)?[
-                "ok"] as? Bool == false)
+        while started != 2 { await Task.yield() }
+        for _ in 0..<100 { await Task.yield() }
+        #expect(returned == 0)
+        await fence.release()
+        await read.value
+        await first.value
+        await second.value
+        #expect(returned == 2 && reads == 1)
+        #expect(!presentation.ready)
     }
 
     @Test func metricsUseSyntheticSnapshotWithoutMenuOrTimer() throws {
@@ -66,4 +78,30 @@ import WorkerFixtureTestSupport
         #expect(engine.systemResourceCount == 0)
     }
 
+}
+
+private actor ControlReadReturnFence {
+    private var entered = false
+    private var open = false
+    private var entrance: CheckedContinuation<Void, Never>?
+    private var pending: CheckedContinuation<Void, Never>?
+
+    func enterAndWait() async {
+        entered = true
+        entrance?.resume()
+        entrance = nil
+        if open { return }
+        await withCheckedContinuation { pending = $0 }
+    }
+
+    func waitForEntry() async {
+        if entered { return }
+        await withCheckedContinuation { entrance = $0 }
+    }
+
+    func release() {
+        open = true
+        pending?.resume()
+        pending = nil
+    }
 }
