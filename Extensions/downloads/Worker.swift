@@ -58,9 +58,21 @@ final class DownloadsWorker {
         default: throw ExtensionPeerError.invalidRequest
         }
     }
-    func shutdown() async {
-        guard !stopped else { return }
+    func cancelPendingWork() async {
         stopped = true
+        startup?.cancel()
+        downloader.cancelPendingWork()
+        await queue.cancelPendingWork()
+    }
+    private var shutdownTask: Task<Void, Never>?
+    func shutdown() async {
+        await cancelPendingWork()
+        if let shutdownTask { await shutdownTask.value; return }
+        let task = Task { await finishShutdown() }
+        shutdownTask = task
+        await task.value
+    }
+    private func finishShutdown() async {
         startup?.cancel()
         await startup?.value
         startup = nil

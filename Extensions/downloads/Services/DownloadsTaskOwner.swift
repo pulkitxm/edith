@@ -13,11 +13,13 @@ final class DownloadsTaskOwner {
             await operation()
         }
     }
-    func shutdown() async {
+    func cancel() {
         stopped = true
+        for task in tasks.values { task.cancel() }
+    }
+    func shutdown() async {
+        cancel()
         let pending = Array(tasks.values)
-        for task in pending { task.cancel() }
-        tasks.removeAll()
         for task in pending { await task.value }
     }
     nonisolated static func detached<Value: Sendable>(

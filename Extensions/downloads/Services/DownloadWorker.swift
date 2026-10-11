@@ -107,6 +107,7 @@ public actor DownloadWorker {
     private var activityReadError: String?
     private var activityPersistenceError: String?
     private struct Flight {
+        var token: UUID
         var task: Task<Void, Never>
         var progress: Task<Void, Never>?
         var output: DownloadWorkerOutput
@@ -116,6 +117,8 @@ public actor DownloadWorker {
     static let maximumConcurrent = 3
     private var logs: [String: String] = [:]
     private var flights: [UUID: Flight] = [:]
+    private var retiredFlights: [UUID: Task<Void, Never>] = [:]
+    private var stopTask: Task<Void, Never>?
     private var started = false
     private var stopping = false
     private let generation = UUID()
@@ -188,13 +191,31 @@ public actor DownloadWorker {
         notify()
     }
 
-    public func stop() async {
+    public func cancelPendingWork() {
         stopping = true
         started = false
         observationTask?.cancel()
-        observationTask = nil
+        for flight in flights.values {
+            flight.task.cancel()
+            flight.progress?.cancel()
+        }
+        for task in retiredFlights.values { task.cancel() }
+        for task in estimates.values { task.cancel() }
+    }
+
+    public func stop() async {
+        cancelPendingWork()
+        if let stopTask { await stopTask.value; return }
+        let task = Task { await finishStop() }
+        stopTask = task
+        await task.value
+    }
+
+    private func finishStop() async {
+        let observation = observationTask
         let running = Array(flights.keys)
         for id in running { interrupt(id, reason: "Downloads stopped.") }
+        let retired = Array(retiredFlights.values)
         let tasks = flights.values.map(\.task)
         let progressTasks = flights.values.compactMap(\.progress)
         let estimates = Array(self.estimates.values)
@@ -203,7 +224,11 @@ public actor DownloadWorker {
             flight.task.cancel()
             flight.progress?.cancel()
         }
+        await observation?.value
+        observationTask = nil
         for task in tasks { await task.value }
+        for task in retired { await task.value }
+        for task in Array(retiredFlights.values) { await task.value }
         schedulerLease = nil
         for task in progressTasks { await task.value }
         for task in estimates { _ = await task.result }
@@ -465,7 +490,7 @@ public actor DownloadWorker {
             }
         }
         flights[record.id] = Flight(
-            task: task, progress: progress, output: buffer, publishedRevision: 0)
+            token: UUID(), task: task, progress: progress, output: buffer, publishedRevision: 0)
         notify()
         return true
     }
@@ -511,6 +536,11 @@ public actor DownloadWorker {
     private func finish(_ id: UUID, result: Result<CLICommandResult, Error>) async {
         guard let flight = flights.removeValue(forKey: id) else { return }
         flight.progress?.cancel()
+        retiredFlights[flight.token] = Task { [self, flight] in
+            await flight.task.value
+            await flight.progress?.value
+            retiredFlights[flight.token] = nil
+        }
         logs[id.uuidString] = flight.output.snapshot.0
         var succeeded = false
         try? update { records in
