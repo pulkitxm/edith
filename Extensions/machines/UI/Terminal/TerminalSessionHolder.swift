@@ -439,7 +439,7 @@ final class TerminalSessionHolder {
             }
         }
         view.onReady = { [weak self, weak view] in
-            guard let self, let view, self.generation == viewGeneration else { return }
+            guard let self, view != nil, self.generation == viewGeneration else { return }
             self.startEngine()
         }
         ghosttyView = view

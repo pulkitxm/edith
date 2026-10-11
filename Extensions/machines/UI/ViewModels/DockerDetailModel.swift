@@ -713,9 +713,11 @@ struct DockerContainerDetail: View {
             VStack(alignment: .leading, spacing: UIScale.pt(14)) {
                 if model.inspectLoad.isRefreshing { LoadingIndicator("Refreshing configuration") }
                 if model.inspectLoad.hasContent, let message = model.inspectLoad.errorMessage {
-                    PageNotice(message, tone: .error) {
-                        Button("Retry") { loadGeneration &+= 1 }
-                    }
+                    PageNotice(
+                        message, tone: .error,
+                        actions: {
+                            Button("Retry") { loadGeneration &+= 1 }
+                        })
                 }
                 if let inspect = model.inspect {
                     section("Image", [inspect.image])
@@ -849,9 +851,11 @@ struct DockerContainerDetail: View {
         ScrollView {
             if model.processesLoad.isRefreshing { LoadingIndicator("Refreshing processes") }
             if model.processesLoad.hasContent, let message = model.processesLoad.errorMessage {
-                PageNotice(message, tone: .error) {
-                    Button("Retry") { loadGeneration &+= 1 }
-                }
+                PageNotice(
+                    message, tone: .error,
+                    actions: {
+                        Button("Retry") { loadGeneration &+= 1 }
+                    })
             }
             if !model.processesLoad.hasContent,
                 model.processesLoading || !model.processesLoaded && !model.processesFailed
@@ -930,9 +934,11 @@ struct DockerContainerDetail: View {
                 LazyVStack(spacing: 0) {
                     if model.filesLoad.isRefreshing { LoadingIndicator("Refreshing files") }
                     if model.filesLoad.hasContent, let message = model.filesLoad.errorMessage {
-                        PageNotice(message, tone: .error) {
-                            Button("Retry") { loadGeneration &+= 1 }
-                        }
+                        PageNotice(
+                            message, tone: .error,
+                            actions: {
+                                Button("Retry") { loadGeneration &+= 1 }
+                            })
                     }
                     if !model.filesLoad.hasContent,
                         model.filesLoading || !model.filesLoaded && !model.filesFailed

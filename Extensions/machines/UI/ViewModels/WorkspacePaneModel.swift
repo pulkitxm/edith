@@ -163,7 +163,7 @@ struct WorkspacePaneView: View {
             Color.clear
         } else {
             ZStack {
-                ForEach(pane.tabs) { tab in
+                ForEach(pane.tabs) { [model] tab in
                     let live = tab.id == (selectedTab?.id ?? pane.selected)
                     PaneContentView(
                         session: machines.session(for: tab.target.machineID),
