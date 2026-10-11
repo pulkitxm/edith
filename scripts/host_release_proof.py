@@ -14,6 +14,8 @@ import xml.etree.ElementTree as ET
 from verify_shipping_host import inspect_layout
 
 SPARKLE = '{http://www.andymatuschak.org/xml-namespaces/sparkle}'
+METADATA_FIELDS = ('sourceCommit', 'sourceTreeDirty', 'configuration', 'optimization', 'linkTimeOptimization', 'architecture', 'hostExecutableSHA256')
+TOOLCHAIN_FIELDS = ('schema', 'sourceCommit', 'hostExecutableSHA256', 'xcode', 'sdk', 'builderSignature')
 
 
 def require(condition, message):
@@ -26,6 +28,51 @@ def document(path, maximum=1024 * 1024):
     status = path.lstat()
     require(stat.S_ISREG(status.st_mode) and status.st_nlink == 1 and 0 < status.st_size <= maximum, 'Invalid bounded regular document')
     return path.read_bytes()
+
+
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        require(key not in result, 'Duplicate document field')
+        result[key] = value
+    return result
+
+
+def json_document(path):
+    return json.loads(document(path), object_pairs_hook=unique_object)
+
+
+def closed_fields(value, fields):
+    require(type(value) is dict and set(value) == set(fields), 'Unexpected document fields')
+
+
+def validate_metadata(metadata):
+    closed_fields(metadata, METADATA_FIELDS)
+    require(type(metadata['sourceCommit']) is str and re.fullmatch('[a-f0-9]{40}', metadata['sourceCommit']) is not None, 'Invalid metadata source')
+    require(type(metadata['hostExecutableSHA256']) is str and re.fullmatch('[a-f0-9]{64}', metadata['hostExecutableSHA256']) is not None, 'Invalid metadata executable hash')
+    require(type(metadata['sourceTreeDirty']) is bool, 'Invalid metadata source state')
+    require(metadata['configuration'] == 'Release' and metadata['optimization'] == 'Osize' and metadata['linkTimeOptimization'] == 'full' and metadata['architecture'] == 'arm64', 'Unexpected host build configuration')
+
+
+def validate_toolchain(receipt):
+    closed_fields(receipt, TOOLCHAIN_FIELDS)
+    require(type(receipt['schema']) is int and receipt['schema'] == 1, 'Invalid toolchain schema')
+    for name, size in [('sourceCommit', 40), ('hostExecutableSHA256', 64)]:
+        require(type(receipt[name]) is str and re.fullmatch('[a-f0-9]{' + str(size) + '}', receipt[name]) is not None, 'Invalid toolchain source or hash')
+    for name, maximum, pattern in [('xcode', 256, r'Xcode [0-9]+\.[0-9]+(?:\.[0-9]+)?\nBuild version [A-Za-z0-9]+'), ('sdk', 32, r'[0-9]+\.[0-9]+(?:\.[0-9]+)?')]:
+        require(type(receipt[name]) is str and len(receipt[name]) <= maximum and re.fullmatch(pattern, receipt[name]) is not None, 'Invalid measured toolchain field')
+    require(type(receipt['builderSignature']) is str and receipt['builderSignature'] in ('ad-hoc', 'unsigned'), 'Invalid builder signature')
+
+
+def collect_toolchain(builder, proof, sanitized):
+    closed_fields(builder, (*METADATA_FIELDS, 'xcode', 'sdk', 'signature'))
+    validate_metadata({name: builder[name] for name in METADATA_FIELDS})
+    validate_metadata(sanitized)
+    require(all(builder[name] == sanitized[name] for name in METADATA_FIELDS if name != 'hostExecutableSHA256'), 'Builder metadata differs from shipping source or configuration')
+    require(proof['sourceCommit'] == sanitized['sourceCommit'] and proof['hostExecutableSHA256'] == sanitized['hostExecutableSHA256'], 'Qualified shipping executable differs')
+    receipt = {'schema': 1, 'sourceCommit': proof['sourceCommit'], 'hostExecutableSHA256': proof['hostExecutableSHA256'], 'xcode': builder['xcode'], 'sdk': builder['sdk'], 'builderSignature': builder['signature']}
+    validate_toolchain(receipt)
+    return receipt
 
 
 def digest(path):
@@ -114,7 +161,9 @@ def collect_proof(bundle, dmg, appcast, metadata, pinned_info, expected_index, s
     if notary == 'verified':
         run(['xcrun', 'stapler', 'validate', str(dmg)])
         run(['spctl', '-a', '-t', 'open', '--context', 'context:primary-signature', str(dmg)])
-    sanitized = {name: metadata[name] for name in ('sourceCommit', 'sourceTreeDirty', 'configuration', 'optimization', 'linkTimeOptimization', 'architecture', 'hostExecutableSHA256')}
+    require(digest(bundle / 'Contents/MacOS/Edith') == executable_hash, 'Shipping executable changed during qualification')
+    sanitized = {name: metadata[name] for name in METADATA_FIELDS}
+    validate_metadata(sanitized)
     return {'schema': 1, 'sourceCommit': source, 'version': version, 'build': build, 'installedBytes': installed, 'extensionPayloadBytes': 0, 'indexedExtensions': 39, 'indexSHA256': hashlib.sha256(index_bytes).hexdigest(), 'hostExecutableSHA256': executable_hash, 'certificateCategory': categories[0], 'teamIdentifier': teams[0], 'verifiedDesignatedRequirement': requirement, 'deepStrictSignatureVerified': True, 'dmgBytes': dmg_status.st_size, 'dmgSHA256': dmg_hash, 'dmgURL': url, 'appcastSHA256': hashlib.sha256(appcast_bytes).hexdigest(), 'sparklePublicKey': key, 'sparkleEd25519Verified': True, 'notarization': notary, 'publicationVerified': False, 'managedViewsVerified': False, 'hardwareVerified': False}, sanitized
 
 
@@ -151,6 +200,7 @@ def main():
     parser = argparse.ArgumentParser()
     for name in ('bundle', 'dmg', 'appcast', 'output'):
         parser.add_argument(name, type=Path)
+    parser.add_argument('--builder-metadata', type=Path, default=Path('local/minimal-host/build-metadata.json'))
     parser.add_argument('--source', required=True)
     parser.add_argument('--tag', required=True)
     parser.add_argument('--version', required=True)
@@ -159,13 +209,16 @@ def main():
     args = parser.parse_args()
     qualification = qualify_source(args.source, args.tag, os.environ)
     info, index, dirty = pinned_sources(args.source, args.version, args.build)
-    metadata = json.loads(document(args.bundle.parent / 'build-metadata.json'))
+    metadata = json_document(args.bundle.parent / 'build-metadata.json')
+    builder = json_document(args.builder_metadata)
+    require(all(metadata.get(name) == builder.get(name) for name in ('xcode', 'sdk')), 'Shipping toolchain differs from measured builder metadata')
     require(metadata['sourceTreeDirty'] is dirty, 'Build metadata source state differs')
     proof, sanitized = collect_proof(args.bundle, args.dmg, args.appcast, metadata, info, index, args.source, args.tag, args.version, args.build, args.notarization)
     proof['sourceQualification'] = 'release-version-stamp-only' if dirty else 'clean'
     proof.update(qualification)
+    toolchain = collect_toolchain(builder, proof, sanitized)
     args.output.mkdir(mode=0o700)
-    for name, value in [('host-release-proof.json', proof), ('build-metadata.json', sanitized)]:
+    for name, value in [('host-release-proof.json', proof), ('build-metadata.json', sanitized), ('toolchain-provenance.json', toolchain)]:
         with (args.output / name).open('x') as target:
             target.write(json.dumps(value, indent=2) + '\n')
 

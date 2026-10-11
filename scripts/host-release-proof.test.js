@@ -9,3 +9,12 @@ test("source-bound host release proof rejects synthetic source, seal, payload an
   );
   expect(output).toBe("");
 });
+
+test("closed host asset receipts reject synthetic source hash schema and file contradictions", () => {
+  const output = execFileSync(
+    "python3",
+    ["scripts/test-host-release-assets.py", "-v"],
+    { encoding: "utf8", timeout: 30000, maxBuffer: 65536, stdio: "pipe" },
+  );
+  expect(output).toBe("");
+});

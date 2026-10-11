@@ -1,8 +1,15 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync, statSync } from "node:fs";
+import { createPublicKey, verify } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { verifyCurrentMain } from "./extension-release-ready.mjs";
+import {
+  assetSnapshot,
+  hostAssets,
+  privateHostAssets,
+  requireAssetSnapshot,
+} from "./host-release-snapshot.mjs";
 import { releaseAssetMatchesFile } from "./release-asset-read.mjs";
 import {
   executeReleaseMutation,
@@ -11,10 +18,36 @@ import {
 } from "./release-asset-upload.mjs";
 import { lookupRelease } from "./release-lookup.mjs";
 
+function releaseInventory(release) {
+  const names = new Set();
+  const ids = new Set();
+  for (const asset of release.assets) {
+    if (names.has(asset.name) || ids.has(asset.id))
+      throw new Error("Ambiguous host release asset");
+    if (
+      !hostAssets.includes(asset.name) ||
+      !Number.isSafeInteger(asset.id) ||
+      asset.id < 1 ||
+      !Number.isSafeInteger(asset.size) ||
+      asset.size < 1 ||
+      asset.size > (asset.name === "Edith.dmg" ? 1024 ** 3 : 1024 ** 2) ||
+      asset.state !== "uploaded"
+    )
+      throw new Error("Invalid host release inventory. Publish a new version.");
+    names.add(asset.name);
+    ids.add(asset.id);
+  }
+  return release.assets
+    .map(({ id, name, size, state }) => [id, name, size, state])
+    .sort((left, right) => left[1].localeCompare(right[1]));
+}
+
 export function preflightHostRelease({
   directory,
   repository,
   tag,
+  source,
+  rebuild = false,
   execute = execFileSync,
 }) {
   if (
@@ -22,27 +55,58 @@ export function preflightHostRelease({
     !/^v\d+\.\d+\.\d+$/.test(tag)
   )
     throw new Error("Invalid release identity");
-  const assets = ["Edith.dmg", "appcast.xml"];
-  for (const name of assets) {
-    if (statSync(resolve(directory, name)).size === 0)
-      throw new Error("Empty release asset");
-  }
-  const appcast = readFileSync(resolve(directory, "appcast.xml"), "utf8");
+  const snapshot = assetSnapshot(directory);
+  const qualification = JSON.parse(
+    execFileSync(
+      "python3",
+      [
+        fileURLToPath(new URL("./host_release_assets.py", import.meta.url)),
+        resolve(directory),
+        "--repository",
+        repository,
+        "--tag",
+        tag,
+        "--source",
+        source,
+        ...(rebuild ? ["--rebuild"] : []),
+      ],
+      {
+        encoding: "utf8",
+        timeout: 60_000,
+        killSignal: "SIGKILL",
+        maxBuffer: 1024 ** 2,
+        stdio: "pipe",
+      },
+    ),
+  );
+  const key = createPublicKey({
+    key: Buffer.concat([
+      Buffer.from("302a300506032b6570032100", "hex"),
+      Buffer.from(qualification.sparklePublicKey, "base64"),
+    ]),
+    format: "der",
+    type: "spki",
+  });
   if (
-    !appcast.includes(
-      `https://github.com/${repository}/releases/download/${tag}/Edith.dmg`,
-    ) ||
-    !/sparkle:edSignature="[^"\s]+"/.test(appcast)
+    !verify(
+      null,
+      readFileSync(resolve(directory, "Edith.dmg")),
+      key,
+      Buffer.from(qualification.sparkleSignature, "base64"),
+    )
   )
-    throw new Error("Invalid signed appcast");
-  for (const name of assets) {
+    throw new Error(
+      "Appcast signature differs from the qualified Sparkle key or DMG",
+    );
+  for (const name of hostAssets) {
     preflightReleaseAsset({
       repository,
       file: resolve(directory, name),
       execute,
     });
   }
-  return assets;
+  requireAssetSnapshot(directory, snapshot);
+  return [...hostAssets];
 }
 
 export async function publishHostRelease({
@@ -73,93 +137,257 @@ export async function publishHostRelease({
   },
 }) {
   if (!/^[0-9a-f]{40}$/.test(target)) throw new Error("Invalid release target");
-  const assets = preflightHostRelease({ directory, repository, tag, execute });
-  const gh = (...args) =>
-    execute("gh", args, {
-      encoding: "utf8",
-      timeout: 60_000,
-      killSignal: "SIGKILL",
-      maxBuffer: 1024 ** 2,
-    });
-  const mutate = (...args) =>
-    executeReleaseMutation([...args, "--repo", repository], { execute });
-  await verifySource();
-  let release = lookupRelease({ repository, tag, execute });
-  if (!release) {
-    if (rebuild) throw new Error("Cannot rebuild a missing release");
-    await verifySource();
-    mutate(
-      "release",
-      "create",
-      tag,
-      "--name",
-      `Edith ${tag}`,
-      "--target",
-      target,
-      "--draft",
-      "--generate-notes",
-    );
-    await verifySource();
-    release = lookupRelease({ repository, tag, execute });
-    if (!release) throw new Error("Created host release is not available");
-  }
-  for (const name of assets) {
-    const file = resolve(directory, name);
-    const matches = release.assets.filter((asset) => asset.name === name);
-    if (matches.length > 1)
-      throw new Error(`Ambiguous host release asset: ${name}`);
-    const existing = matches[0];
-    if (existing) {
-      const identical = await matchesAsset({
-        repository,
-        asset: existing,
-        file,
-      });
-      await verifySource();
-      if (identical) continue;
-      if (!release.draft)
-        throw new Error(
-          `Published host assets are immutable: ${name}. Publish a new version.`,
-        );
-      if (!rebuild) throw new Error(`Existing release asset differs: ${name}`);
-      await verifySource();
-      gh(
-        "api",
-        "--method",
-        "DELETE",
-        `repos/${repository}/releases/assets/${existing.id}`,
-      );
-    }
-    if (!release.draft)
-      throw new Error(
-        `Published host asset is missing: ${name}. Publish a new version.`,
-      );
-    await verifySource();
-    await uploadReleaseAsset({
+  const copies = privateHostAssets(directory);
+  try {
+    const assets = preflightHostRelease({
+      directory: copies.directory,
       repository,
-      releaseID: release.id,
       tag,
-      file,
+      source: sourceTarget,
+      rebuild,
       execute,
     });
-    await verifySource();
+    const verifyFiles = () => {
+      requireAssetSnapshot(directory, copies.original);
+      requireAssetSnapshot(copies.directory, copies.snapshot);
+    };
+    let tagIdentity;
+    const verifyTag = () => {
+      const read = (path) =>
+        JSON.parse(
+          execute("gh", ["api", `repos/${repository}/${path}`], {
+            encoding: "utf8",
+            timeout: 60_000,
+            killSignal: "SIGKILL",
+            maxBuffer: 1024 ** 2,
+          }),
+        );
+      const reference = read(`git/ref/tags/${tag}`);
+      if (
+        reference.ref !== `refs/tags/${tag}` ||
+        !/^[a-f0-9]{40}$/.test(reference.object?.sha) ||
+        !["commit", "tag"].includes(reference.object?.type)
+      )
+        throw new Error("Invalid host release tag reference");
+      let commit = reference.object.sha;
+      if (reference.object.type === "tag") {
+        const annotated = read(`git/tags/${reference.object.sha}`);
+        if (
+          annotated.sha !== reference.object.sha ||
+          annotated.tag !== tag ||
+          annotated.object?.type !== "commit"
+        )
+          throw new Error("Invalid annotated host release tag");
+        commit = annotated.object.sha;
+      }
+      const current = JSON.stringify([
+        reference.ref,
+        reference.object.type,
+        reference.object.sha,
+        commit,
+      ]);
+      if (
+        commit !== target ||
+        (tagIdentity !== undefined && tagIdentity !== current)
+      )
+        throw new Error("Host release tag source changed");
+      tagIdentity = current;
+    };
+    const verifyInputs = async () => {
+      await verifySource();
+      verifyTag();
+      verifyFiles();
+    };
+    const readRelease = () => lookupRelease({ repository, tag, execute });
+    const requireIdentity = (value, draft, id) => {
+      if (
+        !value ||
+        value.id !== id ||
+        value.tag_name !== tag ||
+        value.target_commitish !== target ||
+        value.draft !== draft
+      )
+        throw new Error("Host release identity or draft state changed");
+      releaseInventory(value);
+      return value;
+    };
+    const requireStable = (expected) => {
+      verifyTag();
+      const current = requireIdentity(
+        readRelease(),
+        expected.draft,
+        expected.id,
+      );
+      if (
+        JSON.stringify(releaseInventory(current)) !==
+        JSON.stringify(releaseInventory(expected))
+      )
+        throw new Error("Host release inventory changed concurrently");
+      return current;
+    };
+    const guardSource = () => {
+      const reference = JSON.parse(
+        execute("gh", ["api", `repos/${repository}/git/ref/heads/main`], {
+          encoding: "utf8",
+          timeout: 60_000,
+          killSignal: "SIGKILL",
+          maxBuffer: 1024 ** 2,
+        }),
+      );
+      if (
+        reference.ref !== "refs/heads/main" ||
+        reference.object?.type !== "commit" ||
+        reference.object.sha !== target
+      )
+        throw new Error(
+          "App publication superseded: main moved after the release build",
+        );
+      verifyTag();
+    };
+    await verifyInputs();
+    let release = readRelease();
+    if (!release) {
+      if (rebuild) throw new Error("Cannot rebuild a missing release");
+      await verifyInputs();
+      executeReleaseMutation(
+        [
+          "release",
+          "create",
+          tag,
+          "--name",
+          `Edith ${tag}`,
+          "--target",
+          target,
+          "--draft",
+          "--generate-notes",
+          "--repo",
+          repository,
+        ],
+        {
+          execute: (command, args, options) => {
+            if (command === "pukbot") {
+              guardSource();
+              verifyFiles();
+              if (readRelease())
+                throw new Error("Host release appeared concurrently");
+            }
+            return execute(command, args, options);
+          },
+        },
+      );
+      await verifyInputs();
+      release = readRelease();
+      if (!release) throw new Error("Created host release is not available");
+    }
+    requireIdentity(release, release.draft, release.id);
+    const compareAsset = async (expected, existing) => {
+      const local = copies.snapshot.find(
+        (asset) => asset.name === existing.name,
+      );
+      const identical =
+        existing.size === local.size &&
+        (await matchesAsset({
+          repository,
+          asset: existing,
+          file: resolve(copies.directory, existing.name),
+        }));
+      await verifyInputs();
+      requireStable(expected);
+      if (!identical)
+        throw new Error(
+          `Published host assets are immutable: ${existing.name}. Publish a new version.`,
+        );
+    };
+    const compare = async (expected, complete) => {
+      if (complete && expected.assets.length !== assets.length)
+        throw new Error(
+          "Host release asset is missing. Publish a new version.",
+        );
+      for (const name of assets) {
+        const existing = expected.assets.find((asset) => asset.name === name);
+        if (existing) await compareAsset(expected, existing);
+      }
+      await verifyInputs();
+      requireStable(expected);
+    };
+    await compare(release, !release.draft);
+    if (!release.draft) return { tag, assets, unchanged: true };
+    for (const name of assets) {
+      if (release.assets.some((asset) => asset.name === name)) continue;
+      await verifyInputs();
+      requireStable(release);
+      await uploadReleaseAsset({
+        repository,
+        releaseID: release.id,
+        tag,
+        file: resolve(copies.directory, name),
+        execute: (command, args, options) => {
+          if (
+            (command === "pukbot" && !args.includes("--dry-run")) ||
+            (command === "gh" && args[0] === "release" && args[1] === "upload")
+          ) {
+            guardSource();
+            verifyFiles();
+            requireStable(release);
+          }
+          return execute(command, args, options);
+        },
+      });
+      await verifyInputs();
+      const current = requireIdentity(readRelease(), true, release.id);
+      const appended = current.assets.find((asset) => asset.name === name);
+      if (
+        !appended ||
+        current.assets.length !== release.assets.length + 1 ||
+        JSON.stringify(
+          releaseInventory({
+            assets: current.assets.filter((asset) => asset.name !== name),
+          }),
+        ) !== JSON.stringify(releaseInventory(release))
+      )
+        throw new Error("Host release inventory changed concurrently");
+      await compareAsset(current, appended);
+      release = current;
+    }
+    await compare(release, true);
+    executeReleaseMutation(
+      [
+        "release",
+        "edit",
+        String(release.id),
+        "--draft",
+        "false",
+        "--make-latest",
+        "true",
+        "--repo",
+        repository,
+      ],
+      {
+        execute: (command, args, options) => {
+          if (command === "pukbot") {
+            guardSource();
+            verifyFiles();
+            requireStable(release);
+          }
+          return execute(command, args, options);
+        },
+      },
+    );
+    await verifyInputs();
+    const published = readRelease();
+    if (!published || published.draft || published.id !== release.id)
+      throw new Error("Published host release state was not confirmed");
+    requireIdentity(published, false, release.id);
+    if (
+      JSON.stringify(releaseInventory(published)) !==
+      JSON.stringify(releaseInventory(release))
+    )
+      throw new Error("Host release inventory changed concurrently");
+    await compare(published, true);
+    return { tag, assets };
+  } finally {
+    copies.cleanup();
   }
-  await verifySource();
-  if (!release.draft) return { tag, assets, unchanged: true };
-  mutate(
-    "release",
-    "edit",
-    String(release.id),
-    "--draft",
-    "false",
-    "--make-latest",
-    "true",
-  );
-  await verifySource();
-  const published = lookupRelease({ repository, tag, execute });
-  if (!published || published.draft || published.id !== release.id)
-    throw new Error("Published host release state was not confirmed");
-  return { tag, assets };
 }
 
 if (
@@ -171,6 +399,8 @@ if (
     directory: resolve(process.argv[preflight ? 3 : 2]),
     repository: process.env.GITHUB_REPOSITORY,
     tag: process.env.RELEASE_TAG,
+    source: process.env.BUILT_SHA,
+    rebuild: Boolean(process.env.REBUILD),
   };
   if (preflight) {
     preflightHostRelease(configuration);

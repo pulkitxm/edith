@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from host_release_proof import appcast_enclosure, collect_proof, main, pinned_sources, qualify_source
+from host_release_proof import appcast_enclosure, collect_proof, collect_toolchain, json_document, main, METADATA_FIELDS, pinned_sources, qualify_source, validate_toolchain
 
 
 class HostReleaseProofTests(unittest.TestCase):
@@ -67,6 +67,80 @@ class HostReleaseProofTests(unittest.TestCase):
         self.assertEqual(self.proof('verified')[0]['notarization'], 'verified')
         self.assertTrue(any(call[:3] == ['xcrun', 'stapler', 'validate'] for call in self.commands))
         self.assertTrue(any(call[0] == 'spctl' for call in self.commands))
+
+    def builder_metadata(self):
+        return {**{name: self.metadata[name] for name in METADATA_FIELDS}, 'hostExecutableSHA256': 'b' * 64, 'xcode': 'Xcode 26.0.1\nBuild version 17A400', 'sdk': '26.0', 'signature': 'ad-hoc'}
+
+    def test_toolchain_uses_final_qualified_hash_and_preserves_builder_signature(self):
+        proof, metadata = self.proof()
+        builder = self.builder_metadata()
+        for signature in ['ad-hoc', 'unsigned']:
+            builder['signature'] = signature
+            receipt = collect_toolchain(builder, proof, metadata)
+            self.assertEqual(receipt['hostExecutableSHA256'], hashlib.sha256(self.exe.read_bytes()).hexdigest())
+            self.assertNotEqual(receipt['hostExecutableSHA256'], builder['hostExecutableSHA256'])
+            self.assertEqual(receipt['builderSignature'], signature)
+            self.assertEqual(proof['certificateCategory'], 'Apple Development')
+            self.assertEqual(set(metadata), set(METADATA_FIELDS))
+            self.assertEqual(len(metadata), 7)
+
+    def test_toolchain_closed_fields_types_bounds_and_contradictions(self):
+        proof, metadata = self.proof()
+        builder = self.builder_metadata()
+        receipt = collect_toolchain(builder, proof, metadata)
+        for name in receipt:
+            missing = dict(receipt)
+            del missing[name]
+            with self.subTest(missing=name), self.assertRaises(ValueError):
+                validate_toolchain(missing)
+        invalid = [{'extra': 1}, {'schema': True}, {'schema': 2}, {'sourceCommit': 'A' * 40}, {'sourceCommit': 1}, {'hostExecutableSHA256': 'b' * 63}, {'hostExecutableSHA256': None}, {'xcode': 'Xcode 26.0\nBuild version ' + 'A' * 257}, {'xcode': []}, {'xcode': 'Xcode 26\nBuild version A'}, {'xcode': 'Xcode 26.0\nBuild version A\nprivate'}, {'sdk': '1.' + '0' * 32}, {'sdk': True}, {'sdk': '26.0 beta'}, {'builderSignature': 'Developer ID'}, {'builderSignature': 1}]
+        for change in invalid:
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                validate_toolchain({**receipt, **change})
+        for change in [{'sourceCommit': 'c' * 40}, {'sourceTreeDirty': True}, {'sourceTreeDirty': 0}, {'signature': 'development certificate'}, {'extra': 'private'}, {'hostExecutableSHA256': 'bad'}]:
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                collect_toolchain({**builder, **change}, proof, metadata)
+        with self.assertRaises(ValueError):
+            collect_toolchain(builder, {**proof, 'hostExecutableSHA256': 'd' * 64}, metadata)
+        path = self.root / 'duplicate.json'
+        path.write_text('{"schema":1,"schema":1}')
+        with self.assertRaises(ValueError):
+            json_document(path)
+
+    def test_main_writes_three_closed_outputs_from_separate_builder_metadata(self):
+        proof, sanitized = self.proof()
+        builder = self.builder_metadata()
+        builder_path = self.root / 'builder.json'
+        builder_path.write_text(json.dumps(builder))
+        (self.root / 'build-metadata.json').write_text(json.dumps({**self.metadata, 'xcode': builder['xcode'], 'sdk': builder['sdk']}))
+        output = self.root / 'proof'
+        arguments = ['host_release_proof.py', str(self.bundle), str(self.dmg), str(self.appcast), str(output), '--builder-metadata', str(builder_path), '--source', self.source, '--tag', 'v1.2.3', '--version', '1.2.3', '--build', '123', '--notarization', 'skipped']
+        with patch('sys.argv', arguments), patch.dict('os.environ', {'GITHUB_SHA': self.source, 'REBUILD': ''}), patch('host_release_proof.pinned_sources', return_value=(self.info, self.index.read_bytes(), False)), patch('host_release_proof.collect_proof', return_value=(proof, sanitized)):
+            main()
+        self.assertEqual({path.name for path in output.iterdir()}, {'host-release-proof.json', 'build-metadata.json', 'toolchain-provenance.json'})
+        self.assertEqual(json_document(output / 'build-metadata.json'), sanitized)
+        self.assertEqual(len(json_document(output / 'build-metadata.json')), 7)
+        self.assertEqual(json_document(output / 'toolchain-provenance.json'), collect_toolchain(builder, proof, sanitized))
+
+    def test_final_executable_changes_during_qualification_reject(self):
+        def changed(key, signature, path):
+            self.exe.write_bytes(b'changed synthetic host')
+        with self.assertRaisesRegex(ValueError, 'changed during qualification'):
+            self.proof(signature=changed)
+
+    def test_toolchain_maximum_bounds_and_raw_builder_missing_fields(self):
+        proof, sanitized = self.proof()
+        builder = self.builder_metadata()
+        prefix = 'Xcode 26.0\nBuild version '
+        builder.update(xcode=prefix + 'A' * (256 - len(prefix)), sdk='1.' + '0' * 30)
+        receipt = collect_toolchain(builder, proof, sanitized)
+        self.assertEqual(len(receipt['xcode']), 256)
+        self.assertEqual(len(receipt['sdk']), 32)
+        for name in builder:
+            missing = dict(builder)
+            del missing[name]
+            with self.subTest(missing=name), self.assertRaises(ValueError):
+                collect_toolchain(missing, proof, sanitized)
 
     def test_wrong_source_version_build_configuration_executable_and_key_fail(self):
         for change in [{'sourceCommit': 'b' * 40}, {'hostExecutableSHA256': 'b' * 64}, {'configuration': 'Debug'}, {'architecture': 'x86_64'}]:
@@ -181,7 +255,7 @@ class HostReleaseProofTests(unittest.TestCase):
             with patch('host_release_proof.document', return_value=plistlib.dumps({**stamped, field: 'foreign'})), patch('host_release_proof.subprocess.check_output', return_value=plistlib.dumps(original)), self.assertRaisesRegex(ValueError, 'beyond release version stamping'):
                 pinned_sources(self.source, '1.2.3', '123', run)
 
-    def test_workflow_records_proof_after_signing_without_changing_public_assets_or_executing_host(self):
+    def test_workflow_records_proof_after_signing_and_stages_exact_receipts_without_executing_host(self):
         workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/ci.yml').read_text()
         job = workflow.split('  dmg:\n')[1].split('  publish:')[0]
         self.assertLess(job.index('- name: Verify code signatures'), job.index('- name: Record the source-bound static host release proof'))
@@ -192,7 +266,8 @@ class HostReleaseProofTests(unittest.TestCase):
         self.assertIn('notary=verified', job)
         self.assertIn('cp Edith.dmg release-macos/', job)
         self.assertIn('cp dist/appcast/appcast.xml release-macos/', job)
-        self.assertNotIn('cp local/host-release-proof', job)
+        self.assertIn('local/host-release-proof/toolchain-provenance.json', job)
+        self.assertIn('cp local/host-release-proof/host-release-proof.json local/host-release-proof/build-metadata.json local/host-release-proof/toolchain-provenance.json release-macos/', job)
         script = Path(__file__).with_name('host_release_proof.py').read_text()
         self.assertNotIn('inspect_host', script)
         self.assertNotIn('inspect_cli', script)
