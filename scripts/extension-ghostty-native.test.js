@@ -45,6 +45,7 @@ const consumer = (id) => ({
   id,
   version: "1.0.0",
   hostABI: "fixture",
+  minimumSystemVersion: "14.0.0",
   inputs: [`Extensions/${id}/Runtime.swift`],
   sharedInputs: [],
   dependencies: [],

@@ -3060,6 +3060,7 @@
         "Extensions/quinjet/Transport/OwnedTerminalFiles.swift",
         "Extensions/quinjet/ViewModels/QuinjetSettingsModel.swift",
         "Extensions/quinjet/ViewModels/QuinjetSettingsEngine.swift",
+        "Extensions/quinjet/ViewModels/QuinjetSettingsStore.swift",
         "Extensions/quinjet/Views/QuinjetSettingsPage.swift"
       ]
     },
