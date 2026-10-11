@@ -113,6 +113,7 @@ struct HostedManagedApprovalRoute: Decodable, Equatable {
             ].contains($0.key)
         }
         result["HOME"] = home.path
+        result["CFFIXED_USER_HOME"] = home.path
         result["TMPDIR"] = temporary.path
         result["XDG_CONFIG_HOME"] = home.appendingPathComponent(".config").path
         result["XDG_CACHE_HOME"] = home.appendingPathComponent(".cache").path

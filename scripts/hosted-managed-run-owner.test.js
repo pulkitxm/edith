@@ -197,6 +197,17 @@ test("producer refuses unsafe postlaunch reads, unknown names and tool credentia
     expect(managedToolEnvironment(environment)).toEqual({
       HOME: "/owned-runner",
     });
+    expect(
+      managedToolEnvironment({
+        ...environment,
+        CFFIXED_USER_HOME: environment.HOME,
+      }),
+    ).toEqual({ HOME: environment.HOME, CFFIXED_USER_HOME: environment.HOME });
+    for (const CFFIXED_USER_HOME of ["/foreign/home", "relative", ""]) {
+      expect(() =>
+        managedToolEnvironment({ ...environment, CFFIXED_USER_HOME }),
+      ).toThrow();
+    }
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
