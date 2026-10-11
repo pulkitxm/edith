@@ -48,7 +48,8 @@ Pure contract tests exercise only value validation, signatures and injected asse
 The complementary installed presentation tier uses a maintained per-owner JSON recipe under `scripts/hosted-functional-actions/presentations`. Missing recipes fail closed. `installedPresentationUITestSource` generates a bounded XCTest that acts only on an already running host and an exact session/owner/phase window. It creates no substitute view and does not launch or terminate an application. Keep Awake uses the original downloaded checkbox, sets it off and then on, and requires the installed engine's actual `keepAwake.ui.update` acknowledgement and separate readback.
 
 `validateInstalledPresentationObservation` requires the separately signed producer record, exact before/after source and downloaded bundle tree equality, all original factory/control hashes unchanged, verified host/worker/role signatures, retained root/descriptor pins, the exact presentation and engine/UI generation, an authenticated downloaded UI receiver mutation, independent authoritative output, and presentation/resource release. It rejects factory overlays and changed role payloads. The XCTest attachment is a bounded action claim that cannot qualify itself. Host phase holds, descriptor admission and producer observation still require the isolated hosted controller; generated source typechecking is compile proof only.
-# Admission and action ordering
+
+## Admission and action ordering
 
 Definitions are literal-only data. The case loader requires an independently admitted source snapshot containing the definition, native case and every original control source hash. It never evaluates or imports case modules. Native assembly separately requires pins for the exact context, transport and owner case bytes that it copies.
 
