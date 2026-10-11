@@ -215,29 +215,84 @@ import Testing
 
     @Test func originalEmbeddedControllersRenderAtBothWidthsThemesAndZoom() async throws {
         let application = NSApplication.shared
+        let priorPolicy = application.activationPolicy()
+        let priorAppearance = application.appearance
         application.setActivationPolicy(.prohibited)
+        let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
+            NSAccessibility.Attribute(rawValue: $0)
+        }
+        let priorAccessibility = attributes.map { application.accessibilityAttributeValue($0) }
+        for attribute in attributes {
+            application.accessibilitySetValue(true, forAttribute: attribute)
+        }
         let remote = EmbeddedMusicRemote.shared
-        let encoded = try JSONEncoder().encode(state())
-        remote.configure { _, _ in encoded }
-        remote.rescan()
-        for _ in 0..<20 where !remote.entriesLoaded { await Task.yield() }
-        let current = try #require(remote.current)
-        EmbeddedMusicDetailPresenter.shared.show(current)
-        #expect(EmbeddedMusicDetailPresenter.shared.track == current)
-        let fixtureDirectory = URL(
-            fileURLWithPath: "/tmp/extension-final-batch-20261010/music-render-fixtures")
+        let defaults = SharedDefaults.store
+        let keys = [
+            WindowZoom.defaultsKey, AppStorageKeys.General.appearance,
+            EmbeddedMusicFade.enabledKey, EmbeddedMusicFade.secondsKey,
+            AppStorageKeys.Music.barCollapsed, AppStorageKeys.Music.barAutoHide,
+            AppStorageKeys.Music.gridView,
+        ]
+        let priorDefaults = keys.map { defaults.object(forKey: $0) }
+        let priorZoom = UIScale.current
+        let fixtureDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("music-render-" + UUID().uuidString, isDirectory: true)
+        defer {
+            remote.stop()
+            for (key, value) in zip(keys, priorDefaults) {
+                if let value {
+                    defaults.set(value, forKey: key)
+                } else {
+                    defaults.removeObject(forKey: key)
+                }
+            }
+            UIScale.apply(priorZoom)
+            application.appearance = priorAppearance
+            for (attribute, value) in zip(attributes, priorAccessibility) {
+                application.accessibilitySetValue(value ?? false, forAttribute: attribute)
+            }
+            application.setActivationPolicy(priorPolicy)
+            try? FileManager.default.removeItem(at: fixtureDirectory)
+            #expect(EmbeddedMusicDetailPresenter.shared.track == nil)
+            #expect(remote.tracks.isEmpty && !remote.entriesLoaded)
+        }
         try FileManager.default.createDirectory(
             at: fixtureDirectory, withIntermediateDirectories: true)
-        let defaults = SharedDefaults.store
-        let priorZoom = defaults.object(forKey: WindowZoom.defaultsKey)
-        defer {
-            remote.stop(); defaults.set(priorZoom, forKey: WindowZoom.defaultsKey); UIScale.apply(1)
+        let encoded = try JSONEncoder().encode(state())
+        let downloadsState = EmbeddedMusicDownloadsState(
+            snapshot: .init(
+                records: [], logs: [:], enabled: true, running: false,
+                generation: UUID(), revision: 1), updating: false,
+            directories: ["audio": fixtureDirectory.appendingPathComponent("audio")])
+        let encodedDownloads = try JSONEncoder().encode(downloadsState)
+        remote.configure { operation, _ in
+            switch operation {
+            case "music.ui.read": return encoded
+            case "music.ui.downloads.read": return encodedDownloads
+            case "music.ui.level": return try JSONEncoder().encode(0.25)
+            case "music.ui.action", "music.ui.downloads.action": return Data("{}".utf8)
+            default: throw ExtensionPeerError.invalidRequest
+            }
         }
+        remote.rescan()
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while !remote.entriesLoaded && remote.libraryError == nil && ContinuousClock.now < deadline
+        {
+            await Task.yield()
+        }
+        try #require(remote.entriesLoaded && remote.libraryError == nil)
+        let current = try #require(remote.current)
+        EmbeddedMusicDetailPresenter.shared.show(current)
+        await EmbeddedYoutubeDownloader.shared.refresh()
+        #expect(EmbeddedMusicDetailPresenter.shared.track == current)
         for width in [540.0, 960.0] {
             for scheme in [ColorScheme.light, .dark] {
                 for zoom in [1.0, 1.5] {
                     defaults.set(zoom, forKey: WindowZoom.defaultsKey)
                     UIScale.apply(zoom)
+                    defaults.set(
+                        scheme == .dark ? "dark" : "light",
+                        forKey: AppStorageKeys.General.appearance)
                     let home = NSHostingController(
                         rootView: ExtensionPageHost {
                             EmbeddedMusicSceneLoad {
@@ -274,49 +329,50 @@ import Testing
                             scheme == .dark
                             ? NSColor(calibratedWhite: 0.12, alpha: 1) : NSColor.white
                         container.addSubview(controller.view)
+                        defer { controller.view.removeFromSuperview() }
                         controller.view.autoresizingMask = [.width, .height]
-                        try await Task.sleep(for: .milliseconds(100))
-                        controller.view.layoutSubtreeIfNeeded()
-                        #expect(UIScale.current == zoom)
-                        #expect(EmbeddedMusicDetailPresenter.shared.track == current)
-                        let bitmap: NSBitmapImageRep
-                        if location == "music.footer" {
-                            let renderer = ImageRenderer(
-                                content:
-                                    EmbeddedMusicFooterScene()
-                                    .environment(\.colorScheme, scheme)
-                                    .frame(width: width, height: 96 * zoom)
-                                    .background(scheme == .dark ? Color(white: 0.12) : .white))
-                            renderer.scale = 2
-                            let image = try #require(renderer.nsImage)
-                            let imageData = try #require(image.tiffRepresentation)
-                            bitmap = try #require(NSBitmapImageRep(data: imageData))
-                        } else {
-                            bitmap = try #require(
-                                container.bitmapImageRepForCachingDisplay(in: container.bounds))
-                            container.cacheDisplay(in: container.bounds, to: bitmap)
-                        }
-                        let png = try #require(bitmap.representation(using: .png, properties: [:]))
-                        #expect(png.count > 100)
-                        var colors = Set<String>()
-                        for x in stride(
-                            from: 0, to: bitmap.pixelsWide, by: max(1, bitmap.pixelsWide / 20))
-                        {
-                            for y in stride(
-                                from: 0, to: bitmap.pixelsHigh, by: max(1, bitmap.pixelsHigh / 20))
-                            {
-                                if let color = bitmap.colorAt(x: x, y: y) {
-                                    colors.insert(color.description)
-                                }
-                            }
-                        }
-                        #expect(
-                            colors.count > 3,
-                            "The \(location) controller must render visible content.")
                         let suffix = "\(Int(width))-\(scheme == .dark ? "dark" : "light")-\(zoom)"
+                        let caseName = location + "-" + suffix
+                        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+                        var bitmap: NSBitmapImageRep?
+                        var pixels: MusicRenderPixels?
+                        let control = [
+                            "music.sidebar": "Show the player bar",
+                            "music.footer": "Collapse the player bar",
+                        ][location]
+                        var controlReady = control == nil
+                        repeat {
+                            await Task.yield()
+                            container.layoutSubtreeIfNeeded()
+                            controller.view.layoutSubtreeIfNeeded()
+                            controlReady =
+                                control.map {
+                                    musicRenderHasControl(controller.view, label: $0)
+                                } ?? true
+                            let next = try #require(
+                                container.bitmapImageRepForCachingDisplay(in: container.bounds),
+                                Comment(rawValue: caseName))
+                            container.cacheDisplay(in: container.bounds, to: next)
+                            pixels = try MusicRenderPixels(image: #require(next.cgImage))
+                            bitmap = next
+                        } while !(pixels?.hasContent == true && controlReady)
+                            && ContinuousClock.now < deadline
+                        #expect(UIScale.current == zoom, Comment(rawValue: caseName))
+                        #expect(EmbeddedMusicDetailPresenter.shared.track == current)
+                        #expect(
+                            controlReady,
+                            Comment(rawValue: caseName + " missing control: " + (control ?? "")))
+                        let content = try #require(pixels)
+                        #expect(
+                            content.hasContent,
+                            Comment(
+                                rawValue:
+                                    "\(caseName) colors=\(content.colors) contrastEdges=\(content.contrastEdges)"
+                            ))
+                        let png = try #require(bitmap?.representation(using: .png, properties: [:]))
+                        #expect(png.count > 100, Comment(rawValue: caseName))
                         try png.write(
-                            to: fixtureDirectory.appendingPathComponent(
-                                location + "-" + suffix + ".png"))
+                            to: fixtureDirectory.appendingPathComponent(caseName + ".png"))
                         #expect(controller.view.window == nil)
                         controller.view.removeFromSuperview()
                         #expect(controller.view.fittingSize.width.isFinite)
@@ -336,4 +392,24 @@ private final class MusicRenderFixtureView: NSView {
         color.setFill()
         bounds.fill()
     }
+}
+
+@MainActor private func musicRenderHasControl(
+    _ node: NSObject, label: String, depth: Int = 0
+) -> Bool {
+    guard depth < 64 else { return false }
+    if (node as AnyObject).accessibilityLabel?() == label,
+        (node as AnyObject).accessibilityRole?() == NSAccessibility.Role.button
+    {
+        return true
+    }
+    for child in (node as AnyObject).accessibilityChildren?() as? [NSObject] ?? [] {
+        if musicRenderHasControl(child, label: label, depth: depth + 1) { return true }
+    }
+    if let view = node as? NSView {
+        for child in view.subviews {
+            if musicRenderHasControl(child, label: label, depth: depth + 1) { return true }
+        }
+    }
+    return false
 }
