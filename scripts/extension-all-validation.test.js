@@ -2,10 +2,11 @@ import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  access,
   mkdir,
   mkdtemp,
-  readFile,
   readdir,
+  readFile,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -34,6 +35,10 @@ const definitions = manifest.map((entry) => ({
   sharedInputs: [],
 }));
 const planner = resolve("scripts/extension-release-plan.mjs");
+const workflow = Bun.YAML.parse(
+  await readFile(".github/workflows/extensions.yml", "utf8"),
+);
+const workflowExpression = (value) => ["$", "{{ ", value, " }}"].join("");
 
 function environment(changes = {}) {
   return {
@@ -313,10 +318,26 @@ test("the validation CLI rejects stale dirty and contradictory admission before 
       { GITHUB_REF: "refs/heads/feature" },
       { GITHUB_EVENT_NAME: "push" },
       { GITHUB_SHA: "b".repeat(40) },
+      { EXTENSION_VALIDATION_SHA: "" },
     ]) {
+      await writeFile(trace, "");
       const result = invoke(undefined, changes);
       expect(result.status).not.toBe(0);
       expect(result.stdout).toBe("");
+      expect(result.stderr).toContain(
+        changes.SYNTHETIC_HEAD || changes.SYNTHETIC_DIRTY
+          ? "exact clean source HEAD"
+          : "authorized nonpublishing exact-source dispatch",
+      );
+      const calls = (await readFile(trace, "utf8"))
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map(JSON.parse);
+      expect(calls).toHaveLength(
+        changes.SYNTHETIC_HEAD ? 1 : changes.SYNTHETIC_DIRTY ? 2 : 0,
+      );
+      expect(calls.every(([command]) => command === "git")).toBe(true);
     }
     for (const arguments_ of [
       ["--validate-all", "invalid"],
@@ -325,7 +346,9 @@ test("the validation CLI rejects stale dirty and contradictory admission before 
       ["previous.json"],
       ["--pull-request-base", sourceSHA],
     ]) {
+      await writeFile(trace, "");
       expect(invoke(arguments_).status).not.toBe(0);
+      expect(await readFile(trace, "utf8")).toBe("");
     }
     expect(invoke(["--check-validation-source", sourceSHA]).status).toBe(0);
     await writeFile(trace, "");
@@ -363,5 +386,218 @@ test("the validation CLI refuses missing duplicate and substituted manifests", a
       expect(result.stderr).toContain("exact 39 manifest IDs");
       expect(result.stdout).toBe("");
     }
+  });
+});
+
+function admitted(expression, changes = {}) {
+  const github = {
+    event_name: "workflow_dispatch",
+    repository: "pulkitxm/edith",
+    ref: "refs/heads/main",
+    ...changes.github,
+  };
+  const inputs = { publish: true, validation_sha: "", ...changes.inputs };
+  const needs = {
+    plan: {
+      result: "success",
+      outputs: {
+        changed: "true",
+        draft: "false",
+        mode: "selective",
+        ...changes.outputs,
+      },
+    },
+    build: { result: changes.buildResult ?? "success" },
+    tests: { result: "success" },
+    "frozen-host": { result: "success" },
+  };
+  return Boolean(
+    new Function(
+      "github",
+      "inputs",
+      "needs",
+      "env",
+      "cancelled",
+      `return (${expression.replace(/^\$\{\{\s*|\s*\}\}$/g, "")});`,
+    )(github, inputs, needs, { HAS_NOTARY: "true" }, () => false),
+  );
+}
+
+test("all maintained signing and publication guards independently reject validation input even with forged successful outputs", () => {
+  const productionGuards = [
+    workflow.jobs["frozen-host"].steps.find(
+      (step) => step.name === "Import the release signing certificate",
+    ),
+    workflow.jobs["frozen-host"].steps.find(
+      (step) =>
+        step.name ===
+        "Freeze the production host once for all changed extensions",
+    ),
+    workflow.jobs.plan.steps.find(
+      (step) => step.name === "Require production publication from main",
+    ),
+    workflow.jobs.build.steps.find(
+      (step) => step.name === "Import the release signing certificate",
+    ),
+    workflow.jobs.build.steps.find(
+      (step) => step.name === "Notarize the downloaded package",
+    ),
+    workflow.jobs.publish,
+  ];
+  for (const guard of productionGuards) {
+    expect(guard.if).toContain("!inputs.validation_sha");
+    for (const event_name of ["push", "workflow_dispatch"])
+      for (const validation_sha of [sourceSHA, "malformed", " ", "false"])
+        for (const publish of [true, false])
+          for (const outputs of [
+            {
+              changed: "true",
+              draft: "false",
+              mode: "selective",
+              source_sha: "",
+            },
+            {
+              changed: "false",
+              draft: "true",
+              mode: "selective",
+              source_sha: "",
+            },
+          ])
+            expect(
+              admitted(guard.if, {
+                github: { event_name },
+                inputs: { validation_sha, publish },
+                outputs,
+                buildResult: outputs.changed === "true" ? "success" : "skipped",
+              }),
+            ).toBe(false);
+    expect(admitted(guard.if)).toBe(true);
+    expect(admitted(guard.if, { github: { event_name: "push" } })).toBe(true);
+  }
+  expect(
+    admitted(workflow.jobs.publish.if, { outputs: { mode: "validation" } }),
+  ).toBe(false);
+});
+
+test("validation preserves all native lifecycle package and global gates while withholding release privileges", () => {
+  const context = { inputs: { publish: false, validation_sha: sourceSHA } };
+  for (const job of [
+    workflow.jobs["frozen-host"],
+    workflow.jobs.build,
+    workflow.jobs.tests,
+  ])
+    expect(admitted(job.if, context)).toBe(true);
+  expect(admitted(workflow.jobs.publish.if, context)).toBe(false);
+  expect(workflow.permissions).toEqual({ contents: "read" });
+  expect(workflow.on.workflow_dispatch.inputs.validation_sha).toEqual({
+    description:
+      "Validate all 39 extensions at this exact source SHA without publishing",
+    type: "string",
+    required: false,
+    default: "",
+  });
+  const steps = workflow.jobs.plan.steps;
+  const admission = steps.findIndex(
+    (step) => step.name === "Admit exact-source all-extension validation",
+  );
+  expect(admission).toBeGreaterThan(-1);
+  expect(admission).toBeLessThan(steps.findIndex((step) => step.id === "plan"));
+  expect(steps[admission].if).toBe("inputs.validation_sha != ''");
+  expect(steps[admission].run).toContain(
+    '--check-validation-source "$EXTENSION_VALIDATION_SHA"',
+  );
+  expect(steps[admission].env.EXTENSION_VALIDATION_SHA).toBe(
+    workflowExpression("inputs.validation_sha"),
+  );
+  expect(steps[admission].env.EXTENSION_PUBLISH).toBe(
+    workflowExpression("inputs.publish"),
+  );
+  expect(workflow.jobs.plan.outputs.mode).toBe(
+    workflowExpression("steps.plan.outputs.mode"),
+  );
+  expect(workflow.jobs.plan.outputs.source_sha).toBe(
+    workflowExpression("steps.plan.outputs.source_sha"),
+  );
+  expect(
+    steps.find(
+      (step) =>
+        step.name === "Check portable publication and selective planning",
+    ).run,
+  ).toContain("scripts/extension-all-validation.test.js");
+  const packaging = workflow.jobs.build.steps.find(
+    (step) => step.name === "Build only this extension",
+  );
+  expect(admitted(packaging.env.DEVELOPMENT, context)).toBe(true);
+  expect(
+    workflow.jobs.build.steps.find(
+      (step) => step.name === "Test this extension's optional native packages",
+    ).run,
+  ).toContain("test-extension-package.mjs");
+  expect(
+    workflow.jobs.build.steps.find(
+      (step) => step.name === "Exercise this worker against the frozen host",
+    ).run,
+  ).toContain("test-extension-workers.mjs");
+  expect(
+    workflow.jobs.tests.steps.some((step) =>
+      step.run?.includes(
+        "ci-marketplace-runtime ci-extension-support ci-extension-docs ci-extension-commands ci-comments",
+      ),
+    ),
+  ).toBe(true);
+});
+
+test("the workflow validation branch emits the full matrix and exact-source metadata without reading a catalog", async () => {
+  await fixture(async ({ root, trace, settings }) => {
+    const planStep = workflow.jobs.plan.steps.find(
+      (step) => step.id === "plan",
+    );
+    const output = join(root, "outputs");
+    const quotedPlanner = `'${planner.replaceAll("'", "'\"'\"'")}'`;
+    const script = planStep.run.replaceAll(
+      "bun scripts/extension-release-plan.mjs",
+      `bun ${quotedPlanner}`,
+    );
+    const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", script], {
+      cwd: root,
+      env: { ...settings, GITHUB_OUTPUT: output },
+      encoding: "utf8",
+      timeout: 30_000,
+    });
+    expect(result.status).toBe(0);
+    const outputs = Object.fromEntries(
+      (await readFile(output, "utf8"))
+        .trim()
+        .split("\n")
+        .map((line) => {
+          const index = line.indexOf("=");
+          return [line.slice(0, index), line.slice(index + 1)];
+        }),
+    );
+    const plan = JSON.parse(
+      await readFile(join(root, "dist/extensions/plan.json"), "utf8"),
+    );
+    expect(plan.mode).toBe("validation");
+    expect(plan.sourceSHA).toBe(sourceSHA);
+    expect(JSON.parse(outputs.matrix)).toEqual({ include: plan.include });
+    expect(plan.include.map(({ id }) => id).sort()).toEqual(
+      [...validationExtensionIDs].sort(),
+    );
+    expect(outputs.changed).toBe("true");
+    expect(outputs.draft).toBe("false");
+    expect(outputs.mode).toBe("validation");
+    expect(outputs.source_sha).toBe(sourceSHA);
+    await expect(
+      access(join(root, "dist/extensions/previous.json")),
+    ).rejects.toThrow();
+    await expect(
+      access(join(root, "dist/extensions/previous-state.json")),
+    ).rejects.toThrow();
+    const calls = (await readFile(trace, "utf8"))
+      .trim()
+      .split("\n")
+      .map(JSON.parse);
+    expect(calls).toHaveLength(6);
+    expect(calls.every(([command]) => command === "git")).toBe(true);
   });
 });
