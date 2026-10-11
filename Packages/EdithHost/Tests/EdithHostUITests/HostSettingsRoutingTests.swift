@@ -50,7 +50,7 @@ import Testing
             #expect(request(id, installed: nil, state: .active, version: "1.0.0") == nil)
             for installed in [
                 package(id, hostABI: "obsolete"), package(id, architecture: "x86_64"),
-                package(id, minimumSystemVersion: 31), package("foreign"),
+                package(id, minimumSystemVersion: .init(major: 31)), package("foreign"),
             ] {
                 #expect(request(id, installed: installed, state: .active, version: "1.0.0") == nil)
             }
@@ -110,12 +110,12 @@ import Testing
         HostExtensionSettingsPolicy.request(
             id: id, installed: installed, state: state, activeVersion: version,
             pendingDisable: pendingDisable, pendingRemoval: pendingRemoval,
-            presentationID: token, systemVersion: 30)
+            presentationID: token, systemVersion: .init(major: 30))
     }
 
     private func package(
         _ id: String, hostABI: String = HostContract.compatibility, architecture: String = "arm64",
-        minimumSystemVersion: Int = 14
+        minimumSystemVersion: ExtensionSystemVersion = .init(major: 14)
     ) -> ExtensionPackage {
         .init(
             id: id, version: "1.0.0", hostABI: hostABI, architecture: architecture,

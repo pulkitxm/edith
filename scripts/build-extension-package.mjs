@@ -25,6 +25,7 @@ import {
   extensionFingerprint,
   extensionReleaseTag,
 } from "./extension-release-plan.mjs";
+import { validateMinimumSystemVersion } from "./extension-system-version.mjs";
 import { prepareNativeSupport } from "./prepare-extension-native-support.mjs";
 
 export function presentationLinkerFlags(product) {
@@ -281,6 +282,7 @@ export async function buildExtensionPackage({
   );
   const definition = definitions.find((entry) => entry.id === id);
   if (!definition) throw new Error(`Unknown extension ${id}`);
+  validateMinimumSystemVersion(definition.minimumSystemVersion);
   await verifyExtensionNativeDependencies(root, definition);
   await writeHostABI(root);
   containedHostApp ??= development
@@ -350,7 +352,9 @@ export async function buildExtensionPackage({
         stdio: "inherit",
         env: {
           ...process.env,
-          MACOSX_DEPLOYMENT_TARGET: definition.minimumSystemVersion,
+          MACOSX_DEPLOYMENT_TARGET: validateMinimumSystemVersion(
+            definition.minimumSystemVersion,
+          ),
         },
       },
     );
@@ -596,7 +600,7 @@ export async function buildExtensionPackage({
         "-module-name",
         `EdithExtension_${id}_${role}`,
         "-target",
-        `arm64-apple-macos${definition.minimumSystemVersion}.0`,
+        `arm64-apple-macos${definition.minimumSystemVersion}`,
         ...compileSources,
         ...(support
           ? [
@@ -764,6 +768,7 @@ export async function buildExtensionPackage({
     });
   }
   const payloadManifest = {
+    minimumSystemVersion: definition.minimumSystemVersion,
     id,
     version: releaseVersion,
     hostABI: definition.hostABI,
@@ -775,6 +780,7 @@ export async function buildExtensionPackage({
     JSON.stringify(payloadManifest),
   );
   const uiCarrier = await buildExtensionUICarrier({
+    minimumSystemVersion: definition.minimumSystemVersion,
     hostApp: containedHostApp,
     payloadDirectory: payload,
     id,
@@ -805,7 +811,6 @@ export async function buildExtensionPackage({
   const repository = process.env.GITHUB_REPOSITORY ?? "pulkitxm/edith";
   const packageRecord = {
     ...payloadManifest,
-    minimumSystemVersion: definition.minimumSystemVersion,
     downloadURL: `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${id}.zip`,
     sha256: createHash("sha256").update(bytes).digest("hex"),
     downloadBytes: bytes.length,

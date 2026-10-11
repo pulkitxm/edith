@@ -226,6 +226,7 @@ export async function prepareManagedOwner({
   assert.equal(package_.sourceFingerprint, original.sourceFingerprint);
   assert.equal(package_.hostABI, definition.hostABI);
   assert.equal(package_.architecture, "arm64");
+  assert.equal(package_.minimumSystemVersion, definition.minimumSystemVersion);
   assert.deepEqual(package_.dependencies, []);
   const staging = join(directory, "transformed");
   await mkdir(staging, { mode: 0o700 });
@@ -254,6 +255,7 @@ export async function prepareManagedOwner({
       ? await rebindCamera({ original, payload, host, identity })
       : null;
   await buildExtensionUICarrier({
+    minimumSystemVersion: package_.minimumSystemVersion,
     hostApp: app,
     payloadDirectory: payload,
     id: owner.id,
@@ -277,6 +279,7 @@ export async function prepareManagedOwner({
       version: package_.version,
       hostABI: package_.hostABI,
       architecture: "arm64",
+      minimumSystemVersion: package_.minimumSystemVersion,
       dependencies: [],
     }),
     { mode: 0o600 },

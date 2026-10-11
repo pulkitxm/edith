@@ -127,7 +127,8 @@ private struct RequirementPackageFixture {
         -> HostRequirementPackageInspection
     {
         .init(
-            store: store, hostABI: "edith-host-2", architecture: "arm64", systemVersion: 15,
+            store: store, hostABI: "edith-host-2", architecture: "arm64",
+            systemVersion: .init(major: 15),
             hostIdentifier: host ?? self.host, requiredRoles: roles, policy: .development)
     }
     func writeState(abi: String = "edith-host-2") throws {

@@ -66,7 +66,7 @@ public final class HostRemoteSession {
             configuration.package.hostABI == HostContract.compatibility,
             configuration.package.architecture == "arm64",
             configuration.package.minimumSystemVersion
-                <= ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+                <= .init(ProcessInfo.processInfo.operatingSystemVersion),
             try !store.pendingRemovals().contains(configuration.package.id)
         else { throw HostWorkerError.rejected }
         try configuration.validate(

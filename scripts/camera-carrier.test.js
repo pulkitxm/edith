@@ -10,7 +10,7 @@ const definition = {
   providerRole: "cameraProvider",
   applicationIdentifier: "com.pulkit.edith.cameraCarrier",
   extensionIdentifier: "com.pulkit.edith.camera",
-  minimumSystemVersion: 14,
+  minimumSystemVersion: "14.0.0",
   installEntitlement: "com.apple.developer.system-extension.install",
 };
 
@@ -20,7 +20,7 @@ test("camera carrier metadata permits only the matching sealed roles and identit
     { role: "app" },
     { providerRole: "agent" },
     { extensionIdentifier: "org.other.camera" },
-    { minimumSystemVersion: 13 },
+    { minimumSystemVersion: "13.0.0" },
     { applicationIdentifier: "../arbitrary" },
     { providerEntitlement: "com.apple.developer.cmio.extension" },
   ])
@@ -34,7 +34,7 @@ test("OBS microphone carriers require no provider role or installation entitleme
     role: "cameraCarrier",
     transport: "obs",
     applicationIdentifier: "com.pulkit.edith.cameraCarrier",
-    minimumSystemVersion: 14,
+    minimumSystemVersion: "14.0.0",
   };
   expect(validateCameraCarrierDefinition(obs)).toEqual(obs);
   for (const change of [

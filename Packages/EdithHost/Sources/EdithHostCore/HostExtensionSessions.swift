@@ -110,7 +110,10 @@ public final class HostExtensionSessions {
         states[id] = .starting
         failures.remove(id)
         do {
-            let worker = try create(package)
+            let worker = try package.admitting(
+                hostABI: HostContract.compatibility, architecture: "arm64",
+                systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion)
+            ) { try create(package) }
             workers[id] = worker
             worker.didExit = { [weak self, weak worker] in
                 guard let self, let worker, self.workers[id] === worker else { return }
@@ -182,7 +185,10 @@ public final class HostExtensionSessions {
             try await willDisable(id)
             if workers[id]?.ready != true, pendingDisableIDs.contains(id) {
                 guard let package = packages[id] else { throw HostWorkerError.rejected }
-                let worker = try create(package)
+                let worker = try package.admitting(
+                    hostABI: HostContract.compatibility, architecture: "arm64",
+                    systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion)
+                ) { try create(package) }
                 workers[id] = worker
                 try await worker.start(recoveryOnly: true)
             }

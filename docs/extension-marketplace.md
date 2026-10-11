@@ -10,7 +10,7 @@ The Extensions page supports search, categories, individual downloads and enable
 
 ## App and extension updates
 
-Sparkle updates the app bundle. Extension updates use the signed marketplace catalog and independent package releases. Updating the app preserves downloaded packages and extension user data. Selection checks the package ABI, architecture and minimum macOS version before loading code. An incompatible package stays inactive until a compatible replacement is available.
+Sparkle updates the app bundle. Extension updates use the signed marketplace catalog and independent package releases. Updating the app preserves downloaded packages and extension user data. Selection checks the package ABI, architecture and minimum macOS version before loading code. An incompatible package stays inactive until a compatible replacement is available. The `minimumSystemVersion` field is a canonical `major.minor.patch` string in the definition, catalog record and sealed payload manifest, and all three must agree. Admission compares the full running system version numerically. AudioMixer requires `14.4.0`, so macOS 14.0 through 14.3 cannot install or start it.
 
 Automatic extension updates are enabled by default and can be turned off on the Extensions page. At app startup, an enabled automatic check runs when installed packages exist and at least eight hours have passed since the last successful check. Check for Updates refreshes the catalog on demand. Only downloaded extensions with an available compatible update are updated automatically.
 

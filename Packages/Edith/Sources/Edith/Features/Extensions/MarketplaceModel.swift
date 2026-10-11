@@ -63,7 +63,7 @@ final class MarketplaceModel {
     func package(for id: String) -> ExtensionPackage? {
         try? catalog?.installationPlan(
             for: id, hostABI: MarketplaceConfiguration.hostABI, architecture: "arm64",
-            systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+            systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion)
         ).last
     }
 
@@ -94,7 +94,7 @@ final class MarketplaceModel {
             guard let catalog else { throw MarketplaceError.downloadFailed }
             let plan = try catalog.installationPlan(
                 for: id, hostABI: MarketplaceConfiguration.hostABI, architecture: "arm64",
-                systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion)
+                systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion))
             let previousPackage = installedPackage(for: id)
             _ = try await installer.install(plan, repository: MarketplaceConfiguration.repository) {
                 value in

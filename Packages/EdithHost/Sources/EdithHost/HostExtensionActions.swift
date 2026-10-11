@@ -26,7 +26,8 @@ enum HostExtensionSettingsPolicy: Equatable {
         id: String, installed: ExtensionPackage?, state: HostActivationState?,
         activeVersion: String?, pendingDisable: Bool, pendingRemoval: Bool,
         presentationID: UUID = UUID(),
-        systemVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+        systemVersion: ExtensionSystemVersion = .init(
+            ProcessInfo.processInfo.operatingSystemVersion)
     ) -> HostExtensionContentRequest? {
         guard let route = route(for: id), let installed, installed.id == id,
             installed.isCompatible(

@@ -21,7 +21,7 @@ const expected = [
     id: "calendar",
     hostABI: "runtime-2",
     architecture: "arm64",
-    minimumSystemVersion: 14,
+    minimumSystemVersion: "14.0.0",
     fingerprint: "a".repeat(64),
   },
 ];
@@ -29,7 +29,7 @@ const record = {
   id: "calendar",
   hostABI: "runtime-2",
   version: "1.0.0",
-  minimumSystemVersion: 14,
+  minimumSystemVersion: "14.0.0",
   sourceFingerprint: "a".repeat(64),
   architecture: "arm64",
   dependencies: [],
@@ -165,7 +165,7 @@ test("every supported OS tier selects its highest compatible numeric version", (
   const future = {
     ...record,
     version: "1.10.0",
-    minimumSystemVersion: 15,
+    minimumSystemVersion: "15.0.0",
     sourceFingerprint: "b".repeat(64),
   };
   const current = { ...record, version: "1.9.0" };
@@ -178,7 +178,7 @@ test("every supported OS tier selects its highest compatible numeric version", (
     }),
   ).toEqual([]);
   expect(missingPackages(expected, { packages: [future] })).toEqual(expected);
-  const onlyNewerOS = [{ ...expected[0], minimumSystemVersion: 15 }];
+  const onlyNewerOS = [{ ...expected[0], minimumSystemVersion: "15.0.0" }];
   expect(missingPackages(onlyNewerOS, { packages: [future, current] })).toEqual(
     onlyNewerOS,
   );
@@ -204,7 +204,7 @@ test("signed malformed, duplicate, missing dependency and oversized catalogs rej
     [record, record],
     [{ ...record, version: "broken" }],
     [{ ...record, sourceFingerprint: "invalid" }],
-    [{ ...record, minimumSystemVersion: 13 }],
+    [{ ...record, minimumSystemVersion: "13.0.0" }],
     [{ ...record, dependencies: ["missing"] }],
     [{ ...record, downloadURL: "https://synthetic.invalid/calendar.zip" }],
     Array.from({ length: 1001 }, (_, index) => ({
@@ -426,4 +426,42 @@ test("authenticated first bootstrap waits for its owned draft without trusting u
   ).toBe(2);
   expect(polls).toBe(2);
   expect(assets).toBe(1);
+});
+
+test("minor OS readiness rejects a package that skips the required support floor", () => {
+  const required = [{ ...expected[0], minimumSystemVersion: "14.4.0" }];
+  expect(
+    missingPackages(required, {
+      packages: [{ ...record, minimumSystemVersion: "14.5.0" }],
+    }),
+  ).toEqual(required);
+  expect(
+    missingPackages(required, {
+      packages: [{ ...record, minimumSystemVersion: "14.4.0" }],
+    }),
+  ).toEqual([]);
+  expect(
+    missingPackages(required, {
+      packages: [
+        { ...record, minimumSystemVersion: "14.4.0" },
+        {
+          ...record,
+          version: "1.1.0",
+          minimumSystemVersion: "14.10.0",
+          sourceFingerprint: "b".repeat(64),
+        },
+      ],
+    }),
+  ).toEqual(required);
+  expect(
+    missingPackages(required, {
+      packages: [{ ...record, minimumSystemVersion: "14.0.0" }],
+    }),
+  ).toEqual(required);
+  for (const minimumSystemVersion of [14, "14.4", "14.04.0", "14.4.0-beta"])
+    expect(() =>
+      missingPackages(required, {
+        packages: [{ ...record, minimumSystemVersion }],
+      }),
+    ).toThrow();
 });

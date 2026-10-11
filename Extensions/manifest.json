@@ -3,7 +3,7 @@
     "id": "keepAwake",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
         "Extensions/keepAwake/KeepAwakeStore.swift",
@@ -19,6 +19,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -35,7 +36,7 @@
     "id": "audioMixer",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.4.0",
     "roles": {
       "app": [
         "Extensions/audioMixer/AudioMixerSurface.swift",
@@ -55,6 +56,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "scripts/build-extension-ui-carrier.mjs",
       "scripts/build-contained-host-runtime.mjs"
@@ -72,7 +74,7 @@
     "id": "focusDim",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
         "Extensions/focusDim/Helper/Services/FocusDimEngine.swift",
@@ -90,6 +92,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -106,7 +109,7 @@
     "id": "windowSweaters",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
         "Extensions/windowSweaters/Helper/Services/SkyLight.swift",
@@ -139,6 +142,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -155,7 +159,7 @@
     "id": "micMute",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
         "Extensions/micMute/Helper/Services/MicMuteEngine.swift",
@@ -173,6 +177,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -189,7 +194,7 @@
     "id": "keystrokeHighlight",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
         "Extensions/keystrokeHighlight/Helper/Services/KeystrokeHighlightRuntime.swift",
@@ -208,6 +213,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -224,7 +230,7 @@
     "id": "presenter",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
     "roles": {
@@ -256,6 +262,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -273,7 +280,7 @@
     "id": "colorPicker",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
         "Extensions/colorPicker/CLI/CLIDestructivePlan.swift",
@@ -296,6 +303,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -313,7 +321,7 @@
     "testTargets": ["ci-extension-system-stats"],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
         "Extensions/systemStats/CLI/MachineReports.swift",
@@ -336,6 +344,7 @@
     "inputs": ["Extensions/systemStats"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -352,7 +361,7 @@
     "id": "emoji",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
     "roles": {
@@ -388,6 +397,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -402,7 +412,7 @@
     "id": "homebrew",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
     "roles": {
@@ -426,6 +436,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -442,7 +453,7 @@
     "id": "calendar",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
     "roles": {
@@ -475,6 +486,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -493,7 +505,7 @@
     "id": "jev",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
     "roles": {
@@ -522,6 +534,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -538,7 +551,7 @@
     "id": "system",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
     "roles": {
@@ -563,6 +576,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -579,7 +593,7 @@
     "id": "timeLapse",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 15,
+    "minimumSystemVersion": "15.0.0",
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
     "roles": {
@@ -604,6 +618,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -620,7 +635,7 @@
     "id": "cleaner",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
     "roles": {
@@ -646,6 +661,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -662,7 +678,7 @@
     "id": "appMaintenance",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "roles": {
       "app": [
         "Extensions/appMaintenance/AppMaintenance.swift",
@@ -688,6 +704,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -706,7 +723,7 @@
     "id": "blitztree",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "roles": {
       "app": [
         "Extensions/blitztree/BlitzTreeActions.swift",
@@ -727,6 +744,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -748,7 +766,7 @@
     ],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "supportProduct": [
       "EdithExtensionDocuments",
@@ -807,6 +825,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
@@ -825,7 +844,7 @@
     "id": "notchShelf",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
         "Extensions/notchShelf/Browser/Models/BrowserAddress.swift",
@@ -903,6 +922,7 @@
     "inputs": ["Extensions/notchShelf"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -929,6 +949,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
@@ -992,14 +1013,14 @@
         "Extensions/clipboard/ClipboardShortcutRecorder.swift"
       ]
     },
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "sameExecutableWorker": true
   },
   {
     "id": "music",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "roles": {
       "app": [
         "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
@@ -1117,6 +1138,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -1136,7 +1158,7 @@
     "testTargets": ["ci-extension-docs", "ci-extension-docs-native"],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "supportProduct": ["EdithExtensionDocuments", "EdithExtensionCommands"],
@@ -1159,6 +1181,7 @@
     "inputs": ["Extensions/docs", "Packages/EdithDocsWorker"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -1193,6 +1216,7 @@
     "inputs": ["Extensions/latex"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
@@ -1237,7 +1261,7 @@
         "Extensions/latex/Resources/review.js"
       ]
     },
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "sameExecutableWorker": true
   },
   {
@@ -1251,6 +1275,7 @@
     "inputs": ["Extensions/companion"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
@@ -1322,7 +1347,7 @@
         "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
       ]
     },
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "sameExecutableWorker": true
   },
   {
@@ -1348,6 +1373,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
@@ -1380,7 +1406,7 @@
         "Extensions/terminal/TerminalWorker.swift"
       ]
     },
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "sameExecutableWorker": true,
     "testTargets": [
       "ci-extension-terminal"
@@ -1390,7 +1416,7 @@
     "id": "studio",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
@@ -1658,6 +1684,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -1675,7 +1702,7 @@
     "id": "usage",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
@@ -1834,6 +1861,7 @@
     "inputs": ["Extensions/usage"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
@@ -1851,7 +1879,7 @@
     "id": "bifrost",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
@@ -1915,6 +1943,7 @@
     "inputs": ["Extensions/bifrost"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
@@ -1931,7 +1960,7 @@
     "id": "lidAwake",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
@@ -1969,6 +1998,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
@@ -1989,7 +2019,7 @@
     "id": "attention",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "roles": {
       "app": [
         "Extensions/attention/Runtime.swift"
@@ -2000,6 +2030,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
@@ -2129,6 +2160,7 @@
     "inputs": ["Extensions/machines"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "Extensions/terminal/Native",
@@ -2137,7 +2169,7 @@
       "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
     ],
     "dependencies": [],
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "roles": {
       "app": [
         "Extensions/machines/CLI/CLIProgress.swift",
@@ -2331,7 +2363,7 @@
     "id": "downloads",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "roles": {
       "app": [
         "Extensions/downloads/CLI/CLIDestructivePlan.swift",
@@ -2358,6 +2390,7 @@
     "inputs": ["Extensions/downloads"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "scripts/build-extension-ui-carrier.mjs",
       "scripts/build-contained-host-runtime.mjs",
@@ -2377,7 +2410,7 @@
     "testTargets": ["ci-extension-seo-audit-native"],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
@@ -2415,6 +2448,7 @@
     "inputs": ["Extensions/seoAudit"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -2428,7 +2462,7 @@
     "id": "virtualCamera",
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
@@ -2571,6 +2605,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "scripts/build-contained-host-runtime.mjs",
       "scripts/build-camera-carrier.mjs",
@@ -2596,7 +2631,7 @@
       "role": "cameraCarrier",
       "transport": "obs",
       "applicationIdentifier": "com.pulkit.edith.cameraCarrier",
-      "minimumSystemVersion": 14
+      "minimumSystemVersion": "14.0.0"
     },
     "sameExecutableWorker": true
   },
@@ -2605,7 +2640,7 @@
     "testTargets": ["ci-extension-code-stats-native"],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "roles": {
       "app": [
         "Extensions/codeStats/CLI/CLIDestructivePlan.swift",
@@ -2675,6 +2710,7 @@
     "inputs": ["Extensions/codeStats"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -2694,7 +2730,7 @@
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "supportProduct": ["EdithExtensionDocuments", "EdithExtensionCommands"],
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
@@ -2708,6 +2744,7 @@
     "inputs": ["Extensions/herdr"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
@@ -2937,7 +2974,7 @@
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "supportProduct": ["EdithExtensionDocuments", "EdithExtensionCommands"],
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
@@ -2951,6 +2988,7 @@
     "inputs": ["Extensions/quinjet"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "Extensions/terminal/Native",
@@ -3051,6 +3089,7 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
@@ -3117,7 +3156,7 @@
         "Extensions/database/Views/DatabaseWorkbenchView.swift"
       ]
     },
-    "minimumSystemVersion": 14,
+    "minimumSystemVersion": "14.0.0",
     "nativeLicenses": [
       {
         "source": "Extensions/database/DatabaseEngine/THIRD-PARTY-NOTICES.txt",

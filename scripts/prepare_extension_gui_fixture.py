@@ -41,7 +41,7 @@ def prepare(host, executable, output=None):
         "-target", "arm64-apple-macos14.0", "-module-name", "GUIFixtureCalendar",
         str(source), "-o", str(bundle / "MacOS/Runtime"),
     ], check=True)
-    manifest = dict(id="calendar", version="1.0.0", hostABI="edith-host-1", architecture="arm64", dependencies=[])
+    manifest = dict(id="calendar", version="1.0.0", hostABI="edith-host-1", architecture="arm64", minimumSystemVersion="14.0.0", dependencies=[])
     (payload / "package.json").write_text(json.dumps(manifest))
     (bundle / "Info.plist").write_bytes(plistlib.dumps(dict(
         CFBundleIdentifier="com.pulkit.edith.extensions.calendar.app",
@@ -54,7 +54,7 @@ def prepare(host, executable, output=None):
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as output_zip:
         for file in files:
             output_zip.write(file, file.relative_to(payload.parent))
-    package = dict(manifest, minimumSystemVersion=14,
+    package = dict(manifest,
         downloadURL="https://github.com/pulkitxm/edith/releases/download/gui-fixture/calendar.zip",
         sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),
         downloadBytes=archive.stat().st_size, installedBytes=sum(p.stat().st_size for p in files))

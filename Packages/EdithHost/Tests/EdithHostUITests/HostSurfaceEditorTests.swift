@@ -1136,7 +1136,9 @@ import Testing
                     hostABI: packageState == "abi" || packageState == "removal"
                         ? "incompatible-fixture" : HostContract.compatibility,
                     minimumSystemVersion: packageState == "os"
-                        ? ProcessInfo.processInfo.operatingSystemVersion.majorVersion + 1 : 14,
+                        ? .init(
+                            major: ProcessInfo.processInfo.operatingSystemVersion.majorVersion + 1)
+                        : .init(major: 14),
                     downloadURL: URL(
                         string:
                             "https://github.com/pulkitxm/edith/releases/download/synthetic/fixture.zip"

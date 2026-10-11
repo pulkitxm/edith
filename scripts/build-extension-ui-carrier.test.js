@@ -110,6 +110,7 @@ int main(int argc, char **argv) {
           const payload = join(root, id);
           await mkdir(payload);
           await buildExtensionUICarrier({
+            minimumSystemVersion: "14.0.0",
             hostApp: host,
             payloadDirectory: payload,
             id,
@@ -319,11 +320,30 @@ int main(int argc, char **argv) {
     await expect(buildExtensionUICarrier({})).rejects.toThrow("incomplete");
     await expect(
       buildExtensionUICarrier({
+        minimumSystemVersion: "14.0.0",
         hostApp: "/tmp/synthetic-host.app",
         payloadDirectory: "/tmp/synthetic-payload",
         identity: "",
       }),
     ).rejects.toThrow("incomplete");
+  });
+
+  test("malformed system minimums fail before any native carrier operation", async () => {
+    for (const minimumSystemVersion of [
+      undefined,
+      14,
+      "14.4",
+      "14.04.0",
+      "14.4.0-beta",
+    ])
+      await expect(
+        buildExtensionUICarrier({
+          hostApp: "/tmp/synthetic-host.app",
+          payloadDirectory: "/tmp/synthetic-payload",
+          minimumSystemVersion,
+          development: true,
+        }),
+      ).rejects.toThrow("Invalid system version");
   });
 
   for (const id of ["calendar", "music", "notchShelf"]) {
@@ -408,6 +428,7 @@ int main(int argc, char **argv) {
             join(role, "Contents/MacOS/Runtime"),
           );
           const built = await buildExtensionUICarrier({
+            minimumSystemVersion: "14.0.0",
             hostApp: host,
             payloadDirectory: payload,
             id: id,
@@ -469,6 +490,7 @@ int main(int argc, char **argv) {
             version: "1.0.0",
             hostABI: "edith-host-1",
             architecture: "arm64",
+            minimumSystemVersion: "14.0.0",
             dependencies: [],
           });
           expect(carrierInfo.CFBundleIdentifier).toBe(
@@ -522,6 +544,7 @@ int main(int argc, char **argv) {
                 version: "1.0.0",
                 hostABI: "edith-host-1",
                 architecture: "arm64",
+                minimumSystemVersion: "14.0.0",
                 dependencies: [],
               }),
             );
@@ -540,6 +563,7 @@ int main(int argc, char **argv) {
           }
           await expect(
             buildExtensionUICarrier({
+              minimumSystemVersion: "14.0.0",
               hostApp: host,
               payloadDirectory: payload,
               id: id,

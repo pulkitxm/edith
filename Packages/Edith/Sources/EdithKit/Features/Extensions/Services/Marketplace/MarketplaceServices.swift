@@ -33,7 +33,7 @@ public enum MarketplaceServices {
             catalog.installationPlan(
                 for: id, hostABI: MarketplaceConfiguration.hostABI,
                 architecture: "arm64",
-                systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion),
+                systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion)),
             repository: MarketplaceConfiguration.repository)
     }
 

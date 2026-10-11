@@ -112,7 +112,7 @@ import Sparkle
       applicationIdentifier:
         "com.pulkit.edith.tests.camera-fixture.cameraCarrier",
       extensionIdentifier: "com.pulkit.edith.tests.camera-fixture.camera",
-      minimumSystemVersion: 14,
+      minimumSystemVersion: "14.0.0",
       installEntitlement: "com.apple.developer.system-extension.install",
     },
   });

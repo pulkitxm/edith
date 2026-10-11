@@ -267,7 +267,7 @@ func unsafeArchivesNeverWriteOutsideTheStagingArea(_ path: String) async throws 
     defer { fixture.clean() }
     let old = fixturePackage("keepAwake", version: "1.0.0", hostABI: "host-1")
     let future = ExtensionPackage(
-        id: old.id, version: "2.0.0", hostABI: old.hostABI, minimumSystemVersion: 15,
+        id: old.id, version: "2.0.0", hostABI: old.hostABI, minimumSystemVersion: .init(major: 15),
         downloadURL: old.downloadURL, sha256: old.sha256, downloadBytes: 1, installedBytes: 1)
     try FileManager.default.createDirectory(
         at: fixture.store.root, withIntermediateDirectories: true)
@@ -275,15 +275,17 @@ func unsafeArchivesNeverWriteOutsideTheStagingArea(_ path: String) async throws 
     try fixture.store.select(future)
     #expect(
         try fixture.store.installedPackage(
-            id: old.id, hostABI: old.hostABI, architecture: "arm64", systemVersion: 14) == old)
+            id: old.id, hostABI: old.hostABI, architecture: "arm64", systemVersion: .init(major: 14)
+        ) == old)
     #expect(
         try fixture.store.installedPackage(
-            id: old.id, hostABI: old.hostABI, architecture: "arm64", systemVersion: 15) == future)
+            id: old.id, hostABI: old.hostABI, architecture: "arm64", systemVersion: .init(major: 15)
+        ) == future)
     #expect(
         try fixture.store.installedPackage(
             id: old.id, hostABI: old.hostABI, architecture: "arm64", version: future.version,
-            systemVersion: 14) == nil)
-    try fixture.store.prune(hostABI: old.hostABI, systemVersion: 14)
+            systemVersion: .init(major: 14)) == nil)
+    try fixture.store.prune(hostABI: old.hostABI, systemVersion: .init(major: 14))
     #expect(try fixture.store.installedPackages() == [old])
 }
 

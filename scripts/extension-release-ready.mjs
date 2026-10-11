@@ -11,6 +11,10 @@ import {
 } from "./extension-catalog-pointer.mjs";
 import { writeHostABI } from "./extension-host-abi.mjs";
 import { extensionFingerprint } from "./extension-release-plan.mjs";
+import {
+  compareSystemVersions,
+  validateMinimumSystemVersion,
+} from "./extension-system-version.mjs";
 import { verifiedCatalogPayload } from "./verify-extension-catalog.mjs";
 
 export function verifyCatalog(envelope, publicKey) {
@@ -19,6 +23,9 @@ export function verifyCatalog(envelope, publicKey) {
 
 export function missingPackages(expected, catalog) {
   return expected.filter((entry) => {
+    validateMinimumSystemVersion(entry.minimumSystemVersion);
+    for (const published of catalog.packages)
+      validateMinimumSystemVersion(published.minimumSystemVersion);
     const compatible = catalog.packages.filter(
       (published) =>
         published.id === entry.id &&
@@ -29,11 +36,17 @@ export function missingPackages(expected, catalog) {
       entry.minimumSystemVersion,
       ...compatible
         .map((published) => published.minimumSystemVersion)
-        .filter((system) => system >= entry.minimumSystemVersion),
+        .filter(
+          (system) =>
+            compareSystemVersions(system, entry.minimumSystemVersion) >= 0,
+        ),
     ]);
     return [...systems].some((system) => {
       const selected = compatible
-        .filter((published) => published.minimumSystemVersion <= system)
+        .filter(
+          (published) =>
+            compareSystemVersions(published.minimumSystemVersion, system) <= 0,
+        )
         .reduce(
           (latest, published) =>
             !latest ||
@@ -44,7 +57,10 @@ export function missingPackages(expected, catalog) {
               : latest,
           undefined,
         );
-      return selected?.sourceFingerprint !== entry.fingerprint;
+      return (
+        selected?.sourceFingerprint !== entry.fingerprint ||
+        selected?.minimumSystemVersion !== entry.minimumSystemVersion
+      );
     });
   });
 }
@@ -59,7 +75,9 @@ export async function expectedPackages(root) {
       id: entry.id,
       hostABI: entry.hostABI,
       architecture: "arm64",
-      minimumSystemVersion: entry.minimumSystemVersion,
+      minimumSystemVersion: validateMinimumSystemVersion(
+        entry.minimumSystemVersion,
+      ),
       fingerprint: await extensionFingerprint(root, entry, definitions),
     })),
   );

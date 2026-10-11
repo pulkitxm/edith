@@ -217,7 +217,7 @@ public final class HostMarketplace {
             }
             let plan = try result.catalog.installationPlan(
                 for: id, hostABI: HostContract.compatibility, architecture: "arm64",
-                systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion)
+                systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion))
             if let previous = installed[id] { try store.select(previous) }
             _ = try await installer.install(plan, repository: MarketplaceConfiguration.repository) {
                 [weak self] value in
@@ -275,7 +275,7 @@ public final class HostMarketplace {
         for package in catalog.packages
         where package.isCompatible(
             hostABI: HostContract.compatibility, architecture: "arm64",
-            systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion)
+            systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion))
         {
             if let previous = candidates[package.id],
                 previous.version.compare(package.version, options: .numeric) != .orderedAscending
@@ -299,7 +299,7 @@ public final class HostMarketplace {
                 id: entry.id, hostABI: HostContract.compatibility, architecture: "arm64"),
                 package.isCompatible(
                     hostABI: HostContract.compatibility, architecture: "arm64",
-                    systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion)
+                    systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion))
             {
                 selected[entry.id] = package
             }

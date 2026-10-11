@@ -59,7 +59,8 @@ public struct HostStorageInventory: Sendable {
             .appendingPathComponent("Library/Preferences"),
         ownerDefaults: UserDefaults = SharedDefaults.store,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
-        systemVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+        systemVersion: ExtensionSystemVersion = .init(
+            ProcessInfo.processInfo.operatingSystemVersion)
     ) throws {
         let store = marketplace.packageStore
         let identity = marketplace.identity

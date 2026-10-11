@@ -6,14 +6,14 @@ public struct HostRequirementPackageInspection: Sendable {
     private let store: ExtensionPackageStore
     private let hostABI: String
     private let architecture: String
-    private let systemVersion: Int
+    private let systemVersion: ExtensionSystemVersion
     private let hostIdentifier: String
     private let requiredRoles: Set<String>
     private let verify: @Sendable (ExtensionUICarrier, [URL]) throws -> Void
 
     public init(
         store: ExtensionPackageStore, hostABI: String, architecture: String,
-        systemVersion: Int, hostIdentifier: String, requiredRoles: Set<String>,
+        systemVersion: ExtensionSystemVersion, hostIdentifier: String, requiredRoles: Set<String>,
         policy: SignaturePolicy
     ) {
         self.init(
@@ -36,7 +36,7 @@ public struct HostRequirementPackageInspection: Sendable {
 
     init(
         store: ExtensionPackageStore, hostABI: String, architecture: String,
-        systemVersion: Int, hostIdentifier: String, requiredRoles: Set<String>,
+        systemVersion: ExtensionSystemVersion, hostIdentifier: String, requiredRoles: Set<String>,
         verify: @escaping @Sendable (ExtensionUICarrier, [URL]) throws -> Void
     ) {
         self.store = store; self.hostABI = hostABI; self.architecture = architecture

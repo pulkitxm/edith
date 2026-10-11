@@ -71,7 +71,7 @@ public final class ExtensionBundleRuntime {
         guard [.app, .helper, .agent].contains(role), package.hostABI == hostABI,
             package.architecture == "arm64",
             package.minimumSystemVersion
-                <= ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+                <= .init(ProcessInfo.processInfo.operatingSystemVersion)
         else { throw MarketplaceError.invalidBundle }
         store = ExtensionPackageStore(root: directory)
         self.role = role

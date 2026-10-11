@@ -17,6 +17,7 @@ import {
   copyContainedHostRuntime,
   requireRegularTree,
 } from "./build-contained-host-runtime.mjs";
+import { validateMinimumSystemVersion } from "./extension-system-version.mjs";
 
 const identifierPattern = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
 const extensionPattern = /^[A-Za-z][A-Za-z0-9]{0,63}$/;
@@ -168,6 +169,7 @@ function sign(path, identity, development, entitlements) {
 }
 
 export async function buildExtensionUICarrier({
+  minimumSystemVersion,
   hostApp,
   payloadDirectory,
   id,
@@ -179,6 +181,7 @@ export async function buildExtensionUICarrier({
 }) {
   if (!hostApp || !payloadDirectory || (!development && !identity))
     throw new Error("Extension UI carrier build inputs are incomplete");
+  validateMinimumSystemVersion(minimumSystemVersion);
   const signingIdentity = development ? "-" : identity;
   const source = resolve(hostApp, "Contents/MacOS/Edith");
   await requireRegularTree(hostApp);
@@ -248,6 +251,7 @@ export async function buildExtensionUICarrier({
       version,
       hostABI,
       architecture: "arm64",
+      minimumSystemVersion,
       dependencies,
     }),
   );

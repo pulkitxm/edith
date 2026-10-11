@@ -505,7 +505,7 @@ public final class HostRemoteSessionManager {
             marketplace.sessions.states[request.extensionID] != .stopping,
             package.hostABI == HostContract.compatibility, package.architecture == "arm64",
             package.minimumSystemVersion
-                <= ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+                <= .init(ProcessInfo.processInfo.operatingSystemVersion)
         else { throw HostWorkerError.rejected }
         let active =
             marketplace.sessions.activeIDs.contains(request.extensionID)

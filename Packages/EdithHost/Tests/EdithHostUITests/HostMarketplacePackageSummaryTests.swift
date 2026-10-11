@@ -47,7 +47,7 @@ import Testing
     private func package(_ version: String) -> ExtensionPackage {
         ExtensionPackage(
             id: "sample", version: version, hostABI: HostContract.compatibility,
-            architecture: "arm64", minimumSystemVersion: 14,
+            architecture: "arm64", minimumSystemVersion: .init(major: 14),
             downloadURL: URL(string: "https://example.invalid/sample.zip")!,
             sha256: String(repeating: "a", count: 64), downloadBytes: 100,
             installedBytes: 200, dependencies: [])

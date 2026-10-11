@@ -26,7 +26,7 @@ func fixturePackage(
     try catalog.validate(repository: "example/app")
     #expect(
         try catalog.installationPlan(
-            for: "shelf", hostABI: "host-1", architecture: "arm64", systemVersion: 14
+            for: "shelf", hostABI: "host-1", architecture: "arm64", systemVersion: .init(major: 14)
         ).map(\.id) == ["music", "shelf"])
 }
 
@@ -39,15 +39,18 @@ func fixturePackage(
         ])
     #expect(
         try catalog.installationPlan(
-            for: "keepAwake", hostABI: "host-1", architecture: "arm64", systemVersion: 14
+            for: "keepAwake", hostABI: "host-1", architecture: "arm64",
+            systemVersion: .init(major: 14)
         ).last?.version == "1.10.0")
     #expect(
         try catalog.installationPlan(
-            for: "keepAwake", hostABI: "host-2", architecture: "arm64", systemVersion: 14
+            for: "keepAwake", hostABI: "host-2", architecture: "arm64",
+            systemVersion: .init(major: 14)
         ).last?.version == "2.0.0")
     #expect(throws: MarketplaceError.incompatiblePackage) {
         try catalog.installationPlan(
-            for: "keepAwake", hostABI: "host-3", architecture: "arm64", systemVersion: 14)
+            for: "keepAwake", hostABI: "host-3", architecture: "arm64",
+            systemVersion: .init(major: 14))
     }
 }
 
@@ -59,7 +62,7 @@ func fixturePackage(
         ])
     #expect(throws: MarketplaceError.invalidCatalog) {
         try catalog.installationPlan(
-            for: "a", hostABI: "host-1", architecture: "arm64", systemVersion: 14)
+            for: "a", hostABI: "host-1", architecture: "arm64", systemVersion: .init(major: 14))
     }
 }
 
