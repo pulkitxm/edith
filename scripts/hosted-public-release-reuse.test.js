@@ -288,6 +288,71 @@ describe("Host-only reuse of an unchanged signed catalog publication", () => {
     }
   });
 
+  test("ordinary production skips exact-source validation admission", () => {
+    for (const event of ["push", "workflow_dispatch"]) {
+      const value = noChangeFixture();
+      value.run.event = event;
+      value.jobs[0].steps.splice(2, 0, {
+        name: "Admit exact-source all-extension validation",
+        status: "completed",
+        conclusion: "skipped",
+      });
+      if (event === "workflow_dispatch")
+        value.jobs[0].steps[1].conclusion = "skipped";
+      expect(() => unchangedExtensionsRun(value)).not.toThrow();
+    }
+  });
+
+  test("validation admission and failed current work cannot qualify production", () => {
+    for (const mutate of [
+      (value) => {
+        value.jobs[0].steps[2].conclusion = "success";
+      },
+      (value) => {
+        value.jobs[0].steps[2].conclusion = "failure";
+      },
+      (value) => {
+        value.jobs[0].steps[2].conclusion = "cancelled";
+      },
+      (value) => {
+        value.jobs[0].steps[2].status = "in_progress";
+      },
+      (value) => {
+        value.jobs[0].steps[2].name = "Unknown validation admission";
+      },
+      (value) => value.jobs[0].steps.push(value.jobs[0].steps[2]),
+      (value) => {
+        value.jobs[3].conclusion = "failure";
+      },
+      (value) => {
+        value.jobs[3].conclusion = "cancelled";
+      },
+      (value) => {
+        value.jobs[3].conclusion = "success";
+      },
+      (value) => {
+        value.run.conclusion = "failure";
+      },
+      (value) => {
+        value.run.conclusion = "cancelled";
+      },
+    ]) {
+      for (const event of ["push", "workflow_dispatch"]) {
+        const value = noChangeFixture();
+        value.run.event = event;
+        value.jobs[0].steps.splice(2, 0, {
+          name: "Admit exact-source all-extension validation",
+          status: "completed",
+          conclusion: "skipped",
+        });
+        if (event === "workflow_dispatch")
+          value.jobs[0].steps[1].conclusion = "skipped";
+        mutate(value);
+        expect(() => unchangedExtensionsRun(value)).toThrow();
+      }
+    }
+  });
+
   test("absent runs need a real source path-filter exclusion", async () => {
     expect(() =>
       absentExtensionsPathRoute(

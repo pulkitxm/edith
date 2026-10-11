@@ -383,14 +383,21 @@ export function unchangedExtensionsRun({ run, jobs, artifacts, source }) {
     assert.equal(job.conclusion, job.name === "plan" ? "success" : "skipped");
     if (job.name !== "plan") assert.deepEqual(job.steps, []);
     else {
+      const validationSteps = job.steps.filter(
+        ({ name }) => name === "Admit exact-source all-extension validation",
+      );
+      assert(validationSteps.length <= 1);
       for (const step of job.steps) {
         assert.equal(step.status, "completed");
-        assert(
-          step.conclusion === "success" ||
-            (run.event === "workflow_dispatch" &&
-              step.name === "Require production publication from main" &&
-              step.conclusion === "skipped"),
-        );
+        if (step.name === "Admit exact-source all-extension validation")
+          assert.equal(step.conclusion, "skipped");
+        else
+          assert(
+            step.conclusion === "success" ||
+              (run.event === "workflow_dispatch" &&
+                step.name === "Require production publication from main" &&
+                step.conclusion === "skipped"),
+          );
       }
       for (const name of [
         "Check portable publication and selective planning",
