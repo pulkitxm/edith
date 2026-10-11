@@ -360,7 +360,9 @@ export async function validateCameraFixtureHost(
 }
 
 async function run() {
-  const { buildExtensionPackage } = await import("./build-extension-package.mjs");
+  const { buildExtensionPackage } = await import(
+    "./build-extension-package.mjs"
+  );
   const definitions = JSON.parse(
     await readFile("Extensions/manifest.json", "utf8"),
   );

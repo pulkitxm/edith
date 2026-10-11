@@ -19,10 +19,10 @@ import {
   parseWorkerFixtureArguments,
   supportedFixtureWorkers,
   validateCameraFixtureHost,
+  validatePrivilegedWorkerLifecycleResult,
   validateWorkerFixtureProof,
   validateWorkerFixtureSelection,
   validateWorkerLifecycleResult,
-  validatePrivilegedWorkerLifecycleResult,
   workerFixtureEnvironment,
   workerFixtureHome,
 } from "./test-extension-workers.mjs";
