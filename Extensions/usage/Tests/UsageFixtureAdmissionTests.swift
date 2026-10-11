@@ -69,6 +69,36 @@ struct UsageIssuedFixture {
 
 @MainActor @Suite(.serialized)
 struct UsageFixtureAdmissionTests {
+    @Test func suspensionClosesRegistryAndStartupBeforeFixtureAdmission() async throws {
+        let suite = try #require(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
+        var admissions = 0
+        let runtime = ExtensionRuntime(admitFixture: { _ in
+            admissions += 1
+            throw WorkerFixtureError.invalid
+        })
+        var suspended = false
+        runtime.suspendCommands { suspended = true }
+        let response = runtime.execute(["operation": "start", "defaultsSuite": suite])
+        #expect((response as? NSDictionary)?["ok"] as? Bool == false)
+        #expect(admissions == 0)
+        var replies = 0
+        runtime.invoke([
+            "token": UUID().uuidString, "command": "usage.cli.catalog", "payload": Data(),
+        ]) { data, error in
+            replies += 1
+            #expect(data == nil && error != nil)
+        }
+        #expect(replies == 1)
+        await withCheckedContinuation { continuation in
+            runtime.suspendCommands { continuation.resume() }
+        }
+        #expect(suspended)
+        #expect(admissions == 0)
+        #expect(
+            (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
+                == false)
+    }
+
     @Test func broadFixtureHintIsRejectedBeforeAnyOwnedEngineStarts() throws {
         let fixture = try UsageIssuedFixture()
         defer { fixture.remove() }

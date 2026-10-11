@@ -284,7 +284,7 @@ final class ExtensionRuntime: NSObject {
             ] as NSDictionary
         case "configureUI":
             uiPresentations.prune()
-            guard controller == nil, !recovering,
+            guard !draining, controller == nil, !recovering,
                 let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "usage",
                 let text = input["presentationID"] as? String, let id = UUID(uuidString: text),
@@ -309,7 +309,8 @@ final class ExtensionRuntime: NSObject {
             uiPresentations.release(id)
         case "stopUI": uiPresentations.stop()
         case "start":
-            guard Bundle.main.bundleURL.pathExtension != "appex", uiPresentations.isEmpty else {
+            guard !draining, Bundle.main.bundleURL.pathExtension != "appex", uiPresentations.isEmpty
+            else {
                 return ["ok": false] as NSDictionary
             }
             guard let suite = input["defaultsSuite"] as? String,
@@ -407,6 +408,7 @@ final class ExtensionRuntime: NSObject {
             return scene.controller() ?? (["ok": false] as NSDictionary)
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":
+            guard !draining else { return ["ok": false] as NSDictionary }
             do {
                 _ = try admitFixture(input)
                 guard let controller else { return ["ok": false] as NSDictionary }

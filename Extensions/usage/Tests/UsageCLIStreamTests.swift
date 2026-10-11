@@ -198,6 +198,49 @@ import Testing
         await controller.shutdown()
     }
 
+    @Test func suspendedStreamsJoinCollectorAfterCancelledWaiterReturns() async throws {
+        let fence = UsageCLIStreamReturnFence()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let controller = UsageWorkerController(
+            dataDirectory: root,
+            collect: { _, _ in
+                await fence.enterAndWait()
+                try Task.checkCancellation()
+                return Data()
+            })
+        let streams = try ExtensionCLIStreams(owner: "usage")
+        _ = try start(
+            ["refresh", "--no-machines", "--json"], streams: streams, controller: controller)
+        await fence.waitForEntry()
+        let waiter = Task { await controller.waitForRefresh() }
+        await Task.yield()
+        waiter.cancel()
+        await waiter.value
+        #expect(controller.refreshing)
+        streams.stop()
+        controller.beginShutdown()
+        #expect(throws: (any Error).self) { try controller.requestRefresh() }
+        var draining = false, returned = false
+        let drain = Task {
+            draining = true
+            await streams.stopAndWait()
+            await controller.suspendAndWait()
+            returned = true
+        }
+        while !draining { await Task.yield() }
+        for _ in 0..<100 { await Task.yield() }
+        #expect(!returned)
+        #expect(
+            !FileManager.default.fileExists(atPath: root.appendingPathComponent("usage.json").path))
+        await fence.release()
+        await drain.value
+        #expect(returned)
+        await controller.shutdown()
+        #expect(
+            !FileManager.default.fileExists(atPath: root.appendingPathComponent("usage.json").path))
+    }
+
     @Test func cancellingAndStoppingStreamsCancelOnlyTheirOwnedRefresh() async throws {
         let cancelled = UsageCLIStreamCancellation()
         let controller = UsageWorkerController(
@@ -247,4 +290,30 @@ private actor UsageCLIStreamCancellation {
     private(set) var value = false
 
     func record() { value = true }
+}
+
+private actor UsageCLIStreamReturnFence {
+    private var entered = false
+    private var open = false
+    private var entry: CheckedContinuation<Void, Never>?
+    private var pending: CheckedContinuation<Void, Never>?
+
+    func enterAndWait() async {
+        entered = true
+        entry?.resume()
+        entry = nil
+        if open { return }
+        await withCheckedContinuation { pending = $0 }
+    }
+
+    func waitForEntry() async {
+        if entered { return }
+        await withCheckedContinuation { entry = $0 }
+    }
+
+    func release() {
+        open = true
+        pending?.resume()
+        pending = nil
+    }
 }
