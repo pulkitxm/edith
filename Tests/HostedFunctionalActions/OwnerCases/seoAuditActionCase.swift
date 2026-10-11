@@ -31,13 +31,26 @@ final class SEOAuditActionCase: HostedFunctionalActionCase {
 
     func activateOriginalControl(context: HostedFunctionalActionContext) async throws {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
-        let count = transport.originalInvocationCount
-        await model.renameProject(id: Self.projectID, to: "Synthetic retained audit")
+        let baseline = try await readState(context: context, name: "Synthetic retained audit")
+        var count = transport.originalInvocationCount
+        await model.renameProject(id: Self.projectID, to: "Synthetic temporary audit")
         try await transport.waitForOriginalInvocation(Self.activationOperation, after: count)
         guard model.errorMessage == nil else { throw HostedFunctionalActionError.invalid }
+        let changed = try await readState(context: context, name: "Synthetic temporary audit")
+        guard changed != baseline else { throw HostedFunctionalActionError.invalid }
+        count = transport.originalInvocationCount
+        await model.renameProject(id: Self.projectID, to: "Synthetic retained audit")
+        try await transport.waitForOriginalInvocation(Self.activationOperation, after: count)
+        guard model.errorMessage == nil,
+            try await readState(context: context, name: "Synthetic retained audit") == baseline
+        else { throw HostedFunctionalActionError.invalid }
     }
 
     func readAuthoritativeState(context: HostedFunctionalActionContext) async throws -> Data {
+        try await readState(context: context, name: "Synthetic retained audit")
+    }
+
+    private func readState(context: HostedFunctionalActionContext, name: String) async throws -> Data {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
         try await transport.requireCurrent()
         let file = try context.ownedPath(named: "seo-project", kind: "file")
@@ -46,7 +59,7 @@ final class SEOAuditActionCase: HostedFunctionalActionCase {
             file == root.appendingPathComponent("project-" + Self.projectID.uuidString.lowercased() + ".json"),
             let bytes = SEOAuditOwnedIO.read(file, root: root),
             let value = try? JSONDecoder().decode(SEOAuditProject.self, from: bytes),
-            value.id == Self.projectID, value.name == "Synthetic retained audit", value.runs.isEmpty
+            value.id == Self.projectID, value.name == name, value.runs.isEmpty
         else { throw HostedFunctionalActionError.invalid }
         try await transport.requireCurrent()
         let encoder = JSONEncoder()

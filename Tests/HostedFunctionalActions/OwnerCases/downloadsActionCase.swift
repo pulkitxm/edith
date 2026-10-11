@@ -29,18 +29,31 @@ final class DownloadsActionCase: HostedFunctionalActionCase {
 
     func activateOriginalControl(context: HostedFunctionalActionContext) async throws {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
-        let count = transport.originalInvocationCount
+        let baseline = try await readState(context: context, kind: .audio)
+        var count = transport.originalInvocationCount
+        model.setPreferredKind(.video)
+        try await transport.waitForOriginalInvocation(Self.activationOperation, after: count)
+        let changed = try await readState(context: context, kind: .video)
+        guard changed != baseline else { throw HostedFunctionalActionError.invalid }
+        count = transport.originalInvocationCount
         model.setPreferredKind(.audio)
         try await transport.waitForOriginalInvocation(Self.activationOperation, after: count)
+        guard try await readState(context: context, kind: .audio) == baseline else {
+            throw HostedFunctionalActionError.invalid
+        }
     }
 
     func readAuthoritativeState(context: HostedFunctionalActionContext) async throws -> Data {
+        try await readState(context: context, kind: .audio)
+    }
+
+    private func readState(context: HostedFunctionalActionContext, kind: DownloadKind) async throws -> Data {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
         let configuration = try JSONDecoder().decode(
             DownloadsUIConfiguration.self,
             from: await transport.readAuthoritative("downloads.ui.configuration"))
         let audio = try context.ownedPath(named: "audio-library", kind: "directory")
-        guard configuration.kind == .audio, configuration.directories["audio"] == audio else {
+        guard configuration.kind == kind, configuration.directories["audio"] == audio else {
             throw HostedFunctionalActionError.invalid
         }
         let snapshot = try JSONDecoder().decode(
