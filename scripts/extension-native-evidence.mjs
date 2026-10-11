@@ -43,7 +43,11 @@ import {
 } from "./release-asset-upload.mjs";
 import { lookupRelease } from "./release-lookup.mjs";
 
-export async function readEvidenceAPI(path, fetch_) {
+export async function readEvidenceAPI(
+  path,
+  fetch_,
+  { allowMissing = false } = {},
+) {
   assert(/^\/(?:actions\/|git\/)/.test(path));
   const response = await fetch_(
     `https://api.github.com/repos/${repository}${path}`,
@@ -52,6 +56,10 @@ export async function readEvidenceAPI(path, fetch_) {
       headers: { Accept: "application/vnd.github+json" },
     },
   );
+  if (allowMissing && response.status === 404) {
+    await response.body?.cancel();
+    return null;
+  }
   assert.equal(response.status, 200);
   const reader = response.body.getReader();
   const chunks = [];
@@ -68,6 +76,26 @@ export async function readEvidenceAPI(path, fetch_) {
     await reader.cancel();
   }
   return closedJSON(Buffer.concat(chunks).toString("utf8"), 8 * 1024 ** 2);
+}
+
+export async function preserveNativeEvidenceTag({
+  source,
+  runID,
+  attempt,
+  fetchAPI,
+  createTag,
+}) {
+  const tag = evidenceTag(source, runID, attempt);
+  const path = `/git/ref/tags/${encodeURIComponent(tag)}`;
+  let ref = await readEvidenceAPI(path, fetchAPI, { allowMissing: true });
+  if (!ref) {
+    await createTag(tag, source);
+    ref = await readEvidenceAPI(path, fetchAPI);
+  }
+  assert.equal(ref.ref, `refs/tags/${tag}`);
+  assert.equal(ref.object.type, "commit");
+  assert.equal(ref.object.sha, source);
+  return tag;
 }
 
 export async function evidenceInventory(runID, attempt, fetch_) {
@@ -421,6 +449,15 @@ export async function publishNativeEvidence({
   );
   const tag = evidenceTag(target, runID, attempt);
   let item = lookupRelease(repository, tag);
+  if (item) assert(item.tag_name === tag && item.target_commitish === target);
+  await preserveNativeEvidenceTag({
+    source: target,
+    runID,
+    attempt,
+    fetchAPI: authenticated,
+    createTag: (name, sha) =>
+      mutate("tag", "create", "--repo", repository, "--target", sha, name),
+  });
   if (!item) {
     mutate(
       "release",
@@ -440,12 +477,6 @@ export async function publishNativeEvidence({
     item = lookupRelease(repository, tag);
   }
   assert(item && item.tag_name === tag && item.target_commitish === target);
-  const tagRef = await readEvidenceAPI(
-    `/git/ref/tags/${encodeURIComponent(tag)}`,
-    authenticated,
-  );
-  assert.deepEqual(tagRef.object.type, "commit");
-  assert.equal(tagRef.object.sha, target);
   assert(
     item.assets.every(({ name }) =>
       files.some(([, expected]) => name === expected),

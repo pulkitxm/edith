@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import { generateKeyPairSync, sign } from "node:crypto";
-import { verifyOriginalNativeLineage } from "./extension-native-evidence.mjs";
+import {
+  preserveNativeEvidenceTag,
+  verifyOriginalNativeLineage,
+} from "./extension-native-evidence.mjs";
 import {
   managedNativeBuildSteps,
   managedNativeTestSteps,
@@ -583,4 +586,59 @@ test("closed evidence asset sizes include envelope and every preserved original 
       ],
     ),
   ).toThrow();
+});
+
+test("fresh evidence drafts preserve an exact lightweight source tag before release creation", async () => {
+  let ref = null;
+  const writes = [];
+  const tag = `extension-evidence/${source}/101-1`;
+  const fetchAPI = async (url) => {
+    expect(url).toBe(
+      `https://api.github.com/repos/pulkitxm/edith/git/ref/tags/${encodeURIComponent(tag)}`,
+    );
+    return new Response(JSON.stringify(ref), { status: ref ? 200 : 404 });
+  };
+  const value = {
+    source,
+    runID: 101,
+    attempt: 1,
+    fetchAPI,
+    createTag: async (name, sha) => {
+      writes.push({ name, sha });
+      ref = { ref: `refs/tags/${name}`, object: { type: "commit", sha } };
+    },
+  };
+  expect(await preserveNativeEvidenceTag(value)).toBe(tag);
+  expect(writes).toEqual([{ name: tag, sha: source }]);
+  expect(await preserveNativeEvidenceTag(value)).toBe(tag);
+  expect(writes).toHaveLength(1);
+  for (const changed of [
+    { object: { type: "tag", sha: source } },
+    { object: { type: "commit", sha: "b".repeat(40) } },
+    { ref: `refs/tags/${tag}-other` },
+  ]) {
+    ref = {
+      ref: `refs/tags/${tag}`,
+      object: { type: "commit", sha: source },
+      ...changed,
+    };
+    await expect(preserveNativeEvidenceTag(value)).rejects.toThrow();
+    expect(writes).toHaveLength(1);
+  }
+  for (const status of [401, 403, 500]) {
+    await expect(
+      preserveNativeEvidenceTag({
+        ...value,
+        fetchAPI: async () => new Response("failure", { status }),
+      }),
+    ).rejects.toThrow();
+    expect(writes).toHaveLength(1);
+  }
+  await expect(
+    preserveNativeEvidenceTag({
+      ...value,
+      fetchAPI: async () => new Response("missing", { status: 404 }),
+      createTag: async () => {},
+    }),
+  ).rejects.toThrow();
 });
