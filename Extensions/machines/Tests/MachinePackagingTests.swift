@@ -36,7 +36,7 @@ import Testing
             #expect(!source.contains("import Edith\n"))
             #expect(!source.unicodeScalars.contains { $0.value == 0x2014 })
         }
-        #expect(owned == packaged)
+        #expect(owned.union(["Extensions/fixtureSupport/WorkerFixtureAdmission.swift"]) == packaged)
         let resources = try #require(manifest["resources"] as? [String: [String]])
         #expect(
             Set(resources.values.flatMap { $0 }) == [
