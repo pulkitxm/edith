@@ -18,6 +18,8 @@ public final class HostWorker {
         public let terminationStatus: Int32?
         public let terminationReason: Int?
     }
+    public static var fixtureBeforeConfiguration:
+        ((HostWorker, ExtensionProcessIdentity) async throws -> Void)?
     public static var fixtureObserveStop: ((FixtureStopReceipt) throws -> Void)?
     #endif
     private struct Pending {
@@ -124,6 +126,16 @@ public final class HostWorker {
             try ownedProcessGroups.captureWorker(birth)
             try input.fileHandleForReading.close()
             try output.fileHandleForWriting.close()
+            #if EDITH_FUNCTIONAL_FIXTURE
+            guard let prepare = Self.fixtureBeforeConfiguration else {
+                throw HostWorkerError.rejected
+            }
+            try await prepare(self, birth)
+            try Task.checkCancellation()
+            guard workerIdentity == birth, birth.isAlive, process.isRunning else {
+                throw HostWorkerError.rejected
+            }
+            #endif
             let response = try await request(
                 HostWorkerRequest(operation: "start", configuration: configuration))
             guard response.version == configuration.version else {

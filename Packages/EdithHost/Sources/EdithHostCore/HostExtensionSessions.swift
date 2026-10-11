@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import ExtensionMarketplace
 import Foundation
 import Observation
@@ -77,6 +78,24 @@ public final class HostExtensionSessions {
     public var processIdentifiers: [String: Int32] {
         workers.compactMapValues(\.processIdentifier)
     }
+
+    #if EDITH_FUNCTIONAL_FIXTURE
+    public func fixtureStartingWorker(
+        configuration: HostWorkerConfiguration, birth: ExtensionProcessIdentity
+    ) throws -> HostWorker {
+        let id = configuration.extensionID
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard states[id] == .starting, !activeIDs.contains(id),
+            !pendingDisableIDs.contains(id), !pendingRecoveryIDs.contains(id),
+            let worker = workers[id], !worker.ready, !worker.requiresRecovery,
+            !worker.configuration.recoveryOnly,
+            try encoder.encode(worker.configuration) == encoder.encode(configuration),
+            worker.processIdentifier == birth.pid, birth.isAlive
+        else { throw HostWorkerError.rejected }
+        return worker
+    }
+    #endif
 
     public func requestDisable(ids: Set<String>) {
         pendingDisableIDs.formUnion(ids.intersection(enabledIDs.union(workers.keys)))

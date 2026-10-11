@@ -19,6 +19,26 @@ final class HostRemoteEngineOwner {
         try validate()
     }
 
+    #if EDITH_FUNCTIONAL_FIXTURE
+    init(
+        marketplace: HostMarketplace, configuration: HostRemoteConfiguration,
+        startingWorker: HostWorker, birth: ExtensionProcessIdentity
+    ) throws {
+        guard !configuration.uiOnly,
+            try marketplace.sessions.fixtureStartingWorker(
+                configuration: configuration.worker, birth: birth) === startingWorker,
+            marketplace.installed[configuration.package.id] == configuration.package,
+            !marketplace.pendingRemovalIDs.contains(configuration.package.id)
+        else { throw HostWorkerError.rejected }
+        self.marketplace = marketplace
+        self.configuration = configuration
+        process = try HostRemoteKernelIdentity.read(birth.pid)
+        guard ExtensionProcessIdentity.read(birth.pid) == birth, process.isRunning else {
+            throw HostWorkerError.rejected
+        }
+    }
+    #endif
+
     func validate() throws {
         let id = configuration.package.id
         guard !configuration.uiOnly,
@@ -44,7 +64,8 @@ final class HostRemoteEngineOwner {
             namespace: marketplace.identity.identifier, owner: configuration.package.id,
             directory: marketplace.identity.root.appendingPathComponent("ExtensionState/Commands"))
         let result = try await endpoint.invoke(
-            request.operation, payload: request.payload, timeout: request.timeout)
+            request.operation, payload: request.payload, timeout: request.timeout,
+            token: request.token)
         try Task.checkCancellation()
         try validate()
         guard result.count <= ExtensionEngineWire.maximumPayloadBytes,

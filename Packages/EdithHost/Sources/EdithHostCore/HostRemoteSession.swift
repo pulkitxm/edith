@@ -26,6 +26,8 @@ public final class HostRemoteSession {
     }
     public static var fixtureObserveStop: ((FixtureStopReceipt) throws -> Void)?
     private var fixturePendingStopReceipt: FixtureStopReceipt?
+    private var fixturePreparingPeer: Task<HostRemoteProcessIdentity, Error>?
+    private var fixturePreparedChannel: HostRemoteChannel?
     public struct FixtureEngineInvocation: Sendable {
         public let ui: HostRemoteProcessIdentity
         public let engine: HostRemoteKernelIdentity
@@ -226,6 +228,42 @@ public final class HostRemoteSession {
         return try await task.value
     }
 
+    #if EDITH_FUNCTIONAL_FIXTURE
+    public func fixturePrepareNativePeer() async throws -> HostRemoteProcessIdentity {
+        guard isAvailable, configuring == nil, channel == nil else {
+            throw HostWorkerError.rejected
+        }
+        if let fixturePreparingPeer { return try await fixturePreparingPeer.value }
+        if let peer, fixturePreparedChannel?.peer == peer, peer.isRunning { return peer }
+        let task = Task { [self] in
+            let process = try await prepareProcess()
+            let bootstrap = try process.makeXPCConnection()
+            self.bootstrap = bootstrap
+            let channel = try await HostRemoteChannel.connect(
+                through: bootstrap, executable: executable,
+                rejectedPeer: { [weak self] candidate in self?.rejectedPeer = candidate },
+                receive: receive)
+            guard isAvailable, let peer = channel.peer else {
+                channel.invalidate()
+                throw HostWorkerError.rejected
+            }
+            try recordNativePeer(peer)
+            fixturePreparedChannel = channel
+            try Task.checkCancellation()
+            return peer
+        }
+        fixturePreparingPeer = task
+        defer { fixturePreparingPeer = nil }
+        return try await withTaskCancellationHandler {
+            let peer = try await task.value
+            try Task.checkCancellation()
+            return peer
+        } onCancel: {
+            task.cancel()
+        }
+    }
+    #endif
+
     private func recordNativePeer(_ peer: HostRemoteProcessIdentity) throws {
         guard self.peer == nil || self.peer == peer else { throw HostWorkerError.rejected }
         guard peer.isRunning else { throw HostWorkerError.rejected }
@@ -281,10 +319,25 @@ public final class HostRemoteSession {
                 throw HostWorkerError.exited
             }
             self.process = process
+            let channel: HostRemoteChannel
+            #if EDITH_FUNCTIONAL_FIXTURE
+            if let prepared = fixturePreparedChannel {
+                guard prepared.peer == peer else { throw HostWorkerError.rejected }
+                channel = prepared
+                fixturePreparedChannel = nil
+            } else {
+                let bootstrap = try process.makeXPCConnection()
+                self.bootstrap = bootstrap
+                channel = try await HostRemoteChannel.connect(
+                    through: bootstrap, executable: executable, expectedPeer: peer, receive: receive
+                )
+            }
+            #else
             let bootstrap = try process.makeXPCConnection()
             self.bootstrap = bootstrap
-            let channel = try await HostRemoteChannel.connect(
+            channel = try await HostRemoteChannel.connect(
                 through: bootstrap, executable: executable, expectedPeer: peer, receive: receive)
+            #endif
             guard isAvailable, self.peer == peer else {
                 channel.invalidate(); throw HostWorkerError.exited
             }
@@ -374,13 +427,22 @@ public final class HostRemoteSession {
         activationExpiry = nil
         let configuring = self.configuring
         let launching = self.launching
+        #if EDITH_FUNCTIONAL_FIXTURE
+        let preparingPeer = fixturePreparingPeer
+        #endif
         defer { stopping = false }
         await HostRemoteTaskRetirement.cancelAndJoin(
             cancel: {
                 configuring?.cancel()
                 launching?.cancel()
+                #if EDITH_FUNCTIONAL_FIXTURE
+                preparingPeer?.cancel()
+                #endif
             },
             joinLaunch: {
+                #if EDITH_FUNCTIONAL_FIXTURE
+                _ = try? await preparingPeer?.value
+                #endif
                 if let launching, let process = try? await launching.value, allowEscalation {
                     invalidateProcess(process, site: "joined-launch")
                 }
@@ -388,6 +450,12 @@ public final class HostRemoteSession {
             joinConfiguration: { _ = try? await configuring?.value })
         handles.values.forEach { $0.detach() }
         handles.removeAll()
+        #if EDITH_FUNCTIONAL_FIXTURE
+        if channel == nil, let prepared = fixturePreparedChannel {
+            channel = prepared
+            fixturePreparedChannel = nil
+        }
+        #endif
         if let channel {
             let request = HostRemoteCommand(operation: "stop")
             #if EDITH_FUNCTIONAL_FIXTURE
@@ -446,13 +514,15 @@ public final class HostRemoteSession {
         lease?.close()
         lease = nil
         #if EDITH_FUNCTIONAL_FIXTURE
+        var joinedTasks = [("launch", launching != nil), ("configure", configuring != nil)]
+            .filter { $0.1 }.map { $0.0 }
+        if preparingPeer != nil { joinedTasks.append("bootstrap") }
         let receipt = FixtureStopReceipt(
             configuration: configuration, ui: peer, engine: engineIdentity,
             observedBirths: nativeProcesses.observedBirths,
             signalAttempts: nativeProcesses.signalAttempts,
             stopRequest: fixtureStopRequest, stopReply: fixtureStopReply,
-            joinedTasks: [("launch", launching != nil), ("configure", configuring != nil)]
-                .filter { $0.1 }.map { $0.0 },
+            joinedTasks: joinedTasks,
             invalidations: fixtureInvalidations)
         fixturePendingStopReceipt = receipt
         try observe(receipt)

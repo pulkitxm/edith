@@ -51,7 +51,9 @@ public struct ExtensionPeerEndpoint: Sendable {
             directory: channel.root.appendingPathComponent("Commands"))
     }
 
-    public func invoke(_ command: String, payload: Data = Data(), timeout: TimeInterval = 30)
+    public func invoke(
+        _ command: String, payload: Data = Data(), timeout: TimeInterval = 30, token: UUID = UUID()
+    )
         async throws -> Data
     {
         guard !command.isEmpty, command.utf8.count <= 256, !command.utf8.contains(0),
@@ -59,7 +61,7 @@ public struct ExtensionPeerEndpoint: Sendable {
             timeout <= 1_800
         else { throw ExtensionPeerError.invalidRequest }
         let call = ExtensionPeerCall(
-            endpoint: self, command: command, payload: payload, timeout: timeout)
+            endpoint: self, command: command, payload: payload, timeout: timeout, token: token)
         return try await withTaskCancellationHandler {
             try await call.run()
         } onCancel: {
@@ -167,10 +169,13 @@ private final class ExtensionPeerCall: @unchecked Sendable {
     private var connection: NWConnection?
     private var timer: DispatchSourceTimer?
 
-    init(endpoint: ExtensionPeerEndpoint, command: String, payload: Data, timeout: TimeInterval) {
+    init(
+        endpoint: ExtensionPeerEndpoint, command: String, payload: Data, timeout: TimeInterval,
+        token: UUID
+    ) {
         self.endpoint = endpoint
         request = ExtensionPeerRequest(
-            token: UUID(), command: command, payload: payload, timeout: timeout)
+            token: token, command: command, payload: payload, timeout: timeout)
     }
 
     func run() async throws -> Data {
