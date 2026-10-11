@@ -90,6 +90,7 @@ final class DatabaseActionCase: HostedFunctionalActionCase {
 
     func shutdownPresentation() async {
         columns.clear()
+        await client.cancelAndWait()
         client.shutdown()
     }
 }
