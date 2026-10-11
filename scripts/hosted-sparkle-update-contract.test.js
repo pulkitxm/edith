@@ -276,3 +276,35 @@ test("only the retained exact Calendar ABI architecture version and worker path 
     ).toThrow();
   }
 });
+
+test("line terminators cannot extend canonical source UUID hash account or process birth fields", () => {
+  const { fixture, environment } = setup();
+  for (const key of [
+    "session",
+    "sourceCommit",
+    "archiveSHA256",
+    "installedCodeSHA256",
+  ]) {
+    const changed = { ...fixture, [key]: `${fixture[key]}\n` };
+    expect(() =>
+      validateSparkleFixture(
+        changed,
+        { ...environment, GITHUB_SHA: changed.sourceCommit },
+        "/Users/fixture",
+      ),
+    ).toThrow();
+  }
+  expect(() =>
+    validateSparkleFixture(
+      {
+        ...fixture,
+        producer: { ...fixture.producer, birth: `${fixture.producer.birth}\n` },
+      },
+      environment,
+      "/Users/fixture",
+    ),
+  ).toThrow();
+  expect(() =>
+    validateSparkleFixture(fixture, environment, "/Users/fixture\n"),
+  ).toThrow();
+});

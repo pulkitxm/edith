@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash, createPublicKey, verify } from "node:crypto";
 
-const sha = (value) => /^[a-f0-9]{64}$/.test(value);
+const sha = (value) =>
+  typeof value === "string" &&
+  value.length === 64 &&
+  /^[a-f0-9]{64}$/.test(value);
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const exactKeys = (value, keys) =>
   assert.deepEqual(Object.keys(value).sort(), [...keys].sort());
@@ -31,13 +34,24 @@ export function validateSparkleFixture(value, environment, accountHome) {
   ]);
   assert.equal(value.schema, 1);
   assert(Number.isInteger(value.expectedUID) && value.expectedUID > 0);
-  assert(uuid.test(value.session));
-  assert(/^[a-f0-9]{40}$/.test(value.sourceCommit));
+  assert(
+    typeof value.session === "string" &&
+      value.session.length === 36 &&
+      uuid.test(value.session),
+  );
+  assert(
+    typeof value.sourceCommit === "string" &&
+      value.sourceCommit.length === 40 &&
+      /^[a-f0-9]{40}$/.test(value.sourceCommit),
+  );
   assert.equal(
     value.identifier,
     `com.pulkit.edith.tests.remote-${value.session}`,
   );
-  assert(/^\/Users\/[A-Za-z0-9_-]+$/.test(accountHome));
+  assert(
+    !/[\0\r\n]/.test(accountHome) &&
+      /^\/Users\/[A-Za-z0-9_-]+$/.test(accountHome),
+  );
   assert.equal(
     value.directory,
     `${accountHome}/Applications/Edith Remote Fixture Journey ${value.session}`,
@@ -80,7 +94,10 @@ export function validateSparkleFixture(value, environment, accountHome) {
     "executableSHA256",
   ]);
   assert(Number.isInteger(value.producer.pid) && value.producer.pid > 1);
-  assert(/^[0-9]+\.[0-9]+$/.test(value.producer.birth));
+  assert(
+    !/[\0\r\n]/.test(value.producer.birth) &&
+      /^[0-9]+\.[0-9]+$/.test(value.producer.birth),
+  );
   assert(Number.isInteger(value.producer.uid) && value.producer.uid > 0);
   assert.equal(value.producer.uid, value.expectedUID);
   exactKeys(value.ownedRolePaths, ["engine", "managedUI"]);
@@ -236,7 +253,7 @@ export function validateSparkleOutcome(value, fixture) {
       "executable",
     ]);
     assert(Number.isInteger(host.pid) && host.pid > 1);
-    assert(/^[0-9]+\.[0-9]+$/.test(host.birth));
+    assert(!/[\0\r\n]/.test(host.birth) && /^[0-9]+\.[0-9]+$/.test(host.birth));
     assert(Number.isInteger(host.uid) && host.uid > 0);
     assert.equal(host.uid, fixture.expectedUID);
     assert.equal(
@@ -288,7 +305,7 @@ function validateRoles(rows, fixture, running) {
   for (const row of rows) {
     exactKeys(row, ["role", "pid", "birth", "uid", "executable", "running"]);
     assert(Number.isInteger(row.pid) && row.pid > 1);
-    assert(/^[0-9]+\.[0-9]+$/.test(row.birth));
+    assert(!/[\0\r\n]/.test(row.birth) && /^[0-9]+\.[0-9]+$/.test(row.birth));
     assert.equal(row.uid, fixture.expectedUID);
     assert.equal(row.executable, fixture.ownedRolePaths[row.role]);
     assert.equal(row.running, running);

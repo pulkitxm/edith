@@ -45,6 +45,7 @@ test("only the copied empty-argument host branch authenticates before constructi
     expect(() => sparkleEntryOverlay(value, pins)).toThrow();
   for (const value of [
     { ...pins, sourceCommit: "wrong" },
+    { ...pins, sourceCommit: `${pins.sourceCommit}\n` },
     { ...pins, issuerPublicKey: "wrong" },
     { ...pins, signingRequirement: 'identifier "fixture"\nforeign' },
     { ...pins, signingRequirement: `${pins.signingRequirement}\n` },

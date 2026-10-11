@@ -13,7 +13,11 @@ export function sparkleEntryOverlay(
   source,
   { sourceCommit, issuerPublicKey, signingRequirement },
 ) {
-  assert(/^[a-f0-9]{40}$/.test(sourceCommit));
+  assert(
+    typeof sourceCommit === "string" &&
+      sourceCommit.length === 40 &&
+      /^[a-f0-9]{40}$/.test(sourceCommit),
+  );
   const key = Buffer.from(issuerPublicKey, "base64");
   assert.equal(key.length, 32);
   assert.equal(key.toString("base64"), issuerPublicKey);

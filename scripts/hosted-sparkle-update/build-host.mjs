@@ -53,7 +53,11 @@ export async function buildSparkleHost({
 }) {
   requireCleanSparkleSources(execute);
   const root = await realpath(process.cwd());
-  assert(/^[a-f0-9]{40}$/.test(sourceCommit));
+  assert(
+    typeof sourceCommit === "string" &&
+      sourceCommit.length === 40 &&
+      /^[a-f0-9]{40}$/.test(sourceCommit),
+  );
   assert.equal(
     execute("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
     sourceCommit,
