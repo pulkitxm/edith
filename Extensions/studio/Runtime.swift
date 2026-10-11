@@ -25,6 +25,8 @@ final class ExtensionRuntime: NSObject {
     private let resources = StudioUIResources()
     private let work = StudioUILongOperations()
     private var streams: ExtensionCLIStreams?
+    private var stopping = false
+    private var stopTask: Task<Void, Never>?
 
     override convenience init() {
         self.init(uiConfiguration: { ExtensionUIConfiguration(context: $0) })
@@ -142,20 +144,9 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        let hadEngine = model != nil && fixture == nil
-        commands.shutdown()
-        streams?.stop()
+        let actual = beginShutdown()
         Task {
-            await streams?.stopAndWait()
-            await work.stopAndWait()
-            await videoSessions.stopAndWait()
-            await commands.shutdownAndWait()
-            if hadEngine { await VideoEditorOpenBridge.shared.stopAndWait() }
-            await model?.stopAndWait()
-            shutdown()
-            if hadEngine, #available(macOS 15.0, *) {
-                await StudioRecordBridge.shared.shutdown(); await VideoRecorder.shutdownAll()
-            }
+            await actual.value
             completion()
         }
     }
@@ -171,7 +162,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard Bundle.main.bundleURL.pathExtension != "appex",
+            guard !stopping, Bundle.main.bundleURL.pathExtension != "appex",
                 input["remoteUI"] as? Bool != true,
                 let suite = input["defaultsSuite"] as? String
             else { return ["ok": false] as NSDictionary }
@@ -253,25 +244,44 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
 
-    private func shutdown() {
-        let hadEngine = model != nil && fixture == nil
-        streams?.stop()
-        resources.shutdown()
-        Task {
-            await work.stopAndWait(); await videoSessions.stopAndWait()
-        }
+    private func shutdown() { _ = beginShutdown() }
+
+    private func beginShutdown() -> Task<Void, Never> {
+        if let stopTask { return stopTask }
+        stopping = true
+        let ownedModel = model
+        let ownedStreams = streams
+        let hadEngine = ownedModel != nil && fixture == nil
+        let hadUI = !uiScenes.isEmpty
         commands.shutdown()
-        if hadEngine || !uiScenes.isEmpty { TextEditingCommands.shutdown() }
+        work.suspend()
+        videoSessions.suspend()
+        resources.suspend()
+        ownedStreams?.stop()
         for scene in uiScenes.values { scene.stop() }
         uiScenes.removeAll()
         navigation?.invalidate()
         navigation = nil
-        model?.shutdown()
-        model = nil
-        privacy?.shutdown()
-        privacy = nil
-        if hadEngine { VideoEditorOpenBridge.shared.shutdown() }
-        fixture = nil
+        if hadEngine || hadUI { TextEditingCommands.shutdown() }
+        let task = Task {
+            await ownedStreams?.stopAndWait()
+            await work.stopAndWait()
+            await videoSessions.stopAndWait()
+            await resources.shutdownAndWait()
+            await commands.shutdownAndWait()
+            if hadEngine { await VideoEditorOpenBridge.shared.stopAndWait() }
+            await ownedModel?.stopAndWait()
+            if hadEngine, #available(macOS 15.0, *) {
+                await StudioRecordBridge.shared.shutdown()
+                await VideoRecorder.shutdownAll()
+            }
+            model = nil
+            privacy?.shutdown()
+            privacy = nil
+            fixture = nil
+        }
+        stopTask = task
+        return task
     }
 }
 

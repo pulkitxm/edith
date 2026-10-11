@@ -95,10 +95,26 @@ struct StudioUIResource: Codable, Equatable, Sendable {
         return Data("{}".utf8)
     }
 
+    func suspend() {
+        stopped = true
+        timer?.cancel()
+    }
+
+    func suspendAndWait() async {
+        suspend()
+        let owned = timer
+        await owned?.value
+        timer = nil
+    }
+
+    func shutdownAndWait() async {
+        await suspendAndWait()
+        shutdown()
+    }
+
     func shutdown() {
         stopped = true
         timer?.cancel()
-        timer = nil
         entries.removeAll()
         if let directory { try? FileManager.default.removeItem(at: directory) }
         directory = nil
@@ -119,7 +135,8 @@ struct StudioUIResource: Codable, Equatable, Sendable {
             timer = Task { [weak self] in
                 while !Task.isCancelled {
                     do { try await Task.sleep(for: .seconds(10)) } catch { return }
-                    self?.expire()
+                    guard let self, !self.stopped else { return }
+                    self.expire()
                 }
             }
         }
