@@ -333,16 +333,16 @@ final class FunctionalOriginalUI {
     }
 
     private func descendants(_ element: AXUIElement) throws -> [AXUIElement] {
-        var pending = [element]
+        var pending = try attribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
         var output: [AXUIElement] = []
-        var visited = Set<CFHashCode>()
+        var visited: [CFHashCode: [AXUIElement]] = [CFHash(element): [element]]
         while let current = pending.popLast() {
-            guard output.count <= 10000 else { throw FunctionalFailure.invalid("accessibility inventory bound") }
-            let identity = CFHash(current)
-            guard visited.insert(identity).inserted else { continue }
-            let children = try attribute(current, kAXChildrenAttribute) as? [AXUIElement] ?? []
-            output.append(contentsOf: children)
-            pending.append(contentsOf: children)
+            let hash = CFHash(current)
+            guard !visited[hash, default: []].contains(where: { CFEqual($0, current) }) else { continue }
+            guard output.count < 10000 else { throw FunctionalFailure.invalid("accessibility inventory bound") }
+            visited[hash, default: []].append(current)
+            output.append(current)
+            pending.append(contentsOf: try attribute(current, kAXChildrenAttribute) as? [AXUIElement] ?? [])
         }
         return output
     }
