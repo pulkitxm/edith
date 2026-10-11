@@ -30,6 +30,7 @@ final class UsageActionCase: HostedFunctionalActionCase {
 
     func activateOriginalControl(context: HostedFunctionalActionContext) async throws {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
+        let baseline = try await readState(context: context, enabled: true)
         try await client.prepare()
         let controller = NSHostingController(rootView: Form {
             UsageSettingsRows()
@@ -58,18 +59,27 @@ final class UsageActionCase: HostedFunctionalActionCase {
         guard controls.count == 1 else { throw HostedFunctionalActionError.invalid }
         if SharedDefaults.store.bool(forKey: AppStorageKeys.Budget.enabled) {
             try await press(controls[0])
-        }
+            let changed = try await readState(context: context, enabled: false)
+            guard changed != baseline else { throw HostedFunctionalActionError.invalid }
+        } else { throw HostedFunctionalActionError.invalid }
         guard !SharedDefaults.store.bool(forKey: AppStorageKeys.Budget.enabled) else {
             throw HostedFunctionalActionError.invalid
         }
         try await press(controls[0])
+        guard try await readState(context: context, enabled: true) == baseline else {
+            throw HostedFunctionalActionError.invalid
+        }
     }
 
     func readAuthoritativeState(context: HostedFunctionalActionContext) async throws -> Data {
+        try await readState(context: context, enabled: true)
+    }
+
+    private func readState(context: HostedFunctionalActionContext, enabled: Bool) async throws -> Data {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
         let value = try JSONDecoder().decode(
             UsageUIPreferences.self, from: await transport.readAuthoritative("usage.ui.preferences"))
-        guard value.values[AppStorageKeys.Budget.enabled] == .bool(true) else {
+        guard value.values[AppStorageKeys.Budget.enabled] == .bool(enabled) else {
             throw HostedFunctionalActionError.invalid
         }
         let encoder = JSONEncoder()

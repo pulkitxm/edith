@@ -32,24 +32,44 @@ final class DatabaseActionCase: HostedFunctionalActionCase {
         self.transport = transport
         let client = DatabaseUIClient(engine: try transport.makeEngineClient())
         self.client = client
-        columns = DatabaseColumnsModel(read: { client.columns }, write: { client.persistColumns($0) })
+        columns = DatabaseColumnsModel(read: { client.columns }, write: { value in
+            guard let changes = try? DatabaseColumnsModel.changedLayouts(from: client.columns, to: value),
+                let object = try? JSONSerialization.jsonObject(with: changes) as? [String: Any],
+                let layouts = object["layouts"] as? [Any], !layouts.isEmpty
+            else { return }
+            client.persistColumns(value)
+        })
     }
 
     func activateOriginalControl(context: HostedFunctionalActionContext) async throws {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
+        let baseline = try await readState(context: context, width: 274)
         await client.load()
         guard client.loaded, client.failure == nil else { throw HostedFunctionalActionError.invalid }
         columns.synchronize(connectionID: Self.connection, object: Self.object, fields: Self.fields)
-        try await client.flushColumns()
+        guard columns.width(for: Self.fields[1].path) == 274,
+            try await readState(context: context, width: 274) == baseline
+        else { throw HostedFunctionalActionError.invalid }
+        let first = transport.originalInvocationCount
         columns.setWidth(238, for: Self.fields[1].path)
         try await client.flushColumns()
+        try await transport.waitForOriginalInvocation(Self.activationOperation, after: first)
+        let changed = try await readState(context: context, width: 238)
+        guard changed != baseline else { throw HostedFunctionalActionError.invalid }
         let count = transport.originalInvocationCount
         columns.setWidth(274, for: Self.fields[1].path)
         try await client.flushColumns()
         try await transport.waitForOriginalInvocation(Self.activationOperation, after: count)
+        guard try await readState(context: context, width: 274) == baseline else {
+            throw HostedFunctionalActionError.invalid
+        }
     }
 
     func readAuthoritativeState(context: HostedFunctionalActionContext) async throws -> Data {
+        try await readState(context: context, width: 274)
+    }
+
+    private func readState(context: HostedFunctionalActionContext, width: Double) async throws -> Data {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
         let state = try JSONDecoder().decode(
             DatabaseUIState.self, from: await transport.readAuthoritative("database.ui.state"))
@@ -57,7 +77,7 @@ final class DatabaseActionCase: HostedFunctionalActionCase {
         try DatabaseColumnsModel.validateStoredLayouts(bytes)
         let restored = DatabaseColumnsModel(read: { bytes }, write: { _ in })
         restored.synchronize(connectionID: Self.connection, object: Self.object, fields: Self.fields)
-        guard restored.width(for: Self.fields[1].path) == 274, restored.allFieldsVisible else {
+        guard restored.width(for: Self.fields[1].path) == CGFloat(width), restored.allFieldsVisible else {
             throw HostedFunctionalActionError.invalid
         }
         return try JSONSerialization.data(
