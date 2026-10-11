@@ -33,19 +33,18 @@ final class AttentionActionCase: HostedFunctionalActionCase {
             model.settings.idleThreshold.isFinite, (0...86400).contains(model.settings.idleThreshold)
         else { throw HostedFunctionalActionError.invalid }
         let retained = model.settings.idleThreshold
-        let baseline = try await readState(context: context, idleThreshold: retained)
-        let temporary = retained == 86400 ? retained - 1 : retained + 1
-        try await save(idleThreshold: temporary)
-        let changed = try await readState(context: context, idleThreshold: temporary)
+        let baseline = try await readState(context: context, trackingEnabled: false, idleThreshold: retained)
+        try await save(trackingEnabled: true)
+        let changed = try await readState(context: context, trackingEnabled: true, idleThreshold: retained)
         guard changed != baseline else { throw HostedFunctionalActionError.invalid }
-        try await save(idleThreshold: retained)
-        guard try await readState(context: context, idleThreshold: retained) == baseline else {
+        try await save(trackingEnabled: false)
+        guard try await readState(context: context, trackingEnabled: false, idleThreshold: retained) == baseline else {
             throw HostedFunctionalActionError.invalid
         }
     }
 
-    private func save(idleThreshold: TimeInterval) async throws {
-        model.settings.idleThreshold = idleThreshold
+    private func save(trackingEnabled: Bool) async throws {
+        model.settings.trackingEnabled = trackingEnabled
         model.message = nil
         let count = transport.originalInvocationCount
         model.save()
@@ -55,20 +54,24 @@ final class AttentionActionCase: HostedFunctionalActionCase {
             try await Task.sleep(for: .milliseconds(20))
         }
         guard model.message != nil, model.errorMessage == nil,
-            model.settings.idleThreshold == idleThreshold
+            model.settings.trackingEnabled == trackingEnabled,
+            model.settings.isEnabled == trackingEnabled, !model.settings.browserTrackingEnabled
         else { throw HostedFunctionalActionError.invalid }
     }
 
     func readAuthoritativeState(context: HostedFunctionalActionContext) async throws -> Data {
-        try await readState(context: context, idleThreshold: model.settings.idleThreshold)
+        try await readState(context: context, trackingEnabled: false, idleThreshold: model.settings.idleThreshold)
     }
 
-    private func readState(context: HostedFunctionalActionContext, idleThreshold: TimeInterval) async throws -> Data {
+    private func readState(
+        context: HostedFunctionalActionContext, trackingEnabled: Bool, idleThreshold: TimeInterval
+    ) async throws -> Data {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
         let value = try AttentionPayload.decode(
             AttentionSettings.self,
             from: await transport.readAuthoritative("attention.settings.get"))
-        guard !value.isEnabled, !value.trackingEnabled, !value.browserTrackingEnabled,
+        guard value.isEnabled == trackingEnabled, value.trackingEnabled == trackingEnabled,
+            !value.browserTrackingEnabled,
             value.idleThreshold == idleThreshold else {
             throw HostedFunctionalActionError.invalid
         }
