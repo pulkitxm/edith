@@ -313,7 +313,7 @@ export function validateFunctionalCapability(value, definition) {
   identity(value.ui, value.uid);
   assert.notEqual(value.engine.pid, value.ui.pid);
   assert.deepEqual(value.operations, definition.operations);
-  assert(value.ownedPaths.length >= 1 && value.ownedPaths.length <= 32);
+  assert(Array.isArray(value.ownedPaths) && value.ownedPaths.length <= 32);
   const names = new Set(),
     paths = new Set();
   for (const entry of value.ownedPaths) {

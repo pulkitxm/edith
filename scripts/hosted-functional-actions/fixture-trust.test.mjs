@@ -62,6 +62,7 @@ function policyFixture() {
     ],
     inputs: [],
     outputs: [],
+    fileScopes: [],
     manifestSHA256: digest(manifestBytes),
     caseSHA256: cases.find((entry) => entry.owner === owner).sha256,
   }));
@@ -295,4 +296,208 @@ test("admitted policy hash cannot relax original roles or closed scopes and boun
   assert.throws(() =>
     functionalFixtureTrustSource(f.bytes, f.admitted, p.bytes, p.admitted),
   );
+});
+
+function fileScopeFixture() {
+  return {
+    name: "victim",
+    kind: "file",
+    purpose: "mutable-state",
+    root: "owner-outputs",
+    components: [{ phase: true }, { literal: "victim.bin" }],
+    maximumBytes: 4096,
+    maximumEntries: 1,
+    initialState: "present",
+    allowedStates: ["present", "absent"],
+    immutableFiles: [],
+    mutableFiles: [],
+  };
+}
+
+function compileFileScopes(scopes) {
+  const value = policyFixture();
+  value.policies[0].fileScopes = scopes;
+  value.bytes = Buffer.from(functionalCanonicalJSON(value.policies));
+  value.admitted.policySHA256 = createHash("sha256")
+    .update(value.bytes)
+    .digest("hex");
+  return functionalFixtureRolePolicySource(value.bytes, value.admitted);
+}
+
+test("required file scopes compile exact purpose states bounds and finite source transforms", () => {
+  const scope = fileScopeFixture();
+  scope.components = [
+    { phase: true },
+    { sessionUUID: "uppercase" },
+    { literal: "victim.bin" },
+  ];
+  const source = compileFileScopes([scope]).swiftExpression;
+  assert(source.includes("purpose: .mutableState"));
+  assert(source.includes("root: .ownerOutputs"));
+  assert(
+    source.includes(
+      'components: [.phase, .sessionUUID(.uppercase), .literal("victim.bin")]',
+    ),
+  );
+  assert(
+    source.includes(
+      "maximumBytes: 4096, maximumEntries: 1, initialState: .present",
+    ),
+  );
+  assert(source.includes("allowedStates: [.present, .absent]"));
+  const directory = {
+    ...fileScopeFixture(),
+    name: "scan",
+    kind: "directory",
+    components: [{ phase: true }, { literal: "scan" }],
+    allowedStates: ["present"],
+    mutableFiles: [
+      {
+        components: ["victim.bin"],
+        maximumBytes: 4096,
+        initialState: "present",
+        allowedStates: ["present", "absent"],
+      },
+    ],
+  };
+  assert(
+    compileFileScopes([directory]).swiftExpression.includes(
+      "WorkerFixtureMutableFileScope",
+    ),
+  );
+  const empty = {
+    ...directory,
+    purpose: "immutable-input",
+    root: "owner-home",
+    maximumBytes: 0,
+    maximumEntries: 0,
+    mutableFiles: [],
+  };
+  assert(
+    compileFileScopes([empty]).swiftExpression.includes(
+      "maximumBytes: 0, maximumEntries: 0",
+    ),
+  );
+  const missing = policyFixture();
+  delete missing.policies[0].fileScopes;
+  missing.bytes = Buffer.from(functionalCanonicalJSON(missing.policies));
+  missing.admitted.policySHA256 = createHash("sha256")
+    .update(missing.bytes)
+    .digest("hex");
+  assert.throws(() =>
+    functionalFixtureRolePolicySource(missing.bytes, missing.admitted),
+  );
+});
+
+test("file scope compilation rejects unknown authority traversal state widening and directory aliases", () => {
+  for (const mutate of [
+    (v) => {
+      v.root = "shared-root";
+    },
+    (v) => {
+      v.purpose = "arbitrary-write";
+    },
+    (v) => {
+      v.kind = "symlink";
+    },
+    (v) => {
+      v.components = [{ literal: "../foreign" }];
+    },
+    (v) => {
+      v.components = [{ literal: ".." }];
+    },
+    (v) => {
+      v.components = [{ literal: "a\\b" }];
+    },
+    (v) => {
+      v.components = [{ literal: "é" }];
+    },
+    (v) => {
+      v.components = [{ phase: "updated" }];
+    },
+    (v) => {
+      v.components = [{ phase: true }, { phase: true }];
+    },
+    (v) => {
+      v.components = [{ sessionUUID: "automatic" }];
+    },
+    (v) => {
+      v.components = [
+        { sessionUUID: "uppercase" },
+        { sessionUUID: "lowercase" },
+      ];
+    },
+    (v) => {
+      v.initialState = "unknown";
+    },
+    (v) => {
+      v.allowedStates = ["absent"];
+    },
+    (v) => {
+      v.allowedStates = ["present", "present"];
+    },
+    (v) => {
+      v.allowedStates = ["present", "directory"];
+    },
+    (v) => {
+      v.maximumBytes = 0;
+    },
+    (v) => {
+      v.maximumBytes = 268435457;
+    },
+    (v) => {
+      v.maximumEntries = 2;
+    },
+    (v) => {
+      v.root = "owner-inputs";
+    },
+    (v) => {
+      v.immutableFiles = [{ components: ["extra"], maximumBytes: 1 }];
+    },
+    (v) => {
+      v.callerSegments = ["foreign"];
+    },
+  ]) {
+    const scope = fileScopeFixture();
+    mutate(scope);
+    assert.throws(() => compileFileScopes([scope]));
+  }
+  assert.throws(() =>
+    compileFileScopes([fileScopeFixture(), fileScopeFixture()]),
+  );
+  const directory = {
+    ...fileScopeFixture(),
+    kind: "directory",
+    purpose: "immutable-input",
+    root: "owner-data",
+    maximumBytes: 2,
+    maximumEntries: 3,
+    allowedStates: ["present"],
+    immutableFiles: [
+      { components: ["Foo"], maximumBytes: 1 },
+      { components: ["foo"], maximumBytes: 1 },
+    ],
+  };
+  assert.throws(() => compileFileScopes([directory]));
+  directory.immutableFiles[0].components = ["Foo", "a"];
+  directory.immutableFiles[1].components = ["foo", "b"];
+  directory.maximumEntries = 4;
+  assert.throws(() => compileFileScopes([directory]));
+  directory.immutableFiles[0].components = ["Foo"];
+  directory.immutableFiles[1].components = ["Foo", "child"];
+  assert.throws(() => compileFileScopes([directory]));
+  directory.immutableFiles = [];
+  directory.maximumEntries = 0;
+  assert.throws(() => compileFileScopes([directory]));
+  directory.maximumBytes = 0;
+  compileFileScopes([directory]);
+  directory.mutableFiles = [
+    {
+      components: ["victim"],
+      maximumBytes: 1,
+      initialState: "present",
+      allowedStates: ["present", "absent"],
+    },
+  ];
+  assert.throws(() => compileFileScopes([directory]));
 });

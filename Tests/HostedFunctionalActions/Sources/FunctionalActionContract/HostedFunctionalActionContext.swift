@@ -122,7 +122,7 @@ public struct HostedFunctionalActionContext: Codable, Equatable, Sendable {
             engine.pid != ui.pid, operations == expectedOperations,
             !operations.isEmpty, operations.count <= 16,
             Set(operations).count == operations.count, operations.contains(activationOperation),
-            operations.allSatisfy(Self.operation), !ownedPaths.isEmpty, ownedPaths.count <= 32,
+            operations.allSatisfy(Self.operation), ownedPaths.count <= 32,
             Set(ownedPaths.map(\.name)).count == ownedPaths.count,
             Set(ownedPaths.map(\.path)).count == ownedPaths.count,
             ownedPaths.allSatisfy({

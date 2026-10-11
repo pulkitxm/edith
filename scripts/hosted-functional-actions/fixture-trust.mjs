@@ -45,6 +45,193 @@ function swiftString(value) {
   return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 }
 
+function fileScopeSource(scope) {
+  exact(scope, [
+    "name",
+    "kind",
+    "purpose",
+    "root",
+    "components",
+    "maximumBytes",
+    "maximumEntries",
+    "initialState",
+    "allowedStates",
+    "immutableFiles",
+    "mutableFiles",
+  ]);
+  assert.match(scope.name, /^[A-Za-z0-9_.-]{1,256}$/);
+  assert(["file", "directory"].includes(scope.kind));
+  const purposes = {
+    "immutable-input": "immutableInput",
+    "mutable-state": "mutableState",
+    "initially-absent-output": "initiallyAbsentOutput",
+  };
+  const roots = {
+    "owner-home": "ownerHome",
+    "owner-data": "ownerData",
+    "owner-inputs": "ownerInputs",
+    "owner-outputs": "ownerOutputs",
+  };
+  assert(
+    Object.hasOwn(purposes, scope.purpose) && Object.hasOwn(roots, scope.root),
+  );
+  const component = (value) => {
+    assert(
+      typeof value === "string" && value.length > 0 && value.length <= 256,
+    );
+    assert(
+      ![".", ".."].includes(value) &&
+        !value.includes("/") &&
+        !value.includes("\\"),
+    );
+    assert(
+      [...value].every((character) => {
+        const code = character.charCodeAt(0);
+        return code >= 32 && code < 127;
+      }),
+    );
+  };
+  const relative = (components) => {
+    assert(
+      Array.isArray(components) &&
+        components.length > 0 &&
+        components.length <= 32,
+    );
+    components.forEach(component);
+    assert(components.join("/").length <= 4096);
+  };
+  const maximum = (value, limit, zero = false) => {
+    assert(
+      Number.isSafeInteger(value) && value >= (zero ? 0 : 1) && value <= limit,
+    );
+  };
+  const states = (value) => {
+    assert(["present", "absent"].includes(value.initialState));
+    assert(
+      Array.isArray(value.allowedStates) &&
+        value.allowedStates.length > 0 &&
+        value.allowedStates.length <= 2,
+    );
+    assert(
+      value.allowedStates.every((state) =>
+        ["present", "absent"].includes(state),
+      ),
+    );
+    assert.equal(new Set(value.allowedStates).size, value.allowedStates.length);
+    assert(value.allowedStates.includes(value.initialState));
+  };
+  maximum(scope.maximumBytes, 268435456, true);
+  maximum(scope.maximumEntries, 4096, true);
+  states(scope);
+  assert(
+    Array.isArray(scope.components) &&
+      scope.components.length > 0 &&
+      scope.components.length <= 32,
+  );
+  let sessions = 0,
+    phases = 0;
+  const components = scope.components.map((value) => {
+    assert(value && Object.getPrototypeOf(value) === Object.prototype);
+    if (Object.hasOwn(value, "literal")) {
+      exact(value, ["literal"]);
+      component(value.literal);
+      return `.literal(${swiftString(value.literal)})`;
+    }
+    if (Object.hasOwn(value, "sessionUUID")) {
+      exact(value, ["sessionUUID"]);
+      assert(["lowercase", "uppercase"].includes(value.sessionUUID));
+      sessions += 1;
+      return `.sessionUUID(.${value.sessionUUID})`;
+    }
+    exact(value, ["phase"]);
+    assert.equal(value.phase, true);
+    phases += 1;
+    return ".phase";
+  });
+  assert(sessions <= 1 && phases <= 1);
+  assert(
+    Array.isArray(scope.immutableFiles) && Array.isArray(scope.mutableFiles),
+  );
+  const immutableFiles = scope.immutableFiles.map((file) => {
+    exact(file, ["components", "maximumBytes"]);
+    relative(file.components);
+    maximum(file.maximumBytes, 268435456);
+    return `try WorkerFixtureImmutableFileScope(components: [${file.components.map(swiftString).join(", ")}], maximumBytes: ${file.maximumBytes})`;
+  });
+  const mutableFiles = scope.mutableFiles.map((file) => {
+    exact(file, [
+      "components",
+      "maximumBytes",
+      "initialState",
+      "allowedStates",
+    ]);
+    relative(file.components);
+    maximum(file.maximumBytes, 268435456);
+    states(file);
+    return `try WorkerFixtureMutableFileScope(components: [${file.components.map(swiftString).join(", ")}], maximumBytes: ${file.maximumBytes}, initialState: .${file.initialState}, allowedStates: [${file.allowedStates.map((state) => `.${state}`).join(", ")}])`;
+  });
+  if (scope.kind === "file") {
+    maximum(scope.maximumBytes, 268435456);
+    assert.equal(scope.maximumEntries, 1);
+    assert.equal(immutableFiles.length + mutableFiles.length, 0);
+  } else {
+    assert.equal(scope.initialState, "present");
+    assert.deepEqual(scope.allowedStates, ["present"]);
+    const files = [...scope.immutableFiles, ...scope.mutableFiles];
+    assert(files.length <= 4096);
+    if (files.length === 0) {
+      assert.equal(scope.maximumBytes, 0);
+      assert.equal(scope.maximumEntries, 0);
+    } else {
+      assert(scope.maximumBytes > 0 && scope.maximumEntries > 0);
+      assert(
+        files.reduce((sum, file) => sum + file.maximumBytes, 0) <=
+          scope.maximumBytes,
+      );
+      const leaves = new Set(
+        files.map((file) => file.components.join("/").toLowerCase()),
+      );
+      assert.equal(leaves.size, files.length);
+      const spellings = new Map();
+      for (const file of files) {
+        for (let length = 1; length <= file.components.length; length += 1) {
+          const prefix = file.components.slice(0, length).join("/");
+          const folded = prefix.toLowerCase();
+          assert(!spellings.has(folded) || spellings.get(folded) === prefix);
+          spellings.set(folded, prefix);
+        }
+      }
+      const entries = new Set(leaves);
+      for (const file of files) {
+        for (let length = 1; length < file.components.length; length += 1) {
+          const parent = file.components
+            .slice(0, length)
+            .join("/")
+            .toLowerCase();
+          assert(!leaves.has(parent));
+          entries.add(parent);
+        }
+      }
+      assert(entries.size <= scope.maximumEntries);
+    }
+  }
+  if (scope.purpose === "immutable-input") {
+    assert.notEqual(scope.root, "owner-outputs");
+    assert.equal(scope.initialState, "present");
+    assert.deepEqual(scope.allowedStates, ["present"]);
+    assert.equal(mutableFiles.length, 0);
+  } else if (scope.purpose === "mutable-state") {
+    assert.notEqual(scope.root, "owner-inputs");
+    assert.equal(immutableFiles.length, 0);
+  } else {
+    assert.equal(scope.root, "owner-outputs");
+    assert.equal(scope.kind, "file");
+    assert.equal(scope.initialState, "absent");
+    assert.deepEqual([...scope.allowedStates].sort(), ["absent", "present"]);
+  }
+  return `try WorkerFixtureFileScope(name: ${swiftString(scope.name)}, kind: .${scope.kind}, purpose: .${purposes[scope.purpose]}, root: .${roots[scope.root]}, components: [${components.join(", ")}], maximumBytes: ${scope.maximumBytes}, maximumEntries: ${scope.maximumEntries}, initialState: .${scope.initialState}, allowedStates: [${scope.allowedStates.map((state) => `.${state}`).join(", ")}], immutableFiles: [${immutableFiles.join(", ")}], mutableFiles: [${mutableFiles.join(", ")}])`;
+}
+
 export function functionalFixtureRolePolicySource(
   policyBytes,
   admittedPolicies,
@@ -137,6 +324,7 @@ export function functionalFixtureRolePolicySource(
       "presentations",
       "inputs",
       "outputs",
+      "fileScopes",
       "manifestSHA256",
       "caseSHA256",
     ]);
@@ -201,7 +389,13 @@ export function functionalFixtureRolePolicySource(
         .size,
       policy.inputs.length + policy.outputs.length,
     );
-    return `try WorkerFixtureRolePolicy(owner: ${swiftString(policy.owner)}, primaryRole: .${primary}, operations: [${policy.operations.map(swiftString).join(", ")}], presentations: [${presentations.join(", ")}], inputs: [${inputs.join(", ")}], outputs: [${policy.outputs.map(swiftString).join(", ")}], manifestSHA256: ${swiftString(policy.manifestSHA256)}, caseSHA256: ${swiftString(policy.caseSHA256)})`;
+    assert(Array.isArray(policy.fileScopes) && policy.fileScopes.length <= 32);
+    assert.equal(
+      new Set(policy.fileScopes.map((scope) => scope.name)).size,
+      policy.fileScopes.length,
+    );
+    const fileScopes = policy.fileScopes.map(fileScopeSource);
+    return `try WorkerFixtureRolePolicy(owner: ${swiftString(policy.owner)}, primaryRole: .${primary}, operations: [${policy.operations.map(swiftString).join(", ")}], presentations: [${presentations.join(", ")}], inputs: [${inputs.join(", ")}], outputs: [${policy.outputs.map(swiftString).join(", ")}], fileScopes: [${fileScopes.join(", ")}], manifestSHA256: ${swiftString(policy.manifestSHA256)}, caseSHA256: ${swiftString(policy.caseSHA256)})`;
   });
   return Object.freeze({
     sourceCommit: admittedPolicies.sourceCommit,

@@ -28,14 +28,15 @@ import Testing
                     presentations: [
                         try WorkerFixturePresentationScope(location: "main", section: "studio")
                     ], inputs: [try WorkerFixtureInputScope(name: "project", maximumBytes: 1024)],
-                    outputs: ["movie"], manifestSHA256: hash, caseSHA256: hash),
+                    outputs: ["movie"], fileScopes: [], manifestSHA256: hash, caseSHA256: hash),
                 try WorkerFixtureRolePolicy(
                     owner: "notchShelf", primaryRole: .helper,
                     operations: ["notch.settings.read", "notch.settings.write"],
                     presentations: [
                         try WorkerFixturePresentationScope(
                             location: "settings", section: "extension")
-                    ], inputs: [], outputs: [], manifestSHA256: hash, caseSHA256: hash),
+                    ], inputs: [], outputs: [], fileScopes: [], manifestSHA256: hash,
+                    caseSHA256: hash),
             ])
     }
     private func object() -> [String: Any] {
@@ -378,6 +379,131 @@ import Testing
                     roleDirectory: URL(fileURLWithPath: "/unused"), roleIdentifier: nil,
                     version: nil, hostABI: nil)
             }
+        }
+    }
+
+    private func outputPolicy(_ scopes: [WorkerFixtureFileScope]) throws -> WorkerFixtureRolePolicy
+    {
+        try WorkerFixtureRolePolicy(
+            owner: "blitztree", primaryRole: .app, operations: ["blitztree.probe"],
+            presentations: [
+                try WorkerFixturePresentationScope(location: "main", section: "blitztree")
+            ],
+            inputs: [], outputs: ["victim"], fileScopes: scopes, manifestSHA256: hash,
+            caseSHA256: hash)
+    }
+    private func mutableOutput(
+        root: WorkerFixtureFileRoot = .ownerOutputs,
+        initial: WorkerFixtureFilePresence = .present,
+        states: [WorkerFixtureFilePresence] = [.present, .absent]
+    ) throws -> WorkerFixtureFileScope {
+        try WorkerFixtureFileScope(
+            name: "victim", kind: .file, purpose: .mutableState, root: root,
+            components: [.phase, .literal("victim.txt")], maximumBytes: 16,
+            maximumEntries: 1, initialState: initial, allowedStates: states,
+            immutableFiles: [], mutableFiles: [])
+    }
+    private var victimOutput: WorkerFixtureEngineOutput {
+        WorkerFixtureEngineOutput(
+            name: "victim", path: root + "/outputs/blitztree/initial/victim.txt",
+            parent: root + "/outputs/blitztree/initial")
+    }
+    @Test func preexistingMutableOutputRequiresExactCompiledStateAndByteBounds() throws {
+        let scope = try WorkerFixtureEngineOutputScope(
+            output: victimOutput, policy: outputPolicy([mutableOutput()]),
+            root: root, session: session, phase: "initial")
+        try scope.validate(present: true, bytes: 16, initial: true)
+        try scope.validate(present: true, bytes: 0, initial: false)
+        try scope.validate(present: false, bytes: 0, initial: false)
+        #expect(throws: WorkerFixtureError.self) {
+            try scope.validate(present: false, bytes: 0, initial: true)
+        }
+        #expect(throws: WorkerFixtureError.self) {
+            try scope.validate(present: true, bytes: 17, initial: false)
+        }
+        #expect(throws: WorkerFixtureError.self) {
+            try scope.validate(present: true, bytes: -1, initial: false)
+        }
+        #expect(throws: WorkerFixtureError.self) {
+            try scope.validate(present: false, bytes: 1, initial: false)
+        }
+        let retained = try WorkerFixtureEngineOutputScope(
+            output: victimOutput,
+            policy: outputPolicy([mutableOutput(states: [.present])]),
+            root: root, session: session, phase: "initial")
+        #expect(throws: WorkerFixtureError.self) {
+            try retained.validate(present: false, bytes: 0, initial: false)
+        }
+    }
+    @Test func ordinaryOutputStillRequiresInitialAbsenceWithoutMutableAuthority() throws {
+        let scope = try WorkerFixtureEngineOutputScope(
+            output: victimOutput, policy: outputPolicy([]),
+            root: root, session: session, phase: "initial")
+        try scope.validate(present: false, bytes: 0, initial: true)
+        #expect(throws: WorkerFixtureError.self) {
+            try scope.validate(present: true, bytes: 1, initial: true)
+        }
+        try scope.validate(present: true, bytes: 1, initial: false)
+        let named = try WorkerFixtureFileScope(
+            name: "victim", kind: .file, purpose: .initiallyAbsentOutput,
+            root: .ownerOutputs, components: [.phase, .literal("victim.txt")],
+            maximumBytes: 16, maximumEntries: 1, initialState: .absent,
+            allowedStates: [.absent, .present], immutableFiles: [], mutableFiles: [])
+        let namedOutput = try WorkerFixtureEngineOutputScope(
+            output: victimOutput, policy: outputPolicy([named]),
+            root: root, session: session, phase: "initial")
+        try namedOutput.validate(present: false, bytes: 0, initial: true)
+        try namedOutput.validate(present: true, bytes: 16, initial: false)
+        #expect(throws: WorkerFixtureError.self) {
+            try namedOutput.validate(present: true, bytes: 17, initial: false)
+        }
+        #expect(throws: WorkerFixtureError.self) {
+            try namedOutput.validate(present: true, bytes: 1, initial: true)
+        }
+        let absent = try WorkerFixtureEngineOutputScope(
+            output: victimOutput,
+            policy: outputPolicy([mutableOutput(initial: .absent)]),
+            root: root, session: session, phase: "initial")
+        #expect(throws: WorkerFixtureError.self) {
+            try absent.validate(present: true, bytes: 1, initial: true)
+        }
+    }
+    @Test func mutableOutputAuthorityRejectsWrongOwnerNameRootPhaseAndDerivedLeaf() throws {
+        let policy = try outputPolicy([mutableOutput()])
+        for output in [
+            WorkerFixtureEngineOutput(
+                name: "other", path: victimOutput.path, parent: victimOutput.parent),
+            WorkerFixtureEngineOutput(
+                name: "victim", path: root + "/outputs/studio/initial/victim.txt",
+                parent: root + "/outputs/studio/initial"),
+            WorkerFixtureEngineOutput(
+                name: "victim", path: root + "/outputs/blitztree/initial/arbitrary.txt",
+                parent: victimOutput.parent),
+            WorkerFixtureEngineOutput(
+                name: "victim", path: root + "/outputs/blitztree/initial/../victim.txt",
+                parent: root + "/outputs/blitztree/initial/.."),
+        ] {
+            #expect(throws: WorkerFixtureError.self) {
+                try WorkerFixtureEngineOutputScope(
+                    output: output, policy: policy, root: root, session: session, phase: "initial")
+            }
+        }
+        for phase in ["updated", "reinstalled", "unchecked"] {
+            #expect(throws: WorkerFixtureError.self) {
+                try WorkerFixtureEngineOutputScope(
+                    output: victimOutput, policy: policy, root: root, session: session, phase: phase
+                )
+            }
+        }
+        #expect(throws: WorkerFixtureError.self) {
+            try WorkerFixtureEngineOutputScope(
+                output: victimOutput, policy: outputPolicy([mutableOutput(root: .ownerHome)]),
+                root: root, session: session, phase: "initial")
+        }
+        #expect(throws: WorkerFixtureError.self) {
+            try WorkerFixtureEngineOutputScope(
+                output: victimOutput, policy: policy, root: "/private/foreign",
+                session: session, phase: "initial")
         }
     }
 

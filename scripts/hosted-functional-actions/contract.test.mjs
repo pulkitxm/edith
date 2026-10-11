@@ -998,3 +998,43 @@ test("a signed journal from another presentation cannot qualify the admitted con
     ),
   );
 });
+
+test("empty case paths preserve admission and cannot carry untyped claims or authority", () => {
+  const value = capability("initial", 0);
+  value.ownedPaths = [];
+  validateFunctionalCapability(value, definition);
+  for (const patch of [
+    { ownedPaths: "" },
+    { ownedPaths: null },
+    { ownedPaths: {} },
+    { owner: "plugins" },
+    { uid: 502 },
+    { sourceCommit: "foreign" },
+    {
+      ownedPaths: [
+        {
+          name: "file",
+          path: `${root}/inputs/keepAwake/file`,
+          kind: "file",
+          purpose: "mutable-state",
+        },
+      ],
+    },
+    {
+      ownedPaths: [
+        {
+          name: "file",
+          path: `${root}/inputs/keepAwake/file`,
+          kind: "symlink",
+        },
+      ],
+    },
+    {
+      ownedPaths: [{ name: "file", path: "/Users/actual/file", kind: "file" }],
+    },
+  ]) {
+    assert.throws(() =>
+      validateFunctionalCapability({ ...value, ...patch }, definition),
+    );
+  }
+});

@@ -65,6 +65,44 @@ struct FunctionalActionContractTests {
         #expect(HostedFunctionalActionContext.owners.count == 39)
     }
 
+    @Test func emptyOwnedPathsRetainSourceOwnerAndPeerAdmission() throws {
+        var value = object()
+        value["ownedPaths"] = [] as [[String: String]]
+        let context = try decode(value)
+        try validate(context)
+        #expect(context.ownedPaths.isEmpty)
+        #expect(throws: (any Error).self) { try context.ownedPath(named: "dummy", kind: "file") }
+        for mutation in [
+            ["owner": "plugins"], ["sourceCommit": String(repeating: "c", count: 40)],
+            ["uid": 502], ["engine": value["ui"]!],
+        ] {
+            var bad = value
+            bad.merge(mutation) { _, new in new }
+            #expect(throws: (any Error).self) { try validate(decode(bad)) }
+        }
+        let path = "/private/synthetic/functional-fixture-" + session + "/input.json"
+        for paths in [
+            [
+                ["name": "same", "path": path, "kind": "file"],
+                ["name": "same", "path": path + ".other", "kind": "file"],
+            ],
+            [
+                ["name": "a", "path": path, "kind": "file"],
+                ["name": "b", "path": path, "kind": "file"],
+            ],
+            [["name": "a", "path": "/Users/actual/input", "kind": "file"]],
+            [["name": "a", "path": path, "kind": "symlink"]],
+        ] {
+            var bad = value
+            bad["ownedPaths"] = paths
+            #expect(throws: (any Error).self) { try validate(decode(bad)) }
+        }
+        value["ownedPaths"] = [
+            ["name": "a", "path": path, "kind": "file", "purpose": "mutable-state"]
+        ]
+        #expect(throws: (any Error).self) { try decode(value) }
+    }
+
     @Test func sourceOwnerSessionIdentityAndPathNegatives() throws {
         let mutations: [[String: Any]] = [
             ["sourceCommit": String(repeating: "c", count: 40)], ["owner": "music"],

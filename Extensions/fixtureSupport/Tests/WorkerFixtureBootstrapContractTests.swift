@@ -35,14 +35,16 @@ import Testing
                     operations: ["plugins.agents.read", "plugins.agents.write"],
                     presentations: [
                         try WorkerFixturePresentationScope(location: "main", section: "plugins")
-                    ], inputs: [], outputs: [], manifestSHA256: hash, caseSHA256: hash),
+                    ], inputs: [], outputs: [], fileScopes: [], manifestSHA256: hash,
+                    caseSHA256: hash),
                 try WorkerFixtureRolePolicy(
                     owner: "notchShelf", primaryRole: .helper,
                     operations: ["notch.settings.read", "notch.settings.write"],
                     presentations: [
                         try WorkerFixturePresentationScope(
                             location: "settings", section: "extension")
-                    ], inputs: [], outputs: [], manifestSHA256: hash, caseSHA256: hash),
+                    ], inputs: [], outputs: [], fileScopes: [], manifestSHA256: hash,
+                    caseSHA256: hash),
             ])
     }
     private func object(_ ui: Bool) -> [String: Any] {
@@ -352,7 +354,7 @@ import Testing
                 owner: owner, primaryRole: .helper, operations: [owner + ".probe"],
                 presentations: [
                     try WorkerFixturePresentationScope(location: "main", section: owner)
-                ], inputs: [], outputs: [], manifestSHA256: hash, caseSHA256: hash)
+                ], inputs: [], outputs: [], fileScopes: [], manifestSHA256: hash, caseSHA256: hash)
             let trusted = try trust(key.publicKey.rawRepresentation, rolePolicies: [policy])
             func helper(_ ui: Bool) -> [String: Any] {
                 var value = object(ui)
