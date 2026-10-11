@@ -104,7 +104,7 @@ final class NotchShelfController {
     private var sharePickerDelegate: SharePickerDelegate?
     private var sharePicker: NSSharingServicePicker?
     private var shareStagedFiles: ShelfStagedFiles?
-    private var dragStagedFiles: ShelfStagedFiles?
+    private var dragOwner: NotchDragCallbackOwnership?
     private var isSharing = false
     private var dragStartPositions: [UUID: CGPoint] = [:]
     private var dragPointerStart: CGPoint?
@@ -456,6 +456,7 @@ final class NotchShelfController {
         for task in Array(glanceTasks.values) { await task.value }
         await requests.shutdownAndWait()
         for owner in Array(promiseOwners.values) { await owner.wait() }
+        await dragOwner?.wait()
         if isSharing {
             await withCheckedContinuation { shareWaiters.append($0) }
         }
@@ -477,7 +478,6 @@ final class NotchShelfController {
             browser = nil
             sharePickerDelegate = nil
             shareStagedFiles = nil
-            dragStagedFiles = nil
             await store.shutdownAndWait()
         }
     }
@@ -1372,6 +1372,7 @@ final class NotchShelfController {
     }
 
     func beginExternalDrag(of item: ShelfItem) {
+        guard !stopped, dragOwner == nil else { return }
         let members = group(for: item)
         livePositions = [:]
         dragStartPositions = [:]
@@ -1392,24 +1393,36 @@ final class NotchShelfController {
             presentShelfFailure(error.localizedDescription)
             return
         }
-        dragStagedFiles = staged
+        let owner = NotchDragCallbackOwnership(source: catcher, stagedFiles: staged)
+        dragOwner = owner
         internalDragItemIDs = Set(members.map(\.id))
         if removeAfterDragOut { pendingDragOutIDs = Set(members.map(\.id)) }
-        catcher.beginDrag(of: staged.urls, event: event)
+        owner.bind(session: catcher.beginDrag(of: staged.urls, event: event))
     }
 
-    func externalDragEnded(at point: CGPoint, operation: NSDragOperation) {
-        defer { dragStagedFiles = nil }
-        internalDragItemIDs = []
-        guard !pendingDragOutIDs.isEmpty else { return }
-        let ids = pendingDragOutIDs
-        pendingDragOutIDs = []
-        let insideShelf = panels.values.contains { shapeFrame(of: $0).contains(point) }
-        guard !insideShelf, operation != [] else { return }
-        let members = items.filter { ids.contains($0.id) }
-        guard !members.isEmpty else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-            self?.removeMembers(members)
+    func externalDragEnded(
+        session: NSDraggingSession, source: ShelfDropCatcherView,
+        at point: CGPoint, operation: NSDragOperation
+    ) {
+        guard let owner = dragOwner, owner.matches(session: session, source: source) else { return }
+        enqueueCallback(whileStopping: true) {
+            defer {
+                owner.finish()
+                if self.dragOwner === owner { self.dragOwner = nil }
+            }
+            self.internalDragItemIDs = []
+            let ids = self.pendingDragOutIDs
+            self.pendingDragOutIDs = []
+            guard !self.stopped, !ids.isEmpty else { return }
+            let insideShelf = self.panels.values.contains {
+                self.shapeFrame(of: $0).contains(point)
+            }
+            guard !insideShelf, operation != [] else { return }
+            let members = self.items.filter { ids.contains($0.id) }
+            guard !members.isEmpty else { return }
+            do { try await Task.sleep(for: .milliseconds(800)) } catch { return }
+            guard !Task.isCancelled, !self.stopped else { return }
+            self.removeMembers(members)
         }
     }
 
@@ -1424,6 +1437,7 @@ final class NotchShelfController {
 
     @discardableResult
     func handleDrop(from pasteboard: NSPasteboard, at location: CGPoint? = nil) -> Bool {
+        guard !stopped else { return false }
         let objects =
             pasteboard.readObjects(
                 forClasses: [NSFilePromiseReceiver.self, NSURL.self, NSString.self],
@@ -1521,6 +1535,45 @@ final class NotchShelfController {
         if let location { store.setPosition(location, for: item) }
         items = store.items
         fireHaptic()
+    }
+}
+
+@MainActor
+final class NotchDragCallbackOwnership {
+    private var source: AnyObject?
+    private var stagedFiles: AnyObject?
+    private var session: AnyObject?
+    private var finished = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(source: AnyObject, stagedFiles: AnyObject) {
+        self.source = source
+        self.stagedFiles = stagedFiles
+    }
+
+    func bind(session: AnyObject) {
+        guard self.session == nil, !finished else { return }
+        self.session = session
+    }
+
+    func matches(session: AnyObject, source: AnyObject) -> Bool {
+        !finished && self.session === session && self.source === source
+    }
+
+    func wait() async {
+        guard !finished else { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func finish() {
+        guard !finished else { return }
+        finished = true
+        session = nil
+        source = nil
+        stagedFiles = nil
+        let completions = waiters
+        waiters.removeAll()
+        for completion in completions { completion.resume() }
     }
 }
 
@@ -1673,7 +1726,7 @@ final class ShelfDropCatcherView: NSView {
         return controller?.handleDrop(from: sender.draggingPasteboard, at: location) ?? false
     }
 
-    func beginDrag(of urls: [URL], event: NSEvent) {
+    func beginDrag(of urls: [URL], event: NSEvent) -> NSDraggingSession {
         let point = convert(event.locationInWindow, from: nil)
         let draggingItems = urls.enumerated().map { index, url -> NSDraggingItem in
             let draggingItem = NSDraggingItem(pasteboardWriter: url as NSURL)
@@ -1685,7 +1738,7 @@ final class ShelfDropCatcherView: NSView {
                 contents: icon)
             return draggingItem
         }
-        beginDraggingSession(with: draggingItems, event: event, source: self)
+        return beginDraggingSession(with: draggingItems, event: event, source: self)
     }
 }
 
@@ -1699,6 +1752,7 @@ extension ShelfDropCatcherView: NSDraggingSource {
     func draggingSession(
         _ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation
     ) {
-        controller?.externalDragEnded(at: screenPoint, operation: operation)
+        controller?.externalDragEnded(
+            session: session, source: self, at: screenPoint, operation: operation)
     }
 }
