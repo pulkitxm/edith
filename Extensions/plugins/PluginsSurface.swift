@@ -14,7 +14,18 @@ import Foundation
     ) { self.model = model; self.hidden = hidden }
 
     static func validate(_ command: String, payload: Data) throws {
-        _ = try request(command, payload: payload)
+        let snapshot = try request(command, payload: payload)
+        let expected: Data
+        if command == "surface.snapshot" {
+            expected = try JSONEncoder().encode(snapshot)
+        } else {
+            expected = try JSONEncoder().encode(
+                SurfaceActionRequest(snapshot: snapshot, actionID: "refreshAgents"))
+        }
+        guard let fields = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
+            let encoded = try JSONSerialization.jsonObject(with: expected) as? [String: Any],
+            NSDictionary(dictionary: fields).isEqual(to: encoded)
+        else { throw ExtensionPeerError.invalidRequest }
     }
 
     private static func request(_ command: String, payload: Data) throws -> SurfaceSnapshotRequest {
