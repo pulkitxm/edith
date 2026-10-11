@@ -10,6 +10,13 @@ import SwiftUI
 
 @MainActor
 final class HostRemoteApplication {
+    #if EDITH_FUNCTIONAL_FIXTURE
+    static var fixtureAdmitBeforeConstruction:
+        (
+            (HostRemoteConfiguration, HostRemotePresentation, NSDictionary, [URL]) throws ->
+                NSDictionary
+        )?
+    #endif
     static let shared: HostRemoteApplication = {
         do { return try HostRemoteApplication() } catch {
             exit(1)
@@ -171,27 +178,6 @@ final class HostRemoteApplication {
     ) throws -> ExtensionBundlePresentation {
         guard let configuration, !stopping else { throw HostWorkerError.rejected }
         try presentation.validate(session: configuration.session, extensionID: extensionID)
-        if runtimes.isEmpty {
-            let team = ExtensionCodeSignature.teamIdentifier()
-            let development = try configuration.worker.identity().development
-            for role in [ExtensionBundleRuntime.Role.app, .helper, .agent] {
-                let bundle = payload.appendingPathComponent(extensionID).appendingPathComponent(
-                    "\(role.rawValue).bundle")
-                guard FileManager.default.fileExists(atPath: bundle.path) else { continue }
-                runtimes.append(
-                    try ExtensionBundleRuntime(
-                        readOnlyPackage: configuration.package, directory: payload, role: role,
-                        hostABI: HostContract.compatibility,
-                        verify: { url in
-                            if development {
-                                try ExtensionCodeSignature.verifyDevelopment(url)
-                            } else {
-                                guard let team else { throw MarketplaceError.invalidSignature }
-                                try ExtensionCodeSignature.verify(url, teamIdentifier: team)
-                            }
-                        }))
-            }
-        }
         let input = NSMutableDictionary(dictionary: [
             "remoteUI": true, "uiOnly": configuration.uiOnly,
             "location": presentation.request.location,
@@ -220,6 +206,48 @@ final class HostRemoteApplication {
         if let surface = presentation.request.surface {
             input["tile"] = try JSONEncoder().encode(surface.tile)
             input["target"] = surface.target.rawValue
+        }
+        #if EDITH_FUNCTIONAL_FIXTURE
+        guard !configuration.uiOnly, let admit = Self.fixtureAdmitBeforeConstruction else {
+            throw HostWorkerError.rejected
+        }
+        input["dataDirectory"] = try configuration.worker.identity().extensionDirectory(extensionID)
+            .path
+        let roles = [ExtensionBundleRuntime.Role.app, .helper, .agent].map {
+            payload.appendingPathComponent(extensionID).appendingPathComponent(
+                "\($0.rawValue).bundle")
+        }.filter { FileManager.default.fileExists(atPath: $0.path) }
+        guard !roles.isEmpty else { throw HostWorkerError.rejected }
+        let additions = try admit(configuration, presentation, input, roles)
+        guard additions.count == 1,
+            Set(additions.allKeys.compactMap { $0 as? String }) == ["hostedFunctionalFixture"],
+            let marker = additions["hostedFunctionalFixture"] as? [String: String],
+            Set(marker.keys) == [
+                "sourceCommit", "session", "phase", "descriptorPath", "capabilitySHA256",
+            ], marker.values.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 4096 })
+        else { throw HostWorkerError.rejected }
+        input["hostedFunctionalFixture"] = marker
+        #endif
+        if runtimes.isEmpty {
+            let team = ExtensionCodeSignature.teamIdentifier()
+            let development = try configuration.worker.identity().development
+            for role in [ExtensionBundleRuntime.Role.app, .helper, .agent] {
+                let bundle = payload.appendingPathComponent(extensionID).appendingPathComponent(
+                    "\(role.rawValue).bundle")
+                guard FileManager.default.fileExists(atPath: bundle.path) else { continue }
+                runtimes.append(
+                    try ExtensionBundleRuntime(
+                        readOnlyPackage: configuration.package, directory: payload, role: role,
+                        hostABI: HostContract.compatibility,
+                        verify: { url in
+                            if development {
+                                try ExtensionCodeSignature.verifyDevelopment(url)
+                            } else {
+                                guard let team else { throw MarketplaceError.invalidSignature }
+                                try ExtensionCodeSignature.verify(url, teamIdentifier: team)
+                            }
+                        }))
+            }
         }
         for runtime in runtimes {
             let response = try runtime.response(
