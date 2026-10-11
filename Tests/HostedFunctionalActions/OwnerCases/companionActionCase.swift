@@ -28,42 +28,47 @@ final class CompanionActionCase: HostedFunctionalActionCase {
 
     func activateOriginalControl(context: HostedFunctionalActionContext) async throws {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
-        let baseline = try await readState(context: context, reflectAt: "03:17")
+        let baseline = try await readState(context: context, reasonModel: "qwen3:1.7b")
         await model.refreshSnapshot()
         guard model.hosts.isEmpty, model.deployment == nil, model.selectedHostID == nil,
-            model.error == nil, model.config.reflectAt == "03:17"
+            model.error == nil, model.config.reasonModel == "qwen3:1.7b"
         else { throw HostedFunctionalActionError.invalid }
-        try await save(reflectAt: "03:18")
-        let changed = try await readState(context: context, reflectAt: "03:18")
+        try await save(reasonModel: "synthetic-temporary-reason-model")
+        let changed = try await readState(context: context, reasonModel: "synthetic-temporary-reason-model")
         guard changed != baseline else { throw HostedFunctionalActionError.invalid }
-        try await save(reflectAt: "03:17")
-        guard try await readState(context: context, reflectAt: "03:17") == baseline else {
+        try await save(reasonModel: "qwen3:1.7b")
+        guard try await readState(context: context, reasonModel: "qwen3:1.7b") == baseline else {
             throw HostedFunctionalActionError.invalid
         }
     }
 
-    private func save(reflectAt: String) async throws {
+    private func save(reasonModel: String) async throws {
         guard model.selectedHostID == nil else { throw HostedFunctionalActionError.invalid }
-        model.config.reflectAt = reflectAt
+        model.config.reasonModel = reasonModel
         let count = transport.originalInvocationCount
         model.saveConfig()
         try await transport.waitForOriginalInvocation(Self.activationOperation, after: count)
-        await Task.yield()
-        guard model.error == nil else { throw HostedFunctionalActionError.invalid }
+        let deadline = ContinuousClock.now + .seconds(10)
+        while model.config.reasonModel != reasonModel, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        guard model.error == nil, !model.configStatusIsError,
+            model.config.reasonModel == reasonModel
+        else { throw HostedFunctionalActionError.invalid }
     }
 
     func readAuthoritativeState(context: HostedFunctionalActionContext) async throws -> Data {
-        try await readState(context: context, reflectAt: "03:17")
+        try await readState(context: context, reasonModel: "qwen3:1.7b")
     }
 
-    private func readState(context: HostedFunctionalActionContext, reflectAt: String) async throws -> Data {
+    private func readState(context: HostedFunctionalActionContext, reasonModel: String) async throws -> Data {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
         try await transport.requireCurrent()
         let path = try context.ownedPath(named: "companion-config", kind: "file")
         guard path.path == URL(fileURLWithPath: context.dataDirectory).appendingPathComponent("companion-config.json").path,
             path.standardizedFileURL == path.resolvingSymlinksInPath(),
             let value = try PersistentJSONFile.read(CompanionStackConfig?.self, from: path, missing: nil),
-            value.reflectAt == reflectAt, value.validated().isEmpty
+            value.reasonModel == reasonModel, value.validated().isEmpty
         else { throw HostedFunctionalActionError.invalid }
         try await transport.requireCurrent()
         let encoder = JSONEncoder()
