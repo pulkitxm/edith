@@ -16,6 +16,7 @@ final class ExtensionRuntime: NSObject {
     private var stopped = false
     private var activeCalls = 0
     private var commandDrain: Task<Void, Never>?
+    private var resourceStop: Task<Void, Never>?
     private var commandsSuspended = false
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
 
@@ -52,6 +53,7 @@ final class ExtensionRuntime: NSObject {
         let drain = beginCommandDrain()
         Task { [self] in
             await drain.value
+            await resourceStop?.value
             withExtendedLifetime(self) { completion() }
         }
     }
@@ -66,6 +68,7 @@ final class ExtensionRuntime: NSObject {
         owner?.cancelPendingCommands()
         uiOwner?.stop()
         streams?.stop()
+        if let commandDrain { return commandDrain }
         let task = Task { [self] in
             _ = await commands.suspendAndWait()
             await owner?.drain()
@@ -79,8 +82,8 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareDisableWithCompletion:)
     func prepareDisable(completion: @escaping (NSError?) -> Void) {
-        let drain = beginCommandDrain()
         let owner = worker
+        let drain = beginCommandDrain()
         Task { [self] in
             await drain.value
             do { try await owner?.prepareDisable(); completion(nil) } catch {
@@ -91,20 +94,33 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        let drain = beginCommandDrain()
-        stopped = true
-        let streams = cliStreams; cliStreams = nil; streams?.stop()
-        commands.shutdown()
-        let stopping = worker
-        stopping?.shutdown()
+        let stop = beginResourceStop()
         Task { [self] in
-            await drain.value
-            await stopping?.drain()
-            while activeCalls > 0 { await Task.yield() }
-            await streams?.stopAndWait()
-            await commands.shutdownAndWait()
-            completion()
+            await stop.value
+            withExtendedLifetime(self) { completion() }
         }
+    }
+
+    private func beginResourceStop() -> Task<Void, Never> {
+        if let resourceStop { return resourceStop }
+        let owner = worker
+        let streams = cliStreams
+        let drain = beginCommandDrain()
+        if let resourceStop { return resourceStop }
+        stopped = true
+        retireUI()
+        worker = nil; surface = nil; cliStreams = nil
+        let task = Task { [self] in
+            await drain.value
+            await commands.shutdownAndWait()
+            owner?.shutdown()
+            await owner?.drain()
+            await streams?.stopAndWait()
+            while activeCalls > 0 { await Task.yield() }
+            TextEditingCommands.shutdown(); InputFocus.uninstall()
+        }
+        resourceStop = task
+        return task
     }
 
     private func retireUI() {
@@ -158,14 +174,16 @@ final class ExtensionRuntime: NSObject {
                 TextEditingCommands.install()
             }
         case "view":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard let context = uiContext else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost { BifrostSettings(context: context) })
-        case "synchronize": worker?.configureHotKey()
+        case "synchronize":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
+            worker?.configureHotKey()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
-            prepareToStop(completion: {}); worker = nil; surface = nil
-            TextEditingCommands.shutdown(); InputFocus.uninstall()
+            _ = beginResourceStop()
         case "status": return ["ok": true, "running": !stopped && worker != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }

@@ -11,6 +11,7 @@ final class ExtensionRuntime: NSObject {
     private var uiModel: BlitzTreeModel?
     private var uiClient: ExtensionEngineClient?
     private var commandDrain: Task<Void, Never>?
+    private var resourceStop: Task<Void, Never>?
     private var commandsSuspended = false
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
@@ -43,6 +44,7 @@ final class ExtensionRuntime: NSObject {
         let drain = beginCommandDrain()
         Task { [self] in
             await drain.value
+            await resourceStop?.value
             withExtendedLifetime(self) { completion() }
         }
     }
@@ -55,6 +57,7 @@ final class ExtensionRuntime: NSObject {
         if let commandDrain { return commandDrain }
         owner?.cancelPendingCommands()
         uiOwner?.cancelPendingCommands()
+        if let commandDrain { return commandDrain }
         let task = Task { [self] in
             _ = await commands.suspendAndWait()
             await owner?.cancelAndWait()
@@ -67,16 +70,27 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        let drain = beginCommandDrain()
-        let owner = model
-        stopUI()
+        let stop = beginResourceStop()
         Task { [self] in
+            await stop.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginResourceStop() -> Task<Void, Never> {
+        if let resourceStop { return resourceStop }
+        let owner = model
+        let drain = beginCommandDrain()
+        if let resourceStop { return resourceStop }
+        stopUI()
+        model = nil
+        let task = Task { [self] in
             await drain.value
             await commands.shutdownAndWait()
             await owner?.shutdown()
-            while let task = uiDrains.values.first { await task.value }
-            completion()
         }
+        resourceStop = task
+        return task
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
@@ -106,15 +120,14 @@ final class ExtensionRuntime: NSObject {
             TextEditingCommands.install()
         case "stopUI": stopUI()
         case "view":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost { BlitzTreePage(model: model) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
-            commands.shutdown()
-            model = nil
-            stopUI()
+            _ = beginResourceStop()
         case "status": return ["ok": true, "running": model != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }

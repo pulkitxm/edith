@@ -17,6 +17,7 @@ final class ExtensionRuntime: NSObject {
     private var navigation: CalendarHostNavigation?
     private var fixture: CalendarFixtureBackend?
     private var commandDrain: Task<Void, Never>?
+    private var resourceStop: Task<Void, Never>?
     private var commandsSuspended = false
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
@@ -78,6 +79,7 @@ final class ExtensionRuntime: NSObject {
         let drain = beginCommandDrain()
         Task { [self] in
             await drain.value
+            await resourceStop?.value
             withExtendedLifetime(self) { completion() }
         }
     }
@@ -95,6 +97,7 @@ final class ExtensionRuntime: NSObject {
         navigator?.invalidate()
         CalendarPermission.shutdown()
         for scene in scenes { scene.stop() }
+        if let commandDrain { return commandDrain }
         let task = Task { [self] in
             _ = await commands.suspendAndWait()
             await engine?.stopAndWait()
@@ -110,24 +113,36 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        let drain = beginCommandDrain()
-        stopping = true
-        commands.shutdown()
-        uiEngine?.shutdown()
-        store?.shutdown()
-        navigation?.invalidate()
-        CalendarPermission.shutdown()
-        let ownedPresentation = presentation
+        let stop = beginResourceStop()
         Task { [self] in
+            await stop.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginResourceStop() -> Task<Void, Never> {
+        if let resourceStop { return resourceStop }
+        let owner = store
+        let engine = uiEngine
+        let navigationOwner = navigation
+        let originalPresentation = presentation
+        let drain = beginCommandDrain()
+        if let resourceStop { return resourceStop }
+        stopping = true
+        stopUI()
+        store = nil; uiEngine = nil; navigation = nil; surface = nil; presentation = nil;
+        fixture = nil
+        let task = Task { [self] in
             await drain.value
             await commands.shutdownAndWait()
-            await uiEngine?.stopAndWait()
-            await store?.stopAndWait()
-            await navigation?.stopAndWait()
-            await CalendarPermission.stopAndWait()
-            ownedPresentation?.shutdown()
-            completion()
+            engine?.shutdown()
+            owner?.shutdown()
+            navigationOwner?.invalidate()
+            CalendarPermission.shutdown()
+            originalPresentation?.shutdown()
         }
+        resourceStop = task
+        return task
     }
 
     private func retireScene(_ scene: CalendarUIPresentation) {
@@ -212,6 +227,7 @@ final class ExtensionRuntime: NSObject {
             if let previous = uiPresentations[client.presentationID] { retireScene(previous) }
             uiPresentations[client.presentationID] = scene
         case "view":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard let value = input["presentationID"] as? String,
                 let id = UUID(uuidString: value), let scene = uiPresentations[id],
                 scene.matches(input)
@@ -220,22 +236,11 @@ final class ExtensionRuntime: NSObject {
         case "stopUI":
             stopUI()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": store?.refreshAuthStatus()
+        case "synchronize":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
+            store?.refreshAuthStatus()
         case "stop":
-            stopping = true
-            stopUI()
-            commands.shutdown()
-            navigation?.invalidate()
-            navigation = nil
-            uiEngine?.shutdown()
-            uiEngine = nil
-            surface = nil
-            store?.shutdown()
-            store = nil
-            presentation?.shutdown()
-            presentation = nil
-            fixture = nil
-            CalendarPermission.shutdown()
+            _ = beginResourceStop()
         case "status": return ["ok": true, "running": store != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }

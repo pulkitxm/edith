@@ -12,6 +12,7 @@ final class ExtensionRuntime: NSObject {
     private var engine: AnyObject?
     private var surface: AnyObject?
     private var commandDrain: Task<Void, Never>?
+    private var resourceStop: Task<Void, Never>?
     private var commandsSuspended = false
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
@@ -97,6 +98,7 @@ final class ExtensionRuntime: NSObject {
             if #available(macOS 14.4, *) { uiModel = AudioMixerRemoteModel(client: client) }
         case "stopUI": stopUI()
         case "view":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard uiClient != nil else { return ["ok": false] as NSDictionary }
             if #available(macOS 14.4, *), let engine = uiModel as? AudioMixerRemoteModel {
                 return NSHostingController(
@@ -115,9 +117,7 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
-            commands.shutdown()
-            if #available(macOS 14.4, *) { (engine as? MixerEngine)?.shutdown() }
-            engine = nil; surface = nil
+            _ = beginResourceStop()
         case "status": return ["ok": true, "running": engine != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
@@ -141,6 +141,7 @@ final class ExtensionRuntime: NSObject {
         let drain = beginCommandDrain()
         Task { [self] in
             await drain.value
+            await resourceStop?.value
             withExtendedLifetime(self) { completion() }
         }
     }
@@ -155,6 +156,7 @@ final class ExtensionRuntime: NSObject {
             (owner as? MixerEngine)?.cancelPendingCommands()
             (uiOwner as? AudioMixerRemoteModel)?.stop()
         }
+        if let commandDrain { return commandDrain }
         let task = Task { [self] in
             _ = await commands.suspendAndWait()
             if #available(macOS 14.4, *) {
@@ -169,16 +171,27 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        let drain = beginCommandDrain()
-        let owner = engine
-        stopUI()
+        let stop = beginResourceStop()
         Task { [self] in
+            await stop.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginResourceStop() -> Task<Void, Never> {
+        if let resourceStop { return resourceStop }
+        let owner = engine
+        let drain = beginCommandDrain()
+        if let resourceStop { return resourceStop }
+        stopUI()
+        engine = nil; surface = nil
+        let task = Task { [self] in
             await drain.value
             await commands.shutdownAndWait()
             if #available(macOS 14.4, *) { await (owner as? MixerEngine)?.shutdownAndWait() }
-            while let task = uiDrains.values.first { await task.value }
-            completion()
         }
+        resourceStop = task
+        return task
     }
 
     @available(macOS 14.4, *)

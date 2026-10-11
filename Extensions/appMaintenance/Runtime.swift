@@ -16,6 +16,7 @@ final class ExtensionRuntime: NSObject {
     private var uiLocation: String?
     private var uiSection: String?
     private var commandDrain: Task<Void, Never>?
+    private var resourceStop: Task<Void, Never>?
     private var commandsSuspended = false
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
@@ -58,6 +59,7 @@ final class ExtensionRuntime: NSObject {
         let drain = beginCommandDrain()
         Task { [self] in
             await drain.value
+            await resourceStop?.value
             withExtendedLifetime(self) { completion() }
         }
     }
@@ -74,6 +76,7 @@ final class ExtensionRuntime: NSObject {
         uiOwner?.cancelPendingCommands()
         settingsOwner?.stop()
         streams?.stop()
+        if let commandDrain { return commandDrain }
         let task = Task { [self] in
             _ = await commands.suspendAndWait()
             await owner?.cancelAndWait()
@@ -88,16 +91,28 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        let drain = beginCommandDrain()
-        let owner = model
-        stopUI()
+        let stop = beginResourceStop()
         Task { [self] in
+            await stop.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginResourceStop() -> Task<Void, Never> {
+        if let resourceStop { return resourceStop }
+        let owner = model
+        let drain = beginCommandDrain()
+        if let resourceStop { return resourceStop }
+        stopUI()
+        stopped = true
+        model = nil
+        let task = Task { [self] in
             await drain.value
             await commands.shutdownAndWait()
             await owner?.shutdown()
-            while let task = uiDrains.values.first { await task.value }
-            completion()
         }
+        resourceStop = task
+        return task
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
@@ -139,6 +154,7 @@ final class ExtensionRuntime: NSObject {
             }
             stopUI()
         case "view":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard input["presentationID"] as? String == uiClient?.presentationID.uuidString,
                 input["location"] as? String == uiLocation,
                 input["section"] as? String == uiSection
@@ -153,13 +169,7 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
-            stopped = true
-            stopUI()
-            commands.shutdown(); cliStreams?.stop()
-            let ownedModel = model
-            ownedModel?.stopBackgroundDiscovery()
-            Task { await ownedModel?.shutdown() }
-            model = nil
+            _ = beginResourceStop()
         case "status": return ["ok": true, "running": model != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
