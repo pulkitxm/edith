@@ -18,7 +18,8 @@ final class HostWorkerApplication {
     private let nativeAdmission = ExtensionNativeTaskAdmission()
     private var resourceObservers: [NSObjectProtocol] = []
     private var stopping = false
-    private var preparingDisable = false
+    private let preparation = HostWorkerPreparation()
+    private var preparingDisable: Bool { preparation.isClosed }
     private var preparedApplicationQuit = false
     private var peerServer: ExtensionPeerServer?
     private var shutdownTask: Task<Void, Never>?
@@ -136,20 +137,13 @@ final class HostWorkerApplication {
     }
 
     private func prepareDisable(_ request: HostWorkerRequest) {
-        guard !preparingDisable else {
-            try? control.send(
-                HostWorkerResponse(
-                    token: request.token, ok: false,
-                    message: "The extension is still restoring system settings. Wait and try again."
-                ))
-            return
-        }
-        preparingDisable = true
+        preparation.closeAdmission()
         navigation?.cancelPending()
         Task { [self] in
-            defer { preparingDisable = false }
             do {
-                for runtime in runtimes { try await runtime.prepareDisableAll() }
+                try await preparation.prepare {
+                    for runtime in self.runtimes { try await runtime.prepareDisableAll() }
+                }
                 try control.send(
                     HostWorkerResponse(
                         token: request.token, ok: true, version: configuration?.version))
@@ -174,29 +168,30 @@ final class HostWorkerApplication {
             try? control.send(HostWorkerResponse(token: request.token, ok: false))
             return
         }
-        preparingDisable = true
+        preparation.closeAdmission()
         navigation?.cancelPending()
         peerServer?.shutdown()
         peerServer = nil
         Task { [self] in
-            defer { preparingDisable = false }
             do {
-                guard let host = ExtensionProcessIdentity.read(getppid()) else {
-                    throw HostWorkerError.rejected
+                try await preparation.prepare {
+                    guard let host = ExtensionProcessIdentity.read(getppid()) else {
+                        throw HostWorkerError.rejected
+                    }
+                    let response = try engine.response(
+                        id: configuration.extensionID, operation: "prepareApplicationQuit",
+                        context: [
+                            "reason": HostWorkerStopReason.applicationQuit.rawValue,
+                            "hostPID": host.pid, "hostGeneration": host.generation,
+                        ])
+                    guard response["ok"] as? Bool == true else { throw HostWorkerError.rejected }
+                    for runtime in runtimes where runtime !== engine {
+                        try await runtime.prepareDisableAll()
+                    }
+                    try await engine.prepareToStopAll()
+                    guard !stopping, host.isAlive else { throw HostWorkerError.rejected }
+                    self.preparedApplicationQuit = true
                 }
-                let response = try engine.response(
-                    id: configuration.extensionID, operation: "prepareApplicationQuit",
-                    context: [
-                        "reason": HostWorkerStopReason.applicationQuit.rawValue,
-                        "hostPID": host.pid, "hostGeneration": host.generation,
-                    ])
-                guard response["ok"] as? Bool == true else { throw HostWorkerError.rejected }
-                for runtime in runtimes where runtime !== engine {
-                    try await runtime.prepareDisableAll()
-                }
-                try await engine.prepareToStopAll()
-                guard !stopping, host.isAlive else { throw HostWorkerError.rejected }
-                preparedApplicationQuit = true
                 try control.send(
                     HostWorkerResponse(
                         token: request.token, ok: true, version: configuration.version))
@@ -363,6 +358,7 @@ final class HostWorkerApplication {
                     try await self.showWindow()
                     return Data("{\"opened\":true}".utf8)
                 }
+                guard !self.preparingDisable else { throw ExtensionPeerError.unavailable }
                 guard
                     let runtime = self.runtimes.first(where: {
                         $0.supportsCommands(id: package.id)
@@ -381,6 +377,7 @@ final class HostWorkerApplication {
         guard let configuration else { throw HostWorkerError.rejected }
         switch request.operation {
         case "synchronize", "ambientPolicy":
+            guard !preparingDisable else { throw HostWorkerError.rejected }
             guard let route = HostWorkerSynchronization(rawValue: request.operation) else {
                 throw HostWorkerError.rejected
             }
@@ -422,11 +419,13 @@ final class HostWorkerApplication {
         parentWatcher = nil
         if let windowObserver { NotificationCenter.default.removeObserver(windowObserver) }
         windowObserver = nil
-        resourceObservers.forEach(NotificationCenter.default.removeObserver)
-        resourceObservers.removeAll()
         shutdownTask = Task { [self] in
-            if reason != .applicationQuit || !preparedApplicationQuit {
-                for runtime in runtimes { try? await runtime.prepareDisableAll() }
+            if preparation.isClosed {
+                try? await preparation.join()
+            } else if reason != .applicationQuit || !preparedApplicationQuit {
+                try? await preparation.prepare {
+                    for runtime in self.runtimes { try await runtime.prepareDisableAll() }
+                }
             }
             for runtime in runtimes { try? await runtime.prepareToStopAll() }
             for runtime in runtimes { try? runtime.stopAll() }
@@ -434,6 +433,8 @@ final class HostWorkerApplication {
                 try? control.send(
                     HostWorkerResponse(token: token, ok: true, version: configuration?.version))
             }
+            resourceObservers.forEach(NotificationCenter.default.removeObserver)
+            resourceObservers.removeAll()
             try? control.close()
             exit(0)
         }
