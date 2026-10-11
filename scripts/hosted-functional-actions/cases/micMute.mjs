@@ -3,7 +3,7 @@ export const definition = {
   "owner": "micMute",
   "activation": {
     "kind": "original-control-callback",
-    "control": "mute",
+    "control": "Mute microphones",
     "operation": "micMute.ui.action",
     "sources": [
       {

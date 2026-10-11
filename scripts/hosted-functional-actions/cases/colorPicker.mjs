@@ -3,7 +3,7 @@ export const definition = {
   "owner": "colorPicker",
   "activation": {
     "kind": "original-control-callback",
-    "control": "pick",
+    "control": "Pick now",
     "operation": "colorPicker.ui.action",
     "sources": [
       {

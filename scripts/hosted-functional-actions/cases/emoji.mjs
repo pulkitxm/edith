@@ -3,7 +3,7 @@ export const definition = {
   "owner": "emoji",
   "activation": {
     "kind": "original-control-callback",
-    "control": "clear",
+    "control": "Clear Frequently Used",
     "operation": "emoji.ui.action",
     "sources": [
       {
