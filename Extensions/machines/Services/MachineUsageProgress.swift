@@ -90,13 +90,13 @@ final class MachineUsageProgress: @unchecked Sendable {
     }
 
     func cancel() {
-        let task = lock.withLock {
+        let pending = lock.withLock {
             state = .cancelled
             chunks = []; bytes = 0
             receipt = nil
             return task
         }
-        task?.cancel()
+        pending?.cancel()
     }
 
     func read(id: UUID, sequence: UInt64) throws -> Frame {
