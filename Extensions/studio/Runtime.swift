@@ -136,7 +136,7 @@ final class ExtensionRuntime: NSObject {
             if let fixture = self.fixture {
                 return try await StudioCommands.execute(
                     command, payload: payload, model: model,
-                    workflowDirectory: fixture.admission.dataDirectory)
+                    workflowDirectory: fixture.dataDirectory)
             }
             return try await StudioCommands.execute(command, payload: payload, model: model)
         }

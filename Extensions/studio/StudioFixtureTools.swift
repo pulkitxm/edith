@@ -6,15 +6,29 @@ import WorkerFixtureSupport
 #endif
 
 struct StudioFixtureTools: Sendable {
-    let admission: WorkerFixtureAdmission
+    let home: URL
+    let dataDirectory: URL
     let toolbin: URL
 
     init(admission: WorkerFixtureAdmission) throws {
         guard admission.extensionID == "studio", admission.role == .app else {
             throw WorkerFixtureError.invalid
         }
-        self.admission = admission
-        toolbin = admission.home.appendingPathComponent("toolbin", isDirectory: true)
+        try self.init(home: admission.home, dataDirectory: admission.dataDirectory)
+    }
+
+    @MainActor init(engineAdmission: WorkerFixtureEngineAdmission) throws {
+        try engineAdmission.requireCurrent()
+        guard engineAdmission.descriptor.owner == "studio", engineAdmission.descriptor.role == "app"
+        else { throw WorkerFixtureError.invalid }
+        try self.init(
+            home: URL(fileURLWithPath: engineAdmission.descriptor.home, isDirectory: true),
+            dataDirectory: URL(fileURLWithPath: engineAdmission.descriptor.dataDirectory, isDirectory: true))
+    }
+
+    private init(home: URL, dataDirectory: URL) throws {
+        self.home = home; self.dataDirectory = dataDirectory
+        toolbin = home.appendingPathComponent("toolbin", isDirectory: true)
         if mkdir(toolbin.path, 0o700) != 0 && errno != EEXIST { throw WorkerFixtureError.invalid }
         guard toolbin.path == toolbin.resolvingSymlinksInPath().path else {
             throw WorkerFixtureError.invalid
@@ -49,7 +63,7 @@ struct StudioFixtureTools: Sendable {
             path: toolbin.path,
             resolve: { executable(named: $0) }, allowsSearchFallback: false,
             modelAvailable: { false }, translationAvailable: false)
-        environment.temporaryRoot = admission.dataDirectory.appendingPathComponent("tool-staging")
+        environment.temporaryRoot = dataDirectory.appendingPathComponent("tool-staging")
         return environment
     }
 

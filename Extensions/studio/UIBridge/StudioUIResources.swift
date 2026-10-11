@@ -1,5 +1,8 @@
 import EdithExtensionSupport
 import Foundation
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 
 struct StudioUIResource: Codable, Equatable, Sendable {
     let token: UUID
@@ -19,10 +22,19 @@ struct StudioUIResource: Codable, Equatable, Sendable {
     private var directory: URL?
     private var timer: Task<Void, Never>?
     private var stopped = false
+    private var fixtureAdmission: WorkerFixtureEngineAdmission?
 
     deinit {
         timer?.cancel()
         if let directory { try? FileManager.default.removeItem(at: directory) }
+    }
+
+    func configureFixture(_ admission: WorkerFixtureEngineAdmission) throws {
+        try admission.requireCurrent()
+        guard admission.descriptor.owner == "studio", admission.descriptor.role == "app",
+            directory == nil, entries.isEmpty, !stopped
+        else { throw WorkerFixtureError.invalid }
+        fixtureAdmission = admission
     }
 
     func store(_ data: Data) throws -> StudioUIResource {
@@ -115,23 +127,45 @@ struct StudioUIResource: Codable, Equatable, Sendable {
     func shutdown() {
         stopped = true
         timer?.cancel()
+        for entry in Array(entries.values) { remove(entry.handle) }
         entries.removeAll()
         if let directory { try? FileManager.default.removeItem(at: directory) }
         directory = nil
     }
 
     private func create(length: Int) throws -> StudioUIResource {
+        try fixtureAdmission?.requireCurrent()
         expire()
         guard !stopped, (0...Self.maximumBytes).contains(length), entries.count < 8,
             entries.values.reduce(0, { $0 + $1.handle.length }) <= Self.maximumBytes * 2 - length
         else { throw ExtensionPeerError.rejected("The Studio media transfer is full.") }
-        if directory == nil {
-            let root = FileManager.default.temporaryDirectory.appendingPathComponent(
-                "studio-ui-resources-\(UUID().uuidString)", isDirectory: true)
-            try FileManager.default.createDirectory(
-                at: root, withIntermediateDirectories: false,
-                attributes: [.posixPermissions: 0o700])
-            directory = root
+        let handle = StudioUIResource(token: UUID(), length: length)
+        let url: URL
+        if let admission = fixtureAdmission {
+            let occupied = Set(entries.values.map { $0.url.path })
+            let names = Set((0..<8).map { "studio.ui.blob.\($0)" })
+            guard let output = admission.descriptor.outputs.first(where: {
+                names.contains($0.name) && !occupied.contains($0.path)
+            }) else { throw ExtensionPeerError.unavailable }
+            url = try admission.outputURL(named: output.name)
+        } else {
+            if directory == nil {
+                let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+                    "studio-ui-resources-\(UUID().uuidString)", isDirectory: true)
+                try FileManager.default.createDirectory(
+                    at: root, withIntermediateDirectories: false,
+                    attributes: [.posixPermissions: 0o700])
+                directory = root
+            }
+            guard let directory else { throw ExtensionPeerError.unavailable }
+            url = directory.appendingPathComponent(handle.token.uuidString)
+        }
+        guard FileManager.default.createFile(
+            atPath: url.path, contents: Data(), attributes: [.posixPermissions: 0o600])
+        else { throw ExtensionPeerError.unavailable }
+        try fixtureAdmission?.requireOutput(url)
+        entries[handle.token] = Entry(handle: handle, url: url, written: 0, accessed: .now)
+        if timer == nil {
             timer = Task { [weak self] in
                 while !Task.isCancelled {
                     do { try await Task.sleep(for: .seconds(10)) } catch { return }
@@ -140,28 +174,24 @@ struct StudioUIResource: Codable, Equatable, Sendable {
                 }
             }
         }
-        guard let directory else { throw ExtensionPeerError.unavailable }
-        let handle = StudioUIResource(token: UUID(), length: length)
-        let url = directory.appendingPathComponent(handle.token.uuidString)
-        guard
-            FileManager.default.createFile(
-                atPath: url.path, contents: Data(),
-                attributes: [.posixPermissions: 0o600])
-        else { throw ExtensionPeerError.unavailable }
-        entries[handle.token] = Entry(handle: handle, url: url, written: 0, accessed: .now)
         return handle
     }
 
     private func lookup(_ handle: StudioUIResource) throws -> Entry {
+        try fixtureAdmission?.requireCurrent()
         expire()
         guard !stopped, let entry = entries[handle.token], entry.handle == handle else {
             throw ExtensionPeerError.invalidRequest
         }
+        try fixtureAdmission?.requireOutput(entry.url)
         return entry
     }
 
     private func remove(_ handle: StudioUIResource) {
         guard let entry = entries.removeValue(forKey: handle.token) else { return }
+        if let admission = fixtureAdmission {
+            guard (try? admission.requireOutput(entry.url)) != nil else { return }
+        }
         try? FileManager.default.removeItem(at: entry.url)
     }
 
