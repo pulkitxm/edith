@@ -104,3 +104,31 @@ test("an unexited owned process remains a failure after both bounded signal stag
   ).rejects.toThrow();
   expect(signals).toEqual(["TERM", "KILL"]);
 });
+
+test("only the two declared Calendar package paths can enter post-update cleanup authority", () => {
+  const original =
+    "/owned/Extensions/calendar/edith-host-2/arm64/1.0.0/calendar/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith";
+  const closed = {
+    ...fixture,
+    ownedRolePaths: { ...fixture.ownedRolePaths, managedUI: original },
+  };
+  const candidate = { ...rows()[2], executable: original };
+  expect(validateSparkleSnapshot([candidate], closed)).toEqual([candidate]);
+  const updated = {
+    ...candidate,
+    executable: original.replace("/1.0.0/", "/1.1.0/"),
+  };
+  expect(validateSparkleSnapshot([updated], closed)).toEqual([updated]);
+  for (const version of ["1.2.0", "../1.1.0", "1.1.0\n"])
+    expect(() =>
+      validateSparkleSnapshot(
+        [
+          {
+            ...candidate,
+            executable: original.replace("/1.0.0/", `/${version}/`),
+          },
+        ],
+        closed,
+      ),
+    ).toThrow();
+});
