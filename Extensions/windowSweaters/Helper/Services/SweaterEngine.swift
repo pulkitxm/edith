@@ -12,6 +12,7 @@ final class SweaterEngine: FeatureModule {
     private var tracker: SweaterWindowTracker?
     private var reconciler: SweaterReconciler?
     private var current = SweaterSettings()
+    private var draining = false
 
     private let fixture: WorkerFixtureAdmission?
     var systemResourceCount: Int { (tracker == nil ? 0 : 1) + (reconciler == nil ? 0 : 1) }
@@ -42,6 +43,7 @@ final class SweaterEngine: FeatureModule {
     }
 
     func suspendWork() {
+        draining = true
         reconciler?.stop()
         tracker?.suspendWork()
     }
@@ -61,7 +63,7 @@ final class SweaterEngine: FeatureModule {
     }
 
     func applySettings() {
-        guard tracker == nil || reconciler != nil else { return }
+        guard !draining else { return }
         if fixture != nil { current = SweaterState.settings(); return }
         guard let tracker else { return }
         let updated = SweaterState.settings()

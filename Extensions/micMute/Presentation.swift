@@ -113,6 +113,7 @@ final class ControlPresentation {
     private var defaultsObserver: NSObjectProtocol?
     private var baseline: [String: Any] = [:]
     private var reading = false
+    private var reads: [UUID: Task<Void, Never>] = [:]
     private static let pendingPreferencesKey = "utilityControlsPendingPreferences"
     private var applying = false
     private var stopped = false
@@ -225,7 +226,20 @@ final class ControlPresentation {
     func refresh() async {
         guard active, !stopped, !reading, writing == nil, actions.isEmpty else { return }
         reading = true
+        let id = UUID()
+        let task = Task { [self] in await refreshOwned() }
+        reads[id] = task
+        defer { reads[id] = nil }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func refreshOwned() async {
         defer { reading = false }
+        guard !stopped, !Task.isCancelled else { return }
         let revision = revision
         let request = load.begin()
         defer { if load.owns(request), load.isRunning { load.cancel(request) } }
@@ -290,13 +304,34 @@ final class ControlPresentation {
         }
     }
 
+    func stopAndWait() async {
+        stop()
+        let pending = Array(reads.values) + Array(actions.values)
+        let writing = writing
+        await writing?.value
+        for task in pending { await task.value }
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+
     func stop() {
         guard !stopped else { return }
+        if active, ready, !applying {
+            let values = ControlPresentationContract.values(
+                from: defaults, keys: ControlPresentationContract.writable)
+            if !(values as NSDictionary).isEqual(to: baseline) {
+                do { try queuePreferences(values) } catch {
+                    self.error = error.localizedDescription
+                }
+            }
+        }
         stopped = true
         revision += 1
         load.cancel()
-        writing?.cancel(); writing = nil
-        actions.values.forEach { $0.cancel() }; actions.removeAll()
+        writing?.cancel()
+        actions.values.forEach { $0.cancel() }
+        reads.values.forEach { $0.cancel() }
         IPC.stopObserving(observer); observer = nil
         if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver) }
         defaultsObserver = nil

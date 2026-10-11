@@ -14,6 +14,8 @@ final class ExtensionRuntime: NSObject {
     private var observer: NSObjectProtocol?
 
     private var presentation: ControlPresentation?
+    private var presentationStops: [UUID: Task<Void, Never>] = [:]
+    private var draining = false
 
     private var fixture: WorkerFixtureAdmission?
     private let commands = ExtensionCommandRegistry()
@@ -64,23 +66,30 @@ final class ExtensionRuntime: NSObject {
     @objc(suspendCommandsWithCompletion:)
     func suspendCommands(completion: @escaping () -> Void) {
         _ = commands.suspend()
+        draining = true
+        let presentation = presentation
+        presentation?.stop()
         let service = service
         service?.suspendWork()
-        Task { [self, service] in
+        Task { [self, service, presentation] in
             _ = await commands.suspendAndWait()
             await service?.suspendAndWait()
+            await finishPresentations(presentation)
             completion()
         }
     }
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        draining = true
+        retirePresentation()
         let service = service
         service?.suspendWork()
         commands.shutdown()
         Task { [self, service] in
             await commands.shutdownAndWait()
             await service?.suspendAndWait()
+            await finishPresentations(nil)
             _ = execute(["operation": "stop"])
             completion()
         }
@@ -97,22 +106,23 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
+            guard !draining, presentationStops.isEmpty else { return ["ok": false] as NSDictionary }
             guard let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "micMute",
                 configuration.defaultsSuite
                     == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
-            presentation?.stop()
+            retirePresentation()
             presentation = ControlPresentation(client: configuration.engineClient)
             return ["ok": true] as NSDictionary
         case "stopUI":
-            presentation?.stop()
-            presentation = nil
+            retirePresentation()
             return ["ok": true] as NSDictionary
         case "prepareToStop":
             commands.shutdown()
             return ["ok": true] as NSDictionary
         case "start":
+            guard !draining else { return ["ok": false] as NSDictionary }
             do {
                 fixture = try WorkerFixtureAdmission.current(
                     extensionID: "micMute", context: input,
@@ -152,8 +162,7 @@ final class ExtensionRuntime: NSObject {
         case "synchronize": service?.syncSettings()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
-            presentation?.stop()
-            presentation = nil
+            retirePresentation()
             commands.shutdown()
             service?.shutdown()
             service = nil
@@ -166,6 +175,26 @@ final class ExtensionRuntime: NSObject {
         }
         return ["ok": true] as NSDictionary
     }
+
+    private func retirePresentation() {
+        guard let presentation else { return }
+        presentation.stop()
+        let id = UUID()
+        presentationStops[id] = Task { [self, presentation] in
+            defer { presentationStops[id] = nil }
+            await presentation.stopAndWait()
+        }
+        self.presentation = nil
+    }
+
+    private func finishPresentations(_ presentation: ControlPresentation?) async {
+        await presentation?.stopAndWait()
+        while !presentationStops.isEmpty {
+            let pending = Array(presentationStops.values)
+            for task in pending { await task.value }
+        }
+    }
+
 }
 
 @_cdecl("edith_extension_create")
