@@ -32,7 +32,7 @@ import Foundation
             "previousVersion": "1.0.0", "currentVersion": "1.1.0", "version": "1.0.0",
             "packageSHA256": hash,
             "engine": peer(10), "ui": peer(11),
-            "operations": ["keepAwake.ui.update", "system.arbitrary"],
+            "operations": ["keepAwake.ui.update"],
             "ownedPaths": [
                 [
                     "name": "commands", "path": root + "/ExtensionState/Commands",
@@ -46,7 +46,7 @@ import Foundation
         try context.validate(
             source: String(repeating: "a", count: 40), owner: "keepAwake", session: session,
             uid: 501, root: root,
-            caseSHA256: hash,
+            caseSHA256: hash, operations: ["keepAwake.ui.update"],
             engine: .init(
                 pid: 10, birthSeconds: 1000, birthMicroseconds: 10, uid: 501, executableSHA256: hash
             ),

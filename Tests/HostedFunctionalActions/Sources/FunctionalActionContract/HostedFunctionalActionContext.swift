@@ -1,49 +1,15 @@
 import CoreFoundation
 import CryptoKit
 import Foundation
+import WorkerFixtureSupport
 
 public enum HostedFunctionalActionError: Error { case invalid }
 
 public enum HostedFunctionalJSON {
     public static func object(_ data: Data) throws -> [String: Any] {
-        guard !data.isEmpty, data.count <= 1_048_576,
-            let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { throw HostedFunctionalActionError.invalid }
-        let bytes = Array(data)
-        var index = 0
-        var scopes: [Set<String>?] = []
-        while index < bytes.count {
-            let byte = bytes[index]
-            if byte == 123 || byte == 91 {
-                guard scopes.count < 64 else { throw HostedFunctionalActionError.invalid }
-                scopes.append(byte == 123 ? Set<String>() : nil)
-            } else if byte == 125 || byte == 93 {
-                guard !scopes.isEmpty else { throw HostedFunctionalActionError.invalid }
-                scopes.removeLast()
-            } else if byte == 34 {
-                let start = index
-                index += 1
-                while index < bytes.count && bytes[index] != 34 {
-                    if bytes[index] == 92 { index += 1 }
-                    index += 1
-                }
-                guard index < bytes.count else { throw HostedFunctionalActionError.invalid }
-                var next = index + 1
-                while next < bytes.count && [9, 10, 13, 32].contains(bytes[next]) { next += 1 }
-                if next < bytes.count && bytes[next] == 58 {
-                    guard !scopes.isEmpty, var names = scopes[scopes.count - 1],
-                        let key = try JSONSerialization.jsonObject(
-                            with: Data(bytes[start...index]), options: .fragmentsAllowed)
-                            as? String,
-                        names.insert(key).inserted
-                    else { throw HostedFunctionalActionError.invalid }
-                    scopes[scopes.count - 1] = names
-                }
-            }
-            index += 1
+        do { return try WorkerFixtureJSON.object(data) } catch {
+            throw HostedFunctionalActionError.invalid
         }
-        guard scopes.isEmpty else { throw HostedFunctionalActionError.invalid }
-        return object
     }
 }
 
@@ -110,7 +76,7 @@ public struct HostedFunctionalActionContext: Codable, Equatable, Sendable {
 
     public static func decode(_ data: Data) throws -> Self {
         guard !data.isEmpty, data.count <= 131_072,
-            let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let object = try? HostedFunctionalJSON.object(data),
             Set(object.keys) == [
                 "schema", "sourceCommit", "session", "owner", "uid", "fixtureRoot",
                 "hostIdentifier", "home", "dataDirectory", "hostABI", "caseSHA256",
@@ -134,7 +100,8 @@ public struct HostedFunctionalActionContext: Codable, Equatable, Sendable {
 
     public func validate(
         source: String, owner: String, session: String, uid: UInt32, root: String,
-        caseSHA256: String, engine: HostedFunctionalProcessIdentity,
+        caseSHA256: String, operations expectedOperations: [String],
+        engine: HostedFunctionalProcessIdentity,
         ui: HostedFunctionalProcessIdentity
     ) throws {
         guard schema == 1, sourceCommit == source, Self.hex(source, length: 40),
@@ -152,7 +119,8 @@ public struct HostedFunctionalActionContext: Codable, Equatable, Sendable {
                 || (previousVersion == "1.0.0" && currentVersion == "1.1.0"),
             version == (phase == "initial" ? previousVersion : currentVersion),
             Self.validHash(packageSHA256), self.engine == engine, self.ui == ui,
-            engine.pid != ui.pid, !operations.isEmpty, operations.count <= 16,
+            engine.pid != ui.pid, operations == expectedOperations,
+            !operations.isEmpty, operations.count <= 16,
             Set(operations).count == operations.count, operations.contains(activationOperation),
             operations.allSatisfy(Self.operation), !ownedPaths.isEmpty, ownedPaths.count <= 32,
             Set(ownedPaths.map(\.name)).count == ownedPaths.count,

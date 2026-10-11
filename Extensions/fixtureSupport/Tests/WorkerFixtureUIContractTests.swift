@@ -167,6 +167,65 @@ struct WorkerFixtureUIContractTests {
         }
     }
 
+    @Test func helperSettingsAdmissionCannotBecomeAppEngineNotchPanelOrCLI() throws {
+        let identifier = host + ".extension.notchShelf.worker"
+        let context: [String: Any] = [
+            "hostIdentifier": host, "remoteUI": true, "uiOnly": true,
+            "extensionID": "notchShelf", "operation": "configureUI", "location": "settings",
+            "section": "notchShelf",
+            "presentationID": session, "defaultsSuite": identifier,
+        ]
+        let environment = [
+            "EDITH_APPLICATION_IDENTIFIER": host, "EDITH_EXTENSION_ID": "notchShelf",
+            "EDITH_SHARED_DEFAULTS_SUITE": identifier,
+        ]
+        try WorkerFixtureUIContract.validateUIContext(
+            context as NSDictionary, environment: environment, owner: "notchShelf",
+            workerIdentifier: identifier, role: .helper)
+        for patch: [String: Any] in [
+            ["uiOnly": false], ["remoteUI": false], ["uiOnly": 1], ["location": "notch"],
+            ["section": "panel.1"], ["engineClient": NSObject()], ["tile": Data()],
+            ["target": "notch"], ["operation": "start"], ["operation": "cli"],
+        ] {
+            var value = context; value.merge(patch) { _, new in new }
+            #expect(throws: (any Error).self) {
+                try WorkerFixtureUIContract.validateUIContext(
+                    value as NSDictionary, environment: environment, owner: "notchShelf",
+                    workerIdentifier: identifier, role: .helper)
+            }
+        }
+        #expect(throws: (any Error).self) {
+            try WorkerFixtureUIContract.validateUIContext(
+                context as NSDictionary, environment: environment, owner: "notchShelf",
+                workerIdentifier: identifier, role: .app)
+        }
+        let key = Curve25519.Signing.PrivateKey()
+        var value = object()
+        for field in ["owner", "home", "dataDirectory", "workerPath", "rolePath", "hostIdentifier"]
+        {
+            if let text = value[field] as? String {
+                value[field] = text.replacingOccurrences(of: "plugins", with: "notchShelf")
+                    .replacingOccurrences(of: "app.bundle", with: "helper.bundle")
+            }
+        }
+        value["location"] = "settings"; value["section"] = "notchShelf"
+        for field in ["engine", "ui"] {
+            var peer = value[field] as! [String: Any]
+            peer["executable"] = (peer["executable"] as! String).replacingOccurrences(
+                of: "plugins", with: "notchShelf")
+            value[field] = peer
+        }
+        let descriptor = try WorkerFixtureUIContract.verify(
+            seal(value, key: key), issuerKey: key.publicKey.rawRepresentation)
+        try descriptor.validate(
+            sourceCommit: source, session: session, owner: "notchShelf", presentationID: session,
+            phase: "initial", location: "settings", section: "notchShelf", capabilitySHA256: hash,
+            root: root, dataDirectory: root + "/data/notchShelf",
+            workerPath: value["workerPath"] as! String, rolePath: value["rolePath"] as! String,
+            version: "1.0.0", uid: 501, producer: descriptor.producer, engine: descriptor.engine,
+            ui: descriptor.ui)
+    }
+
     @Test func trustPinsSeparateSignersAndExactOwnedExecutable() throws {
         func trust(
             producer: String? = nil, sourceCommit: String? = nil, issuer: Data? = nil,

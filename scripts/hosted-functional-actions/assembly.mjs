@@ -9,9 +9,15 @@ export function functionalCaseAssembly(
   contextSource,
   transportSource,
   caseSource,
+  jsonSource,
 ) {
   const paths = functionalActionCasePaths(owner);
   assert(contextSource.includes("public struct HostedFunctionalActionContext"));
+  assert(jsonSource.includes("public enum WorkerFixtureJSON"));
+  assert.equal(
+    (contextSource.match(/^import WorkerFixtureSupport$/gm) ?? []).length,
+    1,
+  );
   assert(transportSource.includes("endpoint = try ExtensionPeerEndpoint("));
   assert(caseSource.includes("HostedFunctionalActionCase"));
   assert(caseSource.includes(`static let owner = "${owner}"`));
@@ -21,12 +27,16 @@ export function functionalCaseAssembly(
     return text.replace(/^import FunctionalActionContract\n/m, "");
   };
   return Object.freeze([
-    { name: "HostedFunctionalActionContext.swift", source: contextSource },
+    {
+      name: "HostedFunctionalActionContext.swift",
+      source: contextSource.replace(/^import WorkerFixtureSupport\n/m, ""),
+    },
     {
       name: "HostedFunctionalActionTransport.swift",
       source: removeImport(transportSource),
     },
     { name: paths.native.split("/").at(-1), source: removeImport(caseSource) },
+    { name: "WorkerFixtureJSON.swift", source: jsonSource },
   ]);
 }
 
@@ -52,6 +62,7 @@ export async function assembleFunctionalCaseSources({
     "Tests/HostedFunctionalActions/Sources/FunctionalActionContract/HostedFunctionalActionContext.swift",
     "Tests/HostedFunctionalActions/RuntimeSources/HostedFunctionalActionTransport.swift",
     paths.native,
+    "Extensions/fixtureSupport/WorkerFixtureJSON.swift",
   ];
   const sources = await Promise.all(
     sourcePaths.map((path) => read(join(root, path), "utf8")),

@@ -42,6 +42,7 @@ struct FunctionalActionContractTests {
         try context.validate(
             source: source, owner: "keepAwake", session: session, uid: 501,
             root: "/private/synthetic/functional-fixture-" + session, caseSHA256: hash,
+            operations: ["keepAwake.ui.update"],
             engine: .init(
                 pid: 10, birthSeconds: 1000, birthMicroseconds: 10, uid: 501,
                 executableSHA256: hash),
@@ -72,6 +73,7 @@ struct FunctionalActionContractTests {
             ["hostABI": "foreign"], ["version": "1.1.0"], ["currentVersion": "1.0.0"],
             ["previousVersion": "01.0.0"],
             ["operations": ["keepAwake.ui.update", "keepAwake.ui.update"]],
+            ["operations": ["keepAwake.ui.update", "system.arbitrary"]],
         ]
         for mutation in mutations {
             var value = object()
