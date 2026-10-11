@@ -1510,6 +1510,7 @@
         "Extensions/studio/VideoEditor/VideoCaptionStyleSchema.swift",
         "Extensions/studio/VideoEditor/VideoCaptions.swift",
         "Extensions/studio/VideoEditor/VideoDelivery.swift",
+        "Extensions/studio/VideoEditor/VideoSampleTransfer.swift",
         "Extensions/studio/VideoEditor/VideoDeliveryRange.swift",
         "Extensions/studio/VideoEditor/VideoEditPlan.swift",
         "Extensions/studio/VideoEditor/VideoEditPlanAudioSchema.swift",
