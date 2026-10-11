@@ -113,7 +113,7 @@ def aggregate_release(frozen, shipping_app, shipping_metadata, assets, catalog_n
             or frozen.get('unmeasuredExtensions') != []):
         raise ValueError('Aggregate requires freshly verified clean frozen host and all39 packages')
     identifiers = {package['id'] for package in frozen['packages']}
-    if (len(identifiers) != 39 or identifiers != set(frozen['sourceFingerprints'])
+    if (len(frozen['packages']) != 39 or len(identifiers) != 39 or identifiers != set(frozen['sourceFingerprints'])
             or identifiers != set(frozen['packageHostProvenance'])
             or any(package.get('sourceFingerprint') != frozen['sourceFingerprints'][package['id']]
                    for package in frozen['packages'])):
@@ -204,11 +204,20 @@ def aggregate_release(frozen, shipping_app, shipping_metadata, assets, catalog_n
     if index_hash != proof.get('indexSHA256'):
         raise ValueError('Qualified shipping index differs')
     catalog = catalog_verify(assets / catalog_name, assets / pointer_name, catalog_key)
-    catalog_packages = {package['id']: package for package in catalog['packages']}
-    if len(catalog_packages) != len(catalog['packages']) or set(catalog_packages) != identifiers:
-        raise ValueError('Signed catalog must contain exactly current39 packages')
+    identity_fields = ['id', 'hostABI', 'version', 'architecture']
+    catalog_identities = {}
+    for row in catalog['packages']:
+        identity = tuple(row[field] for field in identity_fields)
+        if identity in catalog_identities:
+            raise ValueError('Signed catalog contains a duplicate package identity')
+        catalog_identities[identity] = row
+    catalog_packages = {}
     for package in frozen['packages']:
-        row = catalog_packages[package['id']]
+        identity = tuple(package[field] for field in identity_fields)
+        row = catalog_identities.get(identity)
+        if row is None:
+            raise ValueError('Signed catalog is missing a current frozen package identity')
+        catalog_packages[package['id']] = row
         for field in ['id', 'version', 'downloadBytes', 'installedBytes', 'sha256', 'sourceFingerprint',
                       'hostABI', 'architecture', 'dependencies', 'minimumSystemVersion', 'downloadURL']:
             if row.get(field) != package.get(field):
