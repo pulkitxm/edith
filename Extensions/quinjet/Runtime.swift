@@ -166,7 +166,7 @@ final class ExtensionRuntime: NSObject {
             uiStops[id] = Task { [self, model, settings, client] in
                 defer { client?.invalidate(); uiStops[id] = nil }
                 await model?.shutdown()
-                _ = settings
+                await settings?.shutdownAndWait()
             }
         } else {
             client?.invalidate()

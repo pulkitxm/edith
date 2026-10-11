@@ -43,6 +43,18 @@ final class QuinjetPageModel {
     var terminalUI: OwnedTerminalUIPresentation?
     private var uiClient: QuinjetUIClient?
     private var uiActions: [UUID: Task<Void, Never>] = [:]
+    private enum ReadKey: Hashable {
+        case ui(String, UUID?)
+        case projects
+        case remoteProjects(UUID)
+        case themes
+        case worktrees(UUID)
+        case folder(UUID)
+    }
+    private var reads: [ReadKey: Task<Void, Never>] = [:]
+    private var readEpochs: [ReadKey: UUID] = [:]
+    private var draining = false
+    private var shutdownTask: Task<Void, Never>?
     private var projectedPrivacy = false
     private(set) var cmuxAvailable = false
     var isRemote: Bool { uiClient != nil }
@@ -113,10 +125,12 @@ final class QuinjetPageModel {
     }
 
     func refreshUI() async {
-        guard let uiClient, !stopped else { return }
-        do {
-            if let state = try await uiClient.state("quinjet.ui.read") { try adoptUI(state) }
-        } catch is CancellationError {} catch { projectError = error.localizedDescription }
+        await performRead(.ui("quinjet.ui.read", nil)) { [self] in
+            guard let uiClient, !stopped else { return }
+            do {
+                if let state = try await uiClient.state("quinjet.ui.read") { try adoptUI(state) }
+            } catch is CancellationError {} catch { projectError = error.localizedDescription }
+        }
     }
 
     func selectMachine(_ machine: Machine, in tab: QuinjetTab) {
@@ -247,7 +261,7 @@ final class QuinjetPageModel {
     }
 
     private func enqueueUI(_ operation: String, object: [String: Any]) {
-        guard !stopped, uiActions.count < 8 else { return }
+        guard !stopped, !draining, uiActions.count < 8 else { return }
         let id = UUID()
         uiActions[id] = Task { [weak self] in
             guard let self else { return }
@@ -257,12 +271,16 @@ final class QuinjetPageModel {
     }
 
     private func performUI(_ operation: String, object: [String: Any]) async {
-        guard !stopped, let uiClient else { return }
-        do {
-            if let state = try await uiClient.state(operation, object: object) {
-                try adoptUI(state)
-            }
-        } catch is CancellationError {} catch { projectError = error.localizedDescription }
+        let identity = (object["tabID"] as? String ?? object["machineID"] as? String).flatMap(
+            UUID.init(uuidString:))
+        await performRead(.ui(operation, identity)) { [self] in
+            guard !stopped, let uiClient else { return }
+            do {
+                if let state = try await uiClient.state(operation, object: object) {
+                    try adoptUI(state)
+                }
+            } catch is CancellationError {} catch { projectError = error.localizedDescription }
+        }
     }
 
     private func configurationObject(_ configuration: QuinjetLaunchConfiguration) -> [String: Any] {
@@ -335,42 +353,48 @@ final class QuinjetPageModel {
     }
 
     func refreshProjects() async {
-        if isRemote { await performUI("quinjet.ui.projects", object: [:]); return }
-        projectError = nil
-        let client = client
-        await projectLoad.perform(operation: {
-            try await QuinjetOperationExecution.projects(using: client)
-        }) { projects = $0 }
-        projectError = projectLoad.errorMessage
+        await performRead(.projects) { [self] in
+            if isRemote { await performUI("quinjet.ui.projects", object: [:]); return }
+            projectError = nil
+            let client = client
+            await projectLoad.perform(operation: {
+                try await QuinjetOperationExecution.projects(using: client)
+            }) { projects = $0 }
+            projectError = projectLoad.errorMessage
+        }
     }
 
     func refreshThemes() async {
-        if isRemote { await performUI("quinjet.ui.themes", object: [:]); return }
-        do {
-            let refreshed = try await client.themes()
-            try Task.checkCancellation()
-            themes = refreshed
-        } catch is CancellationError {
-        } catch {
-            themes = QuinjetTheme.allCases
+        await performRead(.themes) { [self] in
+            if isRemote { await performUI("quinjet.ui.themes", object: [:]); return }
+            do {
+                let refreshed = try await client.themes()
+                try Task.checkCancellation()
+                themes = refreshed
+            } catch is CancellationError {
+            } catch {
+                themes = QuinjetTheme.allCases
+            }
         }
     }
 
     func refreshProjects(for remote: QuinjetRemote) async {
-        if isRemote {
-            await performUI(
-                "quinjet.ui.projects", object: ["machineID": remote.machineID.uuidString])
-            return
+        await performRead(.remoteProjects(remote.machineID)) { [self] in
+            if isRemote {
+                await performUI(
+                    "quinjet.ui.projects", object: ["machineID": remote.machineID.uuidString])
+                return
+            }
+            let machineID = remote.machineID
+            let loading = remoteProjectLoads[machineID] ?? ContentLoad()
+            remoteProjectLoads[machineID] = loading
+            remoteProjectErrors[machineID] = nil
+            let client = client
+            await loading.perform(operation: {
+                try await QuinjetOperationExecution.projects(remote: remote, using: client)
+            }) { remoteProjects[machineID] = $0 }
+            remoteProjectErrors[machineID] = loading.errorMessage
         }
-        let machineID = remote.machineID
-        let loading = remoteProjectLoads[machineID] ?? ContentLoad()
-        remoteProjectLoads[machineID] = loading
-        remoteProjectErrors[machineID] = nil
-        let client = client
-        await loading.perform(operation: {
-            try await QuinjetOperationExecution.projects(remote: remote, using: client)
-        }) { remoteProjects[machineID] = $0 }
-        remoteProjectErrors[machineID] = loading.errorMessage
     }
 
     @discardableResult
@@ -387,6 +411,7 @@ final class QuinjetPageModel {
         remote: QuinjetRemote? = nil, in tab: QuinjetTab, launchEnabled: Bool,
         configuration: QuinjetLaunchConfiguration = .default, select: Bool = true
     ) {
+        guard !stopped, !draining else { return }
         if isRemote {
             enqueueUI(
                 "quinjet.ui.open",
@@ -479,54 +504,60 @@ final class QuinjetPageModel {
         _ path: String, remote: QuinjetRemote? = nil, in tab: QuinjetTab,
         launchEnabled: Bool, configuration: QuinjetLaunchConfiguration = .default
     ) async {
-        if isRemote {
-            await performUI(
-                "quinjet.ui.open",
-                object: [
-                    "tabID": tab.id.uuidString, "path": path,
-                    "configuration": configurationObject(configuration),
-                ])
-            return
-        }
-        if remote == nil {
-            projectError = nil
-        } else {
-            tab.errorMessage = nil
-        }
-        do {
-            let selection = try await QuinjetOperationExecution.openSelection(
-                at: path, remote: remote, using: client)
-            open(
-                selection.worktree, projectName: selection.projectName,
-                available: selection.worktrees, remote: remote, in: tab,
-                launchEnabled: launchEnabled, configuration: configuration)
-            if remote == nil { await refreshProjects() }
-        } catch {
+        await performRead(.folder(tab.id)) { [self] in
+            if isRemote {
+                await performUI(
+                    "quinjet.ui.open",
+                    object: [
+                        "tabID": tab.id.uuidString, "path": path,
+                        "configuration": configurationObject(configuration),
+                    ])
+                return
+            }
             if remote == nil {
-                projectError = error.localizedDescription
+                projectError = nil
             } else {
-                tab.errorMessage = error.localizedDescription
+                tab.errorMessage = nil
+            }
+            do {
+                let selection = try await QuinjetOperationExecution.openSelection(
+                    at: path, remote: remote, using: client)
+                guard !stopped, !draining, !Task.isCancelled else { return }
+                open(
+                    selection.worktree, projectName: selection.projectName,
+                    available: selection.worktrees, remote: remote, in: tab,
+                    launchEnabled: launchEnabled, configuration: configuration)
+                if remote == nil { await refreshProjects() }
+            } catch {
+                if remote == nil {
+                    projectError = error.localizedDescription
+                } else {
+                    tab.errorMessage = error.localizedDescription
+                }
             }
         }
     }
 
     func presentWorktrees(for tab: QuinjetTab) async {
-        if isRemote {
+        await performRead(.worktrees(tab.id)) { [self] in
+            if isRemote {
+                tab.showsWorktrees = true
+                await performUI("quinjet.ui.worktrees", object: ["tabID": tab.id.uuidString])
+                return
+            }
+            guard let path = tab.worktree?.path else { return }
             tab.showsWorktrees = true
-            await performUI("quinjet.ui.worktrees", object: ["tabID": tab.id.uuidString])
-            return
+            tab.errorMessage = nil
+            let client = client
+            let remote = tab.remote
+            await tab.worktreeLoad.perform(operation: {
+                try await QuinjetOperationExecution.worktrees(
+                    at: path, remote: remote, using: client)
+            }) { worktrees in
+                tab.worktrees = worktrees.filter(\.canOpen)
+            }
+            tab.errorMessage = tab.worktreeLoad.errorMessage
         }
-        guard let path = tab.worktree?.path else { return }
-        tab.showsWorktrees = true
-        tab.errorMessage = nil
-        let client = client
-        let remote = tab.remote
-        await tab.worktreeLoad.perform(operation: {
-            try await QuinjetOperationExecution.worktrees(at: path, remote: remote, using: client)
-        }) { worktrees in
-            tab.worktrees = worktrees.filter(\.canOpen)
-        }
-        tab.errorMessage = tab.worktreeLoad.errorMessage
     }
 
     func handleHostPayload(_ payload: String, from tab: QuinjetTab) {
@@ -625,38 +656,75 @@ final class QuinjetPageModel {
         }
     }
 
-    func stopRendering() {
-        terminalUI?.invalidate()
+    private func performRead(_ key: ReadKey, operation: @escaping @MainActor () async -> Void) async
+    {
+        guard !stopped, !draining, !Task.isCancelled else { return }
+        let epoch = UUID()
+        readEpochs[key] = epoch
+        let previous = reads[key]
+        previous?.cancel()
+        await previous?.value
+        guard !stopped, !draining, readEpochs[key] == epoch, !Task.isCancelled else { return }
+        let task = Task { await operation() }
+        reads[key] = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        if readEpochs[key] == epoch {
+            reads[key] = nil
+            readEpochs[key] = nil
+        }
+    }
+
+    func beginSuspension() {
+        draining = true
         preferences.shutdown()
+        cancelDiscovery()
+        for task in reads.values { task.cancel() }
+    }
+
+    func cancelAndWait() async {
+        beginSuspension()
+        let actions = Array(uiActions.values), pendingReads = Array(reads.values)
+        await preferences.shutdownAndWait()
+        for task in actions { await task.value }
+        for task in pendingReads { await task.value }
+    }
+
+    func stopRendering() {
+        beginSuspension()
+        terminalUI?.invalidate()
         guard let uiClient else { return }
         stopped = true
         uiClient.stop()
-        for task in uiActions.values { task.cancel() }
         for tab in tabs { tab.holder.stopRendering() }
     }
 
     func shutdown() async {
+        if let shutdownTask { await shutdownTask.value; return }
+        beginSuspension()
         stopped = true
-        preferences.shutdown()
-        if let uiClient {
-            stopRendering()
-            let actions = Array(uiActions.values)
-            for task in actions { task.cancel() }
-            uiActions.removeAll()
-            for tab in tabs { tab.holder.stopRendering(); await tab.folderPicker?.shutdown() }
-            for task in actions { await task.value }
-            return
-        }
-        cancelDiscovery()
-        stopAll()
-        for tab in tabs {
-            tab.externalLaunchGeneration += 1
-            await tab.folderPicker?.shutdown()
-            if let workspaceID = tab.externalWorkspaceID {
-                tab.externalWorkspaceID = nil
-                try? await closeExternalWorkspace(workspaceID)
+        let task = Task { [self] in
+            await cancelAndWait()
+            if uiClient != nil {
+                stopRendering()
+                for tab in tabs { await tab.folderPicker?.shutdown() }
+                return
+            }
+            stopAll()
+            for tab in tabs {
+                tab.externalLaunchGeneration += 1
+                await tab.folderPicker?.shutdown()
+                if let workspaceID = tab.externalWorkspaceID {
+                    tab.externalWorkspaceID = nil
+                    try? await closeExternalWorkspace(workspaceID)
+                }
             }
         }
+        shutdownTask = task
+        await task.value
     }
 
     func stopAll() {
@@ -664,6 +732,7 @@ final class QuinjetPageModel {
     }
 
     func cancelDiscovery() {
+        for task in reads.values { task.cancel() }
         uiClient?.cancel()
         for task in uiActions.values { task.cancel() }
         projectLoad.cancel()

@@ -38,7 +38,26 @@ struct QuinjetSettingsState: Codable {
         self.init { try await client.invoke($0, payload: $1) }
     }
 
-    func read() async { await perform("quinjet.settings.read", payload: Data("{}".utf8)) }
+    func read() async {
+        guard !stopped else { return }
+        generation += 1
+        let current = generation
+        let previous = work
+        previous?.cancel()
+        loading = true
+        await previous?.value
+        guard !stopped, generation == current, !Task.isCancelled else { return }
+        let task = Task {
+            await perform("quinjet.settings.read", payload: Data("{}".utf8), generation: current)
+        }
+        work = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        if generation == current { work = nil }
+    }
 
     func setTerminal(_ value: String) { update(terminal: value, theme: nil) }
     func setTheme(_ value: String) { update(terminal: nil, theme: value) }
@@ -51,17 +70,22 @@ struct QuinjetSettingsState: Codable {
             let payload = try? JSONEncoder().encode(
                 QuinjetSettingsMutation(baseline: state.preference, preference: next))
         else { return }
-        work?.cancel()
+        generation += 1
+        let current = generation
+        let previous = work
+        previous?.cancel()
         loading = true
-        work = Task { await perform("quinjet.settings.save", payload: payload) }
+        work = Task { [self] in
+            await previous?.value
+            guard !stopped, generation == current, !Task.isCancelled else { return }
+            await perform("quinjet.settings.save", payload: payload, generation: current)
+        }
     }
 
     func dismissError() { error = nil }
 
-    private func perform(_ operation: String, payload: Data) async {
-        guard !stopped else { return }
-        generation += 1
-        let current = generation
+    private func perform(_ operation: String, payload: Data, generation current: Int) async {
+        guard !stopped, generation == current else { return }
         loading = true
         error = nil
         defer { if generation == current { loading = false } }
@@ -82,9 +106,16 @@ struct QuinjetSettingsState: Codable {
     func shutdown() {
         stopped = true
         generation += 1
-        work?.cancel(); work = nil
+        work?.cancel()
         requests.stop()
         loading = false
+    }
+
+    func shutdownAndWait() async {
+        shutdown()
+        let pending = work
+        await pending?.value
+        work = nil
     }
 }
 

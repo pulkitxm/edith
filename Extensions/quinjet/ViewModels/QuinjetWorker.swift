@@ -303,7 +303,7 @@ import Foundation
     func beginSuspension() {
         draining = true
         maintenance?.cancel()
-        model.cancelDiscovery()
+        model.beginSuspension()
         cliStreams?.stop()
         if drainTask == nil {
             drainTask = Task { [self] in
@@ -311,6 +311,7 @@ import Foundation
                 await cliStreams?.stopAndWait()
                 await QuinjetWorkOwnership.shutdown()
                 await maintenance?.value
+                await model.cancelAndWait()
             }
         }
     }
