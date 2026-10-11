@@ -282,6 +282,8 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
             raise ValueError("Final reports require exactly 39 indexed packages and current source fingerprints")
         if any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value) for value in expected_fingerprints.values()):
             raise ValueError("Final source fingerprints must be SHA-256 digests")
+    app_snapshot = TreeSnapshot(app)
+    package_snapshot = TreeSnapshot(packages)
     metadata_by_id = {}
     for identifier in migrated:
         metadata = json.loads((packages / f"{identifier}.json").read_text())
@@ -296,8 +298,6 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
     specification = importlib.util.spec_from_file_location("size_measurements", Path(__file__).with_name("extension-size-report.py"))
     measurements = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(measurements)
-    app_snapshot = TreeSnapshot(app)
-    package_snapshot = TreeSnapshot(packages)
     measured = measurements.measure_app(app)
     executable_hash = digest_file(app / "Contents/MacOS/Edith")
     if host_build is not None and host_build.get("hostExecutableSHA256") != executable_hash:
@@ -359,8 +359,6 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
         "layoutContractVersion": 1,
         "verification": "not-measured-by-size-report",
     }
-    app_snapshot.verify()
-    package_snapshot.verify()
     result["hostTreeInventory"] = tree_inventory(app)
     if source_mode == "final":
         result["resourceCodeIdentities"] = {}
@@ -373,8 +371,9 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
             if len(header) == 16 and header[:4] == b"\xcf\xfa\xed\xfe":
                 filetype = struct.unpack_from("<I", header, 12)[0]
                 result["resourceCodeIdentities"][name] = {**executable_identity(path, filetype=filetype), "filetype": filetype}
-        app_snapshot.verify()
         result["hostInfo"] = plistlib.loads(read_bytes(app / "Contents/Info.plist"))
+    app_snapshot.verify()
+    package_snapshot.verify()
     return result
 
 
