@@ -31,18 +31,32 @@ final class CodeStatsActionCase: HostedFunctionalActionCase {
 
     func activateOriginalControl(context: HostedFunctionalActionContext) async throws {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
-        let folder = try context.ownedPath(named: "repository-folder", kind: "directory")
-        let count = transport.originalInvocationCount
-        await model.chooseFolder(folder.path)
+        let retained = try context.ownedPath(named: "repository-folder", kind: "directory")
+        let temporary = try context.ownedPath(named: "temporary-repository-folder", kind: "directory")
+        guard retained != temporary else { throw HostedFunctionalActionError.invalid }
+        let baseline = try await readState(context: context, folder: retained)
+        var count = transport.originalInvocationCount
+        await model.chooseFolder(temporary.path)
         try await transport.waitForOriginalInvocation(Self.activationOperation, after: count)
         guard model.errorMessage == nil else { throw HostedFunctionalActionError.invalid }
+        let changed = try await readState(context: context, folder: temporary)
+        guard changed != baseline else { throw HostedFunctionalActionError.invalid }
+        count = transport.originalInvocationCount
+        await model.chooseFolder(retained.path)
+        try await transport.waitForOriginalInvocation(Self.activationOperation, after: count)
+        guard model.errorMessage == nil,
+            try await readState(context: context, folder: retained) == baseline
+        else { throw HostedFunctionalActionError.invalid }
     }
 
     func readAuthoritativeState(context: HostedFunctionalActionContext) async throws -> Data {
+        try await readState(context: context, folder: try context.ownedPath(named: "repository-folder", kind: "directory"))
+    }
+
+    private func readState(context: HostedFunctionalActionContext, folder: URL) async throws -> Data {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
         let bytes = try await transport.readAuthoritative("codeStats.ui.status")
         let value = try JSONDecoder().decode(CodeStatsStatus.self, from: bytes)
-        let folder = try context.ownedPath(named: "repository-folder", kind: "directory")
         guard value.settings.folder == folder.path else { throw HostedFunctionalActionError.invalid }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]

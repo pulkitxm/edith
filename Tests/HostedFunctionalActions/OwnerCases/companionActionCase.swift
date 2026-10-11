@@ -28,24 +28,42 @@ final class CompanionActionCase: HostedFunctionalActionCase {
 
     func activateOriginalControl(context: HostedFunctionalActionContext) async throws {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
+        let baseline = try await readState(context: context, reflectAt: "03:17")
         await model.refreshSnapshot()
-        guard model.hosts.isEmpty, model.deployment == nil, model.error == nil else {
+        guard model.hosts.isEmpty, model.deployment == nil, model.selectedHostID == nil,
+            model.error == nil, model.config.reflectAt == "03:17"
+        else { throw HostedFunctionalActionError.invalid }
+        try await save(reflectAt: "03:18")
+        let changed = try await readState(context: context, reflectAt: "03:18")
+        guard changed != baseline else { throw HostedFunctionalActionError.invalid }
+        try await save(reflectAt: "03:17")
+        guard try await readState(context: context, reflectAt: "03:17") == baseline else {
             throw HostedFunctionalActionError.invalid
         }
-        model.config.reflectAt = "03:17"
+    }
+
+    private func save(reflectAt: String) async throws {
+        guard model.selectedHostID == nil else { throw HostedFunctionalActionError.invalid }
+        model.config.reflectAt = reflectAt
         let count = transport.originalInvocationCount
         model.saveConfig()
         try await transport.waitForOriginalInvocation(Self.activationOperation, after: count)
+        await Task.yield()
+        guard model.error == nil else { throw HostedFunctionalActionError.invalid }
     }
 
     func readAuthoritativeState(context: HostedFunctionalActionContext) async throws -> Data {
+        try await readState(context: context, reflectAt: "03:17")
+    }
+
+    private func readState(context: HostedFunctionalActionContext, reflectAt: String) async throws -> Data {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
         try await transport.requireCurrent()
         let path = try context.ownedPath(named: "companion-config", kind: "file")
         guard path.path == URL(fileURLWithPath: context.dataDirectory).appendingPathComponent("companion-config.json").path,
             path.standardizedFileURL == path.resolvingSymlinksInPath(),
             let value = try PersistentJSONFile.read(CompanionStackConfig?.self, from: path, missing: nil),
-            value.reflectAt == "03:17", value.validated().isEmpty
+            value.reflectAt == reflectAt, value.validated().isEmpty
         else { throw HostedFunctionalActionError.invalid }
         try await transport.requireCurrent()
         let encoder = JSONEncoder()
