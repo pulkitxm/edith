@@ -59,6 +59,7 @@ jobs:
           set -euo pipefail
           swift test --package-path Tests/HostedOriginalShell --jobs 1
           bun test scripts/hosted-original-shell-overlay.test.js scripts/hosted-original-shell-preparation.test.js
+          bun scripts/hosted-host-manifest-cold.mjs
       - name: Import signing into an owned disposable keychain
         env:
           MACOS_CERT_P12: "${{ secrets.MACOS_CERT_P12 }}"

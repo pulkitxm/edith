@@ -7,6 +7,8 @@ const dependencies = [
   ["../ExtensionSupport", "Packages/ExtensionSupport"],
   ["../../Extensions/fixtureSupport", "Extensions/fixtureSupport"],
 ];
+const remoteDependency =
+  '.package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6")';
 
 async function ownedDirectory(path) {
   const info = await lstat(path);
@@ -21,6 +23,12 @@ export async function relocateHostedHostManifest(manifest, root) {
   assert(manifest.length > 0 && Buffer.byteLength(manifest) <= 131_072);
   assert.equal(resolve(root), root);
   await ownedDirectory(root);
+  const remoteCount = manifest.split(remoteDependency).length - 1;
+  assert(remoteCount === 0 || remoteCount === 1);
+  assert.equal(
+    (manifest.match(/\.package\s*\(/g) ?? []).length,
+    dependencies.length + remoteCount,
+  );
   assert.equal(
     (manifest.match(/\.package\s*\(\s*path\s*:/g) ?? []).length,
     dependencies.length,
