@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "owner": "database",
+  "location": "main",
+  "section": "database",
+  "operation": "database.ui.columns",
+  "steps": [
+    {
+      "role": "column",
+      "label": "name",
+      "action": "set-column-width",
+      "value": 238
+    },
+    {
+      "role": "column",
+      "label": "name",
+      "action": "set-column-width",
+      "value": 274
+    }
+  ],
+  "sources": [
+    {
+      "path": "Extensions/database/Runtime.swift",
+      "sha256": "50fc5d1eea5e788afb1f19bb97d4b5ec4ae1cf8361bc072ad9c2a94484ceee72"
+    },
+    {
+      "path": "Extensions/database/Views/DatabaseNativeTableView.swift",
+      "sha256": "12e179e4e5dc9de17d6c711d7f7986c2e5732974e1adec020515c6fffe2fc577"
+    },
+    {
+      "path": "Extensions/database/Models/DatabaseColumnsModel.swift",
+      "sha256": "8d4b0d288b2c111e081ff5b8a758783618361b4124abd21adfd63858158c31f5"
+    }
+  ]
+}

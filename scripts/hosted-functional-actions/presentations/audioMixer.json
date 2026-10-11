@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "owner": "audioMixer",
+  "location": "main",
+  "section": "audioMixer",
+  "operation": "audioMixer.request",
+  "steps": [
+    {
+      "role": "slider",
+      "label": "",
+      "action": "set-slider",
+      "value": 0.375,
+      "scope": {
+        "kind": "group",
+        "label": "",
+        "anchor": {
+          "role": "staticText",
+          "label": "Synthetic audio"
+        }
+      }
+    }
+  ],
+  "sources": [
+    {
+      "path": "Extensions/audioMixer/Runtime.swift",
+      "sha256": "6e68c912bbaf83d75cefb03211776c8e6c9282297d3cf6661acb356f05f07169"
+    },
+    {
+      "path": "Extensions/audioMixer/AudioMixerRemoteModel.swift",
+      "sha256": "cd0212fc1d45e74f42a2d3cfc0683eb2e67b7fdc6a1fa6574d2a51ae471a432d"
+    },
+    {
+      "path": "Extensions/audioMixer/Views/AudioMixerView.swift",
+      "sha256": "38faf31c950adb0f4d5f9846a68221288a8d542a0daa2d49f54d674a2938af55"
+    }
+  ]
+}

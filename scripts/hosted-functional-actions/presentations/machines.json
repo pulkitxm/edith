@@ -1,0 +1,145 @@
+{
+  "schema": 1,
+  "owner": "machines",
+  "location": "main",
+  "section": "machines",
+  "operation": "machines.ui.mutate",
+  "steps": [
+    {
+      "role": "button",
+      "label": "",
+      "action": "show-menu",
+      "value": null,
+      "scope": {
+        "kind": "button",
+        "label": "",
+        "anchor": {
+          "role": "staticText",
+          "label": "Synthetic retained machine"
+        }
+      }
+    },
+    {
+      "role": "menuItem",
+      "label": "Edit…",
+      "action": "click",
+      "value": null,
+      "scope": {
+        "kind": "menu",
+        "label": "",
+        "anchor": {
+          "role": "menuItem",
+          "label": "Edit…"
+        }
+      }
+    },
+    {
+      "role": "textField",
+      "label": "Build server",
+      "action": "replace-text",
+      "value": "Synthetic temporary machine",
+      "selector": "placeholder",
+      "scope": {
+        "kind": "sheet",
+        "label": "",
+        "anchor": {
+          "role": "staticText",
+          "label": "Edit machine"
+        }
+      }
+    },
+    {
+      "role": "button",
+      "label": "Save",
+      "action": "click",
+      "value": null,
+      "scope": {
+        "kind": "sheet",
+        "label": "",
+        "anchor": {
+          "role": "staticText",
+          "label": "Edit machine"
+        }
+      }
+    },
+    {
+      "role": "button",
+      "label": "",
+      "action": "show-menu",
+      "value": null,
+      "scope": {
+        "kind": "button",
+        "label": "",
+        "anchor": {
+          "role": "staticText",
+          "label": "Synthetic temporary machine"
+        }
+      }
+    },
+    {
+      "role": "menuItem",
+      "label": "Edit…",
+      "action": "click",
+      "value": null,
+      "scope": {
+        "kind": "menu",
+        "label": "",
+        "anchor": {
+          "role": "menuItem",
+          "label": "Edit…"
+        }
+      }
+    },
+    {
+      "role": "textField",
+      "label": "Build server",
+      "action": "replace-text",
+      "value": "Synthetic retained machine",
+      "selector": "placeholder",
+      "scope": {
+        "kind": "sheet",
+        "label": "",
+        "anchor": {
+          "role": "staticText",
+          "label": "Edit machine"
+        }
+      }
+    },
+    {
+      "role": "button",
+      "label": "Save",
+      "action": "click",
+      "value": null,
+      "scope": {
+        "kind": "sheet",
+        "label": "",
+        "anchor": {
+          "role": "staticText",
+          "label": "Edit machine"
+        }
+      }
+    }
+  ],
+  "sources": [
+    {
+      "path": "Extensions/machines/Runtime.swift",
+      "sha256": "8a860ea7f73dee6350814c15a3831e9a3dad89947875f3de6d7340111b1c01fb"
+    },
+    {
+      "path": "Extensions/machines/UI/Views/MachinesPage.swift",
+      "sha256": "669e8d72a12b1744fd575f1171af3ead8d0113798d6611e45106e2ab9169d76d"
+    },
+    {
+      "path": "Extensions/machines/UI/Views/SelectableChipRow.swift",
+      "sha256": "c88aba22b8a5ab74ec44c0b795e3c756884d74d5a1767ad271bf80ede6291be0"
+    },
+    {
+      "path": "Extensions/machines/UI/Views/AddMachineSheet.swift",
+      "sha256": "c1a5fa458787693ecd01391fcada5d4d6b7e980e3a460061d17c2e18f2606736"
+    },
+    {
+      "path": "Extensions/machines/UI/ViewModels/MachinesModel.swift",
+      "sha256": "81db5a5d3354ba290bcadd577966179a1e0c9a42a86cebfb0aab72a5e7d402ae"
+    }
+  ]
+}

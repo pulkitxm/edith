@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "owner": "quinjet",
+  "location": "settings",
+  "section": "extension",
+  "operation": "quinjet.settings.save",
+  "steps": [
+    {
+      "role": "popUpButton",
+      "label": "Theme",
+      "action": "click",
+      "value": null
+    },
+    {
+      "role": "menuItem",
+      "label": "Quinjet",
+      "action": "click",
+      "value": null,
+      "scope": {
+        "kind": "menu",
+        "label": "",
+        "anchor": {
+          "role": "menuItem",
+          "label": "App theme"
+        }
+      }
+    },
+    {
+      "role": "popUpButton",
+      "label": "Theme",
+      "action": "click",
+      "value": null
+    },
+    {
+      "role": "menuItem",
+      "label": "App theme",
+      "action": "click",
+      "value": null,
+      "scope": {
+        "kind": "menu",
+        "label": "",
+        "anchor": {
+          "role": "menuItem",
+          "label": "Quinjet"
+        }
+      }
+    }
+  ],
+  "sources": [
+    {
+      "path": "Extensions/quinjet/Runtime.swift",
+      "sha256": "21534550c6ada5f22ec3a9fa02559e65fb467b614094043e62345c85ca685375"
+    },
+    {
+      "path": "Extensions/quinjet/Views/QuinjetSettingsPage.swift",
+      "sha256": "98dd1bd6f3de0ab2f8ec6b23fc458b78e40ff3122208f193aee9b8dc9762061a"
+    },
+    {
+      "path": "Extensions/quinjet/ViewModels/QuinjetSettingsModel.swift",
+      "sha256": "517cc522c82c43cc256bf1b28afedfce785a5390f2afb57a5e1c689ae958cfd3"
+    },
+    {
+      "path": "Extensions/quinjet/Models/QuinjetLaunchModels.swift",
+      "sha256": "95597444115b159ee0256f4b43ddae46f3e1d5a73d19bd32ea8c748e98323616"
+    },
+    {
+      "path": "Extensions/quinjet/Services/QuinjetOperations.swift",
+      "sha256": "15f335244b82538ad1924596dc2e4a7096fb3be030c1ace60c14e2cc6a5b98bb"
+    }
+  ]
+}

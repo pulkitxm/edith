@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "owner": "terminal",
+  "location": "main",
+  "section": "terminal",
+  "operation": "terminal.open",
+  "steps": [
+    {
+      "role": "button",
+      "label": "New terminal (⌘T)",
+      "action": "click",
+      "value": null,
+      "selector": "help"
+    }
+  ],
+  "sources": [
+    {
+      "path": "Extensions/terminal/Runtime.swift",
+      "sha256": "68a359b9a63734524ffbce57fe4d5a9d20f1227c8b0dec988a1237e1f4b9af47"
+    },
+    {
+      "path": "Extensions/terminal/TerminalPage.swift",
+      "sha256": "b69d527708229f34fc0c0b89c4980f16e9d417970c8455a40bcd2c8b41937d4e"
+    },
+    {
+      "path": "Extensions/terminal/TerminalTabsView.swift",
+      "sha256": "a0f24fda3abf711beb4806027967e01c10e9d95db2e3590191061159293de4d3"
+    },
+    {
+      "path": "Extensions/terminal/TerminalTabsModel.swift",
+      "sha256": "8cd38f5eb74fbf579a66e86256578f7a4455abac123b8395da9df5f2161ae168"
+    },
+    {
+      "path": "Extensions/terminal/Native/Package.swift",
+      "sha256": "7afd4a4d699e8c8a18ba088f053132b5cdc1a58be9aa5c03a45c870cc2c9f6fc"
+    }
+  ]
+}

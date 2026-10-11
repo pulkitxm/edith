@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "owner": "latex",
+  "location": "main",
+  "section": "latex",
+  "operation": "latex.ui.action",
+  "steps": [
+    {
+      "role": "textArea",
+      "label": "LaTeX source",
+      "action": "replace-text",
+      "value": "\\documentclass{article}\n\\begin{document}\nSynthetic retained draft\n\\end{document}\n\nSynthetic temporary edit\n"
+    },
+    {
+      "role": "textArea",
+      "label": "LaTeX source",
+      "action": "replace-text",
+      "value": "\\documentclass{article}\n\\begin{document}\nSynthetic retained draft\n\\end{document}\n"
+    }
+  ],
+  "sources": [
+    {
+      "path": "Extensions/latex/Runtime.swift",
+      "sha256": "f39509f44ecf4f846f4e7a7a213deb85fa0b044687fa4987789e120b705f89e3"
+    },
+    {
+      "path": "Extensions/latex/LaTeXPage.swift",
+      "sha256": "d8c1b580c4adfcafa22808dda53b3187ce3cca778be77f37eba0407352caf997"
+    },
+    {
+      "path": "Extensions/latex/LaTeXSourceEditor.swift",
+      "sha256": "8b0a52382d15d0daaea859e17262008f9e62f7552409ed691cebec9c56527555"
+    },
+    {
+      "path": "Extensions/latex/LaTeXModel.swift",
+      "sha256": "5c1933aff553b84150e7499e7c474da7e72a603ac501e8686573c6e71a925155"
+    },
+    {
+      "path": "Extensions/latex/Resources/editor.js",
+      "sha256": "decee804310f78b6ab7a2ebed7c5beb5d405ecf93111a63c9e05c036f00a7912"
+    }
+  ]
+}
