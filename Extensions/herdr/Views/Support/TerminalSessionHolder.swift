@@ -442,13 +442,7 @@ final class TerminalSessionHolder {
     }
 
     func bind(_ client: OwnedTerminalClient) {
-        if self.client != nil {
-            if retirementTask == nil {
-                retirePendingWork(closeSession: false)
-            } else {
-                self.client?.stop()
-            }
-        }
+        if self.client != nil { retirePendingWork(closeSession: false) }
         self.client = client
         descriptor = client.descriptor
         currentWorkingDirectory = client.descriptor.directory

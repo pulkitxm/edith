@@ -21,6 +21,49 @@ import Testing
         }
     }
 
+    @Test func everyReplacedClientRemainsJoinedWhileEarlierRetirementIsPending() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let holder = TerminalSessionHolder()
+        let descriptor = OwnedTerminalDescriptor(
+            handle: .init(owner: "herdr", id: UUID(), generation: UUID()),
+            directory: "/synthetic", allowsLocalFileLinks: false,
+            resetTerminalAfterInterrupt: false)
+        var firstReply: CheckedContinuation<Data, Error>?
+        var secondReply: CheckedContinuation<Data, Error>?
+        let first = try OwnedTerminalClient(descriptor: descriptor) { _, _ in
+            try await withCheckedThrowingContinuation { firstReply = $0 }
+        }
+        let second = try OwnedTerminalClient(descriptor: descriptor) { _, _ in
+            try await withCheckedThrowingContinuation { secondReply = $0 }
+        }
+        let third = try OwnedTerminalClient(descriptor: descriptor) { _, _ in Data() }
+        holder.bind(first)
+        let firstRequest = Task { try await first.input(Data([65])) }
+        while firstReply == nil { await Task.yield() }
+        holder.bind(second)
+        let secondRequest = Task { try await second.input(Data([66])) }
+        while secondReply == nil { await Task.yield() }
+        holder.bind(third)
+        var started = false
+        var finished = false
+        let drain = Task {
+            started = true
+            await holder.stopRenderingAndWait()
+            finished = true
+        }
+        while !started { await Task.yield() }
+        firstReply?.resume(returning: Data())
+        await #expect(throws: CancellationError.self) { try await firstRequest.value }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(!finished)
+        secondReply?.resume(returning: Data())
+        await #expect(throws: CancellationError.self) { try await secondRequest.value }
+        await drain.value
+        #expect(finished && holder.ghosttyView == nil)
+        await #expect(throws: ExtensionPeerError.self) { try await third.input(Data([67])) }
+        await HerdrWorkOwnership.shutdown()
+    }
+
     @Test func exactEngineRegistryRetainsAllSessionsAndCannotCloseAnotherOwnerScope() async throws {
         let first = OwnedTerminalSessionRegistry()
         let second = OwnedTerminalSessionRegistry()
