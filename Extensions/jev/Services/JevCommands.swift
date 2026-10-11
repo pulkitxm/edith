@@ -66,6 +66,20 @@ final class JevCommands {
 
     func cancel(_ token: String) { registry.cancel(token) }
 
+    @discardableResult
+    func suspend() -> UUID {
+        let token = registry.suspend()
+        cliStreams?.stop()
+        return token
+    }
+
+    @discardableResult
+    func suspendAndWait() async -> UUID {
+        suspend()
+        await cliStreams?.stopAndWait()
+        return await registry.suspendAndWait()
+    }
+
     func shutdownAndWait() async {
         stopped = true
         await registry.shutdownAndWait()
