@@ -70,7 +70,7 @@ final class AudioMixerActionCase: HostedFunctionalActionCase {
 
     func shutdownPresentation() async {
         model.viewDisappeared()
-        model.stop()
+        await model.stopAndWait()
         client.invalidate()
     }
 }
