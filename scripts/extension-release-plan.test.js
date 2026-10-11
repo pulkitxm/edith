@@ -4,13 +4,16 @@ import {
   access,
   mkdir,
   mkdtemp,
+  readFile,
   rename,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  definitionInputs,
   extensionFingerprint,
   extensionReleaseTag,
   planExtensionBuilds,
@@ -728,6 +731,106 @@ test("shared runtime fingerprints include code fixes and exclude generated legac
   }
 });
 
+test("all39 fingerprints and publication plans include carried engine and request helpers", async () => {
+  const current = JSON.parse(
+    await readFile("Extensions/manifest.json", "utf8"),
+  );
+  expect(current).toHaveLength(39);
+  expect(
+    current.every(({ sameExecutableWorker }) => sameExecutableWorker),
+  ).toBe(true);
+  const helpers = [
+    "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEngineBridge.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEngineTransport.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostTerminalUIRequest.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostMachinesWindowTarget.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostHerdrWindowTarget.swift",
+  ];
+  const root = await mkdtemp(join(tmpdir(), "extension-all39-runtime-"));
+  const fingerprints = () =>
+    Promise.all(
+      current.map((entry) => extensionFingerprint(root, entry, current)),
+    );
+  try {
+    const inputs = new Set(current.flatMap(definitionInputs));
+    for (const path of [...new Set([...inputs, ...helpers])].sort()) {
+      if ((await stat(path)).isDirectory()) {
+        await mkdir(join(root, path), { recursive: true });
+        await writeFile(
+          join(root, path, "Synthetic.swift"),
+          "synthetic source",
+        );
+      } else {
+        await mkdir(join(root, path, ".."), { recursive: true });
+        await writeFile(join(root, path), "synthetic source");
+      }
+    }
+    const initial = await fingerprints();
+    const published = current.map((entry, index) => ({
+      id: entry.id,
+      version: entry.version,
+      hostABI: entry.hostABI,
+      architecture: "arm64",
+      sourceFingerprint: initial[index],
+    }));
+    expect(await planUnpublishedExtensions(root, current, published)).toEqual(
+      [],
+    );
+    for (const path of helpers) {
+      expect(workerRuntimeInputs).toContain(path);
+      expect(planExtensionBuilds(current, [path])).toEqual(current);
+      expect(planPullRequestBuilds(current, [path], current)).toEqual(current);
+      await writeFile(join(root, path), `changed synthetic helper ${path}`);
+      const changed = await fingerprints();
+      for (const [index, fingerprint] of changed.entries())
+        expect(fingerprint).not.toBe(initial[index]);
+      const pending = await planUnpublishedExtensions(root, current, published);
+      expect(pending.map(({ id }) => id)).toEqual(current.map(({ id }) => id));
+      for (const [index, row] of pending.entries()) {
+        expect(row.fingerprint).toBe(changed[index]);
+        expect(row.tag).toBe(extensionReleaseTag(row));
+      }
+      await writeFile(join(root, path), "synthetic source");
+      expect(await fingerprints()).toEqual(initial);
+    }
+    const excluded = [
+      "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift",
+      "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/.DS_Store",
+      ...[
+        "Tests",
+        "tests",
+        "EmbeddedTests",
+        ".build",
+        "build",
+        "dist",
+        "target",
+      ].map(
+        (directory) =>
+          `Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/${directory}/Synthetic.swift`,
+      ),
+    ];
+    for (const path of excluded) {
+      await mkdir(join(root, path, ".."), { recursive: true });
+      await writeFile(join(root, path), "synthetic excluded input");
+    }
+    expect(await fingerprints()).toEqual(initial);
+    expect(planPullRequestBuilds(current, excluded, current)).toEqual([]);
+    expect(await planUnpublishedExtensions(root, current, published)).toEqual(
+      [],
+    );
+    const independent = current.filter(({ id }) => id !== "virtualCamera");
+    for (const path of [
+      "Packages/EdithHost/Sources/EdithHost/HostSidebar.swift",
+      "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEngineOwner.swift",
+    ])
+      expect(planPullRequestBuilds(independent, [path], independent)).toEqual(
+        [],
+      );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("role overrides fingerprint the complete selected SDK without changing unrelated consumers", async () => {
   const root = await mkdtemp(join(tmpdir(), "extension-role-support-"));
   const definition = {
@@ -1206,17 +1309,111 @@ describe("pull request candidate planning", () => {
       ).toEqual(pullRequestDefinitions);
     });
   });
-  test("git planning rejects malformed absent or nonancestor commit identities", async () => {
+  test("divergent event base tips use the branch point for both changes and manifest rows", async () => {
     await pullRequestRepository(async ({ root, git, commit, baseSHA }) => {
+      const advanced = structuredClone(pullRequestDefinitions);
+      advanced[1].minimumSystemVersion = 15;
+      await writeFile(
+        join(root, "Extensions/manifest.json"),
+        JSON.stringify(advanced),
+      );
+      await writeFile(
+        join(root, "Extensions/calendar/Runtime.swift"),
+        "base-only calendar",
+      );
+      const eventBase = await commit();
+      git("checkout", "--quiet", "--detach", baseSHA);
+      await writeFile(
+        join(root, "Extensions/music/Runtime.swift"),
+        "candidate music",
+      );
+      await commit();
+      expect(git("merge-base", "--all", eventBase, "HEAD")).toBe(baseSHA);
+      const baseline = readPullRequestBaseline(root, eventBase);
+      expect(baseline.priorDefinitions).toEqual(pullRequestDefinitions);
+      expect(baseline.changes).toEqual(["Extensions/music/Runtime.swift"]);
+      const candidates = await planPullRequestExtensions(
+        root,
+        pullRequestDefinitions,
+        eventBase,
+      );
+      expect(candidates.map(({ id }) => id)).toEqual(["music", "shelf"]);
+      for (const candidate of candidates) {
+        const definition = pullRequestDefinitions.find(
+          ({ id }) => id === candidate.id,
+        );
+        expect(candidate.fingerprint).toBe(
+          await extensionFingerprint(root, definition, pullRequestDefinitions),
+        );
+        expect(candidate.version).toBe(definition.version);
+        expect(candidate.tag).toBe(extensionReleaseTag(candidate));
+      }
+    });
+  });
+  test("git planning rejects malformed absent noncommit and unrelated identities", async () => {
+    await pullRequestRepository(async ({ root, git, baseSHA }) => {
       for (const value of ["", "main", "--all", "a".repeat(39), "g".repeat(40)])
         expect(() => readPullRequestBaseline(root, value)).toThrow(
           "Invalid pull request base",
         );
       expect(() => readPullRequestBaseline(root, "0".repeat(40))).toThrow();
-      await writeFile(join(root, "README.md"), "future");
-      const future = await commit();
-      git("checkout", "--quiet", "--detach", baseSHA);
-      expect(() => readPullRequestBaseline(root, future)).toThrow();
+      const tree = git("rev-parse", `${baseSHA}^{tree}`);
+      expect(() => readPullRequestBaseline(root, tree)).toThrow();
+      const unrelated = git(
+        "commit-tree",
+        tree,
+        "-m",
+        "Unrelated fixture root",
+      );
+      expect(() => readPullRequestBaseline(root, unrelated)).toThrow();
+    });
+  });
+  test("criss-cross histories fail closed when two verified merge bases exist", async () => {
+    await pullRequestRepository(async ({ root, git, baseSHA }) => {
+      const tree = git("rev-parse", `${baseSHA}^{tree}`);
+      const left = git(
+        "commit-tree",
+        tree,
+        "-p",
+        baseSHA,
+        "-m",
+        "Left fixture",
+      );
+      const right = git(
+        "commit-tree",
+        tree,
+        "-p",
+        baseSHA,
+        "-m",
+        "Right fixture",
+      );
+      const eventBase = git(
+        "commit-tree",
+        tree,
+        "-p",
+        left,
+        "-p",
+        right,
+        "-m",
+        "Base fixture merge",
+      );
+      const head = git(
+        "commit-tree",
+        tree,
+        "-p",
+        right,
+        "-p",
+        left,
+        "-m",
+        "Head fixture merge",
+      );
+      git("checkout", "--quiet", "--detach", head);
+      expect(
+        git("merge-base", "--all", eventBase, head).split("\n").sort(),
+      ).toEqual([left, right].sort());
+      expect(() => readPullRequestBaseline(root, eventBase)).toThrow(
+        "unique merge base",
+      );
     });
   });
   test("malformed base manifests fail closed instead of producing an empty matrix", async () => {

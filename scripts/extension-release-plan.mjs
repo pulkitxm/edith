@@ -38,8 +38,13 @@ export const workerRuntimeInputs = [
   "Packages/EdithHost/Sources/EdithHostCore/HostRemoteProtocol.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostRemoteAuthentication.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEndpoint.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEngineBridge.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEngineTransport.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostRemoteChannel.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostRemoteConfiguration.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostTerminalUIRequest.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostMachinesWindowTarget.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostHerdrWindowTarget.swift",
   "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace",
 ];
 
@@ -199,11 +204,20 @@ export function readPullRequestBaseline(root, baseSHA) {
     });
   const actual = git(["rev-parse", "--verify", `${baseSHA}^{commit}`]).trim();
   if (actual !== baseSHA) throw new Error("Pull request base commit mismatch");
-  git(["merge-base", "--is-ancestor", baseSHA, "HEAD"]);
+  const headSHA = git(["rev-parse", "--verify", "HEAD^{commit}"]).trim();
+  const baseline = git(["merge-base", "--all", baseSHA, headSHA]).trim();
+  if (!/^[a-f0-9]{40}$/.test(baseline))
+    throw new Error("Pull request requires a unique merge base");
+  if (
+    git(["rev-parse", "--verify", `${baseline}^{commit}`]).trim() !== baseline
+  )
+    throw new Error("Pull request merge base commit mismatch");
+  git(["merge-base", "--is-ancestor", baseline, baseSHA]);
+  git(["merge-base", "--is-ancestor", baseline, headSHA]);
   const tree = git([
     "ls-tree",
     "-z",
-    baseSHA,
+    baseline,
     "--",
     "Extensions/manifest.json",
   ]);
@@ -212,7 +226,7 @@ export function readPullRequestBaseline(root, baseSHA) {
     if (!/^100644 blob [a-f0-9]{40}\tExtensions\/manifest\.json\0$/.test(tree))
       throw new Error("Invalid base extension manifest tree");
     priorDefinitions = JSON.parse(
-      git(["show", `${baseSHA}:Extensions/manifest.json`]),
+      git(["show", `${baseline}:Extensions/manifest.json`]),
     );
     if (!Array.isArray(priorDefinitions))
       throw new Error("Invalid base extension manifest");
@@ -222,8 +236,8 @@ export function readPullRequestBaseline(root, baseSHA) {
     "--name-only",
     "-z",
     "--no-renames",
-    baseSHA,
-    "HEAD",
+    baseline,
+    headSHA,
     "--",
   ])
     .split("\0")
