@@ -22,6 +22,7 @@ name: Extensions
       - scripts/build-minimal-host.mjs
       - scripts/build-contained-host-runtime.mjs
       - scripts/build-camera-carrier.mjs
+      - scripts/build-camera-microphone.py
       - scripts/build-ghostty.sh
       - scripts/patches/ghostty-external-io.patch
       - apps/music-player/**
@@ -54,6 +55,7 @@ name: Extensions
       - scripts/build-minimal-host.mjs
       - scripts/build-contained-host-runtime.mjs
       - scripts/build-camera-carrier.mjs
+      - scripts/build-camera-microphone.py
       - scripts/build-ghostty.sh
       - scripts/patches/ghostty-external-io.patch
       - apps/music-player/**

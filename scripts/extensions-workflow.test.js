@@ -67,6 +67,32 @@ test("maintained terminal native inputs trigger selective extension checks", () 
   }
 });
 
+test.each(["pull_request", "push"])(
+  "%s paths cover every explicit maintained producer script",
+  (event) => {
+    const definitions = JSON.parse(
+      readFileSync("Extensions/manifest.json", "utf8"),
+    );
+    const inputs = [
+      ...new Set(
+        definitions.flatMap(({ inputs, sharedInputs }) => [
+          ...inputs,
+          ...sharedInputs,
+        ]),
+      ),
+    ].filter((path) => /^scripts\/[^*?[\]{}]+\.(mjs|js|py|sh)$/.test(path));
+    expect(inputs).toContain("scripts/build-camera-microphone.py");
+    expect(
+      inputs.filter(
+        (path) =>
+          !workflow.on[event].paths.some((pattern) =>
+            new Bun.Glob(pattern).match(path),
+          ),
+      ),
+    ).toEqual([]);
+  },
+);
+
 test("all extension releases reuse one signed host without Camera provisioning", () => {
   const signing = frozen.steps.findIndex(
     (step) => step.name === "Import the release signing certificate",
@@ -299,9 +325,12 @@ test("common frozen runtime changes rebuild all39 while Camera-only packaging st
   );
   expect(definitions).toHaveLength(39);
   const common = "scripts/build-contained-host-runtime.mjs";
-  const camera = "scripts/build-camera-carrier.mjs";
+  const camera = [
+    "scripts/build-camera-carrier.mjs",
+    "scripts/build-camera-microphone.py",
+  ];
   for (const event of [workflow.on.pull_request, workflow.on.push]) {
-    for (const path of [common, camera])
+    for (const path of [common, ...camera])
       expect(
         event.paths.some((pattern) => new Bun.Glob(pattern).match(path)),
       ).toBe(true);
@@ -309,9 +338,11 @@ test("common frozen runtime changes rebuild all39 while Camera-only packaging st
   expect(
     planExtensionBuilds(definitions, [common]).map(({ id }) => id),
   ).toEqual(definitions.map(({ id }) => id));
-  expect(
-    planExtensionBuilds(definitions, [camera]).map(({ id }) => id),
-  ).toEqual(["virtualCamera"]);
+  for (const path of camera) {
+    expect(
+      planExtensionBuilds(definitions, [path]).map(({ id }) => id),
+    ).toEqual(["virtualCamera"]);
+  }
 });
 
 test("signed retained catalogs must pass actual native selection before package publication", () => {
