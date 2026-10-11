@@ -34,21 +34,28 @@ public struct SkillDocument: Codable, Sendable, Equatable {
 @MainActor public final class SkillDocumentStore {
     public private(set) var isStopped = false
     private var pending: [UUID: Task<SkillDocument, any Error>] = [:]
+    private var copying: [UUID: Task<Bool, any Error>] = [:]
     private var documents: [String: SkillDocument] = [:]
     private let remoteLoad: (@MainActor (EdithSkill) async throws -> SkillDocument)?
     private let remoteCopy: (@MainActor (EdithSkill) async throws -> Bool)?
+    private let writeClipboard: @MainActor (String) -> Bool
     private let cacheDirectory: URL
     private let fetch: @Sendable (URL) async throws -> Data
 
     public init(
         remoteLoad: (@MainActor (EdithSkill) async throws -> SkillDocument)? = nil,
         remoteCopy: (@MainActor (EdithSkill) async throws -> Bool)? = nil,
+        writeClipboard: @escaping @MainActor (String) -> Bool = { markdown in
+            NSPasteboard.general.clearContents()
+            return NSPasteboard.general.setString(markdown, forType: .string)
+        },
         cacheDirectory: URL = ExtensionData.root.appendingPathComponent("cache"),
         fetch: @escaping @Sendable (URL) async throws -> Data = { url in
             try await SkillDocumentStore.download(url)
         }
     ) {
         self.remoteLoad = remoteLoad; self.remoteCopy = remoteCopy
+        self.writeClipboard = writeClipboard
         self.cacheDirectory = cacheDirectory
         self.fetch = fetch
     }
@@ -112,11 +119,26 @@ public struct SkillDocument: Codable, Sendable, Equatable {
     }
 
     public func copy(_ skill: EdithSkill) async throws -> Bool {
+        try Task.checkCancellation()
         guard !isStopped else { throw CancellationError() }
-        if let remoteCopy { return try await remoteCopy(skill) }
-        let document = try await load(skill)
-        NSPasteboard.general.clearContents()
-        return NSPasteboard.general.setString(document.markdown, forType: .string)
+        let token = UUID()
+        let task = Task {
+            if let remoteCopy { return try await remoteCopy(skill) }
+            let document = try await load(skill)
+            try Task.checkCancellation()
+            guard !isStopped else { throw CancellationError() }
+            return writeClipboard(document.markdown)
+        }
+        copying[token] = task
+        defer { copying[token] = nil }
+        let copied = try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        try Task.checkCancellation()
+        guard !isStopped else { throw CancellationError() }
+        return copied
     }
 
     public func recordInstalled(_ document: SkillDocument, for skill: EdithSkill) throws {
@@ -161,12 +183,24 @@ public struct SkillDocument: Codable, Sendable, Equatable {
         }
     }
 
-    public func shutdown() async {
+    public func stop() {
         isStopped = true
+        for task in pending.values { task.cancel() }
+        for task in copying.values { task.cancel() }
+    }
+
+    public func stopAndWait() async {
+        stop()
         let tasks = Array(pending.values)
-        for task in tasks { task.cancel() }
+        let copies = Array(copying.values)
         for task in tasks { _ = await task.result }
+        for task in copies { _ = await task.result }
         pending.removeAll()
+        copying.removeAll()
+    }
+
+    public func shutdown() async {
+        await stopAndWait()
         documents.removeAll()
     }
 

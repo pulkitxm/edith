@@ -105,6 +105,122 @@ import Testing
         }
     }
 
+    @MainActor @Test func suspensionJoinsRemoteCopyAndPreservesCachedDocument() async throws {
+        let gate = Gate()
+        var copies = 0
+        let body = markdown
+        let store = SkillDocumentStore(
+            remoteLoad: { _ in SkillDocument(markdown: body, isCached: false) },
+            remoteCopy: { _ in
+                copies += 1
+                await gate.pause()
+                return true
+            },
+            writeClipboard: { _ in
+                Issue.record("Remote copy must not use the local clipboard."); return false
+            },
+            cacheDirectory: URL(fileURLWithPath: "/synthetic/inert-document-cache"))
+        _ = try await store.load(skill)
+        let request = Task { try await store.copy(skill) }
+        try await gate.waitUntilStarted()
+        store.stop()
+        let started = AsyncStream<Void>.makeStream()
+        var entering = started.stream.makeAsyncIterator()
+        var drained = false
+        let drain = Task {
+            started.continuation.yield()
+            await store.stopAndWait()
+            drained = true
+        }
+        _ = await entering.next()
+        #expect(store.isStopped && !drained)
+        #expect(store.cachedDocument(for: skill)?.markdown == body)
+        await gate.release()
+        await drain.value
+        await #expect(throws: CancellationError.self) { try await request.value }
+        #expect(drained && copies == 1)
+        #expect(store.cachedDocument(for: skill)?.markdown == body)
+        await #expect(throws: CancellationError.self) { try await store.copy(skill) }
+        #expect(copies == 1)
+        await store.shutdown()
+        #expect(store.cachedDocument(for: skill) == nil)
+    }
+
+    @MainActor @Test func stoppedCopyRejectsIgnoredLoadCancellationBeforeClipboardMutation()
+        async throws
+    {
+        let gate = Gate()
+        let body = markdown
+        var writes = 0
+        let store = SkillDocumentStore(
+            remoteLoad: { _ in
+                await gate.pause()
+                return SkillDocument(markdown: body, isCached: false)
+            },
+            writeClipboard: { _ in
+                writes += 1; return true
+            },
+            cacheDirectory: URL(fileURLWithPath: "/synthetic/inert-document-cache"))
+        let request = Task { try await store.copy(skill) }
+        try await gate.waitUntilStarted()
+        store.stop()
+        await gate.release()
+        await store.stopAndWait()
+        await #expect(throws: CancellationError.self) { try await request.value }
+        #expect(writes == 0 && store.cachedDocument(for: skill) == nil)
+    }
+
+    @MainActor @Test func admittedCopyPublishesTheOriginalDocumentOnce() async throws {
+        let body = markdown
+        var copied: [String] = []
+        let store = SkillDocumentStore(
+            remoteLoad: { _ in SkillDocument(markdown: body, isCached: false) },
+            writeClipboard: {
+                copied.append($0); return true
+            },
+            cacheDirectory: URL(fileURLWithPath: "/synthetic/inert-document-cache"))
+        #expect(try await store.copy(skill))
+        #expect(copied == [body] && store.cachedDocument(for: skill)?.markdown == body)
+        store.stop()
+        await #expect(throws: CancellationError.self) { try await store.copy(skill) }
+        #expect(copied == [body])
+        await store.shutdown()
+    }
+
+    @MainActor @Test func modelSuspensionPreservesOriginalSelectionAndPresentationUntilShutdown()
+        async throws
+    {
+        let suite = "com.pulkit.edith.tests.worker-" + UUID().uuidString + ".extensions.plugins"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let agent = SkillAgent("synthetic-agent", "Synthetic Agent", "/synthetic/agents", [])
+        let body = markdown
+        let store = SkillDocumentStore(
+            remoteLoad: { _ in SkillDocument(markdown: body) },
+            writeClipboard: { _ in
+                Issue.record("Model suspension must not mutate the clipboard."); return false
+            },
+            cacheDirectory: URL(fileURLWithPath: "/synthetic/inert-document-cache"))
+        let model = SkillsModel(
+            defaults: defaults, documents: store, detectAgents: { [agent] },
+            discoverInstaller: { false })
+        await model.present(skill)
+        model.setSelected(agent.id, enabled: true)
+        _ = try await store.load(skill)
+        #expect(model.presentedSkill == skill && model.selectedAgentIDs == [agent.id])
+        model.stop()
+        #expect(store.isStopped)
+        await model.stopAndWait()
+        #expect(model.agents == [agent])
+        #expect(model.presentedSkill == skill && model.selectedAgentIDs == [agent.id])
+        #expect(store.cachedDocument(for: skill)?.markdown == body)
+        model.setSelected(agent.id, enabled: false)
+        #expect(model.selectedAgentIDs == [agent.id])
+        await model.shutdown()
+        #expect(model.agents.isEmpty && model.selectedAgentIDs.isEmpty)
+        #expect(model.presentedSkill == nil && store.cachedDocument(for: skill) == nil)
+    }
+
     private actor Gate {
         private var started = false
         private var continuation: CheckedContinuation<Void, Never>?
