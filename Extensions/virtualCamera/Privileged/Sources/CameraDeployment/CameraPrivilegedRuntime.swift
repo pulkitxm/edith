@@ -4,6 +4,8 @@ import Foundation
 @MainActor @objc(EdithCameraPrivilegedRuntime)
 final class CameraPrivilegedRuntime: NSObject {
     private var ownsSession = false
+    private var commandsSuspended = false
+    private var commandTasks: [UUID: Task<Void, Never>] = [:]
     private var retirement: CameraMicrophoneRetirement?
     private var installer: CameraSealedInstallation?
     private var fixtureProviderActive = false
@@ -24,52 +26,69 @@ final class CameraPrivilegedRuntime: NSObject {
     }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        do {
-            guard let command = request["command"] as? String,
-                let payload = request["payload"] as? Data, payload.count <= 8192,
-                let values = try JSONSerialization.jsonObject(with: payload) as? [String: String]
-            else { throw CocoaError(.coderReadCorrupt) }
-            let result: [String: Any]
-            switch command {
-            case "installCarrier":
-                guard values.count == 1, let source = values["source"], source.utf8.count <= 4096,
-                    source.hasPrefix("/")
+        guard !commandsSuspended else { completion(nil, "The extension is disabled."); return }
+        let id = UUID()
+        commandTasks[id] = Task { [self] in
+            do {
+                try Task.checkCancellation()
+                guard let command = request["command"] as? String,
+                    let payload = request["payload"] as? Data, payload.count <= 8192,
+                    let values = try JSONSerialization.jsonObject(with: payload) as? [String: String]
                 else { throw CocoaError(.coderReadCorrupt) }
-                if fixture {
-                    guard
-                        let root = ProcessInfo.processInfo.environment[
-                            "EDITH_EXTENSION_FIXTURE_HOME"], source.hasPrefix(root + "/")
-                    else { throw CocoaError(.fileReadNoPermission) }
-                    result = ["path": source]
-                } else {
-                    let installed = try makeInstaller().installCarrier(
-                        source: URL(fileURLWithPath: source), providerExited: try providerExited())
-                    result = ["path": installed.path]
+                let result: [String: Any]
+                switch command {
+                case "installCarrier":
+                    guard values.count == 1, let source = values["source"], source.utf8.count <= 4096,
+                        source.hasPrefix("/")
+                    else { throw CocoaError(.coderReadCorrupt) }
+                    if fixture {
+                        guard
+                            let root = ProcessInfo.processInfo.environment[
+                                "EDITH_EXTENSION_FIXTURE_HOME"], source.hasPrefix(root + "/")
+                        else { throw CocoaError(.fileReadNoPermission) }
+                        result = ["path": source]
+                    } else {
+                        let installed = try makeInstaller().installCarrier(
+                            source: URL(fileURLWithPath: source), providerExited: try providerExited())
+                        result = ["path": installed.path]
+                    }
+                case "beginSession":
+                    guard values.isEmpty else { throw CocoaError(.coderReadCorrupt) }
+                    ownsSession = true
+                    result = ["providerExited": try providerExited()]
+                case "providerStatus":
+                    guard values.isEmpty else { throw CocoaError(.coderReadCorrupt) }
+                    result = ["providerExited": try providerExited()]
+                case "microphonePrepare":
+                    guard values.isEmpty, ownsSession else { throw CocoaError(.coderReadCorrupt) }
+                    if fixture {
+                        fixtureMicrophoneActive = true
+                    } else {
+                        _ = try makeInstaller().installMicrophone(carrier: carrier)
+                    }
+                    result = ["ok": true]
+                case "microphoneDisable":
+                    guard values.isEmpty, ownsSession else { throw CocoaError(.coderReadCorrupt) }
+                    result = ["restartRequired": try retireMicrophone()]
+                default: throw CocoaError(.coderReadCorrupt)
                 }
-            case "beginSession":
-                guard values.isEmpty else { throw CocoaError(.coderReadCorrupt) }
-                ownsSession = true
-                result = ["providerExited": try providerExited()]
-            case "providerStatus":
-                guard values.isEmpty else { throw CocoaError(.coderReadCorrupt) }
-                result = ["providerExited": try providerExited()]
-            case "microphonePrepare":
-                guard values.isEmpty, ownsSession else { throw CocoaError(.coderReadCorrupt) }
-                if fixture {
-                    fixtureMicrophoneActive = true
-                } else {
-                    _ = try makeInstaller().installMicrophone(carrier: carrier)
-                }
-                result = ["ok": true]
-            case "microphoneDisable":
-                guard values.isEmpty, ownsSession else { throw CocoaError(.coderReadCorrupt) }
-                result = ["restartRequired": try retireMicrophone()]
-            default: throw CocoaError(.coderReadCorrupt)
-            }
-            completion(
-                try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
-                    as NSData, nil)
-        } catch { completion(nil, String(error.localizedDescription.prefix(1024)) as NSString) }
+                completion(
+                    try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
+                        as NSData, nil)
+            } catch { completion(nil, String(error.localizedDescription.prefix(1024)) as NSString) }
+        }
+    }
+
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        commandsSuspended = true
+        let tasks = Array(commandTasks.values)
+        for task in tasks { task.cancel() }
+        Task { [self] in
+            for task in tasks { await task.value }
+            commandTasks.removeAll()
+            completion()
+        }
     }
 
     @objc(prepareDisableWithCompletion:)

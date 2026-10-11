@@ -5,14 +5,19 @@ import Foundation
 final class LidAwakePrivilegedRuntime: NSObject {
     private var controller: LidAwakePrivilegedController?
     private var fixtureState = false
+    private var commandsSuspended = false
+    private var commandTasks: [UUID: Task<Void, Never>] = [:]
     private var journal: URL {
         Bundle(for: LidAwakePrivilegedRuntime.self).bundleURL.deletingLastPathComponent()
             .appendingPathComponent("lidAwake-state.json")
     }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        Task { [self] in
+        guard !commandsSuspended else { completion(nil, "The extension is disabled."); return }
+        let id = UUID()
+        commandTasks[id] = Task { [self] in
             do {
+                try Task.checkCancellation()
                 guard let command = request["command"] as? String,
                     let payload = request["payload"] as? Data, payload.count <= 16
                 else { throw CocoaError(.coderReadCorrupt) }
@@ -31,6 +36,18 @@ final class LidAwakePrivilegedRuntime: NSObject {
                 try await controller.setSleepDisabled(disabled)
                 completion(Data("{}".utf8) as NSData, nil)
             } catch { completion(nil, error.localizedDescription as NSString) }
+        }
+    }
+
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        commandsSuspended = true
+        let tasks = Array(commandTasks.values)
+        for task in tasks { task.cancel() }
+        Task { [self] in
+            for task in tasks { await task.value }
+            commandTasks.removeAll()
+            completion()
         }
     }
 
