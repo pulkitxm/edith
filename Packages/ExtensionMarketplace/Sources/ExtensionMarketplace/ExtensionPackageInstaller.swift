@@ -163,6 +163,7 @@ public actor ExtensionPackageInstaller {
         defer { operation.close() }
         for package in plan { try package.validate(repository: repository) }
         guard Set(plan.map(\.id)).count == plan.count else { throw MarketplaceError.invalidCatalog }
+        try store.cancelPendingRemovals(ids: Set(plan.map(\.id)))
         let original = try store.installedPackages()
         var resulting = original
         let authority = try PackageDirectory(store.root, create: true)
@@ -237,6 +238,7 @@ public actor ExtensionPackageInstaller {
                 }
                 if let rollbackError { throw rollbackError }
             }
+            if committed { throw MarketplaceError.packageCleanupPending }
             throw error
         }
     }

@@ -406,7 +406,9 @@ private func replacementBackups(_ fixture: PackageFixture, _ package: ExtensionP
     let (replacement, replacementArchive) = try fixture.archive(runtime: "replaced runtime")
     let (dependency, _) = try fixture.archive(id: "calendar")
     #expect(original != replacement)
-    #expect(ExtensionPayloadManifest(package: original) == ExtensionPayloadManifest(package: replacement))
+    #expect(
+        ExtensionPayloadManifest(package: original)
+            == ExtensionPayloadManifest(package: replacement))
     let runtime = replacementRuntimeURL(fixture, original)
     let oldBytes = try Data(contentsOf: runtime)
     let oldIdentity = try replacementFileIdentity(fixture.store.directory(for: original))
@@ -563,7 +565,7 @@ private func replacementBackups(_ fixture: PackageFixture, _ package: ExtensionP
     let (first, firstArchive) = try fixture.archive(runtime: "first original")
     let (second, secondArchive) = try fixture.archive(id: "calendar", runtime: "second original")
     _ = try await fixture.installer(archives: [
-        first.downloadURL: firstArchive, second.downloadURL: secondArchive
+        first.downloadURL: firstArchive, second.downloadURL: secondArchive,
     ]).install([first, second], repository: "example/app")
     let (nextFirst, nextFirstArchive) = try fixture.archive(runtime: "first replacement")
     let (nextSecond, nextSecondArchive) = try fixture.archive(
@@ -576,10 +578,11 @@ private func replacementBackups(_ fixture: PackageFixture, _ package: ExtensionP
     let state = fixture.store.root.appendingPathComponent("installed.json")
     let oldState = try Data(contentsOf: state)
     let installer = fixture.installer(archives: [
-        nextFirst.downloadURL: nextFirstArchive, nextSecond.downloadURL: nextSecondArchive
+        nextFirst.downloadURL: nextFirstArchive, nextSecond.downloadURL: nextSecondArchive,
     ])
     await #expect(throws: POSIXError.self) {
-        try await installer.install([nextFirst, nextSecond], repository: "example/app") { progress in
+        try await installer.install([nextFirst, nextSecond], repository: "example/app") {
+            progress in
             if progress == 1 { #expect(chmod(fixture.store.root.path, 0o500) == 0) }
         }
     }
@@ -587,7 +590,8 @@ private func replacementBackups(_ fixture: PackageFixture, _ package: ExtensionP
     for (index, package) in originals.enumerated() {
         #expect(try Data(contentsOf: replacementRuntimeURL(fixture, package)) == oldBytes[index])
         #expect(
-            try replacementFileIdentity(fixture.store.directory(for: package)) == oldIdentities[index])
+            try replacementFileIdentity(fixture.store.directory(for: package))
+                == oldIdentities[index])
         #expect(try replacementBackups(fixture, package).isEmpty)
     }
     #expect(try Data(contentsOf: state) == oldState)
@@ -608,7 +612,7 @@ private func replacementBackups(_ fixture: PackageFixture, _ package: ExtensionP
     let installer = fixture.installer(archives: [
         replacement.downloadURL: replacementArchive
     ])
-    await #expect(throws: POSIXError.self) {
+    await #expect(throws: MarketplaceError.packageCleanupPending) {
         try await installer.install([replacement], repository: "example/app") { _ in
             #expect(chmod(parent.path, 0o500) == 0)
         }

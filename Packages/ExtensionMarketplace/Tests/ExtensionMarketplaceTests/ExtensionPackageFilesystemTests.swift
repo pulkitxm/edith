@@ -57,7 +57,7 @@ struct ExtensionPackageFilesystemTests {
     }
 
     @Test(arguments: [0, 1])
-    func failedMultiVersionRemovalRetainsRecordsAndRetriesAfterRestart(_ failingIndex: Int)
+    func failedMultiVersionRemovalCommitsRemovalAndRetriesCleanupAfterRestart(_ failingIndex: Int)
         async throws
     {
         let fixture = try PackageFixture()
@@ -71,14 +71,15 @@ struct ExtensionPackageFilesystemTests {
         }
         try fixture.store.select(second.0)
         let selected = fixture.store.root.appendingPathComponent("selected-packages.json")
-        let selectionBytes = try Data(contentsOf: selected)
         let blocked = fixture.store.directory(for: packages[failingIndex])
             .appendingPathComponent(packages[failingIndex].id)
             .appendingPathComponent("helper.bundle/Contents/MacOS")
         #expect(chmod(blocked.path, 0o500) == 0)
         #expect(throws: (any Error).self) { try fixture.store.remove(id: first.0.id) }
-        #expect(try fixture.store.installedPackages() == packages)
-        #expect(try Data(contentsOf: selected) == selectionBytes)
+        #expect(try fixture.store.installedPackages().isEmpty)
+        #expect(
+            try JSONDecoder().decode([ExtensionPackage].self, from: Data(contentsOf: selected))
+                .isEmpty)
         #expect(
             FileManager.default.fileExists(
                 atPath: fixture.store.directory(for: packages[failingIndex]).path))
@@ -88,7 +89,7 @@ struct ExtensionPackageFilesystemTests {
         }
         #expect(chmod(blocked.path, 0o700) == 0)
         let restarted = ExtensionPackageStore(root: fixture.store.root)
-        #expect(try restarted.remove(id: first.0.id))
+        try restarted.recoverPackageDeletions()
         #expect(try restarted.installedPackages().isEmpty)
         for package in packages {
             #expect(!FileManager.default.fileExists(atPath: restarted.directory(for: package).path))
@@ -208,7 +209,7 @@ struct ExtensionPackageFilesystemTests {
         try authority.remove(package)
     }
 
-    @Test func pendingDeletionFailureRetainsExactRecordsForRestartCompletion() async throws {
+    @Test func pendingDeletionFailureCommitsRemovalBeforeRestartCleanup() async throws {
         let fixture = try PackageFixture()
         defer { fixture.clean() }
         let (package, archive) = try fixture.archive()
@@ -222,7 +223,7 @@ struct ExtensionPackageFilesystemTests {
                 "helper.bundle/Contents/MacOS")
         #expect(chmod(blocked.path, 0o500) == 0)
         #expect(throws: (any Error).self) { try fixture.store.completePendingRemovals() }
-        #expect(try fixture.store.installedPackages() == [package])
+        #expect(try fixture.store.installedPackages().isEmpty)
         #expect(try fixture.store.pendingRemovals() == [package.id])
         #expect(chmod(blocked.path, 0o700) == 0)
         let restarted = ExtensionPackageStore(root: fixture.store.root)

@@ -246,6 +246,9 @@ public final class HostMarketplace {
             }
             try store.prune(hostABI: HostContract.compatibility)
             try reloadInstalled()
+        } catch MarketplaceError.packageCleanupPending {
+            try? reloadInstalled()
+            self.error = "The extension was downloaded. Package files are awaiting cleanup."
         } catch {
             self.error = "The extension could not be downloaded. Try again."
         }
@@ -260,10 +263,17 @@ public final class HostMarketplace {
             try await sessions.disable(id: id)
             _ = try store.requestRemoval(id: id)
             try reloadInstalled()
+        } catch MarketplaceError.packageCleanupPending {
+            try? reloadInstalled()
+            self.error =
+                installedVersions[id]?.isEmpty == false
+                ? "Package files are awaiting cleanup. Try removing this extension again."
+                : "The extension was removed. Package files are awaiting cleanup."
         } catch {
+            try? reloadInstalled()
             self.error =
                 (error as? HostWorkerError)?.disableMessage
-                ?? "The extension could not be removed. It remains installed. Open the extension and try again."
+                ?? "The extension could not be removed. Open the extension and try again."
         }
     }
 
