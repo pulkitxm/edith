@@ -128,7 +128,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard !draining, #available(macOS 15.0, *),
+            guard !draining, !TimeLapseExportIntent.present(input), #available(macOS 15.0, *),
                 let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else {
@@ -192,4 +192,19 @@ public func createExtension() -> UnsafeMutableRawPointer? {
         bitPattern: MainActor.assumeIsolated {
             UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
         })
+}
+
+private enum TimeLapseExportIntent {
+    static func present(_ context: NSDictionary) -> Bool {
+        let environment = ProcessInfo.processInfo.environment
+        return environment["EDITH_FUNCTIONAL_FIXTURE"] != nil
+            || context["hostedFunctionalFixture"] != nil
+            || environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+            || (context["hostIdentifier"] as? String)?.hasPrefix("com.pulkit.edith.tests.") == true
+            || Bundle.main.bundleIdentifier?.hasPrefix("com.pulkit.edith.tests.") == true
+            || environment["EDITH_APPLICATION_IDENTIFIER"]?.hasPrefix("com.pulkit.edith.tests.")
+                == true
+            || environment["EDITH_SHARED_DEFAULTS_SUITE"]?.hasPrefix("com.pulkit.edith.tests.")
+                == true
+    }
 }
