@@ -11,13 +11,13 @@ struct HomeMusicCard: View {
     @State private var accounts: MusicAccounts
     private let open: () -> Void
 
-    init(
-        dark: Bool, remote: MusicRemote = .shared, accounts: MusicAccounts = .shared,
+    @MainActor init(
+        dark: Bool, remote: MusicRemote? = nil, accounts: MusicAccounts? = nil,
         open: @escaping () -> Void = { ExtensionPresentation.showWindow() }
     ) {
         self.dark = dark
-        _remote = State(initialValue: remote)
-        _accounts = State(initialValue: accounts)
+        _remote = State(initialValue: remote ?? .shared)
+        _accounts = State(initialValue: accounts ?? .shared)
         self.open = open
     }
     @Environment(\.windowVisible) private var visible

@@ -11,14 +11,14 @@ struct EmbeddedHomeMusicCard: View {
     @State private var accounts: EmbeddedMusicAccounts
     private let open: @MainActor () -> Void
 
-    init(
-        dark: Bool, remote: EmbeddedMusicRemote = .shared,
-        accounts: EmbeddedMusicAccounts = .shared,
+    @MainActor init(
+        dark: Bool, remote: EmbeddedMusicRemote? = nil,
+        accounts: EmbeddedMusicAccounts? = nil,
         open: @escaping @MainActor () -> Void = { EmbeddedMusicRemote.shared.send(.openMusic) }
     ) {
         self.dark = dark
-        _remote = State(initialValue: remote)
-        _accounts = State(initialValue: accounts)
+        _remote = State(initialValue: remote ?? .shared)
+        _accounts = State(initialValue: accounts ?? .shared)
         self.open = open
     }
     @Environment(\.windowVisible) private var visible

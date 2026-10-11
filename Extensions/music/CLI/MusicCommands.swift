@@ -4,7 +4,7 @@ import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 
-@MainActor struct MusicCommand: AsyncParsableCommand {
+struct MusicCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "music",
         abstract: "Whatever is playing, and playback control.",
@@ -34,13 +34,23 @@ import Foundation
         aliases: ["nowplaying", "np"])
 }
 
-@MainActor struct PlayerChoice: ParsableArguments {
+struct PlayerChoice: ParsableArguments {
     @Option(name: .long, help: "Force one player: builtin, spotify or apple.")
     var player: String?
 
     func resolved() throws -> MusicPlayer? {
         guard let player else { return nil }
         return try MusicPlayer.named(player)
+    }
+}
+
+@MainActor enum MusicCommandExecution {
+    static func execute(_ body: @MainActor () async throws -> Void) async throws {
+        do { try await body() } catch let failure as CLIFailure {
+            CLIOut.report(failure); throw ExitCode(failure.kind.rawValue)
+        } catch let exit as ExitCode { throw exit } catch is CancellationError {
+            throw CancellationError()
+        } catch { CLIOut.note("error: " + error.localizedDescription); throw ExitCode(1) }
     }
 }
 
@@ -116,7 +126,7 @@ import Foundation
     }
 }
 
-@MainActor struct MusicStatusCommand: AsyncParsableCommand {
+struct MusicStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "status", abstract: "What is playing right now, on whichever player.",
         discussion: """
@@ -133,8 +143,8 @@ import Foundation
 
     @OptionGroup var choice: PlayerChoice
 
-    func run() async throws {
-        try await execute {
+    @MainActor func run() async throws {
+        try await MusicCommandExecution.execute {
             let forced = try choice.resolved()
             guard !json else {
                 let players = forced.map { [$0] } ?? MusicPlayer.allCases
@@ -150,7 +160,7 @@ import Foundation
     }
 }
 
-@MainActor struct MusicPlayersCommand: AsyncParsableCommand {
+struct MusicPlayersCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "players", abstract: "List every player Edith can see, and which is active.",
         discussion: """
@@ -166,8 +176,8 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
-        try await execute {
+    @MainActor func run() async throws {
+        try await MusicCommandExecution.execute {
             let observed = await MusicSession.snapshots()
             let active = try? MusicTargeting.resolve(observed, preferred: MusicMemory.last)
             guard !json else {
@@ -190,7 +200,7 @@ import Foundation
     }
 }
 
-@MainActor struct MusicOpenCurrentCommand: AsyncParsableCommand {
+struct MusicOpenCurrentCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "open-current", abstract: "Open the active music player.",
         discussion: """
@@ -207,15 +217,15 @@ import Foundation
 
     @OptionGroup var choice: PlayerChoice
 
-    func run() async throws {
-        try await execute {
+    @MainActor func run() async throws {
+        try await MusicCommandExecution.execute {
             try await MusicCurrentVerb.act(
                 .openCurrent, forced: choice.resolved(), json: json)
         }
     }
 }
 
-@MainActor struct MusicRevealCurrentCommand: AsyncParsableCommand {
+struct MusicRevealCurrentCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "reveal-current",
         abstract: "Reveal the current library track or open its player.",
@@ -234,15 +244,15 @@ import Foundation
 
     @OptionGroup var choice: PlayerChoice
 
-    func run() async throws {
-        try await execute {
+    @MainActor func run() async throws {
+        try await MusicCommandExecution.execute {
             try await MusicCurrentVerb.act(
                 .revealCurrent, forced: choice.resolved(), json: json)
         }
     }
 }
 
-@MainActor struct MusicPlayCommand: AsyncParsableCommand {
+struct MusicPlayCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "play", abstract: "Start playback on the active player.",
         discussion: """
@@ -259,12 +269,14 @@ import Foundation
 
     @OptionGroup var choice: PlayerChoice
 
-    func run() async throws {
-        try await execute { try await MusicVerb.act(.play, forced: choice.resolved(), json: json) }
+    @MainActor func run() async throws {
+        try await MusicCommandExecution.execute {
+            try await MusicVerb.act(.play, forced: choice.resolved(), json: json)
+        }
     }
 }
 
-@MainActor struct MusicPauseCommand: AsyncParsableCommand {
+struct MusicPauseCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "pause", abstract: "Pause the active player.",
         discussion: """
@@ -281,12 +293,14 @@ import Foundation
 
     @OptionGroup var choice: PlayerChoice
 
-    func run() async throws {
-        try await execute { try await MusicVerb.act(.pause, forced: choice.resolved(), json: json) }
+    @MainActor func run() async throws {
+        try await MusicCommandExecution.execute {
+            try await MusicVerb.act(.pause, forced: choice.resolved(), json: json)
+        }
     }
 }
 
-@MainActor struct MusicStopCommand: AsyncParsableCommand {
+struct MusicStopCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "stop", abstract: "Stop the active player and reset its position.",
         discussion: """
@@ -303,12 +317,14 @@ import Foundation
 
     @OptionGroup var choice: PlayerChoice
 
-    func run() async throws {
-        try await execute { try await MusicVerb.act(.stop, forced: choice.resolved(), json: json) }
+    @MainActor func run() async throws {
+        try await MusicCommandExecution.execute {
+            try await MusicVerb.act(.stop, forced: choice.resolved(), json: json)
+        }
     }
 }
 
-@MainActor struct MusicToggleCommand: AsyncParsableCommand {
+struct MusicToggleCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "toggle", abstract: "Toggle play and pause.",
         discussion: """
@@ -325,14 +341,14 @@ import Foundation
 
     @OptionGroup var choice: PlayerChoice
 
-    func run() async throws {
-        try await execute {
+    @MainActor func run() async throws {
+        try await MusicCommandExecution.execute {
             try await MusicVerb.act(.toggle, forced: choice.resolved(), json: json)
         }
     }
 }
 
-@MainActor struct MusicNextCommand: AsyncParsableCommand {
+struct MusicNextCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "next", abstract: "Skip to the next track.",
         discussion: """
@@ -349,12 +365,14 @@ import Foundation
 
     @OptionGroup var choice: PlayerChoice
 
-    func run() async throws {
-        try await execute { try await MusicVerb.act(.next, forced: choice.resolved(), json: json) }
+    @MainActor func run() async throws {
+        try await MusicCommandExecution.execute {
+            try await MusicVerb.act(.next, forced: choice.resolved(), json: json)
+        }
     }
 }
 
-@MainActor struct MusicPreviousCommand: AsyncParsableCommand {
+struct MusicPreviousCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "previous", abstract: "Go back to the previous track.",
         discussion: """
@@ -371,14 +389,14 @@ import Foundation
 
     @OptionGroup var choice: PlayerChoice
 
-    func run() async throws {
-        try await execute {
+    @MainActor func run() async throws {
+        try await MusicCommandExecution.execute {
             try await MusicVerb.act(.previous, forced: choice.resolved(), json: json)
         }
     }
 }
 
-@MainActor struct MusicVolumeCommand: AsyncParsableCommand {
+struct MusicVolumeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "volume", abstract: "Set the active player's volume from 0 to 1.",
         discussion: """
@@ -398,8 +416,8 @@ import Foundation
     @Argument(help: "A number between 0 and 1.")
     var level: Double
 
-    func run() async throws {
-        try await execute {
+    @MainActor func run() async throws {
+        try await MusicCommandExecution.execute {
             let level = try ArgumentChecks.fraction(self.level, "volume")
             try await MusicVerb.act(.volume(level), forced: choice.resolved(), json: json)
         }
