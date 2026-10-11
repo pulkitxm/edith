@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 
 enum PluginsFixturePolicyError: Error { case invalid, unavailable }
@@ -5,10 +6,17 @@ enum PluginsFixturePolicyError: Error { case invalid, unavailable }
 @MainActor final class PluginsFixturePolicy {
     private var stopped = false
     private let requireCurrent: () throws -> Void
+    private let validateSurface: (String, Data) throws -> Void
 
-    init(requireCurrent: @escaping () throws -> Void) throws {
+    init(
+        validateSurface: @escaping (String, Data) throws -> Void = { _, _ in
+            throw PluginsFixturePolicyError.invalid
+        },
+        requireCurrent: @escaping () throws -> Void
+    ) throws {
         try requireCurrent()
         self.requireCurrent = requireCurrent
+        self.validateSurface = validateSurface
     }
 
     func stop() { stopped = true }
@@ -18,7 +26,9 @@ enum PluginsFixturePolicyError: Error { case invalid, unavailable }
         execute: () async throws -> Data
     ) async throws -> Data {
         try current()
-        try Self.validate(command, payload: payload, skillIDs: skillIDs, agentIDs: agentIDs)
+        try Self.validate(
+            command, payload: payload, skillIDs: skillIDs, agentIDs: agentIDs,
+            validateSurface: validateSurface)
         let result = try await execute()
         try current()
         return result
@@ -31,11 +41,20 @@ enum PluginsFixturePolicyError: Error { case invalid, unavailable }
     }
 
     static func validate(
-        _ command: String, payload: Data, skillIDs: Set<String>, agentIDs: Set<String>
+        _ command: String, payload: Data, skillIDs: Set<String>, agentIDs: Set<String>,
+        validateSurface: (String, Data) throws -> Void = { _, _ in
+            throw PluginsFixturePolicyError.invalid
+        }
     ) throws {
-        if command == "surface.snapshot" || command == "surface.perform" { return }
+        if command == "surface.snapshot" || command == "surface.perform" {
+            guard !payload.isEmpty, payload.count <= 131_072 else {
+                throw PluginsFixturePolicyError.invalid
+            }
+            try validateSurface(command, payload)
+            return
+        }
         guard command == "plugins.ui.action", payload.count <= 8192,
-            let fields = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
+            let fields = (try? JSONSerialization.jsonObject(with: payload)) as? [String: Any],
             let action = fields["action"] as? String
         else { throw PluginsFixturePolicyError.invalid }
         let keys = Set(fields.keys)
@@ -55,8 +74,7 @@ enum PluginsFixturePolicyError: Error { case invalid, unavailable }
             guard keys == ["action", "agentID", "enabled"],
                 let agent = fields["agentID"] as? String, agentIDs.contains(agent),
                 let enabled = fields["enabled"] as? NSNumber,
-                String(cString: enabled.objCType) == "c",
-                fields["enabled"] is Bool
+                CFGetTypeID(enabled) == CFBooleanGetTypeID()
             else { throw PluginsFixturePolicyError.invalid }
         default: throw PluginsFixturePolicyError.invalid
         }

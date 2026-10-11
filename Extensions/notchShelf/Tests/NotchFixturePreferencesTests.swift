@@ -72,6 +72,12 @@ import Testing
                     isString: { _ in false }, accepts: accepts, requireCurrent: {},
                     makeDefaults: { _ in throwUnexpectedDefaults() })
             }
+            try rejects {
+                _ = try NotchFixturePreferences(
+                    suite: invalidSuite, expectedSuite: invalidSuite, schema: schema,
+                    isString: { _ in false }, accepts: accepts, requireCurrent: {},
+                    makeDefaults: { _ in throwUnexpectedDefaults() })
+            }
         }
         current = false
         try rejects { _ = try backend.execute("notch.settings.write", payload: boolean) }
