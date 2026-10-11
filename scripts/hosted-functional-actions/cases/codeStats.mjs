@@ -17,6 +17,10 @@ export const definition = {
       {
         "path": "Extensions/codeStats/CodeStatsUIBridge.swift",
         "sha256": "6b62c5707fbeea46cd0850349459eb93d804d54724d2a0b2a71f1a8f077f1d59"
+      },
+      {
+        "path": "Extensions/codeStats/Runtime.swift",
+        "sha256": "b00339c2a18ae8453971df4a890cade4b3573b16a6ca53086910dad54acade44"
       }
     ],
     "mutation": {
