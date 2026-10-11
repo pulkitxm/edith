@@ -123,3 +123,43 @@ export async function startSparkleServer({ fixture, archive, signature }) {
     throw error;
   }
 }
+
+export function validateSparkleRecipe(
+  receipt,
+  { fixture, archive, signature },
+  recipe,
+) {
+  assert.deepEqual(
+    Object.keys(receipt).sort(),
+    [
+      "recipe",
+      "baselineArchiveSHA256",
+      "servedArchiveSHA256",
+      "servedSignatureSHA256",
+      "actualSparkleRejectionValidated",
+    ].sort(),
+  );
+  assert(["valid", "wrong-signature", "tampered-archive"].includes(recipe));
+  assert.equal(receipt.recipe, recipe);
+  assert.equal(receipt.baselineArchiveSHA256, fixture.archiveSHA256);
+  assert.equal(receipt.actualSparkleRejectionValidated, false);
+  const bytes = Buffer.from(archive);
+  const signed = Buffer.from(signature, "base64");
+  assert.equal(bytes.length, fixture.archiveBytes);
+  assert.equal(signed.length, 64);
+  assert.equal(
+    createHash("sha256").update(bytes).digest("hex"),
+    fixture.archiveSHA256,
+  );
+  if (recipe === "tampered-archive") bytes[bytes.length - 1] ^= 1;
+  if (recipe === "wrong-signature") signed[0] ^= 1;
+  assert.equal(
+    receipt.servedArchiveSHA256,
+    createHash("sha256").update(bytes).digest("hex"),
+  );
+  assert.equal(
+    receipt.servedSignatureSHA256,
+    createHash("sha256").update(signed).digest("hex"),
+  );
+  return Object.freeze({ ...receipt });
+}
