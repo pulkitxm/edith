@@ -15,6 +15,7 @@ public final class SurfaceSnapshotClient {
     @ObservationIgnored private let activeVersions: @MainActor () -> [String: String]
     @ObservationIgnored private let execute: Execute
     @ObservationIgnored private var jobs: [UUID: Job] = [:]
+    @ObservationIgnored private var retired: [UUID: Task<Data, Error>] = [:]
     @ObservationIgnored private nonisolated(unsafe) var stopObserving: (() -> Void)?
     @ObservationIgnored private var stopped = false
     public private(set) var versions: [String: String]
@@ -23,6 +24,7 @@ public final class SurfaceSnapshotClient {
     deinit {
         stopObserving?()
         for job in jobs.values { job.task.cancel() }
+        for task in retired.values { task.cancel() }
     }
 
     public init(
@@ -53,6 +55,12 @@ public final class SurfaceSnapshotClient {
         stopped = true
         stopObserving?(); stopObserving = nil
         retain(activeVersions: [:])
+    }
+
+    public func shutdownAndWait() async {
+        shutdown()
+        let pending = Array(retired.values)
+        for task in pending { _ = await task.result }
     }
 
     public func snapshot(providerID: String, target: SurfaceTarget, tile: SurfaceTile) async throws
@@ -99,6 +107,7 @@ public final class SurfaceSnapshotClient {
         where retainedVersions[job.providerID] != job.version
             || (job.target == .notch && retainedVersions["notchShelf"] == nil)
         {
+            retired[token] = job.task
             jobs[token] = nil
             job.task.cancel()
         }
@@ -113,12 +122,12 @@ public final class SurfaceSnapshotClient {
         else {
             throw ExtensionPeerError.unavailable
         }
-        guard jobs.count < 32 else { throw ExtensionPeerError.invalidRequest }
+        guard jobs.count + retired.count < 32 else { throw ExtensionPeerError.invalidRequest }
         try Task.checkCancellation()
         let token = UUID()
         let task = Task { [execute] in try await execute(providerID, command, payload) }
         jobs[token] = Job(providerID: providerID, version: version, target: target, task: task)
-        defer { jobs[token] = nil }
+        defer { jobs[token] = nil; retired[token] = nil }
         let data = try await withTaskCancellationHandler {
             try await task.value
         } onCancel: {
