@@ -425,10 +425,8 @@ final class VirtualCameraEngine {
         let callbacks = callbacks
         for sink in [edithSink, obsSink] {
             sink.observe { [weak self] in
-                DispatchQueue.main.async {
-                    callbacks.perform {
-                        MainActor.assumeIsolated { self?.refreshExtension() }
-                    }
+                callbacks.perform {
+                    callbacks.submit { [weak self] in self?.refreshExtension() }
                 }
             }
         }
