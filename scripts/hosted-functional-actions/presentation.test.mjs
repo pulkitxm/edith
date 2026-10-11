@@ -5,7 +5,7 @@ import test from "node:test";
 import { definition } from "./cases/keepAwake.mjs";
 import { functionalCanonicalJSON, functionalDigest } from "./contract.mjs";
 import {
-  installedPresentationUITestSource,
+  installedPresentationUITestSource, installedPresentationID, heldInstalledPresentationSteps,
   installedPresentationWindowTitle,
   loadInstalledPresentationRecipe,
   validateInstalledPresentationObservation,
@@ -56,7 +56,7 @@ export const capability = {
     },
   ],
 };
-const presentationID = "12345678-1234-4123-8123-123456789abd";
+const presentationID = installedPresentationID(capability);
 const inventory = () => ({
   sourceCommit: capability.sourceCommit,
   sourceClean: true,
@@ -88,6 +88,7 @@ const observation = () => ({
   before: inventory(),
   after: inventory(),
   steps: recipe.steps,
+  stepInventories: recipe.steps.map((_, index) => ({ index, before: inventory(), after: inventory() })),
   mutation: {
     origin: "authenticated-downloaded-ui-engine-receiver",
     operation: recipe.operation,
@@ -288,4 +289,44 @@ test("actual generated XCTest acts on an already held original window and never 
   assert(!source.includes("application.launch("));
   assert(!source.includes("application.terminate("));
   assert(!source.includes("NSHostingController"));
+});
+
+test("external capability presentation ID and every held original step inventory reject drift", () => {
+  const wrong = observation();
+  wrong.presentationID = "12345678-1234-4123-8123-123456789abd";
+  assert.throws(() => validate(wrong));
+  const drift = observation();
+  drift.stepInventories[0].after.engine = structuredClone(drift.stepInventories[0].after.engine);
+  drift.stepInventories[0].after.engine.pid++;
+  assert.throws(() => validate(drift));
+  const missing = observation();
+  missing.stepInventories = [];
+  assert.throws(() => validate(missing));
+});
+
+test("original named chooser requires explicit owned path and held panel scope", () => {
+  const scoped = structuredClone(recipe);
+  scoped.steps = [{ role: "button", label: "Choose", action: "choose-owned-path", value: null,
+    scope: { kind: "panel", label: "Save" }, ownedPath: "data" }];
+  const steps = heldInstalledPresentationSteps(scoped, definition, capability);
+  assert.equal(steps[0].value, null);
+  assert.equal(steps[0].ownedPath, "data");
+  const wrong = structuredClone(scoped); wrong.steps[0].ownedPath = "unrelated";
+  assert.throws(() => heldInstalledPresentationSteps(wrong, definition, capability));
+  delete scoped.steps[0].scope;
+  assert.throws(() => validateInstalledPresentationRecipe(scoped, definition));
+});
+
+test("source anchors select unlabeled original groups, menu options and variable row buttons without invented labels", () => {
+  const scoped = structuredClone(recipe);
+  scoped.steps = [{ role: "button", label: "", action: "click", value: null,
+    scope: { kind: "button", label: "", anchor: { role: "staticText", label: "Standard" } } }];
+  validateInstalledPresentationRecipe(scoped, definition);
+  const source = installedPresentationUITestSource(scoped, definition, capability);
+  assert(source.includes('case "button": scopes = window.buttons'));
+  const missing = structuredClone(scoped); delete missing.steps[0].scope.anchor;
+  assert.throws(() => validateInstalledPresentationRecipe(missing, definition));
+  scoped.steps = [{ role: "menuItem", label: "Custom", action: "click", value: null,
+    scope: { kind: "menu", label: "", anchor: { role: "menuItem", label: "Custom" } } }];
+  validateInstalledPresentationRecipe(scoped, definition);
 });

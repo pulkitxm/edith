@@ -1,4 +1,5 @@
 import CryptoKit
+import Darwin
 import Foundation
 
 struct FunctionalSemanticRead {
@@ -31,10 +32,65 @@ struct FunctionalSemanticRead {
         var selected: [String: Any] = [:]
         for key in keys {
             guard let value = object[key] else { throw FunctionalFailure.invalid("owned key") }
-            selected[key] = maskedKeys.contains(key)
-                ? ["maskedSHA256": FunctionalBytes.digest(try FunctionalBytes.canonical(value))]
-                : value
+            if maskedKeys.contains(key) {
+                guard let text = value as? String else { throw FunctionalFailure.invalid("masked semantic value type") }
+                selected[key] = ["maskedSHA256": FunctionalBytes.digest(Data(text.utf8))]
+            } else { selected[key] = value }
         }
+        try root.requireCurrent()
+        return try FunctionalBytes.canonical(selected)
+    }
+}
+
+struct FunctionalPreferenceRead {
+    enum Codec { case value, dataJSON, maskedUTF8 }
+    let suite: String
+    let directory: FunctionalPinnedPath
+    let keys: [String: Codec]
+
+    func read(root: FunctionalPinnedPath) throws -> Data {
+        try root.requireCurrent()
+        try directory.requireCurrent()
+        guard suite.hasPrefix("com.pulkit.edith.tests.worker-"), !suite.contains("/"),
+            !suite.utf8.contains(0), suite.utf8.count <= 256, !keys.isEmpty, keys.count <= 64,
+            directory.url.path.hasPrefix(root.url.path + "/"),
+            directory.url.path.hasSuffix("/Library/Preferences")
+        else { throw FunctionalFailure.invalid("owned preference source scope") }
+        let url = directory.url.appendingPathComponent(suite + ".plist")
+        var state = stat()
+        let exists = lstat(url.path, &state) == 0
+        guard exists || errno == ENOENT else { throw FunctionalFailure.invalid("owned preferences stat") }
+        let object: [String: Any]
+        if exists {
+            let pinned = try FunctionalPinnedPath(url, directory: false, maximum: 1_048_576)
+            let bytes = try pinned.read()
+            guard let decoded = try PropertyListSerialization.propertyList(from: bytes, format: nil) as? [String: Any],
+                try pinned.read() == bytes
+            else { throw FunctionalFailure.invalid("owned preferences bytes") }
+            object = decoded
+        } else { object = [:] }
+        var selected: [String: Any] = [:]
+        for (key, codec) in keys {
+            guard !key.isEmpty, key.utf8.count <= 256 else { throw FunctionalFailure.invalid("owned preference key") }
+            guard let value = object[key] else { selected[key] = ["present": false]; continue }
+            let semantic: Any
+            switch codec {
+            case .value:
+                semantic = value
+                _ = try FunctionalBytes.canonical(semantic)
+            case .dataJSON:
+                guard let data = value as? Data, !data.isEmpty, data.count <= 1_048_576 else {
+                    throw FunctionalFailure.invalid("saved preference JSON data") }
+                semantic = try JSONSerialization.jsonObject(with: data)
+                _ = try FunctionalBytes.canonical(semantic)
+            case .maskedUTF8:
+                guard let text = value as? String, text.utf8.count <= 4096 else {
+                    throw FunctionalFailure.invalid("saved masked preference type") }
+                semantic = ["maskedSHA256": FunctionalBytes.digest(Data(text.utf8))]
+            }
+            selected[key] = ["present": true, "value": semantic]
+        }
+        try directory.requireCurrent()
         try root.requireCurrent()
         return try FunctionalBytes.canonical(selected)
     }
