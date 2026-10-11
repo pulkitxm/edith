@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "owner": "docs",
+  "location": "main",
+  "section": "docs",
+  "operation": "docs.ui.ask",
+  "steps": [
+    {
+      "role": "textField",
+      "label": "Ask which command does something, like “free up docker space on my server”",
+      "action": "replace-text",
+      "value": "list sessions"
+    },
+    {
+      "role": "textField",
+      "label": "Ask which command does something, like “free up docker space on my server”",
+      "action": "submit",
+      "value": null
+    }
+  ],
+  "sources": [
+    {
+      "path": "Extensions/docs/DocsScreen.swift",
+      "sha256": "afaea6b5a2d3a4fed6238e175d92756321cdbafed29c9c693d06740900835f24"
+    },
+    {
+      "path": "Extensions/docs/DocsBrowser.swift",
+      "sha256": "e1d8f53c54e614efd597be055993fee7519971b74a18cbcb9df218920fb2d34d"
+    },
+    {
+      "path": "Extensions/docs/DocsUIBridge.swift",
+      "sha256": "fff656e44e64b932aa1d6a6b6751c43d0a85c2c3cc63d5150d75388cd904ba08"
+    },
+    {
+      "path": "Extensions/docs/Runtime.swift",
+      "sha256": "545504faa0cdf8d930196cf38cfd6ea057614e68ee50fae50c81555b456b7699"
+    }
+  ]
+}

@@ -1,0 +1,123 @@
+{
+  "schema": 1,
+  "owner": "seoAudit",
+  "location": "main",
+  "section": "seoAudit",
+  "operation": "seoAudit.ui.action",
+  "steps": [
+    {
+      "role": "popUpButton",
+      "label": "Project actions for Synthetic retained audit",
+      "action": "click",
+      "value": null
+    },
+    {
+      "role": "menuItem",
+      "label": "Rename",
+      "action": "click",
+      "value": null,
+      "scope": {
+        "kind": "menu",
+        "label": "",
+        "anchor": {
+          "role": "menuItem",
+          "label": "Rename"
+        }
+      }
+    },
+    {
+      "role": "textField",
+      "label": "Project name",
+      "action": "replace-text",
+      "value": "Synthetic temporary audit",
+      "scope": {
+        "kind": "sheet",
+        "label": "",
+        "anchor": {
+          "role": "staticText",
+          "label": "Rename project"
+        }
+      }
+    },
+    {
+      "role": "button",
+      "label": "Save name",
+      "action": "click",
+      "value": null,
+      "scope": {
+        "kind": "sheet",
+        "label": "",
+        "anchor": {
+          "role": "staticText",
+          "label": "Rename project"
+        }
+      }
+    },
+    {
+      "role": "popUpButton",
+      "label": "Project actions for Synthetic temporary audit",
+      "action": "click",
+      "value": null
+    },
+    {
+      "role": "menuItem",
+      "label": "Rename",
+      "action": "click",
+      "value": null,
+      "scope": {
+        "kind": "menu",
+        "label": "",
+        "anchor": {
+          "role": "menuItem",
+          "label": "Rename"
+        }
+      }
+    },
+    {
+      "role": "textField",
+      "label": "Project name",
+      "action": "replace-text",
+      "value": "Synthetic retained audit",
+      "scope": {
+        "kind": "sheet",
+        "label": "",
+        "anchor": {
+          "role": "staticText",
+          "label": "Rename project"
+        }
+      }
+    },
+    {
+      "role": "button",
+      "label": "Save name",
+      "action": "click",
+      "value": null,
+      "scope": {
+        "kind": "sheet",
+        "label": "",
+        "anchor": {
+          "role": "staticText",
+          "label": "Rename project"
+        }
+      }
+    }
+  ],
+  "sources": [
+    {
+      "path": "Extensions/seoAudit/Runtime.swift",
+      "sha256": "92e4407bc6b7bff5af862bc775ae749372ba7a5fe69563bda16a9dbf5034b4cf"
+    },
+    {
+      "path": "Extensions/seoAudit/Views/SEOAuditPage.swift",
+      "sha256": "8f21320bf901edff73a04f3494f1658fa49a5d8053c7028b93e4e4e65a51b7dc"
+    },
+    {
+      "path": "Extensions/seoAudit/ViewModels/SEOAuditModel.swift",
+      "sha256": "ebc591d8248421a15d3144789ee4dea621b76310c2c7bf01899ff51ae2c3f0f2"
+    },
+    {
+      "path": "Extensions/seoAudit/SEOAuditUIBridge.swift",
+      "sha256": "0380225489bb687bb495bf1a12dd4bbc8ca5ce9108e38a4c0a3b57754f215108"
+    }
+  ]
+}
