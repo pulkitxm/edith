@@ -1,5 +1,6 @@
 import CoreFoundation
 import Foundation
+import WorkerFixtureSupport
 
 enum PluginsFixturePolicyError: Error { case invalid, unavailable }
 
@@ -54,7 +55,7 @@ enum PluginsFixturePolicyError: Error { case invalid, unavailable }
             return
         }
         guard command == "plugins.ui.action", payload.count <= 8192,
-            let fields = (try? JSONSerialization.jsonObject(with: payload)) as? [String: Any],
+            let fields = try? WorkerFixtureJSON.object(payload, maximumBytes: 8192),
             let action = fields["action"] as? String
         else { throw PluginsFixturePolicyError.invalid }
         let keys = Set(fields.keys)

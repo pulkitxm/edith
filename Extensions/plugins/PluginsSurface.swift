@@ -1,5 +1,6 @@
 import EdithExtensionSupport
 import Foundation
+import WorkerFixtureSupport
 
 @MainActor final class PluginsSurface {
     private let model: SkillsModel
@@ -14,6 +15,7 @@ import Foundation
     ) { self.model = model; self.hidden = hidden }
 
     static func validate(_ command: String, payload: Data) throws {
+        let fields = try WorkerFixtureJSON.object(payload, maximumBytes: 131_072)
         let snapshot = try request(command, payload: payload)
         let expected: Data
         if command == "surface.snapshot" {
@@ -22,8 +24,8 @@ import Foundation
             expected = try JSONEncoder().encode(
                 SurfaceActionRequest(snapshot: snapshot, actionID: "refreshAgents"))
         }
-        guard let fields = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
-            let encoded = try JSONSerialization.jsonObject(with: expected) as? [String: Any],
+        let encoded = try WorkerFixtureJSON.object(expected, maximumBytes: 131_072)
+        guard
             NSDictionary(dictionary: fields).isEqual(to: encoded)
         else { throw ExtensionPeerError.invalidRequest }
     }

@@ -44,6 +44,10 @@ import Testing
             "{\"key\":\"synthetic.boolean\",\"value\":\"yes\"}",
             "{\"key\":\"synthetic.string\",\"value\":\"unowned\"}",
             "{\"key\":\"synthetic.string\",\"value\":\"forever\",\"extra\":1}",
+
+            #"{"key":"unowned","key":"synthetic.boolean","value":"1"}"#,
+            #"{"key":"unowned","k\u0065y":"synthetic.boolean","value":"1"}"#,
+            #"{"key":"synthetic.boolean","value":"1","val\u0075e":"0"}"#,
             String(repeating: " ", count: 4097),
         ] {
             try rejects {

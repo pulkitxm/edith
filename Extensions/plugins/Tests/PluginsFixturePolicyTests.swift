@@ -31,6 +31,10 @@ import Testing
             "{\"action\":\"select\",\"agentID\":\"synthetic-agent\",\"enabled\":\"true\"}",
             "{\"action\":\"select\",\"agentID\":\"synthetic-agent\",\"enabled\":null}",
             "{\"action\":\"select\",\"agentID\":\"synthetic-agent\",\"enabled\":false,\"skillID\":\"synthetic-skill\"}",
+
+            #"{"action":"install","action":"snapshot"}"#,
+            #"{"action":"install","a\u0063tion":"snapshot"}"#,
+            #"{"action":"select","agentID":"synthetic-agent","enabled":true,"enabl\u0065d":false}"#,
             String(repeating: " ", count: 8193),
         ]
         for value in denied {

@@ -1,4 +1,5 @@
 import Foundation
+import WorkerFixtureSupport
 
 enum NotchFixturePreferencesError: Error { case invalid, unavailable }
 
@@ -37,7 +38,7 @@ enum NotchFixturePreferencesError: Error { case invalid, unavailable }
     func execute(_ command: String, payload: Data) throws -> [String: String] {
         try current()
         guard payload.count <= 4096,
-            let fields = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
+            let fields = try? WorkerFixtureJSON.object(payload, maximumBytes: 4096)
         else { throw NotchFixturePreferencesError.invalid }
         switch command {
         case "notch.settings.read":
