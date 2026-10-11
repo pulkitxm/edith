@@ -651,6 +651,75 @@ test("all39 workers rebuild for launcher, navigation and privileged ownership ch
   ).toEqual([]);
 });
 
+test("all39 workers fingerprint admission and fixture support production sources", async () => {
+  const current = JSON.parse(
+    await readFile("Extensions/manifest.json", "utf8"),
+  );
+  const paths = [
+    "Packages/EdithHost/Sources/EdithHost/HostWorkerStartAdmission.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostCoreAdmission.swift",
+    "Extensions/fixtureSupport/Package.swift",
+    "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
+  ];
+  const future = "Extensions/fixtureSupport/FutureAdmission.swift";
+  expect(current).toHaveLength(39);
+  expect(workerRuntimeInputs).toContain("Extensions/fixtureSupport");
+  for (const path of [...paths, future])
+    expect(planPullRequestBuilds(current, [path], current)).toEqual(current);
+  const root = await mkdtemp(
+    join(tmpdir(), "extension-worker-admission-inputs-"),
+  );
+  const worker = {
+    id: "mockWorker",
+    inputs: [],
+    sharedInputs: [],
+    dependencies: [],
+    sameExecutableWorker: true,
+  };
+  try {
+    for (const path of workerRuntimeInputs) {
+      if (/\.(swift|resolved|mjs|py)$/.test(path)) {
+        await mkdir(join(root, path, ".."), { recursive: true });
+        await writeFile(join(root, path), "synthetic source");
+      } else {
+        await mkdir(join(root, path), { recursive: true });
+        await writeFile(
+          join(root, path, "Synthetic.swift"),
+          "synthetic source",
+        );
+      }
+    }
+    for (const path of paths)
+      await writeFile(join(root, path), "synthetic source");
+    const first = await extensionFingerprint(root, worker, [worker]);
+    for (const path of paths) {
+      await writeFile(join(root, path), "changed synthetic admission");
+      expect(await extensionFingerprint(root, worker, [worker])).not.toBe(
+        first,
+      );
+      await writeFile(join(root, path), "synthetic source");
+      expect(await extensionFingerprint(root, worker, [worker])).toBe(first);
+    }
+    await writeFile(join(root, future), "future synthetic admission");
+    expect(await extensionFingerprint(root, worker, [worker])).not.toBe(first);
+    await rm(join(root, future));
+    expect(await extensionFingerprint(root, worker, [worker])).toBe(first);
+    const nonCamera = current.filter(({ id }) => id !== "virtualCamera");
+    for (const path of [
+      "Packages/EdithHost/Sources/EdithHost/HostSidebar.swift",
+      "Extensions/fixtureSupport/Tests/WorkerFixtureAdmissionTests.swift",
+      "Extensions/fixtureSupport/Tests/Support/EngineFixture.swift",
+    ]) {
+      expect(planPullRequestBuilds(nonCamera, [path], nonCamera)).toEqual([]);
+      await mkdir(join(root, path, ".."), { recursive: true });
+      await writeFile(join(root, path), "unrelated synthetic source");
+      expect(await extensionFingerprint(root, worker, [worker])).toBe(first);
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("shared runtime fingerprints include code fixes and exclude generated legacy compatibility hashes", async () => {
   const root = await mkdtemp(join(tmpdir(), "extension-worker-inputs-"));
   const definition = {
