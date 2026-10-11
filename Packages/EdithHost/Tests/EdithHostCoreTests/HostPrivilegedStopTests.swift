@@ -6,6 +6,39 @@ import Testing
 @testable import EdithHostCore
 
 @Suite @MainActor struct HostPrivilegedStopTests {
+    @Test func restorationWaitsForActualRegistryOwnerAfterCallerCompletion() async throws {
+        let fixture = RestoreFixture()
+        var owner: CheckedContinuation<Void, Never>?
+        var callbackReturned = false
+        var ownerReturned = false
+        let token = UUID()
+        fixture.commands.invoke(
+            ["token": token.uuidString, "command": "synthetic.wait", "payload": Data()],
+            completion: { _, _ in callbackReturned = true },
+            execute: { _, _ in
+                await withCheckedContinuation { owner = $0 }
+                ownerReturned = true
+                return Data()
+            })
+        while owner == nil { await Task.yield() }
+        let worker = HostPrivilegedWorker(object: fixture)
+        let stop = try stop(reason: .disable)
+        var stopped = false
+        let cleanup = Task {
+            try await worker.prepareForStop(stop); stopped = true
+        }
+        while !callbackReturned { await Task.yield() }
+        #expect(!ownerReturned)
+        #expect(!stopped)
+        #expect(fixture.restorations == 0)
+        owner?.resume()
+        try await cleanup.value
+        #expect(ownerReturned)
+        #expect(stopped)
+        #expect(fixture.restorations == 1)
+        #expect(fixture.suspensions == 1)
+    }
+
     @Test func originalConfirmedQuitRelinquishesWithoutCallingSystemRestoration() async throws {
         let fixture = RestoreFixture()
         let worker = HostPrivilegedWorker(object: fixture)
@@ -79,8 +112,19 @@ import Testing
     }
 
     @MainActor private final class RestoreFixture: NSObject {
+        let commands = ExtensionCommandRegistry()
+        var suspensions = 0
         var restorations = 0
         var reject = false
+
+        @objc(suspendCommandsWithCompletion:)
+        func suspendCommands(completion: @escaping @convention(block) () -> Void) {
+            suspensions += 1
+            Task {
+                await commands.suspendAndWait()
+                completion()
+            }
+        }
 
         @objc(prepareDisableWithCompletion:)
         func prepareDisable(completion: @escaping @convention(block) (NSError?) -> Void) {

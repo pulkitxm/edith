@@ -9,7 +9,11 @@ import Foundation
     private var frames = HostWorkerFrames()
     private var watcher: DispatchSourceProcess?
     private var ending = false
-    private var busy = false
+    private var admissionClosed = false
+    private var invocation: Task<Void, Never>?
+    private let suspension = HostWorkerPreparation()
+    private let preparation = HostWorkerPreparation()
+    private let quitPreparation = HostWorkerPreparation()
     private var restoration: Task<Void, Never>?
 
     public init(bundle: URL, fixture: Bool = false) throws {
@@ -42,6 +46,7 @@ import Foundation
         guard let pointer = factory() else { throw MarketplaceError.invalidBundle }
         object = Unmanaged<NSObject>.fromOpaque(pointer).takeRetainedValue()
         guard object.responds(to: NSSelectorFromString("invoke:completion:")),
+            object.responds(to: NSSelectorFromString("suspendCommandsWithCompletion:")),
             object.responds(to: NSSelectorFromString("prepareDisableWithCompletion:"))
         else { throw MarketplaceError.invalidBundle }
     }
@@ -52,10 +57,45 @@ import Foundation
     }
 
     func prepareForStop(_ stop: HostPrivilegedStop) async throws {
+        try await beginStop(stop, token: UUID()).value.get()
+    }
+
+    private func beginStop(_ stop: HostPrivilegedStop, token: UUID) throws
+        -> Task<Result<Void, Error>, Never>
+    {
         let retain = try stop.retainsState()
-        if !retain { try await prepare() }
         guard !ending else { throw HostWorkerError.rejected }
-        if retain { _ = try stop.retainsState() }
+        admissionClosed = true
+        if !retain { return try beginRestore(token: token) }
+        guard !preparation.isClosed else { throw HostWorkerError.rejected }
+        return try quitPreparation.begin(token: token, operation: "applicationQuit") {
+            try await self.suspend()
+            guard !self.ending else { throw HostWorkerError.rejected }
+            _ = try stop.retainsState()
+        }
+    }
+
+    private func beginRestore(token: UUID = UUID()) throws -> Task<Result<Void, Error>, Never> {
+        admissionClosed = true
+        return try preparation.begin(token: token) {
+            try await self.suspend()
+            try await self.prepare()
+        }
+    }
+
+    private func suspend() async throws {
+        try await suspension.prepare {
+            let selector = NSSelectorFromString("suspendCommandsWithCompletion:")
+            guard self.object.responds(to: selector) else { throw MarketplaceError.invalidBundle }
+            typealias Suspend =
+                @convention(c) (AnyObject, Selector, @convention(block) () -> Void) -> Void
+            let suspend = unsafeBitCast(self.object.method(for: selector), to: Suspend.self)
+            await withCheckedContinuation { continuation in
+                let completion: @convention(block) () -> Void = { continuation.resume() }
+                suspend(self.object, selector, completion)
+            }
+            if let invocation = self.invocation { await invocation.value }
+        }
     }
 
     public func run() {
@@ -78,42 +118,60 @@ import Foundation
         do {
             for frame in try frames.append(data) {
                 let request = try JSONDecoder().decode(HostPrivilegedRequest.self, from: frame)
-                if request.operation == "start" { try send(request.token, data: Data()); continue }
-                guard !busy else {
-                    try send(
-                        request.token,
-                        error: "System settings are still being changed. Wait and try again.");
-                    continue
-                }
-                busy = true
-                Task { [self] in
-                    defer { busy = false }
-                    do {
-                        switch request.operation {
-                        case "invoke":
-                            guard let command = request.command, let payload = request.payload,
-                                payload.count <= 32_768
-                            else { throw HostWorkerError.rejected }
-                            let data = try await invoke(command, payload: payload)
-                            try send(request.token, data: data)
-                        case "prepareDisable":
-                            try await prepare(); try send(request.token, data: Data())
-                        case "stop":
-                            guard let stop = request.stop else { throw HostWorkerError.rejected }
-                            try await prepareForStop(stop)
-                            try send(request.token, data: Data()); exit(0)
-                        default: throw HostWorkerError.rejected
-                        }
-                    } catch {
-                        try? send(
-                            request.token, error: String(error.localizedDescription.prefix(1024)))
+                switch request.operation {
+                case "start":
+                    guard !admissionClosed else { throw HostWorkerError.rejected }
+                    try send(request.token, data: Data())
+                case "invoke":
+                    guard !admissionClosed, invocation == nil,
+                        let command = request.command, let payload = request.payload,
+                        payload.count <= 32_768
+                    else {
+                        try send(
+                            request.token,
+                            error: "System settings are still being changed. Wait and try again.")
+                        continue
                     }
+                    invocation = Task { [self] in
+                        defer { invocation = nil }
+                        do {
+                            try send(
+                                request.token,
+                                data: try await invoke(
+                                    command, payload: payload, token: request.token))
+                        } catch {
+                            try? send(
+                                request.token,
+                                error: String(error.localizedDescription.prefix(1024)))
+                        }
+                    }
+                case "prepareDisable", "stop":
+                    let cleanup = Result {
+                        if request.operation == "prepareDisable" {
+                            return try beginRestore(token: request.token)
+                        }
+                        guard let stop = request.stop else { throw HostWorkerError.rejected }
+                        return try beginStop(stop, token: request.token)
+                    }
+                    Task { [self] in
+                        do {
+                            try await cleanup.get().value.get()
+                            try send(request.token, data: Data())
+                            if request.operation == "stop" { exit(0) }
+                        } catch {
+                            try? send(
+                                request.token,
+                                error: String(error.localizedDescription.prefix(1024)))
+                        }
+                    }
+                default:
+                    try send(request.token, error: "The extension could not complete this action.")
                 }
             }
         } catch { restoreAndExit() }
     }
 
-    private func invoke(_ command: String, payload: Data) async throws -> Data {
+    private func invoke(_ command: String, payload: Data, token: UUID) async throws -> Data {
         let selector = NSSelectorFromString("invoke:completion:")
         typealias Invoke =
             @convention(c) (
@@ -132,7 +190,7 @@ import Foundation
             }
             invoke(
                 object, selector,
-                ["command": command, "payload": payload as NSData, "token": UUID().uuidString],
+                ["command": command, "payload": payload as NSData, "token": token.uuidString],
                 completion)
         }
     }
@@ -155,11 +213,13 @@ import Foundation
         guard restoration == nil else { return }
         ending = true
         FileHandle.standardInput.readabilityHandler = nil
+        let cleanup = Result { try beginRestore() }
         restoration = Task { [self] in
+            var pending = cleanup
             while true {
-                if busy { try? await Task.sleep(for: .milliseconds(100)); continue }
-                do { try await prepare(); exit(0) } catch {
+                do { try await pending.get().value.get(); exit(0) } catch {
                     try? await Task.sleep(for: .seconds(5))
+                    pending = Result { try beginRestore() }
                 }
             }
         }
