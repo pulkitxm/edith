@@ -39,6 +39,12 @@ enum FunctionalBytes {
             && "89ab".contains(value[value.index(value.startIndex, offsetBy: 19)])
     }
 
+    static func boolean(_ object: [String: Any], _ key: String) throws -> Bool {
+        guard let value = object[key] as? NSNumber, CFGetTypeID(value) == CFBooleanGetTypeID() else {
+            throw FunctionalFailure.invalid("boolean") }
+        return value.boolValue
+    }
+
     static func integer(_ object: [String: Any], _ key: String) throws -> Int {
         guard let number = object[key] as? NSNumber,
             CFGetTypeID(number) != CFBooleanGetTypeID(),

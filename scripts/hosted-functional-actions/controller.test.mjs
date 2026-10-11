@@ -3,10 +3,10 @@ import test from "node:test";
 import { definition } from "./cases/keepAwake.mjs";
 import { functionalDigest } from "./contract.mjs";
 import {
+  admitFunctionalBuildArtifact,
   FunctionalJourneyOrder,
   functionalPresentationID,
   runFunctionalPool,
-  admitFunctionalBuildArtifact,
 } from "./controller.mjs";
 
 const session = "12345678-1234-4123-8123-123456789abc";

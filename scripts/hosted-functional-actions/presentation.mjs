@@ -36,13 +36,20 @@ const validateOwnedLabel = (value) => {
   boundedText(value.name, 128);
   assert.match(value.name, /^[A-Za-z0-9_.-]+$/);
 };
-const validateSelector = (value) => assert(["label", "help", "placeholder"].includes(value));
+const validateSelector = (value) =>
+  assert(["label", "help", "placeholder"].includes(value));
 const boundedInput = (value) => {
-  assert(typeof value === "string" && value.length > 0 && Buffer.byteLength(value) <= 4096);
-  assert([...value].every((character) => {
-    const code = character.codePointAt(0);
-    return code !== 127 && (code > 31 || [9, 10, 13].includes(code));
-  }));
+  assert(
+    typeof value === "string" &&
+      value.length > 0 &&
+      Buffer.byteLength(value) <= 4096,
+  );
+  assert(
+    [...value].every((character) => {
+      const code = character.codePointAt(0);
+      return code !== 127 && (code > 31 || [9, 10, 13].includes(code));
+    }),
+  );
 };
 
 export function validateInstalledPresentationRecipe(recipe, definition) {
@@ -59,9 +66,18 @@ export function validateInstalledPresentationRecipe(recipe, definition) {
   assert.equal(recipe.schema, 1);
   assert.equal(recipe.owner, definition.owner);
   assert(["main", "settings"].includes(recipe.location));
-  const settingsSections = { notchShelf: "extension", systemStats: "extension", quinjet: "extension", herdr: "backgroundAgent" };
-  assert.equal(recipe.section, recipe.location === "settings" && settingsSections[recipe.owner]
-    ? settingsSections[recipe.owner] : recipe.owner);
+  const settingsSections = {
+    notchShelf: "extension",
+    systemStats: "extension",
+    quinjet: "extension",
+    herdr: "backgroundAgent",
+  };
+  assert.equal(
+    recipe.section,
+    recipe.location === "settings" && settingsSections[recipe.owner]
+      ? settingsSections[recipe.owner]
+      : recipe.owner,
+  );
   assert.equal(recipe.operation, definition.activation.operation);
   assert(
     Array.isArray(recipe.sources) &&
@@ -90,7 +106,8 @@ export function validateInstalledPresentationRecipe(recipe, definition) {
     const fields = ["role", "label", "action", "value"];
     if (Object.hasOwn(step, "scope")) fields.push("scope");
     if (Object.hasOwn(step, "ownedPath")) fields.push("ownedPath");
-    for (const key of ["selector", "ownedLabel", "when"]) if (Object.hasOwn(step, key)) fields.push(key);
+    for (const key of ["selector", "ownedLabel", "when"])
+      if (Object.hasOwn(step, key)) fields.push(key);
     exact(step, fields);
     if (step.scope) {
       const fields = ["kind", "label"];
@@ -114,9 +131,11 @@ export function validateInstalledPresentationRecipe(recipe, definition) {
         );
       if (step.scope.anchor) {
         const fields = ["role", "label"];
-        for (const key of ["selector", "ownedLabel"]) if (Object.hasOwn(step.scope.anchor, key)) fields.push(key);
+        for (const key of ["selector", "ownedLabel"])
+          if (Object.hasOwn(step.scope.anchor, key)) fields.push(key);
         exact(step.scope.anchor, fields);
-        if (step.scope.anchor.selector) validateSelector(step.scope.anchor.selector);
+        if (step.scope.anchor.selector)
+          validateSelector(step.scope.anchor.selector);
         if (step.scope.anchor.ownedLabel) {
           validateOwnedLabel(step.scope.anchor.ownedLabel);
           assert.equal(step.scope.anchor.label, "");
@@ -126,7 +145,8 @@ export function validateInstalledPresentationRecipe(recipe, definition) {
             step.scope.anchor.role,
           ),
         );
-        if (!step.scope.anchor.ownedLabel) boundedText(step.scope.anchor.label, 512);
+        if (!step.scope.anchor.ownedLabel)
+          boundedText(step.scope.anchor.label, 512);
       }
     }
     if (step.ownedPath !== undefined) {
@@ -134,9 +154,11 @@ export function validateInstalledPresentationRecipe(recipe, definition) {
       assert.match(step.ownedPath, /^[A-Za-z0-9_.-]+$/);
     }
     if (step.selector) validateSelector(step.selector);
-    if (step.ownedLabel) { validateOwnedLabel(step.ownedLabel); assert.equal(step.label, ""); }
-    if (step.label === "")
-      assert(step.ownedLabel || step.scope?.anchor);
+    if (step.ownedLabel) {
+      validateOwnedLabel(step.ownedLabel);
+      assert.equal(step.label, "");
+    }
+    if (step.label === "") assert(step.ownedLabel || step.scope?.anchor);
     else boundedText(step.label);
     assert(
       [
@@ -171,7 +193,9 @@ export function validateInstalledPresentationRecipe(recipe, definition) {
       assert(Number.isFinite(step.value) && step.value >= 0 && step.value <= 1);
     } else if (step.action === "set-column-width") {
       assert.equal(step.role, "column");
-      assert(Number.isFinite(step.value) && step.value >= 64 && step.value <= 2048);
+      assert(
+        Number.isFinite(step.value) && step.value >= 64 && step.value <= 2048,
+      );
     } else if (step.action === "show-menu") {
       assert(["row", "button", "staticText"].includes(step.role));
       assert.equal(step.value, null);
@@ -193,7 +217,8 @@ export function validateInstalledPresentationRecipe(recipe, definition) {
     assert(step.action === "choose-owned-path" || step.ownedPath === undefined);
     if (step.when !== undefined) {
       assert(["value-differs", "not-selected"].includes(step.when));
-      if (step.when === "value-differs") assert.equal(step.action, "set-checkbox");
+      if (step.when === "value-differs")
+        assert.equal(step.action, "set-checkbox");
       else assert.equal(step.action, "click");
     }
     if (step.selector === "placeholder") assert.equal(step.role, "textField");
@@ -414,14 +439,20 @@ export function heldInstalledPresentationSteps(recipe, definition, capability) {
   return recipe.steps.map((step) => {
     const label = (entry) => {
       if (!entry.ownedLabel) return entry.label;
-      const path = capability.ownedPaths.find(({ name }) => name === entry.ownedLabel.name);
+      const path = capability.ownedPaths.find(
+        ({ name }) => name === entry.ownedLabel.name,
+      );
       assert(path, "Missing source-derived label capability");
       return path.path.split("/").at(-1);
     };
-    const originalScope = step.scope ?? { kind: "window", label: installedPresentationWindowTitle(capability) };
+    const originalScope = step.scope ?? {
+      kind: "window",
+      label: installedPresentationWindowTitle(capability),
+    };
     const scope = { ...originalScope, label: label(originalScope) };
-    if (scope.anchor) scope.anchor = { ...scope.anchor, label: label(scope.anchor) };
-    let value = step.value;
+    if (scope.anchor)
+      scope.anchor = { ...scope.anchor, label: label(scope.anchor) };
+    const value = step.value;
     if (step.action === "choose-owned-path") {
       const path = capability.ownedPaths.find(
         (entry) => entry.name === step.ownedPath,

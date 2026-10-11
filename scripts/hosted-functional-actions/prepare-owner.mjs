@@ -12,7 +12,10 @@ import {
 import { join, resolve } from "node:path";
 import { requireRegularTree } from "../build-contained-host-runtime.mjs";
 import { functionalCanonicalJSON } from "./contract.mjs";
-import { functionalFixtureRolePolicySource, functionalFixtureTrustSource } from "./fixture-trust.mjs";
+import {
+  functionalFixtureRolePolicySource,
+  functionalFixtureTrustSource,
+} from "./fixture-trust.mjs";
 import { functionalActionOwners } from "./owners.mjs";
 
 const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
@@ -31,8 +34,16 @@ export function functionalPairBuildPlan({
   environment,
 }) {
   assert(functionalActionOwners.includes(owner));
-  const policy = functionalFixtureRolePolicySource(policyBytes, admittedPolicies);
-  const anchor = functionalFixtureTrustSource(artifactBytes, admittedArtifact, policyBytes, admittedPolicies);
+  const policy = functionalFixtureRolePolicySource(
+    policyBytes,
+    admittedPolicies,
+  );
+  const anchor = functionalFixtureTrustSource(
+    artifactBytes,
+    admittedArtifact,
+    policyBytes,
+    admittedPolicies,
+  );
   const artifact = JSON.parse(artifactBytes.toString("utf8"));
   assert.equal(environment.GITHUB_ACTIONS, "true");
   assert.equal(environment.RUNNER_ENVIRONMENT, "github-hosted");
@@ -101,9 +112,16 @@ export function functionalPairBuildPlan({
   ])
     assert(files.has(path), `Missing independently admitted source: ${path}`);
   assert.equal(policy.sourceCommit, sourcePins.sourceCommit);
-  assert.equal(files.get("Extensions/manifest.json"), admittedPolicies.manifest.sha256);
+  assert.equal(
+    files.get("Extensions/manifest.json"),
+    admittedPolicies.manifest.sha256,
+  );
   for (const entry of admittedPolicies.cases)
-    assert.equal(files.get(entry.path), entry.sha256, `Policy case source changed: ${entry.owner}`);
+    assert.equal(
+      files.get(entry.path),
+      entry.sha256,
+      `Policy case source changed: ${entry.owner}`,
+    );
   const versions = ["1.0.0", "1.1.0"];
   return Object.freeze({
     owner,

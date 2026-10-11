@@ -62,7 +62,8 @@ test("source-built producer pins issuer scope, exact independently reviewed oper
     ],
     roles: { synthetic: ["helper"] },
     recipes: { synthetic: { location: "main", section: "synthetic" } },
-    ownedPathPolicies: { synthetic: [{ name: "data", kind: "directory", purpose: "saved-data", relativePath: "synthetic/Data" }] },
+    policySHA256: "b".repeat(64),
+    rolePolicySwiftExpression: "[]",
   });
   assert(
     source.includes(

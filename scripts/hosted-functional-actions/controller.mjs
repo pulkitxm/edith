@@ -11,18 +11,17 @@ import {
   functionalDigest,
   validateFunctionalActionProof,
   validateFunctionalCapability,
-  verifyFunctionalEnvelope,
 } from "./contract.mjs";
 import {
   functionalActionCasePaths,
   functionalActionOwners,
   validateFunctionalOwnerInventory,
 } from "./owners.mjs";
+import { prepareFunctionalOwnerPair } from "./prepare-owner.mjs";
 import {
   installedPresentationID,
   loadInstalledPresentationRecipe,
 } from "./presentation.mjs";
-import { prepareFunctionalOwnerPair } from "./prepare-owner.mjs";
 import {
   admitFunctionalRunner,
   requireFunctionalPrivateDirectory,
@@ -491,8 +490,11 @@ export class FunctionalProducerChannel {
             "Producer output bound",
           );
           this.#buffer = Buffer.concat([this.#buffer, chunk]);
-          let newline;
-          while ((newline = this.#buffer.indexOf(10)) >= 0) {
+          for (
+            let newline = this.#buffer.indexOf(10);
+            newline >= 0;
+            newline = this.#buffer.indexOf(10)
+          ) {
             const bytes = this.#buffer.subarray(0, newline);
             this.#buffer = this.#buffer.subarray(newline + 1);
             receiveLine(

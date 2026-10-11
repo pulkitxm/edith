@@ -118,21 +118,20 @@ final class FunctionalPersistence {
     private var boundCapabilitySHA256: String?
     private var boundEngine: FunctionalBirth?
     private var boundUI: FunctionalBirth?
-    private var initialSaved: Data?
+    private let initialSaved: Data?
+    private var latestReadSequence: Int?
 
     init(reader: @escaping () throws -> Data?, initialSaved: Data?) {
         self.reader = reader
         self.initialSaved = initialSaved
     }
 
-    func captureBeforeConstruction(sequence: Int, retained: Bool) throws -> Observation {
+    func captureBeforeConstruction(sequence: Int) throws -> Observation {
         guard baseline == nil, loadSequence == nil, firstRequestID == nil, sequence > 0
         else { throw FunctionalFailure.invalid("early persistence order") }
         let bytes = try reader()
-        if retained {
-            guard bytes == initialSaved else { throw FunctionalFailure.invalid("retained saved baseline") }
-        }
-        let observation = Observation(sequence: sequence, bytes: bytes, expectedBytes: retained ? initialSaved : bytes)
+        guard bytes == initialSaved else { throw FunctionalFailure.invalid("source expected saved baseline") }
+        let observation = Observation(sequence: sequence, bytes: bytes, expectedBytes: initialSaved)
         baseline = observation
         return observation
     }
@@ -166,13 +165,14 @@ final class FunctionalPersistence {
     }
 
     func readSaved(sequence: Int, expected: Data?) throws -> Observation {
-        guard let loadSequence, firstRequestID != nil, sequence > loadSequence,
+        guard let loadSequence, firstRequestID != nil, sequence > (latestReadSequence ?? loadSequence),
             let engine = boundEngine, let ui = boundUI
         else { throw FunctionalFailure.invalid("saved observation order") }
         try engine.requireCurrent()
         try ui.requireCurrent()
         let bytes = try reader()
         guard bytes == expected else { throw FunctionalFailure.invalid("saved semantic mismatch") }
+        latestReadSequence = sequence
         return Observation(sequence: sequence, bytes: bytes, expectedBytes: expected)
     }
 }

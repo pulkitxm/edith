@@ -15,6 +15,7 @@ import {
   functionalDigest,
   validateFunctionalCaseDefinition,
 } from "./contract.mjs";
+import { functionalFixtureRolePolicySource } from "./fixture-trust.mjs";
 import { functionalActionOwners } from "./owners.mjs";
 import { validateInstalledPresentationRecipe } from "./presentation.mjs";
 
@@ -25,6 +26,8 @@ export const functionalProducerSources = Object.freeze(
     "FunctionalPersistence.swift",
     "FunctionalOriginalUI.swift",
     "FunctionalProducer.swift",
+    "FunctionalFileScopes.swift",
+    "FunctionalRequestJournal.swift",
   ].map((name) => `Tests/HostedFunctionalActions/ProducerSources/${name}`),
 );
 
@@ -73,10 +76,17 @@ export function functionalProducerPlan({
   cases,
   manifest,
   recipes,
-  ownedPathPolicies,
+  policyBytes,
+  admittedPolicies,
   environment,
 }) {
   admitFunctionalRunner(environment, sourceCommit);
+  const policy = functionalFixtureRolePolicySource(
+    policyBytes,
+    admittedPolicies,
+  );
+  assert.equal(policy.sourceCommit, sourceCommit);
+  const policies = JSON.parse(policyBytes.toString("utf8"));
   assert.match(session, uuid);
   assert.equal(
     root,
@@ -117,6 +127,10 @@ export function functionalProducerPlan({
     "Extensions/manifest.json",
     "Tests/HostedFunctionalActions/Sources/FunctionalActionContract/HostedFunctionalActionContext.swift",
     "Extensions/fixtureSupport/WorkerFixtureJSON.swift",
+    "Extensions/fixtureSupport/WorkerFixtureRolePolicy.swift",
+    "Extensions/fixtureSupport/Package.swift",
+    "scripts/hosted-functional-actions/fixture-trust.mjs",
+    "Tests/HostedFunctionalActions/HostSources/FunctionalHostSocket.swift",
   ])
     assert(seen.has(path), `Missing source pin ${path}`);
   assert.deepEqual(
@@ -131,32 +145,37 @@ export function functionalProducerPlan({
     validateFunctionalCaseDefinition(item.definition);
     assert.equal(item.sourceCommit, sourceCommit);
   }
-  assert.deepEqual(Object.keys(recipes).sort(), [...functionalActionOwners].sort());
-  assert.deepEqual(Object.keys(ownedPathPolicies).sort(), [...functionalActionOwners].sort());
+  assert.deepEqual(
+    Object.keys(recipes).sort(),
+    [...functionalActionOwners].sort(),
+  );
+  assert.equal(
+    sourcePins.files.find(({ path }) => path === "Extensions/manifest.json")
+      ?.sha256,
+    admittedPolicies.manifest.sha256,
+  );
+  for (const entry of admittedPolicies.cases)
+    assert.equal(
+      sourcePins.files.find(({ path }) => path === entry.path)?.sha256,
+      entry.sha256,
+    );
   for (const { definition } of cases) {
     validateInstalledPresentationRecipe(recipes[definition.owner], definition);
-    const scopes = ownedPathPolicies[definition.owner];
-    assert(Array.isArray(scopes) && scopes.length <= 32);
-    assert.equal(new Set(scopes.map(({ name }) => name)).size, scopes.length);
-    for (const scope of scopes) {
-      assert.deepEqual(Object.keys(scope).sort(), ["kind", "name", "purpose", "relativePath"]);
-      assert.match(scope.name, /^[A-Za-z0-9_.-]{1,128}$/);
-      assert(["file", "directory"].includes(scope.kind));
-      assert(["saved-data", "immutable-input", "writable-directory", "absent-output"].includes(scope.purpose));
-      assert(!scope.relativePath.split("/").some((part) => ["", ".", ".."].includes(part)));
-      if (scope.purpose === "saved-data") {
-        assert.equal(scope.name, "data"); assert.equal(scope.kind, "directory");
-        assert.equal(scope.relativePath, `Edith Tests/worker-${session}/Data/${definition.owner}`);
-      } else {
-        const parent = scope.purpose === "immutable-input" ? "inputs" : "outputs";
-        assert(scope.relativePath.startsWith(`${parent}/${definition.owner}/`));
-        if (scope.purpose === "absent-output") assert.equal(scope.kind, "file");
-        if (scope.purpose === "writable-directory") assert.equal(scope.kind, "directory");
-      }
-    }
+    const original = policies.find(({ owner }) => owner === definition.owner);
+    assert(original, "Missing independently admitted original role policy");
+    assert.deepEqual(original.operations, definition.operations);
+    const scopes = original.fileScopes;
     for (const step of recipes[definition.owner].steps) {
-      for (const name of [step.ownedPath, step.ownedLabel?.name, step.scope?.ownedLabel?.name, step.scope?.anchor?.ownedLabel?.name].filter(Boolean))
-        assert(scopes.some((scope) => scope.name === name), `Uncompiled chooser capability ${name}`);
+      for (const name of [
+        step.ownedPath,
+        step.ownedLabel?.name,
+        step.scope?.ownedLabel?.name,
+        step.scope?.anchor?.ownedLabel?.name,
+      ].filter(Boolean))
+        assert(
+          scopes.some((scope) => scope.name === name),
+          `Uncompiled chooser capability ${name}`,
+        );
     }
   }
   const definitions = cases.map(({ definition }) =>
@@ -180,7 +199,8 @@ export function functionalProducerPlan({
     certificateSHA256,
     definitions,
     recipes: structuredClone(recipes),
-    ownedPathPolicies: structuredClone(ownedPathPolicies),
+    policySHA256: policy.policySHA256,
+    rolePolicySwiftExpression: policy.swiftExpression,
     roles,
     hostIdentifier: `com.pulkit.edith.tests.worker-${session}`,
     producerIdentifier: `com.pulkit.edith.tests.functional-producer-${session}`,
@@ -221,11 +241,14 @@ export function functionalProducerBootstrapSource(plan) {
       `[${roles.map(quoted).join(", ")}]`,
     ]),
   );
-  const recipes = dictionary(Object.entries(plan.recipes).map(([owner, recipe]) => [owner,
-    `Data(base64Encoded: ${quoted(Buffer.from(functionalCanonicalJSON(recipe)).toString("base64"))})!`]));
-  const pathPolicies = dictionary(Object.entries(plan.ownedPathPolicies).map(([owner, entries]) => [owner,
-    `Data(base64Encoded: ${quoted(Buffer.from(functionalCanonicalJSON(entries)).toString("base64"))})!`]));
+  const recipes = dictionary(
+    Object.entries(plan.recipes).map(([owner, recipe]) => [
+      owner,
+      `Data(base64Encoded: ${quoted(Buffer.from(functionalCanonicalJSON(recipe)).toString("base64"))})!`,
+    ]),
+  );
   return `import Foundation
+import WorkerFixtureSupport
 
 enum FunctionalProducerBuild {
     static let sourceCommit = ${quoted(plan.sourceCommit)}
@@ -235,7 +258,8 @@ enum FunctionalProducerBuild {
     static let producerIdentifier = ${quoted(plan.producerIdentifier)}
     static let certificateSHA256 = Data(base64Encoded: ${quoted(plan.certificateSHA256)})!
     static let recipes: [String: Data] = ${recipes}
-    static let ownedPathPolicies: [String: Data] = ${pathPolicies}
+    static let policySHA256 = ${quoted(plan.policySHA256)}
+    static let rolePolicies: [WorkerFixtureRolePolicy] = try! ${plan.rolePolicySwiftExpression}
     static let caseDigests: [String: String] = ${digests}
     static let operations: [String: [String]] = ${operations}
     static let activationOperations: [String: String] = ${activation}
@@ -297,32 +321,77 @@ export async function buildFunctionalProducer({
   await writeFile(bootstrap, bootstrapBytes, { mode: 0o600, flag: "wx" });
   const contextPath =
     "Tests/HostedFunctionalActions/Sources/FunctionalActionContract/HostedFunctionalActionContext.swift";
-  const context = await readFile(join(repository, contextPath), "utf8");
-  assert.equal(context.split("import WorkerFixtureSupport\n").length, 2);
-  const copiedContext = join(directory, "HostedFunctionalActionContext.swift");
-  await writeFile(
-    copiedContext,
-    context.replace("import WorkerFixtureSupport\n", ""),
-    { mode: 0o600, flag: "wx" },
+  const supportDirectory = join(directory, "WorkerFixtureSupport");
+  await mkdir(supportDirectory, { mode: 0o700 });
+  await requireFunctionalPrivateDirectory(supportDirectory);
+  const supportSources = plan.sourcePins.files.filter(
+    ({ path }) =>
+      /^Extensions\/fixtureSupport\/[^/]+\.swift$/.test(path) &&
+      !path.endsWith("/Package.swift"),
   );
-  const jsonSource = join(
-    repository,
-    "Extensions/fixtureSupport/WorkerFixtureJSON.swift",
+  assert(supportSources.length > 0);
+  const supportTracked = run("git", [
+    "ls-files",
+    "--",
+    "Extensions/fixtureSupport",
+  ])
+    .toString("utf8")
+    .trim()
+    .split("\n")
+    .filter(
+      (path) =>
+        /^Extensions\/fixtureSupport\/[^/]+\.swift$/.test(path) &&
+        !path.endsWith("/Package.swift"),
+    );
+  assert.deepEqual(
+    supportSources.map(({ path }) => path).sort(),
+    supportTracked.sort(),
   );
+  assert(
+    plan.sourcePins.files.some(
+      ({ path }) => path === "Extensions/fixtureSupport/Package.swift",
+    ),
+  );
+  const supportLibrary = join(supportDirectory, "libWorkerFixtureSupport.a");
+  run("xcrun", [
+    "swiftc",
+    "-parse-as-library",
+    "-emit-module",
+    "-emit-library",
+    "-static",
+    "-swift-version",
+    "5",
+    "-O",
+    "-num-threads",
+    "1",
+    "-module-name",
+    "WorkerFixtureSupport",
+    "-DEDITH_FUNCTIONAL_FIXTURE",
+    ...supportSources.map(({ path }) => path),
+    "-emit-module-path",
+    join(supportDirectory, "WorkerFixtureSupport.swiftmodule"),
+    "-o",
+    supportLibrary,
+  ]);
   run("xcrun", [
     "swiftc",
     "-parse-as-library",
     "-swift-version",
     "6",
     "-O",
+    "-num-threads",
+    "1",
+    "-I",
+    supportDirectory,
     "-framework",
     "ApplicationServices",
     "-framework",
     "Security",
     ...plan.sources,
-    copiedContext,
-    jsonSource,
+    "Tests/HostedFunctionalActions/HostSources/FunctionalHostSocket.swift",
+    contextPath,
     bootstrap,
+    supportLibrary,
     "-o",
     plan.executable,
   ]);
@@ -366,6 +435,14 @@ export async function buildFunctionalProducer({
     session: plan.session,
     sourcePins: plan.sourcePins.files,
     bootstrapSHA256: sha(bootstrapBytes),
+    policySHA256: plan.policySHA256,
+    fixtureSupport: {
+      module: "WorkerFixtureSupport",
+      swiftVersion: "5",
+      functionalFixture: true,
+      sources: supportSources,
+      librarySHA256: sha(await readFile(supportLibrary)),
+    },
     producer: {
       path: plan.executable,
       executableSHA256: sha(await readFile(plan.executable)),
@@ -388,116 +465,351 @@ export function functionalHostProject(plan, inputs) {
   assert.equal(resolve(inputs.repository), inputs.repository);
   assert.equal(inputs.directory, join(plan.root, "HostBuild"));
   const sourceFiles = inputs.sourceFiles;
-  assert(Array.isArray(sourceFiles) && sourceFiles.length > 80 && sourceFiles.length < 512);
+  assert(
+    Array.isArray(sourceFiles) &&
+      sourceFiles.length > 80 &&
+      sourceFiles.length < 512,
+  );
   assert.equal(new Set(sourceFiles).size, sourceFiles.length);
-  const original = sourceFiles.filter((path) => path.startsWith("Packages/EdithHost/Sources/EdithHost/"));
-  assert.deepEqual([...original].sort(), plan.sourcePins.files.map(({ path }) => path)
-    .filter((path) => path.startsWith("Packages/EdithHost/Sources/EdithHost/") && path.endsWith(".swift")).sort());
-  assert(original.includes("Packages/EdithHost/Sources/EdithHost/HostEntry.swift"));
+  const original = sourceFiles.filter((path) =>
+    path.startsWith("Packages/EdithHost/Sources/EdithHost/"),
+  );
+  assert.deepEqual(
+    [...original].sort(),
+    plan.sourcePins.files
+      .map(({ path }) => path)
+      .filter(
+        (path) =>
+          path.startsWith("Packages/EdithHost/Sources/EdithHost/") &&
+          path.endsWith(".swift"),
+      )
+      .sort(),
+  );
+  assert(
+    original.includes("Packages/EdithHost/Sources/EdithHost/HostEntry.swift"),
+  );
   for (const path of sourceFiles) {
     assert(path.endsWith(".swift"));
     assert(!path.split("/").some((part) => ["", ".", ".."].includes(part)));
     assert(plan.sourcePins.files.some((pin) => pin.path === path));
-    assert(path.startsWith("Packages/EdithHost/Sources/EdithHost/") ||
-      path.startsWith("Tests/HostedFunctionalActions/HostSources/") ||
-      functionalProducerSources.slice(0, 4).includes(path) ||
-      path === "Tests/HostedFunctionalActions/Sources/FunctionalActionContract/HostedFunctionalActionContext.swift");
+    assert(
+      path.startsWith("Packages/EdithHost/Sources/EdithHost/") ||
+        path.startsWith("Tests/HostedFunctionalActions/HostSources/") ||
+        functionalProducerSources.slice(0, 4).includes(path) ||
+        path ===
+          "Tests/HostedFunctionalActions/Sources/FunctionalActionContract/HostedFunctionalActionContext.swift",
+    );
   }
-  for (const name of ["FunctionalHostApplication.swift", "FunctionalHostSession.swift", "FunctionalHostBootstrap.swift", "FunctionalHostSocket.swift", "FunctionalSyntheticMedia.swift"])
-    assert(sourceFiles.includes(`Tests/HostedFunctionalActions/HostSources/${name}`));
-  assert(sourceFiles.includes("Tests/HostedFunctionalActions/ProducerSources/FunctionalIssuer.swift"));
-  assert(!sourceFiles.includes("Tests/HostedFunctionalActions/ProducerSources/FunctionalProducer.swift"));
+  for (const name of [
+    "FunctionalHostApplication.swift",
+    "FunctionalHostSession.swift",
+    "FunctionalHostBootstrap.swift",
+    "FunctionalHostSocket.swift",
+    "FunctionalSyntheticMedia.swift",
+  ])
+    assert(
+      sourceFiles.includes(`Tests/HostedFunctionalActions/HostSources/${name}`),
+    );
+  assert(
+    sourceFiles.includes(
+      "Tests/HostedFunctionalActions/ProducerSources/FunctionalIssuer.swift",
+    ),
+  );
+  assert(
+    !sourceFiles.includes(
+      "Tests/HostedFunctionalActions/ProducerSources/FunctionalProducer.swift",
+    ),
+  );
   const generated = ["FunctionalHostBuild.swift"];
   assert.deepEqual(Object.keys(inputs.generatedSources).sort(), generated);
-  assert(inputs.generatedSources[generated[0]].includes("enum FunctionalHostBuild"));
+  assert(
+    inputs.generatedSources[generated[0]].includes("enum FunctionalHostBuild"),
+  );
   const dependencyRoot = join(plan.root, "HostDependencies");
   const artifacts = inputs.dependencyArtifacts;
-  assert(Array.isArray(artifacts) && artifacts.length > 10 && artifacts.length < 4096);
-  assert.equal(new Set(artifacts.map(({ path }) => path)).size, artifacts.length);
+  assert(
+    Array.isArray(artifacts) &&
+      artifacts.length > 10 &&
+      artifacts.length < 4096,
+  );
+  assert.equal(
+    new Set(artifacts.map(({ path }) => path)).size,
+    artifacts.length,
+  );
   for (const artifact of artifacts) {
     assert.deepEqual(Object.keys(artifact).sort(), ["kind", "path", "sha256"]);
     assert.match(artifact.sha256, /^[0-9a-f]{64}$/);
     assert(artifact.path.startsWith(`${dependencyRoot}/`));
     assert(!artifact.path.includes("/EdithHost.build/"));
-    assert(["object", "module", "modulemap", "framework", "resource"].includes(artifact.kind));
+    assert(
+      ["object", "module", "modulemap", "framework", "resource"].includes(
+        artifact.kind,
+      ),
+    );
   }
-  const objectsToLink = artifacts.filter(({ kind }) => kind === "object").map(({ path }) => path);
-  assert(objectsToLink.some((path) => path.endsWith("/HostBootstrap.build/HostBootstrap.c.o")));
+  const objectsToLink = artifacts
+    .filter(({ kind }) => kind === "object")
+    .map(({ path }) => path);
+  assert(
+    objectsToLink.some((path) =>
+      path.endsWith("/HostBootstrap.build/HostBootstrap.c.o"),
+    ),
+  );
   assert(objectsToLink.some((path) => path.includes("/EdithHostCore.build/")));
-  assert(objectsToLink.some((path) => path.includes("/WorkerFixtureSupport.build/")));
-  assert(objectsToLink.some((path) => path.includes("/EdithExtensionUI.build/")));
+  assert(
+    objectsToLink.some((path) => path.includes("/WorkerFixtureSupport.build/")),
+  );
+  assert(
+    objectsToLink.some((path) => path.includes("/EdithExtensionUI.build/")),
+  );
   assert.equal(resolve(inputs.modulesDirectory), inputs.modulesDirectory);
   assert(inputs.modulesDirectory.startsWith(`${dependencyRoot}/`));
-  assert.equal(inputs.moduleMap, artifacts.find(({ kind }) => kind === "modulemap")?.path);
+  assert.equal(
+    inputs.moduleMap,
+    artifacts.find(({ kind }) => kind === "modulemap")?.path,
+  );
   assert(inputs.sparkleFramework.startsWith(`${dependencyRoot}/`));
   assert(inputs.sparkleFramework.endsWith("/Sparkle.framework"));
-  const sourceDigest = sha(Buffer.from(functionalCanonicalJSON(sourceFiles.map((path) =>
-    plan.sourcePins.files.find((pin) => pin.path === path)))));
+  const sourceDigest = sha(
+    Buffer.from(
+      functionalCanonicalJSON(
+        sourceFiles.map((path) =>
+          plan.sourcePins.files.find((pin) => pin.path === path),
+        ),
+      ),
+    ),
+  );
   const objects = {};
   const add = (name, value) => {
-    const id = sha(Buffer.from(`functional-host-project:${name}`)).slice(0, 24).toUpperCase();
+    const id = sha(Buffer.from(`functional-host-project:${name}`))
+      .slice(0, 24)
+      .toUpperCase();
     assert(!Object.hasOwn(objects, id));
     objects[id] = value;
     return id;
   };
-  const sources = [], files = [];
+  const sources = [],
+    files = [];
   for (const path of sourceFiles) {
-    const file = add(`source:${path}`, { isa: "PBXFileReference", lastKnownFileType: "sourcecode.swift", path: join(inputs.repository, path), sourceTree: "<absolute>" });
+    const file = add(`source:${path}`, {
+      isa: "PBXFileReference",
+      lastKnownFileType: "sourcecode.swift",
+      path: join(inputs.repository, path),
+      sourceTree: "<absolute>",
+    });
     files.push(file);
-    sources.push(add(`compile:${path}`, { isa: "PBXBuildFile", fileRef: file }));
+    sources.push(
+      add(`compile:${path}`, { isa: "PBXBuildFile", fileRef: file }),
+    );
   }
   for (const path of generated) {
-    const file = add(`generated:${path}`, { isa: "PBXFileReference", lastKnownFileType: "sourcecode.swift", path: join(inputs.directory, path), sourceTree: "<absolute>" });
+    const file = add(`generated:${path}`, {
+      isa: "PBXFileReference",
+      lastKnownFileType: "sourcecode.swift",
+      path: join(inputs.directory, path),
+      sourceTree: "<absolute>",
+    });
     files.push(file);
-    sources.push(add(`compile-generated:${path}`, { isa: "PBXBuildFile", fileRef: file }));
+    sources.push(
+      add(`compile-generated:${path}`, { isa: "PBXBuildFile", fileRef: file }),
+    );
   }
-  const binary = add("product", { isa: "PBXFileReference", explicitFileType: "wrapper.application", path: "Fixture.app", sourceTree: "BUILT_PRODUCTS_DIR" });
-  const products = add("products", { isa: "PBXGroup", children: [binary], name: "Products", sourceTree: "<group>" });
-  const group = add("root-group", { isa: "PBXGroup", children: files, sourceTree: "<group>" });
-  const sourcePhase = add("source-phase", { isa: "PBXSourcesBuildPhase", buildActionMask: 2147483647, files: sources, runOnlyForDeploymentPostprocessing: 0 });
-  const frameworkFile = add("sparkle-file", { isa: "PBXFileReference", lastKnownFileType: "wrapper.framework", path: inputs.sparkleFramework, sourceTree: "<absolute>" });
-  const frameworkBuild = add("sparkle-link", { isa: "PBXBuildFile", fileRef: frameworkFile });
-  const frameworkPhase = add("framework-phase", { isa: "PBXFrameworksBuildPhase", buildActionMask: 2147483647, files: [frameworkBuild], runOnlyForDeploymentPostprocessing: 0 });
-  const embedBuild = add("sparkle-embed", { isa: "PBXBuildFile", fileRef: frameworkFile, settings: { ATTRIBUTES: ["CodeSignOnCopy", "RemoveHeadersOnCopy"] } });
-  const embedPhase = add("embed-phase", { isa: "PBXCopyFilesBuildPhase", buildActionMask: 2147483647, dstPath: "", dstSubfolderSpec: 10, files: [embedBuild], name: "Embed Frameworks", runOnlyForDeploymentPostprocessing: 0 });
+  const binary = add("product", {
+    isa: "PBXFileReference",
+    explicitFileType: "wrapper.application",
+    path: "Fixture.app",
+    sourceTree: "BUILT_PRODUCTS_DIR",
+  });
+  const products = add("products", {
+    isa: "PBXGroup",
+    children: [binary],
+    name: "Products",
+    sourceTree: "<group>",
+  });
+  const group = add("root-group", {
+    isa: "PBXGroup",
+    children: files,
+    sourceTree: "<group>",
+  });
+  const sourcePhase = add("source-phase", {
+    isa: "PBXSourcesBuildPhase",
+    buildActionMask: 2147483647,
+    files: sources,
+    runOnlyForDeploymentPostprocessing: 0,
+  });
+  const frameworkFile = add("sparkle-file", {
+    isa: "PBXFileReference",
+    lastKnownFileType: "wrapper.framework",
+    path: inputs.sparkleFramework,
+    sourceTree: "<absolute>",
+  });
+  const frameworkBuild = add("sparkle-link", {
+    isa: "PBXBuildFile",
+    fileRef: frameworkFile,
+  });
+  const frameworkPhase = add("framework-phase", {
+    isa: "PBXFrameworksBuildPhase",
+    buildActionMask: 2147483647,
+    files: [frameworkBuild],
+    runOnlyForDeploymentPostprocessing: 0,
+  });
+  const embedBuild = add("sparkle-embed", {
+    isa: "PBXBuildFile",
+    fileRef: frameworkFile,
+    settings: { ATTRIBUTES: ["CodeSignOnCopy", "RemoveHeadersOnCopy"] },
+  });
+  const embedPhase = add("embed-phase", {
+    isa: "PBXCopyFilesBuildPhase",
+    buildActionMask: 2147483647,
+    dstPath: "",
+    dstSubfolderSpec: 10,
+    files: [embedBuild],
+    name: "Embed Frameworks",
+    runOnlyForDeploymentPostprocessing: 0,
+  });
   const resources = [];
   for (const path of inputs.resources) {
-    assert(path.startsWith(`${inputs.repository}/Packages/EdithHost/Sources/`) || path.startsWith(`${dependencyRoot}/`));
-    const file = add(`resource:${path}`, { isa: "PBXFileReference", lastKnownFileType: path.endsWith(".bundle") ? "wrapper.plug-in" : "text.json", path, sourceTree: "<absolute>" });
+    assert(
+      path.startsWith(`${inputs.repository}/Packages/EdithHost/Sources/`) ||
+        path.startsWith(`${dependencyRoot}/`),
+    );
+    const file = add(`resource:${path}`, {
+      isa: "PBXFileReference",
+      lastKnownFileType: path.endsWith(".bundle")
+        ? "wrapper.plug-in"
+        : "text.json",
+      path,
+      sourceTree: "<absolute>",
+    });
     files.push(file);
-    resources.push(add(`copy-resource:${path}`, { isa: "PBXBuildFile", fileRef: file }));
+    resources.push(
+      add(`copy-resource:${path}`, { isa: "PBXBuildFile", fileRef: file }),
+    );
   }
   assert(inputs.resources.some((path) => path.endsWith("/index.json")));
-  assert(inputs.resources.some((path) => path.endsWith("/EdithHost_EdithHost.bundle")));
-  const resourcePhase = add("resource-phase", { isa: "PBXResourcesBuildPhase", buildActionMask: 2147483647, files: resources, runOnlyForDeploymentPostprocessing: 0 });
+  assert(
+    inputs.resources.some((path) =>
+      path.endsWith("/EdithHost_EdithHost.bundle"),
+    ),
+  );
+  const resourcePhase = add("resource-phase", {
+    isa: "PBXResourcesBuildPhase",
+    buildActionMask: 2147483647,
+    files: resources,
+    runOnlyForDeploymentPostprocessing: 0,
+  });
   const settings = {
-    PRODUCT_NAME: "Fixture", PRODUCT_MODULE_NAME: "EdithHost", EXECUTABLE_NAME: "Edith",
-    PRODUCT_BUNDLE_IDENTIFIER: plan.hostIdentifier, SDKROOT: "macosx", MACOSX_DEPLOYMENT_TARGET: "14.0", ARCHS: "arm64", ONLY_ACTIVE_ARCH: "YES",
-    SWIFT_VERSION: "6.0", SWIFT_ACTIVE_COMPILATION_CONDITIONS: ["EDITH_FUNCTIONAL_FIXTURE", "EDITH_FUNCTIONAL_FIXTURE_ENTRY"],
-    OTHER_SWIFT_FLAGS: ["-I", inputs.modulesDirectory, "-Xcc", `-fmodule-map-file=${inputs.moduleMap}`],
-    OTHER_LDFLAGS: [...objectsToLink, "-e", "_NSExtensionMain", "-application_extension"],
-    LD_RUNPATH_SEARCH_PATHS: ["@executable_path/../Frameworks"], FRAMEWORK_SEARCH_PATHS: [inputs.sparkleFramework.slice(0, -"/Sparkle.framework".length)],
-    GENERATE_INFOPLIST_FILE: "NO", INFOPLIST_FILE: join(inputs.directory, "Info.plist"),
-    CODE_SIGNING_ALLOWED: "NO", CODE_SIGNING_REQUIRED: "NO", ENABLE_HARDENED_RUNTIME: "YES", SWIFT_OPTIMIZATION_LEVEL: "-O",
-    CLANG_ENABLE_MODULES: "YES", SWIFT_COMPILATION_MODE: "wholemodule", SWIFT_DISABLE_SAFETY_CHECKS: "NO"
+    PRODUCT_NAME: "Fixture",
+    PRODUCT_MODULE_NAME: "EdithHost",
+    EXECUTABLE_NAME: "Edith",
+    PRODUCT_BUNDLE_IDENTIFIER: plan.hostIdentifier,
+    SDKROOT: "macosx",
+    MACOSX_DEPLOYMENT_TARGET: "14.0",
+    ARCHS: "arm64",
+    ONLY_ACTIVE_ARCH: "YES",
+    SWIFT_VERSION: "6.0",
+    SWIFT_ACTIVE_COMPILATION_CONDITIONS: [
+      "EDITH_FUNCTIONAL_FIXTURE",
+      "EDITH_FUNCTIONAL_FIXTURE_ENTRY",
+    ],
+    OTHER_SWIFT_FLAGS: [
+      "-I",
+      inputs.modulesDirectory,
+      "-Xcc",
+      `-fmodule-map-file=${inputs.moduleMap}`,
+    ],
+    OTHER_LDFLAGS: [
+      ...objectsToLink,
+      "-e",
+      "_NSExtensionMain",
+      "-application_extension",
+    ],
+    LD_RUNPATH_SEARCH_PATHS: ["@executable_path/../Frameworks"],
+    FRAMEWORK_SEARCH_PATHS: [
+      inputs.sparkleFramework.slice(0, -"/Sparkle.framework".length),
+    ],
+    GENERATE_INFOPLIST_FILE: "NO",
+    INFOPLIST_FILE: join(inputs.directory, "Info.plist"),
+    CODE_SIGNING_ALLOWED: "NO",
+    CODE_SIGNING_REQUIRED: "NO",
+    ENABLE_HARDENED_RUNTIME: "YES",
+    SWIFT_OPTIMIZATION_LEVEL: "-O",
+    CLANG_ENABLE_MODULES: "YES",
+    SWIFT_COMPILATION_MODE: "wholemodule",
+    SWIFT_DISABLE_SAFETY_CHECKS: "NO",
   };
-  const configuration = add("configuration", { isa: "XCBuildConfiguration", name: "Release", buildSettings: settings });
-  const configurations = add("configurations", { isa: "XCConfigurationList", buildConfigurations: [configuration], defaultConfigurationIsVisible: 0, defaultConfigurationName: "Release" });
-  const target = add("target", { isa: "PBXNativeTarget", name: "EdithHost", productName: "Fixture", productType: "com.apple.product-type.application", productReference: binary, buildConfigurationList: configurations, buildPhases: [sourcePhase, frameworkPhase, resourcePhase, embedPhase], buildRules: [], dependencies: [] });
+  const configuration = add("configuration", {
+    isa: "XCBuildConfiguration",
+    name: "Release",
+    buildSettings: settings,
+  });
+  const configurations = add("configurations", {
+    isa: "XCConfigurationList",
+    buildConfigurations: [configuration],
+    defaultConfigurationIsVisible: 0,
+    defaultConfigurationName: "Release",
+  });
+  const target = add("target", {
+    isa: "PBXNativeTarget",
+    name: "EdithHost",
+    productName: "Fixture",
+    productType: "com.apple.product-type.application",
+    productReference: binary,
+    buildConfigurationList: configurations,
+    buildPhases: [sourcePhase, frameworkPhase, resourcePhase, embedPhase],
+    buildRules: [],
+    dependencies: [],
+  });
   objects[group].children.push(frameworkFile, products);
-  const project = add("project", { isa: "PBXProject", attributes: { LastUpgradeCheck: "2600" }, buildConfigurationList: configurations, compatibilityVersion: "Xcode 14.0", developmentRegion: "en", hasScannedForEncodings: 0, knownRegions: ["en", "Base"], mainGroup: group, productRefGroup: products, projectDirPath: "", projectRoot: "", targets: [target] });
-  return { archiveVersion: "1", classes: {}, objectVersion: "56", objects, rootObject: project, sourceDigest, settings, sourceFiles, dependencyArtifacts: structuredClone(artifacts) };
+  const project = add("project", {
+    isa: "PBXProject",
+    attributes: { LastUpgradeCheck: "2600" },
+    buildConfigurationList: configurations,
+    compatibilityVersion: "Xcode 14.0",
+    developmentRegion: "en",
+    hasScannedForEncodings: 0,
+    knownRegions: ["en", "Base"],
+    mainGroup: group,
+    productRefGroup: products,
+    projectDirPath: "",
+    projectRoot: "",
+    targets: [target],
+  });
+  return {
+    archiveVersion: "1",
+    classes: {},
+    objectVersion: "56",
+    objects,
+    rootObject: project,
+    sourceDigest,
+    settings,
+    sourceFiles,
+    dependencyArtifacts: structuredClone(artifacts),
+  };
 }
 
 export function functionalHostProjectXML(project) {
-  const escape = (text) => String(text).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+  const escapeXML = (text) =>
+    String(text)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
   const encode = (value) => {
-    if (Array.isArray(value)) return `<array>${value.map(encode).join("")}</array>`;
-    if (value && typeof value === "object") return `<dict>${Object.entries(value).map(([key, item]) => `<key>${escape(key)}</key>${encode(item)}`).join("")}</dict>`;
-    if (typeof value === "number") { assert(Number.isSafeInteger(value)); return `<integer>${value}</integer>`; }
+    if (Array.isArray(value))
+      return `<array>${value.map(encode).join("")}</array>`;
+    if (value && typeof value === "object")
+      return `<dict>${Object.entries(value)
+        .map(([key, item]) => `<key>${escapeXML(key)}</key>${encode(item)}`)
+        .join("")}</dict>`;
+    if (typeof value === "number") {
+      assert(Number.isSafeInteger(value));
+      return `<integer>${value}</integer>`;
+    }
     assert.equal(typeof value, "string");
-    return `<string>${escape(value)}</string>`;
+    return `<string>${escapeXML(value)}</string>`;
   };
-  const { archiveVersion, classes, objectVersion, objects, rootObject } = project;
+  const { archiveVersion, classes, objectVersion, objects, rootObject } =
+    project;
   return `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0">${encode({ archiveVersion, classes, objectVersion, objects, rootObject })}</plist>\n`;
 }

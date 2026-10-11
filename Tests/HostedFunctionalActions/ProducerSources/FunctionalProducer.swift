@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import WorkerFixtureSupport
 
 @MainActor
 final class FunctionalHeldPresentation {
@@ -19,10 +20,11 @@ final class FunctionalHeldPresentation {
     private let roleFiles: [(FunctionalPinnedPath, String)]
     private(set) var originalUI: FunctionalOriginalUI?
     private let compiledRecipe: [String: Any]
+    private let fileScopes: FunctionalFileScopes
     private var nextStep = 0
 
     init(capabilityBytes: Data, presentationID: String, location: String, section: String,
-        hostPID: Int32, issuer: FunctionalIssuer) throws
+        hostPID: Int32, expectedPhase: String, issuer: FunctionalIssuer) throws
     {
         let context = try HostedFunctionalActionContext.decode(capabilityBytes)
         guard context.sourceCommit == FunctionalProducerBuild.sourceCommit,
@@ -30,28 +32,27 @@ final class FunctionalHeldPresentation {
             context.fixtureRoot == FunctionalProducerBuild.root,
             context.hostIdentifier == FunctionalProducerBuild.hostIdentifier,
             context.dataDirectory == context.fixtureRoot + "/Edith Tests/worker-" + context.session + "/Data/" + context.owner,
-            context.pairScope == "synthetic-development",
+            context.pairScope == "synthetic-development", context.phase == expectedPhase,
+            context.version == (expectedPhase == "initial" ? "1.0.0" : "1.1.0"),
             context.caseSHA256 == FunctionalProducerBuild.caseDigests[context.owner],
             context.operations == FunctionalProducerBuild.operations[context.owner],
             context.activationOperation == FunctionalProducerBuild.activationOperations[context.owner],
             presentationID == Self.derivePresentationID(capabilityBytes),
             let recipeBytes = FunctionalProducerBuild.recipes[context.owner],
-            let pathPolicyBytes = FunctionalProducerBuild.ownedPathPolicies[context.owner]
+            let policy = FunctionalProducerBuild.rolePolicies.first(where: { $0.owner == context.owner }),
+            let phase = WorkerFixtureFilePhase(rawValue: expectedPhase)
         else { throw FunctionalFailure.invalid("compiled capability scope") }
         let recipe = try FunctionalBytes.object(recipeBytes)
         guard recipe["location"] as? String == location, recipe["section"] as? String == section,
-            let policy = try JSONSerialization.jsonObject(with: pathPolicyBytes) as? [[String: String]],
-            Set(policy.map { $0["name"] ?? "" }) == Set(context.ownedPaths.map(\.name)),
-            policy.count == context.ownedPaths.count
-        else { throw FunctionalFailure.invalid("independently compiled presentation and path policy") }
-        for entry in context.ownedPaths {
-            guard let expected = policy.first(where: { $0["name"] == entry.name }),
-                expected["kind"] == entry.kind, let relative = expected["relativePath"],
-                entry.path == context.fixtureRoot + "/" + relative,
-                let purpose = expected["purpose"],
-                ["saved-data", "immutable-input", "writable-directory", "absent-output"].contains(purpose)
-            else { throw FunctionalFailure.invalid("caller-selected file authority") }
-        }
+            policy.operations == context.operations
+        else { throw FunctionalFailure.invalid("independently compiled presentation and role policy") }
+        let scopes = try policy.validateOwnedPaths(context.ownedPaths.map { entry in
+            guard let kind = WorkerFixtureFileKind(rawValue: entry.kind) else {
+                throw FunctionalFailure.invalid("source file kind") }
+            return WorkerFixtureOwnedPathClaim(name: entry.name, path: entry.path, kind: kind)
+        }, owner: context.owner, root: FunctionalProducerBuild.root, session: FunctionalProducerBuild.session, phase: phase)
+        fileScopes = try FunctionalFileScopes(resolved: scopes,
+            root: FunctionalPinnedPath(URL(fileURLWithPath: FunctionalProducerBuild.root), directory: true, privateMode: true))
         compiledRecipe = recipe
         engine = try FunctionalBirth.observe(context.engine.pid)
         ui = try FunctionalBirth.observe(context.ui.pid)
@@ -66,9 +67,9 @@ final class FunctionalHeldPresentation {
             + "/edith-host-2/arm64/" + context.version + "/" + context.owner
             + "/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex"
         worker = URL(fileURLWithPath: workerPath)
-        guard let roles = FunctionalProducerBuild.roles[context.owner],
-            let selectedRole = roles.contains("app") ? "app" : roles.first(where: { $0 == "helper" })
-        else { throw FunctionalFailure.invalid("compiled original role map") }
+        let selectedRole = policy.primaryRole.rawValue
+        guard FunctionalProducerBuild.roles[context.owner]?.contains(selectedRole) == true else {
+            throw FunctionalFailure.invalid("compiled original role map") }
         role = worker.appendingPathComponent("Contents/Resources/Payload/" + context.owner + "/" + selectedRole + ".bundle")
         guard engine.executable == context.fixtureRoot + "/Fixture.app/Contents/MacOS/Edith",
             ui.executable == workerPath + "/Contents/MacOS/Edith",
@@ -91,12 +92,17 @@ final class FunctionalHeldPresentation {
         self.capability = context
         self.capabilitySHA256 = FunctionalBytes.digest(capabilityBytes)
         self.presentationID = presentationID
+    }
+
+    func prepareAccessibilityActuator() throws {
+        try requireCurrent()
+        if originalUI != nil { return }
         var owned: [String: FunctionalOriginalUI.ChooserPath] = [:]
-        for entry in context.ownedPaths {
-            owned[entry.name] = try FunctionalOriginalUI.ChooserPath(path: entry.path, kind: entry.kind, root: context.fixtureRoot, owner: context.owner)
+        for entry in capability.ownedPaths {
+            owned[entry.name] = try FunctionalOriginalUI.ChooserPath(path: entry.path, kind: entry.kind, root: capability.fixtureRoot, owner: capability.owner)
         }
         originalUI = try FunctionalOriginalUI(host: host,
-            windowTitle: "Synthetic functional " + context.owner + " " + context.phase + " " + context.session,
+            windowTitle: "Synthetic functional " + capability.owner + " " + capability.phase + " " + capability.session,
             ownedPaths: owned, requireHeld: { [weak self] in
                 guard let self else { throw FunctionalFailure.invalid("released presentation") }
                 try self.requireCurrent()
@@ -104,7 +110,7 @@ final class FunctionalHeldPresentation {
     }
 
     func performOriginalStep(_ supplied: [String: Any]) async throws -> Bool {
-        try requireCurrent()
+        try prepareAccessibilityActuator()
         guard let originalUI, let steps = compiledRecipe["steps"] as? [[String: Any]],
             nextStep < steps.count else { throw FunctionalFailure.invalid("source recipe exhausted") }
         var expected = steps[nextStep]
@@ -148,7 +154,8 @@ final class FunctionalHeldPresentation {
         ])
     }
 
-    func requireCurrent() throws {
+    private func requireOriginalBytes() throws {
+        try fileScopes.requireCurrent()
         for path in paths { try path.requireCurrent() }
         for (path, digest) in roleFiles {
             guard try FunctionalBytes.digest(path.read()) == digest
@@ -156,6 +163,13 @@ final class FunctionalHeldPresentation {
         }
         guard try Self.treePaths(role) == roleFiles.map({ $0.0.url.path })
         else { throw FunctionalFailure.invalid("original role tree changed") }
+        try hostSigner.verify(URL(fileURLWithPath: capability.fixtureRoot + "/Fixture.app"))
+        try workerSigner.verify(worker)
+        try roleSigner.verify(role)
+    }
+
+    func requireCurrent() throws {
+        try requireOriginalBytes()
         try producer.requireCurrent()
         try host.requireCurrent()
         try engine.requireCurrent()
@@ -166,7 +180,24 @@ final class FunctionalHeldPresentation {
         try roleSigner.verify(role)
     }
 
+    func requireCompletedOriginalSteps() throws {
+        guard let steps = compiledRecipe["steps"] as? [[String: Any]], nextStep == steps.count else {
+            throw FunctionalFailure.invalid("incomplete actual original controls") }
+    }
+
+    func requireObserver(_ caller: FunctionalBirth, engineReceiver: Bool) throws {
+        try requireCurrent()
+        guard caller == (engineReceiver ? engine : host) else {
+            throw FunctionalFailure.invalid("original observer kernel source") }
+        try caller.requireCurrent()
+    }
+
+    func requireForwardingSource(_ caller: FunctionalBirth) throws {
+        try requireObserver(caller, engineReceiver: false)
+    }
+
     func requireRetired() throws {
+        try requireOriginalBytes()
         try engine.requireAbsent()
         try ui.requireAbsent()
         originalUI = nil
@@ -237,6 +268,7 @@ enum FunctionalProducer {
         try emit(["schema": 1, "kind": "bootstrap", "sourceCommit": issuer.sourceCommit,
             "session": issuer.session, "issuerPublicKey": issuer.publicKey.base64EncodedString(), "producer": birth.object])
         var held: FunctionalHeldPresentation?
+        var phaseOrder: [String: Int] = [:]
         var count = 0
         let input = FileHandle.standardInput
         defer { try? input.close() }
@@ -265,8 +297,12 @@ enum FunctionalProducer {
                     let location = command["location"] as? String, let section = command["section"] as? String,
                     let hostPID = Int32(exactly: try FunctionalBytes.integer(command, "hostPID"))
                 else { throw FunctionalFailure.invalid("held original command") }
+                guard let owner = capability["owner"] as? String, HostedFunctionalActionContext.owners.contains(owner),
+                    phaseOrder[owner, default: 0] < 3 else { throw FunctionalFailure.invalid("source-owned journey phase exhausted") }
+                let expectedPhase = ["initial", "updated", "reinstalled"][phaseOrder[owner, default: 0]]
                 let current = try FunctionalHeldPresentation(capabilityBytes: FunctionalBytes.canonical(capability),
-                    presentationID: presentation, location: location, section: section, hostPID: hostPID, issuer: issuer)
+                    presentationID: presentation, location: location, section: section, hostPID: hostPID,
+                    expectedPhase: expectedPhase, issuer: issuer)
                 held = current
                 let descriptor = try current.descriptor(location: location, section: section, issuer: issuer)
                 try emit(["requestID": requestID, "operation": operation, "descriptor": try FunctionalBytes.object(descriptor)])
@@ -280,7 +316,9 @@ enum FunctionalProducer {
                     "receiverObservationRequired": true, "presentationID": held.presentationID])
             case "observe-rendered":
                 try FunctionalBytes.exact(command, ["requestID", "operation", "role", "label", "scope"])
-                guard let held, let original = held.originalUI,
+                guard let held else { throw FunctionalFailure.invalid("missing held rendered presentation") }
+                try held.prepareAccessibilityActuator()
+                guard let original = held.originalUI,
                     let role = command["role"] as? String, let label = command["label"] as? String,
                     let scope = command["scope"] as? [String: Any]
                 else { throw FunctionalFailure.invalid("rendered observation command") }
@@ -295,18 +333,24 @@ enum FunctionalProducer {
             case "retired":
                 try FunctionalBytes.exact(command, ["requestID", "operation"])
                 guard let current = held else { throw FunctionalFailure.invalid("no held generation") }
+                try current.requireCompletedOriginalSteps()
                 try current.requireRetired()
+                phaseOrder[current.capability.owner, default: 0] += 1
                 held = nil
                 try emit(["requestID": requestID, "operation": operation, "ownedBirthsAbsent": true])
             case "finish":
                 try FunctionalBytes.exact(command, ["requestID", "operation"])
-                guard held == nil else { throw FunctionalFailure.invalid("held presentation on finish") }
+                guard held == nil, Set(phaseOrder.keys) == HostedFunctionalActionContext.owners,
+                    phaseOrder.values.allSatisfy({ $0 == 3 })
+                else { throw FunctionalFailure.invalid("incomplete exact original owner journeys on finish") }
                 try emit(["requestID": requestID, "operation": operation, "producerJoinedByControllerRequired": true])
                 return
             default: throw FunctionalFailure.unavailable("unpublished producer operation")
             }
         }
-        guard line.isEmpty, held == nil else { throw FunctionalFailure.invalid("controller closed with held generation or partial command") }
+        guard line.isEmpty, held == nil, Set(phaseOrder.keys) == HostedFunctionalActionContext.owners,
+            phaseOrder.values.allSatisfy({ $0 == 3 })
+        else { throw FunctionalFailure.invalid("controller closed before exact original journeys completed") }
     }
 
     private static func emit(_ object: [String: Any]) throws {
