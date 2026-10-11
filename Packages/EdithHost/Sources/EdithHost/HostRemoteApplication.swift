@@ -20,6 +20,7 @@ final class HostRemoteApplication {
     static var fixtureObserveStopPreparation: ((FixtureStopPreparation) throws -> Void)?
     static var fixtureObserveCommandRetirement: ((UUID) throws -> Void)?
     private var fixtureRetirementObserver: NSObjectProtocol?
+    private var fixtureRetirementFailure: Error?
     static var fixtureAdmitConfiguration: ((HostRemoteConfiguration) async throws -> Void)?
     static var fixtureAdmitBeforeConstruction:
         (
@@ -85,7 +86,10 @@ final class HostRemoteApplication {
                         throw HostWorkerError.rejected
                     }
                     try observe(token)
-                } catch { self.shutdown() }
+                } catch {
+                    self.fixtureRetirementFailure = error
+                    self.shutdown()
+                }
             }
         }
         #endif
@@ -384,6 +388,7 @@ final class HostRemoteApplication {
                 guard response["ok"] as? Bool == true else { throw HostWorkerError.rejected }
             }
             #if EDITH_FUNCTIONAL_FIXTURE
+            if let failure = fixtureRetirementFailure { throw failure }
             guard let observe = Self.fixtureObserveStopPreparation else {
                 throw HostWorkerError.rejected
             }
