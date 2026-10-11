@@ -34,6 +34,7 @@ final class ShelfStore {
     private struct PendingPromiseAdoption {
         let id: UUID
         let url: URL
+        let itemID: UUID?
         let completion: (ShelfItem?) -> Void
     }
 
@@ -41,6 +42,9 @@ final class ShelfStore {
     let root: URL
     private var changeObserver: NSObjectProtocol?
     private var incomingDirectories: [UUID: ShelfIncomingDirectory] = [:]
+    private var heldPromiseDestinations: Set<UUID> = []
+    private var heldPromiseAdoptions: [UUID: Int] = [:]
+    private var discardedPromiseDestinations: Set<UUID> = []
     private var retainedActionSelection: ShelfPinnedSelection?
     private var pendingPromiseAdoptions: [PendingPromiseAdoption] = []
     private var indexRefresh: Task<Void, Never>?
@@ -59,8 +63,8 @@ final class ShelfStore {
             NotchWorkerIPC.Name.shelfChanged,
             info: { [weak self] info in
                 guard info["sender"] as? String != Self.senderID else { return }
-                Task { @MainActor in
-                    guard let self else { return }
+                MainActor.assumeIsolated {
+                    guard let self, !self.stopped else { return }
                     if self.reload() { self.onExternalChange?() }
                 }
             })
@@ -74,6 +78,7 @@ final class ShelfStore {
     }
 
     private func enqueueIndexRefresh(_ operation: @escaping @Sendable () -> [ShelfItem]?) {
+        guard !stopped else { return }
         let previous = indexRefresh
         indexRefresh = Task { [weak self] in
             await previous?.value
@@ -94,13 +99,28 @@ final class ShelfStore {
         items = newItems
     }
 
-    func shutdown() {
+    func beginSuspension() {
         stopped = true
-        indexRefresh?.cancel(); indexRefresh = nil
+        indexRefresh?.cancel()
         onExternalChange = nil
         NotchWorkerIPC.stopObserving(changeObserver); changeObserver = nil
+    }
+
+    func stopAndWait() async {
+        beginSuspension()
+        await indexRefresh?.value
+        indexRefresh = nil
+    }
+
+    func shutdown() {
+        beginSuspension()
         cancelActionSelection()
         for id in Array(incomingDirectories.keys) { discardPromiseDestination(id: id) }
+    }
+
+    func shutdownAndWait() async {
+        shutdown()
+        await stopAndWait()
     }
 
     deinit {
@@ -111,7 +131,7 @@ final class ShelfStore {
 
     @discardableResult
     func reload() -> Bool {
-        guard retainedActionSelection == nil else { return false }
+        guard !stopped, retainedActionSelection == nil else { return false }
         guard let selection = try? ShelfMutationExecution.pinnedSelection(root: root) else {
             return false
         }
@@ -120,7 +140,7 @@ final class ShelfStore {
     }
 
     func actionSelection(itemIDs: Set<UUID>) throws -> ShelfStoreActionSelection {
-        guard retainedActionSelection == nil else { throw ShelfActionSelectionError.busy }
+        guard !stopped, retainedActionSelection == nil else { throw ShelfActionSelectionError.busy }
         let selection: ShelfPinnedSelection
         do {
             selection = try ShelfMutationExecution.pinnedSelection(root: root)
@@ -147,30 +167,37 @@ final class ShelfStore {
     }
 
     func retainActionSelection(_ selection: ShelfPinnedSelection) -> Bool {
-        guard retainedActionSelection == nil else { return false }
+        guard !stopped, retainedActionSelection == nil else { return false }
         retainedActionSelection = selection
         return true
     }
 
     func releaseActionSelection() {
+        guard !stopped else { cancelActionSelection(); return }
         retainedActionSelection = nil
         let pending = pendingPromiseAdoptions
         pendingPromiseAdoptions = []
-        for adoption in pending { finishPromiseAdoption(adoption) }
+        for adoption in pending {
+            finishPromiseAdoption(adoption)
+            releasePromiseAdoption(id: adoption.id)
+        }
     }
 
     func cancelActionSelection() {
         retainedActionSelection = nil
         let pending = pendingPromiseAdoptions
         pendingPromiseAdoptions = []
-        for adoption in pending { discardPromiseDestination(id: adoption.id) }
+        for adoption in pending {
+            discardPromiseDestination(id: adoption.id)
+            releasePromiseAdoption(id: adoption.id)
+        }
     }
 
     func fileURL(for item: ShelfItem) -> URL { root.appendingPathComponent(item.name) }
 
     @discardableResult
     func addCopy(of source: URL) -> ShelfItem? {
-        guard retainedActionSelection == nil else { return nil }
+        guard !stopped, retainedActionSelection == nil else { return nil }
         guard
             let result = try? ShelfMutationExecution.addCopy(
                 of: source, root: root, sender: Self.senderID)
@@ -181,7 +208,7 @@ final class ShelfStore {
 
     @discardableResult
     func addText(_ text: String) -> ShelfItem? {
-        guard retainedActionSelection == nil else { return nil }
+        guard !stopped, retainedActionSelection == nil else { return nil }
         guard
             let result = try? ShelfMutationExecution.addText(
                 text, root: root, sender: Self.senderID)
@@ -191,12 +218,13 @@ final class ShelfStore {
     }
 
     @discardableResult
-    func adopt(fileAt url: URL, id: UUID) -> ShelfItem? {
-        guard retainedActionSelection == nil else { return nil }
+    func adopt(fileAt url: URL, id: UUID, itemID: UUID? = nil) -> ShelfItem? {
+        guard !stopped, retainedActionSelection == nil else { return nil }
         guard let incoming = incomingDirectories[id] else { return nil }
         do {
             let result = try ShelfMutationExecution.adopt(
-                fileAt: url, root: root, id: id, incoming: incoming, sender: Self.senderID)
+                fileAt: url, root: root, id: itemID ?? id, incoming: incoming, sender: Self.senderID
+            )
             discardPromiseDestination(id: id)
             publishMutation(result.items)
             return result.item
@@ -206,16 +234,18 @@ final class ShelfStore {
     }
 
     func adoptWhenAvailable(
-        fileAt url: URL, id: UUID, completion: @escaping (ShelfItem?) -> Void
+        fileAt url: URL, id: UUID, itemID: UUID? = nil, completion: @escaping (ShelfItem?) -> Void
     ) {
-        guard incomingDirectories[id] != nil,
-            !pendingPromiseAdoptions.contains(where: { $0.id == id })
+        guard !stopped, incomingDirectories[id] != nil,
+            !pendingPromiseAdoptions.contains(where: { $0.id == id && $0.itemID == itemID })
         else {
             completion(nil)
             return
         }
-        let adoption = PendingPromiseAdoption(id: id, url: url, completion: completion)
-        guard retainedActionSelection == nil else {
+        let adoption = PendingPromiseAdoption(
+            id: id, url: url, itemID: itemID, completion: completion)
+        guard !stopped, retainedActionSelection == nil else {
+            heldPromiseAdoptions[id, default: 0] += 1
             pendingPromiseAdoptions.append(adoption)
             return
         }
@@ -223,20 +253,49 @@ final class ShelfStore {
     }
 
     func promiseDestination(id: UUID) -> URL? {
-        guard retainedActionSelection == nil else { return nil }
+        guard !stopped, retainedActionSelection == nil else { return nil }
         guard let incoming = try? ShelfIncomingDirectory() else { return nil }
         incomingDirectories[id] = incoming
         return incoming.url
     }
 
+    func holdPromiseDestination(id: UUID) {
+        guard incomingDirectories[id] != nil else { return }
+        heldPromiseDestinations.insert(id)
+    }
+
+    func releasePromiseDestination(id: UUID) {
+        heldPromiseDestinations.remove(id)
+        if discardedPromiseDestinations.contains(id) || stopped {
+            discardPromiseDestination(id: id)
+        }
+    }
+
+    private func releasePromiseAdoption(id: UUID) {
+        let count = heldPromiseAdoptions[id, default: 0]
+        if count <= 1 {
+            heldPromiseAdoptions[id] = nil
+        } else {
+            heldPromiseAdoptions[id] = count - 1
+        }
+        if discardedPromiseDestinations.contains(id) || stopped {
+            discardPromiseDestination(id: id)
+        }
+    }
+
     func discardPromiseDestination(id: UUID) {
+        guard !heldPromiseDestinations.contains(id), heldPromiseAdoptions[id] == nil else {
+            discardedPromiseDestinations.insert(id)
+            return
+        }
+        discardedPromiseDestinations.remove(id)
         pendingPromiseAdoptions.removeAll { $0.id == id }
         guard let incoming = incomingDirectories.removeValue(forKey: id) else { return }
         try? incoming.discard()
     }
 
     private func finishPromiseAdoption(_ adoption: PendingPromiseAdoption) {
-        let item = adopt(fileAt: adoption.url, id: adoption.id)
+        let item = adopt(fileAt: adoption.url, id: adoption.id, itemID: adoption.itemID)
         if item == nil { discardPromiseDestination(id: adoption.id) }
         adoption.completion(item)
     }
@@ -247,7 +306,7 @@ final class ShelfStore {
     }
 
     func setPositions(_ positions: [UUID: CGPoint]) {
-        guard retainedActionSelection == nil else { return }
+        guard !stopped, retainedActionSelection == nil else { return }
         guard
             let result = try? ShelfMutationExecution.updatePositions(
                 positions, root: root, sender: Self.senderID)
@@ -264,14 +323,14 @@ final class ShelfStore {
     }
 
     func remove(_ members: [ShelfItem]) throws {
-        guard retainedActionSelection == nil else { throw ShelfActionSelectionError.busy }
+        guard !stopped, retainedActionSelection == nil else { throw ShelfActionSelectionError.busy }
         let result = try ShelfMutationExecution.remove(
             ids: Set(members.map(\.id)), root: root, sender: Self.senderID)
         publishMutation(result.items)
     }
 
     func purgeExpired(keep: ShelfKeepDuration, now: Date = Date()) {
-        guard retainedActionSelection == nil else { return }
+        guard !stopped, retainedActionSelection == nil else { return }
         let indexRoot = root
         let sender = Self.senderID
         enqueueIndexRefresh {
