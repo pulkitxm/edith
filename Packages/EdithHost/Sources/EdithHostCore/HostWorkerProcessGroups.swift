@@ -2,7 +2,18 @@ import Darwin
 import EdithExtensionSupport
 import Foundation
 
+#if EDITH_FUNCTIONAL_FIXTURE
+public struct HostWorkerSignalAttempt: Codable, Sendable {
+    public let target: Int32
+    public let witness: ExtensionProcessIdentity
+}
+#endif
+
 struct HostWorkerProcessGroups {
+    #if EDITH_FUNCTIONAL_FIXTURE
+    private(set) var observedBirths: [ExtensionProcessIdentity] = []
+    private(set) var signalAttempts: [HostWorkerSignalAttempt] = []
+    #endif
     private struct Ownership {
         let leader: ExtensionProcessIdentity
         var witnesses: [ExtensionProcessIdentity]
@@ -66,6 +77,9 @@ struct HostWorkerProcessGroups {
     mutating func captureWorker(_ identity: ExtensionProcessIdentity) throws {
         guard read(identity.pid) == identity else { throw HostWorkerError.invalidResponse }
         worker = Ownership(leader: identity, witnesses: [identity] + descendants(identity.pid))
+        #if EDITH_FUNCTIONAL_FIXTURE
+        if let worker { record(worker) }
+        #endif
     }
 
     mutating func register(_ resource: HostWorkerProcessGroup, owner: Int32) throws {
@@ -79,6 +93,9 @@ struct HostWorkerProcessGroups {
             throw HostWorkerError.invalidResponse
         }
         let ownership = Ownership(leader: identity, witnesses: [identity] + members(resource.pid))
+        #if EDITH_FUNCTIONAL_FIXTURE
+        record(ownership)
+        #endif
         if resource.pid == owner {
             worker = Ownership(
                 leader: identity, witnesses: ownership.witnesses + (worker?.witnesses ?? []))
@@ -102,7 +119,19 @@ struct HostWorkerProcessGroups {
     mutating func refresh(owner: Int32) {
         worker = worker.flatMap { refreshed($0, owner: owner) }
         groups = groups.compactMapValues { refreshed($0, owner: owner) }
+        #if EDITH_FUNCTIONAL_FIXTURE
+        if let worker { record(worker) }
+        for ownership in groups.values { record(ownership) }
+        #endif
     }
+
+    #if EDITH_FUNCTIONAL_FIXTURE
+    private mutating func record(_ ownership: Ownership) {
+        for birth in ownership.witnesses where !observedBirths.contains(birth) {
+            observedBirths.append(birth)
+        }
+    }
+    #endif
 
     private func refreshed(_ ownership: Ownership, owner: Int32) -> Ownership? {
         let live = ownership.witnesses.filter {
@@ -129,15 +158,29 @@ struct HostWorkerProcessGroups {
         for ownership in owned { terminate(ownership, owner: owner) }
     }
 
-    private func terminate(_ ownership: Ownership, owner: Int32) {
+    mutating func terminateCaptured(_ identity: ExtensionProcessIdentity) {
+        sendSignal(identity.pid, witness: identity)
+    }
+
+    private mutating func sendSignal(_ target: Int32, witness: ExtensionProcessIdentity) {
+        guard read(witness.pid) == witness,
+            target > 0 || group(witness.pid) == -target
+        else { return }
+        #if EDITH_FUNCTIONAL_FIXTURE
+        signalAttempts.append(.init(target: target, witness: witness))
+        #endif
+        signal(target)
+    }
+
+    private mutating func terminate(_ ownership: Ownership, owner: Int32) {
         let leader = ownership.leader
-        if ownership.witnesses.contains(where: {
+        if let witness = ownership.witnesses.first(where: {
             read($0.pid) == $0 && group($0.pid) == leader.pid
         }) {
-            signal(-leader.pid)
+            sendSignal(-leader.pid, witness: witness)
         }
         for witness in ownership.witnesses where read(witness.pid) == witness {
-            signal(witness.pid)
+            sendSignal(witness.pid, witness: witness)
         }
     }
 

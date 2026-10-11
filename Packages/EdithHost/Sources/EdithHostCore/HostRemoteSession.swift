@@ -7,6 +7,23 @@ import Foundation
 @MainActor
 public final class HostRemoteSession {
     #if EDITH_FUNCTIONAL_FIXTURE
+    public struct FixtureInvalidationAttempt: Sendable {
+        public let site: String
+        public let peer: HostRemoteProcessIdentity?
+        public let peerWasRunning: Bool?
+    }
+    private var fixtureInvalidations: [FixtureInvalidationAttempt] = []
+    public struct FixtureStopReceipt: Sendable {
+        public let configuration: HostRemoteConfiguration
+        public let ui: HostRemoteProcessIdentity?
+        public let engine: HostRemoteKernelIdentity?
+        public let observedBirths: [ExtensionProcessIdentity]
+        public let signalAttempts: [HostWorkerSignalAttempt]
+        public let joinedTasks: [String]
+        public let invalidations: [FixtureInvalidationAttempt]
+    }
+    public static var fixtureObserveStop: ((FixtureStopReceipt) throws -> Void)?
+    private var fixturePendingStopReceipt: FixtureStopReceipt?
     public struct FixtureEngineInvocation: Sendable {
         public let ui: HostRemoteProcessIdentity
         public let engine: HostRemoteKernelIdentity
@@ -163,7 +180,7 @@ public final class HostRemoteSession {
         guard peer == nil else { return }
         rejectedPeer =
             (try? HostRemoteProcessIdentity.read(bootstrap.processIdentifier)) ?? rejectedPeer
-        process?.invalidate()
+        if let process { invalidateProcess(process, site: "rejected-candidate") }
         process = nil
     }
 
@@ -228,6 +245,14 @@ public final class HostRemoteSession {
             try recordNativePeer(peer)
             unresolvedLaunch = false
         } catch {}
+        invalidateProcess(process, site: "unconfigured-retirement")
+    }
+
+    private func invalidateProcess(_ process: AppExtensionProcess, site: String) {
+        #if EDITH_FUNCTIONAL_FIXTURE
+        fixtureInvalidations.append(
+            .init(site: site, peer: peer, peerWasRunning: peer?.isRunning))
+        #endif
         process.invalidate()
     }
 
@@ -242,7 +267,8 @@ public final class HostRemoteSession {
         let task = Task { [self] in
             let process = try await prepareProcess()
             guard isAvailable, self.peer == peer else {
-                process.invalidate(); throw HostWorkerError.exited
+                invalidateProcess(process, site: "configuration-rejected")
+                throw HostWorkerError.exited
             }
             self.process = process
             let bootstrap = try process.makeXPCConnection()
@@ -303,9 +329,35 @@ public final class HostRemoteSession {
         if let failure { throw failure }
     }
 
+    #if EDITH_FUNCTIONAL_FIXTURE
+    public static func fixtureStopAllWithoutEscalation(extensionID: String) async throws {
+        var failure: Error?
+        for session in Array(retained.values) where session.configuration.package.id == extensionID
+        {
+            do { try await session.stop(allowEscalation: false) } catch { failure = error }
+        }
+        if let failure { throw failure }
+    }
+    #endif
+
     public func stop() async throws {
+        try await stop(allowEscalation: true)
+    }
+
+    private func stop(allowEscalation: Bool) async throws {
         guard !stopped else { return }
         guard !stopping else { throw HostWorkerError.stillRunning }
+        #if EDITH_FUNCTIONAL_FIXTURE
+        guard let observe = Self.fixtureObserveStop else { throw HostWorkerError.rejected }
+        if let receipt = fixturePendingStopReceipt {
+            try observe(receipt)
+            fixturePendingStopReceipt = nil
+            stopped = true
+            Self.retained[configuration.session] = nil
+            didStop?()
+            return
+        }
+        #endif
         stopping = true
         activationExpiry?.cancel()
         activationExpiry = nil
@@ -318,7 +370,9 @@ public final class HostRemoteSession {
                 launching?.cancel()
             },
             joinLaunch: {
-                if let launching, let process = try? await launching.value { process.invalidate() }
+                if let launching, let process = try? await launching.value, allowEscalation {
+                    invalidateProcess(process, site: "joined-launch")
+                }
             },
             joinConfiguration: { _ = try? await configuring?.value })
         handles.values.forEach { $0.detach() }
@@ -332,12 +386,11 @@ public final class HostRemoteSession {
         channel = nil
         bootstrap?.invalidate()
         bootstrap = nil
-        process?.invalidate()
-        process = nil
+        if allowEscalation, let process { invalidateProcess(process, site: "stop") }
         if let peer {
             nativeProcesses.refresh(owner: peer.pid)
             for _ in 0..<30 where peer.isRunning { try? await Task.sleep(for: .milliseconds(100)) }
-            nativeProcesses.terminate(owner: peer.pid)
+            if allowEscalation { nativeProcesses.terminate(owner: peer.pid) }
             for _ in 0..<20 where peer.isRunning { try? await Task.sleep(for: .milliseconds(100)) }
             guard !peer.isRunning else { throw HostWorkerError.stillRunning }
             let until = ContinuousClock.now + .seconds(3)
@@ -356,12 +409,30 @@ public final class HostRemoteSession {
             guard !rejectedPeer.isRunning else { throw HostWorkerError.stillRunning }
             self.rejectedPeer = nil
         }
-        guard !unresolvedLaunch else { throw HostWorkerError.stillRunning }
+        guard !unresolvedLaunch, process == nil || peer != nil else {
+            throw HostWorkerError.stillRunning
+        }
+        if !allowEscalation, let process {
+            invalidateProcess(process, site: "retired-process-release")
+        }
+        process = nil
         nativeRefresh?.cancel()
         nativeRefresh = nil
-        stopped = true
         lease?.close()
         lease = nil
+        #if EDITH_FUNCTIONAL_FIXTURE
+        let receipt = FixtureStopReceipt(
+            configuration: configuration, ui: peer, engine: engineIdentity,
+            observedBirths: nativeProcesses.observedBirths,
+            signalAttempts: nativeProcesses.signalAttempts,
+            joinedTasks: [("launch", launching != nil), ("configure", configuring != nil)]
+                .filter { $0.1 }.map { $0.0 },
+            invalidations: fixtureInvalidations)
+        fixturePendingStopReceipt = receipt
+        try observe(receipt)
+        fixturePendingStopReceipt = nil
+        #endif
+        stopped = true
         Self.retained[configuration.session] = nil
         didStop?()
     }
@@ -440,7 +511,10 @@ public final class HostRemoteSession {
             return channel
         } catch {
             channel.invalidate()
-            if peer == nil { process?.invalidate(); process = nil }
+            if peer == nil {
+                if let process { invalidateProcess(process, site: "connection-rejected") }
+                process = nil
+            }
             throw error
         }
     }

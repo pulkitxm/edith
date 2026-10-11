@@ -36,13 +36,27 @@ private actor CommandCleanupGate {
                 await withCheckedContinuation { owner = $0 }
                 return Data()
             })
-        while owner == nil { await Task.yield() }
+        let ownerDeadline = ContinuousClock.now + .seconds(2)
+        while owner == nil, ContinuousClock.now < ownerDeadline { await Task.yield() }
+        try #require(owner != nil)
+        defer { owner?.resume() }
         registry.cancel(token.uuidString)
         #expect(callbackReturned)
-        let suspension = Task { await registry.suspendAndWait() }
-        while registry.pendingJoins == 0 { await Task.yield() }
+        var suspensionCompleted = false
+        let suspension = Task {
+            let result = await registry.suspendAndWait()
+            suspensionCompleted = true
+            return result
+        }
+        let joinDeadline = ContinuousClock.now + .seconds(2)
+        while registry.pendingJoins == 0, ContinuousClock.now < joinDeadline { await Task.yield() }
+        try #require(registry.pendingJoins > 0)
         #expect(joined == 0)
         owner?.resume()
+        owner = nil
+        let completionDeadline = ContinuousClock.now + .seconds(2)
+        while !suspensionCompleted, ContinuousClock.now < completionDeadline { await Task.yield() }
+        try #require(suspensionCompleted)
         let suspended = await suspension.value
         #expect(joined == 1)
         #expect(registry.resume(suspended))

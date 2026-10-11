@@ -4,6 +4,22 @@ import Foundation
 
 @MainActor
 public final class HostWorker {
+    #if EDITH_FUNCTIONAL_FIXTURE
+    public struct FixtureStopReceipt: Codable, Sendable {
+        public let configuration: HostWorkerConfiguration
+        public let reason: HostWorkerStopReason
+        public let worker: ExtensionProcessIdentity?
+        public let preparationRequest: HostWorkerRequest?
+        public let preparationResponse: HostWorkerResponse?
+        public let stopRequest: HostWorkerRequest?
+        public let stopResponse: HostWorkerResponse?
+        public let observedBirths: [ExtensionProcessIdentity]
+        public let signalAttempts: [HostWorkerSignalAttempt]
+        public let terminationStatus: Int32?
+        public let terminationReason: Int?
+    }
+    public static var fixtureObserveStop: ((FixtureStopReceipt) throws -> Void)?
+    #endif
     private struct Pending {
         let continuation: CheckedContinuation<HostWorkerResponse, any Error>
         let timeout: Task<Void, Never>
@@ -225,11 +241,22 @@ public final class HostWorker {
         try await prepareStop(reason: reason)
         ready = false
         var failure: Error?
+        #if EDITH_FUNCTIONAL_FIXTURE
+        var stopRequest: HostWorkerRequest?
+        var stopResponse: HostWorkerResponse?
+        #endif
         if process.isRunning {
             do {
+                let stop = HostWorkerRequest(operation: "stop", stopReason: reason)
+                #if EDITH_FUNCTIONAL_FIXTURE
+                stopRequest = stop
+                #endif
                 let response = try await request(
-                    HostWorkerRequest(operation: "stop", stopReason: reason),
+                    stop,
                     timeout: min(requestTimeout, .seconds(3)))
+                #if EDITH_FUNCTIONAL_FIXTURE
+                stopResponse = response
+                #endif
                 guard response.version == configuration.version else {
                     throw HostWorkerError.invalidResponse
                 }
@@ -251,6 +278,19 @@ public final class HostWorker {
         guard !requiresRecovery else {
             throw HostWorkerError.disableRejected("Cleanup must be retried in a recovery worker.")
         }
+        #if EDITH_FUNCTIONAL_FIXTURE
+        guard let observe = Self.fixtureObserveStop else { throw HostWorkerError.rejected }
+        let terminated = process.processIdentifier > 1 && !process.isRunning
+        try observe(
+            FixtureStopReceipt(
+                configuration: configuration, reason: reason, worker: workerIdentity,
+                preparationRequest: preparationRequest, preparationResponse: preparationResponse,
+                stopRequest: stopRequest, stopResponse: stopResponse,
+                observedBirths: ownedProcessGroups.observedBirths,
+                signalAttempts: ownedProcessGroups.signalAttempts,
+                terminationStatus: terminated ? process.terminationStatus : nil,
+                terminationReason: terminated ? process.terminationReason.rawValue : nil))
+        #endif
     }
 
     private func request(_ request: HostWorkerRequest, timeout: Duration? = nil) async throws
@@ -490,7 +530,7 @@ public final class HostWorker {
         cancelNavigation()
         terminateGroup()
         if process.isRunning, let workerIdentity, workerIdentity.isAlive {
-            kill(workerIdentity.pid, SIGKILL)
+            ownedProcessGroups.terminateCaptured(workerIdentity)
         }
     }
 
