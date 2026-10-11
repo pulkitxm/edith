@@ -6,6 +6,7 @@ import EdithHostCore
 import EdithExtensionSupport
 import ExtensionMarketplace
 import Foundation
+import WorkerLifecycleFixtureSupport
 
 @main
 struct HostLifecycleHarness {

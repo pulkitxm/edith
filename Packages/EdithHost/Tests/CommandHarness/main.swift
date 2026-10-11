@@ -4,6 +4,7 @@ import EdithHostCore
 import EdithExtensionSupport
 import ExtensionMarketplace
 import Foundation
+import WorkerLifecycleFixtureSupport
 
 @main
 struct HostCommandHarness {
@@ -15,7 +16,7 @@ struct HostCommandHarness {
         let app = URL(fileURLWithPath: arguments[1]).standardizedFileURL
         guard app == root.appendingPathComponent("Fixture.app").standardizedFileURL,
             let bundle = Bundle(url: app), let identifier = bundle.bundleIdentifier,
-            identifier.hasPrefix("com.pulkit.edith.tests.command-"),
+            identifier.hasPrefix("com.pulkit.edith.tests.worker-"),
             HostContract.compatibility == "edith-host-2"
         else {
             throw NSError(
@@ -25,6 +26,13 @@ struct HostCommandHarness {
                         "Host identity mismatch: app=\(app), expected=\(root.appendingPathComponent("Fixture.app").standardizedFileURL), identifier=\(Bundle(url: app)?.bundleIdentifier ?? "missing"), ABI=\(HostContract.compatibility)"
                 ])
         }
+        let fixture = try WorkerLifecycleFixture(root: root, hostIdentifier: identifier)
+        let home = try fixture.home(for: "keepAwake")
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["EDITH_EXTENSION_FIXTURE_HOME"] == home.path,
+            environment["HOME"] == home.path, environment["CFFIXED_USER_HOME"] == home.path,
+            environment["EDITH_EXTENSION_TEST_HOST_IDENTIFIER"] == identifier
+        else { throw HostWorkerError.rejected }
         try ExtensionCodeSignature.verifyDevelopment(app)
         let executable = app.appendingPathComponent("Contents/MacOS/Edith")
         let identity = try HostIdentity(identifier: identifier, supportDirectory: root)
@@ -51,6 +59,11 @@ struct HostCommandHarness {
             let data = identity.extensionDirectory(package.id)
             try? FileManager.default.removeItem(at: data)
             try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+            let selection = WorkerLifecycleFixture.Selection(
+                extensionID: package.id, dataDirectory: data,
+                roleDirectory: store.roleBundle(for: package, role: .helper),
+                version: package.version, hostABI: package.hostABI)
+            try fixture.issue(selection, hostApp: app, defaultsSuite: suite)
             let log = data.appendingPathComponent("worker.log")
             FileManager.default.createFile(atPath: log.path, contents: nil)
             let errorOutput = try FileHandle(forWritingTo: log)
@@ -61,6 +74,7 @@ struct HostCommandHarness {
                 executable: executable, requestTimeout: .seconds(2), errorOutput: errorOutput)
             var stage = "start"
             do {
+                try fixture.validateExact(selection, hostApp: app, defaultsSuite: suite)
                 try await worker.start()
                 stage = "child command"
                 guard let pid = worker.processIdentifier,

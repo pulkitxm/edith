@@ -2,11 +2,11 @@ import CoreFoundation
 import Darwin
 import Foundation
 
-enum WorkerLifecycleFixtureError: Error {
+public enum WorkerLifecycleFixtureError: Error {
     case unsupported, identity, path, marker, package
 }
 
-struct WorkerLifecycleFixture {
+public struct WorkerLifecycleFixture {
     static let inertIDs: Set<String> = [
         "focusDim", "windowSweaters", "micMute", "keystrokeHighlight", "presenter",
         "colorPicker", "systemStats", "emoji", "music", "plugins", "studio",
@@ -23,24 +23,35 @@ struct WorkerLifecycleFixture {
         "quinjet", "database",
     ]
 
-    static func requireSupported(_ id: String) throws {
+    public static func requireSupported(_ id: String) throws {
         guard supportedIDs.contains(id) else {
             throw WorkerLifecycleFixtureError.unsupported
         }
     }
 
-    struct Selection: Equatable {
-        let extensionID: String
-        let dataDirectory: URL
-        let roleDirectory: URL
-        let version: String
-        let hostABI: String
+    public struct Selection: Equatable {
+        public let extensionID: String
+        public let dataDirectory: URL
+        public let roleDirectory: URL
+        public let version: String
+        public let hostABI: String
+
+        public init(
+            extensionID: String, dataDirectory: URL, roleDirectory: URL,
+            version: String, hostABI: String
+        ) {
+            self.extensionID = extensionID
+            self.dataDirectory = dataDirectory
+            self.roleDirectory = roleDirectory
+            self.version = version
+            self.hostABI = hostABI
+        }
     }
 
     let root: URL
     let hostIdentifier: String
 
-    init(root: URL, hostIdentifier: String) throws {
+    public init(root: URL, hostIdentifier: String) throws {
         let prefix = "com.pulkit.edith.tests.worker-"
         guard hostIdentifier.hasPrefix(prefix),
             UUID(uuidString: String(hostIdentifier.dropFirst(prefix.count))) != nil
@@ -53,7 +64,7 @@ struct WorkerLifecycleFixture {
         self.hostIdentifier = hostIdentifier
     }
 
-    func home(for id: String) throws -> URL {
+    public func home(for id: String) throws -> URL {
         try Self.requireSupported(id)
         guard Self.validComponent(id) else { throw WorkerLifecycleFixtureError.identity }
         let home = root.appendingPathComponent(id + "-home", isDirectory: true)
@@ -66,7 +77,7 @@ struct WorkerLifecycleFixture {
         return home
     }
 
-    func issue(_ selection: Selection, hostApp: URL, defaultsSuite: String) throws {
+    public func issue(_ selection: Selection, hostApp: URL, defaultsSuite: String) throws {
         try Task.checkCancellation()
         try validate(selection, hostApp: hostApp, defaultsSuite: defaultsSuite)
         let home = try home(for: selection.extensionID)
@@ -123,7 +134,7 @@ struct WorkerLifecycleFixture {
         }
     }
 
-    func validateExact(_ selection: Selection, hostApp: URL, defaultsSuite: String) throws {
+    public func validateExact(_ selection: Selection, hostApp: URL, defaultsSuite: String) throws {
         try validate(selection, hostApp: hostApp, defaultsSuite: defaultsSuite)
         let home = try home(for: selection.extensionID)
         let directory = open(home.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
@@ -136,7 +147,7 @@ struct WorkerLifecycleFixture {
         try validateValues(values, selection: selection, exactVersion: true)
     }
 
-    func remove(_ selection: Selection) throws {
+    public func remove(_ selection: Selection) throws {
         try Self.validateDirectory(root, mode: 0o700)
         let home = try home(for: selection.extensionID)
         let directory = open(home.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
