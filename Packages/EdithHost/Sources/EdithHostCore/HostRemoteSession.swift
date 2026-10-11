@@ -244,14 +244,18 @@ public final class HostRemoteSession {
                 through: bootstrap, executable: executable,
                 rejectedPeer: { [weak self] candidate in self?.rejectedPeer = candidate },
                 receive: receive)
-            guard isAvailable, let peer = channel.peer else {
-                channel.invalidate()
-                throw HostWorkerError.rejected
+            do {
+                guard isAvailable, let peer = channel.peer else {
+                    throw HostWorkerError.rejected
+                }
+                try recordNativePeer(peer)
+                try Task.checkCancellation()
+                fixturePreparedChannel = channel
+                return peer
+            } catch {
+                await channel.invalidateAndWait()
+                throw error
             }
-            try recordNativePeer(peer)
-            fixturePreparedChannel = channel
-            try Task.checkCancellation()
-            return peer
         }
         fixturePreparingPeer = task
         defer { fixturePreparingPeer = nil }
@@ -289,7 +293,7 @@ public final class HostRemoteSession {
             let channel = try await HostRemoteChannel.connect(
                 through: bootstrap, executable: executable,
                 rejectedPeer: { [weak self] peer in self?.rejectedPeer = peer })
-            defer { channel.invalidate() }
+            defer { retireChannel(channel) }
             guard let peer = channel.peer else { throw HostWorkerError.rejected }
             try recordNativePeer(peer)
             unresolvedLaunch = false
@@ -339,15 +343,18 @@ public final class HostRemoteSession {
             channel = try await HostRemoteChannel.connect(
                 through: bootstrap, executable: executable, expectedPeer: peer, receive: receive)
             #endif
-            guard isAvailable, self.peer == peer else {
-                channel.invalidate(); throw HostWorkerError.exited
+            do {
+                guard isAvailable, self.peer == peer else { throw HostWorkerError.exited }
+                _ = try await channel.request(
+                    HostRemoteCommand(
+                        operation: "configure", payload: HostRemoteWire.encode(configuration)))
+                try Task.checkCancellation()
+                guard isAvailable else { throw HostWorkerError.exited }
+                self.channel = channel
+            } catch {
+                await channel.invalidateAndWait()
+                throw error
             }
-            _ = try await channel.request(
-                HostRemoteCommand(
-                    operation: "configure", payload: HostRemoteWire.encode(configuration)))
-            try Task.checkCancellation()
-            guard isAvailable else { channel.invalidate(); throw HostWorkerError.exited }
-            self.channel = channel
             activationExpiry?.cancel()
             activationExpiry = nil
             didAuthenticate?(identity.id)
@@ -623,7 +630,7 @@ public final class HostRemoteSession {
             handle.isReserved = true
             return channel
         } catch {
-            channel.invalidate()
+            await channel.invalidateAndWait()
             if peer == nil {
                 if let process { invalidateProcess(process, site: "connection-rejected") }
                 process = nil
@@ -679,7 +686,7 @@ public final class HostRemoteSceneHandle {
             let channel = try await session.connect(
                 handle: self, bootstrap: bootstrap, receive: receive)
             guard !closed, let initial = desired else {
-                channel.invalidate()
+                await channel.invalidateAndWait()
                 throw HostWorkerError.exited
             }
             self.channel = channel
