@@ -1560,6 +1560,7 @@
         "Extensions/studio/VideoEditor/VideoReviewBorders.swift",
         "Extensions/studio/VideoEditor/VideoReviewOverlays.swift",
         "Extensions/studio/VideoEditor/VideoReviewReport.swift",
+        "Extensions/studio/VideoEditor/VideoSegmentIndex.swift",
         "Extensions/studio/VideoEditor/VideoSettings.swift",
         "Extensions/studio/VideoEditor/VideoSourceGeometry.swift",
         "Extensions/studio/VideoEditor/VideoSourceMetadata.swift",
