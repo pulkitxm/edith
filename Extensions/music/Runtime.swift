@@ -219,6 +219,16 @@ final class ExtensionRuntime: NSObject {
             guard let controller = embeddedUI.view(input) else {
                 return ["ok": false] as NSDictionary
             }
+#if EDITH_FUNCTIONAL_FIXTURE
+            if let value = input["presentationID"] as? String, let id = UUID(uuidString: value),
+                let admission = admittedUI[id]
+            {
+                do { try admission.requireCurrent() } catch {
+                    _ = embeddedUI.release(input)
+                    return ["ok": false] as NSDictionary
+                }
+            }
+#endif
             return controller
         case "releaseUI":
             _ = embeddedUI.release(input)
