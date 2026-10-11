@@ -38,6 +38,7 @@ struct RateLimitsDialsView: View {
     }
 
     private func reload() {
+        let client = client
         reloadJob?.cancel()
         reloadJob = Task {
             await reloadLoad.perform(operation: {
@@ -485,6 +486,7 @@ struct LimitsCardView: View {
     }
 
     private func reloadAll() {
+        let client = client
         let preferred = LimitProvider(rawValue: selectedProviderRaw) ?? .claude
         reloadJob?.cancel()
         reloadJob = Task {
