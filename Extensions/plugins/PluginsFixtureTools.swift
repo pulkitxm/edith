@@ -41,6 +41,38 @@ struct PluginsFixtureTools: Sendable {
         }
     }
 
+    static func admittedAgents(_ data: Data) throws -> [SkillAgent] {
+        let fields = try WorkerFixtureJSON.object(data, maximumBytes: 8192)
+        guard Set(fields.keys) == ["agentIDs"], let identifiers = fields["agentIDs"] as? [String],
+            !identifiers.isEmpty, identifiers.count <= SkillAgentCatalog.agents.count,
+            Set(identifiers).count == identifiers.count,
+            identifiers.allSatisfy({ identifier in
+                SkillAgentCatalog.agents.contains { $0.id == identifier }
+            })
+        else { throw WorkerFixtureError.invalid }
+        return SkillAgentCatalog.agents.filter { identifiers.contains($0.id) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    @MainActor static func makeAdmittedModel(
+        defaults: UserDefaults, dataDirectory: URL, agents: [SkillAgent],
+        remote: PluginsUIBridge? = nil
+    ) -> SkillsModel {
+        let documents = SkillDocumentStore(
+            remoteLoad: { _ in throw SkillsError.message("Downloads are unavailable in the worker fixture.") },
+            remoteCopy: { _ in throw SkillsError.message("Copying is unavailable in the worker fixture.") },
+            cacheDirectory: dataDirectory.appendingPathComponent("cache"),
+            fetch: { _ in throw SkillsError.message("Downloads are unavailable in the worker fixture.") })
+        let installer = SkillInstaller(
+            recordInstalled: { _, _ in
+                throw SkillsError.message("Installation is unavailable in the worker fixture.")
+            }, unavailableReason: "Installation is unavailable in the worker fixture.",
+            run: { _, _ in throw SkillsError.message("Installation is unavailable in the worker fixture.") })
+        return SkillsModel(
+            remote: remote, defaults: defaults, documents: documents, installer: installer,
+            detectAgents: { agents }, discoverInstaller: { false })
+    }
+
     func executable(named name: String) -> URL? { nil }
 
     func agentMarkerExists(

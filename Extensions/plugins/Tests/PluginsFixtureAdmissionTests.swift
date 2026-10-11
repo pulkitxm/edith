@@ -50,6 +50,22 @@ import WorkerFixtureTestSupport
         }
     }
 
+    @Test func signedAgentBytesAdmitOnlyMaintainedUniqueIdentifiers() throws {
+        let agents = try PluginsFixtureTools.admittedAgents(Data("{\"agentIDs\":[\"cursor\",\"amp\"]}".utf8))
+        #expect(Set(agents.map(\.id)) == ["amp", "cursor"])
+        for payload in [
+            "{}", "{\"agentIDs\":[]}", "{\"agentIDs\":[\"unknown\"]}",
+            "{\"agentIDs\":[\"amp\",\"amp\"]}", "{\"agentIDs\":[1]}",
+            "{\"agentIDs\":[\"amp\"],\"path\":\"/external\"}",
+            "{\"agentIDs\":[\"amp\"],\"agentIDs\":[\"cursor\"]}",
+            "{\"agentIDs\":[\"amp\"],\"agent\\u0049Ds\":[\"cursor\"]}",
+        ] {
+            #expect(throws: (any Error).self) {
+                try PluginsFixtureTools.admittedAgents(Data(payload.utf8))
+            }
+        }
+    }
+
     @MainActor @Test func strictMarkerConstructsOnlyOwnedUnavailableToolsAndRealInertModel()
         async throws
     {
