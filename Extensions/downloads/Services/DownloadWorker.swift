@@ -180,7 +180,7 @@ public actor DownloadWorker {
             let buffer = flight.output.snapshot
             snapshotLogs[id.uuidString] = buffer.0
             if let index = snapshotRecords.firstIndex(where: { $0.id == id }),
-                !snapshotRecords[index].isFinished, let status = buffer.1
+                Self.isRunning(snapshotRecords[index]), let status = buffer.1
             {
                 snapshotRecords[index].status = status
             }
@@ -447,7 +447,7 @@ public actor DownloadWorker {
     private func interrupt(_ id: UUID, reason: String) {
         guard flights[id] != nil else { return }
         try? update { records in
-            guard let index = records.firstIndex(where: { $0.id == id }), !records[index].isFinished
+            guard let index = records.firstIndex(where: { $0.id == id }), Self.isRunning(records[index])
             else { return }
             records[index].status = .interrupted(reason)
         }

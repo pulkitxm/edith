@@ -220,6 +220,61 @@ import Testing
         await replacement.stop()
     }
 
+    @Test(arguments: [true, false], [true, false])
+    func acceptedObserverRetrySurvivesOldAttemptDrain(musicFirst: Bool, stop: Bool) async throws {
+        let root = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("downloads.json")
+        let gate = AttemptGate(root: root)
+        let enabled = HistoryFlag()
+        let scheduler = HistoryOwner(music: musicFirst, file: file, gate: gate, enabled: enabled)
+        let observerEnabled = HistoryFlag()
+        observerEnabled.set(false)
+        let observer = HistoryOwner(music: !musicFirst, file: file, gate: gate, enabled: observerEnabled)
+        try await scheduler.start()
+        let id = try await observer.enqueue(root: root)
+        await scheduler.refresh()
+        await gate.waitForStart(1)
+        try await observer.start()
+        try await observer.cancel(id)
+        try await observer.retry(id)
+        #expect(await observer.state(id) == "queued")
+        let shutdown: Task<Void, Never>?
+        if stop {
+            shutdown = Task { await scheduler.stop() }
+        } else {
+            shutdown = nil
+            enabled.set(false)
+            await scheduler.refresh()
+        }
+        await gate.waitForCancellation(1)
+        #expect(await scheduler.state(id) == "queued")
+        #expect(await observer.state(id) == "queued")
+        await observer.refresh()
+        #expect(await gate.admissions == 1)
+        await gate.release(1)
+        if let shutdown { await shutdown.value }
+        else { await scheduler.waitForIdle() }
+        #expect(await observer.state(id) == "queued")
+        observerEnabled.set(true)
+        await observer.refresh()
+        await gate.waitForStart(2)
+        #expect(await gate.admissions == 2)
+        #expect(await gate.maximumActive == 1)
+        if !stop {
+            enabled.set(true)
+            await scheduler.refresh()
+            #expect(await gate.admissions == 2)
+        }
+        await gate.release(2)
+        await observer.waitForIdle()
+        #expect(await observer.state(id) == "done")
+        #expect(await gate.admissions == 2)
+        #expect(try MusicHistory.DownloadQueue.read(from: file).count == 1)
+        await scheduler.stop()
+        await observer.stop()
+    }
+
     private func environment(owner: String, root: URL, identifier: String = "com.pulkit.edith")
         -> [String: String]
     {
@@ -272,6 +327,158 @@ private actor FakeRunner {
             do { try await Task.sleep(for: .milliseconds(10)) } catch { break }
         }
         let output = root.appendingPathComponent(URL(string: name)!.lastPathComponent + ".m4a")
+        try Data("synthetic output".utf8).write(to: output)
+        return CLICommandResult(terminationStatus: 0, output: output.path + "\n")
+    }
+}
+
+private final class HistoryFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var enabled = true
+    var value: Bool { lock.withLock { enabled } }
+    func set(_ value: Bool) { lock.withLock { enabled = value } }
+}
+
+private enum HistoryOwner: Sendable {
+    case music(MusicHistory.DownloadWorker)
+    case downloads(DownloadsHistory.DownloadWorker)
+
+    init(music: Bool, file: URL, gate: AttemptGate, enabled: HistoryFlag = HistoryFlag()) {
+        let run: @Sendable (CLICommandRequest, @escaping @Sendable (String) -> Void) async throws
+            -> CLICommandResult = { _, line in try await gate.run(line: line) }
+        if music {
+            self = .music(MusicHistory.DownloadWorker(
+                file: file, executable: { URL(fileURLWithPath: "/synthetic/downloader") },
+                isEnabled: { enabled.value }, runCommand: run))
+        } else {
+            self = .downloads(DownloadsHistory.DownloadWorker(
+                file: file, executable: { URL(fileURLWithPath: "/synthetic/downloader") },
+                isEnabled: { enabled.value }, runCommand: run))
+        }
+    }
+
+    func start() async throws {
+        switch self {
+        case .music(let worker): try await worker.start()
+        case .downloads(let worker): try await worker.start()
+        }
+    }
+
+    func refresh() async {
+        switch self {
+        case .music(let worker): await worker.refresh()
+        case .downloads(let worker): await worker.refresh()
+        }
+    }
+
+    func stop() async {
+        switch self {
+        case .music(let worker): await worker.stop()
+        case .downloads(let worker): await worker.stop()
+        }
+    }
+
+    func enqueue(root: URL) async throws -> UUID {
+        let url = URL(string: "https://example.invalid/blocked-attempt")!
+        switch self {
+        case .music(let worker):
+            return try await worker.mutate(.enqueue(
+                urls: [url], prefix: "", kind: .audio, outputDirectory: root)).added[0].id
+        case .downloads(let worker):
+            return try await worker.mutate(.enqueue(
+                urls: [url], prefix: "", kind: .audio, outputDirectory: root)).added[0].id
+        }
+    }
+
+    func cancel(_ id: UUID) async throws {
+        switch self {
+        case .music(let worker):
+            _ = try await worker.mutate(.cancel(id: id, includeQueued: true, reason: "fixture"))
+        case .downloads(let worker):
+            _ = try await worker.mutate(.cancel(id: id, includeQueued: true, reason: "fixture"))
+        }
+    }
+
+    func retry(_ id: UUID) async throws {
+        switch self {
+        case .music(let worker):
+            #expect(try await worker.mutate(.retry(id: id, all: false)).changed == 1)
+        case .downloads(let worker):
+            #expect(try await worker.mutate(.retry(id: id, all: false)).changed == 1)
+        }
+    }
+
+    func state(_ id: UUID) async -> String? {
+        switch self {
+        case .music(let worker): return await worker.snapshot().records.first { $0.id == id }?.state
+        case .downloads(let worker): return await worker.snapshot().records.first { $0.id == id }?.state
+        }
+    }
+
+    func waitForIdle() async {
+        switch self {
+        case .music(let worker):
+            guard let values = try? await worker.values() else { Issue.record("Missing stream"); return }
+            for await value in values where value.running == 0 { return }
+        case .downloads(let worker):
+            guard let values = try? await worker.values() else { Issue.record("Missing stream"); return }
+            for await value in values where value.running == 0 { return }
+        }
+        Issue.record("Stream ended before drain")
+    }
+}
+
+private actor AttemptGate {
+    let root: URL
+    private(set) var admissions = 0
+    private(set) var maximumActive = 0
+    private var active = 0
+    private var cancellations: Set<Int> = []
+    private var drains: [Int: CheckedContinuation<Void, Never>] = [:]
+    private var startWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+    private var cancellationWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+
+    init(root: URL) { self.root = root }
+
+    func waitForStart(_ attempt: Int) async {
+        if admissions >= attempt { return }
+        await withCheckedContinuation { startWaiters.append((attempt, $0)) }
+    }
+
+    func waitForCancellation(_ attempt: Int) async {
+        if cancellations.contains(attempt) { return }
+        await withCheckedContinuation { cancellationWaiters.append((attempt, $0)) }
+    }
+
+    func release(_ attempt: Int) { drains.removeValue(forKey: attempt)?.resume() }
+
+    private func cancelled(_ attempt: Int) {
+        cancellations.insert(attempt)
+        let ready = cancellationWaiters.filter { $0.0 == attempt }
+        cancellationWaiters.removeAll { $0.0 == attempt }
+        for (_, continuation) in ready { continuation.resume() }
+    }
+
+    func run(line: @escaping @Sendable (String) -> Void) async throws -> CLICommandResult {
+        admissions += 1
+        let attempt = admissions
+        active += 1
+        maximumActive = max(maximumActive, active)
+        defer { active -= 1 }
+        for _ in 0..<30 { line(String(repeating: "x", count: 4_000)) }
+        line("[download] 10.0% of synthetic attempt \(attempt)")
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                drains[attempt] = continuation
+                let ready = startWaiters.filter { $0.0 <= admissions }
+                startWaiters.removeAll { $0.0 <= admissions }
+                for (_, waiter) in ready { waiter.resume() }
+            }
+        } onCancel: {
+            Task { await self.cancelled(attempt) }
+        }
+        try Task.checkCancellation()
+        let output = root.appendingPathComponent("attempt-\(attempt).m4a")
         try Data("synthetic output".utf8).write(to: output)
         return CLICommandResult(terminationStatus: 0, output: output.path + "\n")
     }
