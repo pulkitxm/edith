@@ -491,12 +491,16 @@ final class AppMaintenanceModel {
         resultMessage = nil
         launch { [self] cancellation in
             do {
-                let results = try await updateExecutor.execute(
+                let results = try await AppMaintenanceUpdateRecovery.execute(
                     AppUpdatePlan(items: selected, concurrency: concurrency, retries: retries),
-                    confirmed: true)
+                    execute: { [updateExecutor] plan in
+                        try await updateExecutor.execute(plan, confirmed: true)
+                    },
+                    commit: { [self] results in
+                        updateState = updatePersistence.recording(results, in: updateState)
+                        try updatePersistence.save(updateState)
+                    })
                 guard !stopped, !suspending, !Task.isCancelled else { return }
-                updateState = updatePersistence.recording(results, in: updateState)
-                try updatePersistence.save(updateState)
                 updateHistory = updateState.history
                 let succeeded = results.filter { $0.status == .succeeded }.count
                 resultMessage = "Finished \(succeeded) of \(results.count) updates."
@@ -884,5 +888,18 @@ final class AppMaintenanceModel {
         if hasSecurityScopedAccess { securityScopedURL?.stopAccessingSecurityScopedResource() }
         securityScopedURL = nil
         hasSecurityScopedAccess = false
+    }
+}
+
+@MainActor
+enum AppMaintenanceUpdateRecovery {
+    static func execute(
+        _ plan: AppUpdatePlan,
+        execute: @MainActor (AppUpdatePlan) async throws -> [AppUpdateResult],
+        commit: @MainActor ([AppUpdateResult]) throws -> Void
+    ) async throws -> [AppUpdateResult] {
+        let results = try await execute(plan)
+        try commit(results)
+        return results
     }
 }
