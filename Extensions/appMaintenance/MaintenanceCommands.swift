@@ -111,14 +111,17 @@ enum MaintenanceCommands {
     private static func perform(_ model: AppMaintenanceModel, _ action: () -> Void) async throws
         -> Data
     {
-        try await withTaskCancellationHandler {
-            action()
-            await model.finishWork()
+        try Task.checkCancellation()
+        action()
+        let work = model.commandWork
+        let cancel = model.commandCancellation()
+        return try await withTaskCancellationHandler {
+            await work?.value
             try Task.checkCancellation()
             if let error = model.errorMessage { throw ExtensionPeerError.rejected(error) }
             return try preview(model)
         } onCancel: {
-            Task { @MainActor in model.cancel() }
+            cancel()
         }
     }
 

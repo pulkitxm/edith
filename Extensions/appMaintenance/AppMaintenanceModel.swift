@@ -29,6 +29,7 @@ final class AppMaintenanceModel {
 
     var preferences = MaintenanceUISettings()
     let preferenceDefaults: UserDefaults
+    private var suspending = false
     private var preferencesTask: Task<Void, Never>?
     var applications: [InstalledApplication] = []
     var previewToken = UUID()
@@ -181,20 +182,20 @@ final class AppMaintenanceModel {
     }
 
     func updatePreferences(_ change: (inout MaintenanceUISettings) -> Void) {
-        guard !stopped else { return }
+        guard !stopped, !suspending else { return }
         var next = preferences; change(&next)
         if let engineClient {
             preferences = next; preferencesTask?.cancel()
-            preferencesTask = Task { [weak self] in
+            preferencesTask = track { [weak self] in
                 do {
                     let data = try await engineClient.invoke(
                         "maintenance.ui.preferences", payload: JSONEncoder().encode(next))
-                    guard let self, !stopped, !Task.isCancelled else { return }
+                    guard let self, !stopped, !suspending, !Task.isCancelled else { return }
                     preferences = try JSONDecoder().decode(
                         AppMaintenanceUISnapshot.self, from: data
                     ).preferences
                 } catch is CancellationError {} catch {
-                    guard let self, !stopped else { return };
+                    guard let self, !stopped, !suspending else { return };
                     errorMessage = error.localizedDescription
                 }
             }
@@ -206,14 +207,16 @@ final class AppMaintenanceModel {
     }
 
     func refreshRemote() async {
-        guard let engineClient, !stopped else { return }
+        guard let engineClient, !stopped, !suspending else { return }
         let revision = remoteRevision
         do {
             let data = try await engineClient.invoke("maintenance.ui.snapshot")
-            guard !stopped, !Task.isCancelled, revision == remoteRevision else { return }
+            guard !stopped, !suspending, !Task.isCancelled, revision == remoteRevision else {
+                return
+            }
             applyRemote(try JSONDecoder().decode(AppMaintenanceUISnapshot.self, from: data))
         } catch is CancellationError {} catch {
-            if !stopped { errorMessage = error.localizedDescription }
+            if !stopped, !suspending { errorMessage = error.localizedDescription }
         }
     }
 
@@ -244,21 +247,23 @@ final class AppMaintenanceModel {
         _ operation: String, value: String? = nil, item: String? = nil, enabled: Bool? = nil,
         integer: Int? = nil, number: Double? = nil
     ) {
-        guard let engineClient, !stopped, !applyingRemote else { return }
+        guard let engineClient, !stopped, !suspending, !applyingRemote else { return }
         remoteTask?.cancel(); remoteRevision += 1
         let revision = remoteRevision
         let request = AppMaintenanceUIAction(
             operation: operation, value: value, item: item, enabled: enabled, integer: integer,
             number: number, previewToken: previewToken)
-        remoteTask = Task {
+        remoteTask = track { [self] in
             defer { if revision == remoteRevision { remoteTask = nil } }
             do {
                 let payload = try JSONEncoder().encode(request)
                 let data = try await engineClient.invoke("maintenance.ui.action", payload: payload)
-                guard !stopped, !Task.isCancelled, revision == remoteRevision else { return }
+                guard !stopped, !suspending, !Task.isCancelled, revision == remoteRevision else {
+                    return
+                }
                 applyRemote(try JSONDecoder().decode(AppMaintenanceUISnapshot.self, from: data))
             } catch is CancellationError {} catch {
-                if !stopped, revision == remoteRevision {
+                if !stopped, !suspending, revision == remoteRevision {
                     errorMessage = error.localizedDescription
                 }
             }
@@ -266,10 +271,11 @@ final class AppMaintenanceModel {
     }
 
     func refresh(automatic: Bool = false, interval: TimeInterval = 86_400) {
-        if engineClient != nil, !stopped {
+        if engineClient != nil, !stopped, !suspending {
             sendRemote("refresh", enabled: automatic, number: interval); return
         }
-        guard !stopped, !mutationInProgress, !checkingUpdates || operation == nil else { return }
+        guard !stopped, !suspending, !mutationInProgress, !checkingUpdates || operation == nil
+        else { return }
         cancelOperation()
         let generation = loading.begin()
         refreshInterval = interval
@@ -301,10 +307,10 @@ final class AppMaintenanceModel {
             try await Task.sleep(for: $0)
         }
     ) {
-        guard !stopped, engineClient == nil, backgroundDiscovery == nil else { return }
+        guard !stopped, !suspending, engineClient == nil, backgroundDiscovery == nil else { return }
         backgroundDiscovery = Task { [weak self] in
             while !Task.isCancelled {
-                guard let self, !stopped else { return }
+                guard let self, !stopped, !suspending else { return }
                 await discoverIfDue(onBattery: onBattery())
                 do { try await delay(.seconds(60)) } catch { return }
             }
@@ -312,13 +318,13 @@ final class AppMaintenanceModel {
     }
 
     func discoverIfDue(onBattery: Bool) async {
-        guard !stopped, !Task.isCancelled, engineClient == nil, !onBattery,
+        guard !stopped, !suspending, !Task.isCancelled, engineClient == nil, !onBattery,
             !mutationInProgress, operation == nil
         else { return }
         if !loadedBackgroundSnapshot {
             let state = await BlockingWork.value { [updatePersistence] in updatePersistence.load() }
             let snapshot = await snapshots.load()
-            guard !stopped, !Task.isCancelled, operation == nil else { return }
+            guard !stopped, !suspending, !Task.isCancelled, operation == nil else { return }
             loadedBackgroundSnapshot = true
             updateState = state
             updateHistory = state.history
@@ -337,10 +343,12 @@ final class AppMaintenanceModel {
             return
         }
         refresh(interval: 21_600)
+        let task = commandWork
+        let cancel = commandCancellation()
         await withTaskCancellationHandler {
-            await finishWork()
+            await task?.value
         } onCancel: {
-            Task { @MainActor [weak self] in self?.cancelOperation() }
+            cancel()
         }
     }
 
@@ -353,10 +361,10 @@ final class AppMaintenanceModel {
         generation: UInt64, automatic: Bool, interval: TimeInterval, previousIDs: Set<String>
     ) async {
         let claim = await snapshots.claim()
-        guard !stopped, loading.isCurrent(generation) else { return }
+        guard !stopped, !suspending, loading.isCurrent(generation) else { return }
         let snapshot = await snapshots.load()
         let state = await BlockingWork.value { [updatePersistence] in updatePersistence.load() }
-        guard !stopped, loading.isCurrent(generation) else { return }
+        guard !stopped, !suspending, loading.isCurrent(generation) else { return }
         updateState = state
         loadedBackgroundSnapshot = true
         updateHistory = state.history
@@ -375,7 +383,7 @@ final class AppMaintenanceModel {
         let brewFresh = brewCachedAt.map { Date().timeIntervalSince($0) < interval } ?? false
         reuseCachedBrew = brewFresh
         let scanned = await inventory(brewFresh ? brewCache : nil)
-        guard !stopped, loading.isCurrent(generation) else { return }
+        guard !stopped, !suspending, loading.isCurrent(generation) else { return }
         let keptSelection = selectedApplicationID
         applications = scanned
         phase = .ready
@@ -388,7 +396,7 @@ final class AppMaintenanceModel {
         let found = await discover(scanned, brewFresh ? brewCache : nil, brewFresh) { batch in
             await self.absorb(batch, generation: generation)
         }
-        guard !stopped, loading.isCurrent(generation) else { return }
+        guard !stopped, !suspending, loading.isCurrent(generation) else { return }
         discovered = found
         updates = updatePersistence.visible(found, state: updateState, now: Date())
         reconcileUpdates()
@@ -404,10 +412,10 @@ final class AppMaintenanceModel {
             }
             try await snapshots.save(snapshotToSave, replacing: claim)
         } catch {
-            guard !stopped, loading.isCurrent(generation) else { return }
+            guard !stopped, !suspending, loading.isCurrent(generation) else { return }
             errorMessage = error.localizedDescription
         }
-        guard !stopped, loading.isCurrent(generation) else { return }
+        guard !stopped, !suspending, loading.isCurrent(generation) else { return }
         checkingUpdates = false
         phase = .ready
         if let errorMessage {
@@ -422,7 +430,7 @@ final class AppMaintenanceModel {
     }
 
     private func absorb(_ batch: AppUpdateDiscoveryBatch, generation: UInt64) {
-        guard !stopped, loading.isCurrent(generation) else { return }
+        guard !stopped, !suspending, loading.isCurrent(generation) else { return }
         if batch.channel == .homebrew, let data = batch.homebrewData {
             applications = AppMaintenanceInventory.applyingHomebrewUpdates(data, to: applications)
             if brewCache != data || !reuseCachedBrew {
@@ -450,10 +458,10 @@ final class AppMaintenanceModel {
     }
 
     func setUpdateSelected(_ selected: Bool, item: AppUpdateItem) {
-        if engineClient != nil, !stopped {
+        if engineClient != nil, !stopped, !suspending {
             sendRemote("updateSelection", value: item.id, enabled: selected); return
         }
-        guard !stopped else { return }
+        guard !stopped, !suspending else { return }
         if selected {
             selectedUpdateIDs.insert(item.id)
         } else {
@@ -462,10 +470,10 @@ final class AppMaintenanceModel {
     }
 
     func runSelectedUpdates(concurrency: Int, retries: Int) {
-        if engineClient != nil, !stopped {
+        if engineClient != nil, !stopped, !suspending {
             sendRemote("update", integer: concurrency, number: Double(retries)); return
         }
-        guard !stopped, !mutationInProgress else { return }
+        guard !stopped, !suspending, !mutationInProgress else { return }
         let selected = updates.filter { selectedUpdateIDs.contains($0.id) }
         guard !selected.isEmpty else { return }
         cancelOperation()
@@ -477,7 +485,7 @@ final class AppMaintenanceModel {
                 let results = try await updateExecutor.execute(
                     AppUpdatePlan(items: selected, concurrency: concurrency, retries: retries),
                     confirmed: true)
-                guard !stopped, !Task.isCancelled else { return }
+                guard !stopped, !suspending, !Task.isCancelled else { return }
                 updateState = updatePersistence.recording(results, in: updateState)
                 try updatePersistence.save(updateState)
                 updateHistory = updateState.history
@@ -486,7 +494,7 @@ final class AppMaintenanceModel {
                 phase = .ready
                 refresh(interval: refreshInterval)
             } catch {
-                guard !stopped, !Task.isCancelled else { return }
+                guard !stopped, !suspending, !Task.isCancelled else { return }
                 errorMessage = error.localizedDescription
                 phase = .ready
             }
@@ -494,32 +502,36 @@ final class AppMaintenanceModel {
     }
 
     func ignore(_ item: AppUpdateItem) {
-        if engineClient != nil, !stopped { sendRemote("ignore", value: item.id); return }
-        guard !stopped else { return }
+        if engineClient != nil, !stopped, !suspending {
+            sendRemote("ignore", value: item.id); return
+        }
+        guard !stopped, !suspending else { return }
         updateState.ignoredVersions[item.id] = item.availableVersion
         persistPolicy(removing: item)
     }
 
     func snooze(_ item: AppUpdateItem, until: Date) {
-        if engineClient != nil, !stopped {
+        if engineClient != nil, !stopped, !suspending {
             sendRemote("snooze", value: item.id, number: until.timeIntervalSince1970); return
         }
-        guard !stopped else { return }
+        guard !stopped, !suspending else { return }
         updateState.snoozedUntil[item.id] = until
         persistPolicy(removing: item)
     }
 
     func exclude(_ item: AppUpdateItem) {
-        if engineClient != nil, !stopped { sendRemote("exclude", value: item.id); return }
-        guard !stopped else { return }
+        if engineClient != nil, !stopped, !suspending {
+            sendRemote("exclude", value: item.id); return
+        }
+        guard !stopped, !suspending else { return }
         guard let bundleID = item.bundleID else { return }
         updateState.excludedBundleIDs.insert(bundleID)
         persistPolicy(removing: item)
     }
 
     func resetUpdatePolicies() {
-        if engineClient != nil, !stopped { sendRemote("reset"); return }
-        guard !stopped else { return }
+        if engineClient != nil, !stopped, !suspending { sendRemote("reset"); return }
+        guard !stopped, !suspending else { return }
         updateState.ignoredVersions = [:]
         updateState.snoozedUntil = [:]
         updateState.excludedBundleIDs = []
@@ -550,7 +562,7 @@ final class AppMaintenanceModel {
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
         guard settings.authorizationStatus == .authorized else { return }
-        guard !stopped, !Task.isCancelled else { return }
+        guard !stopped, !suspending, !Task.isCancelled else { return }
         let content = UNMutableNotificationContent()
         content.title = "App Update Center"
         content.body = "\(updateCount) new updates are available."
@@ -560,8 +572,10 @@ final class AppMaintenanceModel {
     }
 
     func select(_ application: InstalledApplication) {
-        if engineClient != nil, !stopped { sendRemote("select", value: application.id); return }
-        guard !stopped, !mutationInProgress else { return }
+        if engineClient != nil, !stopped, !suspending {
+            sendRemote("select", value: application.id); return
+        }
+        guard !stopped, !suspending, !mutationInProgress else { return }
         cancelOperation()
         selectedApplicationID = application.id
         plan = nil
@@ -575,14 +589,16 @@ final class AppMaintenanceModel {
                     try AppMaintenanceExecution.plan(
                         applicationURL: application.url, isCancelled: { cancellation.isCancelled })
                 }
-                guard !stopped, !Task.isCancelled, selectedApplicationID == application.id else {
+                guard !stopped, !suspending, !Task.isCancelled,
+                    selectedApplicationID == application.id
+                else {
                     return
                 }
                 plan = loaded
                 selectedItemIDs = Set(loaded.items.map(\.id))
                 phase = .ready
             } catch {
-                guard !stopped, !Task.isCancelled else { return }
+                guard !stopped, !suspending, !Task.isCancelled else { return }
                 errorMessage = error.localizedDescription
                 phase = .ready
             }
@@ -590,10 +606,10 @@ final class AppMaintenanceModel {
     }
 
     func setSelected(_ selected: Bool, item: AppMaintenanceItem) {
-        if engineClient != nil, !stopped {
+        if engineClient != nil, !stopped, !suspending {
             sendRemote("selection", value: item.id, enabled: selected); return
         }
-        guard !stopped else { return }
+        guard !stopped, !suspending else { return }
         if selected {
             selectedItemIDs.insert(item.id)
         } else {
@@ -602,8 +618,8 @@ final class AppMaintenanceModel {
     }
 
     func removeSelected() {
-        if engineClient != nil, !stopped { sendRemote("remove"); return }
-        guard !stopped, !mutationInProgress else { return }
+        if engineClient != nil, !stopped, !suspending { sendRemote("remove"); return }
+        guard !stopped, !suspending, !mutationInProgress else { return }
         guard let plan else { return }
         let selectedIDs = selectedItemIDs
         cancelOperation()
@@ -617,7 +633,7 @@ final class AppMaintenanceModel {
                         plan: plan, selectedIDs: selectedIDs,
                         isCancelled: { cancellation.isCancelled })
                 }
-                guard !stopped, !Task.isCancelled else { return }
+                guard !stopped, !suspending, !Task.isCancelled else { return }
                 if result.failed.isEmpty {
                     resultMessage =
                         "Moved \(result.removed.count) items, \(AppMaintenanceFiles.format(result.reclaimedBytes)), to the Trash."
@@ -626,13 +642,13 @@ final class AppMaintenanceModel {
                         "Moved \(result.removed.count) items to the Trash. \(result.failed.count) items could not be moved."
                 }
                 applications = await inventory(nil)
-                guard !stopped, !Task.isCancelled else { return }
+                guard !stopped, !suspending, !Task.isCancelled else { return }
                 selectedApplicationID = nil
                 self.plan = nil
                 selectedItemIDs = []
                 phase = .ready
             } catch {
-                guard !stopped, !Task.isCancelled else { return }
+                guard !stopped, !suspending, !Task.isCancelled else { return }
                 errorMessage = error.localizedDescription
                 phase = .ready
             }
@@ -640,10 +656,10 @@ final class AppMaintenanceModel {
     }
 
     func prepareDiskImage(_ url: URL, destination: AppMaintenanceInstallDestination) {
-        if engineClient != nil, !stopped {
+        if engineClient != nil, !stopped, !suspending {
             sendRemote("prepareImage", value: url.path, item: destination.rawValue); return
         }
-        guard !stopped, !mutationInProgress else { return }
+        guard !stopped, !suspending, !mutationInProgress else { return }
         cancelOperation()
         cancelInstallPlan()
         phase = .mounting
@@ -658,7 +674,7 @@ final class AppMaintenanceModel {
             do {
                 let prepared = try await AppMaintenanceDiskImageInstaller.plan(
                     imageURL: url, destination: destination)
-                guard !stopped, !Task.isCancelled else {
+                guard !stopped, !suspending, !Task.isCancelled else {
                     await AppMaintenanceDiskImageInstaller.cancel(plan: prepared)
                     return
                 }
@@ -668,7 +684,7 @@ final class AppMaintenanceModel {
                 installPlan = prepared
                 phase = .ready
             } catch {
-                guard !stopped, !Task.isCancelled else { return }
+                guard !stopped, !suspending, !Task.isCancelled else { return }
                 errorMessage = error.localizedDescription
                 phase = .ready
             }
@@ -676,11 +692,11 @@ final class AppMaintenanceModel {
     }
 
     func installDiskImage(replaceExisting: Bool, moveImageToTrash: Bool) {
-        if engineClient != nil, !stopped {
+        if engineClient != nil, !stopped, !suspending {
             sendRemote("install", enabled: replaceExisting, integer: moveImageToTrash ? 1 : 0);
             return
         }
-        guard !stopped, !mutationInProgress else { return }
+        guard !stopped, !suspending, !mutationInProgress else { return }
         guard let installPlan else { return }
         cancelOperation()
         phase = .installing
@@ -693,9 +709,9 @@ final class AppMaintenanceModel {
                     plan: installPlan, replaceExisting: replaceExisting,
                     moveImageToTrash: moveImageToTrash)
                 if result.ejected { self.installPlan = nil }
-                guard !stopped, !Task.isCancelled else { return }
+                guard !stopped, !suspending, !Task.isCancelled else { return }
                 applications = await inventory(nil)
-                guard !stopped, !Task.isCancelled else { return }
+                guard !stopped, !suspending, !Task.isCancelled else { return }
                 let cleanup: String
                 if !result.ejected {
                     cleanup = " The disk image is still mounted."
@@ -707,7 +723,7 @@ final class AppMaintenanceModel {
                 resultMessage = "Installed \(result.applicationURL.lastPathComponent).\(cleanup)"
                 phase = .ready
             } catch {
-                guard !stopped, !Task.isCancelled else { return }
+                guard !stopped, !suspending, !Task.isCancelled else { return }
                 errorMessage = error.localizedDescription
                 phase = .ready
             }
@@ -715,7 +731,7 @@ final class AppMaintenanceModel {
     }
 
     func cancelInstallPlan() {
-        if engineClient != nil, !stopped { sendRemote("cancelImage"); return }
+        if engineClient != nil, !stopped, !suspending { sendRemote("cancelImage"); return }
         if let installPlan {
             self.installPlan = nil
             trackCleanup { await AppMaintenanceDiskImageInstaller.cancel(plan: installPlan) }
@@ -724,10 +740,20 @@ final class AppMaintenanceModel {
     }
 
     func cancel() {
-        if engineClient != nil, !stopped { sendRemote("cancel"); return }
+        if engineClient != nil, !stopped, !suspending { sendRemote("cancel"); return }
         loading.cancel()
         cancelOperation()
         if phase != .installing { cancelInstallPlan() }
+    }
+
+    var commandWork: Task<Void, Never>? { operation.flatMap { ownedTasks[$0.id] } }
+
+    func commandCancellation() -> @Sendable () -> Void {
+        let task = commandWork
+        let cancellation = operation?.cancellation
+        return {
+            cancellation?.cancel(); task?.cancel()
+        }
     }
 
     func finishWork() async {
@@ -736,7 +762,7 @@ final class AppMaintenanceModel {
     }
 
     func backupUpdates(to destination: URL) throws {
-        guard !stopped else { throw ExtensionPeerError.unavailable }
+        guard !stopped, !suspending else { throw ExtensionPeerError.unavailable }
         try updatePersistence.backup(to: destination)
     }
 
@@ -747,7 +773,7 @@ final class AppMaintenanceModel {
     }
 
     private func launch(_ action: @escaping @MainActor (MaintenanceCancellation) async -> Void) {
-        guard !stopped else { return }
+        guard !stopped, !suspending else { return }
         cancelOperation()
         let id = UUID()
         let cancellation = MaintenanceCancellation()
@@ -773,9 +799,37 @@ final class AppMaintenanceModel {
         }
     }
 
+    private func track(_ work: @escaping @MainActor () async -> Void) -> Task<Void, Never>? {
+        guard !suspending, ownedTasks.count < 64 else { return nil }
+        let id = UUID()
+        let task = Task {
+            defer { ownedTasks[id] = nil }
+            await work()
+        }
+        ownedTasks[id] = task
+        return task
+    }
+
+    func cancelPendingCommands() {
+        suspending = true
+        stopBackgroundDiscovery()
+        loading.cancel()
+        remoteRevision += 1
+        preferencesTask?.cancel()
+        remoteTask?.cancel()
+        for task in ownedTasks.values { task.cancel() }
+    }
+
+    func cancelAndWait() async {
+        cancelPendingCommands()
+        await backgroundDiscovery?.value
+        while let task = ownedTasks.values.first { await task.value }
+    }
+
     func shutdown() async {
-        guard !stopped else { return }
+        guard !stopped else { await cancelAndWait(); return }
         stopped = true
+        await cancelAndWait()
         stopBackgroundDiscovery()
         await backgroundDiscovery?.value
         backgroundDiscovery = nil
@@ -799,8 +853,10 @@ final class AppMaintenanceModel {
     }
 
     func openExtension(_ id: String) {
-        if engineClient != nil, !stopped { sendRemote("openExtension", value: id); return }
-        guard !stopped else { return }
+        if engineClient != nil, !stopped, !suspending {
+            sendRemote("openExtension", value: id); return
+        }
+        guard !stopped, !suspending else { return }
         trackCleanup { [self] in
             do {
                 guard let endpoint = ExtensionPeerEndpoint.current(owner: id) else {
@@ -808,7 +864,7 @@ final class AppMaintenanceModel {
                 }
                 _ = try await endpoint.invoke("extension.open", payload: Data(), timeout: 3)
             } catch {
-                guard !stopped else { return }
+                guard !stopped, !suspending else { return }
                 errorMessage =
                     "Download and enable this extension in Extensions, then open it here."
             }

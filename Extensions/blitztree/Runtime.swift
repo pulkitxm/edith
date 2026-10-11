@@ -10,6 +10,8 @@ final class ExtensionRuntime: NSObject {
     private var model: BlitzTreeModel?
     private var uiModel: BlitzTreeModel?
     private var uiClient: ExtensionEngineClient?
+    private var commandDrain: Task<Void, Never>?
+    private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -35,12 +37,42 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginCommandDrain() -> Task<Void, Never> {
+        _ = commands.suspend()
+        if let commandDrain { return commandDrain }
+        let owner = model
+        let uiOwner = uiModel
+        owner?.cancelPendingCommands()
+        uiOwner?.cancelPendingCommands()
+        let task = Task { [self] in
+            _ = await commands.suspendAndWait()
+            await owner?.cancelAndWait()
+            await uiOwner?.cancelAndWait()
+            while let task = uiDrains.values.first { await task.value }
+        }
+        commandDrain = task
+        return task
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
+        let owner = model
         stopUI()
-        Task {
+        Task { [self] in
+            await drain.value
             await commands.shutdownAndWait()
-            await model?.shutdown()
+            await owner?.shutdown()
+            while let task = uiDrains.values.first { await task.value }
             completion()
         }
     }
@@ -87,7 +119,12 @@ final class ExtensionRuntime: NSObject {
         TextEditingCommands.shutdown()
         let model = uiModel; uiModel = nil
         uiClient?.invalidate(); uiClient = nil
-        Task { await model?.shutdown() }
+        model?.cancelPendingCommands()
+        let id = UUID()
+        uiDrains[id] = Task { [self] in
+            defer { uiDrains[id] = nil }
+            await model?.shutdown()
+        }
     }
 }
 

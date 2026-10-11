@@ -15,6 +15,8 @@ final class ExtensionRuntime: NSObject {
     private(set) var settingsModel: MaintenanceSettingsModel?
     private var uiLocation: String?
     private var uiSection: String?
+    private var commandDrain: Task<Void, Never>?
+    private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
     private let cliStreams = try? ExtensionCLIStreams(owner: "appMaintenance")
 
@@ -50,15 +52,45 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginCommandDrain() -> Task<Void, Never> {
+        _ = commands.suspend()
+        if let commandDrain { return commandDrain }
+        let owner = model
+        let uiOwner = uiModel
+        owner?.cancelPendingCommands()
+        uiOwner?.cancelPendingCommands()
+        let streams = cliStreams
+        streams?.stop()
+        let task = Task { [self] in
+            _ = await commands.suspendAndWait()
+            await owner?.cancelAndWait()
+            await uiOwner?.cancelAndWait()
+            await streams?.stopAndWait()
+            while let task = uiDrains.values.first { await task.value }
+        }
+        commandDrain = task
+        return task
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        stopped = true
+        let drain = beginCommandDrain()
+        let owner = model
         stopUI()
-        model?.stopBackgroundDiscovery()
-        Task {
+        Task { [self] in
+            await drain.value
             await commands.shutdownAndWait()
-            await cliStreams?.stopAndWait()
-            await model?.shutdown()
+            await owner?.shutdown()
+            while let task = uiDrains.values.first { await task.value }
             completion()
         }
     }
@@ -156,7 +188,12 @@ final class ExtensionRuntime: NSObject {
         uiLocation = nil; uiSection = nil
         let model = uiModel; uiModel = nil
         uiClient?.invalidate(); uiClient = nil
-        Task { await model?.shutdown() }
+        model?.cancelPendingCommands()
+        let id = UUID()
+        uiDrains[id] = Task { [self] in
+            defer { uiDrains[id] = nil }
+            await model?.shutdown()
+        }
     }
 }
 
