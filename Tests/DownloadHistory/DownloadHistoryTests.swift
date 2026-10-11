@@ -191,6 +191,12 @@ import Testing
             })
         #expect(admissions.count == 14)
         #expect(Set(admissions).count == 14)
+        let activity = try PersistentJSONFile.read(
+            ActivityFixture.self, from: file.appendingPathExtension("activity.json"),
+            missing: ActivityFixture(generation: nil, active: [], logs: [:]))
+        #expect(activity.active.isEmpty)
+        #expect(Set(activity.logs.keys) == Set(records.map { $0.id.uuidString }))
+        #expect(activity.logs.values.reduce(0) { $0 + $1.utf8.count } <= 256_000)
     }
 
     @Test func staleRestartStateIsRecoveredOnlyBySchedulerOwner() async throws {
@@ -220,6 +226,101 @@ import Testing
         await replacement.stop()
     }
 
+    @Test(arguments: [true, false])
+    func eitherObserverProjectsSharedBlockedFlightsAndBoundedLogs(musicFirst: Bool) async throws {
+        let root = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("downloads.json")
+        let gate = AttemptGate(root: root)
+        let scheduler = HistoryOwner(music: musicFirst, file: file, gate: gate)
+        let observer = HistoryOwner(music: !musicFirst, file: file, gate: gate)
+        try await scheduler.start()
+        var ids: [UUID] = []
+        for _ in 0..<3 { ids.append(try await observer.enqueue(root: root)) }
+        await scheduler.refresh()
+        await gate.waitForStart(3)
+        await scheduler.refresh()
+        try await observer.start()
+        #expect(await observer.running() == 3)
+        #expect(await scheduler.running() == 3)
+        let initial = await observer.logs()
+        #expect(Set(initial.keys) == Set(ids.map { $0.uuidString }))
+        #expect(initial.values.allSatisfy { $0.contains("synthetic attempt") })
+        #expect(initial.values.allSatisfy { $0.utf8.count <= 64_000 })
+        #expect(initial.values.reduce(0) { $0 + $1.utf8.count } <= 256_000)
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for iteration in 0..<40 {
+                group.addTask {
+                    if iteration.isMultiple(of: 2) {
+                        await gate.emit("fixture log batch \(iteration)")
+                        await scheduler.refresh()
+                    } else {
+                        let logs = await observer.logs()
+                        #expect(logs.values.allSatisfy { $0.utf8.count <= 64_000 })
+                        #expect(logs.values.reduce(0) { $0 + $1.utf8.count } <= 256_000)
+                        #expect(await observer.running() == 3)
+                    }
+                }
+            }
+            try await group.waitForAll()
+        }
+        #expect(await observer.logs() == scheduler.logs())
+        await gate.release(1)
+        await gate.release(2)
+        await gate.release(3)
+        await scheduler.waitForIdle()
+        #expect(await observer.running() == 0)
+        #expect(await observer.logs().count == 3)
+        await scheduler.stop()
+        await observer.stop()
+        let replacement = HistoryOwner(music: !musicFirst, file: file, gate: gate)
+        try await replacement.start()
+        #expect(await replacement.running() == 0)
+        #expect(await replacement.logs().count == 3)
+        #expect(await gate.admissions == 3)
+        await replacement.stop()
+    }
+
+    @Test func staleSchedulerActivityDoesNotInventActiveWorkAndCorruptCacheRecovers() async throws {
+        let root = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("downloads.json")
+        let stale = MusicHistory.DownloadRecord(
+            url: URL(string: "https://example.invalid/stale-activity")!, status: .resolving,
+            outputFilename: nil, createdAt: Date(), kind: .audio)
+        try MusicHistory.DownloadQueue.save([stale], to: file)
+        let activity = file.appendingPathExtension("activity.json")
+        let value = ActivityFixture(
+            generation: UUID(), active: [stale.id],
+            logs: [stale.id.uuidString: "synthetic prior log"])
+        _ = try PersistentJSONFile.update(ActivityFixture.self, at: activity, missing: value) {
+            $0 = value
+        }
+        var lease = try PersistentFileLease.acquire(
+            at: file.appendingPathExtension("scheduler.lock"))
+        #expect(lease != nil)
+        let observer = DownloadsHistory.DownloadWorker(file: file, executable: { nil })
+        #expect(await observer.snapshot().running == 1)
+        withExtendedLifetime(lease) {}
+        lease = nil
+        #expect(await observer.snapshot().running == 0)
+        #expect(await observer.snapshot().logs[stale.id.uuidString] == "synthetic prior log")
+        try Data("invalid synthetic activity".utf8).write(to: activity, options: .atomic)
+        #expect(await observer.snapshot().problem != nil)
+        let gate = AttemptGate(root: root)
+        let replacement = HistoryOwner(music: true, file: file, gate: gate)
+        try await replacement.start()
+        #expect(await replacement.state(stale.id) == "interrupted")
+        #expect(await replacement.running() == 0)
+        let recovered = try PersistentJSONFile.read(
+            ActivityFixture.self, from: activity, missing: value)
+        #expect(recovered.active.isEmpty)
+        #expect(recovered.logs.isEmpty)
+        #expect(await observer.snapshot().problem == nil)
+        await replacement.stop()
+        await observer.stop()
+    }
+
     @Test(arguments: [true, false], [true, false])
     func acceptedObserverRetrySurvivesOldAttemptDrain(musicFirst: Bool, stop: Bool) async throws {
         let root = try sandbox()
@@ -230,7 +331,8 @@ import Testing
         let scheduler = HistoryOwner(music: musicFirst, file: file, gate: gate, enabled: enabled)
         let observerEnabled = HistoryFlag()
         observerEnabled.set(false)
-        let observer = HistoryOwner(music: !musicFirst, file: file, gate: gate, enabled: observerEnabled)
+        let observer = HistoryOwner(
+            music: !musicFirst, file: file, gate: gate, enabled: observerEnabled)
         try await scheduler.start()
         let id = try await observer.enqueue(root: root)
         await scheduler.refresh()
@@ -248,13 +350,14 @@ import Testing
             await scheduler.refresh()
         }
         await gate.waitForCancellation(1)
+        #expect(await observer.running() == 1)
+        #expect(await scheduler.running() == 1)
         #expect(await scheduler.state(id) == "queued")
         #expect(await observer.state(id) == "queued")
         await observer.refresh()
         #expect(await gate.admissions == 1)
         await gate.release(1)
-        if let shutdown { await shutdown.value }
-        else { await scheduler.waitForIdle() }
+        if let shutdown { await shutdown.value } else { await scheduler.waitForIdle() }
         #expect(await observer.state(id) == "queued")
         observerEnabled.set(true)
         await observer.refresh()
@@ -344,16 +447,19 @@ private enum HistoryOwner: Sendable {
     case downloads(DownloadsHistory.DownloadWorker)
 
     init(music: Bool, file: URL, gate: AttemptGate, enabled: HistoryFlag = HistoryFlag()) {
-        let run: @Sendable (CLICommandRequest, @escaping @Sendable (String) -> Void) async throws
-            -> CLICommandResult = { _, line in try await gate.run(line: line) }
+        let run:
+            @Sendable (CLICommandRequest, @escaping @Sendable (String) -> Void) async throws
+                -> CLICommandResult = { _, line in try await gate.run(line: line) }
         if music {
-            self = .music(MusicHistory.DownloadWorker(
-                file: file, executable: { URL(fileURLWithPath: "/synthetic/downloader") },
-                isEnabled: { enabled.value }, runCommand: run))
+            self = .music(
+                MusicHistory.DownloadWorker(
+                    file: file, executable: { URL(fileURLWithPath: "/synthetic/downloader") },
+                    isEnabled: { enabled.value }, runCommand: run))
         } else {
-            self = .downloads(DownloadsHistory.DownloadWorker(
-                file: file, executable: { URL(fileURLWithPath: "/synthetic/downloader") },
-                isEnabled: { enabled.value }, runCommand: run))
+            self = .downloads(
+                DownloadsHistory.DownloadWorker(
+                    file: file, executable: { URL(fileURLWithPath: "/synthetic/downloader") },
+                    isEnabled: { enabled.value }, runCommand: run))
         }
     }
 
@@ -382,11 +488,15 @@ private enum HistoryOwner: Sendable {
         let url = URL(string: "https://example.invalid/blocked-attempt")!
         switch self {
         case .music(let worker):
-            return try await worker.mutate(.enqueue(
-                urls: [url], prefix: "", kind: .audio, outputDirectory: root)).added[0].id
+            return try await worker.mutate(
+                .enqueue(
+                    urls: [url], prefix: "", kind: .audio, outputDirectory: root)
+            ).added[0].id
         case .downloads(let worker):
-            return try await worker.mutate(.enqueue(
-                urls: [url], prefix: "", kind: .audio, outputDirectory: root)).added[0].id
+            return try await worker.mutate(
+                .enqueue(
+                    urls: [url], prefix: "", kind: .audio, outputDirectory: root)
+            ).added[0].id
         }
     }
 
@@ -408,20 +518,39 @@ private enum HistoryOwner: Sendable {
         }
     }
 
+    func running() async -> Int {
+        switch self {
+        case .music(let worker): return await worker.snapshot().running
+        case .downloads(let worker): return await worker.snapshot().running
+        }
+    }
+
+    func logs() async -> [String: String] {
+        switch self {
+        case .music(let worker): return await worker.snapshot().logs
+        case .downloads(let worker): return await worker.snapshot().logs
+        }
+    }
+
     func state(_ id: UUID) async -> String? {
         switch self {
         case .music(let worker): return await worker.snapshot().records.first { $0.id == id }?.state
-        case .downloads(let worker): return await worker.snapshot().records.first { $0.id == id }?.state
+        case .downloads(let worker):
+            return await worker.snapshot().records.first { $0.id == id }?.state
         }
     }
 
     func waitForIdle() async {
         switch self {
         case .music(let worker):
-            guard let values = try? await worker.values() else { Issue.record("Missing stream"); return }
+            guard let values = try? await worker.values() else {
+                Issue.record("Missing stream"); return
+            }
             for await value in values where value.running == 0 { return }
         case .downloads(let worker):
-            guard let values = try? await worker.values() else { Issue.record("Missing stream"); return }
+            guard let values = try? await worker.values() else {
+                Issue.record("Missing stream"); return
+            }
             for await value in values where value.running == 0 { return }
         }
         Issue.record("Stream ended before drain")
@@ -435,6 +564,7 @@ private actor AttemptGate {
     private var active = 0
     private var cancellations: Set<Int> = []
     private var drains: [Int: CheckedContinuation<Void, Never>] = [:]
+    private var outputs: [Int: @Sendable (String) -> Void] = [:]
     private var startWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
     private var cancellationWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
 
@@ -452,6 +582,8 @@ private actor AttemptGate {
 
     func release(_ attempt: Int) { drains.removeValue(forKey: attempt)?.resume() }
 
+    func emit(_ line: String) { for output in outputs.values { output(line) } }
+
     private func cancelled(_ attempt: Int) {
         cancellations.insert(attempt)
         let ready = cancellationWaiters.filter { $0.0 == attempt }
@@ -464,7 +596,8 @@ private actor AttemptGate {
         let attempt = admissions
         active += 1
         maximumActive = max(maximumActive, active)
-        defer { active -= 1 }
+        outputs[attempt] = line
+        defer { active -= 1; outputs[attempt] = nil }
         for _ in 0..<30 { line(String(repeating: "x", count: 4_000)) }
         line("[download] 10.0% of synthetic attempt \(attempt)")
         await withTaskCancellationHandler {
@@ -482,4 +615,10 @@ private actor AttemptGate {
         try Data("synthetic output".utf8).write(to: output)
         return CLICommandResult(terminationStatus: 0, output: output.path + "\n")
     }
+}
+
+private struct ActivityFixture: Codable {
+    var generation: UUID?
+    var active: [UUID]
+    var logs: [String: String]
 }

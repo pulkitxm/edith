@@ -26,6 +26,7 @@ public enum ExtensionData {
         "music": [
             "music", "thumbnails", "music-library-index.json", "shared-state",
             "data/downloads.json", "data/downloads.json.lock", "data/downloads.json.scheduler.lock",
+            "data/downloads.json.activity.json", "data/downloads.json.activity.json.lock",
         ],
         "seoAudit": ["SEOAudit"], "machines": ["machines"], "codeStats": ["code-stats"],
         "virtualCamera": ["virtual-camera"],
@@ -36,6 +37,7 @@ public enum ExtensionData {
         "database": ["database"], "timeLapse": ["video-projects/TimeLapses"],
         "downloads": [
             "data/downloads.json", "data/downloads.json.lock", "data/downloads.json.scheduler.lock",
+            "data/downloads.json.activity.json", "data/downloads.json.activity.json.lock",
         ],
     ]
 

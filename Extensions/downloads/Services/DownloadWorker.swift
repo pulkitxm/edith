@@ -30,6 +30,47 @@ private final class DownloadWorkerOutput: @unchecked Sendable {
     }
 }
 
+private struct DownloadSchedulerActivity: Codable {
+    var generation: UUID?
+    var active: [UUID] = []
+    var logs: [String: String] = [:]
+
+    static func file(for queue: URL) -> URL { queue.appendingPathExtension("activity.json") }
+
+    static func read(queue: URL) throws -> Self {
+        try PersistentJSONFile.read(Self.self, from: file(for: queue), missing: Self())
+    }
+
+    static func write(
+        queue: URL, generation: UUID, active: [UUID], logs: [String: String], retained: [UUID]
+    ) throws {
+        let file = file(for: queue)
+        let lease = try PersistentFileLease.acquire(
+            at: file.appendingPathExtension("lock"), waits: true)
+        try withExtendedLifetime(lease) {
+            var value = (try? read(queue: queue)) ?? Self()
+            value.generation = generation
+            value.active = active
+            value.logs.merge(logs) { _, latest in latest }
+            value.logs = boundedLogs(value.logs, retained: retained)
+            try JSONEncoder().encode(value).write(to: file, options: .atomic)
+        }
+    }
+
+    static func boundedLogs(_ logs: [String: String], retained: [UUID]) -> [String: String] {
+        var bounded: [String: String] = [:]
+        var remaining = 256_000
+        for id in retained.prefix(32) {
+            guard let log = logs[id.uuidString], remaining > 0 else { continue }
+            var text = String(decoding: log.utf8.suffix(min(64_000, remaining)), as: UTF8.self)
+            while text.utf8.count > min(64_000, remaining) { text.removeFirst() }
+            bounded[id.uuidString] = text
+            remaining -= text.utf8.count
+        }
+        return bounded
+    }
+}
+
 public actor DownloadWorker {
     public static let shared = DownloadWorker()
     private var subscribers: [UUID: AsyncStream<DownloadWorkerSnapshot>.Continuation] = [:]
@@ -63,6 +104,8 @@ public actor DownloadWorker {
     private let loadError: String?
     private var persistenceError: String?
     private var readError: String?
+    private var activityReadError: String?
+    private var activityPersistenceError: String?
     private struct Flight {
         var task: Task<Void, Never>
         var progress: Task<Void, Never>?
@@ -175,7 +218,8 @@ public actor DownloadWorker {
         reload()
         revision += 1
         var snapshotRecords = records
-        var snapshotLogs = logs
+        let activity = sharedActivity()
+        var snapshotLogs = activity.logs
         for (id, flight) in flights {
             let buffer = flight.output.snapshot
             snapshotLogs[id.uuidString] = buffer.0
@@ -185,10 +229,15 @@ public actor DownloadWorker {
                 snapshotRecords[index].status = status
             }
         }
+        let active = flights.keys.sorted { $0.uuidString < $1.uuidString }
+        let retained = active + snapshotRecords.map(\.id).filter { !flights.keys.contains($0) }
+        snapshotLogs = DownloadSchedulerActivity.boundedLogs(snapshotLogs, retained: retained)
         return DownloadWorkerSnapshot(
             records: snapshotRecords, logs: snapshotLogs, enabled: isEnabled(),
             running: !flights.isEmpty, generation: generation, revision: revision,
-            problem: loadError ?? readError ?? persistenceError, executable: executable()
+            problem: loadError ?? readError ?? persistenceError ?? activityReadError
+                ?? activityPersistenceError, executable: executable(),
+            runningCount: max(flights.count, activity.active.count)
         )
     }
 
@@ -328,6 +377,7 @@ public actor DownloadWorker {
                         at: file.appendingPathExtension("scheduler.lock"))
                 else { return }
                 schedulerLease = lease
+                logs.removeAll()
                 try update { records in
                     for index in records.indices {
                         switch records[index].status {
@@ -447,7 +497,8 @@ public actor DownloadWorker {
     private func interrupt(_ id: UUID, reason: String) {
         guard flights[id] != nil else { return }
         try? update { records in
-            guard let index = records.firstIndex(where: { $0.id == id }), Self.isRunning(records[index])
+            guard let index = records.firstIndex(where: { $0.id == id }),
+                Self.isRunning(records[index])
             else { return }
             records[index].status = .interrupted(reason)
         }
@@ -525,7 +576,45 @@ public actor DownloadWorker {
         }
     }
 
+    private func sharedActivity() -> DownloadSchedulerActivity {
+        do {
+            let probe =
+                schedulerLease == nil
+                ? try PersistentFileLease.acquire(at: file.appendingPathExtension("scheduler.lock"))
+                : nil
+            return try withExtendedLifetime(probe) {
+                var activity = try DownloadSchedulerActivity.read(queue: file)
+                if schedulerLease == nil, probe != nil { activity.active = [] }
+                let retained = Set(records.map { $0.id.uuidString })
+                activity.logs = activity.logs.filter { retained.contains($0.key) }
+                activityReadError = nil
+                return activity
+            }
+        } catch {
+            activityReadError = "Download activity could not be read: \(error.localizedDescription)"
+            return DownloadSchedulerActivity()
+        }
+    }
+
+    private func persistActivity() {
+        guard schedulerLease != nil else { return }
+        var current = logs
+        for (id, flight) in flights { current[id.uuidString] = flight.output.snapshot.0 }
+        let active = flights.keys.sorted { $0.uuidString < $1.uuidString }
+        let retained = active + records.map(\.id).filter { !flights.keys.contains($0) }
+        do {
+            try DownloadSchedulerActivity.write(
+                queue: file, generation: generation, active: active, logs: current,
+                retained: retained)
+            activityPersistenceError = nil
+        } catch {
+            activityPersistenceError =
+                "Download activity could not be saved: \(error.localizedDescription)"
+        }
+    }
+
     private func notify() {
+        persistActivity()
         snapshotDirty = true
         guard publicationTask == nil else { return }
         publicationTask = Task { [weak self] in await self?.publishPending() }

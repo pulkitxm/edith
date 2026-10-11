@@ -49,7 +49,8 @@ public struct DownloadWorkerSnapshot: Codable, Sendable {
 
     public init(
         records: [DownloadRecord], logs: [String: String], enabled: Bool, running: Bool,
-        generation: UUID, revision: Int, problem: String? = nil, executable: URL? = nil
+        generation: UUID, revision: Int, problem: String? = nil, executable: URL? = nil,
+        runningCount: Int? = nil
     ) {
         self.problem = problem
         self.executable = executable
@@ -60,7 +61,7 @@ public struct DownloadWorkerSnapshot: Codable, Sendable {
         self.logs = logs
         self.enabled = enabled
         self.queued = records.count { $0.status == .queued }
-        self.running = running ? 1 : 0
+        self.running = runningCount ?? (running ? 1 : 0)
         self.finished = records.count { if case .done = $0.status { true } else { false } }
         self.failed = records.count { $0.canRetry }
     }
