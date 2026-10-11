@@ -207,12 +207,13 @@ final class TimeLapseWriter: @unchecked Sendable {
                 {
                     lastPreview = uptime
                     previewPending = true
-                    previewTask = Task { [self] in
+                    let previous = previewTask
+                    previewTask = Task { [self, previous] in
+                        await previous?.value
                         await preview(image)
                         await withCheckedContinuation { continuation in
                             queue.async { [self] in
                                 previewPending = false
-                                previewTask = nil
                                 continuation.resume()
                             }
                         }

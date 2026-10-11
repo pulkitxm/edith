@@ -161,6 +161,7 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
     private func stopUI() {
+        let client = engineClient; engineClient = nil
         let service = uiService, model = SEOAuditModel.shared
         service?.beginSuspension()
         model.shutdown()
@@ -168,13 +169,13 @@ final class ExtensionRuntime: NSObject {
         uiService = nil
         if service != nil {
             let id = UUID()
-            uiStops[id] = Task { [self, service, model] in
-                defer { uiStops[id] = nil }
+            uiStops[id] = Task { [self, service, model, client] in
+                defer { client?.invalidate(); uiStops[id] = nil }
                 await service?.shutdown()
                 await model.drain()
             }
         }
-        engineClient?.invalidate(); engineClient = nil
+        if service == nil { client?.invalidate() }
     }
 
 }

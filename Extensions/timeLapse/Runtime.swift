@@ -172,16 +172,17 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
     private func stopUI() {
+        let client = uiClient; uiClient = nil
         let recorder = uiRecorder; uiRecorder = nil
         if #available(macOS 15.0, *) { (recorder as? TimeLapseRecorder)?.beginSuspension() }
         if let recorder {
             let id = UUID()
-            uiStops[id] = Task { [self, recorder] in
-                defer { uiStops[id] = nil }
+            uiStops[id] = Task { [self, recorder, client] in
+                defer { client?.invalidate(); uiStops[id] = nil }
                 if #available(macOS 15.0, *) { await (recorder as? TimeLapseRecorder)?.shutdown() }
             }
         }
-        uiClient?.invalidate(); uiClient = nil
+        if recorder == nil { client?.invalidate() }
     }
 }
 
