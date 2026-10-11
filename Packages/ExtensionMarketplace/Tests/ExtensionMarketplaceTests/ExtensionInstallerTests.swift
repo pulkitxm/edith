@@ -8,8 +8,10 @@ struct PackageFixture {
     let store: ExtensionPackageStore
 
     init() throws {
-        directory = FileManager.default.temporaryDirectory.appendingPathComponent(
-            "extension-test-\(UUID().uuidString)")
+        let temporaryRoot = URL(
+            fileURLWithPath: ProcessInfo.processInfo.environment["TMPDIR"]
+                ?? FileManager.default.temporaryDirectory.path)
+        directory = temporaryRoot.appendingPathComponent("extension-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         store = ExtensionPackageStore(root: directory.appendingPathComponent("installed"))
     }
@@ -63,8 +65,7 @@ struct PackageFixture {
             store: store,
             download: { url, _ in
                 guard let archive = archives[url] else { throw MarketplaceError.downloadFailed }
-                let copy = FileManager.default.temporaryDirectory.appendingPathComponent(
-                    UUID().uuidString)
+                let copy = directory.appendingPathComponent(UUID().uuidString)
                 try FileManager.default.copyItem(at: archive, to: copy)
                 return copy
             },

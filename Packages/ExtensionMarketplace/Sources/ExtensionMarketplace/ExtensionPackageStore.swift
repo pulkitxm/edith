@@ -30,10 +30,10 @@ public struct ExtensionPackageStore: Sendable {
     }
 
     public func installedPackages() throws -> [ExtensionPackage] {
-        let state = root.appendingPathComponent("installed.json")
-        guard FileManager.default.fileExists(atPath: state.path) else { return [] }
-        let packages = try JSONDecoder().decode(
-            [ExtensionPackage].self, from: Data(contentsOf: state))
+        guard let data = try PackageDirectory(root, create: true).read("installed.json") else {
+            return []
+        }
+        let packages = try JSONDecoder().decode([ExtensionPackage].self, from: data)
         guard
             packages.allSatisfy({
                 ExtensionPackage.validComponent($0.id)
@@ -78,21 +78,21 @@ public struct ExtensionPackageStore: Sendable {
     }
 
     private func selections() throws -> [ExtensionPackage] {
-        let file = root.appendingPathComponent("selected-packages.json")
-        guard FileManager.default.fileExists(atPath: file.path) else { return [] }
-        return try JSONDecoder().decode([ExtensionPackage].self, from: Data(contentsOf: file))
+        guard let data = try PackageDirectory(root, create: true).read("selected-packages.json")
+        else { return [] }
+        return try JSONDecoder().decode([ExtensionPackage].self, from: data)
     }
 
     private func saveSelections(_ packages: [ExtensionPackage]) throws {
-        try JSONEncoder().encode(packages).write(
-            to: root.appendingPathComponent("selected-packages.json"), options: .atomic)
+        try PackageDirectory(root, create: true).write(
+            JSONEncoder().encode(packages), name: "selected-packages.json")
     }
 
     public func commit(_ packages: [ExtensionPackage]) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        try encoder.encode(packages).write(
-            to: root.appendingPathComponent("installed.json"), options: .atomic)
+        try PackageDirectory(root, create: true).write(
+            encoder.encode(packages), name: "installed.json")
     }
 
     public func remove(id: String) throws -> Bool {
@@ -109,16 +109,17 @@ public struct ExtensionPackageStore: Sendable {
             try PackageFileLock(url: leaseURL(for: package), exclusive: true)
         }
         defer { leases.forEach { $0.close() } }
+        let authority = try PackageDirectory(root, create: true)
+        for package in removed { try authority.remove(package) }
         try saveSelections(selections().filter { $0.id != id })
         try commit(packages.filter { $0.id != id })
-        for package in removed { try FileManager.default.removeItem(at: directory(for: package)) }
         return !removed.isEmpty
     }
 
     public func pendingRemovals() throws -> Set<String> {
-        let file = root.appendingPathComponent("pending-removals.json")
-        guard FileManager.default.fileExists(atPath: file.path) else { return [] }
-        let ids = try JSONDecoder().decode(Set<String>.self, from: Data(contentsOf: file))
+        guard let data = try PackageDirectory(root, create: true).read("pending-removals.json")
+        else { return [] }
+        let ids = try JSONDecoder().decode(Set<String>.self, from: data)
         guard ids.allSatisfy(ExtensionPackage.validComponent) else {
             throw MarketplaceError.invalidCatalog
         }
@@ -155,7 +156,8 @@ public struct ExtensionPackageStore: Sendable {
         defer { operation.close() }
         var ids = try pendingRemovals()
         if pending { ids.insert(id) } else { ids.remove(id) }
-        try JSONEncoder().encode(ids.sorted()).write(to: file, options: .atomic)
+        try PackageDirectory(root, create: true).write(
+            JSONEncoder().encode(ids.sorted()), name: "pending-removals.json")
     }
 
     public func leaseURL(for package: ExtensionPackage) -> URL {
@@ -189,13 +191,12 @@ public struct ExtensionPackageStore: Sendable {
                 (compatible.isEmpty ? Array(ordered.prefix(2)) : Array(compatible.prefix(2)))
                 + compatible.filter { selected.contains($0) }
             for package in ordered where !keep.contains(package) {
-                guard let lease = try? PackageFileLock(url: leaseURL(for: package), exclusive: true)
-                else { continue }
+                let lease: PackageFileLock
+                do {
+                    lease = try PackageFileLock(url: leaseURL(for: package), exclusive: true)
+                } catch MarketplaceError.packageBusy { continue }
                 defer { lease.close() }
-                let directory = directory(for: package)
-                if FileManager.default.fileExists(atPath: directory.path) {
-                    try FileManager.default.removeItem(at: directory)
-                }
+                try PackageDirectory(root, create: true).remove(package)
                 retained.removeAll { $0 == package }
             }
         }
@@ -224,10 +225,17 @@ public final class PackageFileLock: @unchecked Sendable {
     private var descriptor: Int32
 
     public init(url: URL, exclusive: Bool) throws {
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        descriptor = open(url.path, O_CREAT | O_RDWR | O_NOFOLLOW, S_IRUSR | S_IWUSR)
-        guard descriptor >= 0 else { throw MarketplaceError.packageBusy }
+        let parent = try PackageDirectory(url.deletingLastPathComponent(), create: true)
+        descriptor = openat(
+            parent.descriptor, url.lastPathComponent,
+            O_CREAT | O_RDWR | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC,
+            S_IRUSR | S_IWUSR)
+        guard descriptor >= 0 else { throw PackageDirectory.failure() }
+        do { try PackageDirectory.validate(descriptor, directory: false, owned: true) } catch {
+            Darwin.close(descriptor)
+            descriptor = -1
+            throw error
+        }
         guard flock(descriptor, (exclusive ? LOCK_EX : LOCK_SH) | LOCK_NB) == 0 else {
             Darwin.close(descriptor)
             descriptor = -1
@@ -243,4 +251,227 @@ public final class PackageFileLock: @unchecked Sendable {
     }
 
     deinit { close() }
+}
+
+final class PackageDirectory {
+    let descriptor: Int32
+
+    init(_ url: URL, create: Bool) throws {
+        var path = url.path
+        for alias in ["var", "tmp"] {
+            if path == "/\(alias)" || path.hasPrefix("/\(alias)/") {
+                path = "/private" + path
+                break
+            }
+        }
+        let components = path.split(separator: "/").map(String.init)
+        guard path.hasPrefix("/"), !components.isEmpty,
+            components.allSatisfy({ $0 != "." && $0 != ".." })
+        else { throw MarketplaceError.invalidArchive }
+        var current = open("/", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard current >= 0 else { throw Self.failure() }
+        do {
+            var walked = ""
+            for (index, component) in components.enumerated() {
+                walked += "/" + component
+                var next = openat(
+                    current, component, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+                if next < 0, errno == ENOENT, create {
+                    guard mkdirat(current, component, S_IRWXU) == 0 || errno == EEXIST else {
+                        throw Self.failure()
+                    }
+                    next = openat(
+                        current, component, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+                }
+                guard next >= 0 else { throw Self.failure() }
+                do {
+                    try Self.validate(
+                        next, directory: true, owned: index == components.count - 1,
+                        temporary: walked == "/private/tmp")
+                } catch {
+                    Darwin.close(next)
+                    throw error
+                }
+                Darwin.close(current)
+                current = next
+            }
+            descriptor = current
+        } catch {
+            Darwin.close(current)
+            throw error
+        }
+    }
+
+    private init(descriptor: Int32) { self.descriptor = descriptor }
+
+    deinit { Darwin.close(descriptor) }
+
+    static func failure() -> Error { POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+
+    static func validate(
+        _ descriptor: Int32, directory: Bool, owned: Bool, temporary: Bool = false
+    ) throws {
+        var info = stat()
+        guard fstat(descriptor, &info) == 0 else { throw failure() }
+        let kind = info.st_mode & S_IFMT
+        guard kind == (directory ? S_IFDIR : S_IFREG),
+            info.st_uid == getuid() || (!owned && info.st_uid == 0),
+            info.st_mode & 0o022 == 0
+                || (temporary && info.st_uid == 0 && info.st_mode & S_ISVTX != 0)
+        else { throw MarketplaceError.invalidArchive }
+    }
+
+    func child(_ name: String, create: Bool = false) throws -> PackageDirectory? {
+        guard !name.isEmpty, name != ".", name != "..", !name.contains("/"), !name.contains("\0")
+        else { throw MarketplaceError.invalidCatalog }
+        var next = openat(descriptor, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        if next < 0, errno == ENOENT, create {
+            guard mkdirat(descriptor, name, S_IRWXU) == 0 || errno == EEXIST else {
+                throw Self.failure()
+            }
+            next = openat(descriptor, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        }
+        if next < 0, errno == ENOENT { return nil }
+        guard next >= 0 else { throw Self.failure() }
+        do { try Self.validate(next, directory: true, owned: true) } catch {
+            Darwin.close(next)
+            throw error
+        }
+        return PackageDirectory(descriptor: next)
+    }
+
+    func parent(_ package: ExtensionPackage, create: Bool = false) throws -> PackageDirectory? {
+        guard
+            [package.id, package.hostABI, package.architecture, package.version]
+                .allSatisfy(ExtensionPackage.validComponent)
+        else {
+            throw MarketplaceError.invalidCatalog
+        }
+        return try child(package.id, create: create)?
+            .child(package.hostABI, create: create)?.child(package.architecture, create: create)
+    }
+
+    func contains(_ package: ExtensionPackage) throws -> Bool {
+        try parent(package)?.child(package.version) != nil
+    }
+
+    func remove(_ package: ExtensionPackage) throws {
+        try parent(package)?.removeTree(package.version)
+    }
+
+    func removeTree(_ name: String) throws {
+        guard let child = try child(name) else { return }
+        guard let entries = fdopendir(dup(child.descriptor)) else { throw Self.failure() }
+        defer { closedir(entries) }
+        while let entry = readdir(entries) {
+            let name = withUnsafePointer(to: &entry.pointee.d_name) {
+                $0.withMemoryRebound(to: CChar.self, capacity: Int(NAME_MAX) + 1) {
+                    String(cString: $0)
+                }
+            }
+            if name == "." || name == ".." { continue }
+            var info = stat()
+            guard fstatat(child.descriptor, name, &info, AT_SYMLINK_NOFOLLOW) == 0 else {
+                throw Self.failure()
+            }
+            if info.st_mode & S_IFMT == S_IFDIR {
+                try child.removeTree(name)
+            } else {
+                guard [S_IFREG, S_IFLNK].contains(info.st_mode & S_IFMT),
+                    info.st_uid == getuid()
+                else {
+                    throw MarketplaceError.invalidArchive
+                }
+                guard unlinkat(child.descriptor, name, 0) == 0 else { throw Self.failure() }
+            }
+        }
+        var opened = stat()
+        var current = stat()
+        guard fstat(child.descriptor, &opened) == 0,
+            fstatat(descriptor, name, &current, AT_SYMLINK_NOFOLLOW) == 0,
+            opened.st_dev == current.st_dev, opened.st_ino == current.st_ino
+        else { throw MarketplaceError.invalidArchive }
+        guard unlinkat(descriptor, name, AT_REMOVEDIR) == 0 else { throw Self.failure() }
+    }
+
+    func read(_ name: String) throws -> Data? {
+        let file = openat(descriptor, name, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
+        if file < 0, errno == ENOENT { return nil }
+        guard file >= 0 else { throw Self.failure() }
+        defer { Darwin.close(file) }
+        try Self.validate(file, directory: false, owned: true)
+        return try FileHandle(fileDescriptor: file, closeOnDealloc: false).readToEnd() ?? Data()
+    }
+
+    func write(_ data: Data, name: String) throws {
+        let temporary = ".state-\(UUID().uuidString)"
+        let file = openat(
+            descriptor, temporary, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
+            S_IRUSR | S_IWUSR)
+        guard file >= 0 else { throw Self.failure() }
+        defer {
+            Darwin.close(file)
+            unlinkat(descriptor, temporary, 0)
+        }
+        try FileHandle(fileDescriptor: file, closeOnDealloc: false).write(contentsOf: data)
+        guard renameat(descriptor, temporary, descriptor, name) == 0 else { throw Self.failure() }
+    }
+
+    func install(_ package: ExtensionPackage, from source: URL) throws {
+        guard let parent = try parent(package, create: true) else {
+            throw MarketplaceError.invalidArchive
+        }
+        let temporary = ".payload-\(UUID().uuidString)"
+        guard let destination = try parent.child(temporary, create: true) else {
+            throw MarketplaceError.invalidArchive
+        }
+        defer { try? parent.removeTree(temporary) }
+        try destination.copy(from: PackageDirectory(source, create: false))
+        try parent.removeTree(package.version)
+        guard renameat(parent.descriptor, temporary, parent.descriptor, package.version) == 0 else {
+            throw Self.failure()
+        }
+    }
+
+    private func copy(from source: PackageDirectory) throws {
+        guard let entries = fdopendir(dup(source.descriptor)) else { throw Self.failure() }
+        defer { closedir(entries) }
+        while let entry = readdir(entries) {
+            let name = withUnsafePointer(to: &entry.pointee.d_name) {
+                $0.withMemoryRebound(to: CChar.self, capacity: Int(NAME_MAX) + 1) {
+                    String(cString: $0)
+                }
+            }
+            if name == "." || name == ".." { continue }
+            var info = stat()
+            guard fstatat(source.descriptor, name, &info, AT_SYMLINK_NOFOLLOW) == 0 else {
+                throw Self.failure()
+            }
+            if info.st_mode & S_IFMT == S_IFDIR {
+                guard let original = try source.child(name),
+                    let destination = try child(name, create: true)
+                else { throw MarketplaceError.invalidArchive }
+                try destination.copy(from: original)
+            } else {
+                let input = openat(
+                    source.descriptor, name, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
+                guard input >= 0 else { throw Self.failure() }
+                defer { Darwin.close(input) }
+                try Self.validate(input, directory: false, owned: true)
+                let output = openat(
+                    descriptor, name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
+                    S_IRUSR | S_IWUSR)
+                guard output >= 0 else { throw Self.failure() }
+                defer { Darwin.close(output) }
+                guard fcopyfile(input, output, nil, copyfile_flags_t(COPYFILE_ALL)) == 0 else {
+                    throw Self.failure()
+                }
+            }
+        }
+        guard
+            fcopyfile(
+                source.descriptor, descriptor, nil, copyfile_flags_t(COPYFILE_METADATA)) == 0
+        else { throw Self.failure() }
+
+    }
 }
