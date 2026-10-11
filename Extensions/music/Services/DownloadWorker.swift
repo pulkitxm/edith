@@ -74,14 +74,16 @@ private struct DownloadSchedulerActivity: Codable {
 public actor DownloadWorker {
     public static let shared = DownloadWorker()
     private var subscribers: [UUID: AsyncStream<DownloadWorkerSnapshot>.Continuation] = [:]
+    private nonisolated let callbacks = MusicTaskOwner()
     public func values() throws -> AsyncStream<DownloadWorkerSnapshot> {
+        guard !stopping else { throw MusicDownloadError("Music is shutting down.") }
         try start()
         let id = UUID()
         return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
             subscribers[id] = continuation
             continuation.yield(snapshot())
             continuation.onTermination = { [weak self] _ in
-                Task { await self?.removeSubscriber(id) }
+                self?.callbacks.enqueue { [weak self] in await self?.removeSubscriber(id) }
             }
         }
     }
@@ -115,6 +117,9 @@ public actor DownloadWorker {
     static let maximumConcurrent = 3
     private var logs: [String: String] = [:]
     private var flights: [UUID: Flight] = [:]
+    private var finishing: [UUID: Flight] = [:]
+    private var finishWaiters: [UUID: Task<Void, Never>] = [:]
+    private var stopTask: Task<Void, Never>?
     private var started = false
     private var stopping = false
     private let generation = UUID()
@@ -178,31 +183,49 @@ public actor DownloadWorker {
         observationTask = Task { [weak self] in
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
-                guard let self else { return }
-                await refresh()
+                guard let self, await self.refreshWhileActive() else { return }
             }
         }
         notify()
     }
 
     public func stop() async {
+        if let stopTask {
+            await stopTask.value
+            return
+        }
         stopping = true
         started = false
         observationTask?.cancel()
-        observationTask = nil
+        let actual = Task { await self.finishStop() }
+        stopTask = actual
+        await actual.value
+    }
+
+    private func finishStop() async {
+        await callbacks.shutdown()
+        let clock = observationTask
         let running = Array(flights.keys)
         for id in running { interrupt(id, reason: "Music stopped.") }
-        let tasks = flights.values.map(\.task)
-        for flight in flights.values {
+        let owned = Array(flights.values) + Array(finishing.values)
+        for flight in owned {
             flight.task.cancel()
             flight.progress?.cancel()
         }
-        for task in tasks { await task.value }
+        for flight in owned {
+            await flight.task.value
+            await flight.progress?.value
+        }
+        let waiters = Array(finishWaiters.values)
+        for waiter in waiters { await waiter.value }
+        await clock?.value
+        observationTask = nil
         schedulerLease = nil
         notify()
         await publicationTask?.value
         for continuation in subscribers.values { continuation.finish() }
         subscribers.removeAll()
+        await callbacks.shutdownAndWait()
     }
 
     public func snapshot() -> DownloadWorkerSnapshot {
@@ -232,6 +255,12 @@ public actor DownloadWorker {
                 ?? activityPersistenceError, executable: executable(),
             runningCount: max(flights.count, activity.active.count)
         )
+    }
+
+    private func refreshWhileActive() -> Bool {
+        guard !stopping else { return false }
+        refresh()
+        return true
     }
 
     public func refresh() {
@@ -486,8 +515,19 @@ public actor DownloadWorker {
         notify()
     }
 
+    private func removeFinishedFlight(_ id: UUID) {
+        finishing.removeValue(forKey: id)
+        finishWaiters.removeValue(forKey: id)
+    }
+
     private func finish(_ id: UUID, result: Result<CLICommandResult, Error>) async {
         guard let flight = flights.removeValue(forKey: id) else { return }
+        finishing[id] = flight
+        finishWaiters[id] = Task { [weak self] in
+            await flight.task.value
+            await flight.progress?.value
+            await self?.removeFinishedFlight(id)
+        }
         flight.progress?.cancel()
         logs[id.uuidString] = flight.output.snapshot.0
         var succeeded = false
