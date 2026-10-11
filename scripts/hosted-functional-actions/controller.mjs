@@ -266,6 +266,8 @@ export async function runFunctionalOwner({
   ownerPlan,
   artifactBytes,
   admittedArtifact,
+  policyBytes,
+  admittedPolicies,
   environment,
   native,
   issuerDER,
@@ -295,6 +297,8 @@ export async function runFunctionalOwner({
     owner: ownerPlan.owner,
     artifactBytes,
     admittedArtifact,
+    policyBytes,
+    admittedPolicies,
     sourcePins,
     environment,
   });
