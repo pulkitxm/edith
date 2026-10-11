@@ -9,8 +9,24 @@ struct StudioUIOperationState: Codable, Sendable {
     let failure: String?
 }
 
+enum StudioUIOperationContext {
+    @TaskLocal static var requestedToken: UUID?
+}
+
 @MainActor final class StudioUILongOperations {
-    @TaskLocal nonisolated static var requestedToken: UUID?
+    @MainActor private final class ProgressSink {
+        private weak var owner: StudioUILongOperations?
+        private let token: UUID
+
+        init(owner: StudioUILongOperations, token: UUID) {
+            self.owner = owner
+            self.token = token
+        }
+
+        nonisolated func report(_ fraction: Double) {
+            Task { @MainActor [self] in owner?.progress(token, fraction) }
+        }
+    }
     var onChange: ((StudioUIOperationState) -> Void)?
     private var cancelled: [UUID: ContinuousClock.Instant] = [:]
 
@@ -28,7 +44,7 @@ struct StudioUIOperationState: Codable, Sendable {
         }
         let body = try JSONSerialization.data(
             withJSONObject: object, options: [.withoutEscapingSlashes])
-        return try await $requestedToken.withValue(token) { try await operation(body) }
+        return try await StudioUIOperationContext.$requestedToken.withValue(token) { try await operation(body) }
     }
 
     private struct Entry {
@@ -56,7 +72,7 @@ struct StudioUIOperationState: Codable, Sendable {
     {
         try Task.checkCancellation()
         pruneCancelled()
-        let token = Self.requestedToken ?? UUID()
+        let token = StudioUIOperationContext.requestedToken ?? UUID()
         guard cancelled[token] == nil else { throw CancellationError() }
         guard !stopped, entries.count < 8, entries[token] == nil else {
             throw ExtensionPeerError.unavailable
@@ -64,11 +80,11 @@ struct StudioUIOperationState: Codable, Sendable {
         let state = StudioUIOperationState(
             token: token, phase: "running", progress: 0,
             result: nil, failure: nil)
+        let sink = ProgressSink(owner: self, token: token)
+        let progress: @Sendable (Double) -> Void = { sink.report($0) }
         let task = Task { [weak self] in
             do {
-                let result = try await work { fraction in
-                    Task { @MainActor [weak self] in self?.progress(token, fraction) }
-                }
+                let result = try await work(progress)
                 try Task.checkCancellation()
                 guard result.count <= ExtensionEngineWire.maximumPayloadBytes else {
                     throw ExtensionPeerError.invalidRequest

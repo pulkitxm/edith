@@ -7,10 +7,12 @@ final class StudioCLIDefaults: @unchecked Sendable {
     init(_ store: UserDefaults) { self.store = store }
 }
 
-@MainActor enum StudioCLIEnvironment {
-    @TaskLocal nonisolated static var scopedDefaults: StudioCLIDefaults?
+enum StudioCLIContext {
+    @TaskLocal static var scopedDefaults: StudioCLIDefaults?
+}
 
-    nonisolated static var defaults: UserDefaults { scopedDefaults?.store ?? SharedDefaults.store }
+@MainActor enum StudioCLIEnvironment {
+    nonisolated static var defaults: UserDefaults { StudioCLIContext.scopedDefaults?.store ?? SharedDefaults.store }
     nonisolated static var workingDirectory: URL {
         URL(
             fileURLWithPath: ExtensionCLIContext.request?.workingDirectory ?? "/", isDirectory: true
@@ -47,7 +49,7 @@ final class StudioCLIDefaults: @unchecked Sendable {
     {
         try request.validate()
         guard !model.isStopped else { throw ExtensionPeerError.unavailable }
-        return try await StudioCLIEnvironment.$scopedDefaults.withValue(
+        return try await StudioCLIContext.$scopedDefaults.withValue(
             StudioCLIDefaults(model.defaults)
         ) {
             try await ExtensionCLIExecution.run(StudioCommand.self, request: request)
