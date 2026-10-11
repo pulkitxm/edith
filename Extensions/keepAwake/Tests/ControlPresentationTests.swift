@@ -9,6 +9,35 @@ import Testing
         UserDefaults(suiteName: "edith.controls.fixture." + UUID().uuidString)!
     }
 
+    @Test func suspensionWaitsForOriginalReadReturn() async throws {
+        let defaults = fixture()
+        var continuation: CheckedContinuation<Data, any Error>?
+        var calls = 0
+        let model = ControlPresentation(client: nil, defaults: defaults) { _, _ in
+            calls += 1
+            return try await withCheckedThrowingContinuation { continuation = $0 }
+        }
+        let read = Task { await model.refresh() }
+        while continuation == nil { await Task.yield() }
+        model.stop()
+        var drained = false
+        let drain = Task {
+            await model.stopAndWait(); drained = true
+        }
+        for _ in 0..<50 { await Task.yield() }
+        #expect(!drained)
+        model.perform("enable")
+        await model.refresh()
+        #expect(calls == 1)
+        continuation?.resume(
+            returning: try ControlPresentationContract.snapshot(
+                defaults: defaults, state: ControlPresentationState()))
+        await read.value
+        await drain.value
+        #expect(drained)
+        #expect(!model.ready)
+    }
+
     @Test func updateIsScopedAndAtomic() throws {
         let defaults = fixture()
         let before = defaults.dictionaryRepresentation()

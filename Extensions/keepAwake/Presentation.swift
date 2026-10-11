@@ -105,6 +105,7 @@ final class ControlPresentation {
     private let defaults: UserDefaults
     private let client: ExtensionEngineClient?
     private let invoke: (String, Data) async throws -> Data
+    private var readTask: Task<Void, Never>?
     private var writing: Task<Void, Never>?
     private var actions: [UUID: Task<Void, Never>] = [:]
     private var observer: NSObjectProtocol?
@@ -221,6 +222,25 @@ final class ControlPresentation {
     }
 
     func refresh() async {
+        guard !stopped else { return }
+        let task: Task<Void, Never>
+        if let readTask {
+            task = readTask
+        } else {
+            task = Task { [self] in
+                defer { readTask = nil }
+                await refreshWork()
+            }
+            readTask = task
+        }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func refreshWork() async {
         guard active, !stopped, !reading, writing == nil, actions.isEmpty else { return }
         reading = true
         defer { reading = false }
@@ -293,13 +313,22 @@ final class ControlPresentation {
         stopped = true
         revision += 1
         load.cancel()
-        writing?.cancel(); writing = nil
-        actions.values.forEach { $0.cancel() }; actions.removeAll()
+        readTask?.cancel()
+        writing?.cancel()
+        actions.values.forEach { $0.cancel() }
         IPC.stopObserving(observer); observer = nil
         if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver) }
         defaultsObserver = nil
         client?.invalidate()
     }
+
+    func stopAndWait() async {
+        stop()
+        await readTask?.value
+        await writing?.value
+        while let task = actions.values.first { await task.value }
+    }
+
 }
 
 import EdithExtensionUI

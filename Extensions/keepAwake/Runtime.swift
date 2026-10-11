@@ -40,6 +40,8 @@ final class KeepAwakeRuntime: NSObject {
 
     private var presentation: ControlPresentation?
 
+    private var commandDrain: Task<Void, Never>?
+    private var presentationDrains: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -72,12 +74,54 @@ final class KeepAwakeRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginCommandDrain() -> Task<Void, Never> {
+        let owner = store
+        let uiOwner = presentation
+        _ = commands.suspend()
+        if let commandDrain { return commandDrain }
+        owner?.cancelPendingCommands()
+        uiOwner?.stop()
+        let task = Task { [self] in
+            _ = await commands.suspendAndWait()
+            await uiOwner?.stopAndWait()
+            while let task = presentationDrains.values.first { await task.value }
+            withExtendedLifetime(owner) {}
+        }
+        commandDrain = task
+        return task
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        Task {
+        let owner = store
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
             await commands.shutdownAndWait()
+            owner?.shutdown()
             _ = execute(["operation": "stop"])
             completion()
+        }
+    }
+
+    private func stopPresentation() {
+        let owner = presentation
+        presentation = nil
+        owner?.stop()
+        guard let owner else { return }
+        let id = UUID()
+        presentationDrains[id] = Task { [self] in
+            defer { presentationDrains[id] = nil }
+            await owner.stopAndWait()
         }
     }
 
@@ -93,22 +137,25 @@ final class KeepAwakeRuntime: NSObject {
                 "role": "helper",
             ] as NSDictionary
         case "configureUI":
+            guard commandDrain == nil, presentationDrains.count < 8 else {
+                return ["ok": false] as NSDictionary
+            }
             guard let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "keepAwake",
                 configuration.defaultsSuite
                     == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
-            presentation?.stop()
+            stopPresentation()
             presentation = ControlPresentation(client: configuration.engineClient)
             return ["ok": true] as NSDictionary
         case "stopUI":
-            presentation?.stop()
-            presentation = nil
+            stopPresentation()
             return ["ok": true] as NSDictionary
         case "prepareToStop":
             commands.shutdown()
             return ["ok": true] as NSDictionary
         case "start":
+            guard commandDrain == nil else { return ["ok": false] as NSDictionary }
             guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
             else { return ["ok": false] as NSDictionary }
             do {
@@ -144,8 +191,7 @@ final class KeepAwakeRuntime: NSObject {
             commands.cancel(input["token"] as? String ?? "")
             return ["ok": true] as NSDictionary
         case "stop":
-            presentation?.stop()
-            presentation = nil
+            stopPresentation()
             commands.shutdown()
             store?.shutdown()
             store = nil

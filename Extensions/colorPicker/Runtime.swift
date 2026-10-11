@@ -17,6 +17,8 @@ final class ExtensionRuntime: NSObject {
     private var presentation: ControlPresentation?
 
     private var fixture: WorkerFixtureAdmission?
+    private var commandDrain: Task<Void, Never>?
+    private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -100,13 +102,52 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginCommandDrain() -> Task<Void, Never> {
+        let owner = service
+        let ui = presentation
+        _ = commands.suspend()
+        if let commandDrain { return commandDrain }
+        ui?.stop()
+        owner?.shutdown()
+        let task = Task { [self] in
+            _ = await commands.suspendAndWait()
+            await owner?.stopAndWait()
+            await ui?.stopAndWait()
+            while let task = uiDrains.values.first { await task.value }
+        }
+        commandDrain = task
+        return task
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        Task {
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
             await commands.shutdownAndWait()
             _ = execute(["operation": "stop"])
             completion()
         }
+    }
+
+    private func retirePresentation() {
+        guard let owner = presentation else { return }
+        owner.stop()
+        let id = UUID()
+        uiDrains[id] = Task { [self, owner] in
+            defer { uiDrains[id] = nil }
+            await owner.stopAndWait()
+        }
+        presentation = nil
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
@@ -125,12 +166,14 @@ final class ExtensionRuntime: NSObject {
                 configuration.defaultsSuite
                     == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
-            presentation?.stop()
+            guard commandDrain == nil, uiDrains.count < 8 else {
+                return ["ok": false] as NSDictionary
+            }
+            retirePresentation()
             presentation = ControlPresentation(client: configuration.engineClient)
             return ["ok": true] as NSDictionary
         case "stopUI":
-            presentation?.stop()
-            presentation = nil
+            retirePresentation()
             return ["ok": true] as NSDictionary
         case "prepareToStop":
             commands.shutdown()
@@ -175,8 +218,7 @@ final class ExtensionRuntime: NSObject {
         case "synchronize": service?.registerHotKey()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
-            presentation?.stop()
-            presentation = nil
+            retirePresentation()
             commands.shutdown()
             service?.shutdown()
             service = nil

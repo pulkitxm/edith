@@ -21,6 +21,7 @@ final class KeepAwakeStore {
     private var wakeObserver: NSObjectProtocol?
     private var reconciliationTimer: Timer?
     private var stopped = false
+    private var suspending = false
 
     convenience init() {
         self.init(defaults: .standard)
@@ -45,17 +46,17 @@ final class KeepAwakeStore {
         settingsObserver = notificationCenter.addObserver(
             forName: UserDefaults.didChangeNotification, object: defaults, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.syncPreventSleep() }
+            MainActor.assumeIsolated { self?.syncPreventSleep() }
         }
         wakeObserver = workspaceNotifications.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.syncPreventSleep() }
+            MainActor.assumeIsolated { self?.syncPreventSleep() }
         }
         if let reconciliationInterval {
             let timer = Timer(timeInterval: reconciliationInterval, repeats: true) {
                 [weak self] _ in
-                Task { @MainActor in self?.syncPreventSleep() }
+                MainActor.assumeIsolated { self?.syncPreventSleep() }
             }
             timer.tolerance = reconciliationInterval / 5
             reconciliationTimer = timer
@@ -80,7 +81,7 @@ final class KeepAwakeStore {
     }
 
     func syncPreventSleep() {
-        guard !stopped else { return }
+        guard !stopped, !suspending else { return }
         let want =
             defaults.bool(forKey: KeepAwakeKeys.enabled)
             && defaults.bool(forKey: AppStorageKeys.General.preventSleep)
@@ -97,14 +98,19 @@ final class KeepAwakeStore {
         preventingSleep = assertionID != nil
     }
 
-    func shutdown() {
-        stopped = true
+    func cancelPendingCommands() {
+        suspending = true
         reconciliationTimer?.invalidate()
         reconciliationTimer = nil
         if let settingsObserver { notificationCenter.removeObserver(settingsObserver) }
         settingsObserver = nil
         if let wakeObserver { workspaceNotifications.removeObserver(wakeObserver) }
         wakeObserver = nil
+    }
+
+    func shutdown() {
+        cancelPendingCommands()
+        stopped = true
         releaseCurrentAssertion()
     }
 

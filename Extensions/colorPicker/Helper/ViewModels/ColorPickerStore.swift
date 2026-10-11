@@ -13,6 +13,7 @@ final class ColorPickerStore: FeatureModule {
     private(set) var history: [ColorSwatch] = []
     private(set) var copyError: String?
     private var stopped = false
+    @ObservationIgnored private var selectionTask: Task<Void, Never>?
     @ObservationIgnored private var requestObserver: NSObjectProtocol?
 
     private let fixture: WorkerFixtureAdmission?
@@ -55,12 +56,30 @@ final class ColorPickerStore: FeatureModule {
         if fixture != nil {
             commit(NSColor(srgbRed: 0.25, green: 0.5, blue: 0.75, alpha: 1)); return
         }
-        ColorPickerOperationExecution.perform(.pick) { [weak self] color in
-            guard let color else { return }
-            Task { @MainActor in
-                self?.commit(color)
+        guard selectionTask == nil else { return }
+        let sampler = NSColorSampler()
+        let response = AsyncStream<NSColor?>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        selectionTask = Task { [self, sampler] in
+            defer { selectionTask = nil }
+            for await color in response.stream {
+                if let color, !stopped { commit(color) }
             }
+            withExtendedLifetime(sampler) {}
         }
+        ColorPickerOperationExecution.perform(
+            .pick,
+            show: { completion in
+                sampler.show(selectionHandler: completion)
+            }
+        ) { color in
+            response.continuation.yield(color)
+            response.continuation.finish()
+        }
+    }
+
+    func stopAndWait() async {
+        shutdown()
+        await selectionTask?.value
     }
 
     func copyDefault(_ swatch: ColorSwatch) {
