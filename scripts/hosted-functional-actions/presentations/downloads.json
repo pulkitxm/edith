@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "owner": "downloads",
+  "location": "settings",
+  "section": "downloads",
+  "operation": "downloads.ui.action",
+  "steps": [
+    {
+      "role": "button",
+      "label": "Video",
+      "action": "click",
+      "value": null
+    },
+    {
+      "role": "button",
+      "label": "Audio",
+      "action": "click",
+      "value": null
+    }
+  ],
+  "sources": [
+    {
+      "path": "Extensions/downloads/Runtime.swift",
+      "sha256": "526d3186ee3cc6a9c46192e9e90439b0130085da3149089d88473e21af85ce68"
+    },
+    {
+      "path": "Extensions/downloads/Views/DownloadsSettings.swift",
+      "sha256": "81dffdd521f5a0c269783fe0c134e1d3382fae77fc6511c5ef791e272381e018"
+    },
+    {
+      "path": "Extensions/downloads/Services/YoutubeDownloader.swift",
+      "sha256": "3eba1c3bfc891a3ca488d7892d55f2bb21fe97e20752ec69505e0a0eac7e1fc2"
+    },
+    {
+      "path": "Extensions/downloads/DownloadsUIBridge.swift",
+      "sha256": "337cd4b7e5d9438225295f364268163f09e67e74028a8baab9ea17b48665c971"
+    }
+  ]
+}
