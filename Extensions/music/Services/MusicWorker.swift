@@ -291,6 +291,9 @@ final class MusicWorker {
         guard let resources else { return }
         resources.player.suspendCommands()
         resources.accounts.suspendCommands()
+        resources.external.suspendCommands()
+        MusicRemote.shared.suspendCommands()
+        YoutubeDownloader.shared.suspendCommands()
         MusicTools.shared.suspendCommands()
     }
 
@@ -298,6 +301,10 @@ final class MusicWorker {
         guard let resources else { return }
         await resources.player.suspendCommandsAndWait()
         await resources.accounts.suspendCommandsAndWait()
+        await resources.external.suspendCommandsAndWait()
+        await MusicRemote.shared.suspendCommandsAndWait()
+        await YoutubeDownloader.shared.suspendCommandsAndWait()
+        await DownloadWorker.shared.stop()
         await MusicTools.shared.suspendCommandsAndWait()
     }
 
@@ -307,6 +314,9 @@ final class MusicWorker {
         if let resources {
             await resources.player.shutdownAndWait()
             await resources.accounts.shutdownAndWait()
+            await resources.external.stopAndWait()
+            await MusicRemote.shared.stopAndWait()
+            await YoutubeDownloader.shared.shutdownAndWait()
             await MusicTools.shared.shutdownAndWait()
             await DownloadWorker.shared.stop()
         }

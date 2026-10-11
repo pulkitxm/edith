@@ -127,6 +127,7 @@ final class ExternalMusic {
     private(set) var playback: ExternalPlayback?
     private(set) var lastError: String?
     @ObservationIgnored private let effects: ExternalMusicEffects
+    private let tasks = MusicTaskOwner()
     private var pollingTask: Task<Void, Never>?
     private var commandTask: Task<Void, Never>?
     private var observingPlayback = false
@@ -160,6 +161,16 @@ final class ExternalMusic {
         }
     }
 
+    func suspendCommands() { tasks.shutdown() }
+
+    func suspendCommandsAndWait() async { await tasks.shutdownAndWait() }
+
+    func stopAndWait() async {
+        suspendCommands()
+        stop()
+        await tasks.shutdownAndWait()
+    }
+
     func stop() {
         generation &+= 1; presentationSample = .distantPast
         presentationTask?.cancel(); presentationTask = nil
@@ -178,7 +189,7 @@ final class ExternalMusic {
             let command = ExternalPlaybackScript.command(info, app: app)
         else { return }
         let previous = commandTask
-        commandTask = Task { [weak self] in
+        commandTask = tasks.start { [weak self] in
             await previous?.value
             guard let self, !Task.isCancelled else { return }
             await refreshPlayback(app: app, command: command)
@@ -190,7 +201,7 @@ final class ExternalMusic {
         observingPlayback = active
         pollingTask?.cancel(); pollingTask = nil
         guard active else { return }
-        pollingTask = Task { [weak self] in
+        pollingTask = tasks.start { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
                 if lastError == nil {
@@ -215,7 +226,7 @@ final class ExternalMusic {
         lastError = nil
         guard let app = current?.app else { return }
         commandTask?.cancel()
-        commandTask = Task { [weak self] in await self?.refreshPlayback(app: app) }
+        commandTask = tasks.start { [weak self] in await self?.refreshPlayback(app: app) }
     }
 
     func refreshPresentationPlayback(force: Bool = false) async {
@@ -227,10 +238,10 @@ final class ExternalMusic {
         }
         presentationSample = .now
         let token = generation
-        let task = Task<Void, Never> { [weak self] in
+        guard let task = tasks.start({ [weak self] in
             guard let self else { return }
             await self.refreshPlayback(app: app)
-        }
+        }) else { return }
         presentationTask = task
         await withTaskCancellationHandler(
             operation: { await task.value }, onCancel: { task.cancel() })

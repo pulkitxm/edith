@@ -192,6 +192,7 @@ public final class YoutubeDownloader {
     public private(set) var updateResult: Result<String, Error>? = nil
     public private(set) var estimates: [URL: DownloadEstimate] = [:]
 
+    @ObservationIgnored private let tasks = MusicTaskOwner()
     @ObservationIgnored private var mutationTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var updateTask: Task<Void, Never>?
     public var errorMessage: String?
@@ -283,7 +284,7 @@ public final class YoutubeDownloader {
         observesWorker = start
         guard start else { return }
         checkAvailability()
-        streamTask = Task { [weak self, client] in
+        streamTask = tasks.start { [weak self, client] in
             if let snapshot = try? await client.snapshot() { self?.apply(snapshot) }
             guard let values = try? await client.values() else { return }
             for await snapshot in values {
@@ -324,7 +325,7 @@ public final class YoutubeDownloader {
         availabilityTask?.cancel()
         let generation = UUID()
         availabilityGeneration = generation
-        availabilityTask = Task {
+        availabilityTask = tasks.start { [self] in
             defer { if generation == availabilityGeneration { availabilityTask = nil } }
             do {
                 let snapshot = try await client.snapshot()
@@ -352,7 +353,7 @@ public final class YoutubeDownloader {
     private func mutate(_ request: MusicDownloadMutation) {
         errorMessage = nil
         let token = UUID()
-        mutationTasks[token] = Task {
+        mutationTasks[token] = tasks.start { [self] in
             defer { mutationTasks.removeValue(forKey: token) }
             do {
                 _ = try await client.mutateAsync(request)
@@ -370,7 +371,7 @@ public final class YoutubeDownloader {
         updateResult = nil
         ytdlpUpdateMessage = nil
         updateTask?.cancel()
-        updateTask = Task {
+        updateTask = tasks.start { [self] in
             do {
                 let update = try await DownloadToolOperationExecution.update(
                     executable: CLIToolEnvironment.executable(named: "yt-dlp"))
@@ -477,6 +478,16 @@ public final class YoutubeDownloader {
     }
 
     public func cancelAll() { mutate(.cancel(id: nil, includeQueued: true, reason: "Cancelled")) }
+
+    func suspendCommands() { tasks.shutdown() }
+
+    func suspendCommandsAndWait() async { await tasks.shutdownAndWait() }
+
+    func shutdownAndWait() async {
+        suspendCommands()
+        shutdown()
+        await tasks.shutdownAndWait()
+    }
 
     public func shutdown() {
         streamTask?.cancel(); streamTask = nil
