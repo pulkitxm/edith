@@ -5,6 +5,14 @@ import Testing
 @testable import HerdrUI
 
 @Suite(.serialized) @MainActor struct AgentActivityOwnershipTests {
+    private var ambientContext: NSDictionary {
+        [
+            "ambientPolicy": [
+                "pauseAmbientOnBattery": true, "subscribers": ["sessions.discover": 0],
+            ]
+        ]
+    }
+
     @Test func disableDrainsActivityAndHooksThenFreshWorkerRestoresOnlyOptedInScope() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -22,6 +30,7 @@ import Testing
             store: HerdrStore(defaults: defaults, machinesProvider: { [] }), activity: monitor,
             activityInstaller: installer, automaticActions: false)
         await monitor.save(.init(providers: ["claude": .init(observing: true, approvals: true)]))
+        try worker.applyAmbientPolicy(context: ambientContext)
         await worker.start()
         let surface = HerdrSurface(worker: worker, privacyValues: { [:] })
         _ = try await snapshot(surface, SurfaceTile(.agents))
@@ -46,6 +55,7 @@ import Testing
         let fresh = HerdrWorker(
             store: HerdrStore(defaults: defaults, machinesProvider: { [] }), activity: restarted,
             activityInstaller: installer, automaticActions: false)
+        try fresh.applyAmbientPolicy(context: ambientContext)
         await fresh.start()
         #expect(
             FileManager.default.fileExists(
@@ -196,7 +206,7 @@ import Testing
         let deadline = ContinuousClock.now + .seconds(2)
         repeat {
             let value = try await snapshot(surface, tile)
-            if value.metrics.first { $0.id == "permissions" }?.value == "1" { return value }
+            if value.metrics.first(where: { $0.id == "permissions" })?.value == "1" { return value }
             try await Task.sleep(for: .milliseconds(5))
         } while ContinuousClock.now < deadline
         throw ExtensionPeerError.unavailable

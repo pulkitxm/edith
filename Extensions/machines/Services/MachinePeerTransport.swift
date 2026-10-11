@@ -116,7 +116,9 @@ import Foundation
             result = try await connection.run(
                 command, stdin: input, timeout: 900,
                 maximumOutputBytes: MachineUsageCollectionService.maximumDocumentBytes,
-                onStandardErrorLine: progress.map { output in { line in output(line, true) } })
+                onStandardErrorLine: progress.map { output in
+                    { @Sendable line in output(line, true) }
+                })
         }
         try Task.checkCancellation()
         guard result.succeeded else { throw ExtensionPeerError.rejected(result.stderrText) }

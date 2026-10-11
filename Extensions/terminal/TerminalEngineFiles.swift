@@ -27,7 +27,7 @@ import GhosttyTerminal
         "terminal.drop.begin", "terminal.drop.write", "terminal.drop.finish",
         "terminal.drop.cancel", "terminal.drop.paths", "terminal.resolveLink", "terminal.openLink",
     ]
-    static let maximumBytes: UInt64 = 536_870_912
+    nonisolated static let maximumBytes: UInt64 = 536_870_912
     private var uploads: [UUID: Upload] = [:]
     private var targets: [UUID: Target] = [:]
     private var directories: [UUID: Set<URL>] = [:]

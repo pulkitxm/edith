@@ -98,8 +98,8 @@ final class AttentionPageModel {
 
     @MainActor
     private final class LoadStorage {
-        let breakdown = ContentLoad()
-        let page = ContentLoad()
+        fileprivate let breakdown = ContentLoad()
+        fileprivate let page = ContentLoad()
     }
 
     init(

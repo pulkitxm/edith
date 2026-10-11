@@ -28,9 +28,9 @@ public final class AttentionExtensionController: NSObject {
     private var activeCalls = 0
     @MainActor
     private final class Storage {
-        let commands = ExtensionCommandRegistry()
-        let ambientPolicy: ExtensionAmbientPolicy
-        let admitFixture: (NSDictionary) throws -> WorkerFixtureAdmission?
+        fileprivate let commands = ExtensionCommandRegistry()
+        fileprivate let ambientPolicy: ExtensionAmbientPolicy
+        fileprivate let admitFixture: (NSDictionary) throws -> WorkerFixtureAdmission?
 
         init(
             ambientPolicy: ExtensionAmbientPolicy,

@@ -650,7 +650,7 @@ struct MusicRevealCommand: AsyncParsableCommand {
     @MainActor func run() async throws {
         try await MusicCommandExecution.execute {
             let found = try LibraryBridge.track(track)
-            let url = await MusicLibraryOperationExecution.reveal(found.url)
+            let url = MusicLibraryOperationExecution.reveal(found.url)
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -678,7 +678,7 @@ struct MusicOpenLibraryCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @MainActor func run() async throws {
         try await MusicCommandExecution.execute {
-            let url = try await MusicLibraryOperationExecution.openLibrary()
+            let url = try MusicLibraryOperationExecution.openLibrary()
             guard !json else {
                 CLIOut.json(
                     .object([

@@ -128,7 +128,7 @@ struct TerminalTabsView: View {
             tabBar
             Divider().opacity(0.3)
             ZStack {
-                ForEach(model.tabs) { tab in
+                ForEach(model.tabs) { [model] tab in
                     let active = presented && tab.id == model.selected
                     MachineTerminalTab(
                         session: session, active: active,

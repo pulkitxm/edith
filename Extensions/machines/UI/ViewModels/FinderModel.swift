@@ -1455,7 +1455,7 @@ extension FinderModel {
             path: path, selection: selection, text: text, paths: paths, permanently: permanently,
             intent: intent, resolutions: resolutions)
         do {
-            let task = Task {
+            let task = Task { [self] in
                 try await client.files(value) { [weak self] progress in
                     guard let self, listingLoad.isCurrent(request), path == requestedPath else {
                         return

@@ -409,11 +409,11 @@ import Testing
     @Test func ownerStopCancelsInflightOriginalCatalogDiscoveryBeforeCommandDrain() async throws {
         defer { HerdrWorkOwnership.enable() }
         let signal = HerdrCatalogCancellationFixture()
-        let catalogs = AgentLaunchCatalogs { _, _, _ in
+        let catalogs = AgentLaunchCatalogs(fetch: { _, _, _ in
             await signal.started()
             do { try await Task.sleep(for: .seconds(30)) } catch { await signal.cancelled() }
             return nil
-        }
+        })
         let original = worker()
         let worker = HerdrWorker(
             store: original.store, defaults: original.store.uiDefaults,

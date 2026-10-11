@@ -4,7 +4,7 @@ import Foundation
 
 final class AttentionDatabase: @unchecked Sendable {
     private final class Storage {
-        let pool: DatabasePool
+        fileprivate let pool: DatabasePool
 
         init(pool: DatabasePool) { self.pool = pool }
     }

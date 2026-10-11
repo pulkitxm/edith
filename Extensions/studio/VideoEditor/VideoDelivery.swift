@@ -284,6 +284,84 @@ public struct VideoDeliveryReport: Codable, Sendable {
     }
 }
 
+private final class VideoWriterReadiness: @unchecked Sendable {
+    private let input: AVAssetWriterInput
+    private let queue = DispatchQueue(label: "edith.video.writer.readiness")
+    private let reader: AVAssetReader
+    private let writer: AVAssetWriter
+    private let statusTimer: DispatchSourceTimer
+    private var waiting: CheckedContinuation<Void, Error>?
+    private var observation: NSKeyValueObservation?
+    private var cancelled = false
+    private var generation: UInt64 = 0
+
+    init(input: AVAssetWriterInput, reader: AVAssetReader, writer: AVAssetWriter) {
+        self.input = input
+        self.reader = reader
+        self.writer = writer
+        statusTimer = DispatchSource.makeTimerSource(queue: queue)
+        statusTimer.schedule(deadline: .now() + .milliseconds(100), repeating: .milliseconds(100))
+        statusTimer.setEventHandler { [weak self] in
+            guard let self, waiting != nil,
+                writer.status != .writing || reader.status == .failed || reader.status == .cancelled
+            else { return }
+            resume()
+        }
+        statusTimer.resume()
+    }
+
+    deinit {
+        observation?.invalidate()
+        statusTimer.cancel()
+    }
+
+    private func resume() {
+        generation &+= 1
+        observation?.invalidate()
+        observation = nil
+        let continuation = waiting
+        waiting = nil
+        continuation?.resume()
+    }
+
+    func wait() async throws {
+        try Task.checkCancellation()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation {
+                (continuation: CheckedContinuation<Void, Error>) in
+                queue.async { [self] in
+                    guard !cancelled else {
+                        continuation.resume(throwing: CancellationError())
+                        return
+                    }
+                    generation &+= 1
+                    let token = generation
+                    waiting = continuation
+                    observation = input.observe(
+                        \.isReadyForMoreMediaData, options: [.initial, .new]
+                    ) { [weak self] _, change in
+                        guard change.newValue == true else { return }
+                        self?.queue.async { [weak self] in
+                            guard let self, generation == token, waiting != nil else { return }
+                            resume()
+                        }
+                    }
+                }
+            }
+        } onCancel: {
+            self.queue.async { [self] in
+                cancelled = true
+                generation &+= 1
+                observation?.invalidate()
+                observation = nil
+                let continuation = waiting
+                waiting = nil
+                continuation?.resume(throwing: CancellationError())
+            }
+        }
+    }
+}
+
 extension VideoRenderPipeline {
     func export(
         to destination: URL, settings: VideoDeliverySettings = .init(), overwrite: Bool = false,
@@ -461,6 +539,7 @@ extension VideoRenderPipeline {
     ) async throws {
         guard let output, let input else { return }
         var lastProgress = -1.0
+        let readiness = VideoWriterReadiness(input: input, reader: reader, writer: writer)
         try await VideoSampleTransfer.run(
             validate: {
                 guard writer.status == .writing, reader.status != .failed else {
@@ -470,7 +549,7 @@ extension VideoRenderPipeline {
             },
             readNext: { output.copyNextSampleBuffer() },
             isReady: { input.isReadyForMoreMediaData },
-            waitForReadiness: { try await Task.sleep(for: .milliseconds(2)) },
+            waitForReadiness: { try await readiness.wait() },
             append: { sample in
                 guard input.append(sample) else {
                     throw writer.error

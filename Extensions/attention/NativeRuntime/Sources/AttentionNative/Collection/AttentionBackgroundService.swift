@@ -29,7 +29,7 @@ actor AttentionBackgroundService {
     private var maintenanceTask: Task<Void, Never>?
     private var maintenanceContinuation: AsyncStream<Void>.Continuation?
     private final class PolicyStorage {
-        let ambientPolicy: ExtensionAmbientPolicy?
+        fileprivate let ambientPolicy: ExtensionAmbientPolicy?
 
         init(ambientPolicy: ExtensionAmbientPolicy?) {
             self.ambientPolicy = ambientPolicy

@@ -91,7 +91,7 @@ final class HerdrStore {
         ) -> Void
 
     static let shared = HerdrStore(workspacePresenter: { ExtensionPresentation.showWindow() })
-    static let boardID = "board"
+    nonisolated static let boardID = "board"
     var terminalClient: OwnedTerminalClient.Invoke?
     var uiClient: HerdrUIClient?
     var ownsSpaceAgent: @MainActor (String) -> Bool = { _ in false }
