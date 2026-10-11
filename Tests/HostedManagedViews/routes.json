@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "reviewedSource": "46f04593d9cb00eb375842ff739b8a662d25c6b8",
+  "reviewedSource": "2d82e4aefc37abfc3effe34dbf58b4a302aedb5e",
   "owners": [
     {
       "id": "keepAwake",
@@ -672,11 +672,11 @@
       "factoryOverlay": false,
       "scope": "original-view-creation-close-reopen-disable",
       "functionalActionsValidated": false,
-      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; no utility action or settings mutation.",
+      "effects": "Main route creates a presentation-owned remote AttentionPageModel and client with an unused local repository. Hidden presentation gates page work. Strict engine fixture uses synthetic SQLite data with collection and network disabled. stopUI cancels loading and invalidates the client; stop/disable drain commands and services. No tracking, focus, categorization, settings mutation, browser, clipboard, accessibility or backup actions.",
       "sources": [
         {
           "path": "Extensions/attention/NativeRuntime/Sources/AttentionNative/AttentionExtensionController.swift",
-          "sha256": "68e41f430510ceea42c9cc7a14c977d028109383c1fa43d12fa441e0d6fab04d"
+          "sha256": "7aa220740bdd93ff01c6ada607b5cdd464be8dde1c96383151354142461e0019"
         }
       ]
     },
@@ -822,7 +822,7 @@
       "factoryOverlay": false,
       "scope": "original-view-creation-close-reopen-disable",
       "functionalActionsValidated": false,
-      "effects": "Original remote project/page model. Discovery/theme reads only owned engine state; no project session creation/restart/input/action.",
+      "effects": "Original remote page owns its preference model through the same authenticated client. Construction issues no preference request; hidden presentation gates preference, discovery and theme tasks. stopRendering and shutdown cancel preference requests and remote rendering. No preference save, project session creation/restart/input, terminal launch or action.",
       "sources": [
         {
           "path": "Extensions/quinjet/Runtime.swift",
@@ -830,7 +830,7 @@
         },
         {
           "path": "Extensions/quinjet/ViewModels/QuinjetPageModel.swift",
-          "sha256": "4eca2b93134a69ec14d3a8285713d0e07c5e9be31080455101961de64eddf3a2"
+          "sha256": "18f15e66aa52dca14ae2b66098cdfb539406e9d1df8c11a5b54c354dd7aa1cea"
         }
       ]
     },
