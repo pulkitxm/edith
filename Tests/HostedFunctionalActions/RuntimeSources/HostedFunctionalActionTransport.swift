@@ -26,6 +26,7 @@ final class HostedFunctionalActionTransport: NSObject {
     private let verifyCurrent: @MainActor () async throws -> Void
     private let observe: @MainActor (Invocation) async throws -> Void
     private let observeBeforeSend: @MainActor (Request) async throws -> Void
+    private let readPersistentBeforeConstruction: @MainActor () async throws -> Data?
     private let observePersistentBefore: @MainActor (Data?) async throws -> Void
     private let validatePayload: @MainActor (String, Data) throws -> Void
     private var calls: [UUID: Task<Data, Error>] = [:]
@@ -34,6 +35,9 @@ final class HostedFunctionalActionTransport: NSObject {
     private var stopped = false
     private var started = 0
     private var activationID: UUID?
+    private var baselineCaptureStarted = false
+    private var baselineCaptured = false
+    private var persistentBaseline: Data?
 
     init(
         context: HostedFunctionalActionContext, presentationID: UUID,
@@ -41,7 +45,8 @@ final class HostedFunctionalActionTransport: NSObject {
         observe: @escaping @MainActor (Invocation) async throws -> Void,
         validatePayload: @escaping @MainActor (String, Data) throws -> Void,
         observeBeforeSend: @escaping @MainActor (Request) async throws -> Void,
-        observePersistentBefore: @escaping @MainActor (Data?) async throws -> Void
+        observePersistentBefore: @escaping @MainActor (Data?) async throws -> Void,
+        readPersistentBeforeConstruction: @escaping @MainActor () async throws -> Data?
     ) throws {
         let commands = try context.ownedPath(named: "commands", kind: "directory")
         let expected = URL(fileURLWithPath: context.dataDirectory, isDirectory: true)
@@ -55,6 +60,7 @@ final class HostedFunctionalActionTransport: NSObject {
         self.validatePayload = validatePayload
         self.observeBeforeSend = observeBeforeSend
         self.observePersistentBefore = observePersistentBefore
+        self.readPersistentBeforeConstruction = readPersistentBeforeConstruction
         endpoint = try ExtensionPeerEndpoint(
             namespace: context.hostIdentifier, owner: context.owner, directory: commands)
         super.init()
@@ -70,7 +76,7 @@ final class HostedFunctionalActionTransport: NSObject {
     var originalInvocationCount: Int { completed.filter { $0.origin == "original-control" }.count }
 
     func beginActivation() throws -> UUID {
-        guard !stopped, calls.isEmpty, bridges.isEmpty, activationID == nil else {
+        guard !stopped, baselineCaptured, calls.isEmpty, bridges.isEmpty, activationID == nil else {
             throw HostedFunctionalActionError.invalid
         }
         let id = UUID()
@@ -121,15 +127,28 @@ final class HostedFunctionalActionTransport: NSObject {
         try requireRunning()
     }
 
-    func recordPersistentBefore(_ value: Data?) async throws {
+    func capturePersistentBeforeConstruction() async throws -> Data? {
         try requireRunning()
-        guard calls.isEmpty, bridges.isEmpty, activationID == nil else {
+        guard started == 0, calls.isEmpty, bridges.isEmpty, activationID == nil else {
+            throw HostedFunctionalActionError.invalid
+        }
+        if baselineCaptured { return persistentBaseline }
+        guard !baselineCaptureStarted else { throw HostedFunctionalActionError.invalid }
+        baselineCaptureStarted = true
+        try await verifyCurrent()
+        try requireRunning()
+        let value = try await readPersistentBeforeConstruction()
+        try requireRunning()
+        guard value.map({ !$0.isEmpty && $0.count <= 1_048_576 }) ?? true else {
             throw HostedFunctionalActionError.invalid
         }
         try await verifyCurrent()
         try requireRunning()
         try await observePersistentBefore(value)
         try requireRunning()
+        persistentBaseline = value
+        baselineCaptured = true
+        return value
     }
 
     func shutdown() async {
@@ -192,6 +211,7 @@ final class HostedFunctionalActionTransport: NSObject {
         _ operation: String, payload: Data, token: UUID, origin: String, timeout: Double = 10
     ) async throws -> Data {
         try requireRunning()
+        guard baselineCaptured else { throw HostedFunctionalActionError.invalid }
         try context.requireOperation(operation)
         _ = try HostedFunctionalJSON.object(payload)
         try validatePayload(operation, payload)
@@ -267,13 +287,10 @@ enum HostedFunctionalActionNativeDriver {
             throw HostedFunctionalActionError.invalid
         }
         try await transport.requireCurrent()
+        let before = try await transport.capturePersistentBeforeConstruction()
         let action: Case
         do { action = try makeCase() } catch { await transport.shutdown(); throw error }
         do {
-            let before =
-                context.phase == "initial"
-                ? nil : try await action.readPersistentState(context: context)
-            try await transport.recordPersistentBefore(before)
             let activation = try transport.beginActivation()
             try await action.activateOriginalControl(context: context)
             _ = try transport.endActivation(activation)

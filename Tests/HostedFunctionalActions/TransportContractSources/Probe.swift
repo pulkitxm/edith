@@ -59,18 +59,24 @@ import Foundation
             observe:
                 @escaping @MainActor (HostedFunctionalActionTransport.Invocation) async throws ->
                 Void = { _ in }
-        ) throws -> HostedFunctionalActionTransport {
-            try HostedFunctionalActionTransport(
-                context: context, presentationID: UUID(), verifyCurrent: verify, observe: observe,
+        ) async throws -> HostedFunctionalActionTransport {
+            var armed = false
+            let result = try HostedFunctionalActionTransport(
+                context: context, presentationID: UUID(),
+                verifyCurrent: { if armed { try await verify() } }, observe: observe,
                 validatePayload: { _, bytes in
                     guard try HostedFunctionalJSON.object(bytes).isEmpty else {
                         throw HostedFunctionalActionError.invalid
                     }
-                }, observeBeforeSend: { _ in }, observePersistentBefore: { _ in })
+                }, observeBeforeSend: { _ in }, observePersistentBefore: { _ in },
+                readPersistentBeforeConstruction: { nil })
+            _ = try await result.capturePersistentBeforeConstruction()
+            armed = true
+            return result
         }
         for authoritative in [false, true] {
             SyntheticEndpoint.starts = 0
-            let value = try transport()
+            let value = try await transport()
             let invocation = Task { @MainActor in
                 if authoritative { return try await value.readAuthoritative("keepAwake.ui.update") }
                 return try await value.invokeOriginal(
@@ -92,7 +98,8 @@ import Foundation
         print("PASS direct original and authoritative routes are cancelled and awaited")
         var verifier: CheckedContinuation<Void, Never>?
         SyntheticEndpoint.starts = 0
-        let second = try transport(verify: { await withCheckedContinuation { verifier = $0 } })
+        let second = try await transport(verify: { await withCheckedContinuation { verifier = $0 } }
+        )
         let racing = Task { @MainActor in
             try await second.invokeOriginal("keepAwake.ui.update", payload: Data("{}".utf8))
         }
@@ -105,7 +112,9 @@ import Foundation
         precondition(SyntheticEndpoint.starts == 0)
         print("PASS no endpoint send after stop during verification")
         var waiting: [CheckedContinuation<Void, Never>] = []
-        let bounded = try transport(verify: { await withCheckedContinuation { waiting.append($0) } }
+        let bounded = try await transport(verify: {
+            await withCheckedContinuation { waiting.append($0) }
+        }
         )
         var pending: [Task<Data, Error>] = []
         for count in 1...8 {
@@ -132,7 +141,9 @@ import Foundation
         precondition(SyntheticEndpoint.starts == 0)
         print("PASS direct original routes share the eight-call concurrency bound")
         var observer: CheckedContinuation<Void, Never>?
-        let third = try transport(observe: { _ in await withCheckedContinuation { observer = $0 } })
+        let third = try await transport(observe: { _ in
+            await withCheckedContinuation { observer = $0 }
+        })
         let observing = Task { @MainActor in
             try await third.invokeOriginal("keepAwake.ui.update", payload: Data("{}".utf8))
         }
@@ -147,7 +158,7 @@ import Foundation
         guard case .failure = await observing.result else { fatalError("post-stop ACK") }
         precondition(third.originalInvocationCount == 0)
         print("PASS no acknowledgement after stop during observation")
-        let fourth = try transport()
+        let fourth = try await transport()
         let prior = Task { @MainActor in
             try await fourth.invokeOriginal("keepAwake.ui.update", payload: Data("{}".utf8))
         }
@@ -161,7 +172,29 @@ import Foundation
             fatalError("historical ACK admitted")
         } catch {}
         print("PASS historical ACK cannot qualify inert current activation")
-        let fifth = try transport()
+        var events: [String] = []
+        let early = try HostedFunctionalActionTransport(
+            context: context, presentationID: UUID(), verifyCurrent: {}, observe: { _ in },
+            validatePayload: { _, _ in }, observeBeforeSend: { _ in },
+            observePersistentBefore: { _ in events.append("observed") },
+            readPersistentBeforeConstruction: {
+                events.append("baseline"); return nil
+            })
+        do {
+            _ = try await early.invokeOriginal("keepAwake.ui.update", payload: Data("{}".utf8))
+            fatalError("send without producer baseline")
+        } catch {}
+        do {
+            _ = try await HostedFunctionalActionNativeDriver.run(
+                context: context, transport: early,
+                makeCase: {
+                    events.append("constructor"); return InertCase()
+                })
+            fatalError("inert case qualified")
+        } catch {}
+        precondition(events == ["baseline", "observed", "constructor"])
+        print("PASS independently supplied persistence read precedes construction and IPC")
+        let fifth = try await transport()
         let request = ExtensionEngineRequest(
             presentationID: fifth.presentationID, operation: "keepAwake.ui.update")
         let encoded = try ExtensionEngineWire.encode(request)
