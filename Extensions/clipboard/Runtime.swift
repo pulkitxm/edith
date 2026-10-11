@@ -13,6 +13,9 @@ final class ExtensionRuntime: NSObject {
     private var settingsObserver: NSObjectProtocol?
     private var backup: ClipboardBackupProvider?
     private var backupRestoreTask: Task<Void, Never>?
+    private var commandDrain: Task<Void, Never>?
+    private var uiDrains: [UUID: Task<Void, Never>] = [:]
+    private var commandsSuspended = false
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -31,19 +34,68 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginCommandDrain() -> Task<Void, Never> {
+        let owner = worker
+        let uiOwner = presentation
+        let backupOwner = backup
+        let restore = backupRestoreTask
+        commandsSuspended = true
+        _ = commands.suspend()
+        if let commandDrain { return commandDrain }
+        uiOwner?.stop()
+        restore?.cancel()
+        owner?.cancelPendingCommands()
+        HotKeyRegistrar.clear("clipboard")
+        IPC.stopObserving(settingsObserver); settingsObserver = nil
+        backupOwner?.cancelPendingCommands()
+        let task = Task { [self] in
+            await owner?.service.cancelPendingCommands()
+            _ = await commands.suspendAndWait()
+            await backupOwner?.cancelAndWait()
+            await restore?.value
+            await owner?.cancelAndWait()
+            await uiOwner?.stopAndWait()
+            while let task = uiDrains.values.first { await task.value }
+        }
+        commandDrain = task
+        return task
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        presentation?.stop(); presentation = nil
-        commands.shutdown()
+        let owner = worker
+        let backupOwner = backup
+        let drain = beginCommandDrain()
+        retireUI()
         HotKeyRegistrar.shutdown()
         IPC.stopObserving(settingsObserver); settingsObserver = nil
-        backupRestoreTask?.cancel()
-        Task {
-            await backup?.shutdown()
-            await backupRestoreTask?.value
+        Task { [self] in
+            await drain.value
+            await backupOwner?.shutdown()
             await commands.shutdownAndWait()
-            await worker?.shutdown(); completion()
+            await owner?.shutdown()
+            completion()
         }
+    }
+
+    private func retireUI() {
+        guard let owner = presentation else { return }
+        owner.stop()
+        let id = UUID()
+        uiDrains[id] = Task { [self, owner] in
+            defer { uiDrains[id] = nil }
+            await owner.stopAndWait()
+        }
+        presentation = nil
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
@@ -57,10 +109,13 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
+            guard !commandsSuspended, uiDrains.count < 8 else {
+                return ["ok": false] as NSDictionary
+            }
             guard let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "clipboard"
             else { return ["ok": false] as NSDictionary }
-            presentation?.stop()
+            retireUI()
             if let engine = configuration.engineClient {
                 presentation = ClipboardPresentation(engine: engine)
             } else {
@@ -70,9 +125,10 @@ final class ExtensionRuntime: NSObject {
             }
             uiConfigured = true
         case "stopUI":
-            presentation?.stop(); presentation = nil
+            retireUI()
             return ["ok": true] as NSDictionary
         case "start":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard !uiConfigured, Bundle.main.bundleURL.pathExtension != "appex" else {
                 return ["ok": false] as NSDictionary
             }
@@ -133,7 +189,7 @@ final class ExtensionRuntime: NSObject {
         case "synchronize":
             registerHotKey(); backup?.preferencesChanged(); IPC.post(IPC.Name.settingsChanged)
         case "stop":
-            presentation?.stop(); presentation = nil
+            retireUI()
             commands.shutdown()
             worker?.panel.shutdown(); worker?.store.shutdown(); worker?.history.stop()
             worker = nil; surface = nil

@@ -14,6 +14,7 @@ import SwiftUI
     private let invalidate: @MainActor () -> Void
     private var tasks: [UUID: Task<Void, Never>] = [:]
     private var tail: Task<Void, Never>?
+    private let commandTasks = ClipboardTaskOwner()
     private var preferenceTask: Task<Void, Never>?
     private var generation = 0
     private(set) var stopped = false
@@ -49,6 +50,10 @@ import SwiftUI
     }
 
     func refresh() async {
+        _ = try? await commandTasks.perform { [self] in await refreshWork() }
+    }
+
+    private func refreshWork() async {
         guard !stopped else { return }
         let current = generation
         let send = send
@@ -67,7 +72,7 @@ import SwiftUI
         guard !stopped else { return }
         preferenceTask?.cancel()
         let next = preferences
-        preferenceTask = Task { [weak self] in
+        preferenceTask = commandTasks.launch { [weak self] in
             do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
             guard let self, !Task.isCancelled, !self.stopped else { return }
             self.perform {
@@ -111,16 +116,24 @@ import SwiftUI
         tail = task
     }
 
+    func stopAndWait() async {
+        stop()
+        await commandTasks.drain()
+        while let task = tasks.values.first { await task.value }
+        await tail?.value
+        await history.cancelAndWait()
+    }
+
     func stop() {
         guard !stopped else { return }
         stopped = true
         generation += 1
         tasks.values.forEach { $0.cancel() }
-        tasks.removeAll()
-        tail?.cancel(); tail = nil
-        preferenceTask?.cancel(); preferenceTask = nil
-        preferencesLoad.reset()
-        history.stop(discardContent: true)
+        commandTasks.cancel()
+        tail?.cancel()
+        preferenceTask?.cancel()
+        preferencesLoad.cancel()
+        history.cancelPendingCommands()
         invalidate()
     }
 }

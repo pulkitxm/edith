@@ -6,6 +6,21 @@ import Foundation
 @MainActor
 @Observable
 final class ClipboardStore {
+    @ObservationIgnored private var timerDrains: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private let commandTasks = ClipboardTaskOwner()
+
+    func cancelPendingCommands() {
+        commandTasks.cancel()
+        visibility.enabled = false
+        timer?.cancel(); timer = nil
+    }
+
+    func cancelAndWait() async {
+        cancelPendingCommands()
+        await commandTasks.drain()
+        while let task = timerDrains.values.first { await task.value }
+    }
+
     private(set) var entries: [ClipboardEntry] = []
     private(set) var revision = 0
     private(set) var skippedOversizeAt: Date?
@@ -69,10 +84,10 @@ final class ClipboardStore {
             },
         ]
         clipboardObserver = IPC.observe(IPC.Name.clipboardChanged) { [weak self] in
-            Task { @MainActor in self?.reload() }
+            MainActor.assumeIsolated { self?.reload() }
         }
         settingsObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 guard let self else { return }
                 self.timer?.cancel(); self.timer = nil; self.updateTimer()
             }
@@ -82,6 +97,7 @@ final class ClipboardStore {
     }
 
     func shutdown() {
+        cancelPendingCommands()
         visibility.enabled = false
         updateTimer()
         refreshTask?.cancel()
@@ -111,6 +127,7 @@ final class ClipboardStore {
     }
 
     func stop() async {
+        await cancelAndWait()
         let pending =
             [refreshTask, captureTask, activationTask, mutationTail].compactMap { $0 }
             + Array(mutations.values)
@@ -132,21 +149,29 @@ final class ClipboardStore {
     }
 
     private func updateTimer() {
-        guard visibility.active, capturesPasteboard,
+        guard !commandTasks.closed, visibility.active, capturesPasteboard,
             SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.enabled),
             !ClipboardCapturePolicy.isPaused()
         else { timer?.cancel(); timer = nil; return }
-        guard timer == nil else { return }
+        guard timer == nil, timerDrains.isEmpty else { return }
         let interval = configuredInterval
         timerInterval = interval
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + interval, repeating: interval, leeway: .milliseconds(200))
+        let retirement = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let id = UUID()
+        timerDrains[id] = Task { [self] in
+            defer { timerDrains[id] = nil; updateTimer() }
+            for await _ in retirement.stream {}
+        }
+        timer.setCancelHandler { retirement.continuation.finish() }
         timer.setEventHandler { [weak self] in self?.tick() }
         timer.resume()
         self.timer = timer
     }
 
     private func tick() {
+        guard !commandTasks.closed else { return }
         let pasteboard = NSPasteboard.general
         guard pasteboard.changeCount != lastChangeCount else { return }
         lastChangeCount = pasteboard.changeCount
@@ -179,7 +204,7 @@ final class ClipboardStore {
 
     private func drainCaptures() {
         guard captureTask == nil else { return }
-        captureTask = Task { [weak self] in
+        captureTask = commandTasks.launch { [weak self] in
             var failures = 0
             while let self, !Task.isCancelled, self.visibility.enabled,
                 let capture = self.captures.first
@@ -212,7 +237,7 @@ final class ClipboardStore {
         guard visibility.enabled else { return }
         guard mutations.isEmpty else { refreshPending = true; return }
         guard refreshTask == nil else { refreshPending = true; return }
-        refreshTask = Task { [weak self] in
+        refreshTask = commandTasks.launch { [weak self] in
             var failures = 0
             repeat {
                 self?.refreshPending = false
@@ -267,7 +292,7 @@ final class ClipboardStore {
         history.begin(id, mutation: mutation)
         adopt(history.entries)
         let predecessor = mutationTail
-        mutations[id] = Task { [weak self] in
+        mutations[id] = commandTasks.launch { [weak self] in
             var succeeded = false
             defer {
                 if let self {
@@ -300,13 +325,14 @@ final class ClipboardStore {
     }
 
     func activate(_ entry: ClipboardEntry, forcePlainText: Bool = false) {
+        guard !commandTasks.closed else { return }
         activationTask?.cancel()
         activationGeneration += 1
         let activationGeneration = activationGeneration
         let plain =
             forcePlainText
             || SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.pastePlainText)
-        activationTask = Task { [weak self] in
+        activationTask = commandTasks.launch { [weak self] in
             defer {
                 if self?.activationGeneration == activationGeneration { self?.activationTask = nil }
             }

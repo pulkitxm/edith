@@ -522,10 +522,11 @@ final class MixerEngine: AudioMixerPresenting {
     private func reconcileMonitoring() {
         let shouldMonitor = !suspending && !isStopped && (visibleViewCount > 0 || !taps.isEmpty)
         if shouldMonitor, monitoringTask == nil {
+            guard monitorTasks.isEmpty else { return }
             isMonitoring = true
             let id = UUID()
             let task = Task { @MainActor [weak self] in
-                defer { self?.monitorTasks[id] = nil }
+                defer { self?.monitorTasks[id] = nil; self?.reconcileMonitoring() }
                 while !Task.isCancelled {
                     do {
                         try await Task.sleep(for: .seconds(1))

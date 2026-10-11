@@ -121,8 +121,21 @@ public actor ClipboardService {
         }
     }
 
-    public func stop() async {
+    public func cancelPendingCommands() async {
         stopped = true
+        for worker in workers.values { worker.cancel() }
+        await thumbnails.cancelPending()
+    }
+
+    public func cancelAndWait() async {
+        await cancelPendingCommands()
+        await thumbnails.stop()
+        while let worker = workers.values.first { _ = await worker.result }
+        await tail?.value
+    }
+
+    public func stop() async {
+        await cancelAndWait()
         await thumbnails.stop()
         let active = Array(workers.values)
         for worker in active { worker.cancel() }
