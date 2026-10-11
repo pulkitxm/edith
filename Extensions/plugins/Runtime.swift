@@ -11,20 +11,24 @@ import SwiftUI
 
 @MainActor @objc(EdithPluginsExtensionRuntime)
 final class ExtensionRuntime: NSObject {
-    private var fixture: PluginsFixtureTools?
-    private let admitFixture: (NSDictionary) throws -> WorkerFixtureAdmission?
+    private var fixture: WorkerFixtureEngineAdmission?
+    private var fixtureContext: NSDictionary?
+    private var fixturePolicy: PluginsFixturePolicy?
+    private var fixtureTerminated = false
+    private var fixtureRejected = false
+    private let admitFixture: (NSDictionary) throws -> WorkerFixtureEngineAdmission?
     private let fixtureDefaults: (String) -> UserDefaults?
 
     override convenience init() {
         self.init(admitFixture: {
-            try WorkerFixtureAdmission.current(
+            try WorkerFixtureEngineAdmission.current(
                 extensionID: "plugins", context: $0,
                 roleBundle: Bundle(for: ExtensionRuntime.self))
         })
     }
 
     init(
-        admitFixture: @escaping (NSDictionary) throws -> WorkerFixtureAdmission?,
+        admitFixture: @escaping (NSDictionary) throws -> WorkerFixtureEngineAdmission?,
         fixtureDefaults: @escaping (String) -> UserDefaults? = { UserDefaults(suiteName: $0) }
     ) {
         self.admitFixture = admitFixture
@@ -35,6 +39,10 @@ final class ExtensionRuntime: NSObject {
     private var model: SkillsModel?
     private var uiModel: SkillsModel?
     private var engineClient: ExtensionEngineClient?
+    private var uiAdmission: WorkerFixtureUIAdmission?
+    private var uiGeneration: UUID?
+    private var uiDrains: [UUID: Task<Void, Never>] = [:]
+    private var stopping = false
     private var surface: PluginsSurface?
     private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
@@ -44,8 +52,37 @@ final class ExtensionRuntime: NSObject {
             guard let self, let model = self.model, !model.isStopped else {
                 throw ExtensionPeerError.unavailable
             }
-            if self.fixture != nil && !["surface.snapshot", "surface.perform"].contains(command) {
-                throw ExtensionPeerError.unavailable
+            if self.fixture != nil {
+                guard let policy = self.fixturePolicy else { throw ExtensionPeerError.unavailable }
+                do {
+                    guard let token = (request["token"] as? String).flatMap(UUID.init(uuidString:)),
+                        let fixture
+                    else { throw WorkerFixtureError.invalid }
+                    try PluginsFixturePolicy.validate(
+                        command, payload: payload, skillIDs: Set(model.skills.map(\.id)),
+                        agentIDs: Set(model.agents.map(\.id)),
+                        validateSurface: PluginsSurface.validate)
+                    let ticket = try fixture.beginRequest(
+                        token: token, operation: command, payload: payload)
+                    defer { fixture.cancelRequest(ticket) }
+                    let response = try await policy.perform(
+                        command, payload: payload, skillIDs: Set(model.skills.map(\.id)),
+                        agentIDs: Set(model.agents.map(\.id))
+                    ) {
+                        if command == "plugins.ui.action" {
+                            return try await PluginsUIBridge.execute(
+                                command, payload: payload, model: model)
+                        }
+                        guard let surface = self.surface else {
+                            throw ExtensionPeerError.unavailable
+                        }
+                        return try await surface.execute(command, payload: payload)
+                    }
+                    try fixture.completeRequest(ticket)
+                    return response
+                } catch PluginsFixturePolicyError.invalid {
+                    throw ExtensionPeerError.invalidRequest
+                }
             }
             if command.hasPrefix("plugins.cli.") {
                 if self.cliStreams == nil {
@@ -70,14 +107,64 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        stopping = true
+        fixturePolicy?.stop()
+        if fixture != nil { fixtureTerminated = true }
+        stopUI()
         let streams = cliStreams; cliStreams = nil; streams?.stop()
+        let stoppingModel = model; model = nil; surface = nil
+        stoppingModel?.stop()
         commands.shutdown()
         Task {
-            await model?.shutdown()
+            await stoppingModel?.shutdown()
             await streams?.stopAndWait()
             await commands.shutdownAndWait()
+            for task in Array(uiDrains.values) { await task.value }
             completion()
         }
+    }
+
+    private func stopUI() {
+        let hadUI = engineClient != nil || uiModel != nil
+        uiGeneration = nil; uiAdmission = nil
+        engineClient?.invalidate(); engineClient = nil
+        let stoppingModel = uiModel; uiModel = nil
+        stoppingModel?.stop()
+        if let stoppingModel {
+            let id = UUID()
+            uiDrains[id] = Task {
+                await stoppingModel.shutdown()
+                uiDrains[id] = nil
+            }
+        }
+        if hadUI { TextEditingCommands.shutdown() }
+    }
+
+    private func requireCurrentFixture() throws {
+        guard !fixtureTerminated, !fixtureRejected, !stopping, let fixture
+        else { throw WorkerFixtureError.invalid }
+        try fixture.requireCurrent()
+    }
+
+    private func invokeUI(
+        _ operation: String, payload: Data, generation: UUID,
+        client: ExtensionEngineClient, admission: WorkerFixtureUIAdmission
+    ) async throws -> Data {
+        guard !stopping, !fixtureRejected, uiGeneration == generation,
+            engineClient === client, uiAdmission === admission, let uiModel, !uiModel.isStopped
+        else { throw WorkerFixtureError.invalid }
+        try Task.checkCancellation()
+        try admission.requireCurrent()
+        try PluginsFixturePolicy.validate(
+            operation, payload: payload, skillIDs: Set(uiModel.skills.map(\.id)),
+            agentIDs: Set(uiModel.agents.map(\.id)), validateSurface: PluginsSurface.validate)
+        let response = try await client.invoke(operation, payload: payload)
+        try Task.checkCancellation()
+        guard !stopping, !fixtureRejected, uiGeneration == generation,
+            engineClient === client, uiAdmission === admission
+        else { throw WorkerFixtureError.invalid }
+        try admission.requireCurrent()
+        return response
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
@@ -91,27 +178,55 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
+            guard !stopping, !fixtureRejected, fixture == nil, engineClient == nil else {
+                return ["ok": false] as NSDictionary
+            }
+            let admission: WorkerFixtureUIAdmission?
             do {
-                guard try admitFixture(input) == nil else { return ["ok": false] as NSDictionary }
+                admission = try WorkerFixtureUIAdmission.current(
+                    extensionID: "plugins", context: input,
+                    roleBundle: Bundle(for: ExtensionRuntime.self))
+                try admission?.requireCurrent()
             } catch { return ["ok": false] as NSDictionary }
-            guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
-                configuration.extensionID == "plugins", let client = configuration.engineClient,
-                DocumentRenderer.isAvailable
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "plugins", let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
-            engineClient = client
-            uiModel = SkillsModel(remote: PluginsUIBridge(client: client))
+            let generation = UUID()
+            if let admission {
+                guard let suite = input["defaultsSuite"] as? String,
+                    let defaults = fixtureDefaults(suite)
+                else { return ["ok": false] as NSDictionary }
+                do { try admission.requireCurrent() } catch { return ["ok": false] as NSDictionary }
+                let bridge = PluginsUIBridge(invoke: { [weak self] operation, payload in
+                    guard let self else { throw WorkerFixtureError.invalid }
+                    return try await self.invokeUI(
+                        operation, payload: payload, generation: generation,
+                        client: client, admission: admission)
+                })
+                uiModel = PluginsFixtureTools.makeAdmittedModel(
+                    defaults: defaults,
+                    dataDirectory: URL(fileURLWithPath: admission.descriptor.dataDirectory),
+                    agents: [], remote: bridge)
+            } else {
+                guard DocumentRenderer.isAvailable else { return ["ok": false] as NSDictionary }
+                uiModel = SkillsModel(remote: PluginsUIBridge(client: client))
+            }
+            engineClient = client; uiGeneration = generation; uiAdmission = admission
             TextEditingCommands.install()
-        case "stopUI":
-            let hadUI = engineClient != nil || uiModel != nil
-            engineClient?.invalidate(); engineClient = nil
-            let model = uiModel; uiModel = nil
-            Task { await model?.shutdown() }
-            if hadUI { TextEditingCommands.shutdown() }
+        case "stopUI": stopUI()
         case "start":
+            guard !stopping, !fixtureTerminated, !fixtureRejected else {
+                return ["ok": false] as NSDictionary
+            }
             guard let suite = input["defaultsSuite"] as? String
             else { return ["ok": false] as NSDictionary }
             do {
                 let admission = try admitFixture(input)
+                if let fixture {
+                    guard let admission, admission.descriptor == fixture.descriptor,
+                        suite == fixtureContext?["defaultsSuite"] as? String
+                    else { throw WorkerFixtureError.invalid }
+                }
                 guard
                     admission != nil
                         || suite
@@ -119,12 +234,32 @@ final class ExtensionRuntime: NSObject {
                 else { return ["ok": false] as NSDictionary }
                 if model == nil {
                     if let admission {
-                        let tools = try PluginsFixtureTools(admission: admission)
+                        guard let identifier = input["hostIdentifier"] as? String,
+                            suite == identifier + ".extension.plugins.worker",
+                            admission.descriptor.inputs.count == 1,
+                            admission.descriptor.inputs[0].name == "agents",
+                            admission.descriptor.inputs[0].maximumBytes <= 8192,
+                            admission.descriptor.outputs.isEmpty
+                        else { throw WorkerFixtureError.invalid }
+                        let agents = try PluginsFixtureTools.admittedAgents(
+                            admission.readInput(named: "agents"))
+                        fixture = admission
+                        fixtureContext = input.copy() as? NSDictionary
+                        fixturePolicy = try PluginsFixturePolicy(
+                            validateSurface: PluginsSurface.validate,
+                            requireCurrent: { [weak self] in
+                                guard let self else { throw WorkerFixtureError.invalid }
+                                try self.requireCurrentFixture()
+                            })
                         guard let defaults = fixtureDefaults(suite) else {
-                            return ["ok": false] as NSDictionary
+                            throw WorkerFixtureError.invalid
                         }
-                        model = tools.makeModel(defaults: defaults)
-                        fixture = tools
+                        try requireCurrentFixture()
+                        model = PluginsFixtureTools.makeAdmittedModel(
+                            defaults: defaults,
+                            dataDirectory: URL(fileURLWithPath: admission.descriptor.dataDirectory),
+                            agents: agents)
+                        try requireCurrentFixture()
                     } else {
                         guard DocumentRenderer.isAvailable else {
                             return ["ok": false] as NSDictionary
@@ -132,7 +267,11 @@ final class ExtensionRuntime: NSObject {
                         model = SkillsModel()
                     }
                 }
-            } catch { return ["ok": false] as NSDictionary }
+            } catch {
+                fixtureRejected = true
+                fixturePolicy?.stop()
+                return ["ok": false] as NSDictionary
+            }
             if let model, surface == nil {
                 surface =
                     fixture == nil
@@ -142,16 +281,14 @@ final class ExtensionRuntime: NSObject {
             if fixture == nil { TextEditingCommands.install() }
         case "view":
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
+            do { try uiAdmission?.requireCurrent() } catch { return ["ok": false] as NSDictionary }
             return NSHostingController(rootView: ExtensionPageHost { PluginsPage(model: model) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
-            let streams = cliStreams; cliStreams = nil; streams?.stop()
-            Task { await streams?.stopAndWait() }
-            commands.shutdown()
-            let stopping = model; model = nil; surface = nil
-            Task { await stopping?.shutdown() }
-            if fixture == nil && stopping != nil {
+            let ordinaryModel = fixture == nil && model != nil
+            prepareToStop(completion: {})
+            if ordinaryModel {
                 SkillBrand.shutdown()
                 TextEditingCommands.shutdown()
             }

@@ -40,11 +40,12 @@ final class ExtensionRuntime: NSObject {
         @MainActor (SurfaceHostContext, [NotchPanelDisplay]) -> NotchShelfController
 
     init(
-        fixtureAdmission: @escaping @MainActor (NSDictionary) throws -> WorkerFixtureEngineAdmission? = {
-            try WorkerFixtureEngineAdmission.current(
-                extensionID: "notchShelf", context: $0,
-                roleBundle: Bundle(for: ExtensionRuntime.self), expectedRole: .helper)
-        },
+        fixtureAdmission:
+            @escaping @MainActor (NSDictionary) throws -> WorkerFixtureEngineAdmission? = {
+                try WorkerFixtureEngineAdmission.current(
+                    extensionID: "notchShelf", context: $0,
+                    roleBundle: Bundle(for: ExtensionRuntime.self), expectedRole: .helper)
+            },
         contextSource: @escaping @MainActor () -> SurfaceHostContext? = {
             SurfaceHostContext.current
         },
@@ -85,7 +86,8 @@ final class ExtensionRuntime: NSObject {
                     try NotchFixturePreferences.validate(
                         command, payload: payload, schema: NotchSettingsSchema.defaults,
                         accepts: NotchSettingsSchema.accepts)
-                    let ticket = try fixture.beginRequest(token: token, operation: command, payload: payload)
+                    let ticket = try fixture.beginRequest(
+                        token: token, operation: command, payload: payload)
                     defer { fixture.cancelRequest(ticket) }
                     let values = try preferences.execute(command, payload: payload)
                     let snapshot = NotchSettingsSnapshot(
@@ -444,7 +446,8 @@ final class ExtensionRuntime: NSObject {
             do {
                 let admitted = try fixtureAdmission(input)
                 if let admitted {
-                    guard admitted.descriptor.owner == "notchShelf", admitted.descriptor.role == "helper",
+                    guard admitted.descriptor.owner == "notchShelf",
+                        admitted.descriptor.role == "helper",
                         controller == nil, panelEngine == nil, uiScenes.isEmpty
                     else { throw WorkerFixtureError.invalid }
                     if let fixture {
@@ -458,7 +461,8 @@ final class ExtensionRuntime: NSObject {
                         else { throw WorkerFixtureError.invalid }
                         fixtureContext = input.copy() as? NSDictionary
                         fixturePreferences = try NotchFixturePreferences(
-                            suite: suite, expectedSuite: identifier + ".extension.notchShelf.worker",
+                            suite: suite,
+                            expectedSuite: identifier + ".extension.notchShelf.worker",
                             schema: NotchSettingsSchema.defaults,
                             isString: NotchSettingsSchema.isString,
                             accepts: NotchSettingsSchema.accepts,
@@ -498,8 +502,9 @@ final class ExtensionRuntime: NSObject {
                     ?? selectedPresentation,
                 let scene = uiScenes[key]
             else { return ["ok": false] as NSDictionary }
-            do { try scene.admission?.requireCurrent() }
-            catch { return ["ok": false] as NSDictionary }
+            do { try scene.admission?.requireCurrent() } catch {
+                return ["ok": false] as NSDictionary
+            }
             if let chrome = scene.chrome {
                 return NSHostingController(
                     rootView: ExtensionPageHost { NotchPanelPage(client: chrome) })

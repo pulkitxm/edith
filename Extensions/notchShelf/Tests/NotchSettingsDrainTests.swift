@@ -15,14 +15,15 @@ import Testing
             return try JSONEncoder().encode(NotchSettingsSnapshot.empty)
         })
         let caller = Task {
-            if write { model.perform("notch.settings.write") }
-            else { await model.refresh() }
+            if write { model.perform("notch.settings.write") } else { await model.refresh() }
         }
         let deadline = ContinuousClock.now + .seconds(5)
         while suspended == nil, ContinuousClock.now < deadline { await Task.yield() }
         let continuation = try #require(suspended)
         var drained = false
-        let shutdown = Task { await model.stopAndWait(); drained = true }
+        let shutdown = Task {
+            await model.stopAndWait(); drained = true
+        }
         while !model.stopped, ContinuousClock.now < deadline { await Task.yield() }
         for _ in 0..<20 { await Task.yield() }
         #expect(model.stopped)
@@ -47,7 +48,9 @@ import Testing
             return try JSONEncoder().encode(NotchSettingsSnapshot.empty)
         })
         var finished = false
-        let caller = Task { await model.refresh(); finished = true }
+        let caller = Task {
+            await model.refresh(); finished = true
+        }
         let deadline = ContinuousClock.now + .seconds(5)
         while suspended == nil, ContinuousClock.now < deadline { await Task.yield() }
         let continuation = try #require(suspended)

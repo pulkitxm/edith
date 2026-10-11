@@ -37,7 +37,9 @@ enum NotchFixturePreferencesError: Error { case invalid, unavailable }
 
     func execute(_ command: String, payload: Data) throws -> [String: String] {
         try current()
-        if let update = try Self.request(command, payload: payload, schema: schema, accepts: accepts) {
+        if let update = try Self.request(
+            command, payload: payload, schema: schema, accepts: accepts)
+        {
             try current()
             if isString(update.key) {
                 defaults.set(update.value, forKey: update.key)

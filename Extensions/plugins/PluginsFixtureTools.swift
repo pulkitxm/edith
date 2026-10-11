@@ -59,15 +59,23 @@ struct PluginsFixtureTools: Sendable {
         remote: PluginsUIBridge? = nil
     ) -> SkillsModel {
         let documents = SkillDocumentStore(
-            remoteLoad: { _ in throw SkillsError.message("Downloads are unavailable in the worker fixture.") },
-            remoteCopy: { _ in throw SkillsError.message("Copying is unavailable in the worker fixture.") },
+            remoteLoad: { _ in
+                throw SkillsError.message("Downloads are unavailable in the worker fixture.")
+            },
+            remoteCopy: { _ in
+                throw SkillsError.message("Copying is unavailable in the worker fixture.")
+            },
             cacheDirectory: dataDirectory.appendingPathComponent("cache"),
-            fetch: { _ in throw SkillsError.message("Downloads are unavailable in the worker fixture.") })
+            fetch: { _ in
+                throw SkillsError.message("Downloads are unavailable in the worker fixture.")
+            })
         let installer = SkillInstaller(
             recordInstalled: { _, _ in
                 throw SkillsError.message("Installation is unavailable in the worker fixture.")
             }, unavailableReason: "Installation is unavailable in the worker fixture.",
-            run: { _, _ in throw SkillsError.message("Installation is unavailable in the worker fixture.") })
+            run: { _, _ in
+                throw SkillsError.message("Installation is unavailable in the worker fixture.")
+            })
         return SkillsModel(
             remote: remote, defaults: defaults, documents: documents, installer: installer,
             detectAgents: { agents }, discoverInstaller: { false })

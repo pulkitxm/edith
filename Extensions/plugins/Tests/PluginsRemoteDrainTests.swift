@@ -19,14 +19,19 @@ import Testing
         })
         let model = SkillsModel(remote: bridge, defaults: defaults)
         let caller = Task {
-            if present { await model.present(EdithSkillLibrary.skills[0]) }
-            else { await model.discoverAgents() }
+            if present {
+                await model.present(EdithSkillLibrary.skills[0])
+            } else {
+                await model.discoverAgents()
+            }
         }
         let deadline = ContinuousClock.now + .seconds(5)
         while suspended == nil, ContinuousClock.now < deadline { await Task.yield() }
         let continuation = try #require(suspended)
         var drained = false
-        let shutdown = Task { await model.shutdown(); drained = true }
+        let shutdown = Task {
+            await model.shutdown(); drained = true
+        }
         while !model.isStopped, ContinuousClock.now < deadline { await Task.yield() }
         for _ in 0..<20 { await Task.yield() }
         #expect(model.isStopped)
