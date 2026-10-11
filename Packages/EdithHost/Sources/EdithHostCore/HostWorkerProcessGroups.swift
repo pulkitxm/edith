@@ -17,9 +17,14 @@ struct HostWorkerProcessGroups {
     private struct Ownership {
         let leader: ExtensionProcessIdentity
         var witnesses: [ExtensionProcessIdentity]
+        var processGroups: Set<Int32>
 
-        init(leader: ExtensionProcessIdentity, witnesses: [ExtensionProcessIdentity]) {
+        init(
+            leader: ExtensionProcessIdentity, witnesses: [ExtensionProcessIdentity],
+            processGroups: Set<Int32>
+        ) {
             self.leader = leader
+            self.processGroups = processGroups
             self.witnesses = Array(
                 Dictionary(
                     witnesses.map { ($0.pid, $0) },
@@ -35,6 +40,7 @@ struct HostWorkerProcessGroups {
     private let exists: (Int32) -> Bool
     private let group: (Int32) -> Int32
     private let members: (Int32) -> [ExtensionProcessIdentity]
+    private let groupPresence: (Int32) -> Bool?
     private let signal: (Int32) -> Void
     private let descendant: (Int32, Int32) -> Bool
     private let descendants: (Int32) -> [ExtensionProcessIdentity]
@@ -46,7 +52,8 @@ struct HostWorkerProcessGroups {
         maximumGroups: Int = 128,
         read: @escaping (Int32) -> ExtensionProcessIdentity? = ExtensionProcessIdentity.read,
         group: @escaping (Int32) -> Int32 = { getpgid($0) },
-        members: @escaping (Int32) -> [ExtensionProcessIdentity] = Self.members,
+        members: ((Int32) -> [ExtensionProcessIdentity])? = nil,
+        groupPresence: ((Int32) -> Bool?)? = nil,
         signal: @escaping (Int32) -> Void = { kill($0, SIGKILL) },
         descendant: @escaping (Int32, Int32) -> Bool = {
             ExtensionNativeTask.isDescendant($0, of: $1)
@@ -58,7 +65,10 @@ struct HostWorkerProcessGroups {
         self.read = read
         self.exists = exists
         self.group = group
-        self.members = members
+        self.members = members ?? Self.members
+        self.groupPresence =
+            groupPresence ?? members.map { members in { !members($0).isEmpty } }
+            ?? Self.groupPresence
         self.signal = signal
         self.descendant = descendant
         self.descendants = descendants
@@ -76,7 +86,10 @@ struct HostWorkerProcessGroups {
 
     mutating func captureWorker(_ identity: ExtensionProcessIdentity) throws {
         guard read(identity.pid) == identity else { throw HostWorkerError.invalidResponse }
-        worker = Ownership(leader: identity, witnesses: [identity] + descendants(identity.pid))
+        let currentGroup = group(identity.pid)
+        worker = Ownership(
+            leader: identity, witnesses: [identity] + descendants(identity.pid),
+            processGroups: currentGroup > 1 && currentGroup != getpgrp() ? [currentGroup] : [])
         #if EDITH_FUNCTIONAL_FIXTURE
         if let worker { record(worker) }
         #endif
@@ -92,19 +105,23 @@ struct HostWorkerProcessGroups {
         guard currentGroup == resource.pid || currentGroup == owner else {
             throw HostWorkerError.invalidResponse
         }
-        let ownership = Ownership(leader: identity, witnesses: [identity] + members(resource.pid))
+        let ownership = Ownership(
+            leader: identity, witnesses: [identity] + members(currentGroup),
+            processGroups: currentGroup != getpgrp() ? [currentGroup] : [])
         #if EDITH_FUNCTIONAL_FIXTURE
         record(ownership)
         #endif
         if resource.pid == owner {
             worker = Ownership(
-                leader: identity, witnesses: ownership.witnesses + (worker?.witnesses ?? []))
+                leader: identity, witnesses: ownership.witnesses + (worker?.witnesses ?? []),
+                processGroups: ownership.processGroups.union(worker?.processGroups ?? []))
             return
         }
         let admitted = groups.count < maximumGroups || groups[resource.pid] != nil
         groups[resource.pid] = Ownership(
             leader: identity,
-            witnesses: ownership.witnesses + (groups[resource.pid]?.witnesses ?? []))
+            witnesses: ownership.witnesses + (groups[resource.pid]?.witnesses ?? []),
+            processGroups: ownership.processGroups.union(groups[resource.pid]?.processGroups ?? []))
         guard admitted else {
             terminate(ownership, owner: owner)
             throw HostWorkerError.invalidResponse
@@ -138,18 +155,29 @@ struct HostWorkerProcessGroups {
             let identity = read($0.pid)
             return identity == $0 || (identity == nil && exists($0.pid))
         }
-        guard !live.isEmpty else { return nil }
-        let groupMembers =
-            live.contains { read($0.pid) == $0 && group($0.pid) == ownership.leader.pid }
-            ? members(ownership.leader.pid) : []
+        var processGroups = ownership.processGroups
+        for witness in live where read(witness.pid) == witness {
+            let currentGroup = group(witness.pid)
+            if currentGroup > 1, currentGroup != getpgrp() { processGroups.insert(currentGroup) }
+        }
         let children = live.filter { read($0.pid) == $0 }.flatMap { descendants($0.pid) }
+        for child in children where read(child.pid) == child {
+            let currentGroup = group(child.pid)
+            if currentGroup > 1, currentGroup != getpgrp() { processGroups.insert(currentGroup) }
+        }
+        var groupMembers: [ExtensionProcessIdentity] = []
+        for ownedGroup in processGroups {
+            if (live + children).contains(where: {
+                read($0.pid) == $0 && group($0.pid) == ownedGroup
+            }) {
+                groupMembers += members(ownedGroup)
+            }
+        }
+        processGroups = processGroups.filter { groupPresence($0) != false }
+        guard !live.isEmpty || !children.isEmpty || !processGroups.isEmpty else { return nil }
         return Ownership(
             leader: ownership.leader,
-            witnesses: Array(
-                Dictionary(
-                    (live + groupMembers + children).map { ($0.pid, $0) },
-                    uniquingKeysWith: { first, _ in first }
-                ).values))
+            witnesses: live + groupMembers + children, processGroups: processGroups)
     }
 
     mutating func terminate(owner: Int32) {
@@ -173,37 +201,49 @@ struct HostWorkerProcessGroups {
     }
 
     private mutating func terminate(_ ownership: Ownership, owner: Int32) {
-        let leader = ownership.leader
-        if let witness = ownership.witnesses.first(where: {
-            read($0.pid) == $0 && group($0.pid) == leader.pid
-        }) {
-            sendSignal(-leader.pid, witness: witness)
+        for ownedGroup in ownership.processGroups.sorted() {
+            if let witness = ownership.witnesses.first(where: {
+                read($0.pid) == $0 && group($0.pid) == ownedGroup
+            }) {
+                sendSignal(-ownedGroup, witness: witness)
+            }
         }
         for witness in ownership.witnesses where read(witness.pid) == witness {
             sendSignal(witness.pid, witness: witness)
         }
     }
 
-    private static func processIDs(_ type: UInt32, _ value: UInt32) -> [Int32] {
+    private static func processIDs(_ type: UInt32, _ value: UInt32) throws -> [Int32] {
+        errno = 0
         let size = proc_listpids(type, value, nil, 0)
-        guard size > 0 else { return [] }
+        guard size >= 0, size != 0 || errno == 0, size <= 4_000_000 else {
+            throw HostWorkerError.invalidResponse
+        }
         var pids = [Int32](repeating: 0, count: Int(size) / MemoryLayout<Int32>.size + 256)
+        errno = 0
         let count = pids.withUnsafeMutableBytes {
             proc_listpids(type, value, $0.baseAddress, Int32($0.count))
         }
-        guard count > 0 else { return [] }
-        return Array(pids.prefix(Int(count) / MemoryLayout<Int32>.size))
+        guard count >= 0, count != 0 || errno == 0,
+            Int(count) < pids.count * MemoryLayout<Int32>.size
+        else { throw HostWorkerError.invalidResponse }
+        return pids.prefix(Int(count) / MemoryLayout<Int32>.size).filter { $0 > 1 }
+    }
+
+    private static func groupPresence(_ group: Int32) -> Bool? {
+        guard group > 1 else { return false }
+        return (try? processIDs(UInt32(PROC_PGRP_ONLY), UInt32(group))).map { !$0.isEmpty }
     }
 
     private static func members(_ group: Int32) -> [ExtensionProcessIdentity] {
         guard group > 1 else { return [] }
-        return processIDs(UInt32(PROC_PGRP_ONLY), UInt32(group)).compactMap {
+        return ((try? processIDs(UInt32(PROC_PGRP_ONLY), UInt32(group))) ?? []).compactMap {
             ExtensionProcessIdentity.read($0)
         }
     }
 
     private static func descendants(_ owner: Int32) -> [ExtensionProcessIdentity] {
-        processIDs(UInt32(PROC_ALL_PIDS), 0).filter {
+        ((try? processIDs(UInt32(PROC_ALL_PIDS), 0)) ?? []).filter {
             ExtensionNativeTask.isDescendant($0, of: owner)
         }.compactMap { ExtensionProcessIdentity.read($0) }
     }

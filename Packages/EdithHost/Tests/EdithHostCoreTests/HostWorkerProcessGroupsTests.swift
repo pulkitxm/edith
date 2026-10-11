@@ -13,6 +13,7 @@ import Testing
         var onSignal: ((Int32) -> Void)?
         var owned = Set<Int32>()
         var unreadable = Set<Int32>()
+        var scanFailed = false
 
         func tracker(maximum: Int = 128) -> HostWorkerProcessGroups {
             HostWorkerProcessGroups(
@@ -21,6 +22,15 @@ import Testing
                 group: { self.groups[$0] ?? -1 },
                 members: { group in
                     self.identities.values.filter { self.groups[$0.pid] == group }
+                },
+                groupPresence: { group in
+                    self.scanFailed
+                        ? nil
+                        : self.groups.contains {
+                            $0.value == group
+                                && (self.identities[$0.key] != nil
+                                    || self.unreadable.contains($0.key))
+                        }
                 },
                 signal: {
                     self.signals.append($0); self.onSignal?($0)
@@ -104,6 +114,36 @@ import Testing
     }
     #endif
 
+    @Test func lateUnobservedOrphanRetainsGroupWithoutAcquiringSignalAuthority() throws {
+        let kernel = Kernel()
+        try kernel.add(1234, generation: "1.0")
+        var tracker = kernel.tracker()
+        try tracker.register(.init(pid: 1234, generation: "1.0", registered: true), owner: 42)
+        try kernel.add(1235, generation: "1.1", group: 1234)
+        kernel.identities[1234] = nil
+        tracker.terminate(owner: 42)
+        #expect(!tracker.isEmpty)
+        #expect(kernel.signals.isEmpty)
+        kernel.identities[1235] = nil
+        tracker.refresh(owner: 42)
+        #expect(tracker.isEmpty)
+    }
+
+    @Test func failedGroupScanRetainsClosedOwnershipAfterAllCapturedBirthsExit() throws {
+        let kernel = Kernel()
+        try kernel.add(1234, generation: "1.0")
+        var tracker = kernel.tracker()
+        try tracker.register(.init(pid: 1234, generation: "1.0", registered: true), owner: 42)
+        kernel.identities[1234] = nil
+        kernel.scanFailed = true
+        tracker.terminate(owner: 42)
+        #expect(!tracker.isEmpty)
+        #expect(kernel.signals.isEmpty)
+        kernel.scanFailed = false
+        tracker.refresh(owner: 42)
+        #expect(tracker.isEmpty)
+    }
+
     @Test func authenticatedBirthCannotCaptureReusedPID() throws {
         let kernel = Kernel()
         try kernel.add(1234, generation: "2.0")
@@ -149,7 +189,7 @@ import Testing
         #expect(tracker.count == 0)
     }
 
-    @Test func reusedPIDsAndGroupsArePrunedWithoutSignallingTheirNewOwners() throws {
+    @Test func reusedPIDsAndGroupsRetainClosedAuthorityWithoutSignallingTheirNewOwners() throws {
         let kernel = Kernel()
         try kernel.add(1234, generation: "1.0")
         try kernel.add(1235, generation: "1.1", group: 1234)
@@ -160,7 +200,10 @@ import Testing
         try kernel.add(1235, generation: "2.1", group: 1234)
         tracker.terminate(owner: 42)
         #expect(kernel.signals.isEmpty)
-        #expect(tracker.count == 0)
+        #expect(tracker.count == 1)
+        kernel.identities.removeAll()
+        tracker.refresh(owner: 42)
+        #expect(tracker.isEmpty)
     }
 
     @Test func deadRegistrationsArePrunedBeforeTheBoundAndForgedReleasesAreIgnored() throws {
@@ -241,7 +284,7 @@ import Testing
         kernel.identities[1234] = nil
         kernel.groups[1235] = 1235
         tracker.terminate(owner: 42)
-        #expect(kernel.signals == [1235])
+        #expect(kernel.signals == [-1235, 1235])
         #expect(!tracker.isEmpty)
         kernel.identities[1235] = nil
         tracker.refresh(owner: 42)
