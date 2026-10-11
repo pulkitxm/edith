@@ -11,6 +11,8 @@ final class ExtensionRuntime: NSObject {
     private var engineClient: ExtensionEngineClient?
     private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
+    private var suspension: Task<Void, Never>?
+    private var uiRetirements: [UUID: Task<Void, Never>] = [:]
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -36,12 +38,42 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        commands.suspend()
+        let worker = worker
+        let model = uiModel
+        let streams = cliStreams
+        worker?.cancelPendingWork()
+        model?.cancelPendingWork()
+        streams?.stop()
+        if suspension == nil {
+            let retired = Array(uiRetirements.values)
+            suspension = Task { [self, worker, model, streams] in
+                await worker?.model.drainTools()
+                await model?.drainTools()
+                await commands.suspendAndWait()
+                await worker?.drain()
+                await model?.drain()
+                await streams?.stopAndWait()
+                for task in retired { await task.value }
+            }
+        }
+        let pending = suspension
+        Task { [self] in
+            await pending?.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         stopUI()
         let streams = cliStreams; cliStreams = nil; streams?.stop()
         commands.shutdown()
-        Task {
+        let worker = worker
+        Task { [self, worker, streams] in
+            await suspension?.value
             await worker?.shutdown()
             await streams?.stopAndWait()
             await commands.shutdownAndWait()
@@ -96,7 +128,14 @@ final class ExtensionRuntime: NSObject {
     private func stopUI() {
         engineClient?.invalidate(); engineClient = nil
         let model = uiModel; uiModel = nil
-        Task { await model?.shutdown() }
+        if let model {
+            model.cancelPendingWork()
+            let id = UUID()
+            uiRetirements[id] = Task { [self, model] in
+                await model.shutdown()
+                uiRetirements[id] = nil
+            }
+        }
         TextEditingCommands.shutdown()
     }
 

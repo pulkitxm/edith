@@ -70,9 +70,18 @@ import Foundation
         }
     }
 
-    func shutdown() async {
-        guard !isStopped else { return }
+    func cancelPendingWork() {
         isStopped = true
+        model.cancelPendingWork()
+    }
+
+    func drain() async {
+        cancelPendingWork()
+        await model.drain()
+    }
+
+    func shutdown() async {
+        cancelPendingWork()
         await model.shutdown()
     }
 }
