@@ -11,6 +11,7 @@ struct MarketplacePage: View {
     @Bindable var marketplace: HostMarketplace
     var presenter: (any HostExtensionContentPresenting)? = nil
     var openExtension: ((String) -> Void)? = nil
+    @Binding var requestedSettings: HostSettingsNavigation?
     @State private var search = ""
     @State private var category = "all"
     @State private var selected: HostExtension?
@@ -21,10 +22,12 @@ struct MarketplacePage: View {
 
     init(
         marketplace: HostMarketplace, presenter: (any HostExtensionContentPresenting)? = nil,
-        openExtension: ((String) -> Void)? = nil
+        openExtension: ((String) -> Void)? = nil,
+        requestedSettings: Binding<HostSettingsNavigation?> = .constant(nil)
     ) {
         self.marketplace = marketplace; self.presenter = presenter;
         self.openExtension = openExtension
+        _requestedSettings = requestedSettings
         _suites = State(
             initialValue: HostSuiteSelection(
                 marketplace: marketplace,
@@ -104,6 +107,21 @@ struct MarketplacePage: View {
                     .onAppear { handleDeepLink(proxy) }
             }
         }
+        .onChange(of: requestedSettings, initial: true) {
+            guard let request = requestedSettings else { return }
+            let id = request.delivery.extensionID
+            guard presenter != nil,
+                let entry = marketplace.entries.first(where: { $0.id == id }),
+                HostExtensionReview.settingsRequest(id: id, marketplace: marketplace) != nil
+            else { request.delivery.reject(); return }
+            search = ""; category = "all"; selected = entry
+        }
+        .onChange(of: selected?.id) {
+            if let request = requestedSettings, selected?.id != request.delivery.extensionID {
+                request.delivery.reject()
+            }
+        }
+        .onDisappear { requestedSettings?.delivery.reject() }
         .navigationTitle("Extensions")
         .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: category)
         .edithSheet(item: $selected) { entry in detail(entry) }
@@ -253,7 +271,10 @@ struct MarketplacePage: View {
                     selected = nil; callback(entry.id)
                 }
             },
-            done: { selected = nil })
+            done: { selected = nil },
+            navigation: requestedSettings.flatMap {
+                $0.delivery.extensionID == entry.id ? $0 : nil
+            })
     }
 
     private func handleDeepLink(_ proxy: ScrollViewProxy) {

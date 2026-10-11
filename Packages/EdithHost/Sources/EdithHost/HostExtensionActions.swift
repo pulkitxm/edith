@@ -11,7 +11,7 @@ enum HostExtensionSettingsPolicy: Equatable {
             "presenter", "systemStats", "windowSweaters":
             .init(section: "extension", policy: .preferences)
         case "bifrost", "clipboard", "codeStats", "downloads", "lidAwake", "attention",
-            "appMaintenance", "studio":
+            "appMaintenance", "studio", "quinjet", "notchShelf":
             .init(section: "extension", policy: .active)
         case "jev": .init(section: "jev", policy: .active)
         case "usage": .init(section: "usage", policy: .active)
@@ -36,7 +36,7 @@ enum HostExtensionSettingsPolicy: Equatable {
             !pendingDisable, !pendingRemoval, state != .stopping
         else { return nil }
         let active = state == .active && activeVersion == installed.version
-        guard canPresent(id: id, active: active) else { return nil }
+        guard state != .active || active, canPresent(id: id, active: active) else { return nil }
         return .init(
             extensionID: id, location: "settings", section: route.section,
             presentationID: presentationID)

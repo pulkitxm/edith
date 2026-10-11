@@ -137,6 +137,24 @@ final class HostSectionWindows: NSObject, NSWindowDelegate, NSMenuItemValidation
         entries.first(where: { $0.page.id == "herdr.window." + id.uuidString })?.window.close()
     }
 
+    func openTerminalOwned(
+        id: UUID, controller: NSViewController, didClose: @escaping () -> Void
+    ) -> NSWindow {
+        create(
+            page: HostNavigationPage(
+                id: "terminal.window." + id.uuidString, title: "Terminal", symbol: "terminal",
+                extensionID: "terminal"),
+            controller: controller, mode: .alwaysNew, didClose: didClose)
+    }
+
+    func focusTerminalOwned(id: UUID) {
+        _ = focusExisting("terminal.window." + id.uuidString)
+    }
+
+    func closeTerminalOwned(id: UUID) {
+        entries.first(where: { $0.page.id == "terminal.window." + id.uuidString })?.window.close()
+    }
+
     private func create(
         page: HostNavigationPage, controller: NSViewController, mode: HostSectionOpenMode,
         didClose: (() -> Void)?, contentSize: NSSize = HostSectionWindows.baseContentSize,

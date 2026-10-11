@@ -36,6 +36,8 @@ struct HostWorkspace: View {
     @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
     @AppStorage(AppStorageKeys.AppMaintenance.section, store: SharedDefaults.store) private
         var maintenanceSection = "Updates"
+    @State private var requestedSettings: HostSettingsNavigation?
+    @State private var workspaceWindow: NSWindow?
     @State private var router = WindowRouter()
     @State private var expansionRevision = 0
     @State private var liveSidebarWidth: Double?
@@ -144,17 +146,51 @@ struct HostWorkspace: View {
                     navigation: windowNavigation,
                     apply: { route in
                         try Task.checkCancellation()
-                        if let section = route.section { maintenanceSection = section }
+                        if route.restoreOnly { return }
+                        if let id = route.settingsExtensionID {
+                            guard let workspaceWindow,
+                                let version = marketplace.sessions.versions[id]
+                            else { throw HostWindowNavigationError.unavailable }
+                            requestedSettings?.delivery.reject()
+                            requestedSettings = .init(
+                                delivery: HostPresentationDelivery(
+                                    extensionID: id, version: version),
+                                window: workspaceWindow)
+                        }
+                        if let section = route.section {
+                            if route.page == "settings" { settings = section }
+                            if route.page == "appMaintenance" { maintenanceSection = section }
+                        }
                         binding.wrappedValue = route.page
                         await Task.yield()
-                        guard binding.wrappedValue == route.page else {
+                        if let id = route.settingsExtensionID {
+                            guard let request = requestedSettings,
+                                request.delivery.extensionID == id
+                            else { throw HostWindowNavigationError.routeRejected }
+                            try await request.delivery.wait()
+                        }
+                        guard binding.wrappedValue == route.page,
+                            route.page != "settings" || route.section == nil
+                                || settings == route.section,
+                            route.page != "appMaintenance" || route.section == nil
+                                || maintenanceSection == route.section
+                        else {
                             throw HostWindowNavigationError.routeRejected
                         }
-                    }, selected: { binding.wrappedValue })
+                    }, selected: { binding.wrappedValue },
+                    delivered: { route in
+                        if let id = route.settingsExtensionID {
+                            guard let request = requestedSettings,
+                                request.delivery.extensionID == id
+                            else { throw HostWindowNavigationError.routeRejected }
+                            try request.delivery.validate()
+                        }
+                    }, captured: { workspaceWindow = $0 })
             }
         }
         .onAppear { installKeys() }
         .onDisappear {
+            requestedSettings?.delivery.reject()
             removeKeys(); musicSlots?.setVisible(musicWindowID, visible: false)
         }
         .onChange(of: musicAdmission, initial: true) {
@@ -400,6 +436,7 @@ struct HostWorkspace: View {
         HostPageContent(
             marketplace: marketplace, updater: updater, permissions: permissions,
             destination: destination, settings: $settings, maintenanceSection: $maintenanceSection,
+            requestedSettings: $requestedSettings,
             presenter: presenter, showWelcome: showWelcome,
             panelShortcutChanged: panelShortcutChanged, additionalSettings: additionalSettings,
             defaults: defaults, select: select)

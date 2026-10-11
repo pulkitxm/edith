@@ -80,6 +80,18 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
         return controller.view.window
     }
 
+    func owns(_ controller: HostRemoteViewController, presentationID: UUID) -> Bool {
+        closing[presentationID] == nil && controllers[presentationID] === controller
+    }
+
+    func validateConnected(_ controller: HostRemoteViewController, window: NSWindow) throws {
+        guard owns(controller, presentationID: controller.request.presentationID) else {
+            throw HostWorkerError.rejected
+        }
+        try manager.validatePresented(controller.request)
+        try controller.validateConnected(window: window)
+    }
+
     func consumeTerminalZoom(
         _ command: WindowKeyCommand, window: NSWindow?, fallback: @escaping @MainActor () -> Void
     ) -> Bool {
@@ -201,7 +213,9 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
                 presentationID: request.presentationID, client: terminalUI,
                 window: { [weak self] in self?.view.window },
                 visible: { [weak self] in self?.state.visible == true },
-                available: { [weak self] in self?.connected == true && self?.detached == false },
+                available: { [weak self] in
+                    self?.connected == true && self?.detached == false && self?.failure == nil
+                },
                 ownsResponder: { [weak self] in self?.containsResponder(in: $0) == true })
         }
     }
@@ -318,14 +332,26 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
 
     func waitUntilConnected(window: NSWindow) async throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
-        while !connected {
+        while !readiness(window: window).ready {
             try Task.checkCancellation()
-            guard !detached, failure == nil, isViewLoaded, view.window === window,
-                ContinuousClock.now < deadline
+            guard !readiness(window: window).rejected, ContinuousClock.now < deadline
             else { throw HostWorkerError.rejected }
             try await Task.sleep(for: .milliseconds(10))
         }
-        guard !detached, view.window === window else { throw HostWorkerError.rejected }
+        try validateConnected(window: window)
+    }
+
+    func validateConnected(window: NSWindow) throws {
+        try Task.checkCancellation()
+        guard readiness(window: window).ready else { throw HostWorkerError.rejected }
+    }
+
+    private func readiness(window: NSWindow) -> HostPresentationReadiness {
+        .init(
+            connected: connected, failed: failure != nil, detached: detached,
+            attached: isViewLoaded && view.window === window,
+            visible: state.visible && isViewLoaded && !view.isHiddenOrHasHiddenAncestor,
+            updating: updates != nil || pending != nil)
     }
 
     func prepareInputToClose() async { await terminalInput?.stopAndWait() }

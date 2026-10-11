@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithHostCore
 import Foundation
 import Observation
 
@@ -116,15 +117,31 @@ final class HostNotchCompactCardModel {
         defer { if generation == current { acting = false } }
         do {
             try await run { [self] in
-                let next = try await requests.perform(
-                    providerID: providerID, target: .notch,
-                    tile: origin.tile, snapshot: provider.snapshot, actionID: actionID, value: value
-                )
+                let next = try await HostSurfaceActionDelivery.perform(
+                    validate: { try self.validate(versions, generation: current) },
+                    command: {
+                        try await requests.perform(
+                            providerID: providerID, target: .notch,
+                            tile: origin.tile, snapshot: provider.snapshot, actionID: actionID,
+                            value: value)
+                    },
+                    deliver: {
+                        if HostSurfaceActionDelivery.requiresWindow(
+                            providerID: providerID, actionID: actionID)
+                        {
+                            try await navigate(origin, providerID, provider.version)
+                        }
+                    })
                 try validate(versions, generation: current)
                 guard let index = providers.firstIndex(where: { $0.id == providerID }) else {
                     throw HostNotchPanelError.staleState
                 }
                 providers[index].snapshot = next; error = nil
+            }
+            if HostSurfaceActionDelivery.requiresWindow(providerID: providerID, actionID: actionID)
+            {
+                try validate(versions, generation: current)
+                try await postNavigation?(origin, providerID, provider.version)
             }
         } catch {
             if generation == current, !(error is CancellationError) {
