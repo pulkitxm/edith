@@ -29,7 +29,9 @@ struct HostStoragePageTests {
         #expect(sample.versions.allSatisfy { $0.compatible })
         #expect(sample.packageBytes(in: measurement).logical == 12000)
         #expect(measurement.sum(sample.dataScopeIDs).logical == 3250)
-        #expect(measurement.sum(sample.versions.flatMap(\.executableScopeIDs)).logical == 6000)
+        #expect(measurement.sum(sample.versions.flatMap(\.executableScopeIDs)).logical == 8000)
+        #expect(
+            sample.versions.map { measurement.sum($0.executableScopeIDs).logical } == [4000, 4000])
         #expect(measurement.sum(sample.versions.flatMap(\.frameworkScopeIDs)).logical == 4000)
         #expect(
             inventory.categories.reduce(Int64(0)) { $0 + $1.bytes(in: measurement).logical }
