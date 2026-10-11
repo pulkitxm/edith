@@ -121,6 +121,7 @@ def collect_proof(bundle, dmg, appcast, metadata, pinned_info, expected_index, s
 def pinned_sources(source, version, build, run=command):
     require(run(['git', 'rev-parse', 'HEAD']).strip() == source, 'Checkout source differs')
     require(not run(['git', 'ls-files', '--others', '--exclude-standard', '-z']), 'Untracked source inputs cannot qualify a host release')
+    require(not run(['git', 'ls-files', '--others', '-z', '--', 'Packages/EdithHost/Sources', 'Packages/ExtensionMarketplace/Sources', 'Packages/ExtensionSupport/Sources', 'Extensions/fixtureSupport', ':(glob,exclude)**/.build/**', ':(glob,exclude)**/.swiftpm/**', ':(glob,exclude)**/.DS_Store']), 'Ignored untracked source inputs cannot qualify a host release')
     paths = run(['git', 'diff', '--name-only', 'HEAD']).splitlines()
     require(set(paths) <= {'Resources/Info.plist', 'Resources/HelperInfo.plist'}, 'Unexpected source changes')
     for path in paths:

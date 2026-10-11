@@ -149,12 +149,25 @@ class HostReleaseProofTests(unittest.TestCase):
             return self.source + '\n' if arguments[1] == 'rev-parse' else ''
         with patch('host_release_proof.subprocess.check_output', side_effect=[plistlib.dumps(self.info), self.index.read_bytes(), self.index.read_bytes()]):
             self.assertFalse(pinned_sources(self.source, '1.2.3', '123', clean)[2])
-        self.assertEqual(calls, [['git', 'rev-parse', 'HEAD'], ['git', 'ls-files', '--others', '--exclude-standard', '-z'], ['git', 'diff', '--name-only', 'HEAD']])
+        self.assertEqual(calls[:2], [['git', 'rev-parse', 'HEAD'], ['git', 'ls-files', '--others', '--exclude-standard', '-z']])
+        self.assertEqual(calls[2], ['git', 'ls-files', '--others', '-z', '--', 'Packages/EdithHost/Sources', 'Packages/ExtensionMarketplace/Sources', 'Packages/ExtensionSupport/Sources', 'Extensions/fixtureSupport', ':(glob,exclude)**/.build/**', ':(glob,exclude)**/.swiftpm/**', ':(glob,exclude)**/.DS_Store'])
+        self.assertEqual(calls[3], ['git', 'diff', '--name-only', 'HEAD'])
         def changed(arguments):
             return self.source + '\n' if arguments[1] == 'rev-parse' else '' if arguments[1] == 'ls-files' else 'Packages/EdithHost/Sources/EdithHost/HostEntry.swift\n'
         with patch('host_release_proof.subprocess.check_output') as read, self.assertRaisesRegex(ValueError, 'Unexpected source changes'):
             pinned_sources(self.source, '1.2.3', '123', changed)
         read.assert_not_called()
+
+    def test_ignored_compiled_sources_reject_before_the_stamp_exception(self):
+        for path in ['Packages/EdithHost/Sources/EdithHost/Hidden.swift', 'Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/Hidden.swift', 'Packages/ExtensionSupport/Sources/EdithExtensionSupport/Hidden.swift', 'Extensions/fixtureSupport/Hidden.swift']:
+            def run(arguments):
+                if arguments[1] == 'rev-parse':
+                    return self.source + '\n'
+                return '' if '--exclude-standard' in arguments else path + '\0'
+            with patch('host_release_proof.document') as document, patch('host_release_proof.subprocess.check_output') as read, self.assertRaisesRegex(ValueError, 'Ignored untracked source inputs'):
+                pinned_sources(self.source, '1.2.3', '123', run)
+            document.assert_not_called()
+            read.assert_not_called()
 
     def test_exact_two_plist_stamp_exception_retains_the_pinned_feed_and_key(self):
         original = {'CFBundleShortVersionString': '0.1.0', 'CFBundleVersion': '1', 'SUPublicEDKey': self.key, 'SUFeedURL': 'https://example.invalid/appcast.xml'}
