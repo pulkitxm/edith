@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 
@@ -5,12 +6,7 @@ import Testing
 
 struct HostStoragePackageScopesTests {
     @Test func roleAndCameraCopiesAreIncludedExactlyOnce() throws {
-        let root = URL(
-            fileURLWithPath: ProcessInfo.processInfo.environment["TMPDIR"] ?? NSTemporaryDirectory()
-        )
-        .resolvingSymlinksInPath()
-        .appendingPathComponent("synthetic-package-scopes-" + UUID().uuidString)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let root = try syntheticRoot(prefix: "synthetic-package-scopes-")
         defer { try? FileManager.default.removeItem(at: root) }
         let layout = HostStoragePackageScopes(
             key: "fixture", directory: root, extensionID: "virtualCamera",
@@ -44,7 +40,7 @@ struct HostStoragePackageScopesTests {
         #expect(frameworks == 2100)
         #expect(measurement.bytes["fixture"]?.logical == 1000)
         #expect(measurement.total.logical == 5500)
-        #expect(measurement.total.complete)
+        #expect(measurement.total.complete, "\(root.path): \(measurement.issues)")
         #expect(Set(layout.scopes.map(\.id)).count == layout.scopes.count)
     }
 
@@ -73,7 +69,7 @@ struct HostStoragePackageScopesTests {
         #expect(measurement.bytes["usage"]?.logical == 300)
         #expect(measurement.bytes["host"]?.logical == 100)
         #expect(measurement.total.logical == 1100)
-        #expect(measurement.total.complete)
+        #expect(measurement.total.complete, "\(root.path): \(measurement.issues)")
     }
 
     @Test func allPackagesRollbackCopiesAndTransientFilesRemainExclusiveDuringDeletion() throws {
@@ -120,7 +116,7 @@ struct HostStoragePackageScopesTests {
         #expect(before.bytes["cache"]?.logical == 1407)
         #expect(before.bytes["data"]?.logical == 1403)
         #expect(before.total.logical == 43_810)
-        #expect(before.total.complete)
+        #expect(before.total.complete, "\(root.path): \(before.issues)")
         for directory in removeURLs { try FileManager.default.removeItem(at: directory) }
         let remainingScopes = scopes.filter { scope in
             !removeURLs.contains { scope.root == $0 || scope.root.path.hasPrefix($0.path + "/") }
@@ -129,7 +125,7 @@ struct HostStoragePackageScopesTests {
         #expect(before.total.logical - after.total.logical == 2000)
         #expect(after.bytes["data"] == before.bytes["data"])
         #expect(after.bytes["cache"]?.logical == before.bytes["cache"]?.logical)
-        #expect(after.total.complete)
+        #expect(after.total.complete, "\(root.path): \(after.issues)")
         #expect(
             try Data(contentsOf: root.appendingPathComponent("Data/saved-agent-session")).count
                 == 701)
@@ -137,14 +133,19 @@ struct HostStoragePackageScopesTests {
             try Data(contentsOf: root.appendingPathComponent("Data/shared-history")).count == 702)
     }
 
-    private func syntheticRoot() throws -> URL {
+    private func syntheticRoot(prefix: String = "synthetic-storage-") throws -> URL {
         let root = URL(
             fileURLWithPath: ProcessInfo.processInfo.environment["TMPDIR"] ?? NSTemporaryDirectory()
-        )
-        .resolvingSymlinksInPath()
-        .appendingPathComponent("synthetic-storage-" + UUID().uuidString)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        return root
+        ).appendingPathComponent(prefix + UUID().uuidString)
+        try FileManager.default.createDirectory(
+            at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        guard let canonical = realpath(root.path, nil) else {
+            let failure = POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            try? FileManager.default.removeItem(at: root)
+            throw failure
+        }
+        defer { free(canonical) }
+        return URL(fileURLWithPath: String(cString: canonical), isDirectory: true)
     }
 
     private func write(_ root: URL, _ path: String, count: Int) throws -> URL {

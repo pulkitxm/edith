@@ -213,18 +213,8 @@ private final class CoreOwnerFixture: @unchecked Sendable {
                 try HostCLIJSON.object(["operation": .string(name), "payload": payload]).encoded()
                 + Data([10])
             try input.fileHandleForWriting.write(contentsOf: data)
-            var result = Data()
-            let deadline = ContinuousClock.now.advanced(by: .seconds(5))
-            while ContinuousClock.now < deadline {
-                var event = pollfd(
-                    fd: output.fileHandleForReading.fileDescriptor, events: Int16(POLLIN),
-                    revents: 0)
-                if poll(&event, 1, 50) == 0 { continue }
-                guard let byte = try output.fileHandleForReading.read(upToCount: 1), !byte.isEmpty
-                else { throw HostCLIError.unavailable }
-                if byte == Data([10]) { break }
-                result += byte
-            }
+            var result = try CoreOwnerFixtureFrameReader.read(
+                descriptor: output.fileHandleForReading.fileDescriptor, operation: operation)
             if forgeValue && ["run", "cancel"].contains(name) {
                 result = try HostCLIJSON.object([
                     "owner": .string("herdr"), "job": .string("usage.refresh"),
@@ -243,5 +233,152 @@ private final class CoreOwnerFixture: @unchecked Sendable {
         if process.isRunning { process.terminate(); process.waitUntilExit() }
         try? output.fileHandleForReading.close()
         try? FileManager.default.removeItem(at: root)
+    }
+}
+
+private struct CoreOwnerFixtureFrameError: Error, LocalizedError {
+    enum Reason: String {
+        case timedOut, endOfFile, invalidDescriptor, pollFailed, readFailed
+        case tooLarge, emptyFrame, trailingBytes
+    }
+
+    let operation: String
+    let receivedBytes: Int
+    let reason: Reason
+    let systemError: Int32
+
+    var errorDescription: String? {
+        "Controlled owner response failed for \(operation): \(reason.rawValue), "
+            + "received \(receivedBytes) bytes, system error \(systemError)."
+    }
+}
+
+private enum CoreOwnerFixtureFrameReader {
+    static func read(
+        descriptor: Int32, operation: String, maximumBytes: Int = 1_048_576,
+        timeout: Duration = .seconds(5)
+    ) throws -> Data {
+        precondition(maximumBytes > 0 && timeout > .zero)
+        var result = Data()
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        func failure(_ reason: CoreOwnerFixtureFrameError.Reason, error: Int32 = 0)
+            -> CoreOwnerFixtureFrameError
+        {
+            .init(
+                operation: operation, receivedBytes: result.count, reason: reason,
+                systemError: error)
+        }
+        while ContinuousClock.now < deadline {
+            try Task.checkCancellation()
+            var event = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+            let ready = poll(&event, 1, 50)
+            if ready < 0 {
+                if errno == EINTR { continue }
+                throw failure(.pollFailed, error: errno)
+            }
+            if ready == 0 { continue }
+            if event.revents & Int16(POLLNVAL) != 0 { throw failure(.invalidDescriptor) }
+            if event.revents & Int16(POLLERR) != 0 { throw failure(.pollFailed) }
+            guard event.revents & Int16(POLLIN | POLLHUP) != 0 else { continue }
+            var buffer = [UInt8](repeating: 0, count: min(4096, maximumBytes - result.count + 1))
+            let count = buffer.withUnsafeMutableBytes {
+                Darwin.read(descriptor, $0.baseAddress, $0.count)
+            }
+            if count < 0 {
+                if errno == EINTR { continue }
+                throw failure(.readFailed, error: errno)
+            }
+            guard count > 0 else { throw failure(.endOfFile) }
+            result.append(contentsOf: buffer.prefix(count))
+            if let newline = result.firstIndex(of: 10) {
+                guard newline <= maximumBytes else { throw failure(.tooLarge) }
+                guard newline > 0 else { throw failure(.emptyFrame) }
+                guard newline == result.index(before: result.endIndex) else {
+                    throw failure(.trailingBytes)
+                }
+                return Data(result[..<newline])
+            }
+            guard result.count <= maximumBytes else { throw failure(.tooLarge) }
+        }
+        throw failure(.timedOut)
+    }
+}
+
+@Suite(.serialized) struct CoreOwnerFixtureFrameReaderTests {
+    @Test func completeJSONFrameSurvivesPeerHUP() throws {
+        let payload = Data("{\"ok\":true}\n".utf8)
+        let result = try frame(payload)
+        #expect(try JSONSerialization.jsonObject(with: result) as? [String: Bool] == ["ok": true])
+    }
+
+    @Test func partialFrameAtEOFIsRejectedWithRequestDiagnostic() throws {
+        let error = try failure(Data("{\"ok\":".utf8))
+        #expect(error.reason == .endOfFile && error.operation == "fixture.operation")
+        #expect(error.receivedBytes == 6 && error.errorDescription?.contains("fixture.operation") == true)
+    }
+
+    @Test func completeJSONWithoutNewlineIsRejected() throws {
+        let error = try failure(Data("{}".utf8))
+        #expect(error.reason == .endOfFile && error.receivedBytes == 2)
+    }
+
+    @Test func responseBeyondByteBoundIsRejected() throws {
+        let error = try failure(Data(repeating: 65, count: 17), maximumBytes: 16)
+        #expect(error.reason == .tooLarge && error.receivedBytes == 17)
+    }
+
+    @Test func exactByteBoundAllowsCompleteJSON() throws {
+        #expect(try frame(Data("{}\n".utf8), maximumBytes: 2) == Data("{}".utf8))
+    }
+
+    @Test func incompleteLiveFrameTimesOutWithoutReturningData() throws {
+        let error = try failure(Data("{".utf8), closeWriter: false, timeout: .milliseconds(20))
+        #expect(error.reason == .timedOut && error.receivedBytes == 1)
+    }
+
+    @Test func invalidDescriptorIsRejected() throws {
+        do {
+            _ = try CoreOwnerFixtureFrameReader.read(descriptor: Int32.max, operation: "bad.descriptor")
+            Issue.record("An invalid descriptor was accepted.")
+        } catch let error as CoreOwnerFixtureFrameError {
+            #expect(error.reason == .invalidDescriptor && error.receivedBytes == 0)
+        }
+    }
+
+    @Test func trailingFrameBytesAreRejected() throws {
+        let error = try failure(Data("{}\n{}\n".utf8))
+        #expect(error.reason == .trailingBytes && error.receivedBytes == 6)
+    }
+
+    @Test func emptyFrameIsRejected() throws {
+        let error = try failure(Data([10]))
+        #expect(error.reason == .emptyFrame && error.receivedBytes == 1)
+    }
+
+    private func frame(
+        _ payload: Data, maximumBytes: Int = 1_048_576, closeWriter: Bool = true,
+        timeout: Duration = .seconds(1)
+    ) throws -> Data {
+        let pipe = Pipe()
+        defer {
+            try? pipe.fileHandleForReading.close()
+            try? pipe.fileHandleForWriting.close()
+        }
+        try pipe.fileHandleForWriting.write(contentsOf: payload)
+        if closeWriter { try pipe.fileHandleForWriting.close() }
+        return try CoreOwnerFixtureFrameReader.read(
+            descriptor: pipe.fileHandleForReading.fileDescriptor, operation: "fixture.operation",
+            maximumBytes: maximumBytes, timeout: timeout)
+    }
+
+    private func failure(
+        _ payload: Data, maximumBytes: Int = 1_048_576, closeWriter: Bool = true,
+        timeout: Duration = .seconds(1)
+    ) throws -> CoreOwnerFixtureFrameError {
+        do {
+            _ = try frame(payload, maximumBytes: maximumBytes, closeWriter: closeWriter, timeout: timeout)
+            Issue.record("An incomplete or invalid frame was accepted.")
+            throw CocoaError(.coderReadCorrupt)
+        } catch let error as CoreOwnerFixtureFrameError { return error }
     }
 }
