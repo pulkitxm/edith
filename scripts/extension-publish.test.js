@@ -1,9 +1,19 @@
 import { expect, test } from "bun:test";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  linkSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   extensionChecksum,
   mergeExtensionCatalog,
@@ -13,6 +23,10 @@ import {
   validateExtensionChecksum,
 } from "./extension-publish.mjs";
 import { extensionReleaseTag } from "./extension-release-plan.mjs";
+import {
+  snapshotReleaseFile,
+  verifyImmutableReleaseAssets,
+} from "./immutable-release-assets.mjs";
 import { downloadReleaseAsset } from "./release-asset-read.mjs";
 import { verifiedCatalogPayload } from "./verify-extension-catalog.mjs";
 
@@ -31,6 +45,32 @@ const packageRecord = {
     "https://github.com/pulkitxm/edith/releases/download/synthetic/calendar.zip",
 };
 const previous = { schemaVersion: 1, revision: 1, packages: [packageRecord] };
+
+test("portable catalog planning imports without installed release dependencies", () => {
+  const directory = mkdtempSync(join(tmpdir(), "extension-planning-import-"));
+  try {
+    cpSync("scripts", join(directory, "scripts"), {
+      recursive: true,
+      filter: (path) => statSync(path).isDirectory() || path.endsWith(".mjs"),
+    });
+    const module = pathToFileURL(
+      join(directory, "scripts/extension-publish.mjs"),
+    ).href;
+    expect(
+      execFileSync(
+        "node",
+        [
+          "--input-type=module",
+          "-e",
+          `await import(${JSON.stringify(module)});process.stdout.write("loaded");`,
+        ],
+        { encoding: "utf8", timeout: 15000 },
+      ),
+    ).toBe("loaded");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 test("app upgrades retain packages for previous host contracts", () => {
   const upgraded = {
@@ -292,59 +332,76 @@ test("catalog limits fail closed instead of losing required compatibility or acc
   ).toThrow("dependency");
 });
 
-test("extension publication bootstraps all three immutable assets and retries without replacing them", async () => {
-  const files = [
-    ["package.zip", "calendar.zip"],
-    ["record.json", "calendar.json"],
-    ["checksum", "calendar.zip.sha256"],
-  ];
-  const uploaded = [];
-  const options = {
-    repository: "synthetic/fixture",
-    item: { id: 1, draft: true, assets: [] },
-    entry: { tag: "extension-calendar-v1.0.0" },
-    files,
-    uploadAsset: async (...args) => uploaded.push(args.at(-1)),
-    matches: async () => true,
-  };
-  await publishExtensionAssets(options);
-  expect(uploaded).toEqual(files.map(([, name]) => name));
-  uploaded.length = 0;
-  options.item = {
-    id: 1,
-    draft: false,
-    assets: files.map(([, name], index) => ({ name, id: index + 1 })),
-  };
-  await publishExtensionAssets(options);
-  expect(uploaded).toEqual([]);
-  options.matches = async ({ asset }) => asset.name !== "calendar.zip.sha256";
-  await expect(publishExtensionAssets(options)).rejects.toThrow(
-    "Immutable asset differs",
-  );
-  expect(uploaded).toEqual([]);
-  options.item.assets.pop();
-  await expect(publishExtensionAssets(options)).rejects.toThrow(
-    "missing an immutable asset",
-  );
-  expect(uploaded).toEqual([]);
-  options.item = {
-    id: 1,
-    draft: true,
-    assets: [{ id: 3, name: "calendar.zip.sha256" }],
-  };
-  await expect(publishExtensionAssets(options)).rejects.toThrow(
-    "Immutable asset differs",
-  );
-  expect(uploaded).toEqual([]);
-  options.matches = async () => true;
-  await publishExtensionAssets(options);
-  expect(uploaded).toEqual(["calendar.zip", "calendar.json"]);
-  uploaded.length = 0;
-  options.item.assets.push({ id: 4, name: "calendar.zip.sha256" });
-  await expect(publishExtensionAssets(options)).rejects.toThrow(
-    "Duplicate immutable release asset",
-  );
-  expect(uploaded).toEqual([]);
+test("extension publication verifies closed immutable assets before uploads and on exact retries", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "extension-immutable-assets-"));
+  try {
+    const files = ["calendar.zip", "calendar.json", "calendar.zip.sha256"].map(
+      (name) => {
+        const path = join(directory, name);
+        writeFileSync(path, `synthetic ${name}`);
+        return [path, name];
+      },
+    );
+    const uploaded = [];
+    const remote = new Map();
+    const options = {
+      repository: "synthetic/fixture",
+      item: {
+        id: 1,
+        tag_name: "extension-calendar-v1.0.0",
+        draft: true,
+        assets: [],
+      },
+      entry: { tag: "extension-calendar-v1.0.0" },
+      files,
+      readRelease: () => options.item,
+      uploadAsset: async (_, __, ___, file, name) => {
+        uploaded.push(name);
+        const bytes = readFileSync(file);
+        remote.set(name, bytes);
+        options.item.assets.push({
+          name,
+          id: options.item.assets.length + 1,
+          size: bytes.length,
+        });
+      },
+      downloadAsset: async ({ asset, expectedBytes, expectedSHA256 }) => {
+        const bytes = remote.get(asset.name);
+        if (
+          bytes.length !== expectedBytes ||
+          createHash("sha256").update(bytes).digest("hex") !== expectedSHA256
+        )
+          throw new Error("Immutable asset differs from build output");
+        return { sha256: expectedSHA256 };
+      },
+    };
+    await publishExtensionAssets(options);
+    expect(uploaded).toEqual(files.map(([, name]) => name));
+    uploaded.length = 0;
+    options.item.draft = false;
+    await publishExtensionAssets(options);
+    expect(uploaded).toEqual([]);
+    const checksum = remote.get("calendar.zip.sha256");
+    remote.set("calendar.zip.sha256", Buffer.alloc(checksum.length, 42));
+    await expect(publishExtensionAssets(options)).rejects.toThrow(
+      "Immutable asset differs",
+    );
+    expect(uploaded).toEqual([]);
+    remote.set("calendar.zip.sha256", checksum);
+    const asset = options.item.assets.pop();
+    await expect(publishExtensionAssets(options)).rejects.toThrow(
+      "missing an immutable asset",
+    );
+    options.item.draft = true;
+    await publishExtensionAssets(options);
+    expect(uploaded).toEqual(["calendar.zip.sha256"]);
+    options.item.assets.push(asset);
+    await expect(publishExtensionAssets(options)).rejects.toThrow(
+      "Duplicate immutable release asset",
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("local checksum contents bind the actual archive hash and exact filename", async () => {
@@ -428,6 +485,108 @@ test("all local package identities are checked before any release client request
       );
       expect(calls).toEqual([]);
     }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("private immutable snapshots reject FIFOs, hardlinks and same-size restored-mtime source mutation", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "extension-snapshot-"));
+  try {
+    const source = join(directory, "source");
+    const output = join(directory, "snapshot");
+    execFileSync("mkfifo", [source]);
+    await expect(snapshotReleaseFile(source, output)).rejects.toThrow();
+    unlinkSync(source);
+    writeFileSync(source, "original bytes");
+    linkSync(source, join(directory, "hardlink"));
+    await expect(snapshotReleaseFile(source, output)).rejects.toThrow();
+    unlinkSync(join(directory, "hardlink"));
+    const before = statSync(source, { bigint: true });
+    let changed = false;
+    await expect(
+      snapshotReleaseFile(source, output, {
+        readChunk: async (input, buffer) => {
+          const result = await input.read(buffer, 0, buffer.length, null);
+          if (!changed && result.bytesRead) {
+            changed = true;
+            writeFileSync(source, "different data");
+            execFileSync("python3", [
+              "-c",
+              "import os,sys;os.utime(sys.argv[1],ns=(int(sys.argv[2]),int(sys.argv[3])))",
+              source,
+              String(before.atimeNs),
+              String(before.mtimeNs),
+            ]);
+            const after = statSync(source, { bigint: true });
+            expect(after.size).toBe(before.size);
+            expect(after.mtimeNs).toBe(before.mtimeNs);
+            expect(after.ctimeNs).not.toBe(before.ctimeNs);
+          }
+          return result;
+        },
+      }),
+    ).rejects.toThrow();
+    expect(changed).toBe(true);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("uploads use fixed private bytes and reject remote substitution before and after promotion", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "extension-remote-proof-"));
+  try {
+    const file = join(directory, "package.zip");
+    const original = Buffer.from("original synthetic archive");
+    const changed = Buffer.from("modified synthetic archive");
+    writeFileSync(file, original);
+    const item = { id: 1, tag_name: "fixture", draft: true, assets: [] };
+    let remote;
+    let substitute = false;
+    const downloadAsset = async ({ expectedBytes, expectedSHA256 }) => {
+      const sha256 = createHash("sha256").update(remote).digest("hex");
+      if (remote.length !== expectedBytes || sha256 !== expectedSHA256)
+        throw new Error("Remote immutable bytes differ");
+      return { sha256 };
+    };
+    const options = {
+      repository: "synthetic/fixture",
+      item,
+      entry: { tag: "fixture" },
+      files: [[file, "calendar.zip"]],
+      readRelease: () => item,
+      downloadAsset,
+      uploadAsset: async (_, __, ___, snapshot, name) => {
+        expect(snapshot).not.toBe(file);
+        writeFileSync(file, changed);
+        remote = substitute ? changed : readFileSync(snapshot);
+        writeFileSync(file, original);
+        item.assets.push({ id: 2, name, size: remote.length });
+      },
+    };
+    const receipt = await publishExtensionAssets(options);
+    expect(remote).toEqual(original);
+    item.draft = false;
+    await verifyImmutableReleaseAssets({
+      repository: options.repository,
+      receipt,
+      readRelease: options.readRelease,
+      downloadAsset,
+    });
+    remote = changed;
+    await expect(
+      verifyImmutableReleaseAssets({
+        repository: options.repository,
+        receipt,
+        readRelease: options.readRelease,
+        downloadAsset,
+      }),
+    ).rejects.toThrow();
+    item.draft = true;
+    item.assets = [];
+    substitute = true;
+    await expect(publishExtensionAssets(options)).rejects.toThrow();
+    expect(item.draft).toBe(true);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

@@ -8,7 +8,6 @@ import {
 } from "./hosted-managed-views/native-ci-contract.mjs";
 import {
   artifact,
-  composeLineage,
   digest,
   downloadPublic,
   hosted,
@@ -16,6 +15,7 @@ import {
   productionRun,
   publicURL,
   request,
+  toolchainProvenance,
 } from "./hosted-public-release/contract.mjs";
 
 const source = "a".repeat(40);
@@ -272,108 +272,52 @@ describe("Public release admission", () => {
   });
 });
 
-test("selective publication composes unchanged actual lineage with all39 source fingerprints", () => {
-  const full = fixture(true);
-  const prior = {
-    value: full,
-    source,
-    plan: { plannedIDs: definitions.map(({ id }) => id) },
-    rows: productionRun(full),
-    metadata: { sourceCommit: source, sourceTreeDirty: false },
-    frozen: { hostApp: "synthetic" },
-    frozenSHA: "c".repeat(64),
-  };
-  const changed = fixture(true);
-  changed.run.id = 72;
-  changed.run.head_sha = "d".repeat(40);
-  changed.source = changed.run.head_sha;
-  changed.jobs = changed.jobs
-    .filter(
-      ({ name }) => !name.startsWith("build (") || name === "build (owner0)",
-    )
-    .map((job) => ({ ...job, run_id: 72 }));
-  changed.artifacts = changed.artifacts
-    .filter(({ name }) => name === "extension-owner0")
-    .map((asset) => ({
-      ...asset,
-      workflow_run: { id: 72, head_sha: changed.source },
-    }));
-  const current = {
-    value: changed,
-    source: changed.source,
-    plan: { plannedIDs: ["owner0"] },
-    rows: productionRun({ ...changed, plannedIDs: ["owner0"] }),
-    metadata: { sourceCommit: changed.source, sourceTreeDirty: false },
-    frozen: { hostApp: "synthetic" },
-    frozenSHA: "e".repeat(64),
-  };
-  const requestedRuns = Object.fromEntries(
-    definitions.filter(({ id }) => id !== "owner0").map(({ id }) => [id, 71]),
+test("selective current publication still requires every planned native job and global gate", () => {
+  const value = fixture(true);
+  value.jobs = value.jobs.filter(
+    ({ name }) => !name.startsWith("build (") || name === "build (owner0)",
   );
-  const input = {
-    definitions,
-    fingerprints,
-    current,
-    retained: new Map([[71, prior]]),
-    requestedRuns,
-  };
-  const result = composeLineage(input);
-  expect(result).toHaveLength(39);
-  expect(
-    result.find(({ extensionID }) => extensionID === "owner0").sourceCommit,
-  ).toBe(changed.source);
-  expect(
-    result.find(({ extensionID }) => extensionID === "owner1").qualification,
-  ).toBe("retained-unchanged-fingerprint");
-  expect(() =>
-    composeLineage({
-      ...input,
-      requestedRuns: { ...requestedRuns, owner0: 71 },
-    }),
-  ).toThrow();
-  expect(() => composeLineage({ ...input, retained: new Map() })).toThrow();
-  expect(() =>
-    composeLineage({
-      ...input,
-      retained: new Map([
-        [
-          71,
-          { ...prior, metadata: { ...prior.metadata, sourceTreeDirty: true } },
-        ],
-      ]),
-    }),
-  ).toThrow();
-  expect(() =>
-    composeLineage({
-      ...input,
-      retained: new Map([
-        [
-          71,
-          {
-            ...prior,
-            rows: prior.rows.filter(
-              ({ extensionID }) => extensionID !== "owner1",
-            ),
-          },
-        ],
-      ]),
-    }),
-  ).toThrow();
-  expect(() =>
-    composeLineage({
-      ...input,
-      fingerprints: { ...fingerprints, owner1: "f".repeat(64) },
-    }),
-  ).toThrow();
+  value.artifacts = value.artifacts.filter(
+    ({ name }) => name === "extension-owner0",
+  );
+  expect(productionRun({ ...value, plannedIDs: ["owner0"] })).toHaveLength(1);
   for (const conclusion of ["failure", "skipped", "cancelled"]) {
-    expect(() =>
-      productionRun({
-        ...changed,
-        plannedIDs: ["owner0"],
-        jobs: changed.jobs.map((job) =>
-          job.name === "build (owner0)" ? { ...job, conclusion } : job,
-        ),
-      }),
-    ).toThrow();
+    for (const name of [
+      "plan",
+      "frozen-host",
+      "tests",
+      "publish",
+      "build (owner0)",
+    ]) {
+      const changed = structuredClone(value);
+      changed.jobs.find((job) => job.name === name).conclusion = conclusion;
+      expect(() =>
+        productionRun({ ...changed, plannedIDs: ["owner0"] }),
+      ).toThrow();
+    }
   }
+});
+
+test("recorded toolchain provenance binds the successful source and final signed executable without relabeling its builder phase", () => {
+  const value = {
+    schema: 1,
+    sourceCommit: source,
+    hostExecutableSHA256: "c".repeat(64),
+    xcode: "Xcode 26.6\nBuild version 17G100",
+    sdk: "26.6",
+    builderSignature: "ad-hoc",
+  };
+  expect(toolchainProvenance(value, source, "c".repeat(64))).toEqual(value);
+  for (const changed of [
+    { sourceCommit: "d".repeat(40) },
+    { hostExecutableSHA256: "d".repeat(64) },
+    { xcode: "unmeasured" },
+    { sdk: "26.6-extra" },
+    { builderSignature: "Developer ID" },
+    { certificateCategory: "Developer ID" },
+    { schema: true },
+  ])
+    expect(() =>
+      toolchainProvenance({ ...value, ...changed }, source, "c".repeat(64)),
+    ).toThrow();
 });

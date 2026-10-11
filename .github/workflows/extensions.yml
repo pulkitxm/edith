@@ -378,6 +378,9 @@ jobs:
         if: always()
         run: "security delete-keychain \"$RUNNER_TEMP/extensions.keychain-db\" || true"
   publish:
+    permissions:
+      contents: write
+      actions: read
     needs:
       - plan
       - build
@@ -386,11 +389,13 @@ jobs:
     runs-on: macos-26
     env:
       GH_TOKEN: "${{ secrets.RELEASE_PUSH_TOKEN }}"
+      GITHUB_TOKEN: "${{ github.token }}"
       EXTENSION_CATALOG_PRIVATE_KEY: "${{ secrets.EXTENSION_CATALOG_PRIVATE_KEY }}"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: "${{ github.event.pull_request.head.sha || github.sha }}"
+          fetch-depth: 0
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       - run: bun scripts/extension-host-abi.mjs --check
@@ -404,9 +409,14 @@ jobs:
       - name: Inspect release capabilities
         run: |
           pukbot capabilities --json
+          pukbot tag create --help
           pukbot release create --help
           pukbot release edit --help
           pukbot release upload-asset --help
           gh release upload --help
+      - name: Install verified release dependencies
+        run: bun install --frozen-lockfile
+      - name: Preserve immutable native evidence before publication
+        run: bun scripts/extension-native-evidence.mjs
       - name: Publish immutable extension releases and the signed catalog
         run: bun scripts/extension-publish.mjs

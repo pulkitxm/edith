@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { createHash, generateKeyPairSync } from "node:crypto";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import {
   mkdirSync,
   mkdtempSync,
@@ -10,8 +10,14 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { catalogPointer } from "./extension-catalog-pointer.mjs";
 import { extensionChecksum } from "./extension-publish.mjs";
 import { extensionReleaseTag } from "./extension-release-plan.mjs";
+import { managedNativeTestSteps } from "./hosted-managed-views/native-ci-contract.mjs";
+import {
+  closedAssetInventory,
+  stagedEvidence,
+} from "./hosted-public-release/evidence.mjs";
 
 const repository = "pulkitxm/edith";
 const target = "a".repeat(40);
@@ -147,6 +153,48 @@ function publisherFixture(interrupt) {
     join(directory, "plan.json"),
     JSON.stringify({ include: [entry] }),
   );
+  const runner = join(directory, "publisher.mjs");
+  writeFileSync(
+    runner,
+    `
+import { readFileSync, writeFileSync } from "node:fs";
+import { sign } from "node:crypto";
+import { join } from "node:path";
+import { publishExtensions } from ${JSON.stringify(resolve("scripts/extension-publish.mjs"))};
+const directory = process.env.EXTENSION_OUTPUT;
+const result = await publishExtensions({
+  directory,
+  repository: process.env.GITHUB_REPOSITORY,
+  target: process.env.GITHUB_SHA,
+  ref: process.env.GITHUB_REF,
+  catalogTag: process.env.EXTENSION_CATALOG_TAG,
+  publicKey: process.env.EXTENSION_CATALOG_PUBLIC_KEY,
+  publishEvidence: async () => {
+    if (process.env.FIXTURE_EMPTY_RESUME) return JSON.parse(readFileSync(join(directory, "native-evidence-preparation.json")));
+    const packageRecord = JSON.parse(readFileSync(join(directory, "calendar.json")));
+    const sourceCommit = process.env.GITHUB_SHA;
+    const payload = Buffer.from(JSON.stringify({
+      schema: 1, kind: "extension-native-lineage", repository: process.env.GITHUB_REPOSITORY,
+      package: packageRecord, sourceCommit, runID: 101, runAttempt: 1,
+      evidenceTag: "extension-evidence/" + sourceCommit + "/101-1",
+      evidenceSHA256: "c".repeat(64), evidenceBytes: 200,
+    }));
+    writeFileSync(join(directory, "calendar.native-evidence.json"), JSON.stringify({
+      payload: payload.toString("base64"),
+      signature: sign(null, payload, process.env.FIXTURE_PRIVATE_KEY).toString("base64"),
+    }));
+    return { tag: "synthetic", originalArchiveBytes: 0, totalEvidenceBytes: 0 };
+  },
+  publishComposition: process.env.FIXTURE_EMPTY_RESUME ? undefined : async ({ nativeEvidence }) => nativeEvidence,
+  verifyOriginal: async ({ origin }) => ({ payload: {
+    sourceCommit: origin.sourceCommit,
+    plannedIDs: process.env.FIXTURE_EMPTY_RESUME ? Object.keys(JSON.parse(readFileSync(join(directory, "native-evidence-preparation.json"))).fixtureFingerprints) : [origin.package.id],
+    fingerprints: process.env.FIXTURE_EMPTY_RESUME ? JSON.parse(readFileSync(join(directory, "native-evidence-preparation.json"))).fixtureFingerprints : { [origin.package.id]: origin.package.sourceFingerprint },
+  } }),
+});
+process.stdout.write(JSON.stringify(result));
+`,
+  );
   const environment = {
     PATH: `${binary}:${process.env.PATH}`,
     HOME: directory,
@@ -173,8 +221,198 @@ function publisherFixture(interrupt) {
       change(current);
       writeFileSync(stateFile, JSON.stringify(current));
     },
+    prepareEmptyDraft: () => {
+      environment.FIXTURE_EMPTY_RESUME = "true";
+      const definitions = JSON.parse(readFileSync("Extensions/manifest.json"));
+      const fingerprints = Object.fromEntries(
+        definitions.map(({ id }) => [id, "b".repeat(64)]),
+      );
+      const records = definitions.map((definition) => ({
+        id: definition.id,
+        version: "1.0.0",
+        hostABI: definition.hostABI,
+        architecture: "arm64",
+        minimumSystemVersion: definition.minimumSystemVersion,
+        dependencies: definition.dependencies,
+        sourceFingerprint: fingerprints[definition.id],
+        sha256: "d".repeat(64),
+        downloadBytes: 1,
+        installedBytes: 1,
+        downloadURL: `https://github.com/${repository}/releases/download/${encodeURIComponent(`extensions/${definition.id}/1.0.0-${fingerprints[definition.id].slice(0, 20)}`)}/${definition.id}.zip`,
+      }));
+      const previous = { schemaVersion: 1, revision: 1, packages: records };
+      const signed = (value) => {
+        const bytes = Buffer.from(JSON.stringify(value));
+        return Buffer.from(
+          JSON.stringify({
+            payload: bytes.toString("base64"),
+            signature: sign(null, bytes, privateKey).toString("base64"),
+          }),
+        );
+      };
+      const resume = {
+        plan: { include: [] },
+        previous,
+        state: { draft: true },
+        definitions,
+        fingerprints,
+      };
+      const run = {
+        id: 1001,
+        run_attempt: 1,
+        repository: { full_name: repository },
+        path: ".github/workflows/extensions.yml",
+        head_sha: target,
+        head_branch: "main",
+        event: "push",
+        status: "in_progress",
+        conclusion: null,
+      };
+      const jobs = ["plan", "frozen-host", "tests", "build", "publish"].map(
+        (name, index) => ({
+          id: 2001 + index,
+          run_id: run.id,
+          name,
+          status: name === "publish" ? "in_progress" : "completed",
+          conclusion:
+            name === "publish"
+              ? null
+              : name === "build"
+                ? "skipped"
+                : "success",
+          steps: (name === "tests"
+            ? managedNativeTestSteps
+            : name === "publish"
+              ? ["Preserve immutable native evidence before publication"]
+              : []
+          ).map((step, number) => ({
+            name: step,
+            number: number + 1,
+            status: name === "publish" ? "in_progress" : "completed",
+            conclusion: name === "publish" ? null : "success",
+          })),
+        }),
+      );
+      const raw = Buffer.from("synthetic finished archive");
+      const artifacts = ["extension-plan", "frozen-extension-host"].map(
+        (name, index) => ({
+          name,
+          id: 3001 + index,
+          size_in_bytes: raw.length,
+          digest: `sha256:${createHash("sha256").update(raw).digest("hex")}`,
+          expired: false,
+          workflow_run: { id: run.id, head_sha: target },
+        }),
+      );
+      const payload = stagedEvidence({
+        run,
+        jobs,
+        artifacts,
+        source: target,
+        plannedIDs: [],
+        fingerprints,
+        resume,
+        environment: {
+          GITHUB_ACTIONS: "true",
+          RUNNER_ENVIRONMENT: "github-hosted",
+          RUNNER_OS: "macOS",
+          GITHUB_REF: "refs/heads/main",
+          GITHUB_REPOSITORY: repository,
+          GITHUB_SHA: target,
+          GITHUB_RUN_ID: String(run.id),
+          GITHUB_RUN_ATTEMPT: "1",
+          GITHUB_JOB: "publish",
+        },
+      });
+      const bytes = signed(payload);
+      const pin = {
+        bytes: bytes.length,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+      };
+      const tag = `extension-evidence/${target}/${run.id}-1`;
+      const evidence = {
+        tag,
+        ...closedAssetInventory(payload, pin),
+        fixtureFingerprints: fingerprints,
+      };
+      writeFileSync(join(directory, "native-evidence.json"), bytes);
+      writeFileSync(
+        join(directory, "native-evidence-preparation.json"),
+        JSON.stringify(evidence),
+      );
+      writeFileSync(join(directory, "previous.json"), JSON.stringify(previous));
+      writeFileSync(
+        join(directory, "previous-state.json"),
+        JSON.stringify({ draft: true }),
+      );
+      writeFileSync(
+        join(directory, "plan.json"),
+        JSON.stringify({ include: [] }),
+      );
+      const current = JSON.parse(readFileSync(stateFile));
+      const add = (item, name, data) => {
+        const asset = {
+          id: current.next++,
+          name,
+          size: data.length,
+          digest: `sha256:${createHash("sha256").update(data).digest("hex")}`,
+        };
+        item.assets.push(asset);
+        current.bytes[asset.id] = data.toString("base64");
+      };
+      const catalogBytes = signed(previous);
+      const catalog = {
+        id: current.next++,
+        tag_name: catalogTag,
+        draft: true,
+        body: JSON.stringify(catalogPointer(catalogBytes, 1)),
+        assets: [],
+      };
+      add(catalog, "catalog-1.json", catalogBytes);
+      current.releases.push(catalog);
+      const native = {
+        id: current.next++,
+        tag_name: tag,
+        target_commitish: target,
+        draft: false,
+        body: "",
+        assets: [],
+      };
+      for (const row of payload.artifacts) add(native, row.assetName, raw);
+      add(native, "native-evidence.json", bytes);
+      current.releases.push(native);
+      for (const record of records) {
+        const old = {
+          id: current.next++,
+          tag_name: decodeURIComponent(
+            new URL(record.downloadURL).pathname.split("/").at(-2),
+          ),
+          draft: false,
+          body: "",
+          assets: [],
+        };
+        add(
+          old,
+          `${record.id}.native-evidence.json`,
+          signed({
+            schema: 1,
+            kind: "extension-native-lineage",
+            repository,
+            package: record,
+            sourceCommit: "9".repeat(40),
+            runID: 1000,
+            runAttempt: 1,
+            evidenceTag: `extension-evidence/${"9".repeat(40)}/1000-1`,
+            evidenceSHA256: "c".repeat(64),
+            evidenceBytes: 200,
+          }),
+        );
+        current.releases.push(old);
+      }
+      writeFileSync(stateFile, JSON.stringify(current));
+    },
     run: () =>
-      spawnSync(process.execPath, [resolve("scripts/extension-publish.mjs")], {
+      spawnSync(process.execPath, [runner], {
         env: environment,
         encoding: "utf8",
         timeout: 15_000,
@@ -183,35 +421,34 @@ function publisherFixture(interrupt) {
   };
 }
 
-test("an archive-only interruption rejects a byte-different rebuild until the original artifacts are recovered", () => {
+test("an archive-only retry recovers original immutable bytes and signed lineage after a different rebuild", () => {
   const fixture = publisherFixture("calendar.zip");
   try {
     expect(fixture.run().status).not.toBe(0);
     const partial = fixture.state();
     const originalAssets = structuredClone(partial.bytes);
     fixture.build(Buffer.from("byte-different rebuilt signed archive"));
-    const rejected = fixture.run();
-    expect(rejected.status).not.toBe(0);
-    expect(rejected.stderr).toContain(
-      "Immutable asset differs from build output",
-    );
-    expect(fixture.state().bytes).toEqual(originalAssets);
-    expect(fixture.state().uploads).toEqual(["calendar.zip"]);
-    expect(fixture.state().pointerEdits).toBe(0);
-    fixture.build(fixture.original);
     const resumed = fixture.run();
     expect(resumed.status).toBe(0);
+    expect(readFileSync(join(fixture.directory, "calendar.zip"))).toEqual(
+      fixture.original,
+    );
     const complete = fixture.state();
     expect(complete.duplicateUploads).toBe(0);
     expect(
       complete.uploads.filter((name) => name === "calendar.zip"),
+    ).toHaveLength(1);
+    expect(
+      complete.uploads.filter(
+        (name) => name === "calendar.native-evidence.json",
+      ),
     ).toHaveLength(1);
     for (const [id, bytes] of Object.entries(originalAssets))
       expect(complete.bytes[id]).toBe(bytes);
   } finally {
     fixture.close();
   }
-}, 45_000);
+}, 30_000);
 
 for (const interruption of [
   "calendar.json",
@@ -307,6 +544,7 @@ for (const interruption of [
       );
       expect(release.draft).toBe(false);
       expect(release.assets.map(({ name }) => name)).toEqual([
+        "calendar.native-evidence.json",
         "calendar.zip",
         "calendar.json",
         "calendar.zip.sha256",
@@ -327,4 +565,75 @@ for (const interruption of [
       fixture.close();
     }
   }, 30_000);
+}
+
+test("a completed owned draft resumes through a signed full composition after response loss without rebuilding or replacing assets", () => {
+  const fixture = publisherFixture("publication-composition.json");
+  try {
+    fixture.prepareEmptyDraft();
+    const before = fixture.state();
+    const interrupted = fixture.run();
+    expect(interrupted.status).not.toBe(0);
+    expect(interrupted.stderr).toContain("synthetic upload response lost");
+    const partial = fixture.state();
+    expect(
+      partial.releases.find(({ tag_name }) => tag_name === catalogTag).draft,
+    ).toBe(true);
+    expect(partial.uploads).toEqual(["publication-composition.json"]);
+    const resumed = fixture.run();
+    expect(resumed.status).toBe(0);
+    const after = fixture.state();
+    expect(
+      after.releases.find(({ tag_name }) => tag_name === catalogTag).draft,
+    ).toBe(false);
+    expect(after.duplicateUploads).toBe(0);
+    expect(after.uploads).toEqual(["publication-composition.json"]);
+    for (const [id, bytes] of Object.entries(before.bytes))
+      expect(after.bytes[id]).toBe(bytes);
+    for (const [id, bytes] of Object.entries(partial.bytes))
+      expect(after.bytes[id]).toBe(bytes);
+  } finally {
+    fixture.close();
+  }
+}, 30000);
+
+for (const failure of [
+  "missing-draft",
+  "foreign-main",
+  "missing-link",
+  "corrupt-link",
+  "wrong-package",
+]) {
+  test(`empty draft resume refuses ${failure} before promotion`, () => {
+    const fixture = publisherFixture("");
+    try {
+      fixture.prepareEmptyDraft();
+      fixture.updateState((state) => {
+        const catalog = state.releases.find(
+          ({ tag_name }) => tag_name === catalogTag,
+        );
+        const owner = state.releases.find(({ tag_name }) =>
+          tag_name.startsWith("extensions/"),
+        );
+        if (failure === "missing-draft") catalog.draft = false;
+        if (failure === "foreign-main") state.target = "f".repeat(40);
+        if (failure === "missing-link") owner.assets = [];
+        if (failure === "corrupt-link")
+          state.bytes[owner.assets[0].id] = Buffer.from(
+            "bad signature fixture",
+          ).toString("base64");
+        if (failure === "wrong-package")
+          owner.assets[0].name = "other.native-evidence.json";
+      });
+      expect(fixture.run().status).not.toBe(0);
+      const state = fixture.state();
+      expect(state.uploads).toEqual([]);
+      if (failure !== "missing-draft")
+        expect(
+          state.releases.find(({ tag_name }) => tag_name === catalogTag).draft,
+        ).toBe(true);
+    } finally {
+      fixture.close();
+    }
+  }, 30000);
 }

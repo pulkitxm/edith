@@ -9,6 +9,7 @@ import {
   managedNativeTestSteps,
 } from "../hosted-managed-views/native-ci-contract.mjs";
 import { validateCIArtifactSet } from "../hosted-managed-views/package-preparation.mjs";
+import { validateCatalog } from "../verify-extension-catalog.mjs";
 
 export const repository = "pulkitxm/edith";
 const hash = /^[a-f0-9]{64}$/;
@@ -18,8 +19,8 @@ export const digest = (bytes) =>
 const integer = (value, maximum = Number.MAX_SAFE_INTEGER) =>
   assert(Number.isSafeInteger(value) && value > 0 && value <= maximum);
 
-export function request(value) {
-  assert(typeof value === "string" && Buffer.byteLength(value) <= 4096);
+export function closedJSON(value, maximum = 4096) {
+  assert(typeof value === "string" && Buffer.byteLength(value) <= maximum);
   const result = JSON.parse(value);
   const tree = parseExpression(value);
   function unique(node) {
@@ -36,6 +37,11 @@ export function request(value) {
     }
   }
   unique(tree);
+  return result;
+}
+
+export function request(value) {
+  const result = closedJSON(value);
   assert.deepEqual(Object.keys(result).sort(), [
     "hostRun",
     "packagesRun",
@@ -63,7 +69,6 @@ export function request(value) {
   for (const [id, runID] of Object.entries(result.retainedRuns)) {
     assert.match(id, /^[A-Za-z][A-Za-z0-9_-]{0,63}$/);
     integer(runID);
-    assert.notEqual(runID, result.packagesRun);
   }
   return result;
 }
@@ -142,6 +147,8 @@ export function productionRun({
   definitions,
   fingerprints,
   plannedIDs = definitions.map(({ id }) => id),
+  resolveArtifact = (name) => artifact(artifacts, name, run, source),
+  resume,
 }) {
   successfulRun(run, source, ".github/workflows/extensions.yml");
   assert(["push", "workflow_dispatch"].includes(run.event));
@@ -152,7 +159,12 @@ export function productionRun({
     Object.keys(fingerprints).sort(),
     definitions.map(({ id }) => id).sort(),
   );
-  assert(plannedIDs.length > 0 && plannedIDs.length <= 39);
+  assert(plannedIDs.length <= 39);
+  if (!plannedIDs.length) {
+    ownedDraftResume(resume);
+    assert.deepEqual(resume.definitions, definitions);
+    assert.deepEqual(resume.fingerprints, fingerprints);
+  }
   assert.equal(new Set(plannedIDs).size, plannedIDs.length);
   assert(
     plannedIDs.every((id) =>
@@ -164,16 +176,23 @@ export function productionRun({
     "frozen-host",
     "tests",
     "publish",
-    ...plannedIDs.map((id) => `build (${id})`),
+    ...(plannedIDs.length
+      ? plannedIDs.map((id) => `build (${id})`)
+      : ["build"]),
   ];
-  assert.equal(jobs.length, plannedIDs.length + 4);
-  assert.equal(new Set(jobs.map(({ id }) => id)).size, plannedIDs.length + 4);
+  assert.equal(jobs.length, expected.length);
+  assert.equal(new Set(jobs.map(({ id }) => id)).size, expected.length);
   assert.deepEqual(jobs.map(({ name }) => name).sort(), expected.sort());
   for (const job of jobs) {
     integer(job.id);
+    if (!plannedIDs.length && job.name === "build")
+      assert.deepEqual(job.steps, []);
     assert.equal(job.run_id, run.id);
     assert.equal(job.status, "completed");
-    assert.equal(job.conclusion, "success");
+    assert.equal(
+      job.conclusion,
+      !plannedIDs.length && job.name === "build" ? "skipped" : "success",
+    );
     const names =
       job.name === "tests"
         ? managedNativeTestSteps
@@ -192,7 +211,7 @@ export function productionRun({
   return plannedIDs.map((id) => ({
     extensionID: id,
     sourceFingerprint: fingerprints[id],
-    ...artifact(artifacts, `extension-${id}`, run, source),
+    ...resolveArtifact(`extension-${id}`),
   }));
 }
 
@@ -227,6 +246,31 @@ export function hostRun({ run, jobs, artifacts, source }) {
   };
 }
 
+export function toolchainProvenance(value, source, executableSHA256) {
+  assert.deepEqual(Object.keys(value).sort(), [
+    "builderSignature",
+    "hostExecutableSHA256",
+    "schema",
+    "sdk",
+    "sourceCommit",
+    "xcode",
+  ]);
+  assert.equal(value.schema, 1);
+  assert.equal(value.sourceCommit, source);
+  assert.match(source, commit);
+  assert.equal(value.hostExecutableSHA256, executableSHA256);
+  assert.match(executableSHA256, hash);
+  assert(typeof value.xcode === "string" && value.xcode.length <= 256);
+  assert.match(
+    value.xcode,
+    /^Xcode [0-9]+\.[0-9]+(?:\.[0-9]+)?\nBuild version [A-Za-z0-9]+$/,
+  );
+  assert(typeof value.sdk === "string" && value.sdk.length <= 32);
+  assert.match(value.sdk, /^[0-9]+\.[0-9]+(?:\.[0-9]+)?$/);
+  assert(["ad-hoc", "unsigned"].includes(value.builderSignature));
+  return value;
+}
+
 export function currentPackages(catalog, definitions, fingerprints) {
   return definitions.map((definition) => {
     const matching = catalog.packages.filter(
@@ -251,6 +295,160 @@ export function currentPackages(catalog, definitions, fingerprints) {
     return row;
   });
 }
+export function ownedDraftResume(value) {
+  assert(value && typeof value === "object");
+  const { plan, previous, state, definitions, fingerprints } = value;
+  assert.deepEqual(plan, { include: [] });
+  assert.deepEqual(state, { draft: true });
+  validateCatalog(previous);
+  assert.equal(definitions.length, 39);
+  assert.equal(new Set(definitions.map(({ id }) => id)).size, 39);
+  assert.deepEqual(
+    Object.keys(fingerprints).sort(),
+    definitions.map(({ id }) => id).sort(),
+  );
+  return currentPackages(previous, definitions, fingerprints);
+}
+
+export function unchangedCatalogPublication({
+  catalog,
+  definitions,
+  fingerprints,
+  priorDefinitions,
+  priorFingerprints,
+  plan,
+}) {
+  validateCatalog(catalog);
+  assert.deepEqual(plan, { include: [] });
+  for (const entries of [definitions, priorDefinitions]) {
+    assert.equal(entries.length, 39);
+    assert.equal(new Set(entries.map(({ id }) => id)).size, 39);
+  }
+  assert.deepEqual(
+    Object.keys(fingerprints).sort(),
+    definitions.map(({ id }) => id).sort(),
+  );
+  assert.deepEqual(priorFingerprints, fingerprints);
+  assert.deepEqual(
+    currentPackages(catalog, priorDefinitions, priorFingerprints),
+    currentPackages(catalog, definitions, fingerprints),
+  );
+}
+
+export async function currentExtensionsRuns(source, api) {
+  assert.match(source, commit);
+  const runs = [];
+  let count;
+  for (let page = 1; page <= 10; page++) {
+    const result = await api(
+      `/actions/workflows/extensions.yml/runs?head_sha=${source}&per_page=100&page=${page}`,
+    );
+    assert(
+      Number.isSafeInteger(result?.total_count) &&
+        result.total_count >= 0 &&
+        result.total_count <= 1000,
+    );
+    count ??= result.total_count;
+    assert.equal(result.total_count, count);
+    assert(Array.isArray(result.workflow_runs));
+    assert(result.workflow_runs.length <= 100);
+    runs.push(...result.workflow_runs);
+    assert(runs.length <= count);
+    if (runs.length === count) {
+      assert.equal(new Set(runs.map(({ id }) => id)).size, count);
+      for (const run of runs) {
+        successfulRun(run, source, ".github/workflows/extensions.yml");
+        assert(["push", "workflow_dispatch"].includes(run.event));
+        assert.equal(run.head_branch, "main");
+      }
+      return runs;
+    }
+    assert.equal(result.workflow_runs.length, 100);
+  }
+  throw new Error("Current Extensions runs exceed pagination bound");
+}
+
+export function unchangedExtensionsRun({ run, jobs, artifacts, source }) {
+  successfulRun(run, source, ".github/workflows/extensions.yml");
+  assert(["push", "workflow_dispatch"].includes(run.event));
+  assert.equal(run.head_branch, "main");
+  const expected = ["plan", "frozen-host", "tests", "build", "publish"];
+  assert.equal(jobs.length, expected.length);
+  assert.equal(new Set(jobs.map(({ id }) => id)).size, expected.length);
+  assert.deepEqual(jobs.map(({ name }) => name).sort(), expected.sort());
+  for (const job of jobs) {
+    integer(job.id);
+    assert.equal(job.run_id, run.id);
+    assert.equal(job.status, "completed");
+    assert.equal(job.conclusion, job.name === "plan" ? "success" : "skipped");
+    if (job.name !== "plan") assert.deepEqual(job.steps, []);
+    else {
+      const validationSteps = job.steps.filter(
+        ({ name }) => name === "Admit exact-source all-extension validation",
+      );
+      assert(validationSteps.length <= 1);
+      for (const step of job.steps) {
+        assert.equal(step.status, "completed");
+        if (step.name === "Admit exact-source all-extension validation")
+          assert.equal(step.conclusion, "skipped");
+        else
+          assert(
+            step.conclusion === "success" ||
+              (run.event === "workflow_dispatch" &&
+                step.name === "Require production publication from main" &&
+                step.conclusion === "skipped"),
+          );
+      }
+      for (const name of [
+        "Check portable publication and selective planning",
+        "Plan against the exact PR base or last trusted catalog",
+      ]) {
+        const matching = job.steps.filter((step) => step.name === name);
+        assert.equal(matching.length, 1);
+        assert.equal(matching[0].conclusion, "success");
+      }
+    }
+  }
+  assert.deepEqual(
+    artifacts.map(({ name }) => name),
+    ["extension-plan"],
+  );
+  const row = artifact(artifacts, "extension-plan", run, source);
+  assert(row.artifactBytes <= 8 * 1024 ** 2);
+  return row;
+}
+
+export function absentExtensionsPathRoute(workflow, parents, changedPaths) {
+  assert.equal(parents.length, 1);
+  assert.match(parents[0], commit);
+  const push = workflow.on?.push;
+  assert.deepEqual(Object.keys(push).sort(), ["branches", "paths"]);
+  assert.deepEqual(push.branches, ["main"]);
+  assert(
+    Array.isArray(push.paths) &&
+      push.paths.length > 0 &&
+      push.paths.length <= 100,
+  );
+  for (const pattern of push.paths)
+    assert(
+      typeof pattern === "string" && /^[A-Za-z0-9._/*-]{1,256}$/.test(pattern),
+    );
+  assert(
+    Array.isArray(changedPaths) &&
+      changedPaths.length > 0 &&
+      changedPaths.length <= 100000,
+  );
+  assert.equal(new Set(changedPaths).size, changedPaths.length);
+  for (const path of changedPaths) {
+    assert(typeof path === "string" && path.length > 0 && path.length <= 4096);
+    assert(!path.startsWith("/") && !path.split("/").includes(".."));
+    assert(
+      !push.paths.some((pattern) => new Bun.Glob(pattern).match(path)),
+      `Current source path requires an Extensions run: ${path}`,
+    );
+  }
+}
+
 export function publicURL(value, initial = true) {
   const url = new URL(value);
   assert.equal(url.protocol, "https:");
@@ -377,50 +575,4 @@ export async function downloadPublic({
     if (file) await rm(destination, { force: true });
     throw error;
   }
-}
-
-export function composeLineage({
-  definitions,
-  fingerprints,
-  current,
-  retained,
-  requestedRuns,
-}) {
-  const changed = new Set(current.plan.plannedIDs);
-  assert.equal(changed.size, current.plan.plannedIDs.length);
-  const remaining = definitions
-    .map(({ id }) => id)
-    .filter((id) => !changed.has(id));
-  assert.deepEqual(Object.keys(requestedRuns).sort(), remaining.sort());
-  return definitions.map(({ id }) => {
-    const admission = changed.has(id)
-      ? current
-      : retained.get(requestedRuns[id]);
-    assert(admission, `Missing immutable production lineage for ${id}`);
-    assert.equal(admission.value.run.head_sha, admission.source);
-    assert.equal(
-      admission.value.run.id,
-      changed.has(id) ? current.value.run.id : requestedRuns[id],
-    );
-    assert.equal(admission.metadata.sourceCommit, admission.source);
-    assert.equal(admission.metadata.sourceTreeDirty, false);
-    const matches = admission.rows.filter((row) => row.extensionID === id);
-    assert.equal(
-      matches.length,
-      1,
-      `Require an actual successful planned build for ${id}`,
-    );
-    const row = matches[0];
-    assert.equal(row.sourceFingerprint, fingerprints[id]);
-    return {
-      ...row,
-      sourceCommit: admission.source,
-      runID: admission.value.run.id,
-      frozen: admission.frozen,
-      frozenSHA: admission.frozenSHA,
-      qualification: changed.has(id)
-        ? "current-source-build"
-        : "retained-unchanged-fingerprint",
-    };
-  });
 }
