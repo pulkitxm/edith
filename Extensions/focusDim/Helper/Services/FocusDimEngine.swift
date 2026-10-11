@@ -42,6 +42,10 @@ final class FocusDimEngine: FeatureModule {
     private var screenObserver: NSObjectProtocol?
     private var repositionTask: Task<Void, Never>?
     private var repositionGeneration = 0
+    private var stopped = false
+    private var retiredWork: [UUID: Task<Void, Never>] = [:]
+    private var animations: Set<UUID> = []
+    private var animationWaiters: [CheckedContinuation<Void, Never>] = []
 
     private let fixture: WorkerFixtureAdmission?
     var systemResourceCount: Int {
@@ -84,12 +88,13 @@ final class FocusDimEngine: FeatureModule {
         }
     }
 
-    func shutdown() {
+    func cancelPendingWork() {
+        guard !stopped else { return }
+        stopped = true
+        repositionGeneration += 1
+        retireReposition()
         guard fixture == nil else { return }
         HotKeyRegistrar.clear(HotKeyCatalog.focusDim)
-        repositionGeneration += 1
-        repositionTask?.cancel()
-        repositionTask = nil
         let workspaceCenter = NSWorkspace.shared.notificationCenter
         if let activationObserver { workspaceCenter.removeObserver(activationObserver) }
         if let spaceObserver { workspaceCenter.removeObserver(spaceObserver) }
@@ -97,10 +102,14 @@ final class FocusDimEngine: FeatureModule {
         activationObserver = nil
         spaceObserver = nil
         screenObserver = nil
+    }
 
+    func shutdown() {
+        cancelPendingWork()
+        guard fixture == nil else { return }
         let windows = Array(overlays.values)
         overlays.removeAll()
-        NSAnimationContext.runAnimationGroup(
+        animate(
             { ctx in
                 ctx.duration = animationDuration
                 windows.forEach { $0.animator().alphaValue = 0 }
@@ -111,6 +120,7 @@ final class FocusDimEngine: FeatureModule {
     }
 
     func applySettings() {
+        guard !stopped else { return }
         if fixture != nil { loadSettings(); return }
         HotKeyRegistrar.install(HotKeyCatalog.focusDim) {
             FocusDimState.setActive(!FocusDimState.isActive())
@@ -120,7 +130,7 @@ final class FocusDimEngine: FeatureModule {
         loadSettings()
         guard FocusDimState.isActive(), CGPreflightScreenCaptureAccess() else {
             let windows = Array(overlays.values)
-            NSAnimationContext.runAnimationGroup(
+            animate(
                 { ctx in
                     ctx.duration = animationDuration
                     windows.forEach { $0.animator().alphaValue = 0 }
@@ -136,7 +146,7 @@ final class FocusDimEngine: FeatureModule {
         } else if overlays.values.contains(where: { !$0.isVisible }) {
             reposition(animateIn: true)
         } else {
-            NSAnimationContext.runAnimationGroup { ctx in
+            animate { ctx in
                 ctx.duration = animationDuration
                 overlays.values.forEach { $0.animator().alphaValue = self.intensity }
             }
@@ -173,10 +183,10 @@ final class FocusDimEngine: FeatureModule {
     }
 
     private func reposition(animateIn: Bool) {
+        guard !stopped else { return }
         repositionGeneration += 1
         let generation = repositionGeneration
-        repositionTask?.cancel()
-        repositionTask = nil
+        retireReposition()
         guard FocusDimState.isActive(), CGPreflightScreenCaptureAccess() else {
             for overlay in overlays.values {
                 overlay.alphaValue = 0
@@ -206,7 +216,7 @@ final class FocusDimEngine: FeatureModule {
         windows: [FocusDimWindowInfo], screenFrames: [(CGDirectDisplayID, CGRect)],
         frontmostPID: pid_t, mode: FocusDimDisplayMode, animateIn: Bool, generation: Int
     ) {
-        guard generation == repositionGeneration else { return }
+        guard !stopped, generation == repositionGeneration else { return }
         var targets: [(FocusDimOverlayWindow, Int?)] = []
         for (id, frame) in screenFrames {
             guard let overlay = overlays[id] else { continue }
@@ -220,7 +230,7 @@ final class FocusDimEngine: FeatureModule {
             for (overlay, windowNumber) in targets {
                 applyOrder(overlay, below: windowNumber)
             }
-            NSAnimationContext.runAnimationGroup { ctx in
+            animate { ctx in
                 ctx.duration = animationDuration
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 targets.forEach { $0.0.animator().alphaValue = self.intensity }
@@ -229,7 +239,7 @@ final class FocusDimEngine: FeatureModule {
         }
 
         let halfDuration = animationDuration / 2
-        NSAnimationContext.runAnimationGroup(
+        animate(
             { ctx in
                 ctx.duration = halfDuration
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -241,13 +251,55 @@ final class FocusDimEngine: FeatureModule {
                     for (overlay, windowNumber) in targets {
                         self.applyOrder(overlay, below: windowNumber)
                     }
-                    NSAnimationContext.runAnimationGroup { ctx in
+                    self.animate { ctx in
                         ctx.duration = halfDuration
                         ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
                         targets.forEach { $0.0.animator().alphaValue = self.intensity }
                     }
                 }
             })
+    }
+
+    private func retireReposition() {
+        guard let task = repositionTask else { return }
+        repositionTask = nil
+        task.cancel()
+        let id = UUID()
+        retiredWork[id] = Task { [self, task] in
+            await task.value
+            retiredWork[id] = nil
+        }
+    }
+
+    private func animate(_ changes: (NSAnimationContext) -> Void) {
+        animate(changes, completionHandler: {})
+    }
+
+    private func animate(
+        _ changes: (NSAnimationContext) -> Void,
+        completionHandler: @escaping () -> Void
+    ) {
+        let id = UUID()
+        animations.insert(id)
+        NSAnimationContext.runAnimationGroup(changes) { [self] in
+            MainActor.assumeIsolated {
+                completionHandler()
+                animations.remove(id)
+                if animations.isEmpty {
+                    let waiters = animationWaiters
+                    animationWaiters.removeAll()
+                    for waiter in waiters { waiter.resume() }
+                }
+            }
+        }
+    }
+
+    func drain() async {
+        cancelPendingWork()
+        for task in Array(retiredWork.values) { await task.value }
+        if !animations.isEmpty {
+            await withCheckedContinuation { animationWaiters.append($0) }
+        }
     }
 
     private func applyOrder(_ overlay: NSWindow, below windowNumber: Int?) {

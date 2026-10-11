@@ -17,6 +17,7 @@ final class ExtensionRuntime: NSObject {
 
     private var fixture: WorkerFixtureAdmission?
     private let commands = ExtensionCommandRegistry()
+    private var suspension: Task<Void, Never>?
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -62,12 +63,34 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        commands.suspend()
+        let service = service
+        service?.cancelPendingWork()
+        if suspension == nil {
+            suspension = Task { [self, service] in
+                await commands.suspendAndWait()
+                await service?.drain()
+            }
+        }
+        let pending = suspension
+        Task { [self] in
+            await pending?.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        Task {
-            await commands.shutdownAndWait()
-            _ = execute(["operation": "stop"])
-            completion()
+        suspendCommands { [self] in
+            Task { [self] in
+                await commands.shutdownAndWait()
+                let service = service
+                _ = execute(["operation": "stop"])
+                await service?.drain()
+                completion()
+            }
         }
     }
 
