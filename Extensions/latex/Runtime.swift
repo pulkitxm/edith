@@ -119,6 +119,7 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
+            suspendCommands(completion: {})
             let streams = cliStreams; cliStreams = nil; streams?.stop()
             Task { await streams?.stopAndWait() }
             commands.shutdown()

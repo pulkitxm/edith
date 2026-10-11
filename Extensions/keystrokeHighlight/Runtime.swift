@@ -188,6 +188,7 @@ final class ExtensionRuntime: NSObject {
         case "synchronize": synchronize()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
+            suspendCommands(completion: {})
             retirePresentation()
             commands.shutdown()
             retireService()
