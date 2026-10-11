@@ -17,8 +17,21 @@ export const definition = {
       {
         "path": "Extensions/music/Runtime.swift",
         "sha256": "43c40e804a7a59338245af05a8d48bd3213421693f22e8d49587f3276b184fd5"
+      },
+      {
+        "path": "Extensions/music/UI/MusicUIEnvelope.swift",
+        "sha256": "92410906abb2e3dbd35ebe43276b484adf7fa4bd8eb8f5e17e7f3cb61a68041d"
       }
-    ]
+    ],
+    "mutation": {
+      "kind": "state-transition",
+      "payloadKeys": [
+        "kind",
+        "path",
+        "target",
+        "value"
+      ]
+    }
   },
   "operations": [
     "music.ui.settings",
