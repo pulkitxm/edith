@@ -13,6 +13,44 @@ private actor CommandCleanupGate {
 }
 
 @MainActor @Suite struct ExtensionCommandRegistryTests {
+    #if EDITH_FUNCTIONAL_FIXTURE
+    @Test func retirementEventWaitsForActualOwnerTaskAfterCallerCancellation() async throws {
+        let registry = ExtensionCommandRegistry()
+        let token = UUID()
+        var owner: CheckedContinuation<Void, Never>?
+        var callbackReturned = false
+        var joined = 0
+        let observer = NotificationCenter.default.addObserver(
+            forName: ExtensionCommandRegistry.ownerJoinedNotification, object: registry, queue: nil
+        ) { notification in
+            MainActor.assumeIsolated {
+                #expect(notification.userInfo?["token"] as? String == token.uuidString)
+                joined += 1
+            }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        registry.invoke(
+            ["token": token.uuidString, "command": "synthetic.hold", "payload": Data()],
+            completion: { _, _ in callbackReturned = true },
+            execute: { _, _ in
+                await withCheckedContinuation { owner = $0 }
+                return Data()
+            })
+        while owner == nil { await Task.yield() }
+        registry.cancel(token.uuidString)
+        #expect(callbackReturned)
+        let suspension = Task { await registry.suspendAndWait() }
+        await Task.yield()
+        #expect(joined == 0)
+        owner?.resume()
+        let suspended = await suspension.value
+        #expect(joined == 1)
+        #expect(registry.resume(suspended))
+        await registry.suspendAndWait()
+        #expect(joined == 1)
+    }
+    #endif
+
     @Test(arguments: [false, true])
     func shutdownAwaitsCancelledCommandCleanup(cancelFirst: Bool) async throws {
         let registry = ExtensionCommandRegistry()

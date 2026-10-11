@@ -13,6 +13,17 @@ public final class HostRemoteSession {
         public let receiver: HostRemoteKernelIdentity
         public let request: ExtensionEngineRequest
     }
+    public struct FixtureNativeRequest: Sendable {
+        public let ui: HostRemoteProcessIdentity
+        public let receiver: HostRemoteKernelIdentity
+        public let request: ExtensionEngineRequest
+    }
+    public struct FixtureNativeReply: Sendable {
+        public let invocation: FixtureNativeRequest
+        public let reply: ExtensionEngineReply
+        public let encodedReply: Data
+    }
+    public static var fixtureObserveNativeReply: ((FixtureNativeReply) throws -> Void)?
     public static var fixtureBeforeEngineRequest: ((FixtureEngineInvocation) throws -> Void)?
     public static var fixtureObserveEngineResult:
         ((FixtureEngineInvocation, Result<Data, Error>) throws -> Void)?

@@ -95,6 +95,10 @@ final class HostRemoteEngineReceiver: NSObject, HostRemoteEvents, @unchecked Sen
         let task: Task<Void, Never>
         let timeout: Task<Void, Never>
         let completion: Completion
+        #if EDITH_FUNCTIONAL_FIXTURE
+        let invocation: HostRemoteSession.FixtureNativeRequest
+        let observe: (HostRemoteSession.FixtureNativeReply) throws -> Void
+        #endif
     }
     private let receiveEvent: @MainActor (HostRemoteEvent) -> Void
     private let execute: Execute
@@ -126,14 +130,21 @@ final class HostRemoteEngineReceiver: NSObject, HostRemoteEvents, @unchecked Sen
                 let request = try? ExtensionEngineWire.decode(
                     ExtensionEngineRequest.self, from: data)
             else { completion.rejectMalformed(); return }
-            guard !invalidated, peer?.isRunning == true, (try? request.validate()) != nil,
+            guard !invalidated, let peer, peer.isRunning, (try? request.validate()) != nil,
                 pending.count < 8, pending[request.token] == nil
             else { completion.finish(token: request.token, ok: false); return }
+            #if EDITH_FUNCTIONAL_FIXTURE
+            guard let observe = HostRemoteSession.fixtureObserveNativeReply,
+                let receiver = try? HostRemoteKernelIdentity.read(getpid())
+            else { completion.finish(token: request.token, ok: false); return }
+            let invocation = HostRemoteSession.FixtureNativeRequest(
+                ui: peer, receiver: receiver, request: request)
+            #endif
             let execution = Task { @MainActor [self] in
                 do {
                     let payload = try await execute(request)
                     try Task.checkCancellation()
-                    guard !invalidated, peer?.isRunning == true,
+                    guard !invalidated, self.peer == peer, peer.isRunning,
                         payload.count <= ExtensionEngineWire.maximumPayloadBytes,
                         (try? JSONSerialization.jsonObject(
                             with: payload, options: .fragmentsAllowed)) != nil
@@ -145,8 +156,14 @@ final class HostRemoteEngineReceiver: NSObject, HostRemoteEvents, @unchecked Sen
                 do { try await Task.sleep(for: .seconds(request.timeout)) } catch { return }
                 self?.finish(request.token)
             }
+            #if EDITH_FUNCTIONAL_FIXTURE
+            pending[request.token] = Pending(
+                task: execution, timeout: timeout, completion: completion,
+                invocation: invocation, observe: observe)
+            #else
             pending[request.token] = Pending(
                 task: execution, timeout: timeout, completion: completion)
+            #endif
         }
     }
 
@@ -165,19 +182,33 @@ final class HostRemoteEngineReceiver: NSObject, HostRemoteEvents, @unchecked Sen
         guard let request = pending.removeValue(forKey: token) else { return }
         request.task.cancel()
         request.timeout.cancel()
-        request.completion.finish(token: token, ok: payload != nil, payload: payload ?? Data())
+        let reply = ExtensionEngineReply(
+            token: token, ok: payload != nil, payload: payload ?? Data())
+        let encoded = request.completion.finish(token: token, ok: reply.ok, payload: reply.payload)
+        #if EDITH_FUNCTIONAL_FIXTURE
+        if let encoded {
+            do {
+                try request.observe(
+                    HostRemoteSession.FixtureNativeReply(
+                        invocation: request.invocation, reply: reply, encodedReply: encoded))
+            } catch { invalidate() }
+        }
+        #endif
     }
 
     private final class Completion: @unchecked Sendable {
         private let reply: (Data) -> Void
         @MainActor private var finished = false
         init(reply: @escaping (Data) -> Void) { self.reply = reply }
-        @MainActor func finish(token: UUID, ok: Bool, payload: Data = Data()) {
-            guard !finished else { return }
+        @discardableResult
+        @MainActor func finish(token: UUID, ok: Bool, payload: Data = Data()) -> Data? {
+            guard !finished else { return nil }
             finished = true
-            reply(
+            let encoded =
                 (try? ExtensionEngineWire.encode(
-                    ExtensionEngineReply(token: token, ok: ok, payload: payload))) ?? Data())
+                    ExtensionEngineReply(token: token, ok: ok, payload: payload))) ?? Data()
+            reply(encoded)
+            return encoded
         }
         @MainActor func rejectMalformed() {
             guard !finished else { return }

@@ -11,6 +11,7 @@ final class HostWorkerApplication {
     #if EDITH_FUNCTIONAL_FIXTURE
     static var fixtureAdmitBeforeConstruction:
         ((HostWorkerConfiguration, NSDictionary, [URL]) throws -> NSDictionary)?
+    static var fixtureObserveCommandRetirement: ((UUID) throws -> Void)?
     #endif
     private let control: HostWorkerControl
     private var frames = HostWorkerFrames()
@@ -38,6 +39,21 @@ final class HostWorkerApplication {
 
     func run() {
         NSApplication.shared.setActivationPolicy(.accessory)
+        #if EDITH_FUNCTIONAL_FIXTURE
+        resourceObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: ExtensionCommandRegistry.ownerJoinedNotification, object: nil, queue: nil
+            ) { [weak self] notification in
+                let token = (notification.userInfo?["token"] as? String).flatMap(
+                    UUID.init(uuidString:))
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    guard let token, let observe = Self.fixtureObserveCommandRetirement
+                    else { self.shutdown(); return }
+                    do { try observe(token) } catch { self.shutdown() }
+                }
+            })
+        #endif
         for (name, registered) in [
             (ExtensionCommandOwnership.registerNotification, true),
             (ExtensionCommandOwnership.releaseNotification, false),

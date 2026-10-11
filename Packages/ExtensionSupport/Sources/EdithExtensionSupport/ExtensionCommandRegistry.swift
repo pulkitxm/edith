@@ -2,6 +2,11 @@ import Foundation
 
 @MainActor
 public final class ExtensionCommandRegistry {
+    #if EDITH_FUNCTIONAL_FIXTURE
+    public static let ownerJoinedNotification = Notification.Name(
+        "edith.extension.command.owner-joined")
+    private var witnessedRetirements = Set<UUID>()
+    #endif
     public typealias Completion = (NSData?, NSString?) -> Void
     public typealias Execute = @MainActor @Sendable (String, Data) async throws -> Data
     private struct Command {
@@ -92,8 +97,17 @@ public final class ExtensionCommandRegistry {
     }
 
     private func joinRetired() async {
-        let pending = Array(retired.values)
-        for task in pending { await task.value }
+        let pending = Array(retired)
+        for (token, task) in pending {
+            await task.value
+            #if EDITH_FUNCTIONAL_FIXTURE
+            if witnessedRetirements.insert(token).inserted {
+                NotificationCenter.default.post(
+                    name: Self.ownerJoinedNotification, object: self,
+                    userInfo: ["token": token.uuidString])
+            }
+            #endif
+        }
     }
 
     private func finish(_ token: UUID, payload: Data?, message: String?) {
