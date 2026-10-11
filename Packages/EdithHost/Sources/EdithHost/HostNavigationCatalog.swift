@@ -28,7 +28,9 @@ enum HostNavigationCatalog {
         if let section = maintenance.first(where: { $0.extensionID == extensionID }) {
             return ("appMaintenance", section.id)
         }
-        if let section = settings.first(where: { $0.extensionID == extensionID }) {
+        if ["clipboard", "emoji", "micMute", "systemStats"].contains(extensionID),
+            let section = settings.first(where: { $0.extensionID == extensionID })
+        {
             return ("settings", section.id)
         }
         return nil
@@ -77,7 +79,6 @@ enum HostNavigationCatalog {
         .init(id: "home", title: "Home", symbol: "house.fill"),
         .init(id: "machines", title: "Fleet", symbol: "server.rack", extensionID: "machines"),
         .init(id: "docs", title: "Docs", symbol: "book.closed", extensionID: "docs"),
-        .init(id: "terminal", title: "Terminal", symbol: "apple.terminal", extensionID: "terminal"),
         .init(id: "agents", title: "Agents", symbol: "sparkles", suite: "agents", landing: true),
         .init(
             id: "dashboard", title: "Usage", symbol: "chart.bar.fill", suite: "agents",
@@ -143,6 +144,7 @@ enum HostNavigationCatalog {
         .init(
             id: "codeStats", title: "Code Stats", symbol: "chart.line.uptrend.xyaxis",
             suite: "data", parentID: "data", extensionID: "codeStats"),
+        .init(id: "terminal", title: "Terminal", symbol: "apple.terminal", extensionID: "terminal"),
         .init(id: "extensions", title: "Extensions", symbol: "puzzlepiece.extension"),
         .init(
             id: "settings", title: "Settings", symbol: "gearshape", sections: settings,

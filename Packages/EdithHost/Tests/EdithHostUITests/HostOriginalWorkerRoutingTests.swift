@@ -8,6 +8,20 @@ import Testing
 @MainActor @Suite(.serialized) struct HostOriginalWorkerRoutingTests {
     private let owners = ["terminal", "clipboard", "emoji", "micMute", "systemStats"]
 
+    @Test func terminalKeepsExistingNavigationShortcutPositionsAndSettingsOwnership() {
+        #expect(
+            Array(HostNavigationCatalog.pages.prefix(8).map(\.id))
+                == [
+                    "home", "machines", "docs", "agents", "dashboard", "herdr", "quinjet",
+                    "companion",
+                ])
+        #expect(HostNavigationCatalog.route(extensionID: "jev") == nil)
+        #expect(HostNavigationCatalog.route(extensionID: "notchShelf") == nil)
+        #expect(HostExtensionSettingsPolicy.route(for: "notchShelf")?.section == "extension")
+        #expect(
+            HostNavigationCatalog.settings.first { $0.id == "terminal" }?.extensionID == nil)
+    }
+
     @Test(arguments: ["terminal", "clipboard", "emoji", "micMute", "systemStats"])
     func originalUnsectionedRequestsSelectTheOwnedMainPageOrSettingsExport(id: String) throws {
         var visited: [String] = []
