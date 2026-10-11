@@ -89,7 +89,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-      - run: bun scripts/extension-host-abi.mjs --write
+      - run: bun scripts/extension-host-abi.mjs --check
       - run: bun install --frozen-lockfile
       - name: Cache the worker host
         uses: ./.github/actions/cache-host
@@ -148,7 +148,7 @@ jobs:
           ref: "${{ github.event.pull_request.head.sha || github.sha }}"
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-      - run: bun scripts/extension-host-abi.mjs --write
+      - run: bun scripts/extension-host-abi.mjs --check
       - run: bun install --frozen-lockfile
       - name: Restore the frozen host and lifecycle tools
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -195,7 +195,7 @@ jobs:
       - run: python3 -B scripts/test-package-extension-lifecycle-tools.py
       - name: Check portable publication and selective planning
         run: bun test scripts/extension-publication-guard.test.js scripts/extension-release-plan.test.js scripts/extensions-workflow.test.js
-      - run: bun scripts/extension-host-abi.mjs --write
+      - run: bun scripts/extension-host-abi.mjs --check
       - name: Require production publication from main
         if: "github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true)"
         run: 'test "$GITHUB_REF" = refs/heads/main || { echo "Extension publication requires main" >&2; exit 1; }'
@@ -244,7 +244,7 @@ jobs:
           ref: "${{ github.event.pull_request.head.sha || github.sha }}"
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-      - run: bun scripts/extension-host-abi.mjs --write
+      - run: bun scripts/extension-host-abi.mjs --check
       - name: Restore the frozen host and lifecycle tools
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -373,7 +373,7 @@ jobs:
           ref: "${{ github.event.pull_request.head.sha || github.sha }}"
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-      - run: bun scripts/extension-host-abi.mjs --write
+      - run: bun scripts/extension-host-abi.mjs --check
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: extension-*

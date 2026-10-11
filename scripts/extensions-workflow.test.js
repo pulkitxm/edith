@@ -611,3 +611,20 @@ test("publication rejects untrusted repositories refs and implicit manual publis
     ).toBe(false);
   }
 });
+
+test("all extension pipeline ABI preflights validate committed source without generation", () => {
+  for (const job of [plan, frozen, workflow.jobs.tests, build, publish]) {
+    const checks = job.steps.filter((step) =>
+      step.run?.includes("bun scripts/extension-host-abi.mjs"),
+    );
+    expect(checks).toHaveLength(1);
+    expect(checks[0].run).toBe("bun scripts/extension-host-abi.mjs --check");
+  }
+  expect(
+    frozen.steps.findIndex((step) =>
+      step.run?.includes("bun scripts/extension-host-abi.mjs"),
+    ),
+  ).toBeLessThan(
+    frozen.steps.findIndex((step) => step.run === "make ci-host host"),
+  );
+});
