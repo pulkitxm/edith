@@ -14,7 +14,6 @@ import {
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { requireRegularTree } from "./build-contained-host-runtime.mjs";
-import { buildExtensionPackage } from "./build-extension-package.mjs";
 import { validateWorkerLifecycleScope } from "./extension-worker-proof.mjs";
 
 export const inertFixtureWorkers = new Set([
@@ -84,6 +83,16 @@ export const supportedFixtureWorkers = new Set([
 
 export function validateWorkerFixtureSelection(definitions, requested) {
   const workers = definitions.filter((entry) => entry.contractVersion === 1);
+  assert.equal(
+    workers.length,
+    supportedFixtureWorkers.size,
+    "Worker manifest inventory startup rejected",
+  );
+  assert.deepEqual(
+    new Set(workers.map(({ id }) => id)),
+    supportedFixtureWorkers,
+    "Worker manifest inventory startup rejected",
+  );
   const selected =
     requested.length === 0
       ? workers
@@ -116,6 +125,61 @@ export function validateWorkerFixtureProof(
   assert.equal(result.notchMetadataValidated, id === "notchShelf");
   assert.equal(result.studioDataValidated, false);
   assert.equal(result.studioMetadataValidated, id === "studio");
+}
+
+export function validateWorkerLifecycleResult(
+  result,
+  { id, surfaceContractVersion, headlessCLI },
+) {
+  assert(supportedFixtureWorkers.has(id), `Unknown fixture owner ${id}`);
+  assert([0, 1].includes(surfaceContractVersion ?? 0));
+  assert.equal(typeof headlessCLI, "boolean");
+  for (const key of [
+    "downloadedBundle",
+    "updateWithoutAppRestart",
+    "restoreAfterAppUpdate",
+    "freshHostSessionRestored",
+    "pendingDisableRecoveryValidated",
+    "removedPayloads",
+    "isolatedSupportTypes",
+    "surfaceLayoutRestored",
+  ])
+    assert.equal(result[key], true);
+  validateWorkerLifecycleScope(result);
+  assert.equal(result.headlessCLI, headlessCLI);
+  assert.equal(result.headlessLifecycle, true);
+  assert.equal(result.disabledProcesses, 0);
+  validateWorkerFixtureProof(result, { id, surfaceContractVersion });
+  assert.equal(result.clipboardDataValidated, id === "clipboard");
+  assert.equal(result.latexDataValidated, id === "latex");
+  assert.equal(result.companionDataValidated, id === "companion");
+  assert.equal(result.terminalDataValidated, id === "terminal");
+
+  assert.equal(result.audioMixerDataValidated, id === "audioMixer");
+  assert.equal(result.usageDataValidated, id === "usage");
+  assert.equal(result.usageHookLifecycleValidated, id === "usage");
+  assert.equal(result.cameraDataValidated, id === "virtualCamera");
+  assert.equal(result.databaseDataValidated, id === "database");
+  assert.equal(result.calendarFixtureLifecycleValidated, id === "calendar");
+  assert.equal(result.agentActivityValidated, id === "herdr");
+  assert.equal(result.machinesDataValidated, id === "machines");
+  assert.equal(result.codeStatsDataValidated, id === "codeStats");
+  assert.equal(result.systemCleaningValidated, id === "system");
+}
+
+export function validatePrivilegedWorkerLifecycleResult(privileged) {
+  for (const key of [
+    "signedPayload",
+    "sameExecutable",
+    "isolatedPrivilegedWorkers",
+    "restoredBeforeExit",
+    "connectionLossExited",
+  ])
+    assert.equal(privileged[key], true);
+  assert.equal(privileged.disabledProcesses, 0);
+  assert.equal(privileged.productionSystemEffects, 0);
+  assert.equal(privileged.lifecycleScope, "synthetic-restoration-callback");
+  assert.equal(privileged.shippingPrivilegedRoleExecuted, false);
 }
 
 export function workerFixtureHome(root, id) {
@@ -296,6 +360,7 @@ export async function validateCameraFixtureHost(
 }
 
 async function run() {
+  const { buildExtensionPackage } = await import("./build-extension-package.mjs");
   const definitions = JSON.parse(
     await readFile("Extensions/manifest.json", "utf8"),
   );
@@ -409,34 +474,11 @@ async function run() {
           },
         ).trim(),
       );
-      for (const key of [
-        "downloadedBundle",
-        "updateWithoutAppRestart",
-        "restoreAfterAppUpdate",
-        "freshHostSessionRestored",
-        "pendingDisableRecoveryValidated",
-        "removedPayloads",
-        "isolatedSupportTypes",
-        "surfaceLayoutRestored",
-      ])
-        assert.equal(result[key], true);
-      validateWorkerLifecycleScope(result);
-      assert.equal(result.headlessCLI, headlessCLI);
-      assert.equal(result.headlessLifecycle, true);
-      assert.equal(result.disabledProcesses, 0);
-      validateWorkerFixtureProof(result, { id, surfaceContractVersion });
-      assert.equal(result.clipboardDataValidated, id === "clipboard");
-      assert.equal(result.latexDataValidated, id === "latex");
-      assert.equal(result.companionDataValidated, id === "companion");
-      assert.equal(result.terminalDataValidated, id === "terminal");
-
-      assert.equal(result.audioMixerDataValidated, id === "audioMixer");
-      assert.equal(result.usageDataValidated, id === "usage");
-      assert.equal(result.usageHookLifecycleValidated, id === "usage");
-      assert.equal(result.cameraDataValidated, id === "virtualCamera");
-      assert.equal(result.databaseDataValidated, id === "database");
-      assert.equal(result.calendarFixtureLifecycleValidated, id === "calendar");
-      assert.equal(result.agentActivityValidated, id === "herdr");
+      validateWorkerLifecycleResult(result, {
+        id,
+        surfaceContractVersion,
+        headlessCLI,
+      });
       if (id === "lidAwake") {
         const privileged = JSON.parse(
           execFileSync(
@@ -451,27 +493,11 @@ async function run() {
             { encoding: "utf8", timeout: 60_000 },
           ).trim(),
         );
-        for (const key of [
-          "signedPayload",
-          "sameExecutable",
-          "isolatedPrivilegedWorkers",
-          "restoredBeforeExit",
-          "connectionLossExited",
-        ])
-          assert.equal(privileged[key], true);
-        assert.equal(privileged.disabledProcesses, 0);
-        assert.equal(privileged.productionSystemEffects, 0);
-        assert.equal(
-          privileged.lifecycleScope,
-          "synthetic-restoration-callback",
-        );
-        assert.equal(privileged.shippingPrivilegedRoleExecuted, false);
+        validatePrivilegedWorkerLifecycleResult(privileged);
         result.privilegedWorkerLifetimeValidated = true;
         result.privilegedShippingPayloadValidated = true;
         result.privilegedShippingRoleExecuted = false;
       }
-      assert.equal(result.machinesDataValidated, id === "machines");
-      assert.equal(result.codeStatsDataValidated, id === "codeStats");
       if (retainPackages) {
         const output = resolve("dist/extensions");
         await mkdir(output, { recursive: true });

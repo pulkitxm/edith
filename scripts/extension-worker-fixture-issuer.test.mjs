@@ -21,6 +21,8 @@ import {
   validateCameraFixtureHost,
   validateWorkerFixtureProof,
   validateWorkerFixtureSelection,
+  validateWorkerLifecycleResult,
+  validatePrivilegedWorkerLifecycleResult,
   workerFixtureEnvironment,
   workerFixtureHome,
 } from "./test-extension-workers.mjs";
@@ -453,4 +455,157 @@ test("tracked Camera host rejects missing resources, symlink trees and malformed
       assert.equal(verified, false);
     });
   }
+});
+
+function lifecycleResult(worker, headlessCLI = false) {
+  const { id, surfaceContractVersion } = worker;
+  return {
+    downloadedBundle: true,
+    updateWithoutAppRestart: true,
+    restoreAfterAppUpdate: true,
+    freshHostSessionRestored: true,
+    pendingDisableRecoveryValidated: true,
+    removedPayloads: true,
+    isolatedSupportTypes: true,
+    surfaceLayoutRestored: true,
+    engineLifecycleValidated: true,
+    managedNativeViewValidated: false,
+    nativeWindow: false,
+    headlessCLI,
+    headlessLifecycle: true,
+    disabledProcesses: 0,
+    surfaceDataValidated:
+      surfaceContractVersion === 1 && !["music", "notchShelf"].includes(id),
+    inertFeatureDeclineValidated: ["music", "notchShelf"].includes(id),
+    notchMetadataValidated: id === "notchShelf",
+    studioDataValidated: false,
+    studioMetadataValidated: id === "studio",
+    clipboardDataValidated: id === "clipboard",
+    latexDataValidated: id === "latex",
+    companionDataValidated: id === "companion",
+    terminalDataValidated: id === "terminal",
+    audioMixerDataValidated: id === "audioMixer",
+    usageDataValidated: id === "usage",
+    usageHookLifecycleValidated: id === "usage",
+    cameraDataValidated: id === "virtualCamera",
+    databaseDataValidated: id === "database",
+    calendarFixtureLifecycleValidated: id === "calendar",
+    agentActivityValidated: id === "herdr",
+    machinesDataValidated: id === "machines",
+    codeStatsDataValidated: id === "codeStats",
+    systemCleaningValidated: id === "system",
+  };
+}
+
+test("lifecycle result rejects every missing or falsified original observation for all39", () => {
+  for (const worker of workers) {
+    const result = lifecycleResult(worker);
+    const options = { ...worker, headlessCLI: false };
+    validateWorkerLifecycleResult(result, options);
+    for (const [field, value] of Object.entries(result)) {
+      const missing = { ...result };
+      delete missing[field];
+      assert.throws(
+        () => validateWorkerLifecycleResult(missing, options),
+        `${worker.id}: missing ${field}`,
+      );
+      for (const incorrect of [
+        null,
+        typeof value === "boolean" ? !value : 1,
+        String(value),
+      ])
+        assert.throws(
+          () =>
+            validateWorkerLifecycleResult(
+              { ...result, [field]: incorrect },
+              options,
+            ),
+          `${worker.id}: falsified ${field}`,
+        );
+    }
+  }
+});
+
+test("lifecycle result preserves Database CLI and refuses native UI promotion", () => {
+  const worker = workers.find(({ id }) => id === "database");
+  const options = { ...worker, headlessCLI: true };
+  const result = lifecycleResult(worker, true);
+  validateWorkerLifecycleResult(result, options);
+  assert.throws(() =>
+    validateWorkerLifecycleResult(result, { ...options, headlessCLI: false }),
+  );
+  for (const field of ["managedNativeViewValidated", "nativeWindow"])
+    assert.throws(() =>
+      validateWorkerLifecycleResult({ ...result, [field]: true }, options),
+    );
+  assert.throws(() =>
+    validateWorkerLifecycleResult(result, { ...options, id: "futureWorker" }),
+  );
+});
+
+test("privileged lifecycle rejects every dropped observation and shipping execution claim", () => {
+  const result = {
+    signedPayload: true,
+    sameExecutable: true,
+    isolatedPrivilegedWorkers: true,
+    restoredBeforeExit: true,
+    connectionLossExited: true,
+    disabledProcesses: 0,
+    productionSystemEffects: 0,
+    lifecycleScope: "synthetic-restoration-callback",
+    shippingPrivilegedRoleExecuted: false,
+  };
+  validatePrivilegedWorkerLifecycleResult(result);
+  for (const [field, value] of Object.entries(result)) {
+    const missing = { ...result };
+    delete missing[field];
+    assert.throws(
+      () => validatePrivilegedWorkerLifecycleResult(missing),
+      `missing ${field}`,
+    );
+    for (const incorrect of [
+      null,
+      typeof value === "boolean"
+        ? !value
+        : typeof value === "number"
+          ? 1
+          : "shipping",
+    ])
+      assert.throws(
+        () =>
+          validatePrivilegedWorkerLifecycleResult({
+            ...result,
+            [field]: incorrect,
+          }),
+        `falsified ${field}`,
+      );
+  }
+});
+
+test("full worker inventory rejects unselected foreign, missing and duplicate owners before selection", () => {
+  const requested = ["music"];
+  const tampered = [
+    [...definitions, { id: "futureWorker", contractVersion: 1 }],
+    definitions.filter(({ id }) => id !== "usage"),
+    definitions.map((entry) =>
+      entry.id === "usage" ? { ...entry, id: "futureWorker" } : entry,
+    ),
+    definitions.map((entry) =>
+      entry.id === "usage" ? { ...entry, id: "music" } : entry,
+    ),
+    definitions.map((entry) =>
+      entry.id === "usage" ? { ...entry, contractVersion: 2 } : entry,
+    ),
+    [...definitions, definitions.find(({ id }) => id === "usage")],
+  ];
+  for (const manifest of tampered)
+    for (const selection of [[], requested])
+      assert.throws(
+        () => validateWorkerFixtureSelection(manifest, selection),
+        /startup rejected/,
+      );
+  assert.deepEqual(
+    validateWorkerFixtureSelection([...definitions].reverse(), requested),
+    [definitions.find(({ id }) => id === "music")],
+  );
 });
