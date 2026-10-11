@@ -15,7 +15,8 @@
       "role": "textField",
       "label": "qwen3:1.7b",
       "action": "replace-text",
-      "value": "synthetic-temporary-reason-model"
+      "value": "synthetic-temporary-reason-model",
+      "selector": "placeholder"
     },
     {
       "role": "button",
@@ -27,7 +28,8 @@
       "role": "textField",
       "label": "qwen3:1.7b",
       "action": "replace-text",
-      "value": "qwen3:1.7b"
+      "value": "qwen3:1.7b",
+      "selector": "placeholder"
     },
     {
       "role": "button",
