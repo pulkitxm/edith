@@ -201,7 +201,17 @@ export async function runManagedOwner({
           fixture,
           process.getuid(),
         );
-        if (ownedLedger.some(({ role }) => role !== "host")) {
+        for (const row of ledger)
+          recordManagedOwnedProcesses(
+            ownedLedger,
+            [{ ...row, role: "host" }],
+            fixture,
+            process.getuid(),
+          );
+        if (
+          ledger.length === 1 &&
+          ownedLedger.some(({ role }) => role !== "host")
+        ) {
           const pending = join(
             fixture.directory,
             `managed-peer-ack-${randomUUID()}.json`,
