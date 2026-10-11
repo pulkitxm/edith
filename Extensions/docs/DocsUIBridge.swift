@@ -32,6 +32,24 @@ struct DocsPresentationAnswer: Equatable {
     }
 }
 
+struct DocsAskRequest: Codable, Equatable {
+    let request: String
+
+    static func decode(_ payload: Data) throws -> Self {
+        guard payload.count <= ExtensionEngineWire.maximumPayloadBytes,
+            let text = String(data: payload, encoding: .utf8),
+            text.range(
+                of: #"\A[ \t\r\n]*\{[ \t\r\n]*"request"[ \t\r\n]*:[ \t\r\n]*"(?:[^"\\]|\\.)*"[ \t\r\n]*\}[ \t\r\n]*\z"#,
+                options: .regularExpression) != nil
+        else { throw ExtensionPeerError.invalidRequest }
+        let value = try JSONDecoder().decode(Self.self, from: payload)
+        guard !value.request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            value.request.utf8.count <= 4096, !value.request.utf8.contains(0)
+        else { throw ExtensionPeerError.invalidRequest }
+        return value
+    }
+}
+
 struct DocsAnswerWire: Codable {
     struct Pick: Codable {
         let path: String
@@ -60,7 +78,7 @@ struct DocsAnswerWire: Codable {
     }
 
     func answer(_ request: String, library: DocsLibrary) async throws -> DocsPresentationAnswer {
-        let data = try await invoke("docs.ui.ask", JSONEncoder().encode(request))
+        let data = try await invoke("docs.ui.ask", JSONEncoder().encode(DocsAskRequest(request: request)))
         let answer = try JSONDecoder().decode(DocsAnswerWire.self, from: data)
         guard answer.request == request else { throw ExtensionPeerError.invalidRequest }
         return DocsPresentationAnswer(
@@ -87,10 +105,7 @@ struct DocsAnswerWire: Codable {
             return try JSONEncoder().encode(
                 library.pages.map { DocsSource(path: $0.path, markdown: $0.markdown) })
         case "docs.ui.ask":
-            let request = try JSONDecoder().decode(String.self, from: payload)
-            guard !request.isEmpty, request.utf8.count <= 4096 else {
-                throw ExtensionPeerError.invalidRequest
-            }
+            let request = try DocsAskRequest.decode(payload).request
             await browser.load()
             guard let library = browser.library else { throw ExtensionPeerError.unavailable }
             let answer = await DocsAsk.answer(

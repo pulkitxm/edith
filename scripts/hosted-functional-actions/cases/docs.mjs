@@ -12,17 +12,27 @@ export const definition = {
       },
       {
         "path": "Extensions/docs/DocsUIBridge.swift",
-        "sha256": "20b5d7ad46e0d95b517d98798307f2673969aa169a4447dda2287e2d043021b7"
+        "sha256": "fff656e44e64b932aa1d6a6b6751c43d0a85c2c3cc63d5150d75388cd904ba08"
+      },
+      {
+        "path": "Extensions/docs/DocsScreen.swift",
+        "sha256": "afaea6b5a2d3a4fed6238e175d92756321cdbafed29c9c693d06740900835f24"
       }
-    ]
+    ],
+    "mutation": {
+      "kind": "owned-output",
+      "payloadKeys": [
+        "request"
+      ]
+    }
   },
   "operations": [
     "docs.ui.library",
     "docs.ui.ask"
   ],
   "observation": {
-    "kind": "checked-engine-readback",
-    "name": "blocked original action: docs"
+    "kind": "owned-process-output",
+    "name": "blocked original Ask rendered result observer"
   },
   "persistence": {
     "applicable": false,
