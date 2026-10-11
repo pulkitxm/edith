@@ -58,6 +58,24 @@ struct CodeStatsPNGDelivery: Codable { let data: Data; let name: String; let sav
     }
 }
 
+struct CodeStatsFolderRequest: Codable, Equatable {
+    let folder: String
+
+    static func decode(_ payload: Data) throws -> Self {
+        guard payload.count <= ExtensionEngineWire.maximumPayloadBytes,
+            let text = String(data: payload, encoding: .utf8),
+            text.range(
+                of: #"\A[ \t\r\n]*\{[ \t\r\n]*"folder"[ \t\r\n]*:[ \t\r\n]*"(?:[^"\\]|\\.)*"[ \t\r\n]*\}[ \t\r\n]*\z"#,
+                options: .regularExpression) != nil
+        else { throw ExtensionPeerError.invalidRequest }
+        let request = try JSONDecoder().decode(Self.self, from: payload)
+        guard !request.folder.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            request.folder.utf8.count <= 4096, !request.folder.utf8.contains(0)
+        else { throw ExtensionPeerError.invalidRequest }
+        return request
+    }
+}
+
 struct CodeStatsUIPreferences: Codable {
     let identity: CodeStatsIdentity
     let schedule: CodeStatsSchedule
@@ -110,7 +128,7 @@ struct CodeStatsUIBridge: Sendable {
         return try await read("export", payload: JSONEncoder().encode(request))
     }
     @MainActor func folder(_ path: String) async throws {
-        _ = try await invoke("codeStats.ui.folder", JSONEncoder().encode(path))
+        _ = try await invoke("codeStats.ui.folder", JSONEncoder().encode(CodeStatsFolderRequest(folder: path)))
     }
     @MainActor func settings(_ defaults: UserDefaults) async throws {
         let request = CodeStatsUIPreferences(
@@ -147,10 +165,7 @@ struct CodeStatsUIBridge: Sendable {
             return try await workflow.perform(
                 operation: CodeStatsCommand.report, payload: JSONEncoder().encode(request))
         case "codeStats.ui.folder":
-            let path = try JSONDecoder().decode(String.self, from: payload)
-            guard !path.isEmpty, path.utf8.count <= 4096 else {
-                throw ExtensionPeerError.invalidRequest
-            }
+            let path = try CodeStatsFolderRequest.decode(payload).folder
             if let fixture = CodeStatsExecutionEnvironment.fixtureHome {
                 let url = CodeStatsPaths.standardizedURL(path, homeDirectory: fixture)
                 guard url == fixture || url.path.hasPrefix(fixture.path + "/") else {

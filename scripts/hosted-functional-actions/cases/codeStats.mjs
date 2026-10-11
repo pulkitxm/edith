@@ -13,6 +13,10 @@ export const definition = {
       {
         "path": "Extensions/codeStats/Views/CodeStatsSetupView.swift",
         "sha256": "f2df959cff9b1f76017530d9e54a629aa781f0037bf9936b4abbb71fb9d184b9"
+      },
+      {
+        "path": "Extensions/codeStats/CodeStatsUIBridge.swift",
+        "sha256": "6b62c5707fbeea46cd0850349459eb93d804d54724d2a0b2a71f1a8f077f1d59"
       }
     ],
     "mutation": {
