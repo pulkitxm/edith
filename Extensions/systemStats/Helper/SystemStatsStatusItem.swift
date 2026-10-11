@@ -17,6 +17,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         (item == nil ? 0 : 1) + (timer == nil ? 0 : 1) + sleepObservers.count + lockObservers.count
     }
     private var timer: Timer?
+    private var draining = false
     private var previous: CPUTicks?
     private var sleepObservers: [NSObjectProtocol] = []
     private var lockObservers: [NSObjectProtocol] = []
@@ -47,29 +48,29 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
             workspace.addObserver(
                 forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
             ) { [weak self] _ in
-                Task { @MainActor in self?.stopTimer() }
+                MainActor.assumeIsolated { self?.stopTimer() }
             },
             workspace.addObserver(
                 forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
             ) { [weak self] _ in
-                Task { @MainActor in self?.startTimer() }
+                MainActor.assumeIsolated { self?.startTimer() }
             },
         ]
         let dnc = DistributedNotificationCenter.default()
         lockObservers = [
             dnc.addObserver(forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main) {
                 [weak self] _ in
-                Task { @MainActor in self?.stopTimer() }
+                MainActor.assumeIsolated { self?.stopTimer() }
             },
             dnc.addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main)
             { [weak self] _ in
-                Task { @MainActor in self?.startTimer() }
+                MainActor.assumeIsolated { self?.startTimer() }
             },
         ]
     }
 
     private func startTimer() {
-        guard timer == nil else { return }
+        guard !draining, timer == nil else { return }
         previous = SystemStatsReader.readCPUTicks()
         update()
         let timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
@@ -86,7 +87,21 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     }
 
     func shutdown() {
+        suspendWork()
         panel.close()
+        if let item { NSStatusBar.system.removeStatusItem(item) }
+        item = nil
+    }
+
+    func suspendAndWait() async {
+        suspendWork()
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+
+    func suspendWork() {
+        draining = true
         stopTimer()
         for observer in sleepObservers {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
@@ -96,8 +111,6 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
             DistributedNotificationCenter.default().removeObserver(observer)
         }
         lockObservers = []
-        if let item { NSStatusBar.system.removeStatusItem(item) }
-        item = nil
     }
 
     @objc private func clicked() {
@@ -116,6 +129,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     }
 
     private func update() {
+        guard !draining else { return }
         var cpu = 0.0
         if let previous, let current = SystemStatsReader.readCPUTicks() {
             cpu = SystemStatsReader.cpuUsage(previous: previous, current: current)

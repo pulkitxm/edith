@@ -109,6 +109,13 @@ struct KeyboardCleaningStatus: Codable, Equatable, Sendable {
         stopCleaning()
     }
 
+    func shutdownAndWait() async {
+        shutdown()
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+
     func execute(_ command: String, payload: Data) throws -> Data {
         guard !stopped else { throw KeyboardCleaningError.unavailable }
         guard payload.isEmpty || payload == Data("{}".utf8) else {

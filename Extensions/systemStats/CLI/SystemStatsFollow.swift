@@ -33,6 +33,7 @@ struct SystemStatsFollowRequest: Codable {
 
     private var sessions: [UUID: Session] = [:]
     private var stopped = false
+    private var tasks: [UUID: Task<Data, Error>] = [:]
     private let makeSampler: () -> any SystemStatsSampling
 
     init(makeSampler: @escaping () -> any SystemStatsSampling = { LocalMachineSampler() }) {
@@ -40,6 +41,19 @@ struct SystemStatsFollowRequest: Codable {
     }
 
     func execute(_ operation: String, payload: Data) async throws -> Data {
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        let id = UUID()
+        let task = Task { try await executeOwned(operation, payload: payload) }
+        tasks[id] = task
+        defer { tasks[id] = nil }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func executeOwned(_ operation: String, payload: Data) async throws -> Data {
         guard !stopped else { throw ExtensionPeerError.unavailable }
         let request = try JSONDecoder().decode(SystemStatsFollowRequest.self, from: payload)
         guard request.processes >= 0, request.processes <= 1000 else {
@@ -94,6 +108,13 @@ struct SystemStatsFollowRequest: Codable {
 
     func shutdown() {
         stopped = true
+        for task in tasks.values { task.cancel() }
+    }
+
+    func shutdownAndWait() async {
+        shutdown()
+        let pending = Array(tasks.values)
+        for task in pending { _ = await task.result }
         sessions.removeAll()
     }
 }
