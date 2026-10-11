@@ -220,7 +220,7 @@ extension MusicExtensionTests {
         }
 
         @Test func openingAFolderDoesNotListSiblingTrees() async {
-            var listed: [String] = []
+            let listed = MusicCallbackRecorder<String>()
             let root = URL(fileURLWithPath: "/tmp/music-siblings")
             let remote = MusicRemote(
                 listSubfolders: { path in
@@ -241,8 +241,8 @@ extension MusicExtensionTests {
                 })
             remote.navigate(to: "A")
             #expect(await waitUntil { remote.entriesLoaded })
-            #expect(listed.contains("A"))
-            #expect(!listed.contains("B"))
+            #expect(listed.values.contains("A"))
+            #expect(!listed.values.contains("B"))
             #expect(remote.folderTracks.map(\.relativePath) == ["A/one.mp3"])
         }
 
