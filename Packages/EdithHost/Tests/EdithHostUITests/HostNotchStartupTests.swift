@@ -22,7 +22,7 @@ struct HostNotchStartupTests {
             defaults: defaults, activeVersions: { ["terminal": "1.0.0"] })
         let first = navigation.register(window: main, apply: { _ in }, selected: { "home" })
         let second = navigation.register(window: other, apply: { _ in }, selected: { "home" })
-        var failDelivery = true, deliveries = 0
+        let delivery = TerminalDelivery()
         let startup = HostNotchStartup(
             navigation: navigation,
             openTerminal: { request in
@@ -31,8 +31,8 @@ struct HostNotchStartupTests {
                 let owner = try await navigation.workspaceOwner(
                     extensionID: "terminal", version: request.version, sourceWindow: request.window)
                 #expect(owner.window === main && owner.token == first)
-                deliveries += 1
-                if failDelivery { throw HostWorkerError.rejected }
+                delivery.calls += 1
+                if delivery.fail { throw HostWorkerError.rejected }
                 await Task.yield()
                 try request.validate()
                 try owner.validate()
@@ -45,14 +45,19 @@ struct HostNotchStartupTests {
         await #expect(throws: HostWorkerError.rejected) {
             try await fixture.context!.navigate(fixture.origin, "terminal", "1.0.0")
         }
-        #expect(deliveries == 1 && fixture.collapseCalls == 0)
-        failDelivery = false
+        #expect(delivery.calls == 1 && fixture.collapseCalls == 0)
+        delivery.fail = false
         try await fixture.context!.navigate(fixture.origin, "terminal", "1.0.0")
         try await fixture.context!.postNavigation(fixture.origin, "terminal", "1.0.0")
-        #expect(deliveries == 2 && fixture.collapseCalls == 1)
+        #expect(delivery.calls == 2 && fixture.collapseCalls == 1)
         navigation.removeAssociation(association)
         navigation.unregister(second); navigation.unregister(first)
         try await startup.stop()
+    }
+
+    @MainActor private final class TerminalDelivery {
+        var fail = true
+        var calls = 0
     }
 
     @Test func exactRegistrationsNotifyWithoutOrderingAnyWindow() {
