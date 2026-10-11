@@ -18,6 +18,8 @@ import {
   toolchainProvenance,
 } from "./hosted-public-release/contract.mjs";
 
+import { validateInstallerProof } from "./hosted-public-release/verify.mjs";
+
 const source = "a".repeat(40);
 const fingerprints = Object.fromEntries(
   Array.from({ length: 39 }, (_, index) => [`owner${index}`, "b".repeat(64)]),
@@ -320,4 +322,108 @@ test("recorded toolchain provenance binds the successful source and final signed
     expect(() =>
       toolchainProvenance({ ...value, ...changed }, source, "c".repeat(64)),
     ).toThrow();
+});
+
+function installerFixture(updateIDs = ["owner3"]) {
+  return {
+    schema: 1,
+    sourceCommit: source,
+    owners: 39,
+    installationVerified: true,
+    productionSignaturesVerified: true,
+    storeSelectionVerified: true,
+    offlineCatalogAndSelectionVerified: true,
+    removalVerified: true,
+    removedIDs: definitions.map(({ id }) => id).sort(),
+    busyRemovalAndLeaseDrainVerified: true,
+    removalDataPreserved: true,
+    reinstallationVerified: true,
+    reinstalledIDs: definitions.map(({ id }) => id).sort(),
+    reinstalledSelectionVerified: true,
+    reinstallationDataPreserved: true,
+    pendingRemovalsDrained: true,
+    persistentSyntheticDataPreserved: true,
+    preservationChecks: 45,
+    publicVersionUpdateVerified: updateIDs.length > 0,
+    updatedIDs: updateIDs,
+    workerEnableDisableExecuted: false,
+    workerProcessesStarted: 0,
+    featureCodeExecuted: false,
+  };
+}
+
+describe("Public installer removal and reinstallation proof", () => {
+  const context = { source, current: definitions, updateIDs: ["owner3"] };
+
+  test("a complete filesystem lifecycle admits an explicit subset update", () => {
+    expect(() =>
+      validateInstallerProof(installerFixture(), context),
+    ).not.toThrow();
+  });
+
+  test("every lifecycle observation is independently required", () => {
+    for (const field of [
+      "installationVerified",
+      "productionSignaturesVerified",
+      "storeSelectionVerified",
+      "offlineCatalogAndSelectionVerified",
+      "removalVerified",
+      "busyRemovalAndLeaseDrainVerified",
+      "removalDataPreserved",
+      "reinstallationVerified",
+      "reinstalledSelectionVerified",
+      "reinstallationDataPreserved",
+      "pendingRemovalsDrained",
+      "persistentSyntheticDataPreserved",
+    ]) {
+      const missing = installerFixture();
+      delete missing[field];
+      expect(() => validateInstallerProof(missing, context)).toThrow();
+      for (const value of [false, 1, "true", null])
+        expect(() =>
+          validateInstallerProof(
+            { ...installerFixture(), [field]: value },
+            context,
+          ),
+        ).toThrow();
+    }
+  });
+
+  test("partial or substituted removal and reinstall identities reject", () => {
+    for (const field of ["removedIDs", "reinstalledIDs"]) {
+      const ids = installerFixture()[field];
+      for (const value of [
+        undefined,
+        [],
+        ids.slice(1),
+        [...ids.slice(1), ids[1]],
+        [...ids.slice(1), "foreign"].sort(),
+      ])
+        expect(() =>
+          validateInstallerProof(
+            { ...installerFixture(), [field]: value },
+            context,
+          ),
+        ).toThrow();
+    }
+  });
+
+  test("filesystem proof rejects native execution claims and unpinned receipts", () => {
+    for (const changed of [
+      { workerEnableDisableExecuted: true },
+      { workerProcessesStarted: 1 },
+      { featureCodeExecuted: true },
+      { workerEnableDisableExecuted: undefined },
+      { workerProcessesStarted: undefined },
+      { featureCodeExecuted: undefined },
+      { sourceCommit: "d".repeat(40) },
+      { owners: 38 },
+      { schema: true },
+      { preservationChecks: 44 },
+      { preservationChecks: "45" },
+    ])
+      expect(() =>
+        validateInstallerProof({ ...installerFixture(), ...changed }, context),
+      ).toThrow();
+  });
 });

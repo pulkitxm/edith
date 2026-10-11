@@ -83,6 +83,44 @@ async function privateDirectory(path) {
   );
   assert.equal(await realpath(path), path);
 }
+export function validateInstallerProof(
+  installer,
+  { source, current, updateIDs },
+) {
+  assert.equal(current.length, 39);
+  const currentIDs = current.map(({ id }) => id).sort();
+  assert.equal(new Set(currentIDs).size, 39);
+  assert(Array.isArray(updateIDs));
+  assert.equal(new Set(updateIDs).size, updateIDs.length);
+  assert(updateIDs.every((id) => currentIDs.includes(id)));
+  assert.equal(installer.schema, 1);
+  assert.equal(installer.owners, 39);
+  assert.equal(installer.sourceCommit, source);
+  for (const field of [
+    "installationVerified",
+    "productionSignaturesVerified",
+    "storeSelectionVerified",
+    "offlineCatalogAndSelectionVerified",
+    "removalVerified",
+    "busyRemovalAndLeaseDrainVerified",
+    "removalDataPreserved",
+    "reinstallationVerified",
+    "reinstalledSelectionVerified",
+    "reinstallationDataPreserved",
+    "pendingRemovalsDrained",
+    "persistentSyntheticDataPreserved",
+  ])
+    assert.equal(installer[field], true, field);
+  assert.deepEqual(installer.removedIDs, currentIDs);
+  assert.deepEqual(installer.reinstalledIDs, currentIDs);
+  assert.deepEqual(installer.updatedIDs, updateIDs);
+  assert.equal(installer.publicVersionUpdateVerified, updateIDs.length > 0);
+  assert(Number.isSafeInteger(installer.preservationChecks));
+  assert(installer.preservationChecks >= 45);
+  assert.equal(installer.workerEnableDisableExecuted, false);
+  assert.equal(installer.workerProcessesStarted, 0);
+  assert.equal(installer.featureCodeExecuted, false);
+}
 export async function run() {
   hosted(process.env, process.env.EXPECTED_SOURCE_SHA);
   assert.equal(process.platform, "darwin");
@@ -1093,9 +1131,11 @@ export async function run() {
       3600000,
     ),
   );
-  assert.equal(installer.installationVerified, true);
-  assert.equal(installer.owners, 39);
-  assert.equal(installer.sourceCommit, options.source);
+  validateInstallerProof(installer, {
+    source: options.source,
+    current,
+    updateIDs: options.updateIDs,
+  });
   for (const value of [...productionByRun.values()]
     .map(({ value }) => value)
     .concat(host, currentNoChangeInventories)) {

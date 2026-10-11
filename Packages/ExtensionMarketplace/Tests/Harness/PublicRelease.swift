@@ -230,10 +230,18 @@ extension MarketplaceHarness {
             fetch: { _ in throw MarketplaceError.downloadFailed })
         let cached = try await offline.refresh()
         try requirePublic(cached.offline && cached.catalog == catalog)
-        _ = try await installer.install(
-            request.current, repository: MarketplaceConfiguration.repository)
-        try preserve()
+        for package in request.current {
+            let plan = try cached.catalog.installationPlan(
+                for: package.id, hostABI: package.hostABI, architecture: package.architecture,
+                systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion))
+            try requirePublic(plan.contains(package))
+            try requirePublic(
+                try store.installedPackage(
+                    id: package.id, hostABI: package.hostABI, architecture: package.architecture)
+                    == package)
+        }
         let installed = try store.installedPackages()
+        var removedIDs: [String] = []
         var remaining = Set(request.current.map(\.id))
         while !remaining.isEmpty {
             guard
@@ -270,18 +278,56 @@ extension MarketplaceHarness {
             try requirePublic(try !store.pendingRemovals().contains(id))
             try preserve()
             remaining.remove(id)
+            removedIDs.append(id)
         }
         try requirePublic(try store.installedPackages().isEmpty)
+        try requirePublic(try store.pendingRemovals().isEmpty)
+        let removedSelections = try JSONDecoder().decode(
+            [ExtensionPackage].self,
+            from: Data(contentsOf: packageRoot.appendingPathComponent("selected-packages.json")))
+        try requirePublic(removedSelections.isEmpty)
         for package in request.previous {
             try requirePublic(
                 !FileManager.default.fileExists(atPath: store.directory(for: package).path))
         }
+        try preserve()
+        let reinstalled = try await installer.install(
+            request.current, repository: MarketplaceConfiguration.repository)
+        let expectedCurrent = request.current.sorted { $0.id < $1.id }
+        try requirePublic(reinstalled.sorted { $0.id < $1.id } == expectedCurrent)
+        try requirePublic(try store.installedPackages().sorted { $0.id < $1.id } == expectedCurrent)
+        try preserve()
+        for package in request.current {
+            try store.select(package)
+            try requirePublic(
+                try store.installedPackage(
+                    id: package.id, hostABI: package.hostABI, architecture: package.architecture)
+                    == package)
+            try requirePublic(
+                FileManager.default.fileExists(atPath: store.directory(for: package).path))
+            let plan = try cached.catalog.installationPlan(
+                for: package.id, hostABI: package.hostABI, architecture: package.architecture,
+                systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion))
+            try requirePublic(plan.contains(package))
+        }
+        let reinstalledSelections = try JSONDecoder().decode(
+            [ExtensionPackage].self,
+            from: Data(contentsOf: packageRoot.appendingPathComponent("selected-packages.json")))
+        try requirePublic(reinstalledSelections.sorted { $0.id < $1.id } == expectedCurrent)
+        try requirePublic(try store.pendingRemovals().isEmpty)
+        try store.completePendingRemovals()
+        try requirePublic(try store.pendingRemovals().isEmpty)
+        try requirePublic(try store.installedPackages().sorted { $0.id < $1.id } == expectedCurrent)
         try preserve()
         let result: [String: Any] = [
             "schema": 1, "sourceCommit": request.sourceCommit, "owners": 39,
             "installationVerified": true, "publicVersionUpdateVerified": !request.updateIDs.isEmpty,
             "updatedIDs": request.updateIDs,
             "offlineCatalogAndSelectionVerified": true, "removalVerified": true,
+            "removedIDs": removedIDs.sorted(), "removalDataPreserved": true,
+            "reinstallationVerified": true, "reinstalledIDs": reinstalled.map(\.id).sorted(),
+            "reinstalledSelectionVerified": true, "reinstallationDataPreserved": true,
+            "pendingRemovalsDrained": true,
             "busyRemovalAndLeaseDrainVerified": true, "persistentSyntheticDataPreserved": true,
             "preservationChecks": preservationChecks, "productionSignaturesVerified": true,
             "storeSelectionVerified": true, "workerEnableDisableExecuted": false,

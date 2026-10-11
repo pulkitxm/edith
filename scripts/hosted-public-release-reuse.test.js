@@ -7,6 +7,8 @@ import {
   unchangedExtensionsRun,
 } from "./hosted-public-release/contract.mjs";
 
+import { validateInstallerProof } from "./hosted-public-release/verify.mjs";
+
 const source = "a".repeat(40);
 const fingerprint = "b".repeat(64);
 function catalogFixture() {
@@ -403,6 +405,103 @@ describe("Host-only reuse of an unchanged signed catalog publication", () => {
     ])
       expect(() =>
         absentExtensionsPathRoute({ on: { push } }, [source], ["host.swift"]),
+      ).toThrow();
+  });
+});
+
+function reusedInstallerFixture(updateIDs) {
+  const current = catalogFixture().catalog.packages;
+  const ids = current.map(({ id }) => id).sort();
+  return {
+    context: { source, current, updateIDs },
+    proof: {
+      schema: 1,
+      sourceCommit: source,
+      owners: 39,
+      installationVerified: true,
+      productionSignaturesVerified: true,
+      storeSelectionVerified: true,
+      offlineCatalogAndSelectionVerified: true,
+      removalVerified: true,
+      removedIDs: ids,
+      busyRemovalAndLeaseDrainVerified: true,
+      removalDataPreserved: true,
+      reinstallationVerified: true,
+      reinstalledIDs: [...ids],
+      reinstalledSelectionVerified: true,
+      reinstallationDataPreserved: true,
+      pendingRemovalsDrained: true,
+      persistentSyntheticDataPreserved: true,
+      preservationChecks: 45,
+      publicVersionUpdateVerified: updateIDs.length > 0,
+      updatedIDs: [...updateIDs],
+      workerEnableDisableExecuted: false,
+      workerProcessesStarted: 0,
+      featureCodeExecuted: false,
+    },
+  };
+}
+
+describe("Reused public packages retain explicit lifecycle and update scope", () => {
+  test("zero, subset and full updates remain independent from all39 reinstall", () => {
+    for (const updateIDs of [
+      [],
+      ["owner3"],
+      ["owner7", "owner2"],
+      catalogFixture().catalog.packages.map(({ id }) => id),
+    ]) {
+      const { proof, context } = reusedInstallerFixture(updateIDs);
+      expect(() => validateInstallerProof(proof, context)).not.toThrow();
+      expect(proof.updatedIDs).toEqual(updateIDs);
+      expect(proof.reinstalledIDs).toHaveLength(39);
+      for (const changed of [
+        { updatedIDs: undefined },
+        { updatedIDs: [...updateIDs, "foreign"] },
+        { publicVersionUpdateVerified: !proof.publicVersionUpdateVerified },
+      ])
+        expect(() =>
+          validateInstallerProof({ ...proof, ...changed }, context),
+        ).toThrow();
+    }
+  });
+
+  test("subset or zero updates cannot be broadened into all39 public updates", () => {
+    for (const updateIDs of [[], ["owner3"]]) {
+      const { proof, context } = reusedInstallerFixture(updateIDs);
+      expect(() =>
+        validateInstallerProof(
+          { ...proof, updatedIDs: proof.reinstalledIDs },
+          context,
+        ),
+      ).toThrow();
+    }
+  });
+
+  test("prior install plus removal never substitutes for actual reinstall", () => {
+    const { proof, context } = reusedInstallerFixture([]);
+    for (const field of [
+      "reinstallationVerified",
+      "reinstalledIDs",
+      "reinstalledSelectionVerified",
+      "reinstallationDataPreserved",
+      "pendingRemovalsDrained",
+    ]) {
+      const old = { ...proof };
+      delete old[field];
+      expect(() => validateInstallerProof(old, context)).toThrow();
+    }
+  });
+
+  test("duplicate update IDs and incomplete or duplicate current owners reject", () => {
+    const { proof, context } = reusedInstallerFixture(["owner3"]);
+    for (const changed of [
+      { updateIDs: ["owner3", "owner3"] },
+      { updateIDs: ["foreign"] },
+      { current: context.current.slice(1) },
+      { current: [...context.current.slice(1), context.current[1]] },
+    ])
+      expect(() =>
+        validateInstallerProof(proof, { ...context, ...changed }),
       ).toThrow();
   });
 });
