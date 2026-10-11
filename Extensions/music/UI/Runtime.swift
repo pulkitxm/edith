@@ -10,6 +10,7 @@ import SwiftUI
     private var closing: [UUID: MusicEmbeddedPresentation] = [:]
     private var closingTasks: [UUID: Task<Void, Never>] = [:]
     private var retired: [UUID: MusicEmbeddedPresentation] = [:]
+    private var hasRemoteWork = false
     static let presentationLimit = 16
 
     func configure(_ input: NSDictionary) -> NSDictionary {
@@ -39,6 +40,7 @@ import SwiftUI
         }
         if let previous = presentations.removeValue(forKey: id) { retire(previous) }
         presentations[id] = scene
+        hasRemoteWork = hasRemoteWork || scene.usesRemoteClient
         scene.attach()
         configured = true
         return true
@@ -71,6 +73,7 @@ import SwiftUI
     }
 
     func suspendCommands() {
+        if hasRemoteWork { EmbeddedMusicRemote.shared.suspendCommands() }
         for scene in presentations.values { scene.suspendCommands() }
         for scene in closing.values { scene.suspendCommands() }
         for scene in retired.values { scene.suspendCommands() }
@@ -82,6 +85,7 @@ import SwiftUI
         let tasks = Array(closingTasks.values)
         for scene in scenes { await scene.suspendCommandsAndWait() }
         for task in tasks { await task.value }
+        if hasRemoteWork { await EmbeddedMusicRemote.shared.suspendCommandsAndWait() }
     }
 
     func stop() {
@@ -92,9 +96,12 @@ import SwiftUI
     }
 
     func stopAndWait() async {
+        let remote = hasRemoteWork ? EmbeddedMusicRemote.shared : nil
         stop()
         let tasks = Array(closingTasks.values)
         for task in tasks { await task.value }
+        await remote?.stopAndWait()
+        hasRemoteWork = false
     }
 
     @discardableResult
@@ -133,6 +140,7 @@ import SwiftUI
     private var closed = false
     private var detached = false
     var isMain: Bool { location == "main" }
+    var usesRemoteClient: Bool { client != nil }
     var isRetained: Bool { !closed && (pending || presentedController != nil) }
 
     init?(

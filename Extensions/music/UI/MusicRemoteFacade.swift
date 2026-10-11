@@ -33,6 +33,8 @@ import Observation
     @ObservationIgnored private var levelGeneration: UInt64 = 0
     @ObservationIgnored private var readTask: Task<Void, Never>?
     @ObservationIgnored private var tasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var ownedTasks: [UUID: Task<Void, Never>] = [:]
+    private var suspended = false
     private var generation: UInt64 = 0
     private var query = ""
     private var lifecycle: UInt64 = 0
@@ -48,6 +50,7 @@ import Observation
     var progress: Double { duration > 0 ? elapsed / duration : 0 }
 
     func configure(_ client: ExtensionEngineClient) {
+        guard !suspended else { return }
         clients[ObjectIdentifier(client)] = client
         invoke = { [weak self] operation, payload in
             guard let client = self?.clients.values.first else {
@@ -65,10 +68,42 @@ import Observation
     }
 
     func configure(invoke: @escaping (String, Data) async throws -> Data) {
+        guard !suspended else { return }
         stop(); self.invoke = invoke; installLevelDemand()
     }
 
     func start() { rescan() }
+
+    private func ownedTask(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
+        let id = UUID()
+        let task = Task { [weak self] in
+            defer { self?.ownedTasks[id] = nil }
+            guard !Task.isCancelled else { return }
+            await operation()
+        }
+        ownedTasks[id] = task
+        return task
+    }
+
+    func suspendCommands() {
+        suspended = true
+        generation &+= 1; lifecycle &+= 1; levelGeneration &+= 1
+        invoke = nil
+        EmbeddedPlaybackLevel.shared.onViewersChange = nil
+        for task in ownedTasks.values { task.cancel() }
+    }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        let owned = Array(ownedTasks.values)
+        for task in owned { await task.value }
+    }
+
+    func stopAndWait() async {
+        stop()
+        let owned = Array(ownedTasks.values)
+        for task in owned { await task.value }
+    }
 
     func stop() {
         EmbeddedMusicBrowserSession.stopAll()
@@ -79,7 +114,7 @@ import Observation
         levelGeneration &+= 1; levelTask?.cancel(); levelTask = nil
         EmbeddedPlaybackLevel.shared.onViewersChange = nil
         EmbeddedPlaybackLevel.shared.reset()
-        for task in tasks.values { task.cancel() }
+        for task in ownedTasks.values { task.cancel() }
         tasks.removeAll()
         for client in clients.values { client.invalidate() }
         clients.removeAll(); invoke = nil
@@ -110,7 +145,7 @@ import Observation
         guard levelTask == nil else { return }
         levelGeneration &+= 1
         let token = levelGeneration
-        levelTask = Task { [weak self] in
+        levelTask = ownedTask { [weak self] in
             defer { if self?.levelGeneration == token { self?.levelTask = nil } }
             while !Task.isCancelled, let self, self.levelGeneration == token,
                 EmbeddedPlaybackLevel.shared.viewers > 0
@@ -140,7 +175,7 @@ import Observation
         readTask?.cancel(); generation &+= 1
         let token = generation
         readQuery = request
-        readTask = Task { [weak self] in
+        readTask = ownedTask { [weak self] in
             defer {
                 if let self, self.generation == token { self.readTask = nil; self.readQuery = nil }
             }
@@ -243,7 +278,7 @@ import Observation
     ) {
         guard invoke != nil else { return }
         let id = UUID()
-        tasks[id] = Task { [weak self] in
+        tasks[id] = ownedTask { [weak self] in
             guard let self else { return }
             defer { self.tasks[id] = nil }
             do {
@@ -264,7 +299,7 @@ import Observation
         }
         let id = UUID()
         let token = lifecycle
-        tasks[id] = Task { [weak self] in
+        tasks[id] = ownedTask { [weak self] in
             defer { self?.tasks[id] = nil }
             do {
                 _ = try await invoke("music.ui.spotify", payload)

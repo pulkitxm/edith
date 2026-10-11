@@ -189,6 +189,10 @@ final class ExtensionRuntime: NSObject {
 #endif
                 let result = embeddedUI.configure(input)
 #if EDITH_FUNCTIONAL_FIXTURE
+                do { try admission?.requireCurrent() } catch {
+                    if result["ok"] as? Bool == true { _ = embeddedUI.release(input) }
+                    throw error
+                }
                 if let admission, result["ok"] as? Bool == true,
                     let value = input["presentationID"] as? String, let id = UUID(uuidString: value)
                 {
