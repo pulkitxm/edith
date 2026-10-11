@@ -656,3 +656,72 @@ private final class TimeLapseRecorderCallbacks: @unchecked Sendable {
         for task in pending { await task.value }
     }
 }
+
+struct TimeLapseSavedRecordingScope: Sendable {
+    let sessionID: UUID
+    let directory: URL
+    let metadata: URL
+    let video: URL
+    let destination: URL
+
+    init(session: String, root: String, phase: String, metadata: URL, video: URL, destination: URL)
+        throws
+    {
+        guard let id = UUID(uuidString: session), id.uuidString.lowercased() == session,
+            root.hasPrefix("/"), !root.utf8.contains(0),
+            root == URL(fileURLWithPath: root).standardizedFileURL.path,
+            root.hasSuffix("/functional-fixture-" + session),
+            ["initial", "updated", "reinstalled"].contains(phase)
+        else { throw TimeLapseError.invalidSession }
+        let directory = URL(fileURLWithPath: root, isDirectory: true)
+            .appendingPathComponent("inputs/timeLapse/saved-recording", isDirectory: true)
+        let expectedDestination = URL(fileURLWithPath: root, isDirectory: true)
+            .appendingPathComponent("outputs/timeLapse/" + phase, isDirectory: true)
+            .appendingPathComponent("Recording.mp4")
+        guard Self.matches(metadata, directory.appendingPathComponent("session.json")),
+            Self.matches(video, directory.appendingPathComponent("video.mp4")),
+            Self.matches(destination, expectedDestination)
+        else { throw TimeLapseError.invalidSession }
+        sessionID = id
+        self.directory = directory
+        self.metadata = metadata
+        self.video = video
+        self.destination = destination
+    }
+
+    private static func matches(_ actual: URL, _ expected: URL) -> Bool {
+        actual.isFileURL && (actual.host.map({ $0.isEmpty || $0 == "localhost" }) ?? true)
+            && actual.query == nil && actual.fragment == nil
+            && actual.path == actual.standardizedFileURL.path && actual.path == expected.path
+    }
+
+    func recording(from data: Data) throws -> TimeLapseRecording {
+        guard !data.isEmpty, data.count <= 65_536 else { throw TimeLapseError.invalidSession }
+        let session = try JSONDecoder().decode(TimeLapseSession.self, from: data)
+        try session.validate()
+        guard session.id == sessionID, session.settings.mode == .standard,
+            session.settings.speed == 1, !session.settings.systemAudio,
+            session.settings.microphoneID == nil, session.width == 64, session.height == 64,
+            session.failure == nil, session.startedAt.timeIntervalSince1970.isFinite,
+            let ended = session.endedAt, ended.timeIntervalSince1970.isFinite,
+            ended >= session.startedAt, session.segments.count == 1,
+            let segment = session.segments.first, segment.file == "video.mp4",
+            segment.kind == "video", (1...120).contains(segment.frames),
+            segment.startedAt == session.startedAt, segment.duration.isFinite,
+            segment.duration > 0, segment.duration <= 5,
+            session.playbackSeconds.isFinite, session.playbackSeconds > 0,
+            session.playbackSeconds <= 5
+        else { throw TimeLapseError.invalidSession }
+        return TimeLapseRecording(session: session, directory: directory)
+    }
+
+    func requireExport(
+        _ recording: TimeLapseRecording, quality: TimeLapseExportQuality, to url: URL
+    )
+        throws
+    {
+        guard recording.id == sessionID, Self.matches(recording.directory, directory),
+            quality == .original, Self.matches(url, destination)
+        else { throw TimeLapseError.invalidSession }
+    }
+}
