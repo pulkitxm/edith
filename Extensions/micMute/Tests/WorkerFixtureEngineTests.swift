@@ -12,16 +12,25 @@ import WorkerFixtureTestSupport
         return try EngineFixture(owner: owner)
     }
 
-    @Test func malformedFunctionalIntentCannotAdmitOriginalOwner() throws {
-        let identifier = "com.pulkit.edith.tests.worker-" + UUID().uuidString
+    @Test func functionalIntentCannotAdmitOriginalOwnerThroughLegacyNamespace() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        for marker in ["0", "1", "invalid"] {
+            #expect(throws: WorkerFixtureError.self) {
+                try WorkerFixtureAdmission.admit(
+                    extensionID: "micMute", context: [:],
+                    environment: ["EDITH_FUNCTIONAL_FIXTURE": marker],
+                    hostIdentifier: "com.pulkit.edith",
+                    hostBundle: root.appendingPathComponent("Fixture.app"),
+                    roleDirectory: root.appendingPathComponent("helper.bundle"),
+                    roleIdentifier: "com.pulkit.edith.extensions.micMute.helper",
+                    version: "1.0.0", hostABI: "edith-host-2")
+            }
+        }
         #expect(throws: WorkerFixtureError.self) {
             try WorkerFixtureAdmission.admit(
-                extensionID: "micMute", context: [:],
-                environment: [
-                    "EDITH_FUNCTIONAL_FIXTURE": "1", "EDITH_EXTENSION_FIXTURE_HOME": "relative",
-                ],
-                hostIdentifier: identifier, hostBundle: root.appendingPathComponent("Fixture.app"),
+                extensionID: "micMute", context: ["hostedFunctionalFixture": false],
+                environment: [:], hostIdentifier: "com.pulkit.edith",
+                hostBundle: root.appendingPathComponent("Fixture.app"),
                 roleDirectory: root.appendingPathComponent("helper.bundle"),
                 roleIdentifier: "com.pulkit.edith.extensions.micMute.helper",
                 version: "1.0.0", hostABI: "edith-host-2")
