@@ -7,8 +7,9 @@ import FunctionalActionContract
 @MainActor
 final class ClipboardActionCase: HostedFunctionalActionCase {
     static let owner = "clipboard"
-    static let activationOperation = "clipboard.mutate"
+    static let activationOperation = "clipboard.ui.mutate"
     private let transport: HostedFunctionalActionTransport
+    private let presentation: ClipboardPresentation
     private let model: ClipboardHistoryModel
     private static let recordID = "functional-clipboard"
 
@@ -21,15 +22,20 @@ final class ClipboardActionCase: HostedFunctionalActionCase {
         else { throw HostedFunctionalActionError.invalid }
         guard transport.context.owner == Self.owner else { throw HostedFunctionalActionError.invalid }
         self.transport = transport
-        let client = ClipboardClient { operation, payload in
+        let presentation = ClipboardPresentation(send: { operation, payload in
             try await transport.invokeOriginal(operation, payload: payload)
-        }
-        model = ClipboardHistoryModel(client: client, observesNotifications: false)
+        })
+        self.presentation = presentation
+        model = presentation.history
     }
 
     func activateOriginalControl(context: HostedFunctionalActionContext) async throws {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
         let baseline = try await readState(context: context, pinned: true)
+        await presentation.refresh()
+        guard presentation.preferencesLoad.hasContent, presentation.error == nil,
+            !presentation.preferences.enabled
+        else { throw HostedFunctionalActionError.invalid }
         model.start()
         let deadline = ContinuousClock.now + .seconds(10)
         while model.entries.isEmpty, ContinuousClock.now < deadline {
@@ -67,10 +73,10 @@ final class ClipboardActionCase: HostedFunctionalActionCase {
     private func readState(context: HostedFunctionalActionContext, pinned: Bool) async throws -> Data {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
         let bytes = try await transport.readAuthoritative(
-            "clipboard.snapshot", payload: ClipboardMessage.encode(ClipboardSnapshotRequest()))
+            "clipboard.ui.snapshot", payload: ClipboardMessage.encode(ClipboardSnapshotRequest()))
         let snapshot = try ClipboardMessage.decode(ClipboardSnapshot.self, from: bytes)
         guard snapshot.total == 1, snapshot.entries.count == 1, let entry = snapshot.entries.first,
-            entry.id == Self.recordID, entry.preview == "Synthetic clipboard content", entry.pinned == pinned
+            entry.id == Self.recordID, entry.kind == .text, entry.preview == "Synthetic clipboard content", entry.pinned == pinned
         else { throw HostedFunctionalActionError.invalid }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -81,5 +87,8 @@ final class ClipboardActionCase: HostedFunctionalActionCase {
         try await readAuthoritativeState(context: context)
     }
 
-    func shutdownPresentation() async { await model.shutdown() }
+    func shutdownPresentation() async {
+        presentation.stop()
+        await model.shutdown()
+    }
 }
