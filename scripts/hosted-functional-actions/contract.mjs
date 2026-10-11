@@ -1,0 +1,591 @@
+import assert from "node:assert/strict";
+import { createHash, createPublicKey, verify } from "node:crypto";
+import { isAbsolute, posix } from "node:path";
+import { functionalActionOwners } from "./owners.mjs";
+
+const uuid =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const hash = /^[0-9a-f]{64}$/;
+const source = /^[0-9a-f]{40}$/;
+const phases = ["initial", "updated", "reinstalled"];
+const limits = new Set([
+  "synthetic-platform-adapter",
+  "private-filesystem",
+  "loopback-service",
+  "owned-pty",
+  "bundled-content",
+  "owned-toolchain",
+  "privileged-role-unproved",
+]);
+
+function keys(value, expected) {
+  assert(value !== null && typeof value === "object" && !Array.isArray(value));
+  assert.equal(Object.getPrototypeOf(value), Object.prototype);
+  assert.deepEqual(Object.keys(value).sort(), [...expected].sort());
+}
+
+function text(value, maximum = 256) {
+  assert(
+    typeof value === "string" &&
+      value.length > 0 &&
+      Buffer.byteLength(value) <= maximum,
+  );
+  assert(
+    [...value].every((character) => {
+      const code = character.codePointAt(0);
+      return code > 31 && code !== 127;
+    }),
+  );
+}
+
+function canonicalValue(value) {
+  if (Array.isArray(value)) return value.map(canonicalValue);
+  if (value !== null && typeof value === "object") {
+    assert.equal(Object.getPrototypeOf(value), Object.prototype);
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalValue(value[key])]),
+    );
+  }
+  assert(
+    value === null || ["string", "boolean", "number"].includes(typeof value),
+  );
+  if (typeof value === "number") assert(Number.isFinite(value));
+  return value;
+}
+
+export function functionalCanonicalJSON(value) {
+  return JSON.stringify(canonicalValue(value));
+}
+
+export function functionalDigest(value) {
+  return createHash("sha256")
+    .update(functionalCanonicalJSON(value))
+    .digest("hex");
+}
+
+export function verifyFunctionalEnvelope(envelope, compiledIssuerPublicKeyDER) {
+  keys(envelope, ["schema", "payload", "signature"]);
+  assert.equal(envelope.schema, 1);
+  assert(
+    typeof envelope.payload === "string" &&
+      Buffer.byteLength(envelope.payload) <= 131072,
+  );
+  assert.match(envelope.signature, /^[A-Za-z0-9+/]{86}==$/);
+  const signature = Buffer.from(envelope.signature, "base64");
+  assert.equal(signature.length, 64);
+  assert.equal(signature.toString("base64"), envelope.signature);
+  assert(Buffer.isBuffer(compiledIssuerPublicKeyDER));
+  const key = createPublicKey({
+    key: compiledIssuerPublicKeyDER,
+    format: "der",
+    type: "spki",
+  });
+  assert.equal(key.asymmetricKeyType, "ed25519");
+  const payload = JSON.parse(envelope.payload);
+  assert.equal(
+    functionalCanonicalJSON(payload),
+    envelope.payload,
+    "Noncanonical or duplicate fields",
+  );
+  assert(
+    verify(null, Buffer.from(envelope.payload), key, signature),
+    "Invalid fixture issuer signature",
+  );
+  return payload;
+}
+
+function path(value, root) {
+  text(value, 4096);
+  assert(
+    isAbsolute(value) &&
+      posix.normalize(value) === value &&
+      !value.endsWith("/"),
+  );
+  if (root !== undefined) assert(value.startsWith(`${root}/`));
+  return value;
+}
+
+function identity(value, uid) {
+  keys(value, [
+    "pid",
+    "birthSeconds",
+    "birthMicroseconds",
+    "uid",
+    "executableSHA256",
+  ]);
+  assert(Number.isSafeInteger(value.pid) && value.pid > 1);
+  assert(Number.isSafeInteger(value.birthSeconds) && value.birthSeconds > 0);
+  assert(
+    Number.isSafeInteger(value.birthMicroseconds) &&
+      value.birthMicroseconds >= 0 &&
+      value.birthMicroseconds < 1000000,
+  );
+  assert.equal(value.uid, uid);
+  assert.match(value.executableSHA256, hash);
+  return value;
+}
+
+function version(value) {
+  assert(
+    typeof value === "string" &&
+      value.length <= 80 &&
+      /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value),
+  );
+  return value.split(".").map(BigInt);
+}
+
+function increasingVersion(before, after) {
+  const a = version(before),
+    b = version(after);
+  for (const part of [...a, ...b]) assert(part <= 18446744073709551615n);
+  for (let index = 0; index < 3; index++) {
+    if (a[index] < b[index]) return;
+    assert.equal(a[index], b[index], "Older package version must be lower");
+  }
+  assert.fail("Distinct lower package version required");
+}
+
+function differentGeneration(before, after) {
+  assert.notEqual(before.pid, after.pid, "Fresh process PID required");
+  assert(
+    before.birthSeconds !== after.birthSeconds ||
+      before.birthMicroseconds !== after.birthMicroseconds,
+    "Fresh process birth required",
+  );
+}
+
+function sourcePin(value, owner) {
+  keys(value, ["path", "sha256"]);
+  text(value.path, 4096);
+  assert(value.path.startsWith(`Extensions/${owner}/`));
+  assert(!value.path.split("/").some((part) => ["", ".", ".."].includes(part)));
+  assert.match(value.sha256, hash);
+}
+
+export function validateFunctionalCaseDefinition(value) {
+  keys(value, [
+    "schema",
+    "owner",
+    "activation",
+    "operations",
+    "observation",
+    "persistence",
+    "limits",
+  ]);
+  assert.equal(value.schema, 1);
+  assert(functionalActionOwners.includes(value.owner));
+  keys(value.activation, ["kind", "control", "operation", "sources"]);
+  assert(
+    ["original-control-callback", "native-accessibility"].includes(
+      value.activation.kind,
+    ),
+  );
+  text(value.activation.control);
+  assert(
+    value.activation.sources.length >= 1 &&
+      value.activation.sources.length <= 8,
+  );
+  for (const pin of value.activation.sources) sourcePin(pin, value.owner);
+  assert.equal(
+    new Set(value.activation.sources.map((pin) => pin.path)).size,
+    value.activation.sources.length,
+  );
+  assert(value.operations.length >= 1 && value.operations.length <= 16);
+  for (const operation of value.operations) {
+    text(operation, 128);
+    assert(
+      /^[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z][A-Za-z0-9_-]*)+$/.test(operation),
+    );
+  }
+  assert.equal(new Set(value.operations).size, value.operations.length);
+  assert(value.operations.includes(value.activation.operation));
+  keys(value.observation, ["kind", "name"]);
+  assert(
+    [
+      "checked-engine-readback",
+      "owned-file-output",
+      "owned-process-output",
+    ].includes(value.observation.kind),
+  );
+  text(value.observation.name);
+  keys(value.persistence, ["applicable", "name"]);
+  assert(typeof value.persistence.applicable === "boolean");
+  text(value.persistence.name);
+  if (!value.persistence.applicable)
+    assert.equal(value.persistence.name, "no-owned-persistent-record");
+  assert(value.limits.length >= 1 && value.limits.length <= limits.size);
+  for (const limit of value.limits) assert(limits.has(limit));
+  assert.equal(new Set(value.limits).size, value.limits.length);
+  return value;
+}
+
+export function validateFunctionalCapability(value, definition) {
+  validateFunctionalCaseDefinition(definition);
+  keys(value, [
+    "schema",
+    "sourceCommit",
+    "session",
+    "owner",
+    "uid",
+    "fixtureRoot",
+    "hostIdentifier",
+    "home",
+    "dataDirectory",
+    "hostABI",
+    "caseSHA256",
+    "activationOperation",
+    "phase",
+    "pairScope",
+    "previousVersion",
+    "currentVersion",
+    "version",
+    "packageSHA256",
+    "engine",
+    "ui",
+    "operations",
+    "ownedPaths",
+  ]);
+  assert.equal(value.schema, 1);
+  assert.match(value.sourceCommit, source);
+  assert.match(value.session, uuid);
+  assert.equal(value.owner, definition.owner);
+  assert(Number.isSafeInteger(value.uid) && value.uid >= 0);
+  path(value.fixtureRoot);
+  assert(value.fixtureRoot.endsWith(`/functional-fixture-${value.session}`));
+  assert.equal(
+    value.hostIdentifier,
+    `com.pulkit.edith.tests.worker-${value.session}`,
+  );
+  assert.equal(value.home, `${value.fixtureRoot}/${value.owner}-home`);
+  path(value.dataDirectory, value.fixtureRoot);
+  assert.equal(value.hostABI, "edith-host-2");
+  assert.equal(value.caseSHA256, functionalDigest(definition));
+  assert.equal(value.activationOperation, definition.activation.operation);
+  assert(phases.includes(value.phase));
+  assert(
+    ["synthetic-development", "public-signed-pair"].includes(value.pairScope),
+  );
+  increasingVersion(value.previousVersion, value.currentVersion);
+  if (value.pairScope === "synthetic-development") {
+    assert.equal(value.previousVersion, "1.0.0");
+    assert.equal(value.currentVersion, "1.1.0");
+  }
+  assert.equal(
+    value.version,
+    value.phase === "initial" ? value.previousVersion : value.currentVersion,
+  );
+  assert.match(value.packageSHA256, hash);
+  identity(value.engine, value.uid);
+  identity(value.ui, value.uid);
+  assert.notEqual(value.engine.pid, value.ui.pid);
+  assert.deepEqual(value.operations, definition.operations);
+  assert(value.ownedPaths.length >= 1 && value.ownedPaths.length <= 32);
+  const names = new Set(),
+    paths = new Set();
+  for (const entry of value.ownedPaths) {
+    keys(entry, ["name", "path", "kind"]);
+    text(entry.name);
+    path(entry.path, value.fixtureRoot);
+    assert(["file", "directory"].includes(entry.kind));
+    assert(!names.has(entry.name) && !paths.has(entry.path));
+    names.add(entry.name);
+    paths.add(entry.path);
+  }
+  return value;
+}
+
+export function validateFunctionalRequest(request, capability) {
+  keys(request, [
+    "schema",
+    "sourceCommit",
+    "session",
+    "owner",
+    "phase",
+    "capabilitySHA256",
+    "requestID",
+    "operation",
+    "payloadSHA256",
+  ]);
+  assert.equal(request.schema, 1);
+  for (const key of ["sourceCommit", "session", "owner", "phase"])
+    assert.equal(request[key], capability[key]);
+  assert.equal(request.capabilitySHA256, functionalDigest(capability));
+  assert.match(request.requestID, uuid);
+  assert(
+    capability.operations.includes(request.operation),
+    "Unadmitted functional operation",
+  );
+  assert.match(request.payloadSHA256, hash);
+  return request;
+}
+
+export function validateFunctionalActionProof(
+  proof,
+  definition,
+  signedObservation,
+  compiledIssuerPublicKeyDER,
+  admittedPublicPair,
+) {
+  validateFunctionalCaseDefinition(definition);
+  const observed = verifyFunctionalEnvelope(
+    signedObservation,
+    compiledIssuerPublicKeyDER,
+  );
+  keys(observed, [
+    "schema",
+    "authority",
+    "execution",
+    "sourceCommit",
+    "session",
+    "owner",
+    "uid",
+    "caseSHA256",
+    "stages",
+    "packagePair",
+    "naturalExit",
+    "removal",
+    "agenticSentinels",
+  ]);
+  assert.equal(observed.schema, 1);
+  assert.equal(observed.authority, "independent-hosted-producer");
+  assert.equal(observed.execution, "hosted-macos-native");
+  assert.equal(observed.owner, definition.owner);
+  assert.equal(observed.caseSHA256, functionalDigest(definition));
+  keys(proof, [
+    "schema",
+    "sourceCommit",
+    "session",
+    "owner",
+    "caseSHA256",
+    "stages",
+  ]);
+  assert.equal(proof.schema, 1);
+  for (const key of ["sourceCommit", "session", "owner", "caseSHA256"])
+    assert.equal(proof[key], observed[key]);
+  assert.equal(observed.stages.length, 3);
+  assert.equal(proof.stages.length, 3);
+  const requests = new Set(),
+    processes = new Set();
+  for (let index = 0; index < phases.length; index++) {
+    const stage = observed.stages[index],
+      claim = proof.stages[index];
+    keys(stage, [
+      "capability",
+      "admission",
+      "activation",
+      "acknowledgement",
+      "authoritative",
+      "retired",
+      "persistence",
+    ]);
+    const capability = validateFunctionalCapability(
+      stage.capability,
+      definition,
+    );
+    assert.equal(capability.phase, phases[index]);
+    for (const peer of [capability.engine, capability.ui]) {
+      assert(!processes.has(peer.pid), "Captured process PID reused");
+      processes.add(peer.pid);
+    }
+    for (const key of ["sourceCommit", "session", "owner", "uid", "caseSHA256"])
+      assert.equal(capability[key], observed[key]);
+    if (index > 0) {
+      const before = observed.stages[index - 1].capability;
+      for (const key of [
+        "fixtureRoot",
+        "hostIdentifier",
+        "home",
+        "dataDirectory",
+        "hostABI",
+        "pairScope",
+        "previousVersion",
+        "currentVersion",
+      ])
+        assert.equal(capability[key], before[key]);
+      differentGeneration(before.engine, capability.engine);
+      differentGeneration(before.ui, capability.ui);
+      assert.deepEqual(stage.retired, [before.engine, before.ui]);
+      if (index === 1)
+        assert.notEqual(capability.packageSHA256, before.packageSHA256);
+      else assert.equal(capability.packageSHA256, before.packageSHA256);
+    } else assert.deepEqual(stage.retired, []);
+    keys(stage.admission, [
+      "heldRootPinned",
+      "heldDescriptorPinned",
+      "sourceClean",
+      "sourcePinned",
+      "payloadSignatureVerified",
+      "architectureVerified",
+      "hostABIVerified",
+      "originalFactoryUnchanged",
+      "originalControlsUnchanged",
+      "staleGenerationRejected",
+    ]);
+    for (const result of Object.values(stage.admission))
+      assert.equal(result, true);
+    keys(stage.activation, [
+      "kind",
+      "control",
+      "operation",
+      "sources",
+      "ui",
+      "request",
+    ]);
+    assert.equal(stage.activation.kind, definition.activation.kind);
+    assert.equal(stage.activation.control, definition.activation.control);
+    assert.equal(stage.activation.operation, definition.activation.operation);
+    assert.deepEqual(stage.activation.sources, definition.activation.sources);
+    assert.deepEqual(stage.activation.ui, capability.ui);
+    validateFunctionalRequest(stage.activation.request, capability);
+    assert.equal(
+      stage.activation.request.operation,
+      definition.activation.operation,
+    );
+    assert(!requests.has(stage.activation.request.requestID));
+    requests.add(stage.activation.request.requestID);
+    keys(stage.acknowledgement, [
+      "request",
+      "engine",
+      "success",
+      "responseSHA256",
+    ]);
+    assert.deepEqual(stage.acknowledgement.request, stage.activation.request);
+    assert.deepEqual(stage.acknowledgement.engine, capability.engine);
+    assert.equal(stage.acknowledgement.success, true);
+    assert.match(stage.acknowledgement.responseSHA256, hash);
+    keys(stage.authoritative, [
+      "kind",
+      "name",
+      "reader",
+      "observationID",
+      "afterAcknowledgement",
+      "observationSHA256",
+      "expectedSHA256",
+    ]);
+    assert.equal(stage.authoritative.kind, definition.observation.kind);
+    assert.equal(stage.authoritative.name, definition.observation.name);
+    assert.equal(stage.authoritative.reader, "independent-hosted-producer");
+    assert.match(stage.authoritative.observationSHA256, hash);
+    assert.equal(
+      stage.authoritative.observationSHA256,
+      stage.authoritative.expectedSHA256,
+    );
+    assert.match(stage.authoritative.observationID, uuid);
+    assert(!requests.has(stage.authoritative.observationID));
+    requests.add(stage.authoritative.observationID);
+    assert.equal(stage.authoritative.afterAcknowledgement, true);
+    keys(stage.persistence, ["name", "readbackSHA256", "expectedSHA256"]);
+    assert.equal(stage.persistence.name, definition.persistence.name);
+    if (definition.persistence.applicable) {
+      assert.match(stage.persistence.readbackSHA256, hash);
+      assert.equal(
+        stage.persistence.readbackSHA256,
+        stage.persistence.expectedSHA256,
+      );
+      if (index > 0)
+        assert.equal(
+          stage.persistence.readbackSHA256,
+          observed.stages[0].persistence.readbackSHA256,
+        );
+    } else {
+      assert.equal(stage.persistence.readbackSHA256, null);
+      assert.equal(stage.persistence.expectedSHA256, null);
+    }
+    keys(claim, [
+      "phase",
+      "requestID",
+      "capabilitySHA256",
+      "observationSHA256",
+    ]);
+    assert.equal(claim.phase, capability.phase);
+    assert.equal(claim.requestID, stage.activation.request.requestID);
+    assert.equal(claim.capabilitySHA256, functionalDigest(capability));
+    assert.equal(
+      claim.observationSHA256,
+      stage.authoritative.observationSHA256,
+    );
+  }
+  const first = observed.stages[0].capability,
+    current = observed.stages[1].capability;
+  keys(observed.packagePair, [
+    "scope",
+    "previous",
+    "current",
+    "publicAdmissionSHA256",
+  ]);
+  assert.equal(observed.packagePair.scope, first.pairScope);
+  for (const [name, cap] of [
+    ["previous", first],
+    ["current", current],
+  ]) {
+    keys(observed.packagePair[name], ["version", "packageSHA256"]);
+    assert.equal(observed.packagePair[name].version, cap.version);
+    assert.equal(observed.packagePair[name].packageSHA256, cap.packageSHA256);
+  }
+  if (first.pairScope === "public-signed-pair") {
+    assert.match(observed.packagePair.publicAdmissionSHA256, hash);
+    keys(admittedPublicPair, [
+      "owner",
+      "sourceCommit",
+      "previous",
+      "current",
+      "receiptSHA256",
+    ]);
+    assert.equal(admittedPublicPair.owner, observed.owner);
+    assert.equal(admittedPublicPair.sourceCommit, observed.sourceCommit);
+    assert.equal(
+      admittedPublicPair.receiptSHA256,
+      observed.packagePair.publicAdmissionSHA256,
+    );
+    assert.deepEqual(
+      admittedPublicPair.previous,
+      observed.packagePair.previous,
+    );
+    assert.deepEqual(admittedPublicPair.current, observed.packagePair.current);
+  } else {
+    assert.equal(observed.packagePair.publicAdmissionSHA256, null);
+    assert.equal(admittedPublicPair, undefined);
+  }
+  const versions = [first.version, current.version];
+  keys(observed.naturalExit, ["cleanupStarted", "captured", "absent"]);
+  assert.equal(observed.naturalExit.cleanupStarted, false);
+  const captured = observed.stages.flatMap(({ capability }) => [
+    capability.engine,
+    capability.ui,
+  ]);
+  assert.deepEqual(observed.naturalExit.captured, captured);
+  assert.deepEqual(observed.naturalExit.absent, captured);
+  keys(observed.removal, [
+    "capturedVersions",
+    "physicallyAbsentBeforeReinstall",
+    "finalPhysicallyAbsent",
+    "leasesReleased",
+  ]);
+  assert.deepEqual(observed.removal.capturedVersions, versions);
+  assert.deepEqual(observed.removal.physicallyAbsentBeforeReinstall, versions);
+  assert.deepEqual(observed.removal.finalPhysicallyAbsent, versions);
+  assert.equal(observed.removal.leasesReleased, true);
+  keys(observed.agenticSentinels, ["beforeSHA256", "afterSHA256"]);
+  assert.match(observed.agenticSentinels.beforeSHA256, hash);
+  assert.equal(
+    observed.agenticSentinels.beforeSHA256,
+    observed.agenticSentinels.afterSHA256,
+  );
+  return Object.freeze({
+    schema: 1,
+    owner: observed.owner,
+    sourceCommit: observed.sourceCommit,
+    session: observed.session,
+    functionalActionsValidated: true,
+    activationKind: definition.activation.kind,
+    actionDeliveryScope: "source-original-control-to-installed-engine",
+    downloadedUIBinaryActionsValidated: false,
+    packagePairScope: first.pairScope,
+    publicUpdateValidated: first.pairScope === "public-signed-pair",
+    scope: [...definition.limits],
+    nativeHardwareValidated: false,
+    privilegedShippingRoleValidated: false,
+  });
+}
