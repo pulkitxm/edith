@@ -18,8 +18,8 @@ export const digest = (bytes) =>
 const integer = (value, maximum = Number.MAX_SAFE_INTEGER) =>
   assert(Number.isSafeInteger(value) && value > 0 && value <= maximum);
 
-export function request(value) {
-  assert(typeof value === "string" && Buffer.byteLength(value) <= 4096);
+export function closedJSON(value, maximum = 4096) {
+  assert(typeof value === "string" && Buffer.byteLength(value) <= maximum);
   const result = JSON.parse(value);
   const tree = parseExpression(value);
   function unique(node) {
@@ -36,6 +36,11 @@ export function request(value) {
     }
   }
   unique(tree);
+  return result;
+}
+
+export function request(value) {
+  const result = closedJSON(value);
   assert.deepEqual(Object.keys(result).sort(), [
     "hostRun",
     "packagesRun",
