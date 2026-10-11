@@ -49,8 +49,10 @@ export function validateSparkleFixture(value, environment, accountHome) {
     `com.pulkit.edith.tests.remote-${value.session}`,
   );
   assert(
-    !/[\0\r\n]/.test(accountHome) &&
-      /^\/Users\/[A-Za-z0-9_-]+$/.test(accountHome),
+    [...accountHome].every(
+      (character) =>
+        character.charCodeAt(0) >= 32 && character.charCodeAt(0) < 127,
+    ) && /^\/Users\/[A-Za-z0-9_-]+$/.test(accountHome),
   );
   assert.equal(
     value.directory,
@@ -66,6 +68,7 @@ export function validateSparkleFixture(value, environment, accountHome) {
       "refs/heads/main",
       "refs/heads/feat/extension-marketplace",
       "refs/heads/feat/hosted-sparkle-update",
+      "refs/heads/feat/hosted-sparkle-execution",
     ].includes(environment.GITHUB_REF),
   );
   assert.equal(environment.GITHUB_SHA, value.sourceCommit);
@@ -95,8 +98,8 @@ export function validateSparkleFixture(value, environment, accountHome) {
   ]);
   assert(Number.isInteger(value.producer.pid) && value.producer.pid > 1);
   assert(
-    !/[\0\r\n]/.test(value.producer.birth) &&
-      /^[0-9]+\.[0-9]+$/.test(value.producer.birth),
+    /^[0-9]+\.[0-9]+$/.exec(value.producer.birth)?.[0] ===
+      value.producer.birth && /^[0-9]+\.[0-9]+$/.test(value.producer.birth),
   );
   assert(Number.isInteger(value.producer.uid) && value.producer.uid > 0);
   assert.equal(value.producer.uid, value.expectedUID);
@@ -110,7 +113,8 @@ export function validateSparkleFixture(value, environment, accountHome) {
     `${value.directory}/support/Edith Tests/remote-${value.session}/Extensions/calendar/edith-host-2/arm64/1.0.0/calendar/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith`,
   );
   assert(
-    /^\/[A-Za-z0-9._ /-]+$/.test(value.producer.executable) &&
+    /^\/[A-Za-z0-9._ /-]+$/.exec(value.producer.executable)?.[0] ===
+      value.producer.executable &&
       !value.producer.executable.includes("//") &&
       !value.producer.executable.endsWith("/"),
   );
@@ -253,7 +257,7 @@ export function validateSparkleOutcome(value, fixture) {
       "executable",
     ]);
     assert(Number.isInteger(host.pid) && host.pid > 1);
-    assert(!/[\0\r\n]/.test(host.birth) && /^[0-9]+\.[0-9]+$/.test(host.birth));
+    assert(/^[0-9]+\.[0-9]+$/.exec(host.birth)?.[0] === host.birth);
     assert(Number.isInteger(host.uid) && host.uid > 0);
     assert.equal(host.uid, fixture.expectedUID);
     assert.equal(
@@ -305,7 +309,7 @@ function validateRoles(rows, fixture, running) {
   for (const row of rows) {
     exactKeys(row, ["role", "pid", "birth", "uid", "executable", "running"]);
     assert(Number.isInteger(row.pid) && row.pid > 1);
-    assert(!/[\0\r\n]/.test(row.birth) && /^[0-9]+\.[0-9]+$/.test(row.birth));
+    assert(/^[0-9]+\.[0-9]+$/.exec(row.birth)?.[0] === row.birth);
     assert.equal(row.uid, fixture.expectedUID);
     assert.equal(row.executable, fixture.ownedRolePaths[row.role]);
     assert.equal(row.running, running);
