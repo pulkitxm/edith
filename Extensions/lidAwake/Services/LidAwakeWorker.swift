@@ -2,16 +2,11 @@ import AppKit
 import EdithExtensionSupport
 import Foundation
 
-@MainActor private final class LidAwakeWorkerAdmission {
-    var closed = false
-}
-
 @MainActor final class LidAwakeWorker {
     let engine: LidAwakeEngine
-    let operations: LidAwakeOperationModel
     private var observer: NSObjectProtocol?
     private var stopped = false
-    private let admission = LidAwakeWorkerAdmission()
+    private var commandWorkClosed = false
     private let recoveryOnly: Bool
     private let defaults: UserDefaults
     private let confirm: @MainActor () -> Bool
@@ -46,12 +41,6 @@ import Foundation
                 startServices: !fixture && !recoveryOnly, recoveryOnly: recoveryOnly,
                 systemStateReader: systemStateReader)
         self.engine = created
-        let admission = admission
-        operations = LidAwakeOperationModel { request in
-            try Task.checkCancellation()
-            guard !admission.closed else { throw ExtensionPeerError.unavailable }
-            return try await Self.perform(request, engine: created, defaults: defaults)
-        }
         guard !recoveryOnly else { return }
         observer = NotificationCenter.default.addObserver(
             forName: Notification.Name("lidAwakeSettingsChanged"), object: nil, queue: .main
@@ -61,12 +50,12 @@ import Foundation
     func perform(_ request: LidAwakeRequest, requiresConfirmation: Bool = false) async throws
         -> LidAwakeSnapshot
     {
-        guard !stopped, !admission.closed, !recoveryOnly else {
+        guard !stopped, !commandWorkClosed, !recoveryOnly else {
             throw ExtensionPeerError.unavailable
         }
         if requiresConfirmation, !confirm() { throw CancellationError() }
         try Task.checkCancellation()
-        guard !admission.closed else { throw ExtensionPeerError.unavailable }
+        guard !commandWorkClosed else { throw ExtensionPeerError.unavailable }
         return try await Self.perform(request, engine: engine, defaults: defaults)
     }
 
@@ -93,7 +82,7 @@ import Foundation
     }
 
     func setSession(_ session: LidAwakeSession) throws {
-        guard !stopped, !admission.closed, !recoveryOnly else {
+        guard !stopped, !commandWorkClosed, !recoveryOnly else {
             throw ExtensionPeerError.unavailable
         }
         defaults.set(session.rawValue, forKey: LidAwakeState.sessionKey)
@@ -101,24 +90,32 @@ import Foundation
     }
 
     func beginCommandDrain() {
-        admission.closed = true
-        operations.cancel()
+        commandWorkClosed = true
         if let observer { NotificationCenter.default.removeObserver(observer) }
         observer = nil
         engine.beginCommandDrain()
     }
 
-    func prepareDisable() async throws { try await engine.prepareDisable() }
+    func cancelPendingWorkAndWait() async {
+        beginCommandDrain()
+        await engine.cancelPendingWorkAndWait()
+    }
+
+    func prepareDisable() async throws {
+        await cancelPendingWorkAndWait()
+        try await engine.prepareDisable()
+    }
     func requestApproval() throws { try engine.requestApproval() }
     func prepareApplicationQuit(_ context: LidAwakeApplicationQuitContext) async throws {
         guard !recoveryOnly else { throw ExtensionPeerError.unavailable }
+        await cancelPendingWorkAndWait()
         try await engine.prepareForApplicationQuit(context)
         await prepareToStop()
     }
     func prepareToStop() async {
+        await cancelPendingWorkAndWait()
         if !stopped {
             stopped = true
-            operations.cancel()
             if let observer { NotificationCenter.default.removeObserver(observer) }
             observer = nil
         }
@@ -128,7 +125,7 @@ import Foundation
 
     func shutdown() {
         guard !stopped else { return }; stopped = true
-        operations.cancel()
+        beginCommandDrain()
         if let observer { NotificationCenter.default.removeObserver(observer) }; observer = nil
         engine.shutdown()
         defaults.set(false, forKey: LidAwakeState.enabledKey)
