@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
@@ -41,9 +42,21 @@ test("actual native case assembly preserves original activation and the shared c
 
 test("assembly is restricted to a private copied native test target and never overwrites source", async () => {
   const written = [];
+  const admittedSnapshot = {
+    sourceCommit: "a".repeat(40),
+    files: await Promise.all(
+      [contextPath, transportPath, casePath].map(async (path) => ({
+        path,
+        sha256: createHash("sha256")
+          .update(await readFile(root + path))
+          .digest("hex"),
+      })),
+    ),
+  };
   const output = await assembleFunctionalCaseSources({
     root,
     owner: "keepAwake",
+    admittedSnapshot,
     targetDirectory:
       "/private/synthetic/functional-native-assembly-123/Tests/OwnerTests",
     write: async (path, source, options) => {
@@ -63,6 +76,27 @@ test("assembly is restricted to a private copied native test target and never ov
       root,
       owner: "keepAwake",
       targetDirectory: root + "Extensions/keepAwake/Tests",
+    }),
+  );
+  await assert.rejects(
+    assembleFunctionalCaseSources({
+      root,
+      owner: "keepAwake",
+      targetDirectory:
+        "/private/synthetic/functional-native-assembly-123/Tests/OwnerTests",
+      admittedSnapshot: {
+        ...admittedSnapshot,
+        files: admittedSnapshot.files.map((pin) => ({
+          ...pin,
+          sha256: "0".repeat(64),
+        })),
+      },
+      write: async () => {
+        throw new Error("Must not write unadmitted source");
+      },
+      createDirectory: async () => {
+        throw new Error("Must not create unadmitted target");
+      },
     }),
   );
 });

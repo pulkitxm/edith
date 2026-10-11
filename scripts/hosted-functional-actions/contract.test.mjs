@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync, sign } from "node:crypto";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import test from "node:test";
 import {
   loadAllFunctionalActionCases,
@@ -34,6 +34,7 @@ const definition = {
     kind: "original-control-callback",
     control: "Keep awake",
     operation: "keepAwake.ui.update",
+    mutation: { kind: "state-transition", payloadKeys: ["values", "removed"] },
     sources: [
       {
         path: "Extensions/keepAwake/Views/KeepAwakeSettings.swift",
@@ -95,6 +96,9 @@ function seal(payload, key = keys.privateKey) {
   };
 }
 function fixture() {
+  const payload = Buffer.from(
+    '{"removed":[],"values":"synthetic-preference-bytes"}',
+  );
   const stages = ["initial", "updated", "reinstalled"].map((phase, index) => {
     const cap = capability(phase, index);
     const request = {
@@ -106,7 +110,7 @@ function fixture() {
       capabilitySHA256: functionalDigest(cap),
       requestID: `12345678-1234-4123-8123-123456789ab${index}`,
       operation: "keepAwake.ui.update",
-      payloadSHA256: digest("e"),
+      payloadSHA256: createHash("sha256").update(payload).digest("hex"),
     };
     return {
       capability: cap,
@@ -122,12 +126,19 @@ function fixture() {
         originalControlsUnchanged: true,
         staleGenerationRejected: true,
       },
-      activation: { ...definition.activation, ui: cap.ui, request },
+      activation: {
+        ...definition.activation,
+        ui: cap.ui,
+        request,
+        payload: payload.toString("base64"),
+        sequence: 3,
+      },
       acknowledgement: {
         request,
         engine: cap.engine,
         success: true,
         responseSHA256: digest("f"),
+        sequence: 4,
       },
       authoritative: {
         ...definition.observation,
@@ -136,6 +147,7 @@ function fixture() {
         afterAcknowledgement: true,
         observationSHA256: digest("1"),
         expectedSHA256: digest("1"),
+        sequence: 6,
       },
       retired:
         index === 0
@@ -148,6 +160,40 @@ function fixture() {
         name: "preventSleep",
         readbackSHA256: digest("2"),
         expectedSHA256: digest("2"),
+        sequence: 7,
+        beforeActivation:
+          index === 0
+            ? null
+            : {
+                reader: "independent-hosted-producer",
+                observationID: `12345678-1234-4123-8123-123456789ad${index}`,
+                capabilitySHA256: functionalDigest(cap),
+                engine: cap.engine,
+                ui: cap.ui,
+                beforeFirstMutation: true,
+                beforeRequestID: request.requestID,
+                sequence: 1,
+                readbackSHA256: digest("2"),
+                expectedSHA256: digest("2"),
+              },
+      },
+      transition: {
+        kind: "state-transition",
+        reader: "independent-hosted-producer",
+        capabilitySHA256: functionalDigest(cap),
+        requestID: request.requestID,
+        before: {
+          observationID: `12345678-1234-4123-8123-123456789ae${index}`,
+          sequence: 2,
+          observationSHA256: digest("0"),
+          expectedSHA256: digest("0"),
+        },
+        after: {
+          observationID: `12345678-1234-4123-8123-123456789af${index}`,
+          sequence: 5,
+          observationSHA256: digest("1"),
+          expectedSHA256: digest("1"),
+        },
       },
     };
   });
@@ -457,6 +503,70 @@ test("missing native cases and readonly definitions cannot become complete actio
   );
 });
 
+test("literal-only case admission binds the externally pinned definition bytes without evaluation or import caching", async () => {
+  const paths = functionalActionCasePaths("keepAwake");
+  const bytes = Buffer.from("original source");
+  const sha = (value) => createHash("sha256").update(value).digest("hex");
+  const def = structuredClone(definition);
+  def.activation.sources[0].sha256 = sha(bytes);
+  const files = new Map([
+    [
+      paths.definition,
+      Buffer.from(`export const definition = ${JSON.stringify(def)};`),
+    ],
+    [paths.native, Buffer.from("synthetic native case")],
+    [def.activation.sources[0].path, bytes],
+  ]);
+  const read = async (path) =>
+    files.get(path.replace("/private/synthetic/", ""));
+  const snapshot = () => ({
+    sourceCommit,
+    files: [...files].map(([path, value]) => ({ path, sha256: sha(value) })),
+  });
+  const admitted = snapshot();
+  const first = await loadFunctionalActionCase(
+    "/private/synthetic",
+    "keepAwake",
+    read,
+    admitted,
+  );
+  assert.deepEqual(first.definition, def);
+  assert(Object.isFrozen(first.definition.activation.sources[0]));
+  files.set(
+    paths.definition,
+    Buffer.from(
+      `export const definition = ${JSON.stringify(def)}; export const extra = 1;`,
+    ),
+  );
+  await assert.rejects(
+    loadFunctionalActionCase("/private/synthetic", "keepAwake", read, admitted),
+  );
+  await assert.rejects(
+    loadFunctionalActionCase(
+      "/private/synthetic",
+      "keepAwake",
+      read,
+      snapshot(),
+    ),
+  );
+  for (const source of [
+    "export const definition = (() => { throw Error('must not execute'); })();",
+    "export const definition = {owner:'foreign', '\\u006fwner':'keepAwake'};",
+    "export const definition = {get owner() { return 'keepAwake'; }};",
+    "export const definition = {...globalThis};",
+  ]) {
+    files.set(paths.definition, Buffer.from(source));
+    await assert.rejects(
+      loadFunctionalActionCase(
+        "/private/synthetic",
+        "keepAwake",
+        read,
+        snapshot(),
+      ),
+    );
+  }
+});
+
 test("public pair qualification requires separate admitted production receipt, not a producer hash claim", () => {
   const f = fixture();
   f.observed.packagePair.scope = "public-signed-pair";
@@ -468,6 +578,11 @@ test("public pair qualification requires separate admitted production receipt, n
     stage.activation.request.capabilitySHA256 = functionalDigest(
       stage.capability,
     );
+    stage.transition.capabilitySHA256 = functionalDigest(stage.capability);
+    if (stage.persistence.beforeActivation)
+      stage.persistence.beforeActivation.capabilitySHA256 = functionalDigest(
+        stage.capability,
+      );
     f.proof.stages[index].capabilitySHA256 = functionalDigest(stage.capability);
   }
   assert.throws(() => validate(f));
@@ -497,4 +612,65 @@ test("public pair qualification requires separate admitted production receipt, n
       { ...admitted, receiptSHA256: digest("5") },
     ),
   );
+});
+
+test("semantic action proof rejects readonly declarations, unchanged outcomes and persistence repaired after activation", () => {
+  assert.throws(() =>
+    validateFunctionalCaseDefinition({
+      ...definition,
+      operations: ["keepAwake.ui.read"],
+      activation: { ...definition.activation, operation: "keepAwake.ui.read" },
+    }),
+  );
+  const mutations = [
+    (f) => {
+      f.observed.stages[1].persistence.beforeActivation = null;
+    },
+    (f) => {
+      f.observed.stages[1].persistence.beforeActivation.sequence = 3;
+    },
+    (f) => {
+      f.observed.stages[1].persistence.beforeActivation.beforeFirstMutation = false;
+    },
+    (f) => {
+      f.observed.stages[1].persistence.beforeActivation.engine =
+        f.observed.stages[0].capability.engine;
+    },
+    (f) => {
+      f.observed.stages[1].persistence.beforeActivation.readbackSHA256 =
+        digest("0");
+    },
+    (f) => {
+      f.observed.stages[1].persistence.beforeActivation.observationID =
+        f.observed.stages[1].activation.request.requestID;
+    },
+    (f) => {
+      f.observed.stages[0].transition.before.observationSHA256 = digest("1");
+      f.observed.stages[0].transition.before.expectedSHA256 = digest("1");
+    },
+    (f) => {
+      f.observed.stages[0].activation.payload = Buffer.from(
+        '{"removed":[],"values":"synthetic-preference-bytes","extra":true}',
+      ).toString("base64");
+    },
+    (f) => {
+      const bytes = Buffer.from(
+        '{"removed":[],"values":"synthetic-preference-bytes","\\u0076alues":"synthetic-preference-bytes"}',
+      );
+      f.observed.stages[0].activation.payload = bytes.toString("base64");
+      f.observed.stages[0].activation.request.payloadSHA256 = createHash(
+        "sha256",
+      )
+        .update(bytes)
+        .digest("hex");
+    },
+    (f) => {
+      f.observed.stages[0].acknowledgement.sequence = 3;
+    },
+  ];
+  for (const mutate of mutations) {
+    const f = fixture();
+    mutate(f);
+    assert.throws(() => validate(f));
+  }
 });

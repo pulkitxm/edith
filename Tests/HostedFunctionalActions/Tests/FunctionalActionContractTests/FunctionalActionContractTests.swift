@@ -105,4 +105,19 @@ struct FunctionalActionContractTests {
         value["currentVersion"] = "2.2.9"
         #expect(throws: (any Error).self) { try validate(decode(value)) }
     }
+
+    @Test func wireObjectRejectsDuplicateEscapedAndNestedFields() throws {
+        let good = Data("{\"operation\":\"keepAwake.ui.update\",\"nested\":{\"value\":true}}".utf8)
+        #expect(
+            try HostedFunctionalJSON.object(good)["operation"] as? String == "keepAwake.ui.update")
+        for text in [
+            "{\"presentationID\":\"one\",\"presentationID\":\"two\"}",
+            "{\"presentationID\":\"one\",\"\\u0070resentationID\":\"two\"}",
+            "{\"nested\":{\"value\":1,\"value\":2}}",
+            "{\"array\":[{\"value\":1,\"\\u0076alue\":2}]}",
+            "[1,2]",
+        ] {
+            #expect(throws: (any Error).self) { try HostedFunctionalJSON.object(Data(text.utf8)) }
+        }
+    }
 }

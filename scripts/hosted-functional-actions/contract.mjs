@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { isAbsolute, posix } from "node:path";
+import { parseExpression } from "@babel/parser";
 import { functionalActionOwners } from "./owners.mjs";
 
 const uuid =
@@ -176,7 +177,13 @@ export function validateFunctionalCaseDefinition(value) {
   ]);
   assert.equal(value.schema, 1);
   assert(functionalActionOwners.includes(value.owner));
-  keys(value.activation, ["kind", "control", "operation", "sources"]);
+  keys(value.activation, [
+    "kind",
+    "control",
+    "operation",
+    "sources",
+    "mutation",
+  ]);
   assert(
     ["original-control-callback", "native-accessibility"].includes(
       value.activation.kind,
@@ -201,6 +208,26 @@ export function validateFunctionalCaseDefinition(value) {
   }
   assert.equal(new Set(value.operations).size, value.operations.length);
   assert(value.operations.includes(value.activation.operation));
+  assert(
+    !value.activation.operation
+      .split(".")
+      .some((part) =>
+        ["read", "snapshot", "state", "list", "schema", "get", "poll"].includes(
+          part,
+        ),
+      ),
+  );
+  keys(value.activation.mutation, ["kind", "payloadKeys"]);
+  assert(
+    ["state-transition", "owned-output"].includes(
+      value.activation.mutation.kind,
+    ),
+  );
+  const fields = value.activation.mutation.payloadKeys;
+  assert(Array.isArray(fields) && fields.length >= 1 && fields.length <= 32);
+  for (const field of fields)
+    assert.match(field, /^[A-Za-z][A-Za-z0-9_]{0,63}$/);
+  assert.equal(new Set(fields).size, fields.length);
   keys(value.observation, ["kind", "name"]);
   assert(
     [
@@ -379,6 +406,7 @@ export function validateFunctionalActionProof(
       "authoritative",
       "retired",
       "persistence",
+      "transition",
     ]);
     const capability = validateFunctionalCapability(
       stage.capability,
@@ -432,11 +460,15 @@ export function validateFunctionalActionProof(
       "sources",
       "ui",
       "request",
+      "payload",
+      "sequence",
+      "mutation",
     ]);
     assert.equal(stage.activation.kind, definition.activation.kind);
     assert.equal(stage.activation.control, definition.activation.control);
     assert.equal(stage.activation.operation, definition.activation.operation);
     assert.deepEqual(stage.activation.sources, definition.activation.sources);
+    assert.deepEqual(stage.activation.mutation, definition.activation.mutation);
     assert.deepEqual(stage.activation.ui, capability.ui);
     validateFunctionalRequest(stage.activation.request, capability);
     assert.equal(
@@ -445,16 +477,36 @@ export function validateFunctionalActionProof(
     );
     assert(!requests.has(stage.activation.request.requestID));
     requests.add(stage.activation.request.requestID);
+    assert(
+      typeof stage.activation.payload === "string" &&
+        stage.activation.payload.length <= 1_398_104,
+    );
+    const payloadBytes = Buffer.from(stage.activation.payload, "base64");
+    assert(payloadBytes.length > 0 && payloadBytes.length <= 1_048_576);
+    assert.equal(payloadBytes.toString("base64"), stage.activation.payload);
+    assert.equal(
+      createHash("sha256").update(payloadBytes).digest("hex"),
+      stage.activation.request.payloadSHA256,
+    );
+    const payload = uniqueJSON(payloadBytes.toString("utf8"));
+    assert.deepEqual(
+      Object.keys(payload).sort(),
+      [...definition.activation.mutation.payloadKeys].sort(),
+    );
+    positiveSequence(stage.activation.sequence);
     keys(stage.acknowledgement, [
       "request",
       "engine",
       "success",
       "responseSHA256",
+      "sequence",
     ]);
     assert.deepEqual(stage.acknowledgement.request, stage.activation.request);
     assert.deepEqual(stage.acknowledgement.engine, capability.engine);
     assert.equal(stage.acknowledgement.success, true);
     assert.match(stage.acknowledgement.responseSHA256, hash);
+    positiveSequence(stage.acknowledgement.sequence);
+    assert(stage.acknowledgement.sequence > stage.activation.sequence);
     keys(stage.authoritative, [
       "kind",
       "name",
@@ -463,6 +515,7 @@ export function validateFunctionalActionProof(
       "afterAcknowledgement",
       "observationSHA256",
       "expectedSHA256",
+      "sequence",
     ]);
     assert.equal(stage.authoritative.kind, definition.observation.kind);
     assert.equal(stage.authoritative.name, definition.observation.name);
@@ -476,7 +529,66 @@ export function validateFunctionalActionProof(
     assert(!requests.has(stage.authoritative.observationID));
     requests.add(stage.authoritative.observationID);
     assert.equal(stage.authoritative.afterAcknowledgement, true);
-    keys(stage.persistence, ["name", "readbackSHA256", "expectedSHA256"]);
+    positiveSequence(stage.authoritative.sequence);
+    assert(stage.authoritative.sequence > stage.acknowledgement.sequence);
+    keys(stage.transition, [
+      "kind",
+      "reader",
+      "capabilitySHA256",
+      "requestID",
+      "before",
+      "after",
+    ]);
+    assert.equal(stage.transition.kind, definition.activation.mutation.kind);
+    assert.equal(stage.transition.reader, "independent-hosted-producer");
+    assert.equal(
+      stage.transition.capabilitySHA256,
+      functionalDigest(capability),
+    );
+    assert.equal(
+      stage.transition.requestID,
+      stage.activation.request.requestID,
+    );
+    for (const [name, record] of Object.entries({
+      before: stage.transition.before,
+      after: stage.transition.after,
+    })) {
+      keys(record, [
+        "observationID",
+        "sequence",
+        "observationSHA256",
+        "expectedSHA256",
+      ]);
+      assert.match(record.observationID, uuid);
+      assert(!requests.has(record.observationID));
+      requests.add(record.observationID);
+      assert.match(record.observationSHA256, hash);
+      assert.equal(record.observationSHA256, record.expectedSHA256);
+      positiveSequence(record.sequence);
+      assert(
+        name === "before"
+          ? record.sequence < stage.activation.sequence
+          : record.sequence > stage.acknowledgement.sequence,
+      );
+    }
+    assert.notEqual(
+      stage.transition.before.observationSHA256,
+      stage.transition.after.observationSHA256,
+      "An independently observed action effect is required",
+    );
+    assert.equal(
+      stage.transition.after.observationSHA256,
+      stage.authoritative.observationSHA256,
+    );
+    keys(stage.persistence, [
+      "name",
+      "readbackSHA256",
+      "expectedSHA256",
+      "beforeActivation",
+      "sequence",
+    ]);
+    positiveSequence(stage.persistence.sequence);
+    assert(stage.persistence.sequence > stage.authoritative.sequence);
     assert.equal(stage.persistence.name, definition.persistence.name);
     if (definition.persistence.applicable) {
       assert.match(stage.persistence.readbackSHA256, hash);
@@ -484,14 +596,45 @@ export function validateFunctionalActionProof(
         stage.persistence.readbackSHA256,
         stage.persistence.expectedSHA256,
       );
-      if (index > 0)
+      if (index > 0) {
         assert.equal(
           stage.persistence.readbackSHA256,
           observed.stages[0].persistence.readbackSHA256,
         );
+        const prior = stage.persistence.beforeActivation;
+        keys(prior, [
+          "reader",
+          "observationID",
+          "capabilitySHA256",
+          "engine",
+          "ui",
+          "beforeFirstMutation",
+          "beforeRequestID",
+          "sequence",
+          "readbackSHA256",
+          "expectedSHA256",
+        ]);
+        assert.equal(prior.reader, "independent-hosted-producer");
+        assert.match(prior.observationID, uuid);
+        assert(!requests.has(prior.observationID));
+        requests.add(prior.observationID);
+        assert.equal(prior.capabilitySHA256, functionalDigest(capability));
+        assert.deepEqual(prior.engine, capability.engine);
+        assert.deepEqual(prior.ui, capability.ui);
+        assert.equal(prior.beforeFirstMutation, true);
+        assert.equal(prior.beforeRequestID, stage.activation.request.requestID);
+        positiveSequence(prior.sequence);
+        assert(prior.sequence < stage.transition.before.sequence);
+        assert.equal(
+          prior.readbackSHA256,
+          observed.stages[0].persistence.readbackSHA256,
+        );
+        assert.equal(prior.expectedSHA256, prior.readbackSHA256);
+      } else assert.equal(stage.persistence.beforeActivation, null);
     } else {
       assert.equal(stage.persistence.readbackSHA256, null);
       assert.equal(stage.persistence.expectedSHA256, null);
+      assert.equal(stage.persistence.beforeActivation, null);
     }
     keys(claim, [
       "phase",
@@ -588,4 +731,29 @@ export function validateFunctionalActionProof(
     nativeHardwareValidated: false,
     privilegedShippingRoleValidated: false,
   });
+}
+
+function positiveSequence(value) {
+  assert(Number.isSafeInteger(value) && value > 0);
+}
+
+function uniqueJSON(value) {
+  const result = JSON.parse(value);
+  assert(result && typeof result === "object" && !Array.isArray(result));
+  const tree = parseExpression(value);
+  function visit(node) {
+    if (node.type === "ObjectExpression") {
+      const fields = node.properties.map((property) => property.key.value);
+      assert.equal(
+        new Set(fields).size,
+        fields.length,
+        "Duplicate payload key",
+      );
+      for (const property of node.properties) visit(property.value);
+    } else if (node.type === "ArrayExpression") {
+      for (const entry of node.elements) visit(entry);
+    }
+  }
+  visit(tree);
+  return result;
 }
