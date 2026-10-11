@@ -32,6 +32,7 @@ import Observation
     private let remote: PluginsUIBridge?
     private var remoteGeneration = 0
     private var remoteRequests: [UUID: Task<Void, Never>] = [:]
+    private var installationLogs: [UUID: SkillInstallationLogs] = [:]
     private static let agentSelectionsKey = "plugins.agentSelections"
 
     init(
@@ -170,29 +171,17 @@ import Observation
         installationSucceeded = false
         installationError = nil
         installationLog = ""
+        let logs = SkillInstallationLogs { [weak self] line in
+            guard let self, !isStopped, installationID == token else { return }
+            installationLog = String((installationLog + line + "\n").suffix(24_000))
+        }
+        installationLogs[token] = logs
         let task = Task { [weak self] in
-            guard let self else { return }
+            guard let self else { await logs.finishAndWait(); return }
+            defer { installationLogs[token] = nil }
             defer { if installationID == token { isInstalling = false } }
-            do {
-                try await installer.install(skill: skill, agentIDs: Array(targets)) {
-                    [weak self] line in
-                    Task { @MainActor [weak self] in
-                        guard let self, !isStopped, installationID == token else { return }
-                        installationLog = String((installationLog + line + "\n").suffix(24_000))
-                    }
-                }
-                try Task.checkCancellation()
-                guard !isStopped, installationID == token else { return }
-                installedAgents[skill.id, default: []].formUnion(targets)
-                installationSucceeded = true
-            } catch is CancellationError {
-            } catch {
-                guard !isStopped, installationID == token else { return }
-                installationError =
-                    (error as? CLICommandRunnerError) == .timedOut
-                    ? "Installation timed out after five minutes. Check the output before retrying."
-                    : error.localizedDescription
-            }
+            await runInstallation(skill: skill, targets: targets, token: token, logs: logs)
+            await logs.finishAndWait()
         }
         jobs[token] = task
         defer { jobs[token] = nil }
@@ -200,6 +189,28 @@ import Observation
             await task.value
         } onCancel: {
             task.cancel()
+            logs.stop()
+        }
+    }
+
+    private func runInstallation(
+        skill: EdithSkill, targets: Set<String>, token: UUID, logs: SkillInstallationLogs
+    ) async {
+        do {
+            try await installer.install(skill: skill, agentIDs: Array(targets)) { line in
+                logs.append(line)
+            }
+            try Task.checkCancellation()
+            guard !isStopped, installationID == token else { return }
+            installedAgents[skill.id, default: []].formUnion(targets)
+            installationSucceeded = true
+        } catch is CancellationError {
+        } catch {
+            guard !isStopped, installationID == token else { return }
+            installationError =
+                (error as? CLICommandRunnerError) == .timedOut
+                ? "Installation timed out after five minutes. Check the output before retrying."
+                : error.localizedDescription
         }
     }
 
@@ -275,6 +286,7 @@ import Observation
         remoteInstallLaunch?.cancel()
         for task in jobs.values { task.cancel() }
         for task in remoteRequests.values { task.cancel() }
+        for logs in installationLogs.values { logs.stop() }
     }
 
     public func shutdown() async {
@@ -282,9 +294,11 @@ import Observation
         let discovering = discoveryTask
         let tasks = Array(jobs.values)
         let remoteTasks = Array(remoteRequests.values)
+        let logs = Array(installationLogs.values)
         await discovering?.value
         for task in tasks { await task.value }
         for task in remoteTasks { await task.value }
+        for owner in logs { await owner.finishAndWait() }
         await remoteInstallLaunch?.value; remoteInstallLaunch = nil
         await documents.shutdown()
         discoveryTask = nil
@@ -298,5 +312,33 @@ import Observation
         isInstalling = false
         installationSucceeded = false
         installerAvailable = false
+    }
+}
+
+final class SkillInstallationLogs: Sendable {
+    private let continuation: AsyncStream<String>.Continuation
+    private let task: Task<Void, Never>
+
+    @MainActor init(publish: @escaping @MainActor @Sendable (String) async -> Void) {
+        let stream = AsyncStream<String>.makeStream()
+        continuation = stream.continuation
+        task = Task {
+            for await line in stream.stream {
+                guard !Task.isCancelled else { return }
+                await publish(line)
+            }
+        }
+    }
+
+    func append(_ line: String) { continuation.yield(line) }
+
+    func stop() {
+        continuation.finish()
+        task.cancel()
+    }
+
+    func finishAndWait() async {
+        continuation.finish()
+        await task.value
     }
 }

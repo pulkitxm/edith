@@ -49,4 +49,46 @@ import Testing
         #expect(!model.remoteInstallIsPending)
         #expect(starts == 1)
     }
+    @Test func installationLogsCancelAndJoinTheActualSuspendedCallback() async throws {
+        var pending: CheckedContinuation<Void, Never>?
+        var cancelled = false
+        var starts = 0
+        let logs = SkillInstallationLogs { _ in
+            starts += 1
+            await withCheckedContinuation { pending = $0 }
+            cancelled = Task.isCancelled
+        }
+        logs.append("first")
+        let deadline = ContinuousClock.now + .seconds(5)
+        while pending == nil, ContinuousClock.now < deadline { await Task.yield() }
+        let continuation = try #require(pending)
+        logs.append("queued")
+        logs.stop()
+        logs.append("closed")
+        var drained = false
+        let drain = Task {
+            await logs.finishAndWait(); drained = true
+        }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(!drained)
+        continuation.resume()
+        await drain.value
+        #expect(cancelled && drained && starts == 1)
+    }
+
+    @Test func installationLogsFlushBeforeReturningAndCloseAdmission() async {
+        var lines: [String] = []
+        let logs = SkillInstallationLogs { lines.append($0) }
+        logs.append("first"); logs.append("last")
+        await logs.finishAndWait()
+        logs.append("closed")
+        await logs.finishAndWait()
+        #expect(lines == ["first", "last"])
+        var unexpected = false
+        let stopped = SkillInstallationLogs { _ in unexpected = true }
+        stopped.append("pending")
+        stopped.stop()
+        await stopped.finishAndWait()
+        #expect(!unexpected)
+    }
 }
