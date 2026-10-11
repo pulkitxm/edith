@@ -24,11 +24,12 @@ final class ExtensionRuntime: NSObject {
     private var retiredPresentations: [UUID: Task<Void, Never>] = [:]
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
+        let token = (request["token"] as? String).flatMap { UUID(uuidString: $0) }
+        let admission = engineAdmission
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self, let identifier = request["token"] as? String,
-                let token = UUID(uuidString: identifier)
-            else { throw ExtensionPeerError.invalidRequest }
-            let admission = self.engineAdmission
+            guard let self, let token, self.engineAdmission === admission else {
+                throw ExtensionPeerError.unavailable
+            }
             let admitted = try admission?.beginRequest(
                 token: token, operation: command, payload: payload)
             defer {
