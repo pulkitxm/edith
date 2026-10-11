@@ -16,15 +16,15 @@ export const definition = {
       },
       {
         "path": "Extensions/clipboard/ClipboardHistoryView.swift",
-        "sha256": "366cb274529c87a7625148489ba238ca1c2f9032ceb678343ee15f91b4f42770"
+        "sha256": "e6a0985cdadfb9811d268ef96d7e08552b3b0e9356e4a628a8b8b06c7c6e7aef"
       },
       {
         "path": "Extensions/clipboard/ClipboardPresentation.swift",
-        "sha256": "ad654574c5c6c0b176d8038f36601dedb12d3a70ff72b4ee98ed263e0e0cbd21"
+        "sha256": "cd8b366315ababd086d8c76f1b1e612e29af946934378bc364d22b5dac31e06e"
       },
       {
         "path": "Extensions/clipboard/ClipboardHistoryModel.swift",
-        "sha256": "e4a9337c2a532024a622e52a09fa9763be5913b78f73752a09d21984bc494fe3"
+        "sha256": "e7df786895da51dac45228e06c92568579caa549117fbf04a84f145d86ab2e2b"
       },
       {
         "path": "Extensions/clipboard/ClipboardClient.swift",
@@ -32,11 +32,11 @@ export const definition = {
       },
       {
         "path": "Extensions/clipboard/Runtime.swift",
-        "sha256": "0f69469483a50e1212b26640f1fe8681bb7130ca70ae15de4d62bfdfe0942526"
+        "sha256": "409e052b2478664e6644afb0ecc6fa8ab444d27e99d0e5f0035451b286c1e109"
       },
       {
         "path": "Extensions/clipboard/ClipboardWorker.swift",
-        "sha256": "b177befca112578c478f750e46de9199c8002ffc5552b3a170ee7aac0414ba7b"
+        "sha256": "96d9178d99be9559fb87fa04b8144b3f255b8460ea28e4879d1b43ab5abd47c5"
       }
     ],
     "mutation": {
