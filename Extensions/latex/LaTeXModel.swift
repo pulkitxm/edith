@@ -29,7 +29,8 @@ final class LaTeXModel {
     private var remoteApplying = false
     private var remoteActionRunning = false
     private var draftTask: Task<Void, Never>?
-    private var retiredWork: [UUID: Task<Void, Never>] = [:]
+    private var draftGeneration = UUID()
+    private var pendingDraft: LaTeXUIAction?
     private var toolDrain: Task<Void, Never>?
     private let service: LaTeXService
     let store: LaTeXProjectStore
@@ -455,7 +456,7 @@ final class LaTeXModel {
         isStopped = true
         remoteGeneration &+= 1
         remoteTask?.cancel()
-        draftTask?.cancel()
+        retireDraft()
         operation?.cancel()
         for task in jobs.values { task.cancel() }
         if toolDrain == nil {
@@ -465,14 +466,9 @@ final class LaTeXModel {
     }
 
     private func retireDraft() {
-        guard let task = draftTask else { return }
-        draftTask = nil
-        task.cancel()
-        let id = UUID()
-        retiredWork[id] = Task { [self, task] in
-            await task.value
-            retiredWork[id] = nil
-        }
+        draftGeneration = UUID()
+        pendingDraft = nil
+        draftTask?.cancel()
     }
 
     func drainTools() async {
@@ -484,7 +480,7 @@ final class LaTeXModel {
         cancelPendingWork()
         let pending =
             [remoteTask, draftTask, operation].compactMap { $0 }
-            + Array(jobs.values) + Array(retiredWork.values)
+            + Array(jobs.values)
         for task in pending { await task.value }
         await toolDrain?.value
     }
@@ -551,15 +547,31 @@ final class LaTeXModel {
     }
 
     private func publishDraft() {
-        guard let remote, !isStopped, let id = selectedID, let original else { return }
-        retireDraft()
-        let request = LaTeXUIAction(
+        guard remote != nil, !isStopped, let id = selectedID, let original else { return }
+        draftGeneration = UUID()
+        pendingDraft = LaTeXUIAction(
             action: "draft", projectID: id, revision: original.revision, text: source)
-        draftTask = Task { [weak self] in
+        draftTask?.cancel()
+        startPendingDraft()
+    }
+
+    private func startPendingDraft() {
+        guard draftTask == nil, !isStopped, let remote, let request = pendingDraft else { return }
+        pendingDraft = nil
+        let generation = draftGeneration
+        draftTask = Task { [self, remote] in
+            defer {
+                draftTask = nil
+                startPendingDraft()
+            }
             do {
                 try await Task.sleep(for: .milliseconds(150))
                 _ = try await remote.perform(request)
-            } catch { if !Task.isCancelled { self?.message = error.localizedDescription } }
+            } catch {
+                if !isStopped, !Task.isCancelled, generation == draftGeneration {
+                    message = error.localizedDescription
+                }
+            }
         }
     }
 
@@ -588,6 +600,8 @@ final class LaTeXModel {
         busy = true
         remoteActionRunning = true
         defer { remoteActionRunning = false }
+        await draftTask?.value
+        guard !isStopped, !Task.isCancelled, generation == remoteGeneration else { return }
         do {
             let value = try await remote.perform(action)
             guard !isStopped, !Task.isCancelled, generation == remoteGeneration else { return }

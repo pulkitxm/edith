@@ -43,7 +43,17 @@ final class FocusDimEngine: FeatureModule {
     private var repositionTask: Task<Void, Never>?
     private var repositionGeneration = 0
     private var stopped = false
-    private var retiredWork: [UUID: Task<Void, Never>] = [:]
+    private struct RepositionRequest {
+        let screenFrames: [(CGDirectDisplayID, CGRect)]
+        let frontmostPID: pid_t
+        let primaryHeight: CGFloat
+        let mode: FocusDimDisplayMode
+        let animateIn: Bool
+        let generation: Int
+    }
+    private var pendingReposition: RepositionRequest?
+    private var repositionToken: UUID?
+    private var repositionJoin: Task<Void, Never>?
     private var animations: Set<UUID> = []
     private var animationWaiters: [CheckedContinuation<Void, Never>] = []
 
@@ -202,13 +212,33 @@ final class FocusDimEngine: FeatureModule {
             }
         }
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
-        let mode = displayMode
-        repositionTask = Task.detached(priority: .userInitiated) { [weak self] in
-            let windows = Self.onScreenWindows(primaryHeight: primaryHeight)
+        pendingReposition = RepositionRequest(
+            screenFrames: screenFrames, frontmostPID: frontmostPID, primaryHeight: primaryHeight,
+            mode: displayMode, animateIn: animateIn, generation: generation)
+        startPendingReposition()
+    }
+
+    private func startPendingReposition() {
+        guard !stopped, repositionTask == nil, let request = pendingReposition else { return }
+        pendingReposition = nil
+        let token = UUID()
+        repositionToken = token
+        let task = Task.detached(priority: .userInitiated) { [self] in
+            let windows = Self.onScreenWindows(primaryHeight: request.primaryHeight)
             guard !Task.isCancelled else { return }
-            await self?.applyReposition(
-                windows: windows, screenFrames: screenFrames, frontmostPID: frontmostPID,
-                mode: mode, animateIn: animateIn, generation: generation)
+            await applyReposition(
+                windows: windows, screenFrames: request.screenFrames,
+                frontmostPID: request.frontmostPID, mode: request.mode,
+                animateIn: request.animateIn, generation: request.generation)
+        }
+        repositionTask = task
+        repositionJoin = Task { [self, task] in
+            await task.value
+            guard repositionToken == token else { return }
+            repositionTask = nil
+            repositionJoin = nil
+            repositionToken = nil
+            startPendingReposition()
         }
     }
 
@@ -261,14 +291,8 @@ final class FocusDimEngine: FeatureModule {
     }
 
     private func retireReposition() {
-        guard let task = repositionTask else { return }
-        repositionTask = nil
-        task.cancel()
-        let id = UUID()
-        retiredWork[id] = Task { [self, task] in
-            await task.value
-            retiredWork[id] = nil
-        }
+        pendingReposition = nil
+        repositionTask?.cancel()
     }
 
     private func animate(_ changes: (NSAnimationContext) -> Void) {
@@ -296,7 +320,10 @@ final class FocusDimEngine: FeatureModule {
 
     func drain() async {
         cancelPendingWork()
-        for task in Array(retiredWork.values) { await task.value }
+        let task = repositionTask
+        let joined = repositionJoin
+        await task?.value
+        await joined?.value
         if !animations.isEmpty {
             await withCheckedContinuation { animationWaiters.append($0) }
         }

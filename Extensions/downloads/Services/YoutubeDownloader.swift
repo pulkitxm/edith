@@ -193,7 +193,9 @@ public final class YoutubeDownloader {
     public private(set) var estimates: [URL: DownloadEstimate] = [:]
 
     @ObservationIgnored private var stopped = false
-    @ObservationIgnored private var retiredWork: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var availabilityRequested = false
+    @ObservationIgnored private var updateRequested = false
+    @ObservationIgnored private var updateCompletion: ((Result<String, Error>) -> Void)?
     @ObservationIgnored private var mutationTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var updateTask: Task<Void, Never>?
     public var errorMessage: String?
@@ -338,12 +340,21 @@ public final class YoutubeDownloader {
 
     public func checkAvailability() {
         guard !stopped else { return }
-        retire(availabilityTask)
-        availabilityTask = nil
-        let generation = UUID()
-        availabilityGeneration = generation
-        availabilityTask = Task {
-            defer { if generation == availabilityGeneration { availabilityTask = nil } }
+        availabilityGeneration = UUID()
+        availabilityRequested = true
+        availabilityTask?.cancel()
+        startAvailabilityCheck()
+    }
+
+    private func startAvailabilityCheck() {
+        guard !stopped, availabilityTask == nil, availabilityRequested else { return }
+        availabilityRequested = false
+        let generation = availabilityGeneration
+        availabilityTask = Task { [self] in
+            defer {
+                availabilityTask = nil
+                startAvailabilityCheck()
+            }
             do {
                 let snapshot = try await client.snapshot()
                 try Task.checkCancellation()
@@ -352,6 +363,8 @@ public final class YoutubeDownloader {
                 let status: DownloadToolStatus
                 if let remote {
                     let configuration = try await remote.configuration()
+                    try Task.checkCancellation()
+                    guard generation == availabilityGeneration, !stopped else { return }
                     remoteDirectories = configuration.directories
                     SharedDefaults.store.set(
                         configuration.kind.rawValue, forKey: AppStorageKeys.Music.downloadKind)
@@ -398,9 +411,22 @@ public final class YoutubeDownloader {
         isUpdatingYTDLP = true
         updateResult = nil
         ytdlpUpdateMessage = nil
-        retire(updateTask)
-        updateTask = nil
-        updateTask = Task {
+        updateRequested = true
+        updateCompletion = completion
+        updateTask?.cancel()
+        startToolUpdate()
+    }
+
+    private func startToolUpdate() {
+        guard !stopped, updateTask == nil, updateRequested else { return }
+        updateRequested = false
+        let completion = updateCompletion
+        updateCompletion = nil
+        updateTask = Task { [self] in
+            defer {
+                updateTask = nil
+                startToolUpdate()
+            }
             do {
                 let update: DownloadToolUpdate
                 if let remote {
@@ -556,6 +582,9 @@ public final class YoutubeDownloader {
 
     func cancelPendingWork() {
         stopped = true
+        availabilityRequested = false
+        updateRequested = false
+        updateCompletion = nil
         availabilityGeneration = UUID()
         let pending =
             [streamTask, availabilityTask, updateTask].compactMap { $0 }
@@ -563,21 +592,11 @@ public final class YoutubeDownloader {
         for task in pending { task.cancel() }
     }
 
-    private func retire(_ task: Task<Void, Never>?) {
-        guard let task else { return }
-        task.cancel()
-        let id = UUID()
-        retiredWork[id] = Task { [self, task] in
-            await task.value
-            retiredWork[id] = nil
-        }
-    }
-
     public func shutdown() async {
         cancelPendingWork()
         let pending =
             [streamTask, availabilityTask, updateTask].compactMap { $0 }
-            + Array(mutationTasks.values) + Array(retiredWork.values)
+            + Array(mutationTasks.values)
         for task in pending { await task.value }
         streamTask = nil; availabilityTask = nil; updateTask = nil
         mutationTasks.removeAll()
