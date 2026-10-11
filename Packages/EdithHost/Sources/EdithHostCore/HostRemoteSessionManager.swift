@@ -65,14 +65,15 @@ public final class HostRemoteSessionManager {
         let engine = try HostRemoteEngineOwner(
             marketplace: marketplace, configuration: configuration, startingWorker: worker,
             birth: birth)
-        try await admit(configuration, engine.process, request)
-        try Task.checkCancellation()
-        guard
-            try marketplace.sessions.fixtureStartingWorker(
-                configuration: configuration.worker, birth: birth) === worker,
-            marketplace.installed[id] == package, !marketplace.pendingRemovalIDs.contains(id)
-        else { throw HostWorkerError.rejected }
+        let reservation = UUID()
         let task = Task { [self] in
+            try await admit(configuration, engine.process, request)
+            try Task.checkCancellation()
+            guard
+                try marketplace.sessions.fixtureStartingWorker(
+                    configuration: configuration.worker, birth: birth) === worker,
+                marketplace.installed[id] == package, !marketplace.pendingRemovalIDs.contains(id)
+            else { throw HostWorkerError.rejected }
             let session = try await createSession(configuration: configuration, engine: engine)
             do {
                 _ = try await session.fixturePrepareNativePeer()
@@ -88,8 +89,8 @@ public final class HostRemoteSessionManager {
                 throw error
             }
         }
-        starting[id] = task
-        defer { starting[id] = nil }
+        starting[id] = Starting(token: reservation, task: task)
+        defer { finishStarting(id: id, token: reservation) }
         return try await withTaskCancellationHandler {
             let session = try await task.value
             try Task.checkCancellation()
@@ -104,7 +105,17 @@ public final class HostRemoteSessionManager {
     public var receive: @MainActor (String, HostRemoteEvent) -> Void = { _, _ in }
     private let marketplace: HostMarketplace
     private var sessions: [String: HostRemoteSession] = [:]
-    private var starting: [String: Task<HostRemoteSession, any Error>] = [:]
+    private struct Starting {
+        let token: UUID
+        let task: Task<HostRemoteSession, any Error>
+    }
+    private var starting: [String: Starting] = [:]
+
+    private func finishStarting(id: String, token: UUID) {
+        guard starting[id]?.token == token else { return }
+        starting[id] = nil
+    }
+
     private var presentations: [UUID: HostRemoteSceneHandle] = [:]
     private var terminalClients: [UUID: HostTerminalSceneClient] = [:]
     private var admissions: [String: Set<UUID>] = [:]
@@ -178,15 +189,16 @@ public final class HostRemoteSessionManager {
             current.engineIdentity == engine?.process
         {
             session = current
-        } else if let task = starting[id] {
-            session = try await task.value
+        } else if let reservation = starting[id] {
+            session = try await reservation.task.value
         } else {
             if let current = sessions[id] { detach(id); try await current.stop() }
+            let reservation = UUID()
             let task = Task { [self] in
                 try await createSession(configuration: configuration, engine: engine)
             }
-            starting[id] = task
-            defer { starting[id] = nil }
+            starting[id] = Starting(token: reservation, task: task)
+            defer { finishStarting(id: id, token: reservation) }
             session = try await task.value
         }
         try Task.checkCancellation()
@@ -549,7 +561,7 @@ public final class HostRemoteSessionManager {
         if admissions[id] == nil,
             !presentations.values.contains(where: { $0.request.extensionID == id })
         {
-            starting[id]?.cancel()
+            starting[id]?.task.cancel()
         }
     }
 
@@ -562,9 +574,12 @@ public final class HostRemoteSessionManager {
 
     public func stop(extensionID: String) async throws {
         marketplace.sessions.ambientPolicyCoordinator.release(owner: extensionID)
-        starting[extensionID]?.cancel()
-        if let task = starting[extensionID] { _ = try? await task.value }
-        starting[extensionID] = nil
+        let reservation = starting[extensionID]
+        reservation?.task.cancel()
+        if let reservation {
+            _ = try? await reservation.task.value
+            finishStarting(id: extensionID, token: reservation.token)
+        }
         detach(extensionID)
         terminalClients = terminalClients.filter {
             presentations[$0.key]?.request.extensionID != extensionID

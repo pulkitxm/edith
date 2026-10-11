@@ -333,6 +333,7 @@ final class HostWorkerApplication {
                             admission
                     }
                     #endif
+                    #if !EDITH_FUNCTIONAL_FIXTURE
                     if fixtureIntent {
                         try HostWorkerStartAdmission.admitFixture(
                             identifier: identity.identifier, owner: package.id,
@@ -344,6 +345,7 @@ final class HostWorkerApplication {
                             defaultsSuite: identity.extensionDefaultsSuite(package.id),
                             roles: fixtureRoles, environment: environment)
                     }
+                    #endif
                     #if EDITH_FUNCTIONAL_FIXTURE
                     return roles.filter { fixtureAdmissions[$0.rawValue] != nil }
                     #else
