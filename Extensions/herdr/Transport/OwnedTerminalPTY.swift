@@ -9,6 +9,7 @@ final class OwnedTerminalPTY {
     private let pid: pid_t
     private let identity: ExtensionProcessIdentity?
     private var closed = false
+    private var closing: Task<Void, Never>?
     private var pendingInput = Data()
     private var output = Data()
     private(set) var offset: UInt64 = 0
@@ -84,28 +85,46 @@ final class OwnedTerminalPTY {
         Darwin.close(descriptor)
         pendingInput.removeAll()
         output.removeAll()
-        observeExit()
-        let members = identity?.isAlive == true ? (Self.sessionMembers(pid) ?? []) : []
-        for member in members where member.isAlive { _ = kill(member.pid, SIGHUP) }
-        if identity?.isAlive == true, getpgid(pid) == pid { _ = kill(-pid, SIGHUP) }
-        if identity?.isAlive == true { _ = kill(pid, SIGHUP) }
-        for member in members where member.isAlive { _ = kill(member.pid, SIGKILL) }
-        if identity?.isAlive == true, getpgid(pid) == pid { _ = kill(-pid, SIGKILL) }
-        if identity?.isAlive == true { _ = kill(pid, SIGKILL) }
-        while true {
-            guard identity?.isAlive == true else { usleep(10_000); continue }
-            guard let remaining = Self.sessionMembers(pid) else { usleep(10_000); continue }
-            guard !remaining.isEmpty else { break }
-            for member in remaining where member.isAlive { _ = kill(member.pid, SIGKILL) }
-            usleep(10_000)
+        let identifier = pid
+        let identity = identity
+        closing = Task.detached {
+            let members = identity?.isAlive == true ? (Self.sessionMembers(identifier) ?? []) : []
+            for member in members where member.isAlive { _ = kill(member.pid, SIGHUP) }
+            if identity?.isAlive == true, getpgid(identifier) == identifier {
+                _ = kill(-identifier, SIGHUP)
+            }
+            if identity?.isAlive == true { _ = kill(identifier, SIGHUP) }
+            for member in members where member.isAlive { _ = kill(member.pid, SIGKILL) }
+            if identity?.isAlive == true, getpgid(identifier) == identifier {
+                _ = kill(-identifier, SIGKILL)
+            }
+            if identity?.isAlive == true { _ = kill(identifier, SIGKILL) }
+            while true {
+                guard identity?.isAlive == true else {
+                    try? await Task.sleep(for: .milliseconds(10))
+                    continue
+                }
+                guard let remaining = Self.sessionMembers(identifier) else {
+                    try? await Task.sleep(for: .milliseconds(10))
+                    continue
+                }
+                guard !remaining.isEmpty else { break }
+                for member in remaining where member.isAlive { _ = kill(member.pid, SIGKILL) }
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+            var status: Int32 = 0
+            while true {
+                if waitpid(identifier, &status, 0) == identifier { break }
+                if errno == ECHILD, identity?.isAlive != true { break }
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+            ExtensionCommandOwnership.release(identifier)
         }
-        var status: Int32 = 0
-        while true {
-            if waitpid(pid, &status, 0) == pid { break }
-            if errno == ECHILD, identity?.isAlive != true { break }
-            usleep(10_000)
-        }
-        ExtensionCommandOwnership.release(pid)
+    }
+
+    func closeAndWait() async {
+        close()
+        await closing?.value
     }
 
     private func poll(after cursor: UInt64) throws {

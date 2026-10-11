@@ -42,8 +42,10 @@ enum OwnedTerminalContext {
     let files = OwnedTerminalFiles()
     let links = OwnedTerminalLinks()
     private var sessions: [UUID: OwnedTerminalSession] = [:]
+    private var retired: [UUID: Task<Void, Never>] = [:]
+    private var drainTask: Task<Void, Never>?
     private var stopped = false
-    var acceptsSession: Bool { !stopped && sessions.count < 512 }
+    var acceptsSession: Bool { !stopped && sessions.count + retired.count < 512 }
 
     func register(_ session: OwnedTerminalSession) {
         sessions[session.descriptor.handle.id] = session
@@ -55,11 +57,26 @@ enum OwnedTerminalContext {
         return session
     }
 
-    func remove(_ handle: OwnedTerminalHandle) { sessions[handle.id] = nil }
+    func remove(_ handle: OwnedTerminalHandle) {
+        guard let session = sessions[handle.id], session.descriptor.handle == handle else { return }
+        sessions[handle.id] = nil
+        retired[handle.id] = Task { [self, session] in
+            await session.stopAndWait()
+            retired[handle.id] = nil
+        }
+    }
 
     func stopAllAndWait() async {
         stopAll()
-        await files.stopAndWait()
+        if let drainTask { await drainTask.value; return }
+        let pending = Array(retired.values)
+        let files = files
+        let task = Task {
+            for task in pending { await task.value }
+            await files.stopAndWait()
+        }
+        drainTask = task
+        await task.value
     }
 
     func stopAll() {
@@ -67,7 +84,6 @@ enum OwnedTerminalContext {
         files.stop()
         links.stop()
         let owned = Array(sessions.values)
-        sessions.removeAll()
         for session in owned { session.stop() }
     }
 }
@@ -81,6 +97,7 @@ enum OwnedTerminalContext {
     private weak var registry: OwnedTerminalSessionRegistry?
     private var stopped = false
     private var writing = false
+    private var drainTask: Task<Void, Never>?
 
     init(launch: OwnedTerminalLaunch) throws {
         guard Bundle.main.bundleURL.pathExtension != "appex" else {
@@ -168,8 +185,7 @@ enum OwnedTerminalContext {
                 columns: columns, rows: rows, pixelWidth: width, pixelHeight: height)
         case "herdr.terminal.close":
             guard Set(object.keys) == ["session"] else { throw ExtensionPeerError.invalidRequest }
-            stop()
-            await files.drain([descriptor.handle])
+            await stopAndWait()
         default: throw ExtensionPeerError.invalidRequest
         }
         return Data("{}".utf8)
@@ -183,6 +199,21 @@ enum OwnedTerminalContext {
         terminal.close()
         registry?.remove(descriptor.handle)
     }
+
+    func stopAndWait() async {
+        stop()
+        if let drainTask { await drainTask.value; return }
+        let terminal = terminal
+        let files = files
+        let handle = descriptor.handle
+        let task = Task {
+            await terminal.closeAndWait()
+            await files.drain([handle])
+        }
+        drainTask = task
+        await task.value
+    }
+
 }
 
 @MainActor final class OwnedEngineRequests {
@@ -325,7 +356,12 @@ enum OwnedTerminalContext {
     func stop() {
         stopped = true
         for task in pending.values { task.cancel() }
-        pending.removeAll()
+    }
+
+    func stopAndWait() async {
+        stop()
+        let pending = Array(pending.values)
+        for task in pending { _ = await task.result }
     }
 
     private func perform(_ action: String, request: OwnedTerminalRequest) async throws -> Data {
