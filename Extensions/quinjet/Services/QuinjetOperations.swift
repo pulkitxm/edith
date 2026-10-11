@@ -196,30 +196,51 @@ public struct QuinjetLaunchConfiguration: Codable, Equatable, Sendable {
     public static func preferred(
         sharedDefaults: UserDefaults, standardDefaults: UserDefaults
     ) -> QuinjetLaunchConfiguration {
+        preferred(
+            sharedPreference: sharedDefaults.string(forKey:),
+            systemAppearance: standardDefaults.string(forKey: SharedDefaults.systemAppearanceKey))
+    }
+
+    static func preferred(
+        sharedPreference: (String) -> String?, systemAppearance: String?
+    ) -> QuinjetLaunchConfiguration {
         let terminal =
             QuinjetTerminal(
-                rawValue: sharedDefaults.string(forKey: AppStorageKeys.Quinjet.terminal) ?? "")
+                rawValue: sharedPreference(AppStorageKeys.Quinjet.terminal) ?? "")
             ?? .embedded
         let themePreference =
-            sharedDefaults.string(forKey: AppStorageKeys.Quinjet.theme)
+            sharedPreference(AppStorageKeys.Quinjet.theme)
             ?? QuinjetThemePreference.app
         let appTheme = AppTheme(
-            storedName: sharedDefaults.string(forKey: AppStorageKeys.General.theme)
+            storedName: sharedPreference(AppStorageKeys.General.theme)
                 ?? AppTheme.accent.rawValue)
         let theme = QuinjetThemePreference.resolve(themePreference, appTheme: appTheme)
         let appearance: QuinjetAppearance
-        switch sharedDefaults.string(forKey: AppStorageKeys.General.appearance) {
+        switch sharedPreference(AppStorageKeys.General.appearance) {
         case "light": appearance = .light
         case "dark": appearance = .dark
         default:
             appearance =
-                standardDefaults.string(forKey: SharedDefaults.systemAppearanceKey) == "Dark"
+                systemAppearance == "Dark"
                 ? .dark : .light
         }
         return QuinjetLaunchConfiguration(
             terminal: terminal, theme: theme, appearance: appearance,
             hostTheme: themePreference == QuinjetThemePreference.app
                 ? .edith(appTheme: appTheme) : nil)
+    }
+
+    func arguments(worktreePath: String, managedByEdith: Bool, supportsHostTheme: Bool) -> [String]
+    {
+        var arguments: [String] = []
+        if managedByEdith { arguments += ["--client", "edith"] }
+        arguments += ["-C", worktreePath, "tui"]
+        if let hostTheme, supportsHostTheme {
+            arguments += ["--theme-palette", hostTheme.argument]
+        } else {
+            arguments += ["--theme", theme.rawValue]
+        }
+        return arguments + ["--appearance", appearance.rawValue]
     }
 }
 
@@ -257,15 +278,9 @@ public struct QuinjetLaunchRequest: Equatable, Sendable {
         } else {
             remoteExecutable = nil
         }
-        var quinjetArguments: [String] = []
-        if managedByEdith { quinjetArguments += ["--client", "edith"] }
-        quinjetArguments += ["-C", worktreePath, "tui"]
-        if let hostTheme = configuration.hostTheme, remote?.platform != .windows {
-            quinjetArguments += ["--theme-palette", hostTheme.argument]
-        } else {
-            quinjetArguments += ["--theme", configuration.theme.rawValue]
-        }
-        quinjetArguments += ["--appearance", configuration.appearance.rawValue]
+        let quinjetArguments = configuration.arguments(
+            worktreePath: worktreePath, managedByEdith: managedByEdith,
+            supportsHostTheme: remote?.platform != .windows)
         let environment: [String: String] = [:]
         if let remote, let remoteExecutable {
             self.executableURL = SSHConnection.executable

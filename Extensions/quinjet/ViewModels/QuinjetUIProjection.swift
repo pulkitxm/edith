@@ -126,6 +126,10 @@ struct QuinjetUIState: Codable {
         self.init { try await client.invoke($0, payload: $1) }
     }
 
+    func makeSettingsModel() -> QuinjetSettingsModel {
+        QuinjetSettingsModel(invoke: invoke)
+    }
+
     func state(_ operation: String, object: [String: Any] = [:]) async throws -> QuinjetUIState? {
         let data = try await request(operation, object: object)
         guard data.count <= 1_048_576 else { throw ExtensionPeerError.invalidRequest }

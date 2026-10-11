@@ -7,10 +7,6 @@ struct QuinjetPage: View {
     @State private var bridgeToken = UUID()
     @State private var model: QuinjetPageModel
     @MainActor init(model: QuinjetPageModel) { _model = State(initialValue: model) }
-    @AppStorage(AppStorageKeys.Quinjet.terminal, store: SharedDefaults.store)
-    private var terminalName = QuinjetTerminal.embedded.rawValue
-    @AppStorage(AppStorageKeys.Quinjet.theme, store: SharedDefaults.store)
-    private var themeName = QuinjetThemePreference.app
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
     private var appThemeName = AppTheme.accent.rawValue
     @Environment(\.colorScheme) private var scheme
@@ -38,6 +34,8 @@ struct QuinjetPage: View {
             QuinjetSessionBridge.shared.attach(model, token: bridgeToken, router: router)
         }
         .pageTask(cancel: model.cancelDiscovery) {
+            await model.preferences.read()
+            guard !Task.isCancelled else { return }
             await model.refreshThemes()
             guard !Task.isCancelled else { return }
             await model.refreshProjects()
@@ -50,7 +48,14 @@ struct QuinjetPage: View {
             }
         }
         .onChange(of: configuration) { _, configuration in
+            guard model.preferences.state != nil else { return }
             model.apply(configuration, launchEnabled: launchEnabled)
+        }
+        .alert("Quinjet preferences", isPresented: preferenceError) {
+            Button("Retry") { Task { await model.preferences.read() } }
+            Button("OK", role: .cancel) { model.preferences.dismissError() }
+        } message: {
+            Text(model.preferences.error ?? "")
         }
         .onChange(of: launchEnabled) { _, enabled in
             model.setSessionLaunchEnabled(enabled)
@@ -122,18 +127,36 @@ struct QuinjetPage: View {
         let storedTerminal = QuinjetTerminal(rawValue: terminalName) ?? .embedded
         let appTheme = AppTheme(storedName: appThemeName)
         return QuinjetLaunchConfiguration(
-            terminal: model.terminalAvailable(storedTerminal) ? storedTerminal : .embedded,
+            terminal: terminalAvailable(storedTerminal) ? storedTerminal : .embedded,
             theme: QuinjetThemePreference.resolve(themeName, appTheme: appTheme),
             appearance: scheme == .dark ? .dark : .light,
             hostTheme: themeName == QuinjetThemePreference.app
                 ? .edith(appTheme: appTheme) : nil)
     }
 
+    private var terminalName: String {
+        model.preferences.state?.preference.terminal ?? QuinjetTerminal.embedded.rawValue
+    }
+
+    private var themeName: String {
+        model.preferences.state?.preference.theme ?? QuinjetThemePreference.app
+    }
+
+    private var preferenceError: Binding<Bool> {
+        Binding(
+            get: { model.preferences.error != nil },
+            set: { if !$0 { model.preferences.dismissError() } })
+    }
+
+    private func terminalAvailable(_ terminal: QuinjetTerminal) -> Bool {
+        terminal == .embedded || model.preferences.state?.cmuxAvailable == true
+    }
+
     private var terminalMenu: some View {
         Menu {
             ForEach(QuinjetTerminal.allCases) { terminal in
                 Button {
-                    terminalName = terminal.rawValue
+                    model.preferences.setTerminal(terminal.rawValue)
                 } label: {
                     if terminal == configuration.terminal {
                         Label(terminal.label, systemImage: "checkmark")
@@ -141,7 +164,7 @@ struct QuinjetPage: View {
                         Label(terminal.label, systemImage: terminal.icon)
                     }
                 }
-                .disabled(!model.terminalAvailable(terminal))
+                .disabled(!terminalAvailable(terminal))
             }
         } label: {
             QuinjetMenuLabel(
@@ -151,12 +174,13 @@ struct QuinjetPage: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .help("Choose the terminal renderer")
+        .disabled(model.preferences.loading || model.preferences.state == nil)
     }
 
     private var themeMenu: some View {
         Menu {
             Button {
-                themeName = QuinjetThemePreference.app
+                model.preferences.setTheme(QuinjetThemePreference.app)
             } label: {
                 if themeName == QuinjetThemePreference.app {
                     Label("App theme", systemImage: "checkmark")
@@ -167,7 +191,7 @@ struct QuinjetPage: View {
             Divider()
             ForEach(model.themes) { theme in
                 Button {
-                    themeName = theme.rawValue
+                    model.preferences.setTheme(theme.rawValue)
                 } label: {
                     if themeName == theme.rawValue {
                         Label(theme.label, systemImage: "checkmark")
@@ -186,6 +210,7 @@ struct QuinjetPage: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .help("Quinjet theme")
+        .disabled(model.preferences.loading || model.preferences.state == nil)
     }
 
     @ViewBuilder
@@ -195,7 +220,7 @@ struct QuinjetPage: View {
         } else {
             QuinjetTerminalWorkspace(
                 model: model, tab: tab, presented: presented,
-                useEmbedded: { terminalName = QuinjetTerminal.embedded.rawValue })
+                useEmbedded: { model.preferences.setTerminal(QuinjetTerminal.embedded.rawValue) })
         }
     }
 }

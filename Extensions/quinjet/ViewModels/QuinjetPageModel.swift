@@ -39,6 +39,7 @@ final class QuinjetPageModel {
 
     private let client: QuinjetClient
     let machines: QuinjetMachines
+    let preferences: QuinjetSettingsModel
     var terminalUI: OwnedTerminalUIPresentation?
     private var uiClient: QuinjetUIClient?
     private var uiActions: [UUID: Task<Void, Never>] = [:]
@@ -75,6 +76,7 @@ final class QuinjetPageModel {
         }
     ) {
         self.client = client
+        preferences = QuinjetSettingsModel { _, _ in throw ExtensionPeerError.unavailable }
         machines = .shared
         self.usage = usage ?? .shared
         self.focusExternalWorkspace = focusExternalWorkspace
@@ -86,6 +88,7 @@ final class QuinjetPageModel {
 
     init(uiClient: QuinjetUIClient) {
         self.uiClient = uiClient
+        preferences = uiClient.makeSettingsModel()
         client = .init(execute: { _ in throw ExtensionPeerError.unavailable })
         usage = LauncherUsage(defaults: nil)
         machines = QuinjetMachines(renderingOnly: true)
@@ -624,6 +627,7 @@ final class QuinjetPageModel {
 
     func stopRendering() {
         terminalUI?.invalidate()
+        preferences.shutdown()
         guard let uiClient else { return }
         stopped = true
         uiClient.stop()
@@ -633,6 +637,7 @@ final class QuinjetPageModel {
 
     func shutdown() async {
         stopped = true
+        preferences.shutdown()
         if let uiClient {
             stopRendering()
             let actions = Array(uiActions.values)
