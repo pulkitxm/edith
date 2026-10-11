@@ -101,6 +101,7 @@ final class OriginalShellJourneyTests: XCTestCase {
         try await waitState("recommended-calendar-installed") {
             ($0["versions"] as? [String: String])?["calendar"] == "1.0.0"
                 && ($0["active"] as? [String]) == ["calendar"]
+                && Self.packageDirectoryPresence($0, version: "1.0.0") == true
         }
         try click(application.buttons["Go to Home"], in: application)
         try click(application.buttons["journey.navigation.calendar"], in: application)
@@ -166,6 +167,7 @@ final class OriginalShellJourneyTests: XCTestCase {
         try click(application.buttons["Update"], in: application)
         try await waitState("updated-calendar-version") {
             ($0["versions"] as? [String: String])?["calendar"] == "1.1.0"
+                && Self.packageDirectoryPresence($0, version: "1.1.0") == true
         }
         try await assertLayouts(home: home, notch: notch)
         try click(application.buttons["Open"], in: application)
@@ -182,7 +184,11 @@ final class OriginalShellJourneyTests: XCTestCase {
                 && !Self.running($0, role: "managedUI")
         }
         try click(application.buttons["Remove"], in: application)
-        try await waitState("removed-packages") { ($0["downloaded"] as? [String]) == [] }
+        try await waitState("removed-packages") {
+            ($0["downloaded"] as? [String]) == []
+                && Self.packageDirectoryPresence($0, version: "1.0.0") == false
+                && Self.packageDirectoryPresence($0, version: "1.1.0") == false
+        }
         try await assertLayouts(home: home, notch: notch)
         try verifyProtected(fixture)
         try click(application.buttons["journey.navigation.settings"], in: application)
@@ -220,6 +226,19 @@ final class OriginalShellJourneyTests: XCTestCase {
         selectionObservation["actual"] = actual
         XCTAssertEqual(actual, expected)
         guard actual == expected else { throw JourneyContractError.invalidMetadata }
+    }
+
+    private static func packageDirectoryPresence(_ state: [String: Any], version: String) -> Bool? {
+        guard let records = state["packageDirectories"] as? [[String: Any]], records.count == 2,
+            let captured = try? JourneyPackageDirectory(
+                id: "calendar", hostABI: "edith-host-2", architecture: "arm64", version: version)
+        else { return nil }
+        let matching = records.filter {
+            $0["version"] as? String == version
+                && $0["relativePath"] as? String == captured.relativePath
+        }
+        guard matching.count == 1 else { return nil }
+        return matching[0]["present"] as? Bool
     }
 
     private func retainFailureDiagnostics() {

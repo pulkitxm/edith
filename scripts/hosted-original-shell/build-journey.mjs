@@ -54,10 +54,11 @@ for (const name of ["HostGUIFixture.swift", "HostGUIJourneyServices.swift"])
     join("Tests/HostedOriginalShell/FixtureSources", name),
     join(sources, name),
   );
-await cp(
-  "Tests/HostedOriginalShell/Sources/JourneyContract/JourneyContract.swift",
-  join(sources, "JourneyContract.swift"),
-);
+for (const name of ["JourneyContract.swift", "JourneyPackageDirectory.swift"])
+  await cp(
+    join("Tests/HostedOriginalShell/Sources/JourneyContract", name),
+    join(sources, name),
+  );
 let builder = await readFile("scripts/build-minimal-host.mjs", "utf8");
 for (const [before, after] of [
   [

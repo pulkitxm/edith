@@ -15,7 +15,10 @@ import {
   retainJourneyAttachmentProof,
 } from "./attachments.mjs";
 import { journeyImageNames, validateJourneyImage } from "./evidence.mjs";
-import { validateDisabledJourneyProcesses } from "./outcomes.mjs";
+import {
+  validateDisabledJourneyProcesses,
+  validateRemovedJourneyPackages,
+} from "./outcomes.mjs";
 import { runOwnedJourneyCommand } from "./owned-command.mjs";
 import { admitHostedJourney, prepareJourney } from "./prepare-journey.mjs";
 import { registerJourneyApplication } from "./registration.mjs";
@@ -303,6 +306,7 @@ try {
     productionExecutableUnchangedProof: false,
     postQuitProcesses: currentProcesses,
     disabledProcessObservations: validateDisabledJourneyProcesses(proof),
+    removedPackageDirectoryObservations: validateRemovedJourneyPackages(proof),
     proof,
   };
   assert.deepEqual(
