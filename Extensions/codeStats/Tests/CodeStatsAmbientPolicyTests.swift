@@ -1,7 +1,6 @@
 import EdithExtensionSupport
 import Foundation
 import WorkerFixtureSupport
-import WorkerFixtureTestSupport
 import Testing
 @testable import CodeStatsExtension
 
@@ -93,18 +92,25 @@ import Testing
                 == false)
     }
 
-    @Test func admittedFixturePolicySynchronizationRemainsObserverFree() throws {
-        let fixture = try EngineFixture(owner: "codeStats")
-        defer { fixture.remove() }
-        #expect(try fixture.admit()?.role == .app)
-        let runtime = ExtensionRuntime(fixtureAdmission: { _ in try fixture.admit() })
-        let input = context(job, paused: true).mutableCopy() as! NSMutableDictionary
-        input["operation"] = "synchronize"
-        input["ambientPolicyOnly"] = true
-        #expect((runtime.execute(input) as? NSDictionary)?["ok"] as? Bool == true)
-        #expect(
-            (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
-                == false)
+    @Test func unsignedFixtureIntentCannotSynchronizePolicyOrConstructServices() {
+        let identifier = "com.pulkit.edith.tests.worker-95000000-0000-4000-8000-000000000001"
+        var wakes = 0
+        let runtime = ExtensionRuntime(settingsWake: { wakes += 1 })
+        for operation in ["start", "synchronize"] {
+            for policyOnly in [false, true] {
+                let input = context(job, paused: true).mutableCopy() as! NSMutableDictionary
+                input["operation"] = operation
+                input["ambientPolicyOnly"] = policyOnly
+                input["hostIdentifier"] = identifier
+                input["defaultsSuite"] = identifier + ".extensions.codeStats"
+                input["dataDirectory"] = "/synthetic-unadmitted/codeStats"
+                #expect((runtime.execute(input) as? NSDictionary)?["ok"] as? Bool == false)
+                #expect(wakes == 0)
+                #expect(
+                    (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"]
+                        as? Bool == false)
+            }
+        }
     }
 
     private func policy(
