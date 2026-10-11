@@ -74,7 +74,7 @@ import Observation
         await refreshTask?.value
     }
 
-    func stop() {
+    func beginSuspension() {
         guard !stopped else { return }
         let refreshing = refreshTask
         let acting = actionTask
@@ -89,7 +89,6 @@ import Observation
         thumbnailTasks = [:]
         if let observer { DistributedNotificationCenter.default().removeObserver(observer) }
         observer = nil
-        snapshot = nil; reported = []; slotsByKey = [:]
         remoteLayouts.changed = nil
         camera?.stop(); camera = nil
         drainBrowser()
@@ -99,6 +98,13 @@ import Observation
             for task in thumbnails { _ = await task.value }
             for task in drains { await task.value }
         }
+    }
+
+    func suspendAndWait() async { beginSuspension(); await teardown?.value }
+
+    func stop() {
+        beginSuspension()
+        snapshot = nil; reported = []; slotsByKey = [:]
     }
 
     func stopAndWait() async { stop(); await teardown?.value }

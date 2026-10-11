@@ -19,6 +19,12 @@ final class ExtensionRuntime: NSObject {
     private var fixtureRejected = false
     private var fixtureUI = false
     private var stopped = false
+    private var suspensionTask: Task<Void, Never>?
+    private var suspensionFinished = false
+    private var suspensionCompletions: [() -> Void] = []
+    private var shutdownTask: Task<Void, Never>?
+    private var shutdownFinished = false
+    private var shutdownCompletions: [() -> Void] = []
     #if EDITH_FUNCTIONAL_FIXTURE
     private let fixtureAdmission: @MainActor (NSDictionary) throws -> WorkerFixtureEngineAdmission?
     #endif
@@ -34,6 +40,7 @@ final class ExtensionRuntime: NSObject {
         let generation: UUID
     }
     private var uiScenes: [UUID: UIScene] = [:]
+    private var suspendedUIScenes: [UIScene] = []
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private var selectedPresentation: UUID?
     private let commands = ExtensionCommandRegistry()
@@ -354,67 +361,99 @@ final class ExtensionRuntime: NSObject {
         owned.synchronize()
     }
 
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        if suspensionFinished { completion(); return }
+        suspensionCompletions.append(completion)
+        guard suspensionTask == nil else { return }
         startRequested = false
         stopped = true
+        commands.suspend()
         #if EDITH_FUNCTIONAL_FIXTURE
         fixturePreferences?.stop()
         #endif
-        commands.shutdown()
-        if fixtureActive || fixtureUI {
-            stopUI()
-            Task {
-                for task in Array(uiDrains.values) { await task.value }
-                await commands.shutdownAndWait()
-                completion()
-            }
-            return
-        }
-        if controller == nil, panelEngine == nil, uiScenes.isEmpty, uiDrains.isEmpty,
-            cliStreams == nil, browserStreams == nil
-        {
-            Task {
-                await commands.shutdownAndWait(); completion()
-            }
-            return
-        }
-        cliStreams?.stop()
-        browserStreams?.stop()
-        panelEngine?.stop()
-        stopUI()
+        stopUI(preservingMetadata: true)
+        let streams = cliStreams
+        let browserCommands = browserStreams
+        let ownedController = controller
         let cameraEngine = panelEngine?.cameraEngine
-        let browserEngine = controller?.browserEngine
-        controller?.shutdown()
-        controller = nil
-        NotchPresenterState.shared.privacy = nil
-        ShelfThumbnails.clear()
-        Task {
+        streams?.stop()
+        browserCommands?.stop()
+        ownedController?.beginSuspension()
+        cameraEngine?.shutdown()
+        suspensionTask = Task {
+            await commands.suspendAndWait()
+            await streams?.stopAndWait()
+            await browserCommands?.stopAndWait()
             for task in Array(uiDrains.values) { await task.value }
-            await commands.shutdownAndWait()
-            await cliStreams?.stopAndWait()
-            await browserStreams?.stopAndWait()
-            await browserEngine?.stopAndWait()
+            await ownedController?.stopAndWait()
             await cameraEngine?.shutdownAndWait()
-            completion()
+            suspensionFinished = true
+            let completions = suspensionCompletions
+            suspensionCompletions.removeAll()
+            for completion in completions { completion() }
+            suspensionTask = nil
         }
     }
 
-    private func stopUI(_ presentation: UUID? = nil) {
+    @objc(prepareToStopWithCompletion:)
+    func prepareToStop(completion: @escaping () -> Void) {
+        if shutdownFinished { completion(); return }
+        shutdownCompletions.append(completion)
+        guard shutdownTask == nil else { return }
+        suspendCommands(completion: {})
+        commands.shutdown()
+        let suspending = suspensionTask
+        let ownedController = controller
+        let ownedPanel = panelEngine
+        shutdownTask = Task {
+            await suspending?.value
+            ownedPanel?.stop()
+            await ownedController?.shutdownAndWait()
+            for scene in suspendedUIScenes { await scene.chrome?.stopAndWait() }
+            await commands.shutdownAndWait()
+            suspendedUIScenes.removeAll()
+            selectedPresentation = nil
+            controller = nil; panelEngine = nil
+            cliStreams = nil; browserStreams = nil
+            NotchPresenterState.shared.privacy = nil
+            ShelfThumbnails.clear()
+            #if EDITH_FUNCTIONAL_FIXTURE
+            fixture = nil; fixtureContext = nil; fixturePreferences = nil
+            #endif
+            fixtureActive = false; fixtureUI = false
+            shutdownFinished = true
+            let completions = shutdownCompletions
+            shutdownCompletions.removeAll()
+            for completion in completions { completion() }
+            shutdownTask = nil
+        }
+    }
+
+    private func stopUI(_ presentation: UUID? = nil, preservingMetadata: Bool = false) {
         let keys = presentation.map { [$0] } ?? Array(uiScenes.keys)
         for key in keys {
             guard let scene = uiScenes.removeValue(forKey: key) else { continue }
             scene.settings?.stop()
-            scene.chrome?.stop()
+            if preservingMetadata {
+                suspendedUIScenes.append(scene)
+                scene.chrome?.beginSuspension()
+            } else {
+                scene.chrome?.stop()
+            }
             scene.client?.invalidate()
             let drainID = UUID()
             uiDrains[drainID] = Task {
                 await scene.settings?.stopAndWait()
-                await scene.chrome?.stopAndWait()
+                if preservingMetadata {
+                    await scene.chrome?.suspendAndWait()
+                } else {
+                    await scene.chrome?.stopAndWait()
+                }
                 uiDrains[drainID] = nil
             }
         }
-        if presentation == nil || selectedPresentation == presentation {
+        if !preservingMetadata, presentation == nil || selectedPresentation == presentation {
             selectedPresentation = nil
         }
     }
@@ -599,9 +638,10 @@ final class ExtensionRuntime: NSObject {
         case "stop": prepareToStop(completion: {})
         case "status":
             return [
-                "ok": true, "running": controller != nil, "startRequested": startRequested,
+                "ok": true, "running": controller != nil && !stopped,
+                "startRequested": startRequested,
                 "controllerAttached": controller != nil,
-                "panelAttached": panelEngine?.attached == true,
+                "panelAttached": !stopped && panelEngine?.attached == true,
                 "fixture": fixtureActive, "fixtureRejected": fixtureRejected,
                 "stopped": stopped,
             ] as NSDictionary
