@@ -16,6 +16,7 @@ struct HostApplication: App {
     @State private var windowNavigation: HostWindowNavigation?
     @State private var musicSlots: HostMusicSlots?
     @State private var machinesWindows: HostMachinesWindows?
+    @State private var terminalWindows: HostTerminalWindows?
     @State private var herdrWindows: HostHerdrWindows?
     @State private var herdrInteractions: HostHerdrInteractions?
     @State private var notchStartup: HostNotchStartup?
@@ -162,6 +163,8 @@ struct HostApplication: App {
                 manager: manager, presenter: presenter, navigation: navigation)
             let ownedHerdr = HostHerdrWindows(
                 manager: manager, presenter: presenter, navigation: navigation)
+            let ownedTerminal = HostTerminalWindows(
+                manager: manager, presenter: presenter, navigation: navigation)
             let interactions = HostHerdrInteractions(
                 marketplace: loaded, manager: manager, presenter: presenter,
                 navigation: navigation, windows: ownedHerdr)
@@ -176,9 +179,14 @@ struct HostApplication: App {
             ownedNotch = notch
             notchStartup = notch
             loaded.sessions.didRequestNavigation = {
-                [weak manager, weak navigation, weak ownedMachines, weak ownedHerdr, weak notch]
+                [
+                    weak manager, weak navigation, weak ownedMachines, weak ownedHerdr,
+                    weak ownedTerminal, weak notch
+                ]
                 request in
-                guard let manager, let navigation, let ownedMachines, let ownedHerdr else {
+                guard let manager, let navigation, let ownedMachines, let ownedHerdr,
+                    let ownedTerminal
+                else {
                     throw HostWorkerError.rejected
                 }
                 try manager.validateNavigationOrigin(request)
@@ -197,6 +205,8 @@ struct HostApplication: App {
                     try await ownedMachines.open(request)
                 } else if request.herdrWindow != nil {
                     try await ownedHerdr.open(request)
+                } else if request.extensionID == "terminal" {
+                    try await ownedTerminal.open(request)
                 } else {
                     try await navigation.navigate(
                         extensionID: request.extensionID, version: request.version,
@@ -218,6 +228,7 @@ struct HostApplication: App {
             let disable = loaded.sessions.willDisable
             loaded.sessions.willDisable = { id in
                 if id == "music" { await slots.stop() }
+                if id == "terminal" { try await ownedTerminal.stop() }
                 if id == "machines" { try await ownedMachines.stop() }
                 if id == "herdr" { try await ownedHerdr.stop() }
                 try await disable(id)
@@ -226,6 +237,7 @@ struct HostApplication: App {
             musicSlots = slots
             machinesWindows = ownedMachines
             herdrWindows = ownedHerdr
+            terminalWindows = ownedTerminal
             remotePresenter = presenter
             marketplace = loaded
             delegate.openMainWindow = { openWindow(id: "main") }
@@ -255,6 +267,7 @@ struct HostApplication: App {
                 await interactions.cancelPending()
                 do {
                     try await notch.stop()
+                    try await ownedTerminal.stop()
                     try await ownedHerdr.stop()
                 } catch { return false }
                 let ready = await loaded.sessions.shutdown(reason: .applicationQuit)

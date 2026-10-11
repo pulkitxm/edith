@@ -8,6 +8,8 @@ struct HostWindowRoute: Equatable {
     let relativePath: String?
     let presentationID: UUID?
     let location: String?
+    var restoreOnly = false
+    var settingsExtensionID: String? = nil
 }
 
 enum HostWindowNavigationError: Error, Equatable {
@@ -25,7 +27,9 @@ enum HostWorkerNavigationRouting {
         guard activeVersions[extensionID] == version else {
             throw HostWindowNavigationError.inactiveOwner
         }
-        guard current, windowPresented, visible else { throw HostWindowNavigationError.routeRejected }
+        guard current, windowPresented, visible else {
+            throw HostWindowNavigationError.routeRejected
+        }
     }
 
     static func activeVersions(
@@ -46,12 +50,25 @@ enum HostWorkerNavigationRouting {
     static func resolve(
         extensionID: String, version: String, section: String? = nil,
         relativePath: String? = nil, presentationID: UUID? = nil, location: String? = nil,
-        activeVersions: [String: String], visible: (String) -> Bool
+        activeVersions: [String: String], currentPage: String = "home", visible: (String) -> Bool
     ) throws -> HostWindowRoute {
         guard activeVersions[extensionID] == version else {
             throw HostWindowNavigationError.inactiveOwner
         }
-        guard let owned = HostNavigationCatalog.route(extensionID: extensionID) else {
+        let owned: (page: String, section: String?)
+        let restoreOnly = extensionID == "micMute"
+        let settingsID = ["clipboard", "emoji"].contains(extensionID) ? extensionID : nil
+        switch extensionID {
+        case "clipboard", "emoji": owned = ("extensions", nil)
+        case "micMute": owned = (currentPage, nil)
+        case "systemStats": owned = ("system", nil)
+        default:
+            guard let catalog = HostNavigationCatalog.route(extensionID: extensionID) else {
+                throw HostWindowNavigationError.invalidDestination
+            }
+            owned = catalog
+        }
+        guard !restoreOnly || section == nil else {
             throw HostWindowNavigationError.invalidDestination
         }
         let page = section ?? owned.page
@@ -79,6 +96,7 @@ enum HostWorkerNavigationRouting {
         }
         return HostWindowRoute(
             page: page, section: page == owned.page ? owned.section : nil,
-            relativePath: relativePath, presentationID: presentationID, location: location)
+            relativePath: relativePath, presentationID: presentationID, location: location,
+            restoreOnly: restoreOnly, settingsExtensionID: settingsID)
     }
 }

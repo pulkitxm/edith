@@ -11,6 +11,7 @@ struct MarketplacePage: View {
     @Bindable var marketplace: HostMarketplace
     var presenter: (any HostExtensionContentPresenting)? = nil
     var openExtension: ((String) -> Void)? = nil
+    @Binding var requestedSettings: String?
     @State private var search = ""
     @State private var category = "all"
     @State private var selected: HostExtension?
@@ -21,10 +22,12 @@ struct MarketplacePage: View {
 
     init(
         marketplace: HostMarketplace, presenter: (any HostExtensionContentPresenting)? = nil,
-        openExtension: ((String) -> Void)? = nil
+        openExtension: ((String) -> Void)? = nil,
+        requestedSettings: Binding<String?> = .constant(nil)
     ) {
         self.marketplace = marketplace; self.presenter = presenter;
         self.openExtension = openExtension
+        _requestedSettings = requestedSettings
         _suites = State(
             initialValue: HostSuiteSelection(
                 marketplace: marketplace,
@@ -103,6 +106,13 @@ struct MarketplacePage: View {
                 }.pageContent(compact).scrollIndicators(.automatic)
                     .onAppear { handleDeepLink(proxy) }
             }
+        }
+        .onChange(of: requestedSettings, initial: true) {
+            guard let id = requestedSettings,
+                let entry = marketplace.entries.first(where: { $0.id == id }),
+                HostExtensionReview.settingsRequest(id: id, marketplace: marketplace) != nil
+            else { return }
+            search = ""; category = "all"; selected = entry; requestedSettings = nil
         }
         .navigationTitle("Extensions")
         .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: category)

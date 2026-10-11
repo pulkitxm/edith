@@ -3,6 +3,12 @@ import EdithExtensionSupport
 import Foundation
 import SwiftUI
 
+struct HostWorkspaceNavigationOwner {
+    let token: UUID
+    let window: NSWindow
+    let validate: @MainActor () throws -> Void
+}
+
 @MainActor
 final class HostWindowNavigation {
     typealias Apply = @MainActor (HostWindowRoute) async throws -> Void
@@ -118,7 +124,7 @@ final class HostWindowNavigation {
         relativePath: String? = nil, presentationID: UUID? = nil, location: String? = nil
     ) async throws {
         try Task.checkCancellation()
-        let route = try HostWorkerNavigationRouting.resolve(
+        _ = try HostWorkerNavigationRouting.resolve(
             extensionID: extensionID, version: version, section: section,
             relativePath: relativePath, presentationID: presentationID, location: location,
             activeVersions: activeVersions(),
@@ -127,6 +133,59 @@ final class HostWindowNavigation {
                     HostNavigationCatalog.page($0), active: Set(activeVersions().keys),
                     defaults: defaults)
             })
+        let owner = try await workspaceOwner(
+            extensionID: extensionID, version: version,
+            presentationID: presentationID, location: location)
+        guard let registration = registrations[owner.token] else {
+            throw HostWindowNavigationError.unavailable
+        }
+        let window = owner.window
+        let route = try HostWorkerNavigationRouting.resolve(
+            extensionID: extensionID, version: version, section: section,
+            relativePath: relativePath, presentationID: presentationID, location: location,
+            activeVersions: activeVersions(), currentPage: registration.selected(),
+            visible: { self.visible($0) })
+        try owner.validate()
+        try Task.checkCancellation()
+        if !route.restoreOnly { try await registration.apply(route) }
+        try Task.checkCancellation()
+        try HostWorkerNavigationRouting.validateApplied(
+            extensionID: extensionID, version: version, activeVersions: activeVersions(),
+            current: registration.selected() == route.page, visible: visible(route.page))
+        try owner.validate()
+        try await showWindow(window)
+        try Task.checkCancellation()
+        try HostWorkerNavigationRouting.validateApplied(
+            extensionID: extensionID, version: version, activeVersions: activeVersions(),
+            current: registration.selected() == route.page,
+            windowPresented: windowIsPresented(window))
+        try owner.validate()
+        try await didApply(route)
+        try Task.checkCancellation()
+        try HostWorkerNavigationRouting.validateApplied(
+            extensionID: extensionID, version: version, activeVersions: activeVersions(),
+            current: registration.selected() == route.page,
+            windowPresented: windowIsPresented(window),
+            visible: visible(route.page))
+        try owner.validate()
+    }
+
+    private func visible(_ page: String) -> Bool {
+        HostNavigationCatalog.visible(
+            HostNavigationCatalog.page(page), active: Set(activeVersions().keys), defaults: defaults
+        )
+    }
+
+    func workspaceOwner(
+        extensionID: String, version: String, presentationID: UUID? = nil, location: String? = nil
+    ) async throws -> HostWorkspaceNavigationOwner {
+        try Task.checkCancellation()
+        try HostWorkerNavigationRouting.validateApplied(
+            extensionID: extensionID, version: version, activeVersions: activeVersions(),
+            current: true)
+        guard (presentationID == nil) == (location == nil) else {
+            throw HostWindowNavigationError.invalidDestination
+        }
         registrations = registrations.filter { $0.value.window != nil }
         let origin = presentationID.flatMap(originatingWindow)
         guard presentationID == nil || origin != nil else {
@@ -145,10 +204,7 @@ final class HostWindowNavigation {
                 try Task.checkCancellation()
                 try HostWorkerNavigationRouting.validateApplied(
                     extensionID: extensionID, version: version, activeVersions: activeVersions(),
-                    current: true,
-                    visible: HostNavigationCatalog.visible(
-                        HostNavigationCatalog.page(route.page), active: Set(activeVersions().keys),
-                        defaults: defaults))
+                    current: true)
                 if registeredMainWorkspace != nil { break }
                 try await Task.sleep(for: .milliseconds(20))
             }
@@ -167,33 +223,18 @@ final class HostWindowNavigation {
         guard let (token, registration) = chosen, let window = registration.window else {
             throw HostWindowNavigationError.unavailable
         }
-        try Task.checkCancellation()
-        try await registration.apply(route)
-        try Task.checkCancellation()
-        try HostWorkerNavigationRouting.validateApplied(
-            extensionID: extensionID, version: version, activeVersions: activeVersions(),
-            current: currentOrigin(presentationID, window: origin, relationship: relationship)
-                && registrations[token] === registration && registration.window != nil
-                && registration.selected() == route.page)
-        try await showWindow(window)
-        try Task.checkCancellation()
-        try HostWorkerNavigationRouting.validateApplied(
-            extensionID: extensionID, version: version, activeVersions: activeVersions(),
-            current: currentOrigin(presentationID, window: origin, relationship: relationship)
-                && registrations[token] === registration && registration.window === window
-                && registration.selected() == route.page,
-            windowPresented: windowIsPresented(window))
-        try await didApply(route)
-        try Task.checkCancellation()
-        try HostWorkerNavigationRouting.validateApplied(
-            extensionID: extensionID, version: version, activeVersions: activeVersions(),
-            current: currentOrigin(presentationID, window: origin, relationship: relationship)
-                && registrations[token] === registration && registration.window === window
-                && registration.selected() == route.page,
-            windowPresented: windowIsPresented(window),
-            visible: HostNavigationCatalog.visible(
-                HostNavigationCatalog.page(route.page), active: Set(activeVersions().keys),
-                defaults: defaults))
+        let validate: @MainActor () throws -> Void = { [weak self] in
+            guard let self else { throw HostWindowNavigationError.unavailable }
+            try Task.checkCancellation()
+            try HostWorkerNavigationRouting.validateApplied(
+                extensionID: extensionID, version: version, activeVersions: self.activeVersions(),
+                current: self.currentOrigin(
+                    presentationID, window: origin, relationship: relationship)
+                    && self.registrations[token] === registration
+                    && registration.window === window)
+        }
+        try validate()
+        return HostWorkspaceNavigationOwner(token: token, window: window, validate: validate)
     }
 
     private func currentOrigin(_ id: UUID?, window: NSWindow?, relationship: WindowRelationship?)

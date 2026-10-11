@@ -1,3 +1,4 @@
+import AppKit
 import EdithHostCore
 import ExtensionMarketplace
 import Foundation
@@ -6,49 +7,63 @@ import Testing
 @testable import EdithHost
 
 @MainActor @Suite(.serialized) struct HostOriginalWorkerRoutingTests {
+    private let utilityOwners = ["clipboard", "emoji", "micMute", "systemStats"]
     private let owners = ["terminal", "clipboard", "emoji", "micMute", "systemStats"]
 
-    @Test func terminalKeepsExistingNavigationShortcutPositionsAndSettingsOwnership() {
+    @Test func completeOriginalCatalogsExcludeUtilityDestinationsAndKeepShortcutOrder() {
         #expect(
-            Array(HostNavigationCatalog.pages.prefix(8).map(\.id))
-                == [
-                    "home", "machines", "docs", "agents", "dashboard", "herdr", "quinjet",
-                    "companion",
-                ])
+            HostNavigationCatalog.pages.map(\.id) == [
+                "home", "machines", "docs", "agents", "dashboard", "herdr", "quinjet", "companion",
+                "plugins", "appMaintenance", "blitztree", "system", "runningApps", "desk", "media",
+                "studio", "latex", "timeLapse", "downloads", "music", "calendar", "virtualCamera",
+                "data", "database", "attention", "seoAudit", "codeStats", "extensions", "settings",
+                "about",
+            ])
+        #expect(
+            HostNavigationCatalog.settings.map(\.id) == [
+                "general", "surfaces", "agentActivity", "permissions", "agent", "jev", "data",
+                "storage", "shortcuts", "terminal", "icloud", "updates",
+            ])
+        for id in owners { #expect(HostNavigationCatalog.route(extensionID: id) == nil) }
         #expect(HostNavigationCatalog.route(extensionID: "jev") == nil)
         #expect(HostNavigationCatalog.route(extensionID: "notchShelf") == nil)
         #expect(HostExtensionSettingsPolicy.route(for: "notchShelf")?.section == "extension")
-        #expect(
-            HostNavigationCatalog.settings.first { $0.id == "terminal" }?.extensionID == nil)
+        #expect(HostNavigationCatalog.settings.first { $0.id == "terminal" }?.extensionID == nil)
     }
 
-    @Test(arguments: ["terminal", "clipboard", "emoji", "micMute", "systemStats"])
-    func originalUnsectionedRequestsSelectTheOwnedMainPageOrSettingsExport(id: String) throws {
+    @Test func terminalFactoryRemainsInteractiveWithoutBecomingASidebarDestination() {
+        #expect(HostTerminalUIRequest.accepts(.init(extensionID: "terminal", location: "main")))
+        #expect(
+            !HostTerminalUIRequest.accepts(.init(extensionID: "terminal", location: "settings")))
+        #expect(throws: HostWindowNavigationError.invalidDestination) {
+            try HostWorkerNavigationRouting.resolve(
+                extensionID: "terminal", version: "1.0.0", activeVersions: admitted("terminal"),
+                visible: { _ in true })
+        }
+    }
+
+    @Test(arguments: ["clipboard", "emoji", "micMute", "systemStats"])
+    func originalRequestsUseReviewRestoreAndSystemWithoutInventedSettings(id: String) throws {
         var visited: [String] = []
         let route = try HostWorkerNavigationRouting.resolve(
-            extensionID: id, version: "1.0.0", activeVersions: admitted(id),
+            extensionID: id, version: "1.0.0", activeVersions: admitted(id), currentPage: "music",
             visible: {
                 visited.append($0); return true
             })
-        #expect(route.page == (id == "terminal" ? "terminal" : "settings"))
-        #expect(route.section == (id == "terminal" ? nil : id))
-        #expect(visited == [route.page])
+        let expectedPage =
+            id == "micMute" ? "music" : (id == "systemStats" ? "system" : "extensions")
+        #expect(route.page == expectedPage && route.section == nil)
+        #expect(route.restoreOnly == (id == "micMute"))
+        #expect(route.settingsExtensionID == (["clipboard", "emoji"].contains(id) ? id : nil))
+        #expect(visited == [expectedPage])
         #expect(route.relativePath == nil && route.presentationID == nil && route.location == nil)
-        if id == "terminal" {
-            let page = HostNavigationCatalog.page(route.page)
-            #expect(page.extensionID == id && page.id != "extensions")
-            #expect(HostTerminalUIRequest.accepts(.init(extensionID: id, location: "main")))
-        } else {
-            let settings = try #require(
-                HostNavigationCatalog.settings.first { $0.id == route.section })
-            #expect(settings.extensionID == id)
-            let request = try #require(
-                HostExtensionSettingsPolicy.request(
-                    id: id, installed: package(id), state: .active, activeVersion: "1.0.0",
-                    pendingDisable: false, pendingRemoval: false, systemVersion: 30))
-            #expect(request.location == "settings" && request.section == "extension")
-            #expect(request.extensionID == id)
-        }
+        let request = try #require(
+            HostExtensionSettingsPolicy.request(
+                id: id, installed: package(id), state: .active, activeVersion: "1.0.0",
+                pendingDisable: false, pendingRemoval: false, systemVersion: 30))
+        #expect(
+            request.extensionID == id && request.location == "settings"
+                && request.section == "extension")
     }
 
     @Test(arguments: ["terminal", "clipboard", "emoji", "micMute", "systemStats"])
@@ -80,8 +95,13 @@ import Testing
     }
 
     @Test func utilityWorkersCannotBorrowAnotherOwnerPageOrMusicContext() {
-        for id in owners {
-            for page in ["home", "extensions", "music", "downloads", "quinjet"] {
+        for id in utilityOwners {
+            let owned = try? HostWorkerNavigationRouting.resolve(
+                extensionID: id, version: "1.0.0", activeVersions: admitted(id),
+                visible: { _ in true })
+            for page in ["home", "extensions", "music", "downloads", "quinjet", "terminal"].filter({
+                $0 != owned?.page || id == "micMute"
+            }) {
                 #expect(throws: HostWindowNavigationError.invalidDestination) {
                     try HostWorkerNavigationRouting.resolve(
                         extensionID: id, version: "1.0.0", section: page,
@@ -108,7 +128,7 @@ import Testing
 
     @Test func presentationIdentityAndOriginRemainPairedForOriginalRequests() throws {
         let token = UUID()
-        for id in owners {
+        for id in utilityOwners {
             let route = try HostWorkerNavigationRouting.resolve(
                 extensionID: id, version: "1.0.0", presentationID: token, location: "home",
                 activeVersions: admitted(id), visible: { _ in true })
@@ -125,7 +145,7 @@ import Testing
         }
     }
 
-    @Test(arguments: ["terminal", "clipboard", "emoji", "micMute", "systemStats"])
+    @Test(arguments: ["clipboard", "emoji", "micMute", "systemStats"])
     func workerClientAcknowledgesOnlyAfterItsOriginalDestinationApplies(id: String) async throws {
         let identity = try HostIdentity(
             identifier: "com.pulkit.edith.tests.original-navigation",
@@ -161,7 +181,7 @@ import Testing
     }
 
     @Test func replacedRetiringUnselectedAndHiddenDestinationsCannotAcknowledge() throws {
-        for id in owners {
+        for id in utilityOwners {
             let route = try HostWorkerNavigationRouting.resolve(
                 extensionID: id, version: "1.0.0", activeVersions: admitted(id),
                 visible: { _ in true })

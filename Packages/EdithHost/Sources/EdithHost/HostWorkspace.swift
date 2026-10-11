@@ -36,6 +36,7 @@ struct HostWorkspace: View {
     @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
     @AppStorage(AppStorageKeys.AppMaintenance.section, store: SharedDefaults.store) private
         var maintenanceSection = "Updates"
+    @State private var requestedSettings: String?
     @State private var router = WindowRouter()
     @State private var expansionRevision = 0
     @State private var liveSidebarWidth: Double?
@@ -144,12 +145,24 @@ struct HostWorkspace: View {
                     navigation: windowNavigation,
                     apply: { route in
                         try Task.checkCancellation()
+                        if route.restoreOnly { return }
+                        if let id = route.settingsExtensionID { requestedSettings = id }
                         if let section = route.section {
                             if route.page == "settings" { settings = section }
                             if route.page == "appMaintenance" { maintenanceSection = section }
                         }
                         binding.wrappedValue = route.page
                         await Task.yield()
+                        if route.settingsExtensionID != nil {
+                            for _ in 0..<100 {
+                                try Task.checkCancellation()
+                                if requestedSettings == nil { break }
+                                try await Task.sleep(for: .milliseconds(20))
+                            }
+                            guard requestedSettings == nil else {
+                                throw HostWindowNavigationError.routeRejected
+                            }
+                        }
                         guard binding.wrappedValue == route.page,
                             route.page != "settings" || route.section == nil
                                 || settings == route.section,
@@ -408,6 +421,7 @@ struct HostWorkspace: View {
         HostPageContent(
             marketplace: marketplace, updater: updater, permissions: permissions,
             destination: destination, settings: $settings, maintenanceSection: $maintenanceSection,
+            requestedSettings: $requestedSettings,
             presenter: presenter, showWelcome: showWelcome,
             panelShortcutChanged: panelShortcutChanged, additionalSettings: additionalSettings,
             defaults: defaults, select: select)
