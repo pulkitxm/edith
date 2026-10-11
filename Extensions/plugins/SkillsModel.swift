@@ -279,6 +279,7 @@ import Observation
 
     public func stop() {
         isStopped = true
+        documents.stop()
         remoteGeneration &+= 1
         installationID = UUID()
         discoveryLoad.reset()
@@ -289,7 +290,7 @@ import Observation
         for logs in installationLogs.values { logs.stop() }
     }
 
-    public func shutdown() async {
+    public func stopAndWait() async {
         stop()
         let discovering = discoveryTask
         let tasks = Array(jobs.values)
@@ -300,9 +301,14 @@ import Observation
         for task in remoteTasks { await task.value }
         for owner in logs { await owner.finishAndWait() }
         await remoteInstallLaunch?.value; remoteInstallLaunch = nil
-        await documents.shutdown()
+        await documents.stopAndWait()
         discoveryTask = nil
         jobs.removeAll()
+    }
+
+    public func shutdown() async {
+        await stopAndWait()
+        await documents.shutdown()
         agents.removeAll()
         installedAgents.removeAll()
         selectedAgentIDs.removeAll()
