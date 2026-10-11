@@ -80,6 +80,7 @@ public final class HostRemoteSession {
     private var stopping = false
     private var stopRequested = false
     private var stopFailure: Error?
+    private var stopAcknowledged = false
     #if EDITH_FUNCTIONAL_FIXTURE
     private var fixtureStopRequest: HostRemoteCommand?
     private var fixtureStopReply: HostRemoteReply?
@@ -293,12 +294,18 @@ public final class HostRemoteSession {
             let channel = try await HostRemoteChannel.connect(
                 through: bootstrap, executable: executable,
                 rejectedPeer: { [weak self] peer in self?.rejectedPeer = peer })
-            defer { retireChannel(channel) }
-            guard let peer = channel.peer else { throw HostWorkerError.rejected }
-            try recordNativePeer(peer)
-            unresolvedLaunch = false
+            do {
+                guard let peer = channel.peer, self.channel == nil else {
+                    throw HostWorkerError.rejected
+                }
+                try recordNativePeer(peer)
+                self.channel = channel
+                unresolvedLaunch = false
+            } catch {
+                await channel.invalidateAndWait()
+                throw error
+            }
         } catch {}
-        invalidateProcess(process, site: "unconfigured-retirement")
     }
 
     private func invalidateProcess(_ process: AppExtensionProcess, site: String) {
@@ -461,9 +468,7 @@ public final class HostRemoteSession {
                 #if EDITH_FUNCTIONAL_FIXTURE
                 _ = try? await preparingPeer?.value
                 #endif
-                if let launching, let process = try? await launching.value, allowEscalation {
-                    invalidateProcess(process, site: "joined-launch")
-                }
+                _ = try? await launching?.value
             },
             joinConfiguration: { _ = try? await configuring?.value })
         handles.values.forEach { $0.detach() }
@@ -474,6 +479,30 @@ public final class HostRemoteSession {
             fixturePreparedChannel = nil
         }
         #endif
+        if channel == nil, !stopAcknowledged, let process,
+            peer == nil || peer?.isRunning == true
+        {
+            let bootstrap = try process.makeXPCConnection()
+            self.bootstrap = bootstrap
+            let recovered = try await HostRemoteChannel.connect(
+                through: bootstrap, executable: executable, expectedPeer: peer,
+                rejectedPeer: { [weak self] candidate in self?.rejectedPeer = candidate },
+                receive: receive)
+            do {
+                guard let recoveredPeer = recovered.peer else { throw HostWorkerError.rejected }
+                try recordNativePeer(recoveredPeer)
+                channel = recovered
+                unresolvedLaunch = false
+            } catch {
+                await recovered.invalidateAndWait()
+                throw error
+            }
+        }
+        guard peer == nil || stopAcknowledged || channel != nil else {
+            throw HostWorkerError.disableRejected(
+                "Native cleanup could not be confirmed. Retry recovery before releasing this extension."
+            )
+        }
         #if EDITH_FUNCTIONAL_FIXTURE
         let fixtureReceiverCount = retiringChannels.count + (channel == nil ? 0 : 1)
         #endif
@@ -488,6 +517,7 @@ public final class HostRemoteSession {
                 #if EDITH_FUNCTIONAL_FIXTURE
                 fixtureStopReply = reply
                 #endif
+                stopAcknowledged = true
                 stopFailure = nil
             } catch {
                 stopFailure = error
