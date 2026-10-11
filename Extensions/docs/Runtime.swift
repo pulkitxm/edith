@@ -48,6 +48,7 @@ final class ExtensionRuntime: NSObject {
     func suspendCommands(completion: @escaping () -> Void) {
         commands.suspend()
         suspended = true
+        DocsCopyResetWork.beginSuspension()
         let browser = browser
         let uiBrowser = uiBrowser
         let streams = cliStreams
@@ -58,6 +59,7 @@ final class ExtensionRuntime: NSObject {
             let retired = Array(uiRetirements.values)
             suspension = Task { [self, browser, uiBrowser, streams] in
                 await commands.suspendAndWait()
+                await DocsCopyResetWork.drain()
                 await browser?.drain()
                 await uiBrowser?.drain()
                 await streams?.stopAndWait()
@@ -107,13 +109,16 @@ final class ExtensionRuntime: NSObject {
                 configuration.extensionID == "docs", let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
             engineClient = client
+            DocsCopyResetWork.enable()
             uiBrowser = DocsBrowser(remote: DocsUIBridge(client: client))
         case "stopUI":
+            DocsCopyResetWork.beginSuspension()
             if let browser = uiBrowser {
                 browser.cancelPendingWork()
                 let id = UUID()
                 uiRetirements[id] = Task { [self, browser] in
                     await browser.drain()
+                    await DocsCopyResetWork.drain()
                     browser.shutdown()
                     uiRetirements[id] = nil
                 }
