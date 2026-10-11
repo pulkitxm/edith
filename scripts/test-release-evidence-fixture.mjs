@@ -34,7 +34,7 @@ if (mode === 'resign') {
             await writeFile(`${directory}/${assetName}`, bytes);
             artifacts.push({ name, artifactID: index + 1, artifactBytes: bytes.length, artifactSHA256: digest(bytes).sha256, assetName });
         }
-        const jobs = ['plan', 'frozen-host', 'tests', 'publish', ...plannedIDs.map(id => `build (${id})`)].map((name, index) => ({
+        const jobs = ['plan', 'frozen-host', 'tests', 'publish', ...(plannedIDs.length ? plannedIDs.map(id => `build (${id})`) : ['build'])].map((name, index) => ({
             id: index + 1, name,
             steps: (name === 'tests' ? managedNativeTestSteps : name.startsWith('build (') ? managedNativeBuildSteps : name === 'publish' ? [preservationStep] : []).map((name, index) => ({ name, number: index + 1 }))
         })).sort((left, right) => left.name.localeCompare(right.name));
@@ -53,7 +53,7 @@ if (mode === 'resign') {
             sourceCommit: lineage.sourceCommit, runID: lineage.runID, runAttempt: lineage.runAttempt,
             evidenceSHA256: lineage.evidenceSHA256, evidenceBytes: lineage.evidenceBytes });
     }
-    const publication = mode === 'current' ? origin : await release(current.source, current.runID, current.attempt, ['first']);
+    const publication = mode === 'current' ? origin : await release(current.source, current.runID, current.attempt, mode === 'zero-plan' ? [] : ['first']);
     await writeFile(`${publication.directory}/publication-composition.json`, envelope(publicationComposition(current.source, current.runID, current.attempt, rows, fingerprints)));
     if (mode === 'historical-composition') {
         await writeFile(`${origin.directory}/publication-composition.json`, envelope(publicationComposition(origin.payload.sourceCommit, origin.payload.runID, origin.payload.runAttempt, rows, fingerprints)));

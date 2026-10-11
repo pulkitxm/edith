@@ -1,3 +1,4 @@
+import base64
 import json
 from pathlib import Path
 import shutil
@@ -343,6 +344,87 @@ class SignedCompositionSizeTests(unittest.TestCase):
         payload['fingerprints']['second'] = 'e' * 64
         self.resign(path, payload)
         with self.assertRaisesRegex(ValueError, 'current publication fingerprints'):
+            self.measure()
+
+
+class ZeroPlanCompositionSizeTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.value = json.loads(subprocess.run(['node', 'scripts/test-release-evidence-fixture.mjs', str(self.root), 'zero-plan'], check=True, capture_output=True, text=True).stdout)
+        self.directory = self.root / 'evidence-assets'
+        self.links = self.root / 'native-links'
+        self.current = self.directory / ('b' * 40) / '300-2'
+        self.origin = self.directory / ('a' * 40) / '100-1'
+
+    def measure(self):
+        return measure_native_evidence(self.directory, self.links, self.value['records'], self.value['key'], self.value['current'])
+
+    def change_signed(self, path, change):
+        envelope = json.loads(path.read_text())
+        payload = json.loads(base64.b64decode(envelope['payload']))
+        change(payload)
+        path.write_text(json.dumps(payload))
+        subprocess.run(['node', 'scripts/test-release-evidence-fixture.mjs', str(path), 'resign'], check=True, capture_output=True, text=True)
+
+    def test_shared_origin_and_zero_plan_current_are_counted_with_every_asset(self):
+        measured = self.measure()
+        self.assertEqual(len(measured['links']), 39)
+        self.assertEqual(len(measured['releases']), 2)
+        self.assertEqual(len(measured['closedAssetInventory']), 46)
+        self.assertEqual(measured['originalArchiveBytes'], 43 * len(b'original synthetic archive bytes'))
+        self.assertEqual(measured['totalEvidenceBytes'], sum(p.stat().st_size for p in self.directory.rglob('*') if p.is_file()))
+        self.assertEqual(measured['signedLinkBytes'], sum(p.stat().st_size for p in self.links.iterdir()))
+        self.assertEqual({r['lineage']['sourceCommit'] for r in measured['links']}, {'a' * 40})
+        current = next(r for r in measured['releases'] if r['sourceCommit'] == 'b' * 40)
+        self.assertEqual(current['payload']['plannedIDs'], [])
+        self.assertEqual(current['compositionBytes'], (self.current / 'publication-composition.json').stat().st_size)
+
+    def test_empty_current_evidence_cannot_become_package_origin(self):
+        script = "import {readFile} from 'node:fs/promises';import {verifiedEvidence,nativeLineage,admitOriginalEvidence} from './scripts/hosted-public-release/evidence.mjs';import assert from 'node:assert/strict';const input=JSON.parse(process.argv[1]);const payload=verifiedEvidence(await readFile(input.path),input.key);assert.throws(()=>nativeLineage(input.record,payload,{bytes:100,sha256:'c'.repeat(64)}));assert.throws(()=>admitOriginalEvidence(payload,{},[]));"
+        arguments = {'path': str(self.current / 'native-evidence.json'), 'key': self.value['key'], 'record': self.value['records']['first']}
+        subprocess.run(['node', '--input-type=module', '-e', script, json.dumps(arguments)], check=True, capture_output=True, text=True)
+
+    def test_missing_current_envelope_rejects_count(self):
+        (self.current / 'native-evidence.json').unlink()
+        with self.assertRaisesRegex(ValueError, 'current publication evidence'):
+            self.measure()
+
+    def test_missing_current_composition_rejects_count(self):
+        (self.current / 'publication-composition.json').unlink()
+        with self.assertRaisesRegex(ValueError, 'current publication composition'):
+            self.measure()
+
+    def test_zero_plan_build_shape_cannot_be_replaced_with_specific_owner(self):
+        def mutate(payload):
+            next(job for job in payload['jobs'] if job['name'] == 'build')['name'] = 'build (first)'
+        self.change_signed(self.current / 'native-evidence.json', mutate)
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.measure()
+
+    def test_missing_required_global_job_rejects_current_envelope(self):
+        def mutate(payload):
+            payload['jobs'] = [job for job in payload['jobs'] if job['name'] != 'tests']
+        self.change_signed(self.current / 'native-evidence.json', mutate)
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.measure()
+
+    def test_missing_global_test_step_rejects_current_envelope(self):
+        def mutate(payload):
+            next(job for job in payload['jobs'] if job['name'] == 'tests')['steps'].pop()
+        self.change_signed(self.current / 'native-evidence.json', mutate)
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.measure()
+
+    def test_wrong_current_composition_source_rejects_count(self):
+        self.change_signed(self.current / 'publication-composition.json', lambda payload: payload.update(sourceCommit='a' * 40))
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.measure()
+
+    def test_unreferenced_archive_cannot_disappear_from_total(self):
+        (self.current / 'unreferenced.zip').write_bytes(b'synthetic additional bytes')
+        with self.assertRaises(subprocess.CalledProcessError):
             self.measure()
 
 
