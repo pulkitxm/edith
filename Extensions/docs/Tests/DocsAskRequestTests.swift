@@ -43,6 +43,22 @@ import Testing
         #expect(throws: (any Error).self) { try DocsAskRequest.decode(Data([0xff])) }
     }
 
+    @Test func decodedQuestionByteLimitIsIndependentOfJSONEscaping() throws {
+        let question = String(repeating: "界", count: 1365) + "x"
+        #expect(question.utf8.count == 4096)
+        let literal = try JSONEncoder().encode(DocsAskRequest(request: question))
+        let escaped = Data(("{\"request\":\"" + String(repeating: "\\u754c", count: 1365) + "x\"}").utf8)
+        #expect(try DocsAskRequest.decode(literal).request == question)
+        #expect(try DocsAskRequest.decode(escaped).request == question)
+        #expect(escaped.count > literal.count)
+        for payload in [
+            try JSONEncoder().encode(DocsAskRequest(request: question + "x")),
+            Data(("{\"request\":\"" + String(repeating: "\\u754c", count: 1365) + "xx\"}").utf8),
+        ] {
+            #expect(throws: (any Error).self) { try DocsAskRequest.decode(payload) }
+        }
+    }
+
     @Test func originalSubmitUsesClosedRequestAndOriginalEngineAnswer() async throws {
         let suite = "test.edith.docs-request." + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))
