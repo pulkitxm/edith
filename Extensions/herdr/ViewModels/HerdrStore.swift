@@ -113,6 +113,7 @@ final class HerdrStore {
     private var uiPoll: Task<Void, Never>?
     private var uiRetirements: [UUID: Task<Void, Never>] = [:]
     private var uiRequests: [UUID: Task<Data, Error>] = [:]
+    private var terminalRequests: [UUID: Task<Void, Error>] = [:]
     private var workSuspended = false
     private var uiDirty = false
     private var wantsUIWatch = false
@@ -622,6 +623,8 @@ final class HerdrStore {
 
     func stopRendering() {
         workSuspended = true
+        for task in terminalRequests.values { task.cancel() }
+        for tab in sessions + Array(detachedTabs.values) { tab.quinjet.cancelPendingWork() }
         for task in uiRequests.values { task.cancel() }
         terminalUI?.invalidate()
         guard let uiClient else { return }
@@ -635,8 +638,28 @@ final class HerdrStore {
         for model in uiSpaces.values { model.uiChanged = nil; model.stopAll() }
     }
 
+    func performTerminalWork(_ operation: @escaping @MainActor () async throws -> Void)
+        async throws
+    {
+        guard !workSuspended else { throw CancellationError() }
+        let id = UUID()
+        let task = Task {
+            try Task.checkCancellation()
+            try await operation()
+        }
+        terminalRequests[id] = task
+        defer { terminalRequests[id] = nil }
+        try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
     func cancelPendingWork() {
         workSuspended = true
+        for task in terminalRequests.values { task.cancel() }
+        for tab in sessions + Array(detachedTabs.values) { tab.quinjet.cancelPendingWork() }
         if uiClient != nil { stopRendering() }
         stopWatching()
         uiMutation?.cancel()
@@ -648,11 +671,15 @@ final class HerdrStore {
         let holders = terminalHolders
         let polling = Array(uiRetirements.values)
         let requests = Array(uiRequests.values)
+        let terminals = Array(terminalRequests.values)
+        let diffs = (sessions + Array(detachedTabs.values)).map(\.quinjet)
         let spaces = Array(uiSpaceTasks.values)
         let presentations = Array(uiPresentationTasks.values)
         await uiMutation?.value
         for task in polling { await task.value }
         for task in requests { _ = await task.result }
+        for task in terminals { _ = await task.result }
+        for session in diffs { await session.cancelPendingWorkAndWait() }
         for task in spaces { await task.value }
         for task in presentations { await task.value }
         for holder in holders { await holder.stopRenderingAndWait() }
@@ -682,7 +709,7 @@ final class HerdrStore {
         machinesObserver = nil
         for tab in sessions + Array(detachedTabs.values) {
             await tab.holder.stopAndWait()
-            tab.quinjet.stop()
+            await tab.quinjet.stopAndWait()
         }
         for terminal in terminalPanels.terminals.values {
             await terminal.holder.stopAndWait()

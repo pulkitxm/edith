@@ -15,6 +15,7 @@ final class HerdrQuinjetSession {
     private let client: QuinjetClient
     private var launched: QuinjetLaunchConfiguration?
     private var generation = 0
+    private var preparations: [UUID: Task<Void, Never>] = [:]
 
     init(client: QuinjetClient = .live) {
         self.client = client
@@ -47,8 +48,25 @@ final class HerdrQuinjetSession {
             launchEnabled: launchEnabled)
     }
 
-    func stop() {
+    func cancelPendingWork() {
         generation += 1
+        preparing = false
+        for task in preparations.values { task.cancel() }
+    }
+
+    func cancelPendingWorkAndWait() async {
+        cancelPendingWork()
+        for task in Array(preparations.values) { await task.value }
+    }
+
+    func stopAndWait() async {
+        stop()
+        await cancelPendingWorkAndWait()
+        await holder.stopAndWait()
+    }
+
+    func stop() {
+        cancelPendingWork()
         launched = nil
         holder.stop()
     }
@@ -68,12 +86,32 @@ final class HerdrQuinjetSession {
         directory: String, remote: QuinjetRemote?,
         configuration: QuinjetLaunchConfiguration, launchEnabled: Bool
     ) async {
+        generation += 1
+        let attempt = generation
+        let id = UUID()
+        let task = HerdrWorkOwnership.start { [self] in
+            await prepareLaunch(
+                directory: directory, remote: remote, configuration: configuration,
+                launchEnabled: launchEnabled, attempt: attempt)
+        }
+        preparations[id] = task
+        defer { preparations[id] = nil }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func prepareLaunch(
+        directory: String, remote: QuinjetRemote?,
+        configuration: QuinjetLaunchConfiguration, launchEnabled: Bool, attempt: Int
+    ) async {
+        guard attempt == generation, !Task.isCancelled else { return }
         guard Bundle.main.bundleURL.pathExtension != "appex" else {
             errorMessage = "Only the owning engine can prepare a diff."
             return
         }
-        generation += 1
-        let attempt = generation
         errorMessage = nil
         guard !directory.isEmpty else {
             errorMessage = "This agent does not report a working directory."
@@ -114,7 +152,9 @@ final class HerdrQuinjetSession {
                 environment: QuinjetOperationExecution.terminalEnvironment(
                     overrides: request.environment),
                 currentDirectory: request.currentDirectory, allowsLocalFileLinks: remote == nil)
-            guard holder.descriptor != nil else { throw ExtensionPeerError.unavailable }
+            try await holder.waitForCreation()
+            try Task.checkCancellation()
+            guard attempt == generation else { return }
             launched = configuration
         } catch {
             guard attempt == generation else { return }
