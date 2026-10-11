@@ -7,6 +7,8 @@ final class TerminalPTY {
     static let maximumInputBytes = 16_384
     private let descriptor: Int32
     private let pid: pid_t
+    private let identity: ExtensionProcessIdentity?
+    private var closing: Task<Void, Never>?
     private var closed = false
     private var pendingInput = Data()
     private var output = Data()
@@ -29,6 +31,7 @@ final class TerminalPTY {
         let spawned = try Self.spawn(launch, columns: columns, rows: rows)
         descriptor = spawned.master
         pid = spawned.pid
+        identity = ExtensionProcessIdentity.read(spawned.pid)
         _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
         _ = fcntl(descriptor, F_SETFL, O_NONBLOCK)
         do {
@@ -82,17 +85,27 @@ final class TerminalPTY {
         pendingInput.removeAll()
         output.removeAll()
         reap()
-        ExtensionCommandOwnership.release(pid)
-        guard exitCode == nil else { return }
-        _ = kill(-pid, SIGHUP)
-        _ = kill(pid, SIGHUP)
-        _ = kill(-pid, SIGKILL)
-        _ = kill(pid, SIGKILL)
-        let identifier = pid
-        DispatchQueue.global(qos: .utility).async {
-            var status: Int32 = 0
-            while waitpid(identifier, &status, 0) < 0 && errno == EINTR {}
+        guard exitCode == nil else { ExtensionCommandOwnership.release(pid); return }
+        if let identity, identity.isAlive, getpgid(pid) == pid {
+            _ = kill(-pid, SIGHUP)
+            if identity.isAlive, getpgid(pid) == pid { _ = kill(-pid, SIGKILL) }
         }
+        let identifier = pid
+        closing = Task.detached(priority: .utility) {
+            var status: Int32 = 0
+            while true {
+                let result = waitpid(identifier, &status, 0)
+                if result == identifier || (result < 0 && errno == ECHILD) { break }
+                if result < 0 && errno == EINTR { continue }
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+            ExtensionCommandOwnership.release(identifier)
+        }
+    }
+
+    func closeAndWait() async {
+        close()
+        await closing?.value
     }
 
     func poll() throws {

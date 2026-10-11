@@ -38,10 +38,26 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        _ = commands.suspend()
+        let engine = engine
+        engine?.beginSuspension()
+        Task { [self, engine] in
+            _ = await commands.suspendAndWait()
+            await engine?.stopAndWait()
+            completion()
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        Task {
+        commands.shutdown()
+        let engine = engine
+        engine?.beginSuspension()
+        Task { [self, engine] in
             await commands.shutdownAndWait()
+            await engine?.stopAndWait()
             stopEngine()
             completion()
         }
@@ -128,7 +144,7 @@ final class ExtensionRuntime: NSObject {
         case "stop":
             stopUI()
             commands.shutdown()
-            stopEngine()
+            prepareToStop(completion: {})
         case "status": return ["ok": true, "running": engine?.isStopped == false] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }

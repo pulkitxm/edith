@@ -78,6 +78,8 @@ import Foundation
     private var tabs: [Tab] = []
     private var selected: UUID?
     private var polling: Task<Void, Never>?
+    private var pollTasks: [UUID: Task<Void, Never>] = [:]
+    private var retired: [UUID: Task<Void, Never>] = [:]
     private var failures: [UUID: any Error] = [:]
     private var nextNumber = 1
     private let launch: @MainActor () -> TerminalLaunch
@@ -161,14 +163,14 @@ import Foundation
             selected = try tab(request, allowFailed: true).id
         case "terminal.closeAll":
             try requireEmpty(payload)
-            for tab in tabs { tab.terminal.close(); files.close(tab.id) }
+            for tab in tabs { retire(tab.terminal); files.close(tab.id) }
             tabs.removeAll()
             failures.removeAll()
             selected = nil
         case "terminal.close":
             let request = try decoder.decode(SessionRequest.self, from: payload)
             let owned = try tab(request, allowFailed: true)
-            owned.terminal.close()
+            retire(owned.terminal)
             files.close(owned.id)
             tabs.removeAll { $0.id == owned.id }
             failures[owned.id] = nil
@@ -178,10 +180,10 @@ import Foundation
             let previous = try tab(request, allowFailed: true)
             let plan = launch()
             let replacement = try TerminalPTY(launch: plan)
-            previous.terminal.close()
+            retire(previous.terminal)
             files.close(previous.id)
             guard let index = tabs.firstIndex(where: { $0.id == previous.id }) else {
-                replacement.close()
+                retire(replacement)
                 throw ExtensionPeerError.unavailable
             }
             failures[previous.id] = nil
@@ -229,16 +231,36 @@ import Foundation
         return try encoder.encode(snapshot())
     }
 
-    func stop() {
+    func beginSuspension() {
         guard !isStopped else { return }
         isStopped = true
         polling?.cancel()
-        polling = nil
+        files.beginSuspension()
+        for tab in tabs { retire(tab.terminal) }
+    }
+
+    func stop() { beginSuspension() }
+
+    func stopAndWait() async {
+        beginSuspension()
+        let polling = Array(pollTasks.values)
+        let pending = Array(retired.values)
+        for task in polling { await task.value }
+        for task in pending { await task.value }
+        await files.stopAndWait()
+        self.polling = nil
         failures.removeAll()
-        files.stop()
-        for tab in tabs { tab.terminal.close() }
         tabs.removeAll()
         selected = nil
+    }
+
+    private func retire(_ terminal: TerminalPTY) {
+        terminal.close()
+        let id = UUID()
+        retired[id] = Task { [self, terminal] in
+            defer { retired[id] = nil }
+            await terminal.closeAndWait()
+        }
     }
 
     private func open() throws {
@@ -267,7 +289,9 @@ import Foundation
 
     private func startPolling() {
         guard polling == nil else { return }
+        let id = UUID()
         polling = Task { [weak self] in
+            defer { self?.pollTasks[id] = nil }
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .milliseconds(20)) } catch { return }
                 guard let self, !self.isStopped else { return }
@@ -278,6 +302,7 @@ import Foundation
                 }
             }
         }
+        pollTasks[id] = polling
     }
 
     private func read(_ request: ReadRequest) async throws -> TerminalPTY.Output {

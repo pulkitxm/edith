@@ -34,6 +34,9 @@ import GhosttyTerminal
     private let open: @MainActor (URL) -> Bool
     private let handler: @MainActor (URL) -> String
     private let root: URL
+    private var stopped = false
+    private var copies: [UUID: (session: UUID, task: Task<Void, Error>)] = [:]
+    private var cleanups: [UUID: Task<Void, Never>] = [:]
 
     init(
         root: URL = FileManager.default.temporaryDirectory,
@@ -50,6 +53,7 @@ import GhosttyTerminal
         _ command: String, payload: Data, session: TerminalEngine.SessionRequest, directory: String,
         input: @MainActor (Data) throws -> Void
     ) async throws -> Data {
+        guard !stopped else { throw ExtensionPeerError.unavailable }
         expire()
         let decoder = JSONDecoder()
         let encoder = JSONEncoder()
@@ -129,9 +133,12 @@ import GhosttyTerminal
                 imported.append(destination)
                 let target = destination.appendingPathComponent(
                     URL(fileURLWithPath: item.path).lastPathComponent)
+                let id = UUID()
                 let copy = Task.detached {
                     try Self.copy(URL(fileURLWithPath: item.path), to: target)
                 }
+                copies[id] = (session.id, copy)
+                defer { copies[id] = nil }
                 do {
                     try await withTaskCancellationHandler {
                         try await copy.value
@@ -172,16 +179,40 @@ import GhosttyTerminal
     }
 
     func close(_ id: UUID) {
-        for (token, upload) in uploads where upload.handle.session.id == id {
-            try? upload.writer.close(); uploads[token] = nil
-        }
+        let writers = uploads.filter { $0.value.handle.session.id == id }
+        for token in writers.keys { uploads[token] = nil }
         targets = targets.filter { $0.value.handle.session.id != id }
-        for directory in directories.removeValue(forKey: id) ?? [] {
-            try? FileManager.default.removeItem(at: directory)
+        let directories = directories.removeValue(forKey: id) ?? []
+        let pending = copies.values.filter { $0.session == id }.map(\.task)
+        for task in pending { task.cancel() }
+        let token = UUID()
+        cleanups[token] = Task { [self] in
+            defer { cleanups[token] = nil }
+            for task in pending { _ = await task.result }
+            for upload in writers.values { try? upload.writer.close() }
+            for directory in directories { try? FileManager.default.removeItem(at: directory) }
         }
     }
 
-    func stop() { for id in Array(directories.keys) { close(id) }; targets.removeAll() }
+    func beginSuspension() {
+        stopped = true
+        for copy in copies.values { copy.task.cancel() }
+    }
+
+    func stop() {
+        beginSuspension()
+        for id in Array(directories.keys) { close(id) }
+        targets.removeAll()
+    }
+
+    func stopAndWait() async {
+        beginSuspension()
+        let pending = copies.values.map(\.task)
+        for task in pending { _ = await task.result }
+        stop()
+        let cleanups = Array(cleanups.values)
+        for task in cleanups { await task.value }
+    }
 
     func expire() {
         for (token, upload) in uploads where upload.expires <= Date() {
