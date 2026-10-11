@@ -33,61 +33,77 @@ final class ExtensionRuntime: NSObject {
     private var follow = SystemStatsFollow()
 
     private var fixture: WorkerFixtureAdmission?
+    #if EDITH_FUNCTIONAL_FIXTURE
+    private var engineAdmission: WorkerFixtureEngineAdmission?
+    #endif
     private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            if command.hasPrefix("systemStats.follow.") {
-                guard self?.fixture == nil else { throw ExtensionPeerError.unavailable }
-                guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
-                return try await self.follow.execute(command, payload: payload)
-            }
-            if command == "systemStats.cli.catalog" {
-                return try SystemStatsCLIExecution.catalog(payload)
-            }
-            if command.hasPrefix("systemStats.cli.stream.") {
-                guard self?.fixture == nil else { throw ExtensionPeerError.unavailable }
-                guard let self, self.service != nil, let streams = self.cliStreams else {
+            guard let self else { throw ExtensionPeerError.unavailable }
+            return try await self.withFixtureRequest(
+                command, payload: payload, token: request["token"] as? String
+            ) { [weak self] in
+                if command.hasPrefix("systemStats.follow.") {
+                    guard self?.fixture == nil else { throw ExtensionPeerError.unavailable }
+                    guard let self, self.service != nil else {
+                        throw ExtensionPeerError.unavailable
+                    }
+                    return try await self.follow.execute(command, payload: payload)
+                }
+                if command == "systemStats.cli.catalog" {
+                    return try SystemStatsCLIExecution.catalog(payload)
+                }
+                if command.hasPrefix("systemStats.cli.stream.") {
+                    guard self?.fixture == nil else { throw ExtensionPeerError.unavailable }
+                    guard let self, self.service != nil, let streams = self.cliStreams else {
+                        throw ExtensionPeerError.unavailable
+                    }
+                    return try streams.invoke(
+                        SystemCommand.self, operation: command,
+                        prefix: "systemStats.cli.stream", payload: payload)
+                }
+                if command == "systemStats.cli" {
+                    let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                    if let help = try await SystemStatsCLIExecution.help(request) {
+                        return try JSONEncoder().encode(help)
+                    }
+                    guard let self, self.service != nil else {
+                        throw ExtensionPeerError.unavailable
+                    }
+                    guard self.fixture == nil else { throw ExtensionPeerError.unavailable }
+                    let reply = try await SystemStatsCLIExecution.run(request)
+                    return try JSONEncoder().encode(reply)
+                }
+                if command.hasPrefix("systemStats.ui.") {
+                    guard let self, self.service != nil else {
+                        throw ExtensionPeerError.unavailable
+                    }
+                    return try ControlPresentationContract.execute(
+                        command, payload: payload, defaults: SharedDefaults.store,
+                        state: ControlPresentationState(
+                            cpu: self.service?.snapshot.cpu ?? 0,
+                            memory: self.service?.snapshot.memory ?? 0))
+                }
+                guard let self, let service = self.service else {
                     throw ExtensionPeerError.unavailable
                 }
-                return try streams.invoke(
-                    SystemCommand.self, operation: command,
-                    prefix: "systemStats.cli.stream", payload: payload)
+                return try await SurfaceCommandService.execute(
+                    providerID: "systemStats", command: command, payload: payload,
+                    snapshot: { _ in
+                        SystemStatsSurface.snapshot(
+                            cpu: service.snapshot.cpu, memory: service.snapshot.memory,
+                            freeDiskBytes: self.fixture != nil
+                                ? 1_000_000
+                                : try? URL(fileURLWithPath: "/").resourceValues(forKeys: [
+                                    .volumeAvailableCapacityForImportantUsageKey
+                                ]).volumeAvailableCapacityForImportantUsage)
+                    },
+                    perform: { action in
+                        throw ExtensionPeerError.invalidRequest
+                    })
             }
-            if command == "systemStats.cli" {
-                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                if let help = try await SystemStatsCLIExecution.help(request) {
-                    return try JSONEncoder().encode(help)
-                }
-                guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
-                guard self.fixture == nil else { throw ExtensionPeerError.unavailable }
-                let reply = try await SystemStatsCLIExecution.run(request)
-                return try JSONEncoder().encode(reply)
-            }
-            if command.hasPrefix("systemStats.ui.") {
-                guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
-                return try ControlPresentationContract.execute(
-                    command, payload: payload, defaults: SharedDefaults.store,
-                    state: ControlPresentationState(
-                        cpu: self.service?.snapshot.cpu ?? 0,
-                        memory: self.service?.snapshot.memory ?? 0))
-            }
-            guard let self, let service = self.service else { throw ExtensionPeerError.unavailable }
-            return try await SurfaceCommandService.execute(
-                providerID: "systemStats", command: command, payload: payload,
-                snapshot: { _ in
-                    SystemStatsSurface.snapshot(
-                        cpu: service.snapshot.cpu, memory: service.snapshot.memory,
-                        freeDiskBytes: self.fixture != nil
-                            ? 1_000_000
-                            : try? URL(fileURLWithPath: "/").resourceValues(forKeys: [
-                                .volumeAvailableCapacityForImportantUsageKey
-                            ]).volumeAvailableCapacityForImportantUsage)
-                },
-                perform: { action in
-                    throw ExtensionPeerError.invalidRequest
-                })
         }
     }
 
@@ -167,18 +183,34 @@ final class ExtensionRuntime: NSObject {
             return ["ok": true] as NSDictionary
         case "start":
             guard !draining else { return ["ok": false] as NSDictionary }
+            #if EDITH_FUNCTIONAL_FIXTURE
             do {
+                let admission = try WorkerFixtureEngineAdmission.current(
+                    extensionID: "systemStats", context: input,
+                    roleBundle: Bundle(for: ExtensionRuntime.self), expectedRole: .helper)
+                engineAdmission = admission
+                if let admission {
+                    return try admission.withPlatformFixture(
+                        extensionID: "systemStats", expectedRole: .helper
+                    ) { namespace in
+                        fixture = namespace
+                        return startOwned(input)
+                    }
+                }
+                fixture = nil
+                return startOwned(input)
+            } catch { return ["ok": false] as NSDictionary }
+            #else
+            do {
+                guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+                    input["hostedFunctionalFixture"] == nil
+                else { throw WorkerFixtureError.invalid }
                 fixture = try WorkerFixtureAdmission.current(
                     extensionID: "systemStats", context: input,
                     roleBundle: Bundle(for: ExtensionRuntime.self))
+                return startOwned(input)
             } catch { return ["ok": false] as NSDictionary }
-            guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
-            else { return ["ok": false] as NSDictionary }
-            guard let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            if service == nil { service = SystemStatsStatusItem(fixture: fixture) }
-            if cliStreams == nil { cliStreams = try? ExtensionCLIStreams(owner: "systemStats") }
+            #endif
         case "view":
             guard let presentation else { return ["ok": false] as NSDictionary }
             if settingsDetail {
@@ -212,7 +244,16 @@ final class ExtensionRuntime: NSObject {
                         }
                     }
                 })
-        case "synchronize": break
+        case "synchronize":
+            guard !draining else { return ["ok": false] as NSDictionary }
+            #if EDITH_FUNCTIONAL_FIXTURE
+            if let engineAdmission {
+                do { try engineAdmission.requireCurrent() } catch {
+                    return ["ok": false] as NSDictionary
+                }
+            }
+            #endif
+            break
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
             cliStreams?.stop()
@@ -226,6 +267,42 @@ final class ExtensionRuntime: NSObject {
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
+    }
+
+    private func startOwned(_ input: NSDictionary) -> NSObject {
+        guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
+        else { return ["ok": false] as NSDictionary }
+        guard let suite = input["defaultsSuite"] as? String,
+            suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+        else { return ["ok": false] as NSDictionary }
+        if service == nil { service = SystemStatsStatusItem(fixture: fixture) }
+        if cliStreams == nil { cliStreams = try? ExtensionCLIStreams(owner: "systemStats") }
+        return ["ok": true] as NSDictionary
+    }
+
+    private func withFixtureRequest(
+        _ operation: String, payload: Data, token: String?,
+        execute: () async throws -> Data
+    ) async throws -> Data {
+        #if EDITH_FUNCTIONAL_FIXTURE
+        guard let admission = engineAdmission else { return try await execute() }
+        guard let token, let identifier = UUID(uuidString: token) else {
+            throw WorkerFixtureError.invalid
+        }
+        let request = try admission.beginRequest(
+            token: identifier, operation: operation, payload: payload)
+        do {
+            let result = try await execute()
+            try Task.checkCancellation()
+            try admission.completeRequest(request)
+            return result
+        } catch {
+            admission.cancelRequest(request)
+            throw error
+        }
+        #else
+        return try await execute()
+        #endif
     }
 
     private func retirePresentation() {

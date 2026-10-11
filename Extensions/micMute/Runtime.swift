@@ -18,48 +18,61 @@ final class ExtensionRuntime: NSObject {
     private var draining = false
 
     private var fixture: WorkerFixtureAdmission?
+    #if EDITH_FUNCTIONAL_FIXTURE
+    private var engineAdmission: WorkerFixtureEngineAdmission?
+    #endif
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            if command.hasPrefix("micMute.ui.") {
-                guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
-                let defaults = SharedDefaults.store
-                switch command {
-                case "micMute.ui.read":
-                    guard payload == Data("{}".utf8) else {
-                        throw ExtensionPeerError.invalidRequest
+            guard let self else { throw ExtensionPeerError.unavailable }
+            return try await self.withFixtureRequest(
+                command, payload: payload, token: request["token"] as? String
+            ) { [weak self] in
+                if command.hasPrefix("micMute.ui.") {
+                    guard let self, self.service != nil else {
+                        throw ExtensionPeerError.unavailable
                     }
-                case "micMute.ui.update":
-                    try ControlPresentationContract.update(payload, defaults: defaults)
-                    self.service?.syncSettings()
-                case "micMute.ui.action":
-                    let action = try JSONDecoder().decode(
-                        ControlPresentationAction.self, from: payload)
-                    guard action.value.isEmpty, let service = self.service else {
-                        throw ExtensionPeerError.invalidRequest
-                    }
-                    switch action.action {
-                    case "mute": service.setMuted(true)
-                    case "unmute": service.setMuted(false)
-                    case "retry": service.retry()
+                    let defaults = SharedDefaults.store
+                    switch command {
+                    case "micMute.ui.read":
+                        guard payload == Data("{}".utf8) else {
+                            throw ExtensionPeerError.invalidRequest
+                        }
+                    case "micMute.ui.update":
+                        try ControlPresentationContract.update(payload, defaults: defaults)
+                        self.service?.syncSettings()
+                    case "micMute.ui.action":
+                        let action = try JSONDecoder().decode(
+                            ControlPresentationAction.self, from: payload)
+                        guard action.value.isEmpty, let service = self.service else {
+                            throw ExtensionPeerError.invalidRequest
+                        }
+                        switch action.action {
+                        case "mute": service.setMuted(true)
+                        case "unmute": service.setMuted(false)
+                        case "retry": service.retry()
+                        default: throw ExtensionPeerError.invalidRequest
+                        }
                     default: throw ExtensionPeerError.invalidRequest
                     }
-                default: throw ExtensionPeerError.invalidRequest
+                    return try ControlPresentationContract.snapshot(
+                        defaults: defaults,
+                        state: ControlPresentationState(
+                            muted: self.service?.muted ?? false, error: self.service?.error))
                 }
-                return try ControlPresentationContract.snapshot(
-                    defaults: defaults,
-                    state: ControlPresentationState(
-                        muted: self.service?.muted ?? false, error: self.service?.error))
+                guard let self, let service = self.service else {
+                    throw ExtensionPeerError.unavailable
+                }
+                return try await SurfaceCommandService.execute(
+                    providerID: "micMute", command: command, payload: payload,
+                    snapshot: { _ in
+                        MicMuteSurface.snapshot(muted: service.muted, error: service.error)
+                    },
+                    perform: { action in
+                        service.setMuted(action == "mute")
+                    })
             }
-            guard let self, let service = self.service else { throw ExtensionPeerError.unavailable }
-            return try await SurfaceCommandService.execute(
-                providerID: "micMute", command: command, payload: payload,
-                snapshot: { _ in MicMuteSurface.snapshot(muted: service.muted, error: service.error)
-                },
-                perform: { action in
-                    service.setMuted(action == "mute")
-                })
         }
     }
 
@@ -123,30 +136,34 @@ final class ExtensionRuntime: NSObject {
             return ["ok": true] as NSDictionary
         case "start":
             guard !draining else { return ["ok": false] as NSDictionary }
+            #if EDITH_FUNCTIONAL_FIXTURE
             do {
+                let admission = try WorkerFixtureEngineAdmission.current(
+                    extensionID: "micMute", context: input,
+                    roleBundle: Bundle(for: ExtensionRuntime.self), expectedRole: .helper)
+                engineAdmission = admission
+                if let admission {
+                    return try admission.withPlatformFixture(
+                        extensionID: "micMute", expectedRole: .helper
+                    ) { namespace in
+                        fixture = namespace
+                        return startOwned(input)
+                    }
+                }
+                fixture = nil
+                return startOwned(input)
+            } catch { return ["ok": false] as NSDictionary }
+            #else
+            do {
+                guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+                    input["hostedFunctionalFixture"] == nil
+                else { throw WorkerFixtureError.invalid }
                 fixture = try WorkerFixtureAdmission.current(
                     extensionID: "micMute", context: input,
                     roleBundle: Bundle(for: ExtensionRuntime.self))
+                return startOwned(input)
             } catch { return ["ok": false] as NSDictionary }
-            guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
-            else { return ["ok": false] as NSDictionary }
-            guard let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            if fixture == nil {
-                HotKeyRegistrar.configure(
-                    ExtensionHotKeyBinding(
-                        id: HotKeyCatalog.micMute, carbonID: 6, prefix: "micHotKey",
-                        defaultCode: kVK_ANSI_M, defaultModifiers: cmdKey | shiftKey))
-            }
-            SharedDefaults.store.set(true, forKey: AppStorageKeys.Mic.muteEnabled)
-            if service == nil { service = MicMuteEngine(fixture: fixture) }
-            service?.syncSettings()
-            if observer == nil {
-                observer = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
-                    MainActor.assumeIsolated { self?.service?.syncSettings() }
-                }
-            }
+            #endif
         case "view":
             guard let presentation else { return ["ok": false] as NSDictionary }
             return NSHostingController(
@@ -159,7 +176,16 @@ final class ExtensionRuntime: NSObject {
                         }
                     }
                 })
-        case "synchronize": service?.syncSettings()
+        case "synchronize":
+            guard !draining else { return ["ok": false] as NSDictionary }
+            #if EDITH_FUNCTIONAL_FIXTURE
+            if let engineAdmission {
+                do { try engineAdmission.requireCurrent() } catch {
+                    return ["ok": false] as NSDictionary
+                }
+            }
+            #endif
+            service?.syncSettings()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
             retirePresentation()
@@ -174,6 +200,54 @@ final class ExtensionRuntime: NSObject {
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
+    }
+
+    private func startOwned(_ input: NSDictionary) -> NSObject {
+        guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
+        else { return ["ok": false] as NSDictionary }
+        guard let suite = input["defaultsSuite"] as? String,
+            suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+        else { return ["ok": false] as NSDictionary }
+        if fixture == nil {
+            HotKeyRegistrar.configure(
+                ExtensionHotKeyBinding(
+                    id: HotKeyCatalog.micMute, carbonID: 6, prefix: "micHotKey",
+                    defaultCode: kVK_ANSI_M, defaultModifiers: cmdKey | shiftKey))
+        }
+        SharedDefaults.store.set(true, forKey: AppStorageKeys.Mic.muteEnabled)
+        if service == nil { service = MicMuteEngine(fixture: fixture) }
+        service?.syncSettings()
+        if observer == nil {
+            observer = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
+                MainActor.assumeIsolated { self?.service?.syncSettings() }
+            }
+        }
+        return ["ok": true] as NSDictionary
+    }
+
+    private func withFixtureRequest(
+        _ operation: String, payload: Data, token: String?,
+        execute: () async throws -> Data
+    ) async throws -> Data {
+        #if EDITH_FUNCTIONAL_FIXTURE
+        guard let admission = engineAdmission else { return try await execute() }
+        guard let token, let identifier = UUID(uuidString: token) else {
+            throw WorkerFixtureError.invalid
+        }
+        let request = try admission.beginRequest(
+            token: identifier, operation: operation, payload: payload)
+        do {
+            let result = try await execute()
+            try Task.checkCancellation()
+            try admission.completeRequest(request)
+            return result
+        } catch {
+            admission.cancelRequest(request)
+            throw error
+        }
+        #else
+        return try await execute()
+        #endif
     }
 
     private func retirePresentation() {

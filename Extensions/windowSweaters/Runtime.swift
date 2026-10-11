@@ -17,43 +17,55 @@ final class ExtensionRuntime: NSObject {
     private var draining = false
 
     private var fixture: WorkerFixtureAdmission?
+    #if EDITH_FUNCTIONAL_FIXTURE
+    private var engineAdmission: WorkerFixtureEngineAdmission?
+    #endif
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            if command.hasPrefix("windowSweaters.ui.") {
-                guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
-                let defaults = SharedDefaults.store
-                switch command {
-                case "windowSweaters.ui.read":
-                    guard payload == Data("{}".utf8) else {
-                        throw ExtensionPeerError.invalidRequest
+            guard let self else { throw ExtensionPeerError.unavailable }
+            return try await self.withFixtureRequest(
+                command, payload: payload, token: request["token"] as? String
+            ) { [weak self] in
+                if command.hasPrefix("windowSweaters.ui.") {
+                    guard let self, self.service != nil else {
+                        throw ExtensionPeerError.unavailable
                     }
-                case "windowSweaters.ui.update":
-                    try ControlPresentationContract.update(payload, defaults: defaults)
-                    self.service?.applySettings()
-                case "windowSweaters.ui.action":
-                    _ = try JSONDecoder().decode(
-                        ControlPresentationAction.self, from: payload)
-                    throw ExtensionPeerError.invalidRequest
-                default: throw ExtensionPeerError.invalidRequest
+                    let defaults = SharedDefaults.store
+                    switch command {
+                    case "windowSweaters.ui.read":
+                        guard payload == Data("{}".utf8) else {
+                            throw ExtensionPeerError.invalidRequest
+                        }
+                    case "windowSweaters.ui.update":
+                        try ControlPresentationContract.update(payload, defaults: defaults)
+                        self.service?.applySettings()
+                    case "windowSweaters.ui.action":
+                        _ = try JSONDecoder().decode(
+                            ControlPresentationAction.self, from: payload)
+                        throw ExtensionPeerError.invalidRequest
+                    default: throw ExtensionPeerError.invalidRequest
+                    }
+                    return try ControlPresentationContract.snapshot(
+                        defaults: defaults, state: ControlPresentationState())
                 }
-                return try ControlPresentationContract.snapshot(
-                    defaults: defaults, state: ControlPresentationState())
+                guard let self, let service = self.service else {
+                    throw ExtensionPeerError.unavailable
+                }
+                return try await SurfaceCommandService.execute(
+                    providerID: "windowSweaters", command: command, payload: payload,
+                    snapshot: { _ in
+                        WindowSweatersSurface.snapshot(
+                            active: SweaterState.isActive(),
+                            pattern: SweaterState.settings().pattern.rawValue)
+                    },
+                    perform: { action in
+                        SweaterState.setActive(action == "enable")
+                        service.applySettings()
+                        IPC.post(IPC.Name.settingsChanged)
+                    })
             }
-            guard let self, let service = self.service else { throw ExtensionPeerError.unavailable }
-            return try await SurfaceCommandService.execute(
-                providerID: "windowSweaters", command: command, payload: payload,
-                snapshot: { _ in
-                    WindowSweatersSurface.snapshot(
-                        active: SweaterState.isActive(),
-                        pattern: SweaterState.settings().pattern.rawValue)
-                },
-                perform: { action in
-                    SweaterState.setActive(action == "enable")
-                    service.applySettings()
-                    IPC.post(IPC.Name.settingsChanged)
-                })
         }
     }
 
@@ -117,23 +129,34 @@ final class ExtensionRuntime: NSObject {
             return ["ok": true] as NSDictionary
         case "start":
             guard !draining else { return ["ok": false] as NSDictionary }
+            #if EDITH_FUNCTIONAL_FIXTURE
             do {
+                let admission = try WorkerFixtureEngineAdmission.current(
+                    extensionID: "windowSweaters", context: input,
+                    roleBundle: Bundle(for: ExtensionRuntime.self), expectedRole: .helper)
+                engineAdmission = admission
+                if let admission {
+                    return try admission.withPlatformFixture(
+                        extensionID: "windowSweaters", expectedRole: .helper
+                    ) { namespace in
+                        fixture = namespace
+                        return startOwned(input)
+                    }
+                }
+                fixture = nil
+                return startOwned(input)
+            } catch { return ["ok": false] as NSDictionary }
+            #else
+            do {
+                guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+                    input["hostedFunctionalFixture"] == nil
+                else { throw WorkerFixtureError.invalid }
                 fixture = try WorkerFixtureAdmission.current(
                     extensionID: "windowSweaters", context: input,
                     roleBundle: Bundle(for: ExtensionRuntime.self))
+                return startOwned(input)
             } catch { return ["ok": false] as NSDictionary }
-            guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
-            else { return ["ok": false] as NSDictionary }
-            guard let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            SharedDefaults.store.set(true, forKey: SweaterState.enabledKey)
-            if service == nil { service = SweaterEngine(fixture: fixture) }
-            if observer == nil {
-                observer = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
-                    MainActor.assumeIsolated { self?.service?.applySettings() }
-                }
-            }
+            #endif
         case "view":
             guard let presentation else { return ["ok": false] as NSDictionary }
             return NSHostingController(
@@ -146,7 +169,16 @@ final class ExtensionRuntime: NSObject {
                         }
                     }
                 })
-        case "synchronize": service?.applySettings()
+        case "synchronize":
+            guard !draining else { return ["ok": false] as NSDictionary }
+            #if EDITH_FUNCTIONAL_FIXTURE
+            if let engineAdmission {
+                do { try engineAdmission.requireCurrent() } catch {
+                    return ["ok": false] as NSDictionary
+                }
+            }
+            #endif
+            service?.applySettings()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
             retirePresentation()
@@ -159,6 +191,47 @@ final class ExtensionRuntime: NSObject {
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
+    }
+
+    private func startOwned(_ input: NSDictionary) -> NSObject {
+        guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
+        else { return ["ok": false] as NSDictionary }
+        guard let suite = input["defaultsSuite"] as? String,
+            suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+        else { return ["ok": false] as NSDictionary }
+        SharedDefaults.store.set(true, forKey: SweaterState.enabledKey)
+        if service == nil { service = SweaterEngine(fixture: fixture) }
+        if observer == nil {
+            observer = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
+                MainActor.assumeIsolated { self?.service?.applySettings() }
+            }
+        }
+        return ["ok": true] as NSDictionary
+    }
+
+    private func withFixtureRequest(
+        _ operation: String, payload: Data, token: String?,
+        execute: () async throws -> Data
+    ) async throws -> Data {
+        #if EDITH_FUNCTIONAL_FIXTURE
+        guard let admission = engineAdmission else { return try await execute() }
+        guard let token, let identifier = UUID(uuidString: token) else {
+            throw WorkerFixtureError.invalid
+        }
+        let request = try admission.beginRequest(
+            token: identifier, operation: operation, payload: payload)
+        do {
+            let result = try await execute()
+            try Task.checkCancellation()
+            try admission.completeRequest(request)
+            return result
+        } catch {
+            admission.cancelRequest(request)
+            throw error
+        }
+        #else
+        return try await execute()
+        #endif
     }
 
     private func retirePresentation() {
