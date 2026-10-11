@@ -11,6 +11,32 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct HostNotchCompactCardTests {
+    @Test func terminalCommandsAwaitOwnedNavigationAndPropagateRejectionWithoutRepeatingNew()
+        async throws
+    {
+        let fixture = CompactCardFixture(widget: .ability("terminal"), versions: ["terminal": "1"])
+        var acknowledgements = 0
+        fixture.postNavigation = { origin, provider, version in
+            #expect(origin == fixture.origin && provider == "terminal" && version == "1")
+            acknowledgements += 1
+        }
+        try await fixture.model.refresh()
+        fixture.failNavigation = true
+        await #expect(throws: HostWindowNavigationError.routeRejected) {
+            try await fixture.model.perform(providerID: "terminal", actionID: "new")
+        }
+        #expect(await fixture.gate.performed() == ["terminal/new"])
+        #expect(
+            fixture.navigation.count == 1 && acknowledgements == 0 && fixture.model.error != nil)
+        fixture.failNavigation = false
+        try await fixture.model.perform(providerID: "terminal", actionID: "new")
+        #expect(await fixture.gate.performed() == ["terminal/new", "terminal/new"])
+        #expect(fixture.navigation.count == 2 && acknowledgements == 1)
+        try await fixture.model.open(providerID: "terminal")
+        #expect(fixture.navigation.count == 3 && acknowledgements == 2)
+        #expect(await fixture.gate.performed() == ["terminal/new", "terminal/new"])
+    }
+
     @Test func originalCompactCardRendersAndItsActualButtonsUseIssuedActionsAndOneOpenCallback()
         async throws
     {
@@ -330,7 +356,7 @@ private func compactFixtureSnapshot(providerID: String, value: String) throws ->
             .init(
                 "row", sourceID: "synthetic-source", title: "Synthetic original item", value: value,
                 actions: [.init("change", "Change", "checkmark")])
-        ]
+        ], actions: providerID == "terminal" ? [.init("new", "New terminal", "plus")] : []
     ).encoded()
 }
 

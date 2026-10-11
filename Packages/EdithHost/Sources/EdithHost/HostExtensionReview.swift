@@ -10,6 +10,7 @@ struct HostExtensionReview: View {
     let presenter: (any HostExtensionContentPresenting)?
     let open: (() -> Void)?
     let done: () -> Void
+    let navigation: HostSettingsNavigation?
     @State private var reviewed: ExtensionPackage?
     @State private var task: Task<Void, Never>?
     @State private var notice: String?
@@ -17,10 +18,11 @@ struct HostExtensionReview: View {
     init(
         marketplace: HostMarketplace, suites: HostSuiteSelection, entry: HostExtension,
         presenter: (any HostExtensionContentPresenting)?, open: (() -> Void)?,
-        done: @escaping () -> Void
+        done: @escaping () -> Void, navigation: HostSettingsNavigation? = nil
     ) {
         self.marketplace = marketplace; self.suites = suites; self.entry = entry
         self.presenter = presenter; self.open = open; self.done = done
+        self.navigation = navigation
         _reviewed = State(initialValue: marketplace.available[entry.id])
     }
 
@@ -62,7 +64,9 @@ struct HostExtensionReview: View {
                 HostExtensionContent(
                     marketplace: marketplace, extensionID: request.extensionID,
                     location: request.location, section: request.section,
-                    presenter: presenter, openMarketplace: done)
+                    presenter: presenter, openMarketplace: done, navigation: navigation
+                )
+                .id(navigation?.delivery.id)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: UIScale.pt(16)) {
@@ -134,8 +138,11 @@ struct HostExtensionReview: View {
                 .bar)
         }
         .frame(width: PresentationMetrics.width(560), height: PresentationMetrics.height(620))
+        .tracksWindowVisibility()
         .interactiveDismissDisabled(busy)
-        .onDisappear { task?.cancel() }
+        .onDisappear {
+            task?.cancel(); navigation?.delivery.reject()
+        }
     }
 
     private func perform(_ action: @escaping @MainActor () async -> Void) {

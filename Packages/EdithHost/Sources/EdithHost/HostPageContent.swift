@@ -10,6 +10,7 @@ struct HostPageContent: View {
     let destination: HostNavigationPage
     @Binding var settings: String
     @Binding var maintenanceSection: String
+    var requestedSettings: Binding<HostSettingsNavigation?> = .constant(nil)
     var presenter: (any HostExtensionContentPresenting)? = nil
     var showWelcome: (() -> Void)? = nil
     var panelShortcutChanged: () -> Void = {}
@@ -38,7 +39,8 @@ struct HostPageContent: View {
                 presenter: presenter, workflowSetup: additionalSettings?("home-setup"))
         case "extensions":
             MarketplacePage(
-                marketplace: marketplace, presenter: presenter, openExtension: openExtension)
+                marketplace: marketplace, presenter: presenter, openExtension: openExtension,
+                requestedSettings: requestedSettings)
         case "settings":
             HostSettingsContainer(category: settingsBinding, sections: settingsSections) {
                 settingsContent
@@ -79,7 +81,10 @@ struct HostPageContent: View {
             if let section = settingsSections.first(where: { $0.id == settingsDestination }),
                 let id = section.extensionID
             {
-                content(id, section: settingsDestination)
+                content(
+                    id,
+                    section: HostExtensionSettingsPolicy.route(for: id)?.section
+                        ?? settingsDestination)
             } else if let view = additionalSettings?(settingsDestination) {
                 view
             } else {
@@ -94,6 +99,7 @@ struct HostPageContent: View {
             if route.page == "appMaintenance", let section = route.section {
                 maintenanceSection = section
             }
+            if route.page == "settings", let section = route.section { settings = section }
             select(route.page)
         } else {
             defaults.set(id, forKey: HostMarketplaceKeys.expandedExtension)

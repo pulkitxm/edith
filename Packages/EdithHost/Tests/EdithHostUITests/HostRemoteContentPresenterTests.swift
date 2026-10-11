@@ -8,6 +8,28 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct HostRemoteContentPresenterTests {
+    @Test func connectedSceneUpdateFailureCannotPassFinalWindowAdmission() async throws {
+        let controller = HostRemoteViewController(
+            request: .init(extensionID: "terminal", location: "main"),
+            remote: EXHostViewController(), connect: { _, _, _ in },
+            update: { _ in throw HostWorkerError.rejected })
+        let window = TestWindowHost.window(contentRect: .init(x: 0, y: 0, width: 880, height: 640))
+        window.isReleasedWhenClosed = false
+        window.contentViewController = controller
+        defer { controller.detach(); window.close() }
+        controller.apply(compact: false, visible: true, width: 880)
+        try controller.activate(
+            through: NSXPCConnection(serviceName: "com.pulkit.edith.tests.remote"))
+        await settle { controller.failure != nil }
+        #expect(controller.connected && controller.failure != nil)
+        await #expect(throws: HostWorkerError.rejected) {
+            try await controller.waitUntilConnected(window: window)
+        }
+        #expect(throws: HostWorkerError.rejected) {
+            try controller.validateConnected(window: window)
+        }
+    }
+
     @Test func activationReceivesCurrentGeometryAndCoalescesOwnedUpdates() async throws {
         var connections = 0
         var states: [HostRemoteViewState] = []

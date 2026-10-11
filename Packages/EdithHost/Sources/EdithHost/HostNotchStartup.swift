@@ -26,6 +26,7 @@ struct HostNotchStartupContext {
 
 @MainActor
 final class HostNotchStartup {
+    typealias OpenTerminal = @MainActor (HostTerminalSurfaceRequest) async throws -> Void
     private let navigation: HostWindowNavigation
     private var lifecycle: (any HostNotchStartupLifecycle)?
     private var refreshing: Task<Void, Never>?
@@ -38,6 +39,7 @@ final class HostNotchStartup {
 
     init(
         navigation: HostWindowNavigation,
+        openTerminal: @escaping OpenTerminal = { _ in throw HostWindowNavigationError.unavailable },
         make: (HostNotchStartupContext) -> any HostNotchStartupLifecycle
     ) {
         self.navigation = navigation
@@ -73,9 +75,26 @@ final class HostNotchStartup {
                 else { throw HostWindowNavigationError.unavailable }
                 navigating.insert(origin.cardPresentationID)
                 defer { navigating.remove(origin.cardPresentationID) }
-                try await navigation.navigate(
-                    extensionID: provider, version: version,
-                    presentationID: origin.cardPresentationID, location: "notch")
+                if provider == "terminal" {
+                    try await openTerminal(
+                        .init(
+                            version: version, window: window,
+                            validate: { [weak self] in
+                                guard let self, !stopped,
+                                    lifecycle?.compactVersions(origin)?[provider] == version,
+                                    lifecycle?.window(for: origin.cardPresentationID) === window,
+                                    navigation.owningWorkspace(for: window) === owner,
+                                    navigationTicket(
+                                        presentationID: origin.cardPresentationID,
+                                        providerID: provider,
+                                        version: version) == ticket
+                                else { throw HostWindowNavigationError.routeRejected }
+                            }))
+                } else {
+                    try await navigation.navigate(
+                        extensionID: provider, version: version,
+                        presentationID: origin.cardPresentationID, location: "notch")
+                }
                 guard !stopped, lifecycle?.compactVersions(origin)?[provider] == version,
                     lifecycle?.window(for: origin.cardPresentationID) === window,
                     navigation.owningWorkspace(for: window) === owner,
@@ -104,9 +123,9 @@ final class HostNotchStartup {
 
     convenience init(
         marketplace: HostMarketplace, manager: HostRemoteSessionManager,
-        navigation: HostWindowNavigation
+        navigation: HostWindowNavigation, openTerminal: @escaping OpenTerminal
     ) {
-        self.init(navigation: navigation) { context in
+        self.init(navigation: navigation, openTerminal: openTerminal) { context in
             HostNotchLifecycleAdapter(
                 marketplace: marketplace, manager: manager, association: context.association,
                 compactNavigate: context.navigate,
