@@ -30,6 +30,21 @@ const boundedText = (value, maximum = 256) => {
   );
 };
 
+const validateOwnedLabel = (value) => {
+  exact(value, ["name", "component"]);
+  assert.equal(value.component, "basename");
+  boundedText(value.name, 128);
+  assert.match(value.name, /^[A-Za-z0-9_.-]+$/);
+};
+const validateSelector = (value) => assert(["label", "help", "placeholder"].includes(value));
+const boundedInput = (value) => {
+  assert(typeof value === "string" && value.length > 0 && Buffer.byteLength(value) <= 4096);
+  assert([...value].every((character) => {
+    const code = character.codePointAt(0);
+    return code !== 127 && (code > 31 || [9, 10, 13].includes(code));
+  }));
+};
+
 export function validateInstalledPresentationRecipe(recipe, definition) {
   validateFunctionalCaseDefinition(definition);
   exact(recipe, [
@@ -44,13 +59,9 @@ export function validateInstalledPresentationRecipe(recipe, definition) {
   assert.equal(recipe.schema, 1);
   assert.equal(recipe.owner, definition.owner);
   assert(["main", "settings"].includes(recipe.location));
-  assert.equal(
-    recipe.section,
-    recipe.owner === "notchShelf" ||
-      (recipe.owner === "systemStats" && recipe.location === "settings")
-      ? "extension"
-      : recipe.owner,
-  );
+  const settingsSections = { notchShelf: "extension", systemStats: "extension", quinjet: "extension", herdr: "backgroundAgent" };
+  assert.equal(recipe.section, recipe.location === "settings" && settingsSections[recipe.owner]
+    ? settingsSections[recipe.owner] : recipe.owner);
   assert.equal(recipe.operation, definition.activation.operation);
   assert(
     Array.isArray(recipe.sources) &&
@@ -79,38 +90,53 @@ export function validateInstalledPresentationRecipe(recipe, definition) {
     const fields = ["role", "label", "action", "value"];
     if (Object.hasOwn(step, "scope")) fields.push("scope");
     if (Object.hasOwn(step, "ownedPath")) fields.push("ownedPath");
+    for (const key of ["selector", "ownedLabel", "when"]) if (Object.hasOwn(step, key)) fields.push(key);
     exact(step, fields);
     if (step.scope) {
       const fields = ["kind", "label"];
       if (Object.hasOwn(step.scope, "anchor")) fields.push("anchor");
+      if (Object.hasOwn(step.scope, "ownedLabel")) fields.push("ownedLabel");
       exact(step.scope, fields);
       assert(
         ["window", "sheet", "menu", "row", "panel", "group", "button"].includes(
           step.scope.kind,
         ),
       );
+      if (step.scope.ownedLabel) {
+        validateOwnedLabel(step.scope.ownedLabel);
+        assert.equal(step.scope.label, "");
+      }
       if (step.scope.label !== "") boundedText(step.scope.label, 512);
       else
         assert(
-          step.scope.anchor,
+          step.scope.anchor || step.scope.ownedLabel,
           "An unlabeled original scope requires a source anchor",
         );
       if (step.scope.anchor) {
-        exact(step.scope.anchor, ["role", "label"]);
+        const fields = ["role", "label"];
+        for (const key of ["selector", "ownedLabel"]) if (Object.hasOwn(step.scope.anchor, key)) fields.push(key);
+        exact(step.scope.anchor, fields);
+        if (step.scope.anchor.selector) validateSelector(step.scope.anchor.selector);
+        if (step.scope.anchor.ownedLabel) {
+          validateOwnedLabel(step.scope.anchor.ownedLabel);
+          assert.equal(step.scope.anchor.label, "");
+        }
         assert(
           ["staticText", "button", "textField", "menuItem"].includes(
             step.scope.anchor.role,
           ),
         );
-        boundedText(step.scope.anchor.label, 512);
+        if (!step.scope.anchor.ownedLabel) boundedText(step.scope.anchor.label, 512);
       }
     }
     if (step.ownedPath !== undefined) {
       boundedText(step.ownedPath, 128);
       assert.match(step.ownedPath, /^[A-Za-z0-9_.-]+$/);
     }
+    if (step.selector) validateSelector(step.selector);
+    if (step.ownedLabel) { validateOwnedLabel(step.ownedLabel); assert.equal(step.label, ""); }
     if (step.label === "")
-      assert(step.scope?.kind === "button" && step.scope.anchor);
+      assert(step.ownedLabel || step.scope?.anchor);
     else boundedText(step.label);
     assert(
       [
@@ -132,17 +158,23 @@ export function validateInstalledPresentationRecipe(recipe, definition) {
       assert.equal(step.role, "checkBox");
       assert.equal(typeof step.value, "boolean");
     } else if (step.action === "replace-text") {
-      assert(["textField", "secureTextField"].includes(step.role));
-      boundedText(step.value, 4096);
+      assert(["textField", "secureTextField", "textArea"].includes(step.role));
+      boundedInput(step.value);
     } else if (step.action === "choose-owned-path") {
       assert.equal(step.role, "button");
-      assert(["Save", "Choose", "Open"].includes(step.label));
+      assert(["Save", "Choose", "Open", "Scan"].includes(step.label));
       assert.equal(step.value, null);
       assert(step.ownedPath);
       assert.equal(step.scope?.kind, "panel");
     } else if (step.action === "set-slider") {
       assert.equal(step.role, "slider");
       assert(Number.isFinite(step.value) && step.value >= 0 && step.value <= 1);
+    } else if (step.action === "set-column-width") {
+      assert.equal(step.role, "column");
+      assert(Number.isFinite(step.value) && step.value >= 64 && step.value <= 2048);
+    } else if (step.action === "show-menu") {
+      assert(["row", "button", "staticText"].includes(step.role));
+      assert.equal(step.value, null);
     } else if (["increment", "decrement"].includes(step.action)) {
       assert.equal(step.role, "stepper");
       assert.equal(step.value, null);
@@ -159,6 +191,12 @@ export function validateInstalledPresentationRecipe(recipe, definition) {
       );
     }
     assert(step.action === "choose-owned-path" || step.ownedPath === undefined);
+    if (step.when !== undefined) {
+      assert(["value-differs", "not-selected"].includes(step.when));
+      if (step.when === "value-differs") assert.equal(step.action, "set-checkbox");
+      else assert.equal(step.action, "click");
+    }
+    if (step.selector === "placeholder") assert.equal(step.role, "textField");
   }
   return recipe;
 }
@@ -374,10 +412,15 @@ export function heldInstalledPresentationSteps(recipe, definition, capability) {
   validateInstalledPresentationRecipe(recipe, definition);
   validateFunctionalCapability(capability, definition);
   return recipe.steps.map((step) => {
-    const scope = step.scope ?? {
-      kind: "window",
-      label: installedPresentationWindowTitle(capability),
+    const label = (entry) => {
+      if (!entry.ownedLabel) return entry.label;
+      const path = capability.ownedPaths.find(({ name }) => name === entry.ownedLabel.name);
+      assert(path, "Missing source-derived label capability");
+      return path.path.split("/").at(-1);
     };
+    const originalScope = step.scope ?? { kind: "window", label: installedPresentationWindowTitle(capability) };
+    const scope = { ...originalScope, label: label(originalScope) };
+    if (scope.anchor) scope.anchor = { ...scope.anchor, label: label(scope.anchor) };
     let value = step.value;
     if (step.action === "choose-owned-path") {
       const path = capability.ownedPaths.find(
@@ -389,6 +432,7 @@ export function heldInstalledPresentationSteps(recipe, definition, capability) {
     }
     return Object.freeze({
       ...step,
+      label: label(step),
       scope,
       ownedPath: step.ownedPath ?? null,
       value,
@@ -430,11 +474,13 @@ final class HostedFunctionalInstalledUITests: XCTestCase {
         let value: Value
         let scope: Scope
         let ownedPath: String?
+        let selector: String?
+        let when: String?
         struct Scope: Decodable {
             let kind: String
             let label: String
             let anchor: Anchor?
-            struct Anchor: Decodable { let role: String; let label: String }
+            struct Anchor: Decodable { let role: String; let label: String; let selector: String? }
         }
         enum Value: Decodable {
             case boolean(Bool), number(Double), text(String), null
@@ -488,29 +534,42 @@ final class HostedFunctionalInstalledUITests: XCTestCase {
             case "button": scopes = window.buttons
             default: XCTFail("Unsupported original scope"); return
             }
-            let sourceScopes = scopes.allElementsBoundByIndex.filter { candidate in
-                if !step.scope.label.isEmpty && candidate.label != step.scope.label && candidate.identifier != step.scope.label { return false }
-                if let anchor = step.scope.anchor {
-                    let types: [String: XCUIElement.ElementType] = ["staticText": .staticText, "button": .button, "textField": .textField, "menuItem": .menuItem]
-                    guard let anchorType = types[anchor.role] else { return false }
-                    let anchors = candidate.descendants(matching: anchorType).matching(NSPredicate(format: "label == %@ OR identifier == %@", anchor.label, anchor.label))
-                    guard anchors.count == 1 else { return false }
+            let deadline = Date().addingTimeInterval(30)
+            func sourceScopes() -> [XCUIElement] {
+                scopes.allElementsBoundByIndex.filter { candidate in
+                    if !step.scope.label.isEmpty && candidate.label != step.scope.label && candidate.identifier != step.scope.label { return false }
+                    if let anchor = step.scope.anchor {
+                        let types: [String: XCUIElement.ElementType] = ["staticText": .staticText, "button": .button, "textField": .textField, "menuItem": .menuItem]
+                        guard let anchorType = types[anchor.role] else { return false }
+                        guard matching(candidate, application: application, type: anchorType, label: anchor.label, selector: anchor.selector ?? "label", deadline: deadline).count == 1 else { return false }
+                    }
+                    return matching(candidate, application: application, type: type, label: step.label, selector: step.selector ?? "label", deadline: deadline).count == 1
                 }
-                if step.label.isEmpty { return step.scope.kind == "button" && type == .button }
-                return candidate.descendants(matching: type).matching(NSPredicate(format: "label == %@ OR identifier == %@", step.label, step.label)).count == 1
             }
-            let innermost = sourceScopes.filter { candidate in
-                !sourceScopes.contains { child in child != candidate && candidate.descendants(matching: .any).allElementsBoundByIndex.contains(child) }
+            func innermostScopes() -> [XCUIElement] {
+                let candidates = sourceScopes()
+                return candidates.filter { candidate in
+                    !candidates.contains { child in child != candidate && candidate.descendants(matching: .any).allElementsBoundByIndex.contains(child) }
+                }
             }
+            XCTAssertTrue(wait(30) { innermostScopes().count == 1 })
+            let innermost = innermostScopes()
             XCTAssertEqual(innermost.count, 1)
             let scoped = try XCTUnwrap(innermost.first)
-            let control: XCUIElement
-            if step.label.isEmpty { control = scoped }
-            else {
-                let controls = scoped.descendants(matching: type).matching(NSPredicate(format: "label == %@ OR identifier == %@", step.label, step.label))
-                XCTAssertTrue(wait(30) { controls.count == 1 })
-                XCTAssertEqual(controls.count, 1)
-                control = controls.element(boundBy: 0)
+            let controls = matching(scoped, application: application, type: type, label: step.label, selector: step.selector ?? "label", deadline: deadline)
+            XCTAssertEqual(controls.count, 1)
+            let control = try XCTUnwrap(controls.first)
+            if let condition = step.when {
+                switch condition {
+                case "value-differs":
+                    guard case .boolean(let desired) = step.value else { XCTFail("Invalid checkbox condition"); return }
+                    let current = control.value as? String
+                    XCTAssertTrue(current == "0" || current == "1")
+                    if current == (desired ? "1" : "0") { continue }
+                case "not-selected":
+                    if control.isSelected { continue }
+                default: XCTFail("Invalid source condition"); return
+                }
             }
             XCTAssertTrue(wait(30) { control.isHittable && (step.action == "choose-owned-path" || control.isEnabled) })
             switch (step.action, step.value) {
@@ -547,6 +606,16 @@ final class HostedFunctionalInstalledUITests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(value, 0)
                 XCTAssertLessThanOrEqual(value, 1)
                 control.adjust(toNormalizedSliderPosition: value)
+            case ("set-column-width", .number(let width)):
+                XCTAssertGreaterThanOrEqual(width, 64)
+                XCTAssertLessThanOrEqual(width, 2048)
+                let original = control.frame.width
+                XCTAssertGreaterThanOrEqual(abs(original - width), 1)
+                let start = control.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0)).withOffset(CGVector(dx: -1, dy: 4))
+                let end = start.withOffset(CGVector(dx: width - original, dy: 0))
+                start.clickAndDrag(to: end)
+                XCTAssertTrue(wait(15) { abs(control.frame.width - width) <= 2 })
+            case ("show-menu", .null): control.rightClick()
             case ("increment", .null): control.buttons["Increment"].click()
             case ("decrement", .null): control.buttons["Decrement"].click()
             case ("submit", .null): control.typeKey(.return, modifierFlags: [])
@@ -565,6 +634,28 @@ final class HostedFunctionalInstalledUITests: XCTestCase {
         attachment.name = "Original downloaded functional action"
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func matching(_ root: XCUIElement, application: XCUIApplication, type: XCUIElement.ElementType, label: String, selector: String, deadline: Date) -> [XCUIElement] {
+        var candidates = root.descendants(matching: type).allElementsBoundByIndex
+        if root.elementType == type { candidates.insert(root, at: 0) }
+        guard candidates.count <= 128, Date() < deadline else { return [] }
+        switch selector {
+        case "label": return candidates.filter { label.isEmpty || $0.label == label || $0.identifier == label }
+        case "placeholder": return candidates.filter { $0.placeholderValue == label }
+        case "help":
+            guard candidates.count <= 32 else { return [] }
+            var matches: [XCUIElement] = []
+            for candidate in candidates where candidate.isHittable && Date() < deadline {
+                root.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0)).hover()
+                guard wait(min(1, max(0, deadline.timeIntervalSinceNow)), { application.helpTags.count == 0 }) else { return [] }
+                candidate.hover()
+                let tags = application.helpTags.matching(NSPredicate(format: "label == %@", label))
+                if wait(min(1, max(0, deadline.timeIntervalSinceNow)), { tags.count == 1 }) { matches.append(candidate) }
+            }
+            return matches
+        default: XCTFail("Invalid source selector"); return []
+        }
     }
 
     private func wait(_ seconds: TimeInterval, _ condition: @escaping () -> Bool) -> Bool {

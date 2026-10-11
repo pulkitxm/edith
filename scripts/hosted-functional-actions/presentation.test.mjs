@@ -376,3 +376,50 @@ test("source anchors select unlabeled original groups, menu options and variable
   ];
   validateInstalledPresentationRecipe(scoped, definition);
 });
+
+test("source-scoped unnamed controls, multiline editor input and actual menu or header actions retain original selectors", () => {
+  const steps = [
+    { role: "slider", label: "", action: "set-slider", value: 0.25, scope: { kind: "group", label: "", anchor: { role: "staticText", label: "Synthetic audio" } } },
+    { role: "textArea", label: "", action: "replace-text", value: "synthetic\nsecond line", scope: { kind: "group", label: "Editor", anchor: { role: "staticText", label: "Editor" } } },
+    { role: "row", label: "synthetic-machine", action: "show-menu", value: null },
+    { role: "column", label: "Name", action: "set-column-width", value: 238 },
+    { role: "textField", label: "Ask a question", selector: "placeholder", action: "submit", value: null },
+    { role: "button", label: "New terminal (⌘T)", selector: "help", action: "click", value: null },
+  ];
+  const value = { ...recipe, steps };
+  validateInstalledPresentationRecipe(value, definition);
+  const source = installedPresentationUITestSource(value, definition, capability);
+  assert(source.includes("control.rightClick()"));
+  assert(source.includes("start.clickAndDrag(to: end)"));
+  assert(source.includes("$0.placeholderValue == label"));
+  assert(source.includes("candidate.hover()"));
+  assert(source.includes("let sourceScopes") === false);
+  assert(source.includes("func sourceScopes()"));
+});
+
+test("unsupported selectors, unscoped empty controls, invalid guards and unsafe text fail before original UI generation", () => {
+  const values = [
+    { role: "slider", label: "", action: "set-slider", value: 0.25 },
+    { role: "button", label: "New", selector: "ordinal", action: "click", value: null },
+    { role: "button", label: "New", selector: "placeholder", action: "click", value: null },
+    { role: "textArea", label: "Editor", action: "replace-text", value: "synthetic\u0000secret" },
+    { role: "column", label: "Name", action: "set-column-width", value: 2049 },
+    { role: "row", label: "machine", action: "show-menu", value: "pretend" },
+    { role: "button", label: "New", action: "click", value: null, when: "value-differs" },
+    { role: "checkBox", label: "Enabled", action: "set-checkbox", value: true, when: "always" },
+  ];
+  for (const step of values) assert.throws(() => validateInstalledPresentationRecipe({ ...recipe, steps: [step] }, definition));
+});
+
+test("basename labels come only from exact named signed capabilities and missing names cannot generate a chooser", () => {
+  const step = { role: "button", label: "", ownedLabel: { name: "data", component: "basename" }, action: "click", value: null };
+  const value = { ...recipe, steps: [step] };
+  const held = heldInstalledPresentationSteps(value, definition, capability);
+  assert.equal(held[0].label, "keepAwake");
+  assert.equal(held[0].ownedLabel.name, "data");
+  const missing = structuredClone(value);
+  missing.steps[0].ownedLabel.name = "another-owner";
+  assert.throws(() => heldInstalledPresentationSteps(missing, definition, capability));
+  missing.steps[0].ownedLabel.component = "arbitrary-path";
+  assert.throws(() => validateInstalledPresentationRecipe(missing, definition));
+});
