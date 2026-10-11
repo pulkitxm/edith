@@ -108,8 +108,7 @@ public final class WorkerFixtureUIAdmission {
         let root = host.deletingLastPathComponent()
         let session = String(hostIdentifier.dropFirst("com.pulkit.edith.tests.worker-".count))
         guard WorkerFixtureUIContract.uuid(session),
-            root.path.hasSuffix("/functional-fixture-" + session),
-            let hostBundle = Bundle(url: host)
+            root.path.hasSuffix("/functional-fixture-" + session)
         else { throw WorkerFixtureError.invalid }
         try trust.validate()
         guard root.path == trust.root, session == trust.session,
@@ -119,7 +118,9 @@ public final class WorkerFixtureUIAdmission {
                 + "/edith-host-2/arm64/" + version + "/" + extensionID
                 + "/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex",
             roleBundle.bundleURL.path == workerBundle.bundleURL.path
-                + "/Contents/Resources/Payload/" + extensionID + "/" + roleKind.rawValue + ".bundle"
+                + "/Contents/Resources/Payload/" + extensionID + "/" + roleKind.rawValue
+                + ".bundle",
+            let hostBundle = Bundle(url: host)
         else { throw WorkerFixtureError.invalid }
         var paths: [WorkerFixtureUIOpenedPath] = []
         for url in [
