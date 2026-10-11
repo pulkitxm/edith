@@ -131,11 +131,22 @@ final class MachinePTY {
                     try? await Task.sleep(for: .milliseconds(10))
                     continue
                 }
+                if identity.isAlive, getpgid(identifier) == identifier {
+                    _ = kill(-identifier, SIGKILL)
+                }
+                if identity.isAlive { _ = kill(identifier, SIGKILL) }
+                var information = siginfo_t()
+                var observed: Int32
+                repeat {
+                    observed = waitid(
+                        P_PID, id_t(identifier), &information, WEXITED | WNOHANG | WNOWAIT)
+                } while observed < 0 && errno == EINTR
+                let leaderReturned = observed == 0 && information.si_pid == identifier
                 guard let remaining = Self.sessionMembers(identifier) else {
                     try? await Task.sleep(for: .milliseconds(10))
                     continue
                 }
-                guard !remaining.isEmpty else { break }
+                if remaining.isEmpty, leaderReturned { break }
                 for member in remaining where member.isAlive { _ = kill(member.pid, SIGKILL) }
                 try? await Task.sleep(for: .milliseconds(10))
             }
