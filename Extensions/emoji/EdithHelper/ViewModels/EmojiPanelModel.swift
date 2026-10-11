@@ -78,6 +78,19 @@ final class EmojiPanelModel {
         renderedSections.reduce(0) { $0 + $1.emoji.count }
     }
 
+    func activate(
+        _ emoji: Emoji?, copyOnly: Bool, tone: EmojiSkinTone? = nil,
+        store: EmojiStore, onDismiss: () -> Void
+    ) {
+        guard !stopped, let emoji else { return }
+        onDismiss()
+        if copyOnly {
+            store.copy(emoji, tone: tone)
+        } else {
+            store.insert(emoji, tone: tone)
+        }
+    }
+
     func setQuery(_ value: String) {
         guard !stopped else { return }
         query = value

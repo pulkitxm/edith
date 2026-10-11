@@ -344,13 +344,7 @@ struct EmojiPanelView: View {
     }
 
     private func activate(_ emoji: Emoji?, copyOnly: Bool, tone: EmojiSkinTone? = nil) {
-        guard let emoji else { return }
-        onDismiss()
-        if copyOnly {
-            store.copy(emoji, tone: tone)
-        } else {
-            store.insert(emoji, tone: tone)
-        }
+        model.activate(emoji, copyOnly: copyOnly, tone: tone, store: store, onDismiss: onDismiss)
     }
 
     private func openPreferences() {
