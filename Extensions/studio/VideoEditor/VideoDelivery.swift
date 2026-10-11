@@ -461,34 +461,31 @@ extension VideoRenderPipeline {
     ) async throws {
         guard let output, let input else { return }
         var lastProgress = -1.0
-        while true {
-            try Task.checkCancellation()
-            guard writer.status == .writing, reader.status != .failed else {
-                throw writer.error ?? reader.error
-                    ?? VideoDeliveryError.failed("The encoder stopped before completion.")
-            }
-            while !input.isReadyForMoreMediaData {
-                try await Task.sleep(for: .milliseconds(2))
+        try await VideoSampleTransfer.run(
+            validate: {
                 guard writer.status == .writing, reader.status != .failed else {
                     throw writer.error ?? reader.error
                         ?? VideoDeliveryError.failed("The encoder stopped accepting frames.")
                 }
-            }
-            guard let sample = output.copyNextSampleBuffer() else { break }
-            guard input.append(sample) else {
-                throw writer.error ?? VideoDeliveryError.failed("Could not encode a media sample.")
-            }
-            let fraction = min(
-                0.99,
-                max(
-                    0,
-                    (CMSampleBufferGetPresentationTimeStamp(sample) - timeRange.start).seconds
-                        / timeRange.duration.seconds))
-            if fraction - lastProgress >= 0.01 {
-                progress(fraction)
-                lastProgress = fraction
-            }
-        }
-        input.markAsFinished()
+            },
+            readNext: { output.copyNextSampleBuffer() },
+            isReady: { input.isReadyForMoreMediaData },
+            waitForReadiness: { try await Task.sleep(for: .milliseconds(2)) },
+            append: { sample in
+                guard input.append(sample) else {
+                    throw writer.error
+                        ?? VideoDeliveryError.failed("Could not encode a media sample.")
+                }
+                let fraction = min(
+                    0.99,
+                    max(
+                        0,
+                        (CMSampleBufferGetPresentationTimeStamp(sample) - timeRange.start).seconds
+                            / timeRange.duration.seconds))
+                if fraction - lastProgress >= 0.01 {
+                    progress(fraction)
+                    lastProgress = fraction
+                }
+            }, finish: { input.markAsFinished() })
     }
 }
