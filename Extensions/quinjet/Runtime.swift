@@ -40,6 +40,7 @@ final class ExtensionRuntime: NSObject {
     func suspendCommands(completion: @escaping () -> Void) {
         _ = commands.suspend()
         draining = true
+        QuinjetWorkOwnership.beginSuspension()
         retireUI()
         let startup = startup, worker = worker
         startup?.cancel()
@@ -49,6 +50,7 @@ final class ExtensionRuntime: NSObject {
             await startup?.value
             await worker?.cancelPendingWork()
             for task in Array(uiStops.values) { await task.value }
+            await QuinjetWorkOwnership.shutdown()
             completion()
         }
     }
@@ -56,6 +58,7 @@ final class ExtensionRuntime: NSObject {
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         draining = true
+        QuinjetWorkOwnership.beginSuspension()
         retireUI()
         startup?.cancel()
         commands.shutdown()
@@ -70,6 +73,7 @@ final class ExtensionRuntime: NSObject {
             surface = nil
             self.startup = nil
             for task in Array(uiStops.values) { await task.value }
+            await QuinjetWorkOwnership.shutdown()
             completion()
         }
     }

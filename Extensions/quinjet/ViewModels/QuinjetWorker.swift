@@ -301,6 +301,7 @@ import Foundation
         return try JSONEncoder().encode(result)
     }
     func beginSuspension() {
+        QuinjetWorkOwnership.beginSuspension()
         draining = true
         maintenance?.cancel()
         model.beginSuspension()
@@ -322,7 +323,12 @@ import Foundation
     }
 
     func shutdown() async {
-        guard !isStopped else { return }
+        beginSuspension()
+        guard !isStopped else {
+            await cancelPendingWork()
+            await QuinjetWorkOwnership.shutdown()
+            return
+        }
         isStopped = true
         await terminalSessions.stopAllAndWait()
         await cliStreams?.stopAndWait()
