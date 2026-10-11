@@ -43,4 +43,39 @@ import Testing
         await second.value
         await actual.value
     }
+
+    @Test func joinCurrentWaitsForActualCallbackThenPermitsControlRetry() async throws {
+        let callbacks = HostRemoteCallbackRetirement()
+        var held: CheckedContinuation<Void, Never>?
+        var returned = false
+        var joined = false
+        let actual = try #require(
+            callbacks.schedule {
+                await withCheckedContinuation { held = $0 }
+                returned = true
+            })
+        defer { held?.resume() }
+        let ready = ContinuousClock.now + .seconds(2)
+        while held == nil, ContinuousClock.now < ready { await Task.yield() }
+        try #require(held != nil)
+        let drain = Task {
+            await callbacks.joinCurrent(); joined = true
+        }
+        for _ in 0..<100 { await Task.yield() }
+        #expect(!joined && !returned)
+        held?.resume()
+        held = nil
+        let finished = ContinuousClock.now + .seconds(2)
+        while !joined, ContinuousClock.now < finished { await Task.yield() }
+        try #require(joined && returned)
+        await actual.value
+        await drain.value
+        var retryReturned = false
+        let retry = try #require(callbacks.schedule { retryReturned = true })
+        await retry.value
+        await callbacks.closeAndWait()
+        #expect(retryReturned)
+        #expect(callbacks.schedule {} == nil)
+    }
+
 }

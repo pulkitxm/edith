@@ -22,6 +22,7 @@ final class HostRemoteInvocationRetirement {
     private var work: [UUID: Work] = [:]
     private var closed = false
     var count: Int { work.count }
+    func contains(_ token: UUID) -> Bool { work[token] != nil }
 
     func accepts(_ token: UUID) -> Bool {
         !closed && work.count < 8 && work[token] == nil
@@ -44,12 +45,18 @@ final class HostRemoteInvocationRetirement {
         for item in work.values { item.task.cancel() }
     }
 
+    func cancelAndJoin(excluding token: UUID? = nil) async {
+        let snapshot = work.filter { $0.key != token }
+        for item in snapshot.values { item.task.cancel() }
+        for (key, item) in snapshot {
+            await item.task.value
+            finish(key, identity: item.identity)
+        }
+    }
+
     func closeAndWait() async {
         close()
-        for (token, item) in work {
-            await item.task.value
-            finish(token, identity: item.identity)
-        }
+        await cancelAndJoin()
     }
 
     private func finish(_ token: UUID, identity: UUID) {
@@ -93,11 +100,22 @@ final class HostRemoteCallbackRetirement: @unchecked Sendable {
         }
     }
 
+    func joinCurrent() async {
+        await withCheckedContinuation { continuation in
+            let ready = lock.withLock { () -> Bool in
+                guard pending != 0 else { return true }
+                waiters.append(continuation)
+                return false
+            }
+            if ready { continuation.resume() }
+        }
+    }
+
     private func finish() {
         let ready = lock.withLock { () -> [CheckedContinuation<Void, Never>] in
             precondition(pending > 0)
             pending -= 1
-            guard closed, pending == 0 else { return [] }
+            guard pending == 0 else { return [] }
             let ready = waiters
             waiters.removeAll()
             return ready

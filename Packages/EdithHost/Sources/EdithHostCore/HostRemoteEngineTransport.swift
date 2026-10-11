@@ -11,6 +11,7 @@ final class HostRemoteEngineCalls {
     private let authorize: @MainActor () -> Bool
     private var pending: [UUID: Pending] = [:]
     private var invalidated = false
+    nonisolated private let callbacks = HostRemoteCallbackRetirement()
 
     init(connection: NSXPCConnection, authorize: @escaping @MainActor () -> Bool) {
         self.connection = connection
@@ -25,20 +26,22 @@ final class HostRemoteEngineCalls {
         let data = try ExtensionEngineWire.encode(request)
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
-                let timeout = Task { [weak self] in
-                    do { try await Task.sleep(for: .seconds(request.timeout)) } catch { return }
-                    self?.cancel(request.token)
-                    self?.finish(request.token, result: .failure(HostWorkerError.timedOut))
-                }
+                guard
+                    let timeout = callbacks.schedule({ [weak self] in
+                        do { try await Task.sleep(for: .seconds(request.timeout)) } catch { return }
+                        self?.cancel(request.token)
+                        self?.finish(request.token, result: .failure(HostWorkerError.timedOut))
+                    })
+                else { continuation.resume(throwing: HostWorkerError.exited); return }
                 pending[request.token] = Pending(continuation: continuation, timeout: timeout)
                 guard
                     let proxy = connection.remoteObjectProxyWithErrorHandler({
                         @Sendable [weak self] _ in
-                        Task { @MainActor [weak self] in self?.invalidate() }
+                        self?.callbacks.schedule { [weak self] in self?.invalidate() }
                     }) as? HostRemoteEvents
                 else { invalidate(); return }
                 proxy.invoke(data) { @Sendable [weak self] bytes in
-                    Task { @MainActor [weak self] in
+                    self?.callbacks.schedule { [weak self] in
                         do {
                             let reply = try ExtensionEngineWire.decode(
                                 ExtensionEngineReply.self, from: bytes)
@@ -57,8 +60,8 @@ final class HostRemoteEngineCalls {
                     finish(request.token, result: .failure(CancellationError()))
                 }
             }
-        } onCancel: {
-            Task { @MainActor [weak self] in
+        } onCancel: { [weak self] in
+            self?.callbacks.schedule { [weak self] in
                 self?.cancel(request.token)
                 self?.finish(request.token, result: .failure(CancellationError()))
             }
@@ -80,6 +83,12 @@ final class HostRemoteEngineCalls {
             finish(token, result: .failure(HostWorkerError.exited))
         }
         invalidated = true
+        callbacks.close()
+    }
+
+    func invalidateAndWait() async {
+        invalidate()
+        await callbacks.closeAndWait()
     }
 
     private func finish(_ token: UUID, result: Result<Data, any Error>) {

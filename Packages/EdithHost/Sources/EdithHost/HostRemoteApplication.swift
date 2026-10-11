@@ -47,6 +47,7 @@ final class HostRemoteApplication {
     private var stopping = false
     private let stopPreparation = HostWorkerPreparation()
     private var exitScheduled = false
+    private var exitTask: Task<Void, Never>?
 
     private init() throws {
         let bundle = Bundle.main
@@ -373,10 +374,13 @@ final class HostRemoteApplication {
 
     private func beginShutdown(token: UUID = UUID()) throws -> Task<Result<Void, Error>, Never> {
         stopping = true
+        endpoint.closeMutationAdmission()
         let retainedRuntimes = runtimes
         let presentations = slots.compactMap { $0.request?.presentationID }
         slots.forEach { $0.beginClosing() }
         return try stopPreparation.begin(token: token) { [self] in
+            await endpoint.prepareToStop(excluding: token)
+            for slot in slots { await slot.prepareToStop() }
             for runtime in retainedRuntimes { try await runtime.suspendRemoteUICommandsAll() }
             for runtime in retainedRuntimes {
                 for presentationID in presentations {
@@ -397,7 +401,7 @@ final class HostRemoteApplication {
                     token: token, configuration: configuration,
                     roles: retainedRuntimes.map { $0.role.rawValue }, presentations: presentations))
             #endif
-            slots.forEach { $0.release() }
+            slots.forEach { $0.release(reset: false) }
             presentationRuntimes.removeAll()
             terminalRenderer = HostRemoteTerminalRenderer()
         }
@@ -416,8 +420,10 @@ final class HostRemoteApplication {
     private func scheduleExit() {
         guard !exitScheduled else { return }
         exitScheduled = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [self] in
-            endpoint.invalidate()
+        exitTask = Task { [self] in
+            try? await Task.sleep(for: .milliseconds(50))
+            await endpoint.invalidateAndWait()
+            for slot in slots { await slot.invalidateAndWait() }
             exit(0)
         }
     }
@@ -449,6 +455,7 @@ private final class HostRemoteSceneSlot {
     private let executable: URL
     private let requirement: String
     private var generation = UUID()
+    private var retiringEndpoints: [UUID: Task<Void, Never>] = [:]
 
     init(
         index: Int, executable: URL, requirement: String,
@@ -491,7 +498,22 @@ private final class HostRemoteSceneSlot {
         closing = false
     }
 
-    func beginClosing() { closing = true }
+    func beginClosing() {
+        closing = true
+        endpoint?.closeMutationAdmission()
+    }
+
+    func prepareToStop() async {
+        beginClosing()
+        await endpoint?.prepareToStop()
+        for task in retiringEndpoints.values { await task.value }
+    }
+
+    func invalidateAndWait() async {
+        if let endpoint { await endpoint.invalidateAndWait() }
+        for task in retiringEndpoints.values { await task.value }
+        retiringEndpoints.removeAll()
+    }
 
     private func execute(_ command: HostRemoteCommand) throws -> Data {
         if HostTerminalUIRequest.Operation(rawValue: command.operation) != nil {
@@ -550,15 +572,22 @@ private final class HostRemoteSceneSlot {
         presentation = nil
     }
 
-    func release() {
+    func release(reset: Bool = true) {
         generation = UUID()
         clearView()
         bootstrap.replace(nil)
-        endpoint?.invalidate()
+        if let endpoint {
+            endpoint.invalidate()
+            let token = UUID()
+            retiringEndpoints[token] = Task { [self] in
+                await endpoint.invalidateAndWait()
+                retiringEndpoints[token] = nil
+            }
+        }
         endpoint = nil
         request = nil
         session = nil
-        try? resetEndpoint()
+        if reset { try? resetEndpoint() }
     }
 }
 
