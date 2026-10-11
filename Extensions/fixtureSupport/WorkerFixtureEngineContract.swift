@@ -7,6 +7,16 @@ public struct WorkerFixtureEngineInput: Codable, Equatable, Sendable {
     public let path: String
     public let sha256: String
     public let maximumBytes: Int
+
+    @MainActor func read(_ file: WorkerFixtureUIOpenedPath) throws -> Data {
+        guard file.url.path == path, maximumBytes > 0, maximumBytes <= 268_435_456,
+            file.original.st_size > 0, file.original.st_size <= maximumBytes
+        else { throw WorkerFixtureError.invalid }
+        let data = try file.read()
+        guard data.count <= maximumBytes, WorkerFixtureUIAdmission.digest(data) == sha256
+        else { throw WorkerFixtureError.invalid }
+        return data
+    }
 }
 
 public struct WorkerFixtureEngineOutput: Codable, Equatable, Sendable {
@@ -97,16 +107,35 @@ public struct WorkerFixtureEngineContract: Codable, Equatable, Sendable {
                 String(host.dropFirst("com.pulkit.edith.tests.worker-".count))),
             workerIdentifier == host + ".extension." + owner + ".worker",
             context["extensionID"] as? String == owner,
-            context["defaultsSuite"] as? String == workerIdentifier,
+            context["defaultsSuite"] as? String == host + ".extensions." + owner,
             environment["EDITH_APPLICATION_IDENTIFIER"] == host,
             environment["EDITH_EXTENSION_ID"] == owner,
-            environment["EDITH_SHARED_DEFAULTS_SUITE"] == workerIdentifier
+            environment["EDITH_SHARED_DEFAULTS_SUITE"] == host + ".extensions." + owner
         else { throw WorkerFixtureError.invalid }
     }
 
     public func validate(
         trust: WorkerFixtureUITrust, owner expectedOwner: String, uid: UInt32,
         expectedRole: WorkerFixtureRole = .app
+    ) throws {
+        let policy = try trust.rolePolicy(owner: expectedOwner)
+        guard policy.primaryRole == expectedRole else { throw WorkerFixtureError.invalid }
+        try policy.validateEngine(self)
+        try validateBounds(trust: trust, owner: expectedOwner, uid: uid, expectedRole: expectedRole)
+    }
+
+    public func validate(
+        trust: WorkerFixtureBootstrapTrust, owner expectedOwner: String, uid: UInt32,
+        expectedRole: WorkerFixtureRole = .app
+    ) throws {
+        let policy = try trust.rolePolicy(owner: expectedOwner)
+        guard policy.primaryRole == expectedRole else { throw WorkerFixtureError.invalid }
+        try policy.validateEngine(self)
+        try validateBounds(trust: trust, owner: expectedOwner, uid: uid, expectedRole: expectedRole)
+    }
+
+    func validateBounds<T: WorkerFixtureTrustBounds>(
+        trust: T, owner expectedOwner: String, uid: UInt32, expectedRole: WorkerFixtureRole
     ) throws {
         try trust.validate()
         guard schema == 1, owner == expectedOwner, WorkerFixtureUIContract.owners.contains(owner),
@@ -115,23 +144,23 @@ public struct WorkerFixtureEngineContract: Codable, Equatable, Sendable {
             ["initial", "updated", "reinstalled"].contains(phase),
             WorkerFixtureUIContract.uuid(requestGeneration),
             WorkerFixtureUIContract.hex(capabilitySHA256, count: 64),
-            home == root + "/" + owner + "-home", dataDirectory == root + "/data/" + owner,
+            home == root + "/" + owner + "-home",
+            dataDirectory == WorkerFixtureUIContract.identityRoot(root: root, session: session)
+                + "/Data/" + owner,
             WorkerFixtureUIContract.version(version), hostABI == "edith-host-2",
             WorkerFixtureUIContract.hex(packageSHA256, count: 64),
             WorkerFixtureUIContract.canonical(workerPath),
-            workerPath == root + "/Extensions/" + owner + "/edith-host-2/arm64/" + version + "/"
+            workerPath == WorkerFixtureUIContract.identityRoot(root: root, session: session)
+                + "/Extensions/" + owner + "/edith-host-2/arm64/" + version + "/"
                 + owner
                 + "/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex",
             role == expectedRole.rawValue,
-            expectedRole == .app
-                || (owner == "notchShelf"
-                    && operations == ["notch.settings.read", "notch.settings.write"]
-                    && inputs.isEmpty && outputs.isEmpty),
             rolePath == workerPath + "/Contents/Resources/Payload/" + owner + "/" + role
                 + ".bundle",
             producer.executable == trust.producerExecutable,
             producer.executableSHA256 == trust.producerExecutableSHA256,
-            producer.pid != engine.pid, engine.executable == workerPath + "/Contents/MacOS/Edith",
+            producer.pid != engine.pid,
+            engine.executable == root + "/Fixture.app/Contents/MacOS/Edith",
             !operations.isEmpty, operations.count <= 16, Set(operations).count == operations.count,
             operations.allSatisfy(Self.operation), inputs.count <= 64, outputs.count <= 64,
             Set(inputs.map(\.name) + outputs.map(\.name)).count == inputs.count + outputs.count,

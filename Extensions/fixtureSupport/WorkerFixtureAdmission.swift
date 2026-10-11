@@ -11,12 +11,44 @@ public struct WorkerFixtureAdmission: Sendable {
     public let extensionID: String
     public let home: URL
     public let dataDirectory: URL
+    #if EDITH_FUNCTIONAL_FIXTURE
+    private let signedAuthority: WorkerFixtureEngineAdmission?
+    #endif
 
-    private init(extensionID: String, role: WorkerFixtureRole, home: URL, dataDirectory: URL) {
+    private init(
+        extensionID: String, role: WorkerFixtureRole, home: URL, dataDirectory: URL
+    ) {
         self.role = role
         self.extensionID = extensionID
         self.home = home
         self.dataDirectory = dataDirectory
+        #if EDITH_FUNCTIONAL_FIXTURE
+        signedAuthority = nil
+        #endif
+    }
+
+    #if EDITH_FUNCTIONAL_FIXTURE
+    @MainActor private init(authority: WorkerFixtureEngineAdmission) {
+        let descriptor = authority.descriptor
+        extensionID = descriptor.owner
+        role = authority.platformRole
+        home = URL(fileURLWithPath: descriptor.home, isDirectory: true)
+        dataDirectory = URL(fileURLWithPath: descriptor.dataDirectory, isDirectory: true)
+        signedAuthority = authority
+    }
+
+    @MainActor static func retaining(_ authority: WorkerFixtureEngineAdmission) -> Self {
+        Self(authority: authority)
+    }
+    #endif
+
+    @MainActor public func requireCurrent() throws {
+        #if EDITH_FUNCTIONAL_FIXTURE
+        guard let signedAuthority else { throw WorkerFixtureError.invalid }
+        try signedAuthority.requireCurrent()
+        #else
+        throw WorkerFixtureError.invalid
+        #endif
     }
 
     public static func current(
@@ -37,6 +69,11 @@ public struct WorkerFixtureAdmission: Sendable {
         hostIdentifier: String?, hostBundle: URL, roleDirectory: URL,
         roleIdentifier: String?, version: String?, hostABI: String?
     ) throws -> Self? {
+        guard environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+            context["hostedFunctionalFixture"] == nil
+        else {
+            throw WorkerFixtureError.invalid
+        }
         guard
             environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
                 || environment["EDITH_APPLICATION_IDENTIFIER"]?.hasPrefix("com.pulkit.edith.tests.")

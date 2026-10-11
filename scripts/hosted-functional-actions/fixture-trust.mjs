@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { functionalCanonicalJSON } from "./contract.mjs";
+import { functionalActionOwners } from "./owners.mjs";
 
 const hash = /^[0-9a-f]{64}$/;
 const source = /^[0-9a-f]{40}$/;
@@ -44,7 +45,181 @@ function swiftString(value) {
   return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 }
 
-export function functionalFixtureTrustSource(artifactBytes, admittedArtifact) {
+export function functionalFixtureRolePolicySource(
+  policyBytes,
+  admittedPolicies,
+) {
+  exact(admittedPolicies, [
+    "sourceCommit",
+    "policySHA256",
+    "manifest",
+    "cases",
+  ]);
+  assert.match(admittedPolicies.sourceCommit, source);
+  assert.match(admittedPolicies.policySHA256, hash);
+  assert(
+    Buffer.isBuffer(policyBytes) &&
+      policyBytes.length > 0 &&
+      policyBytes.length <= 131072,
+  );
+  assert.equal(
+    createHash("sha256").update(policyBytes).digest("hex"),
+    admittedPolicies.policySHA256,
+  );
+  const readSource = (entry, maximum) => {
+    assert(
+      Buffer.isBuffer(entry.bytes) &&
+        entry.bytes.length > 0 &&
+        entry.bytes.length <= maximum,
+    );
+    assert.match(entry.sha256, hash);
+    assert.equal(
+      createHash("sha256").update(entry.bytes).digest("hex"),
+      entry.sha256,
+    );
+  };
+  exact(admittedPolicies.manifest, ["bytes", "sha256"]);
+  readSource(admittedPolicies.manifest, 262144);
+  const manifest = JSON.parse(
+    new TextDecoder("utf-8", { fatal: true }).decode(
+      admittedPolicies.manifest.bytes,
+    ),
+  );
+  assert(Array.isArray(manifest) && manifest.length === 39);
+  assert.deepEqual(
+    manifest.map((entry) => entry.id).sort(),
+    [...functionalActionOwners].sort(),
+  );
+  assert(
+    Array.isArray(admittedPolicies.cases) &&
+      admittedPolicies.cases.length === 39,
+  );
+  assert.deepEqual(
+    admittedPolicies.cases.map((entry) => entry.owner).sort(),
+    [...functionalActionOwners].sort(),
+  );
+  for (const entry of admittedPolicies.cases) {
+    exact(entry, ["owner", "path", "bytes", "sha256"]);
+    assert.equal(
+      entry.path,
+      `Tests/HostedFunctionalActions/OwnerCases/${entry.owner}ActionCase.swift`,
+    );
+    readSource(entry, 131072);
+  }
+  const policies = JSON.parse(
+    new TextDecoder("utf-8", { fatal: true }).decode(policyBytes),
+  );
+  assert.equal(functionalCanonicalJSON(policies), policyBytes.toString("utf8"));
+  assert(Array.isArray(policies) && policies.length === 39);
+  assert.deepEqual(
+    policies.map((entry) => entry.owner).sort(),
+    [...functionalActionOwners].sort(),
+  );
+  const helpers = new Set([
+    "keepAwake",
+    "focusDim",
+    "windowSweaters",
+    "micMute",
+    "keystrokeHighlight",
+    "presenter",
+    "colorPicker",
+    "systemStats",
+    "emoji",
+    "notchShelf",
+    "clipboard",
+  ]);
+  const token = /^[A-Za-z0-9_.-]{1,256}$/;
+  const expression = policies.map((policy) => {
+    exact(policy, [
+      "owner",
+      "primaryRole",
+      "operations",
+      "presentations",
+      "inputs",
+      "outputs",
+      "manifestSHA256",
+      "caseSHA256",
+    ]);
+    assert.equal(policy.manifestSHA256, admittedPolicies.manifest.sha256);
+    assert.equal(
+      policy.caseSHA256,
+      admittedPolicies.cases.find((entry) => entry.owner === policy.owner)
+        .sha256,
+    );
+    const original = manifest.find((entry) => entry.id === policy.owner);
+    assert(
+      original.roles &&
+        Object.getPrototypeOf(original.roles) === Object.prototype,
+    );
+    const primary = Object.hasOwn(original.roles, "app") ? "app" : "helper";
+    assert(Object.hasOwn(original.roles, primary));
+    assert.equal(policy.primaryRole, primary);
+    assert.equal(primary, helpers.has(policy.owner) ? "helper" : "app");
+    assert(
+      Array.isArray(policy.operations) &&
+        policy.operations.length > 0 &&
+        policy.operations.length <= 16,
+    );
+    assert.equal(new Set(policy.operations).size, policy.operations.length);
+    for (const operation of policy.operations) assert.match(operation, token);
+    assert(
+      Array.isArray(policy.presentations) &&
+        policy.presentations.length > 0 &&
+        policy.presentations.length <= 8,
+    );
+    const presentationKeys = new Set();
+    const presentations = policy.presentations.map((presentation) => {
+      exact(presentation, ["location", "section"]);
+      assert(["main", "settings"].includes(presentation.location));
+      assert(
+        presentation.section === policy.owner ||
+          (presentation.location === "settings" &&
+            ["general", "appearance", "extensions", "extension"].includes(
+              presentation.section,
+            )),
+      );
+      const key = `${presentation.location}.${presentation.section}`;
+      assert(!presentationKeys.has(key));
+      presentationKeys.add(key);
+      return `try WorkerFixturePresentationScope(location: ${swiftString(presentation.location)}, section: ${swiftString(presentation.section)})`;
+    });
+    assert(Array.isArray(policy.inputs) && policy.inputs.length <= 64);
+    assert(Array.isArray(policy.outputs) && policy.outputs.length <= 64);
+    const inputs = policy.inputs.map((input) => {
+      exact(input, ["name", "maximumBytes"]);
+      assert.match(input.name, token);
+      assert(
+        Number.isSafeInteger(input.maximumBytes) &&
+          input.maximumBytes > 0 &&
+          input.maximumBytes <= 268435456,
+      );
+      return `try WorkerFixtureInputScope(name: ${swiftString(input.name)}, maximumBytes: ${input.maximumBytes})`;
+    });
+    for (const output of policy.outputs) assert.match(output, token);
+    assert.equal(
+      new Set([...policy.inputs.map((input) => input.name), ...policy.outputs])
+        .size,
+      policy.inputs.length + policy.outputs.length,
+    );
+    return `try WorkerFixtureRolePolicy(owner: ${swiftString(policy.owner)}, primaryRole: .${primary}, operations: [${policy.operations.map(swiftString).join(", ")}], presentations: [${presentations.join(", ")}], inputs: [${inputs.join(", ")}], outputs: [${policy.outputs.map(swiftString).join(", ")}], manifestSHA256: ${swiftString(policy.manifestSHA256)}, caseSHA256: ${swiftString(policy.caseSHA256)})`;
+  });
+  return Object.freeze({
+    sourceCommit: admittedPolicies.sourceCommit,
+    policySHA256: admittedPolicies.policySHA256,
+    swiftExpression: `[${expression.join(",\n")}]`,
+  });
+}
+
+export function functionalFixtureTrustSource(
+  artifactBytes,
+  admittedArtifact,
+  policyBytes,
+  admittedPolicies,
+) {
+  const policy = functionalFixtureRolePolicySource(
+    policyBytes,
+    admittedPolicies,
+  );
   exact(admittedArtifact, [
     "sourceCommit",
     "runID",
@@ -53,6 +228,7 @@ export function functionalFixtureTrustSource(artifactBytes, admittedArtifact) {
     "artifactSHA256",
   ]);
   assert.match(admittedArtifact.sourceCommit, source);
+  assert.equal(policy.sourceCommit, admittedArtifact.sourceCommit);
   assert.match(admittedArtifact.artifactSHA256, hash);
   for (const field of ["runID", "jobID", "artifactID"])
     assert(
@@ -138,6 +314,7 @@ export function functionalFixtureTrustSource(artifactBytes, admittedArtifact) {
     `roleCertificateSHA256: ${data(artifact.roleCertificateSHA256)}`,
     `producerExecutable: ${swiftString(artifact.producer.path)}`,
     `producerExecutableSHA256: ${swiftString(artifact.producer.executableSHA256)}`,
+    `rolePolicies: ${policy.swiftExpression}`,
   ];
   return Object.freeze({
     sourceCommit: artifact.sourceCommit,

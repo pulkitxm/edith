@@ -30,7 +30,7 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
     ]
     static let helperOwners: Set<String> = [
         "focusDim", "micMute", "systemStats", "windowSweaters", "colorPicker", "emoji",
-        "presenter", "keystrokeHighlight", "keepAwake", "notchShelf",
+        "presenter", "keystrokeHighlight", "keepAwake", "notchShelf", "clipboard",
     ]
     public let schema: Int
     public let sourceCommit: String
@@ -56,8 +56,23 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
 
     public static func validateUIContext(
         _ context: NSDictionary, environment: [String: String], owner: String,
-        workerIdentifier: String, role: WorkerFixtureRole = .app
+        workerIdentifier: String, role: WorkerFixtureRole = .app,
+        settingsService: WorkerFixtureEngineContract? = nil,
+        rolePolicy: WorkerFixtureRolePolicy? = nil
     ) throws {
+        if let rolePolicy {
+            guard rolePolicy.owner == owner, rolePolicy.primaryRole == role,
+                rolePolicy.presentations.contains(where: {
+                    $0.location == context["location"] as? String
+                        && $0.section == context["section"] as? String
+                })
+            else { throw WorkerFixtureError.invalid }
+            if let settingsService { try rolePolicy.validateEngine(settingsService) }
+        }
+        let client = context["engineClient"] as? NSObject
+        let validServiceClient =
+            client?.responds(to: NSSelectorFromString("invoke:completion:")) == true
+            && client?.responds(to: NSSelectorFromString("cancel:")) == true
         guard Self.owners.contains(owner),
             let host = context["hostIdentifier"] as? String,
             host.hasPrefix("com.pulkit.edith.tests.worker-"),
@@ -66,18 +81,34 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
             let remote = context["remoteUI"] as? NSNumber,
             CFGetTypeID(remote) == CFBooleanGetTypeID(), remote.boolValue,
             let only = context["uiOnly"] as? NSNumber,
-            CFGetTypeID(only) == CFBooleanGetTypeID(), only.boolValue == (role == .helper),
+            CFGetTypeID(only) == CFBooleanGetTypeID(),
+            only.boolValue == (role == .helper && settingsService == nil && rolePolicy == nil),
             context["extensionID"] as? String == owner,
             let location = context["location"] as? String,
             ["main", "settings"].contains(location),
             let section = context["section"] as? String,
             section == owner
                 || (location == "settings"
-                    && ["general", "appearance", "extensions"].contains(section)),
+                    && ["general", "appearance", "extensions", "extension"].contains(section)),
+            settingsService == nil
+                || (rolePolicy != nil && settingsService?.hostIdentifier == host)
+                || (role == .helper && owner == "notchShelf"
+                    && settingsService?.owner == owner && settingsService?.role == "helper"
+                    && settingsService?.operations == [
+                        "notch.settings.read", "notch.settings.write",
+                    ]
+                    && settingsService?.inputs.isEmpty == true
+                    && settingsService?.outputs.isEmpty == true
+                    && settingsService?.hostIdentifier == host),
             role != .helper
-                || (helperOwners.contains(owner) && location == "settings"
+                || (rolePolicy != nil && settingsService != nil && validServiceClient
+                    && context["operation"] as? String == "configureUI" && context["tile"] == nil
+                    && context["target"] == nil)
+                || (rolePolicy == nil && helperOwners.contains(owner) && location == "settings"
                     && section == owner && context["operation"] as? String == "configureUI"
-                    && context["engineClient"] == nil
+                    && ((settingsService == nil && owner != "notchShelf"
+                        && context["engineClient"] == nil)
+                        || (settingsService != nil && validServiceClient))
                     && context["tile"] == nil && context["target"] == nil),
             let presentation = context["presentationID"] as? String,
             uuid(presentation.lowercased()),
@@ -125,6 +156,10 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
         return try JSONDecoder().decode(Self.self, from: data)
     }
 
+    static func identityRoot(root: String, session: String) -> String {
+        root + "/Edith Tests/worker-" + session
+    }
+
     public func validate(
         sourceCommit expectedSource: String, session expectedSession: String,
         owner expectedOwner: String, presentationID expectedPresentation: String,
@@ -134,7 +169,8 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
         workerPath expectedWorker: String, rolePath expectedRole: String,
         version expectedVersion: String, uid: UInt32,
         producer observedProducer: WorkerFixtureUIProcess,
-        engine observedEngine: WorkerFixtureUIProcess, ui observedUI: WorkerFixtureUIProcess
+        engine observedEngine: WorkerFixtureUIProcess, ui observedUI: WorkerFixtureUIProcess,
+        rolePolicy: WorkerFixtureRolePolicy? = nil
     ) throws {
         guard schema == 1, Self.owners.contains(owner), owner == expectedOwner,
             sourceCommit == expectedSource, Self.hex(sourceCommit, count: 40),
@@ -145,7 +181,7 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
             section == expectedSection,
             section == owner
                 || (location == "settings"
-                    && ["general", "appearance", "extensions"].contains(section)),
+                    && ["general", "appearance", "extensions", "extension"].contains(section)),
             capabilitySHA256 == expectedCapability, Self.hex(capabilitySHA256, count: 64),
             root == expectedRoot, Self.canonical(root),
             root.hasSuffix("/functional-fixture-" + session),
@@ -154,25 +190,60 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
             dataDirectory == expectedData, Self.canonical(dataDirectory),
             dataDirectory.hasPrefix(root + "/"),
             workerPath == expectedWorker, Self.canonical(workerPath),
-            workerPath == root
+            workerPath == Self.identityRoot(root: root, session: session)
                 + "/Extensions/" + owner + "/edith-host-2/arm64/" + version + "/" + owner
                 + "/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex",
             rolePath == expectedRole,
             rolePath == workerPath + "/Contents/Resources/Payload/" + owner + "/app.bundle"
-                || (Self.helperOwners.contains(owner) && location == "settings" && section == owner
+                || (Self.helperOwners.contains(owner)
+                    && ((location == "settings" && section == owner)
+                        || rolePolicy?.primaryRole == .helper)
                     && rolePath == workerPath + "/Contents/Resources/Payload/" + owner
                         + "/helper.bundle"),
             hostABI == "edith-host-2", version == expectedVersion, Self.version(version),
-            dataDirectory == root + "/data/" + owner,
+            dataDirectory == Self.identityRoot(root: root, session: session) + "/Data/" + owner,
             Self.hex(packageSHA256, count: 64),
             producer == observedProducer, engine == observedEngine, ui == observedUI,
             Set([producer.pid, engine.pid, ui.pid]).count == 3,
-            engine.executable == workerPath + "/Contents/MacOS/Edith",
+            engine.executable == root + "/Fixture.app/Contents/MacOS/Edith",
             ui.executable == workerPath + "/Contents/MacOS/Edith"
         else { throw WorkerFixtureError.invalid }
+        if let rolePolicy { try rolePolicy.validateUI(self) }
         try producer.validate(uid: uid)
         try engine.validate(uid: uid)
         try ui.validate(uid: uid)
+    }
+
+    public func validateEngineBuddy(
+        _ service: WorkerFixtureEngineContract, rolePolicy: WorkerFixtureRolePolicy
+    ) throws {
+        try rolePolicy.validateUI(self)
+        try rolePolicy.validateEngine(service)
+        guard service.schema == schema, service.sourceCommit == sourceCommit,
+            service.session == session, service.owner == owner, service.phase == phase,
+            service.capabilitySHA256 == capabilitySHA256, service.root == root,
+            service.hostIdentifier == hostIdentifier, service.home == home,
+            service.dataDirectory == dataDirectory, service.workerPath == workerPath,
+            service.rolePath == rolePath, service.version == version,
+            service.hostABI == hostABI, service.packageSHA256 == packageSHA256,
+            service.producer == producer, service.engine == engine
+        else { throw WorkerFixtureError.invalid }
+    }
+
+    public func validateSettingsService(_ service: WorkerFixtureEngineContract) throws {
+        guard owner == "notchShelf", location == "settings", section == owner,
+            rolePath == workerPath + "/Contents/Resources/Payload/notchShelf/helper.bundle",
+            service.schema == schema, service.sourceCommit == sourceCommit,
+            service.session == session, service.owner == owner, service.phase == phase,
+            service.capabilitySHA256 == capabilitySHA256, service.root == root,
+            service.hostIdentifier == hostIdentifier, service.home == home,
+            service.dataDirectory == dataDirectory, service.workerPath == workerPath,
+            service.rolePath == rolePath, service.role == "helper", service.version == version,
+            service.hostABI == hostABI, service.packageSHA256 == packageSHA256,
+            service.producer == producer, service.engine == engine,
+            service.operations == ["notch.settings.read", "notch.settings.write"],
+            service.inputs.isEmpty, service.outputs.isEmpty
+        else { throw WorkerFixtureError.invalid }
     }
 
     static func canonicalJSON(_ object: [String: Any]) throws -> Data {

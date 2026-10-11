@@ -19,41 +19,58 @@ public struct WorkerFixtureEngineRequest: Equatable, Sendable {
     private let role: URL
     private let requests: WorkerFixtureEngineRequestGate
     private let expectedRole: WorkerFixtureRole
+    private let inputFiles: [String: WorkerFixtureUIOpenedPath]
 
     private init(
         descriptor: WorkerFixtureEngineContract, trust: WorkerFixtureUITrust,
         paths: [WorkerFixtureUIOpenedPath], host: URL, worker: URL, role: URL,
-        expectedRole: WorkerFixtureRole
+        expectedRole: WorkerFixtureRole, inputFiles: [String: WorkerFixtureUIOpenedPath]
     ) {
         self.descriptor = descriptor; self.trust = trust; self.paths = paths
         self.host = host; self.worker = worker; self.role = role; self.expectedRole = expectedRole
+        self.inputFiles = inputFiles
         requests = WorkerFixtureEngineRequestGate(
             operations: descriptor.operations, generation: descriptor.requestGeneration)
     }
 
     public static func current(
         extensionID: String, context: NSDictionary, roleBundle: Bundle,
-        workerBundle: Bundle = .main,
-        expectedRole: WorkerFixtureRole = .app
+        workerBundle suppliedWorkerBundle: Bundle? = nil,
+        expectedRole suppliedRole: WorkerFixtureRole? = nil
     ) throws -> WorkerFixtureEngineAdmission? {
         let environment = ProcessInfo.processInfo.environment
+        let intentBundle = suppliedWorkerBundle ?? .main
         let intent =
-            context["hostedFunctionalFixture"] != nil
+            environment["EDITH_FUNCTIONAL_FIXTURE"] != nil
+            || context["hostedFunctionalFixture"] != nil
             || environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
             || (context["hostIdentifier"] as? String)?.hasPrefix("com.pulkit.edith.tests.") == true
-            || workerBundle.bundleIdentifier?.hasPrefix("com.pulkit.edith.tests.") == true
+            || intentBundle.bundleIdentifier?.hasPrefix("com.pulkit.edith.tests.") == true
             || environment["EDITH_APPLICATION_IDENTIFIER"]?.hasPrefix("com.pulkit.edith.tests.")
                 == true
             || environment["EDITH_SHARED_DEFAULTS_SUITE"]?.hasPrefix("com.pulkit.edith.tests.")
                 == true
         guard intent else { return nil }
-        try WorkerFixtureEngineContract.validateContext(
-            context, environment: environment, owner: extensionID,
-            workerIdentifier: workerBundle.bundleIdentifier ?? "")
         guard let trust = WorkerFixtureUITrustAnchor.admitted else {
             throw WorkerFixtureError.invalid
         }
         try trust.validate()
+        let policy = try trust.rolePolicy(owner: extensionID)
+        let expectedRole = suppliedRole ?? policy.primaryRole
+        guard expectedRole == policy.primaryRole else { throw WorkerFixtureError.invalid }
+        guard
+            roleBundle.bundleURL.path.hasPrefix(
+                WorkerFixtureUIContract.identityRoot(root: trust.root, session: trust.session)
+                    + "/Extensions/" + extensionID + "/edith-host-2/arm64/")
+        else { throw WorkerFixtureError.invalid }
+        var workerURL = roleBundle.bundleURL
+        for _ in 0..<5 { workerURL.deleteLastPathComponent() }
+        guard let workerBundle = suppliedWorkerBundle ?? Bundle(url: workerURL) else {
+            throw WorkerFixtureError.invalid
+        }
+        try WorkerFixtureEngineContract.validateContext(
+            context, environment: environment, owner: extensionID,
+            workerIdentifier: workerBundle.bundleIdentifier ?? "")
         let documentPath = trust.root + "/functional-engine-" + extensionID + ".json"
         guard let marker = context["hostedFunctionalFixture"] as? [String: String],
             Set(marker.keys) == [
@@ -63,7 +80,9 @@ public struct WorkerFixtureEngineRequest: Equatable, Sendable {
             marker["sourceCommit"] == trust.sourceCommit, marker["session"] == trust.session,
             marker["descriptorPath"] == documentPath,
             context["hostIdentifier"] as? String == trust.hostIdentifier,
-            context["dataDirectory"] as? String == trust.root + "/data/" + extensionID,
+            context["dataDirectory"] as? String == WorkerFixtureUIContract.identityRoot(
+                root: trust.root, session: trust.session)
+                + "/Data/" + extensionID,
             environment["HOME"] == trust.root + "/" + extensionID + "-home",
             environment["CFFIXED_USER_HOME"] == environment["HOME"],
             environment["EDITH_EXTENSION_FIXTURE_HOME"] == environment["HOME"],
@@ -103,7 +122,8 @@ public struct WorkerFixtureEngineRequest: Equatable, Sendable {
             roleBundle.object(forInfoDictionaryKey: "EdithHostABI") as? String
                 == descriptor.hostABI,
             descriptor.engine.pid == getpid(),
-            descriptor.engine.executable == workerBundle.executableURL?.path
+            descriptor.engine.executable == trust.root + "/Fixture.app/Contents/MacOS/Edith",
+            Bundle.main.executableURL?.path == descriptor.engine.executable
         else { throw WorkerFixtureError.invalid }
         let host = root.appendingPathComponent("Fixture.app", isDirectory: true)
         guard let bundle = Bundle(url: host),
@@ -126,6 +146,7 @@ public struct WorkerFixtureEngineRequest: Equatable, Sendable {
                     bundle.appendingPathComponent("Contents/Info.plist"), directory: false,
                     mode: nil, maximum: 131_072))
         }
+        var inputFiles: [String: WorkerFixtureUIOpenedPath] = [:]
         for input in descriptor.inputs {
             let file = try WorkerFixtureUIOpenedPath(
                 URL(fileURLWithPath: input.path), directory: false, mode: nil,
@@ -133,7 +154,7 @@ public struct WorkerFixtureEngineRequest: Equatable, Sendable {
             guard WorkerFixtureUIAdmission.digest(try file.read()) == input.sha256 else {
                 throw WorkerFixtureError.invalid
             }
-            paths.append(file)
+            paths.append(file); inputFiles[input.name] = file
         }
         for parent in Set(descriptor.outputs.map(\.parent)) {
             paths.append(
@@ -149,10 +170,26 @@ public struct WorkerFixtureEngineRequest: Equatable, Sendable {
         let admission = WorkerFixtureEngineAdmission(
             descriptor: descriptor, trust: trust, paths: paths,
             host: host, worker: workerBundle.bundleURL, role: roleBundle.bundleURL,
-            expectedRole: expectedRole)
+            expectedRole: expectedRole, inputFiles: inputFiles)
         try admission.requireCurrent()
         return admission
     }
+
+    #if EDITH_FUNCTIONAL_FIXTURE
+    var platformRole: WorkerFixtureRole { expectedRole }
+
+    public func withPlatformFixture<Value>(
+        extensionID: String, expectedRole: WorkerFixtureRole,
+        _ factory: (WorkerFixtureAdmission) throws -> Value
+    ) throws -> Value {
+        let scope = WorkerFixtureEngineFactoryScope(
+            descriptor: descriptor, trust: trust, owner: extensionID, role: expectedRole,
+            uid: getuid())
+        return try scope.perform(requireCurrent: requireCurrent) {
+            try factory(WorkerFixtureAdmission.retaining(self))
+        }
+    }
+    #endif
 
     public func requireCurrent() throws {
         try trust.validate()
@@ -195,6 +232,16 @@ public struct WorkerFixtureEngineRequest: Equatable, Sendable {
         try requests.complete(request)
     }
     public func cancelRequest(_ request: WorkerFixtureEngineRequest) { requests.cancel(request) }
+    public func readInput(named name: String) throws -> Data {
+        try requireCurrent()
+        guard let input = descriptor.inputs.first(where: { $0.name == name }),
+            let file = inputFiles[name]
+        else { throw WorkerFixtureError.invalid }
+        let data = try input.read(file)
+        try requireCurrent()
+        return data
+    }
+
     public func inputURL(named name: String) throws -> URL {
         try requireCurrent()
         guard let input = descriptor.inputs.first(where: { $0.name == name }) else {
@@ -233,5 +280,23 @@ public struct WorkerFixtureEngineRequest: Equatable, Sendable {
         } else if errno != ENOENT {
             throw WorkerFixtureError.invalid
         }
+    }
+}
+
+struct WorkerFixtureEngineFactoryScope {
+    let descriptor: WorkerFixtureEngineContract
+    let trust: WorkerFixtureUITrust
+    let owner: String
+    let role: WorkerFixtureRole
+    let uid: UInt32
+
+    func perform<Value>(
+        requireCurrent: () throws -> Void, factory: () throws -> Value
+    ) throws -> Value {
+        try descriptor.validate(trust: trust, owner: owner, uid: uid, expectedRole: role)
+        try requireCurrent()
+        let value = try factory()
+        try requireCurrent()
+        return value
     }
 }

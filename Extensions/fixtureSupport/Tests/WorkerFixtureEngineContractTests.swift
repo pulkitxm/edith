@@ -8,8 +8,9 @@ import Testing
     private let source = String(repeating: "a", count: 40)
     private let hash = String(repeating: "b", count: 64)
     private var root: String { "/private/synthetic/functional-fixture-" + session }
+    private var identityRoot: String { root + "/Edith Tests/worker-" + session }
     private var worker: String {
-        root
+        identityRoot
             + "/Extensions/studio/edith-host-2/arm64/1.0.0/studio/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex"
     }
     private func trust(_ key: Data) throws -> WorkerFixtureUITrust {
@@ -20,7 +21,22 @@ import Testing
             workerCertificateSHA256: Data(repeating: 2, count: 32),
             roleCertificateSHA256: Data(repeating: 3, count: 32),
             producerExecutable: root + "/Producer/functional-producer",
-            producerExecutableSHA256: hash)
+            producerExecutableSHA256: hash,
+            rolePolicies: [
+                try WorkerFixtureRolePolicy(
+                    owner: "studio", primaryRole: .app, operations: ["studio.export"],
+                    presentations: [
+                        try WorkerFixturePresentationScope(location: "main", section: "studio")
+                    ], inputs: [try WorkerFixtureInputScope(name: "project", maximumBytes: 1024)],
+                    outputs: ["movie"], manifestSHA256: hash, caseSHA256: hash),
+                try WorkerFixtureRolePolicy(
+                    owner: "notchShelf", primaryRole: .helper,
+                    operations: ["notch.settings.read", "notch.settings.write"],
+                    presentations: [
+                        try WorkerFixturePresentationScope(
+                            location: "settings", section: "extension")
+                    ], inputs: [], outputs: [], manifestSHA256: hash, caseSHA256: hash),
+            ])
     }
     private func object() -> [String: Any] {
         func peer(_ pid: Int, _ path: String) -> [String: Any] {
@@ -35,11 +51,11 @@ import Testing
             "capabilitySHA256": hash, "root": root,
             "hostIdentifier": "com.pulkit.edith.tests.worker-" + session,
             "home": root + "/studio-home",
-            "dataDirectory": root + "/data/studio", "workerPath": worker,
+            "dataDirectory": identityRoot + "/Data/studio", "workerPath": worker,
             "rolePath": worker + "/Contents/Resources/Payload/studio/app.bundle", "role": "app",
             "version": "1.0.0", "hostABI": "edith-host-2", "packageSHA256": hash,
             "producer": peer(10, root + "/Producer/functional-producer"),
-            "engine": peer(11, worker + "/Contents/MacOS/Edith"),
+            "engine": peer(11, root + "/Fixture.app/Contents/MacOS/Edith"),
             "operations": ["studio.export"],
             "inputs": [
                 [
@@ -158,7 +174,12 @@ import Testing
                 "rolePath": (value["rolePath"] as! String).replacingOccurrences(
                     of: "helper.bundle", with: "app.bundle")
             ],
-            ["engine": object()["engine"]!], ["inputs": object()["inputs"]!],
+            [
+                "engine": [
+                    "pid": 11, "birthSeconds": 1000, "birthMicroseconds": 11, "uid": 501,
+                    "executable": worker + "/Contents/MacOS/Edith", "executableSHA256": hash,
+                ]
+            ], ["inputs": object()["inputs"]!],
             ["outputs": object()["outputs"]!],
         ] {
             var changed = value; changed.merge(patch) { _, new in new }
@@ -198,11 +219,11 @@ import Testing
         let id = host + ".extension.studio.worker"
         let environment = [
             "EDITH_APPLICATION_IDENTIFIER": host, "EDITH_EXTENSION_ID": "studio",
-            "EDITH_SHARED_DEFAULTS_SUITE": id,
+            "EDITH_SHARED_DEFAULTS_SUITE": host + ".extensions.studio",
         ]
         let context: [String: Any] = [
             "operation": "start", "hostIdentifier": host, "extensionID": "studio",
-            "defaultsSuite": id,
+            "defaultsSuite": host + ".extensions.studio",
         ]
         try WorkerFixtureEngineContract.validateContext(
             context as NSDictionary, environment: environment, owner: "studio", workerIdentifier: id
@@ -210,6 +231,7 @@ import Testing
         for patch: [String: Any] in [
             ["remoteUI": true], ["uiOnly": true], ["remoteUI": 0], ["uiOnly": 0],
             ["engineClient": NSObject()], ["operation": "configureUI"], ["defaultsSuite": "live"],
+            ["defaultsSuite": id],
         ] {
             var value = context; value.merge(patch) { _, new in new }
             #expect(throws: (any Error).self) {
@@ -273,4 +295,90 @@ import Testing
             try gate.begin(token: UUID(), operation: "studio.export", payload: payload)
         }
     }
+    @Test func platformFactoryRejectsWrongOwnerRoleAndUnadmittedRootBeforeConstruction() throws {
+        let key = Curve25519.Signing.PrivateKey()
+        let admitted = try trust(key.publicKey.rawRepresentation)
+        var factoryCalls = 0
+        for candidate in [
+            (object(), "notchShelf", WorkerFixtureRole.app),
+            (object(), "studio", WorkerFixtureRole.helper),
+            (
+                object().merging(["home": "/private/unadmitted/studio-home"]) { _, new in new },
+                "studio", WorkerFixtureRole.app
+            ),
+            (
+                object().merging(["dataDirectory": "/private/unadmitted/data/studio"]) { _, new in
+                    new
+                },
+                "studio", WorkerFixtureRole.app
+            ),
+        ] {
+            let descriptor = try WorkerFixtureEngineContract.verify(
+                seal(candidate.0, key), issuerKey: key.publicKey.rawRepresentation)
+            let scope = WorkerFixtureEngineFactoryScope(
+                descriptor: descriptor, trust: admitted, owner: candidate.1, role: candidate.2,
+                uid: 501)
+            #expect(throws: (any Error).self) {
+                try scope.perform(requireCurrent: {}) { factoryCalls += 1 }
+            }
+        }
+        #expect(factoryCalls == 0)
+    }
+
+    @Test func platformFactoryRevalidatesAuthorityBeforeAndAfterConstruction() throws {
+        let key = Curve25519.Signing.PrivateKey()
+        let descriptor = try WorkerFixtureEngineContract.verify(
+            seal(object(), key), issuerKey: key.publicKey.rawRepresentation)
+        let scope = WorkerFixtureEngineFactoryScope(
+            descriptor: descriptor, trust: try trust(key.publicKey.rawRepresentation),
+            owner: "studio", role: .app, uid: 501)
+        var current = false
+        var factoryCalls = 0
+        var checks = 0
+        let validate = {
+            checks += 1
+            guard current else { throw WorkerFixtureError.invalid }
+        }
+        #expect(throws: (any Error).self) {
+            try scope.perform(requireCurrent: validate) { factoryCalls += 1 }
+        }
+        #expect(factoryCalls == 0 && checks == 1)
+        current = true
+        #expect(throws: (any Error).self) {
+            try scope.perform(requireCurrent: validate) {
+                factoryCalls += 1
+                current = false
+                return "discarded"
+            }
+        }
+        #expect(factoryCalls == 1 && checks == 3)
+        current = true
+        let result = try scope.perform(requireCurrent: validate) {
+            factoryCalls += 1
+            return "verified"
+        }
+        #expect(result == "verified" && factoryCalls == 2 && checks == 5)
+        #expect(throws: (any Error).self) {
+            try scope.perform(requireCurrent: validate) { throw WorkerFixtureError.invalid }
+        }
+        #expect(checks == 6)
+    }
+
+    @Test func unsignedLegacyAdmissionCannotAcceptFunctionalIntent() throws {
+        for intent in [
+            (NSDictionary(), ["EDITH_FUNCTIONAL_FIXTURE": "1"]),
+            (NSDictionary(), ["EDITH_FUNCTIONAL_FIXTURE": "0"]),
+            (["hostedFunctionalFixture": [:]] as NSDictionary, [String: String]()),
+        ] {
+            #expect(throws: (any Error).self) {
+                try WorkerFixtureAdmission.admit(
+                    extensionID: "studio", context: intent.0,
+                    environment: intent.1,
+                    hostIdentifier: "com.pulkit.edith", hostBundle: URL(fileURLWithPath: "/unused"),
+                    roleDirectory: URL(fileURLWithPath: "/unused"), roleIdentifier: nil,
+                    version: nil, hostABI: nil)
+            }
+        }
+    }
+
 }

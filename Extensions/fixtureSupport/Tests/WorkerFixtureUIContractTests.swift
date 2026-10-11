@@ -10,8 +10,9 @@ struct WorkerFixtureUIContractTests {
 
     private var root: String { "/private/synthetic/functional-fixture-" + session }
     private var host: String { "com.pulkit.edith.tests.worker-" + session }
+    private var identityRoot: String { root + "/Edith Tests/worker-" + session }
     private var worker: String {
-        root
+        identityRoot
             + "/Extensions/plugins/edith-host-2/arm64/1.0.0/plugins/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex"
     }
 
@@ -26,12 +27,12 @@ struct WorkerFixtureUIContractTests {
             "schema": 1, "sourceCommit": source, "session": session, "owner": "plugins",
             "phase": "initial", "presentationID": session, "location": "main", "section": "plugins",
             "capabilitySHA256": hash, "root": root, "hostIdentifier": host,
-            "home": root + "/plugins-home", "dataDirectory": root + "/data/plugins",
+            "home": root + "/plugins-home", "dataDirectory": identityRoot + "/Data/plugins",
             "workerPath": worker,
             "rolePath": worker + "/Contents/Resources/Payload/plugins/app.bundle",
             "version": "1.0.0", "hostABI": "edith-host-2", "packageSHA256": hash,
             "producer": peer(10, executable: root + "/Producer/functional-producer"),
-            "engine": peer(11, executable: worker + "/Contents/MacOS/Edith"),
+            "engine": peer(11, executable: root + "/Fixture.app/Contents/MacOS/Edith"),
             "ui": peer(12, executable: worker + "/Contents/MacOS/Edith"),
         ]
     }
@@ -54,7 +55,7 @@ struct WorkerFixtureUIContractTests {
         try descriptor.validate(
             sourceCommit: source, session: session, owner: "plugins", presentationID: session,
             phase: "initial", location: "main", section: "plugins", capabilitySHA256: hash,
-            root: root, dataDirectory: root + "/data/plugins", workerPath: worker,
+            root: root, dataDirectory: identityRoot + "/Data/plugins", workerPath: worker,
             rolePath: worker + "/Contents/Resources/Payload/plugins/app.bundle", version: "1.0.0",
             uid: 501, producer: process("producer"), engine: process("engine"), ui: process("ui"))
     }
@@ -168,19 +169,19 @@ struct WorkerFixtureUIContractTests {
     }
 
     @Test func helperSettingsAdmissionCannotBecomeAppEngineNotchPanelOrCLI() throws {
-        let identifier = host + ".extension.notchShelf.worker"
+        let identifier = host + ".extension.keepAwake.worker"
         let context: [String: Any] = [
             "hostIdentifier": host, "remoteUI": true, "uiOnly": true,
-            "extensionID": "notchShelf", "operation": "configureUI", "location": "settings",
-            "section": "notchShelf",
+            "extensionID": "keepAwake", "operation": "configureUI", "location": "settings",
+            "section": "keepAwake",
             "presentationID": session, "defaultsSuite": identifier,
         ]
         let environment = [
-            "EDITH_APPLICATION_IDENTIFIER": host, "EDITH_EXTENSION_ID": "notchShelf",
+            "EDITH_APPLICATION_IDENTIFIER": host, "EDITH_EXTENSION_ID": "keepAwake",
             "EDITH_SHARED_DEFAULTS_SUITE": identifier,
         ]
         try WorkerFixtureUIContract.validateUIContext(
-            context as NSDictionary, environment: environment, owner: "notchShelf",
+            context as NSDictionary, environment: environment, owner: "keepAwake",
             workerIdentifier: identifier, role: .helper)
         for patch: [String: Any] in [
             ["uiOnly": false], ["remoteUI": false], ["uiOnly": 1], ["location": "notch"],
@@ -190,13 +191,13 @@ struct WorkerFixtureUIContractTests {
             var value = context; value.merge(patch) { _, new in new }
             #expect(throws: (any Error).self) {
                 try WorkerFixtureUIContract.validateUIContext(
-                    value as NSDictionary, environment: environment, owner: "notchShelf",
+                    value as NSDictionary, environment: environment, owner: "keepAwake",
                     workerIdentifier: identifier, role: .helper)
             }
         }
         #expect(throws: (any Error).self) {
             try WorkerFixtureUIContract.validateUIContext(
-                context as NSDictionary, environment: environment, owner: "notchShelf",
+                context as NSDictionary, environment: environment, owner: "keepAwake",
                 workerIdentifier: identifier, role: .app)
         }
         let key = Curve25519.Signing.PrivateKey()
@@ -204,23 +205,23 @@ struct WorkerFixtureUIContractTests {
         for field in ["owner", "home", "dataDirectory", "workerPath", "rolePath", "hostIdentifier"]
         {
             if let text = value[field] as? String {
-                value[field] = text.replacingOccurrences(of: "plugins", with: "notchShelf")
+                value[field] = text.replacingOccurrences(of: "plugins", with: "keepAwake")
                     .replacingOccurrences(of: "app.bundle", with: "helper.bundle")
             }
         }
-        value["location"] = "settings"; value["section"] = "notchShelf"
+        value["location"] = "settings"; value["section"] = "keepAwake"
         for field in ["engine", "ui"] {
             var peer = value[field] as! [String: Any]
             peer["executable"] = (peer["executable"] as! String).replacingOccurrences(
-                of: "plugins", with: "notchShelf")
+                of: "plugins", with: "keepAwake")
             value[field] = peer
         }
         let descriptor = try WorkerFixtureUIContract.verify(
             seal(value, key: key), issuerKey: key.publicKey.rawRepresentation)
         try descriptor.validate(
-            sourceCommit: source, session: session, owner: "notchShelf", presentationID: session,
-            phase: "initial", location: "settings", section: "notchShelf", capabilitySHA256: hash,
-            root: root, dataDirectory: root + "/data/notchShelf",
+            sourceCommit: source, session: session, owner: "keepAwake", presentationID: session,
+            phase: "initial", location: "settings", section: "keepAwake", capabilitySHA256: hash,
+            root: root, dataDirectory: identityRoot + "/Data/keepAwake",
             workerPath: value["workerPath"] as! String, rolePath: value["rolePath"] as! String,
             version: "1.0.0", uid: 501, producer: descriptor.producer, engine: descriptor.engine,
             ui: descriptor.ui)

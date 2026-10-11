@@ -97,7 +97,7 @@ final class KeepAwakeActionCase: HostedFunctionalActionCase {
     }
 
     func shutdownPresentation() async {
-        presentation.stop()
+        await presentation.stopAndWait()
         for (attribute, value) in accessibility {
             NSApp.accessibilitySetValue(value ?? false, forAttribute: attribute)
         }

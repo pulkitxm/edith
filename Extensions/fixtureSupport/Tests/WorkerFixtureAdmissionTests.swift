@@ -40,6 +40,27 @@ import Testing
         #expect(throws: (any Error).self) { try fixture.admit(roleIdentifierOverride: wrong) }
     }
 
+    @MainActor @Test func unsignedOwnedNamespaceDoesNotCarrySignedAuthority() throws {
+        let fixture = try Fixture(owner: "keepAwake")
+        defer { fixture.remove() }
+        let admission = try #require(try fixture.admit())
+        #expect(throws: (any Error).self) { try admission.requireCurrent() }
+    }
+
+    @Test(arguments: ["1", "0", "", "context"])
+    func functionalIntentCannotUseLegacyAdmission(_ marker: String) throws {
+        let environment = marker == "context" ? [:] : ["EDITH_FUNCTIONAL_FIXTURE": marker]
+        let context: NSDictionary = marker == "context" ? ["hostedFunctionalFixture": [:]] : [:]
+        #expect(throws: WorkerFixtureError.self) {
+            try WorkerFixtureAdmission.admit(
+                extensionID: "keepAwake", context: context, environment: environment,
+                hostIdentifier: "com.pulkit.edith",
+                hostBundle: URL(fileURLWithPath: "/Applications/Edith.app"),
+                roleDirectory: URL(fileURLWithPath: "/Applications/helper.bundle"),
+                roleIdentifier: nil, version: nil, hostABI: nil)
+        }
+    }
+
     @Test func productionHasNoFixture() throws {
         #expect(
             try WorkerFixtureAdmission.admit(

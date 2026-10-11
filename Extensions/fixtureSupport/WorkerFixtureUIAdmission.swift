@@ -34,7 +34,8 @@ public final class WorkerFixtureUIAdmission {
         let environment = ProcessInfo.processInfo.environment
         let suppliedHost = context["hostIdentifier"] as? String
         let intent =
-            suppliedHost?.hasPrefix("com.pulkit.edith.tests.") == true
+            environment["EDITH_FUNCTIONAL_FIXTURE"] != nil
+            || suppliedHost?.hasPrefix("com.pulkit.edith.tests.") == true
             || workerBundle.bundleIdentifier?.hasPrefix("com.pulkit.edith.tests.") == true
             || environment["EDITH_APPLICATION_IDENTIFIER"]?.hasPrefix("com.pulkit.edith.tests.")
                 == true
@@ -54,17 +55,18 @@ public final class WorkerFixtureUIAdmission {
         } else {
             throw WorkerFixtureError.invalid
         }
-        try WorkerFixtureUIContract.validateUIContext(
-            context, environment: environment, owner: extensionID,
-            workerIdentifier: workerBundle.bundleIdentifier ?? "", role: roleKind)
+        let usesSettingsService =
+            roleKind == .helper
         guard let trust = WorkerFixtureUITrustAnchor.admitted,
+            let policy = try? trust.rolePolicy(owner: extensionID), policy.primaryRole == roleKind,
             WorkerFixtureUIContract.owners.contains(extensionID),
             let hostIdentifier = suppliedHost,
             hostIdentifier.hasPrefix("com.pulkit.edith.tests.worker-"),
             let remote = context["remoteUI"] as? NSNumber,
             CFGetTypeID(remote) == CFBooleanGetTypeID(), remote.boolValue,
             let only = context["uiOnly"] as? NSNumber,
-            CFGetTypeID(only) == CFBooleanGetTypeID(), only.boolValue == (roleKind == .helper),
+            CFGetTypeID(only) == CFBooleanGetTypeID(),
+            only.boolValue == (roleKind == .helper && !usesSettingsService),
             context["extensionID"] as? String == extensionID,
             let location = context["location"] as? String,
             let section = context["section"] as? String,
@@ -79,7 +81,8 @@ public final class WorkerFixtureUIAdmission {
             let phase = marker["phase"],
             let capabilitySHA256 = marker["capabilitySHA256"],
             marker["descriptorPath"] == trust.root + "/functional-ui-" + extensionID + ".json",
-            roleKind == .helper || Self.validEngineClient(context["engineClient"]),
+            (roleKind == .helper && !usesSettingsService)
+                || Self.validEngineClient(context["engineClient"]),
             workerBundle.bundleIdentifier == hostIdentifier + ".extension." + extensionID
                 + ".worker",
             context["defaultsSuite"] as? String == workerBundle.bundleIdentifier,
@@ -113,8 +116,12 @@ public final class WorkerFixtureUIAdmission {
         try trust.validate()
         guard root.path == trust.root, session == trust.session,
             hostIdentifier == trust.hostIdentifier,
-            dataDirectory == trust.root + "/data/" + extensionID,
-            workerBundle.bundleURL.path == trust.root + "/Extensions/" + extensionID
+            dataDirectory == WorkerFixtureUIContract.identityRoot(
+                root: trust.root, session: trust.session)
+                + "/Data/" + extensionID,
+            workerBundle.bundleURL.path == WorkerFixtureUIContract.identityRoot(
+                root: trust.root, session: trust.session)
+                + "/Extensions/" + extensionID
                 + "/edith-host-2/arm64/" + version + "/" + extensionID
                 + "/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex",
             roleBundle.bundleURL.path == workerBundle.bundleURL.path
@@ -170,6 +177,25 @@ public final class WorkerFixtureUIAdmission {
         guard descriptor.producer.executable == trust.producerExecutable,
             descriptor.producer.executableSHA256 == trust.producerExecutableSHA256
         else { throw WorkerFixtureError.invalid }
+        var settingsService: WorkerFixtureEngineContract?
+        if usesSettingsService {
+            let engineDocument = try WorkerFixtureUIOpenedPath(
+                root.appendingPathComponent("functional-engine-" + extensionID + ".json"),
+                directory: false,
+                mode: 0o600, maximum: 131_072)
+            paths.append(engineDocument)
+            let service = try WorkerFixtureEngineContract.verify(
+                engineDocument.read(), issuerKey: trust.issuerKey)
+            try service.validateBounds(
+                trust: trust, owner: extensionID, uid: getuid(), expectedRole: roleKind)
+            try policy.validateEngine(service)
+            try descriptor.validateEngineBuddy(service, rolePolicy: policy)
+            settingsService = service
+        }
+        try WorkerFixtureUIContract.validateUIContext(
+            context, environment: environment, owner: extensionID,
+            workerIdentifier: workerBundle.bundleIdentifier ?? "", role: roleKind,
+            settingsService: settingsService, rolePolicy: policy)
         let producer = descriptor.producer
         let observedProducer = try observe(producer)
         let engine = try observe(descriptor.engine)
@@ -186,7 +212,8 @@ public final class WorkerFixtureUIAdmission {
             location: location, section: section, capabilitySHA256: capabilitySHA256,
             root: root.path, dataDirectory: dataDirectory,
             workerPath: workerBundle.bundleURL.path, rolePath: roleBundle.bundleURL.path,
-            version: version, uid: getuid(), producer: observedProducer, engine: engine, ui: ui)
+            version: version, uid: getuid(), producer: observedProducer, engine: engine, ui: ui,
+            rolePolicy: policy)
         let result = WorkerFixtureUIAdmission(
             descriptor: descriptor, paths: paths, producer: producer,
             trust: trust, host: host,
@@ -221,7 +248,7 @@ public final class WorkerFixtureUIAdmission {
         try paths.forEach { try $0.validate() }
     }
 
-    private static func validEngineClient(_ value: Any?) -> Bool {
+    static func validEngineClient(_ value: Any?) -> Bool {
         guard let client = value as? NSObject else { return false }
         return client.responds(to: NSSelectorFromString("invoke:completion:"))
             && client.responds(to: NSSelectorFromString("cancel:"))

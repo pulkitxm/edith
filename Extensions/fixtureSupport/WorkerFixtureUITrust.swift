@@ -13,12 +13,14 @@ public struct WorkerFixtureUITrust: Sendable {
     public let roleCertificateSHA256: Data
     public let producerExecutable: String
     public let producerExecutableSHA256: String
+    public let rolePolicies: [WorkerFixtureRolePolicy]
 
     public init(
         sourceCommit: String, session: String, root: String, issuerKey: Data,
         hostExecutableSHA256: String, hostRequirement: String, hostCertificateSHA256: Data,
         workerCertificateSHA256: Data, roleCertificateSHA256: Data,
-        producerExecutable: String, producerExecutableSHA256: String
+        producerExecutable: String, producerExecutableSHA256: String,
+        rolePolicies: [WorkerFixtureRolePolicy] = []
     ) throws {
         self.sourceCommit = sourceCommit
         self.session = session
@@ -32,7 +34,15 @@ public struct WorkerFixtureUITrust: Sendable {
         self.roleCertificateSHA256 = roleCertificateSHA256
         self.producerExecutable = producerExecutable
         self.producerExecutableSHA256 = producerExecutableSHA256
+        self.rolePolicies = rolePolicies
         try validate()
+    }
+
+    public func rolePolicy(owner: String) throws -> WorkerFixtureRolePolicy {
+        guard let value = rolePolicies.first(where: { $0.owner == owner }) else {
+            throw WorkerFixtureError.invalid
+        }
+        return value
     }
 
     func validate() throws {
@@ -45,7 +55,8 @@ public struct WorkerFixtureUITrust: Sendable {
             hostCertificateSHA256.count == 32, workerCertificateSHA256.count == 32,
             roleCertificateSHA256.count == 32,
             producerExecutable == root + "/Producer/functional-producer",
-            WorkerFixtureUIContract.hex(producerExecutableSHA256, count: 64)
+            WorkerFixtureUIContract.hex(producerExecutableSHA256, count: 64),
+            rolePolicies.count <= 39, Set(rolePolicies.map(\.owner)).count == rolePolicies.count
         else { throw WorkerFixtureError.invalid }
     }
 }
