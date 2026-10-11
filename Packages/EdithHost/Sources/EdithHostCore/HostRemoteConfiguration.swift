@@ -22,7 +22,7 @@ public struct HostRemoteConfiguration: Codable, Sendable {
             package.id == extensionID, package.version == version,
             package.hostABI == HostContract.compatibility, package.architecture == "arm64",
             package.minimumSystemVersion
-                <= ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+                <= .init(ProcessInfo.processInfo.operatingSystemVersion),
             worker.zoom.isFinite, (0.8...1.6).contains(worker.zoom),
             worker.theme.utf8.count <= 64, worker.appearance.utf8.count <= 32
         else { throw HostWorkerError.rejected }

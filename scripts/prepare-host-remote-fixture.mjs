@@ -347,7 +347,7 @@ export async function prepareHostRemoteFixture({
       version: fixtureVersion,
       hostABI,
       architecture: "arm64",
-      minimumSystemVersion: 14,
+      minimumSystemVersion: "14.0.0",
       downloadURL:
         "https://github.com/pulkitxm/edith/releases/download/fixture/sample.zip",
       sha256: "0".repeat(64),

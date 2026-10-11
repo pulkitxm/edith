@@ -1,3 +1,4 @@
+import { validateMinimumSystemVersion } from "./extension-system-version.mjs";
 import { createPublicKey, verify } from "node:crypto";
 import { mkdtemp, open, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -61,7 +62,6 @@ export function validateCatalog(catalog) {
       !/^\d+\.\d+\.\d+$/.test(entry.version) ||
       !entry.version.split(".").every((part) => integer(Number(part), 0)) ||
       !["arm64", "x86_64"].includes(entry.architecture) ||
-      !integer(entry.minimumSystemVersion, 14) ||
       !integer(entry.downloadBytes, 1, 512 * 1024 ** 2) ||
       !integer(entry.installedBytes, 1, 1024 ** 3) ||
       !digest(entry.sha256) ||
@@ -74,6 +74,7 @@ export function validateCatalog(catalog) {
       typeof entry.downloadURL !== "string"
     )
       fail("Invalid package schema");
+    validateMinimumSystemVersion(entry.minimumSystemVersion);
     const url = new URL(entry.downloadURL);
     if (
       url.protocol !== "https:" ||

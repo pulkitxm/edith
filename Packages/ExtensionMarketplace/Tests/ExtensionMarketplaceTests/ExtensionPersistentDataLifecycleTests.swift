@@ -122,11 +122,11 @@ private struct PersistentDataSentinels {
 
         let retainedLease = try fixture.store.lease(second.0)
         defer { retainedLease.close() }
-        try fixture.store.prune(hostABI: "host-1", systemVersion: 14)
+        try fixture.store.prune(hostABI: "host-1", systemVersion: .init(major: 14))
         try expectState(fixture.store, installed: items.map(\.0), selected: first.0, paths: paths)
         try sentinels.expectPreserved()
         retainedLease.close()
-        try fixture.store.prune(hostABI: "host-1", systemVersion: 14)
+        try fixture.store.prune(hostABI: "host-1", systemVersion: .init(major: 14))
         let retained = [first.0, third.0, fourth.0]
         try expectState(fixture.store, installed: retained, selected: first.0, paths: paths)
         try sentinels.expectPreserved()
@@ -184,7 +184,7 @@ private struct PersistentDataSentinels {
             contentsOf: fixture.store.root.appendingPathComponent("selected-packages.json"))
         let plan = try ExtensionCatalog(revision: 1, packages: [second.0, dependent.0])
             .installationPlan(
-                for: "companion", hostABI: "host-1", architecture: "arm64", systemVersion: 14)
+                for: "companion", hostABI: "host-1", architecture: "arm64", systemVersion: .init(major: 14))
         #expect(plan == [second.0, dependent.0])
         await #expect(throws: MarketplaceError.downloadFailed) {
             try await fixture.installer(archives: [second.0.downloadURL: second.1]).install(
@@ -264,7 +264,7 @@ private struct PersistentDataSentinels {
                 == installed.sorted { ($0.id, $0.version) < ($1.id, $1.version) })
         #expect(
             try store.installedPackage(
-                id: "usage", hostABI: "host-1", architecture: "arm64", systemVersion: 14)
+                id: "usage", hostABI: "host-1", architecture: "arm64", systemVersion: .init(major: 14))
                 == selected)
         for (package, path) in paths {
             #expect(

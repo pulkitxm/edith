@@ -35,7 +35,7 @@ public struct ExtensionPackage: Codable, Equatable, Identifiable, Sendable {
     public let version: String
     public let hostABI: String
     public let architecture: String
-    public let minimumSystemVersion: Int
+    public let minimumSystemVersion: ExtensionSystemVersion
     public let downloadURL: URL
     public let sha256: String
     public let downloadBytes: Int64
@@ -44,7 +44,7 @@ public struct ExtensionPackage: Codable, Equatable, Identifiable, Sendable {
 
     public init(
         id: String, version: String, hostABI: String, architecture: String = "arm64",
-        minimumSystemVersion: Int = 14, downloadURL: URL, sha256: String,
+        minimumSystemVersion: ExtensionSystemVersion = .init(major: 14), downloadURL: URL, sha256: String,
         downloadBytes: Int64, installedBytes: Int64, dependencies: [String] = []
     ) {
         self.id = id
@@ -69,9 +69,18 @@ public struct ExtensionPackage: Codable, Equatable, Identifiable, Sendable {
             } && value != "." && value != ".." && !value.hasPrefix(".")
     }
 
-    public func isCompatible(hostABI: String, architecture: String, systemVersion: Int) -> Bool {
+    public func isCompatible(hostABI: String, architecture: String, systemVersion: ExtensionSystemVersion) -> Bool {
         self.hostABI == hostABI && self.architecture == architecture
             && systemVersion >= minimumSystemVersion
+    }
+
+    public func admitting<Result>(
+        hostABI: String, architecture: String, systemVersion: ExtensionSystemVersion,
+        operation: () throws -> Result
+    ) throws -> Result {
+        guard isCompatible(hostABI: hostABI, architecture: architecture, systemVersion: systemVersion)
+        else { throw MarketplaceError.incompatiblePackage }
+        return try operation()
     }
 
     public func validate(repository: String) throws {
@@ -80,7 +89,7 @@ public struct ExtensionPackage: Codable, Equatable, Identifiable, Sendable {
             version.split(separator: ".").allSatisfy({
                 !$0.isEmpty && $0.allSatisfy({ $0.isASCII && $0.isNumber })
             }),
-            architecture == "arm64" || architecture == "x86_64", minimumSystemVersion >= 14,
+            architecture == "arm64" || architecture == "x86_64", minimumSystemVersion >= .init(major: 14),
             downloadBytes > 0, downloadBytes <= 512 * 1024 * 1024,
             installedBytes > 0, installedBytes <= 1024 * 1024 * 1024,
             sha256.count == 64, sha256.allSatisfy({ $0.isHexDigit && !$0.isUppercase }),
@@ -134,7 +143,7 @@ public struct ExtensionCatalog: Codable, Equatable, Sendable {
     }
 
     public func installationPlan(
-        for id: String, hostABI: String, architecture: String, systemVersion: Int
+        for id: String, hostABI: String, architecture: String, systemVersion: ExtensionSystemVersion
     ) throws -> [ExtensionPackage] {
         var result: [ExtensionPackage] = []
         var visiting = Set<String>()

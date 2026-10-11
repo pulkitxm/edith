@@ -184,7 +184,7 @@ import Foundation
         let inspector = HostRequirementPackageInspection(
             store: environment.store, hostABI: environment.hostABI,
             architecture: environment.architecture,
-            systemVersion: environment.systemVersion.majorVersion,
+            systemVersion: .init(environment.systemVersion),
             hostIdentifier: environment.identity.identifier,
             requiredRoles: roles, policy: environment.signaturePolicy)
         let result = try environment.inspectPackage(

@@ -69,7 +69,7 @@ import Foundation
     version: "1.0.0",
     contractVersion: 1,
     hostABI: "edith-host-1",
-    minimumSystemVersion: 14,
+    minimumSystemVersion: "14.0.0",
     roles: {
       app: ["Extensions/mock/Runtime.swift"],
       helper: ["Extensions/mock/Runtime.swift"],

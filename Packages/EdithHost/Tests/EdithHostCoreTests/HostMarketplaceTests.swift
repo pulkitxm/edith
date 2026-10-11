@@ -308,7 +308,7 @@ import Testing
         defer { fixture.clean() }
         let future = fixture.package(
             "1.0.0",
-            minimumSystemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion + 1)
+            minimumSystemVersion: .init(major: ProcessInfo.processInfo.operatingSystemVersion.majorVersion + 1))
         try fixture.install([future])
         let defaults = try #require(UserDefaults(suiteName: fixture.identity.defaultsSuite))
         defaults.set(["sample"], forKey: "enabledExtensions")
@@ -559,7 +559,7 @@ import Testing
 
         func package(
             _ version: String, abi: String = HostContract.compatibility,
-            minimumSystemVersion: Int = 14
+            minimumSystemVersion: ExtensionSystemVersion = .init(major: 14)
         )
             -> ExtensionPackage
         {

@@ -1249,7 +1249,7 @@ describe("pull request candidate planning", () => {
   });
   test("manifest production rows select only the changed owner and consumers", () => {
     const next = structuredClone(pullRequestDefinitions);
-    next[0].minimumSystemVersion = 15;
+    next[0].minimumSystemVersion = "15.0.0";
     expect(
       planPullRequestBuilds(
         next,
@@ -1381,7 +1381,7 @@ describe("pull request candidate planning", () => {
   test("divergent event base tips use the branch point for both changes and manifest rows", async () => {
     await pullRequestRepository(async ({ root, git, commit, baseSHA }) => {
       const advanced = structuredClone(pullRequestDefinitions);
-      advanced[1].minimumSystemVersion = 15;
+      advanced[1].minimumSystemVersion = "15.0.0";
       await writeFile(
         join(root, "Extensions/manifest.json"),
         JSON.stringify(advanced),

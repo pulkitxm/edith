@@ -43,7 +43,7 @@ export function factoryCompileArguments({
     "-module-name",
     `EdithExtension_${definition.id}_app`,
     "-target",
-    `arm64-apple-macos${definition.minimumSystemVersion}.0`,
+    `arm64-apple-macos${definition.minimumSystemVersion}`,
     ...sources,
     "-swift-version",
     "5",

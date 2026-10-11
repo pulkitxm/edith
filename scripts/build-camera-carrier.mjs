@@ -32,7 +32,7 @@ export function validateCameraCarrierDefinition(value) {
     (obs &&
       (value.providerRole !== undefined ||
         value.installEntitlement !== undefined)) ||
-    value.minimumSystemVersion !== 14 ||
+    value.minimumSystemVersion !== "14.0.0" ||
     (!obs &&
       (value.installEntitlement !==
         "com.apple.developer.system-extension.install" ||

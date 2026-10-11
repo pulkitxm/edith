@@ -10,7 +10,7 @@ struct MarketplaceHarness {
         if arguments.first == "verify-catalog-selection" {
             do {
                 guard arguments.count == 7, let publicKey = Data(base64Encoded: arguments[2]),
-                    let systemVersion = Int(arguments[6]), systemVersion >= 14
+                    let systemVersion = ExtensionSystemVersion(arguments[6]), systemVersion >= .init(major: 14)
                 else { throw MarketplaceError.invalidCatalog }
                 let bytes = try Data(contentsOf: URL(fileURLWithPath: arguments[1]))
                 guard bytes.count <= 3 * 1024 * 1024 else { throw MarketplaceError.invalidCatalog }
@@ -115,7 +115,7 @@ struct MarketplaceHarness {
                     for: "keepAwake",
                     hostABI: MarketplaceConfiguration.workerHostABI,
                     architecture: "arm64",
-                    systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion),
+                    systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion)),
                 repository: "pulkitxm/edith")
         }
         let runtime = ExtensionBundleRuntime(
@@ -130,7 +130,7 @@ struct MarketplaceHarness {
                     for: "keepAwake",
                     hostABI: MarketplaceConfiguration.workerHostABI,
                     architecture: "arm64",
-                    systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion),
+                    systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion)),
                 repository: "pulkitxm/edith")
         }
         try runtime.stopAll()

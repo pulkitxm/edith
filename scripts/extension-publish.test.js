@@ -23,7 +23,7 @@ const packageRecord = {
   architecture: "arm64",
   sha256: "a".repeat(64),
   sourceFingerprint: "b".repeat(64),
-  minimumSystemVersion: 14,
+  minimumSystemVersion: "14.0.0",
   downloadBytes: 1,
   installedBytes: 1,
   dependencies: [],
@@ -231,7 +231,7 @@ test("retention preserves older OS contracts, architectures and explicit rollbac
           ...packageRecord,
           hostABI,
           architecture,
-          minimumSystemVersion: 26,
+          minimumSystemVersion: "26.0.0",
           version: `1.0.${generation}`,
         });
       }
@@ -251,12 +251,12 @@ test("retention preserves older OS contracts, architectures and explicit rollbac
       );
       expect(
         versions
-          .filter((record) => record.minimumSystemVersion === 14)
+          .filter((record) => record.minimumSystemVersion === "14.0.0")
           .map(({ version }) => version),
       ).toEqual(["1.0.4", "1.0.3"]);
       expect(
         versions
-          .filter((record) => record.minimumSystemVersion === 26)
+          .filter((record) => record.minimumSystemVersion === "26.0.0")
           .map(({ version }) => version),
       ).toEqual(["1.0.8", "1.0.7"]);
     }

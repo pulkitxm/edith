@@ -121,7 +121,7 @@ function publisherFixture(interrupt) {
     architecture: "arm64",
     sha256: createHash("sha256").update(bytes).digest("hex"),
     sourceFingerprint: entry.fingerprint,
-    minimumSystemVersion: 14,
+    minimumSystemVersion: "14.0.0",
     downloadBytes: bytes.length,
     installedBytes: 100,
     dependencies: [],

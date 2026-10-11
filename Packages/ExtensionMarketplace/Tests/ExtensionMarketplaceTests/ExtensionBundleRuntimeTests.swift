@@ -137,7 +137,7 @@ import Testing
         defer { fixture.clean() }
         let package = ExtensionPackage(
             id: "keepAwake", version: "1.0.0", hostABI: "runtime-1",
-            minimumSystemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion + 1,
+            minimumSystemVersion: .init(major: ProcessInfo.processInfo.operatingSystemVersion.majorVersion + 1),
             downloadURL: URL(
                 string: "https://github.com/example/app/releases/download/fixture/keepAwake.zip")!,
             sha256: String(repeating: "a", count: 64), downloadBytes: 1, installedBytes: 1)

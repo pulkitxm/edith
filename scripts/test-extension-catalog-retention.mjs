@@ -20,7 +20,7 @@ try {
     version: `1.0.${generation}`,
     hostABI: "edith-host-2",
     architecture: "arm64",
-    minimumSystemVersion: 14,
+    minimumSystemVersion: "14.0.0",
     downloadBytes: 1,
     installedBytes: 1,
     sha256: "a".repeat(64),
@@ -88,7 +88,7 @@ try {
           record(calendar, generation, {
             hostABI,
             architecture,
-            minimumSystemVersion: generation < 5 ? 14 : 26,
+            minimumSystemVersion: generation < 5 ? "14.0.0" : "26.0.0",
             dependencies: [],
           }),
         );

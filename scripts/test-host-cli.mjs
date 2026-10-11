@@ -486,7 +486,7 @@ try {
       version,
       hostABI: "edith-host-2",
       architecture: "arm64",
-      minimumSystemVersion: 14,
+      minimumSystemVersion: "14.0.0",
       dependencies: [],
       downloadURL: `https://github.com/pulkitxm/edith/releases/download/${id}-${version}/${id}.zip`,
       sha256: createHash("sha256").update(bytes).digest("hex"),
