@@ -16,6 +16,7 @@ struct HostApplication: App {
     @State private var windowNavigation: HostWindowNavigation?
     @State private var musicSlots: HostMusicSlots?
     @State private var machinesWindows: HostMachinesWindows?
+    @State private var terminalWindows: HostTerminalWindows?
     @State private var herdrWindows: HostHerdrWindows?
     @State private var herdrInteractions: HostHerdrInteractions?
     @State private var notchStartup: HostNotchStartup?
@@ -43,7 +44,9 @@ struct HostApplication: App {
                             coreOnline: coreServices?.online ?? false,
                             coreSummary: coreServices?.activityLabel ?? "Starting",
                             sectionWindows: sectionWindows, windowNavigation: windowNavigation,
-                            musicSlots: musicSlots)
+                            musicSlots: musicSlots
+                        )
+                        .environment(\.hostTerminalWindows, terminalWindows)
                     } else if startupError {
                         ContentUnavailableView(
                             "Edith could not start", systemImage: "exclamationmark.triangle")
@@ -133,12 +136,29 @@ struct HostApplication: App {
             weak var ownedNotch: HostNotchStartup?
             let navigation = HostWindowNavigation(
                 activeVersions: {
-                    loaded.sessions.versions.filter {
-                        loaded.surfaceAvailability.activeIDs.contains($0.key)
-                    }
+                    HostWorkerNavigationRouting.activeVersions(
+                        installed: loaded.installed, states: loaded.sessions.states,
+                        versions: loaded.sessions.versions,
+                        pendingDisable: loaded.sessions.pendingDisableIDs,
+                        pendingRemoval: loaded.pendingRemovalIDs)
                 },
                 originatingWindow: { [weak presenter] in
                     presenter?.window(for: $0) ?? ownedNotch?.window(for: $0)
+                },
+                openWorkspace: {
+                    guard let open = delegate.openMainWindow else {
+                        throw HostWindowNavigationError.unavailable
+                    }
+                    open()
+                },
+                showWindow: { window in
+                    delegate.showMainWindow(window)
+                    await Task.yield()
+                },
+                windowIsPresented: { window in
+                    window.isVisible && !window.isMiniaturized
+                        && (window.isKeyWindow || window.attachedSheet === NSApp.keyWindow)
+                        && NSApp.isActive
                 }
             )
             let slots = HostMusicSlots.live(marketplace: loaded)
@@ -146,6 +166,8 @@ struct HostApplication: App {
                 manager: manager, presenter: presenter, navigation: navigation)
             let ownedHerdr = HostHerdrWindows(
                 manager: manager, presenter: presenter, navigation: navigation)
+            let ownedTerminal = HostTerminalWindows(
+                manager: manager, presenter: presenter, navigation: navigation, identity: identity)
             let interactions = HostHerdrInteractions(
                 marketplace: loaded, manager: manager, presenter: presenter,
                 navigation: navigation, windows: ownedHerdr)
@@ -156,13 +178,24 @@ struct HostApplication: App {
                 return try await interactions.chooseFolder(request)
             }
             let notch = HostNotchStartup(
-                marketplace: loaded, manager: manager, navigation: navigation)
+                marketplace: loaded, manager: manager, navigation: navigation,
+                openTerminal: { [weak ownedTerminal] request in
+                    guard let ownedTerminal else { throw HostWorkerError.rejected }
+                    try await ownedTerminal.openSurface(
+                        version: request.version, window: request.window, validate: request.validate
+                    )
+                })
             ownedNotch = notch
             notchStartup = notch
             loaded.sessions.didRequestNavigation = {
-                [weak manager, weak navigation, weak ownedMachines, weak ownedHerdr, weak notch]
+                [
+                    weak manager, weak navigation, weak ownedMachines, weak ownedHerdr,
+                    weak ownedTerminal, weak notch
+                ]
                 request in
-                guard let manager, let navigation, let ownedMachines, let ownedHerdr else {
+                guard let manager, let navigation, let ownedMachines, let ownedHerdr,
+                    let ownedTerminal
+                else {
                     throw HostWorkerError.rejected
                 }
                 try manager.validateNavigationOrigin(request)
@@ -181,6 +214,8 @@ struct HostApplication: App {
                     try await ownedMachines.open(request)
                 } else if request.herdrWindow != nil {
                     try await ownedHerdr.open(request)
+                } else if request.extensionID == "terminal" {
+                    try await ownedTerminal.open(request)
                 } else {
                     try await navigation.navigate(
                         extensionID: request.extensionID, version: request.version,
@@ -202,6 +237,7 @@ struct HostApplication: App {
             let disable = loaded.sessions.willDisable
             loaded.sessions.willDisable = { id in
                 if id == "music" { await slots.stop() }
+                if id == "terminal" { try await ownedTerminal.stop() }
                 if id == "machines" { try await ownedMachines.stop() }
                 if id == "herdr" { try await ownedHerdr.stop() }
                 try await disable(id)
@@ -210,6 +246,7 @@ struct HostApplication: App {
             musicSlots = slots
             machinesWindows = ownedMachines
             herdrWindows = ownedHerdr
+            terminalWindows = ownedTerminal
             remotePresenter = presenter
             marketplace = loaded
             delegate.openMainWindow = { openWindow(id: "main") }
@@ -239,6 +276,7 @@ struct HostApplication: App {
                 await interactions.cancelPending()
                 do {
                     try await notch.stop()
+                    try await ownedTerminal.stop()
                     try await ownedHerdr.stop()
                 } catch { return false }
                 let ready = await loaded.sessions.shutdown(reason: .applicationQuit)

@@ -222,7 +222,7 @@ struct HostWindowNavigationTests {
         let navigation = fixture.navigation()
         let sentinel = HostWindowNavigationView(
             navigation: navigation, apply: { fixture.selected = $0.page },
-            selected: { fixture.selected })
+            selected: { fixture.selected }, delivered: { _ in }, captured: { _ in })
         let container = NSView()
         container.addSubview(sentinel)
         fixture.window.contentView = container

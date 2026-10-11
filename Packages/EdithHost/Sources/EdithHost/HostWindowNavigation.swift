@@ -3,19 +3,19 @@ import EdithExtensionSupport
 import Foundation
 import SwiftUI
 
-struct HostWindowRoute: Equatable {
-    let page: String
-    let section: String?
-    let relativePath: String?
-    let presentationID: UUID?
-    let location: String?
-}
+struct HostWorkspaceNavigationOwner {
+    let token: UUID
+    let window: NSWindow
+    let validate: @MainActor () throws -> Void
+    let validateRetained: @MainActor () throws -> Void
 
-enum HostWindowNavigationError: Error, Equatable {
-    case unavailable
-    case invalidDestination
-    case inactiveOwner
-    case routeRejected
+    init(
+        token: UUID, window: NSWindow, validate: @escaping @MainActor () throws -> Void,
+        validateRetained: (@MainActor () throws -> Void)? = nil
+    ) {
+        self.token = token; self.window = window; self.validate = validate
+        self.validateRetained = validateRetained ?? validate
+    }
 }
 
 @MainActor
@@ -24,6 +24,9 @@ final class HostWindowNavigation {
     private let activeVersions: @MainActor () -> [String: String]
     private let defaults: UserDefaults
     private let originatingWindow: @MainActor (UUID) -> NSWindow?
+    private let openWorkspace: @MainActor () throws -> Void
+    private let showWindow: @MainActor (NSWindow) async throws -> Void
+    private let windowIsPresented: @MainActor (NSWindow) -> Bool
     private let didApply: @MainActor (HostWindowRoute) async throws -> Void
     private var registrations: [UUID: Registration] = [:]
     private var sequence: UInt64 = 0
@@ -43,22 +46,31 @@ final class HostWindowNavigation {
         defaults: UserDefaults = SharedDefaults.store,
         activeVersions: @escaping @MainActor () -> [String: String],
         originatingWindow: @escaping @MainActor (UUID) -> NSWindow? = { _ in nil },
+        openWorkspace: @escaping @MainActor () throws -> Void = {
+            throw HostWindowNavigationError.unavailable
+        },
+        showWindow: @escaping @MainActor (NSWindow) async throws -> Void = { _ in },
+        windowIsPresented: @escaping @MainActor (NSWindow) -> Bool = { _ in true },
         didApply: @escaping @MainActor (HostWindowRoute) async throws -> Void = { _ in }
     ) {
         self.defaults = defaults
         self.activeVersions = activeVersions
         self.originatingWindow = originatingWindow
+        self.openWorkspace = openWorkspace
+        self.showWindow = showWindow
+        self.windowIsPresented = windowIsPresented
         self.didApply = didApply
     }
 
     func register(
-        window: NSWindow, apply: @escaping Apply, selected: @escaping @MainActor () -> String
+        window: NSWindow, apply: @escaping Apply, selected: @escaping @MainActor () -> String,
+        delivered: @escaping @MainActor (HostWindowRoute) throws -> Void = { _ in }
     ) -> UUID {
         registrations = registrations.filter { $0.value.window != nil }
         sequence &+= 1
         let token = UUID()
         let registration = Registration(
-            window: window, order: sequence, apply: apply, selected: selected)
+            window: window, order: sequence, apply: apply, selected: selected, delivered: delivered)
         registrations[token] = registration
         registration.closeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: window, queue: .main
@@ -122,44 +134,83 @@ final class HostWindowNavigation {
         relativePath: String? = nil, presentationID: UUID? = nil, location: String? = nil
     ) async throws {
         try Task.checkCancellation()
-        guard activeVersions()[extensionID] == version else {
-            throw HostWindowNavigationError.inactiveOwner
-        }
-        guard let owned = HostNavigationCatalog.route(extensionID: extensionID) else {
-            throw HostWindowNavigationError.invalidDestination
-        }
-        let page = section ?? owned.page
-        guard page == owned.page || (extensionID == "music" && page == "downloads"),
-            HostNavigationCatalog.pages.contains(where: { $0.id == page }),
-            HostNavigationCatalog.visible(
-                HostNavigationCatalog.page(page), active: Set(activeVersions().keys),
-                defaults: defaults),
-            location.map({
-                [
-                    "main", "settings", "home", "notch", "sidebar.utility", "music.footer",
-                    "music.sidebar", "music.detail", "machines.window",
-                ]
-                .contains($0)
-            }) ?? true,
-            (presentationID == nil) == (location == nil),
-            !(location?.hasPrefix("music.") ?? false) || extensionID == "music"
-        else { throw HostWindowNavigationError.invalidDestination }
-        if let relativePath {
-            guard extensionID == "music", page == "music", relativePath.utf8.count <= 4096,
-                !relativePath.isEmpty, !relativePath.hasPrefix("/"), !relativePath.hasPrefix("~"),
-                !relativePath.utf8.contains(0), !relativePath.contains("\\"),
-                relativePath.split(separator: "/", omittingEmptySubsequences: false).allSatisfy({
-                    !$0.isEmpty && $0 != "." && $0 != ".."
-                })
-            else { throw HostWindowNavigationError.invalidDestination }
-        }
-        registrations = registrations.filter { $0.value.window != nil }
-        let origin = presentationID.flatMap(originatingWindow)
-        guard presentationID == nil || origin != nil else {
+        _ = try HostWorkerNavigationRouting.resolve(
+            extensionID: extensionID, version: version, section: section,
+            relativePath: relativePath, presentationID: presentationID, location: location,
+            activeVersions: activeVersions(),
+            visible: {
+                HostNavigationCatalog.visible(
+                    HostNavigationCatalog.page($0), active: Set(activeVersions().keys),
+                    defaults: defaults)
+            })
+        let owner = try await workspaceOwner(
+            extensionID: extensionID, version: version,
+            presentationID: presentationID, location: location)
+        guard let registration = registrations[owner.token] else {
             throw HostWindowNavigationError.unavailable
         }
-        let candidates = registrations.filter {
-            $0.value.window?.identifier?.rawValue == "EdithMainWindow"
+        let window = owner.window
+        let route = try HostWorkerNavigationRouting.resolve(
+            extensionID: extensionID, version: version, section: section,
+            relativePath: relativePath, presentationID: presentationID, location: location,
+            activeVersions: activeVersions(), currentPage: registration.selected(),
+            visible: { self.visible($0) })
+        try owner.validate()
+        try Task.checkCancellation()
+        if route.settingsExtensionID != nil {
+            try await showWindow(window)
+            try Task.checkCancellation()
+            try owner.validate()
+        }
+        if !route.restoreOnly { try await registration.apply(route) }
+        try Task.checkCancellation()
+        try HostWorkerNavigationRouting.validateApplied(
+            extensionID: extensionID, version: version, activeVersions: activeVersions(),
+            current: registration.selected() == route.page, visible: visible(route.page))
+        try owner.validate()
+        try await showWindow(window)
+        try Task.checkCancellation()
+        try HostWorkerNavigationRouting.validateApplied(
+            extensionID: extensionID, version: version, activeVersions: activeVersions(),
+            current: registration.selected() == route.page,
+            windowPresented: windowIsPresented(window))
+        try owner.validate()
+        try registration.delivered(route)
+        try await didApply(route)
+        try Task.checkCancellation()
+        try HostWorkerNavigationRouting.validateApplied(
+            extensionID: extensionID, version: version, activeVersions: activeVersions(),
+            current: registration.selected() == route.page,
+            windowPresented: windowIsPresented(window),
+            visible: visible(route.page))
+        try owner.validate()
+        try registration.delivered(route)
+    }
+
+    private func visible(_ page: String) -> Bool {
+        HostNavigationCatalog.visible(
+            HostNavigationCatalog.page(page), active: Set(activeVersions().keys), defaults: defaults
+        )
+    }
+
+    func workspaceOwner(
+        extensionID: String, version: String, presentationID: UUID? = nil, location: String? = nil,
+        sourceWindow: NSWindow? = nil
+    ) async throws -> HostWorkspaceNavigationOwner {
+        try Task.checkCancellation()
+        try HostWorkerNavigationRouting.validateApplied(
+            extensionID: extensionID, version: version, activeVersions: activeVersions(),
+            current: true)
+        guard (presentationID == nil) == (location == nil) else {
+            throw HostWindowNavigationError.invalidDestination
+        }
+        registrations = registrations.filter { $0.value.window != nil }
+        guard sourceWindow == nil || presentationID == nil else {
+            throw HostWindowNavigationError.invalidDestination
+        }
+        let origin = sourceWindow ?? presentationID.flatMap(originatingWindow)
+        guard presentationID == nil || origin != nil else {
+            throw HostWindowNavigationError.unavailable
         }
         let relationship = origin.flatMap { source in
             relationships.values.first(where: { $0.window === source })
@@ -168,6 +219,20 @@ final class HostWindowNavigation {
             source.identifier?.rawValue == "EdithMainWindow" ? source : relationship?.owner
         }
         guard origin == nil || owner != nil else { throw HostWindowNavigationError.unavailable }
+        if origin == nil, registeredMainWorkspace == nil {
+            try openWorkspace()
+            for _ in 0..<100 {
+                try Task.checkCancellation()
+                try HostWorkerNavigationRouting.validateApplied(
+                    extensionID: extensionID, version: version, activeVersions: activeVersions(),
+                    current: true)
+                if registeredMainWorkspace != nil { break }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+        }
+        let candidates = registrations.filter {
+            $0.value.window?.identifier?.rawValue == "EdithMainWindow"
+        }
         let chosen: (key: UUID, value: Registration)?
         if let owner {
             chosen = candidates.first(where: { $0.value.window === owner })
@@ -176,33 +241,27 @@ final class HostWindowNavigation {
                 candidates.first(where: { $0.value.window?.isKeyWindow == true })
                 ?? candidates.max(by: { $0.value.order < $1.value.order })
         }
-        guard let (token, registration) = chosen else {
+        guard let (token, registration) = chosen, let window = registration.window else {
             throw HostWindowNavigationError.unavailable
         }
-        let route = HostWindowRoute(
-            page: page, section: page == owned.page ? owned.section : nil,
-            relativePath: relativePath, presentationID: presentationID, location: location)
-        try Task.checkCancellation()
-        try await registration.apply(route)
-        try Task.checkCancellation()
-        guard activeVersions()[extensionID] == version else {
-            throw HostWindowNavigationError.inactiveOwner
+        let validateRetained: @MainActor () throws -> Void = { [weak self] in
+            guard let self else { throw HostWindowNavigationError.unavailable }
+            try Task.checkCancellation()
+            try HostWorkerNavigationRouting.validateApplied(
+                extensionID: extensionID, version: version, activeVersions: self.activeVersions(),
+                current: self.registrations[token] === registration
+                    && registration.window === window)
         }
-        guard currentOrigin(presentationID, window: origin, relationship: relationship),
-            registrations[token] === registration, registration.window != nil,
-            registration.selected() == route.page
-        else { throw HostWindowNavigationError.routeRejected }
-        try await didApply(route)
-        try Task.checkCancellation()
-        guard activeVersions()[extensionID] == version else {
-            throw HostWindowNavigationError.inactiveOwner
+        let validate: @MainActor () throws -> Void = { [weak self] in
+            try validateRetained()
+            guard let self,
+                self.currentOrigin(presentationID, window: origin, relationship: relationship),
+                sourceWindow == nil || sourceWindow.flatMap(self.owningWorkspace) === window
+            else { throw HostWindowNavigationError.unavailable }
         }
-        guard currentOrigin(presentationID, window: origin, relationship: relationship),
-            registrations[token] === registration, registration.selected() == route.page,
-            HostNavigationCatalog.visible(
-                HostNavigationCatalog.page(page), active: Set(activeVersions().keys),
-                defaults: defaults)
-        else { throw HostWindowNavigationError.routeRejected }
+        try validate()
+        return HostWorkspaceNavigationOwner(
+            token: token, window: window, validate: validate, validateRetained: validateRetained)
     }
 
     private func currentOrigin(_ id: UUID?, window: NSWindow?, relationship: WindowRelationship?)
@@ -227,15 +286,18 @@ final class HostWindowNavigation {
         let order: UInt64
         let apply: Apply
         let selected: @MainActor () -> String
+        let delivered: @MainActor (HostWindowRoute) throws -> Void
         var closeObserver: NSObjectProtocol?
         deinit {
             if let closeObserver { NotificationCenter.default.removeObserver(closeObserver) }
         }
         init(
             window: NSWindow, order: UInt64, apply: @escaping Apply,
-            selected: @escaping @MainActor () -> String
+            selected: @escaping @MainActor () -> String,
+            delivered: @escaping @MainActor (HostWindowRoute) throws -> Void
         ) {
             self.window = window; self.order = order; self.apply = apply; self.selected = selected
+            self.delivered = delivered
         }
     }
 }
@@ -244,11 +306,16 @@ struct HostWindowNavigationAnchor: NSViewRepresentable {
     let navigation: HostWindowNavigation
     let apply: HostWindowNavigation.Apply
     let selected: @MainActor () -> String
+    var delivered: @MainActor (HostWindowRoute) throws -> Void = { _ in }
+    var captured: @MainActor (NSWindow) -> Void = { _ in }
     func makeNSView(context: Context) -> HostWindowNavigationView {
-        HostWindowNavigationView(navigation: navigation, apply: apply, selected: selected)
+        HostWindowNavigationView(
+            navigation: navigation, apply: apply, selected: selected, delivered: delivered,
+            captured: captured)
     }
     func updateNSView(_ view: HostWindowNavigationView, context: Context) {
         view.apply = apply; view.selected = selected
+        view.delivered = delivered; view.captured = captured
     }
     static func dismantleNSView(_ view: HostWindowNavigationView, coordinator: ()) {
         view.detach()
@@ -261,11 +328,16 @@ final class HostWindowNavigationView: NSView {
     private var token: UUID?
     var apply: HostWindowNavigation.Apply
     var selected: @MainActor () -> String
+    var delivered: @MainActor (HostWindowRoute) throws -> Void
+    var captured: @MainActor (NSWindow) -> Void
     init(
         navigation: HostWindowNavigation, apply: @escaping HostWindowNavigation.Apply,
-        selected: @escaping @MainActor () -> String
+        selected: @escaping @MainActor () -> String,
+        delivered: @escaping @MainActor (HostWindowRoute) throws -> Void,
+        captured: @escaping @MainActor (NSWindow) -> Void
     ) {
         self.navigation = navigation; self.apply = apply; self.selected = selected
+        self.delivered = delivered; self.captured = captured
         super.init(frame: .zero)
     }
     required init?(coder: NSCoder) { nil }
@@ -276,13 +348,18 @@ final class HostWindowNavigationView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard let window, let navigation else { return }
+        captured(window)
         token = navigation.register(
             window: window,
             apply: { [weak self] route in
                 guard let self else { throw HostWindowNavigationError.unavailable }
                 try await apply(route)
             },
-            selected: { [weak self] in self?.selected() ?? "" })
+            selected: { [weak self] in self?.selected() ?? "" },
+            delivered: { [weak self] route in
+                guard let self else { throw HostWindowNavigationError.unavailable }
+                try delivered(route)
+            })
     }
     func detach() {
         if let token { navigation?.unregister(token) }

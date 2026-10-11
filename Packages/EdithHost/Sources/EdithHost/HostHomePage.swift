@@ -275,6 +275,8 @@ private struct HostSurfaceProviderCard: View {
     @State private var actionTask: Task<Void, Never>?
     @State private var actionError: String?
     @State private var actionToken: UUID?
+    @State private var navigationOrigin = HostSurfaceNavigationOrigin()
+    @Environment(\.hostTerminalWindows) private var terminalWindows
 
     private var version: String? {
         marketplace.surfaceAvailability.activeIDs.contains(provider.id)
@@ -299,8 +301,14 @@ private struct HostSurfaceProviderCard: View {
                     }
                     .accessibilityLabel("Refresh " + provider.title)
                     if let openExtension {
-                        Button("Open") { openExtension(provider.id) }
-                            .accessibilityLabel("Open " + provider.title)
+                        Button("Open") {
+                            if provider.id == "terminal" {
+                                openTerminal()
+                            } else {
+                                openExtension(provider.id)
+                            }
+                        }
+                        .accessibilityLabel("Open " + provider.title)
                     }
                 }
             }.buttonStyle(.edith(.borderless))
@@ -321,12 +329,13 @@ private struct HostSurfaceProviderCard: View {
                 Button("Retry") { retry += 1 }.buttonStyle(.edith(.secondary))
             }
         }
+        .background(HostSurfaceNavigationAnchor(origin: navigationOrigin))
         .pageTask(
             id: Request(tile: tile, version: version, retry: retry),
             active: version != nil && !hidden
                 && (target != .notch
                     || marketplace.surfaceAvailability.activeIDs.contains("notchShelf")),
-            cancel: clear
+            cancel: resetContent
         ) {
             repeat {
                 let requests = marketplace.surfaces.requests
@@ -361,7 +370,11 @@ private struct HostSurfaceProviderCard: View {
 
     private func clear() {
         actionTask?.cancel(); actionTask = nil; actionToken = nil
-        load.reset(); snapshot = nil; actionError = nil
+        resetContent(); actionError = nil
+    }
+
+    private func resetContent() {
+        load.reset(); snapshot = nil
     }
 
     private func perform(_ action: SurfaceAction) {
@@ -380,14 +393,64 @@ private struct HostSurfaceProviderCard: View {
         actionTask = Task {
             defer { if actionToken == token { actionTask = nil; actionToken = nil } }
             do {
-                let next = try await marketplace.surfaces.requests.perform(
-                    providerID: provider.id, target: target, tile: tile, snapshot: snapshot,
-                    actionID: actionID, value: value)
+                let command: @MainActor () async throws -> SurfaceSnapshot = {
+                    try await marketplace.surfaces.requests.perform(
+                        providerID: provider.id, target: target, tile: tile, snapshot: snapshot,
+                        actionID: actionID, value: value)
+                }
+                let next: SurfaceSnapshot
+                if HostSurfaceActionDelivery.requiresWindow(
+                    providerID: provider.id, actionID: actionID)
+                {
+                    guard let version, let window = navigationOrigin.window, let terminalWindows
+                    else { throw HostWindowNavigationError.unavailable }
+                    let validate: @MainActor () throws -> Void = {
+                        try validateTerminalOrigin(window: window, version: version, token: token)
+                    }
+                    next = try await HostSurfaceActionDelivery.perform(
+                        validate: validate, command: command,
+                        deliver: {
+                            try await terminalWindows.openSurface(
+                                version: version, window: window, validate: validate)
+                        })
+                } else {
+                    next = try await command()
+                }
                 try Task.checkCancellation()
                 self.snapshot = next
             } catch {
                 guard !Task.isCancelled else { return }
                 actionError = error.localizedDescription
+            }
+        }
+    }
+
+    private func validateTerminalOrigin(window: NSWindow, version: String, token: UUID) throws {
+        try Task.checkCancellation()
+        guard !hidden, self.version == version, actionToken == token,
+            !marketplace.pendingRemovalIDs.contains(provider.id),
+            !marketplace.sessions.pendingDisableIDs.contains(provider.id)
+        else { throw HostWindowNavigationError.inactiveOwner }
+        try navigationOrigin.validate(window: window)
+    }
+
+    private func openTerminal() {
+        guard !hidden, actionTask == nil else { return }
+        actionError = nil
+        let token = UUID()
+        actionToken = token
+        actionTask = Task {
+            defer { if actionToken == token { actionTask = nil; actionToken = nil } }
+            do {
+                guard let version, let window = navigationOrigin.window, let terminalWindows
+                else { throw HostWindowNavigationError.unavailable }
+                try await terminalWindows.openSurface(
+                    version: version, window: window,
+                    validate: {
+                        try validateTerminalOrigin(window: window, version: version, token: token)
+                    })
+            } catch {
+                if !Task.isCancelled { actionError = error.localizedDescription }
             }
         }
     }

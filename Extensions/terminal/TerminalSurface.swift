@@ -1,25 +1,21 @@
 import EdithExtensionSupport
-import EdithExtensionUI
 import Foundation
 
 @MainActor final class TerminalSurface {
     private let engine: TerminalEngine
     private let privacyValues: @MainActor () -> [String: String]
     private let home: String
-    private let showWindow: @MainActor () -> Void
 
     init(
         engine: TerminalEngine,
         privacyValues: @escaping @MainActor () -> [String: String] = {
             ExtensionSharedState.current?.values(for: "presenter") ?? [:]
         },
-        home: String = NSHomeDirectory(),
-        showWindow: @escaping @MainActor () -> Void = { ExtensionPresentation.showWindow() }
+        home: String = NSHomeDirectory()
     ) {
         self.engine = engine
         self.privacyValues = privacyValues
         self.home = home
-        self.showWindow = showWindow
     }
 
     func execute(_ command: String, payload: Data) async throws -> Data {
@@ -67,7 +63,6 @@ import Foundation
         guard !engine.isStopped else { throw ExtensionPeerError.unavailable }
         if actionID == "new" {
             _ = try await engine.execute("terminal.open", payload: Data())
-            showWindow()
             return
         }
         let parts = actionID.split(separator: "/", maxSplits: 1).map(String.init)
@@ -78,6 +73,5 @@ import Foundation
             "terminal.select",
             payload: JSONEncoder().encode(
                 TerminalEngine.SessionRequest(id: session.id, generation: session.generation)))
-        showWindow()
     }
 }

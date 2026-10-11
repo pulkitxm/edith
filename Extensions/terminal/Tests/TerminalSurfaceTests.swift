@@ -4,8 +4,20 @@ import Testing
 @testable import TerminalExtension
 
 @Suite(.serialized) @MainActor struct TerminalSurfaceTests {
+    @Test func newCreatesExactlyOneSessionBeforeTheHostOwnsWindowDelivery() async throws {
+        let engine = TerminalTestFixture.engine()
+        defer { engine.stop() }
+        let surface = TerminalSurface(
+            engine: engine, privacyValues: { [:] }, home: "/synthetic/home")
+        let request = SurfaceActionRequest(
+            snapshot: .init(target: .home, tile: .init(.ability("terminal"))), actionID: "new")
+        _ = try await surface.execute(
+            "surface.perform", payload: request.encoded(providerID: "terminal"))
+        #expect(try engine.snapshot().sessions.count == 1)
+        #expect(try engine.snapshot().sessions.first?.selected == true)
+    }
+
     @Test func sourcesLimitsFieldsAndActionsUseTheCurrentEngineSessions() async throws {
-        var shows = 0
         let engine = TerminalTestFixture.engine()
         defer { engine.stop() }
         _ = try await engine.execute("terminal.open", payload: Data())
@@ -20,7 +32,7 @@ import Testing
                     session: .init(id: first.id, generation: first.generation),
                     title: "Fixture shell", directory: "/tmp/mock/folder")))
         let surface = TerminalSurface(
-            engine: engine, privacyValues: { [:] }, home: "/tmp/mock", showWindow: { shows += 1 })
+            engine: engine, privacyValues: { [:] }, home: "/tmp/mock")
         var tile = SurfaceTile(.ability("terminal")); tile.itemLimit = 1
         tile.sourceIDs = [first.id.uuidString]; tile.hiddenFields = ["running"]
         let request = SurfaceSnapshotRequest(target: .notch, tile: tile)
@@ -37,14 +49,12 @@ import Testing
             try await surface.execute(
                 "surface.perform", payload: hidden.encoded(providerID: "terminal"))
         }
-        #expect(shows == 0)
         let allowed = SurfaceActionRequest(
             snapshot: request, actionID: "focus/" + first.id.uuidString)
         _ = try await surface.execute(
             "surface.perform", payload: allowed.encoded(providerID: "terminal"))
         #expect(
-            try engine.snapshot().sessions.first(where: { $0.id == first.id })?.selected == true
-                && shows == 1)
+            try engine.snapshot().sessions.first(where: { $0.id == first.id })?.selected == true)
         _ = try await engine.execute(
             "terminal.close",
             payload: JSONEncoder().encode(
@@ -60,7 +70,7 @@ import Testing
         defer { engine.stop() }
         _ = try await engine.execute("terminal.open", payload: Data())
         let surface = TerminalSurface(
-            engine: engine, privacyValues: { ["active": "1"] }, showWindow: {})
+            engine: engine, privacyValues: { ["active": "1"] })
         let request = SurfaceSnapshotRequest(target: .home, tile: SurfaceTile(.ability("terminal")))
         let snapshot = try SurfaceSnapshot.decode(
             try await surface.execute(
