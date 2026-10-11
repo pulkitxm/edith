@@ -232,6 +232,31 @@ export function hostRun({ run, jobs, artifacts, source }) {
   };
 }
 
+export function toolchainProvenance(value, source, executableSHA256) {
+  assert.deepEqual(Object.keys(value).sort(), [
+    "builderSignature",
+    "hostExecutableSHA256",
+    "schema",
+    "sdk",
+    "sourceCommit",
+    "xcode",
+  ]);
+  assert.equal(value.schema, 1);
+  assert.equal(value.sourceCommit, source);
+  assert.match(source, commit);
+  assert.equal(value.hostExecutableSHA256, executableSHA256);
+  assert.match(executableSHA256, hash);
+  assert(typeof value.xcode === "string" && value.xcode.length <= 256);
+  assert.match(
+    value.xcode,
+    /^Xcode [0-9]+\.[0-9]+(?:\.[0-9]+)?\nBuild version [A-Za-z0-9]+$/,
+  );
+  assert(typeof value.sdk === "string" && value.sdk.length <= 32);
+  assert.match(value.sdk, /^[0-9]+\.[0-9]+(?:\.[0-9]+)?$/);
+  assert(["ad-hoc", "unsigned"].includes(value.builderSignature));
+  return value;
+}
+
 export function currentPackages(catalog, definitions, fingerprints) {
   return definitions.map((definition) => {
     const matching = catalog.packages.filter(

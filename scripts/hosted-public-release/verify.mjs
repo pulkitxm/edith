@@ -37,6 +37,7 @@ import {
   repository,
   request,
   successfulRun,
+  toolchainProvenance,
 } from "./contract.mjs";
 import {
   admitEvidence,
@@ -639,6 +640,9 @@ export async function run() {
     join(work, "host-bytes"),
     "Edith.dmg",
     "appcast.xml",
+    "host-release-proof.json",
+    "build-metadata.json",
+    "toolchain-provenance.json",
   );
   python(
     "extract",
@@ -646,8 +650,23 @@ export async function run() {
     join(work, "host-proof"),
     "host-release-proof.json",
     "build-metadata.json",
+    "toolchain-provenance.json",
   );
   const proof = document(join(work, "host-proof/host-release-proof.json"));
+  const hostToolchain = toolchainProvenance(
+    document(join(work, "host-proof/toolchain-provenance.json")),
+    options.source,
+    proof.hostExecutableSHA256,
+  );
+  for (const name of [
+    "host-release-proof.json",
+    "build-metadata.json",
+    "toolchain-provenance.json",
+  ])
+    assert.deepEqual(
+      await readFile(join(work, "host-proof", name)),
+      await readFile(join(work, "host-bytes", name)),
+    );
   const qualification = python(
     "tag",
     root,
@@ -694,6 +713,32 @@ export async function run() {
       appcast,
     ),
   ];
+  assert.deepEqual(
+    release.assets.map(({ name }) => name).sort(),
+    [
+      "Edith.dmg",
+      "appcast.xml",
+      "build-metadata.json",
+      "host-release-proof.json",
+      "toolchain-provenance.json",
+    ].sort(),
+  );
+  for (const name of [
+    "host-release-proof.json",
+    "build-metadata.json",
+    "toolchain-provenance.json",
+  ]) {
+    const bytes = await readFile(join(work, "host-proof", name));
+    publicHost.push(
+      await publicAsset(
+        release,
+        name,
+        bytes.length,
+        digest(bytes),
+        join(work, `public-${name}`),
+      ),
+    );
+  }
   for (const row of productionAdmission) {
     const definition = definitions.find(({ id }) => id === row.extensionID);
     const package_ = current.find(({ id }) => id === row.extensionID);
@@ -953,6 +998,7 @@ export async function run() {
     artifacts: downloads,
     publicHost,
     host: hostStatic,
+    hostToolchain,
     catalogRevision: pointer.revision,
     catalogSHA256: pointer.sha256,
     packages,

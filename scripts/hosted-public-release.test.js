@@ -15,6 +15,7 @@ import {
   productionRun,
   publicURL,
   request,
+  toolchainProvenance,
 } from "./hosted-public-release/contract.mjs";
 
 const source = "a".repeat(40);
@@ -295,4 +296,28 @@ test("selective current publication still requires every planned native job and 
       ).toThrow();
     }
   }
+});
+
+test("recorded toolchain provenance binds the successful source and final signed executable without relabeling its builder phase", () => {
+  const value = {
+    schema: 1,
+    sourceCommit: source,
+    hostExecutableSHA256: "c".repeat(64),
+    xcode: "Xcode 26.6\nBuild version 17G100",
+    sdk: "26.6",
+    builderSignature: "ad-hoc",
+  };
+  expect(toolchainProvenance(value, source, "c".repeat(64))).toEqual(value);
+  for (const changed of [
+    { sourceCommit: "d".repeat(40) },
+    { hostExecutableSHA256: "d".repeat(64) },
+    { xcode: "unmeasured" },
+    { sdk: "26.6-extra" },
+    { builderSignature: "Developer ID" },
+    { certificateCategory: "Developer ID" },
+    { schema: true },
+  ])
+    expect(() =>
+      toolchainProvenance({ ...value, ...changed }, source, "c".repeat(64)),
+    ).toThrow();
 });
