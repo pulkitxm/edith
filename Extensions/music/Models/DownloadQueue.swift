@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Foundation
 
 public struct DownloadRecord: Codable, Equatable, Identifiable, Sendable {
@@ -72,23 +73,27 @@ public struct DownloadRecord: Codable, Equatable, Identifiable, Sendable {
 }
 
 public enum DownloadQueue {
-    public static var file: URL { MusicStorage.dataDir.appendingPathComponent("downloads.json") }
+    public static var file: URL { MusicStorage.downloadQueueFile }
 
     public static func load(from file: URL = DownloadQueue.file) -> [DownloadRecord] {
-        guard let data = try? Data(contentsOf: file) else { return [] }
-        return ((try? JSONDecoder().decode([DownloadRecord].self, from: data)) ?? [])
-            .sorted {
-                if $0.createdAt != $1.createdAt { return $0.createdAt > $1.createdAt }
-                return $0.id.uuidString < $1.id.uuidString
-            }
+        (try? read(from: file)) ?? []
     }
 
-    public static func save(
-        _ records: [DownloadRecord], to file: URL = DownloadQueue.file
-    ) throws {
-        try FileManager.default.createDirectory(
-            at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try JSONEncoder().encode(records).write(to: file, options: .atomic)
+    public static func read(from file: URL = DownloadQueue.file) throws -> [DownloadRecord] {
+        try PersistentJSONFile.read([DownloadRecord].self, from: file, missing: []).sorted {
+            if $0.createdAt != $1.createdAt { return $0.createdAt > $1.createdAt }
+            return $0.id.uuidString < $1.id.uuidString
+        }
+    }
+
+    public static func update<Result>(
+        file: URL = DownloadQueue.file, _ mutation: (inout [DownloadRecord]) throws -> Result
+    ) throws -> ([DownloadRecord], Result) {
+        try PersistentJSONFile.update([DownloadRecord].self, at: file, missing: [], mutation)
+    }
+
+    public static func save(_ records: [DownloadRecord], to file: URL = DownloadQueue.file) throws {
+        _ = try update(file: file) { $0 = records }
     }
 
     public static func outputTemplate(prefix: String, directory: URL = MusicStorage.musicDir)
@@ -111,7 +116,7 @@ public enum DownloadQueue {
                 url: $0, status: .queued, outputFilename: template, createdAt: now, kind: kind,
                 browser: browser)
         }
-        try save(added + load(from: file), to: file)
+        _ = try update(file: file) { $0.insert(contentsOf: added, at: 0) }
         return added
     }
 
@@ -119,27 +124,25 @@ public enum DownloadQueue {
     public static func retry(
         _ matching: (DownloadRecord) -> Bool, file: URL = DownloadQueue.file
     ) throws -> Int {
-        var records = load(from: file)
-        var changed = 0
-        for index in records.indices where matching(records[index]) {
-            guard records[index].canRetry else { continue }
-            records[index].status = .queued
-            changed += 1
-        }
-        guard changed > 0 else { return 0 }
-        try save(records, to: file)
-        return changed
+        try update(file: file) { records in
+            var changed = 0
+            for index in records.indices where matching(records[index]) && records[index].canRetry {
+                records[index].status = .queued
+                changed += 1
+            }
+            return changed
+        }.1
     }
 
     @discardableResult
     public static func remove(
         _ matching: (DownloadRecord) -> Bool, file: URL = DownloadQueue.file
     ) throws -> Int {
-        let records = load(from: file)
-        let kept = records.filter { !matching($0) }
-        guard kept.count != records.count else { return 0 }
-        try save(kept, to: file)
-        return records.count - kept.count
+        try update(file: file) { records in
+            let count = records.count
+            records.removeAll(where: matching)
+            return count - records.count
+        }.1
     }
 
     @discardableResult

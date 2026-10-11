@@ -78,6 +78,8 @@ public actor DownloadWorker {
     private var revision = 0
     private var snapshotDirty = false
     private var publicationTask: Task<Void, Never>?
+    private var observationTask: Task<Void, Never>?
+    private var schedulerLease: PersistentFileLease?
     private var estimates: [UUID: Task<CLICommandResult, Error>] = [:]
 
     public init(
@@ -106,11 +108,7 @@ public actor DownloadWorker {
         self.publish = publish
         self.completed = completed
         do {
-            records = try JSONDecoder().decode([DownloadRecord].self, from: Data(contentsOf: file))
-                .sorted {
-                    if $0.createdAt != $1.createdAt { return $0.createdAt > $1.createdAt }
-                    return $0.id.uuidString < $1.id.uuidString
-                }
+            records = try DownloadQueue.read(from: file)
             loadError = nil
         } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
             records = []
@@ -127,6 +125,7 @@ public actor DownloadWorker {
             flight.progress?.cancel()
         }
         publicationTask?.cancel()
+        observationTask?.cancel()
         for task in estimates.values { task.cancel() }
     }
 
@@ -134,23 +133,22 @@ public actor DownloadWorker {
         if let loadError { throw DownloadsError(loadError) }
         guard !started, !stopping else { return }
         started = true
-        var changed = false
-        for index in records.indices {
-            switch records[index].status {
-            case .resolving, .downloading:
-                records[index].status = .interrupted("Downloads restarted.")
-                changed = true
-            default: break
+        startNext()
+        observationTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+                guard let self else { return }
+                await refresh()
             }
         }
-        if changed { try save() }
-        startNext()
         notify()
     }
 
     public func stop() async {
         stopping = true
         started = false
+        observationTask?.cancel()
+        observationTask = nil
         let running = Array(flights.keys)
         for id in running { interrupt(id, reason: "Downloads stopped.") }
         let tasks = flights.values.map(\.task)
@@ -162,6 +160,7 @@ public actor DownloadWorker {
             flight.progress?.cancel()
         }
         for task in tasks { await task.value }
+        schedulerLease = nil
         for task in progressTasks { await task.value }
         for task in estimates { _ = await task.result }
         self.estimates.removeAll()
@@ -172,6 +171,7 @@ public actor DownloadWorker {
     }
 
     public func snapshot() -> DownloadWorkerSnapshot {
+        reload()
         revision += 1
         var snapshotRecords = records
         var snapshotLogs = logs
@@ -193,6 +193,11 @@ public actor DownloadWorker {
 
     public func refresh() {
         guard !stopping else { return }
+        reload()
+        for id in flights.keys where !records.contains(where: { $0.id == id && Self.isRunning($0) })
+        {
+            flights[id]?.task.cancel()
+        }
         if !isEnabled() {
             for id in Array(flights.keys) {
                 interrupt(id, reason: "Downloads are disabled.")
@@ -205,63 +210,68 @@ public actor DownloadWorker {
     public func mutate(_ request: DownloadsMutation) throws -> DownloadsMutationResult {
         guard !stopping else { throw DownloadsError("Downloads are shutting down.") }
         if let loadError { throw DownloadsError(loadError) }
-        let previousRecords = records
         let previousLogs = logs
         var cancelIDs = Set<UUID>()
         var changed = 0
         var added: [DownloadRecord] = []
-        switch request {
-        case let .enqueue(urls, prefix, kind, outputDirectory, browser):
-            guard urls.count <= 100, !urls.isEmpty,
-                records.count(where: { !$0.isFinished }) + urls.count <= 128,
-                urls.allSatisfy(MediaDownloadInput.isValid),
-                prefix.utf8.count <= 200, !prefix.contains("/"), !prefix.contains("\\"),
-                !prefix.contains(where: { $0.isNewline }),
-                outputDirectory.isFileURL
-            else { throw DownloadsError("The download request is invalid.") }
-            try FileManager.default.createDirectory(
-                at: outputDirectory, withIntermediateDirectories: true)
-            let template = DownloadQueue.outputTemplate(prefix: prefix, directory: outputDirectory)
-            added = urls.map {
-                DownloadRecord(
-                    url: $0, status: .queued, outputFilename: template, createdAt: Date(),
-                    kind: kind, browser: browser)
-            }
-            records.insert(contentsOf: added, at: 0)
-            changed = added.count
-        case let .retry(id, all):
-            for index in records.indices
-            where (all || records[index].id == id) && records[index].canRetry {
-                guard flights[records[index].id] == nil else { continue }
-                records[index].status = .queued
-                changed += 1
-            }
-        case let .cancel(id, includeQueued, reason):
-            for index in records.indices where id == nil || records[index].id == id {
-                guard !records[index].isFinished, includeQueued || records[index].status != .queued
-                else { continue }
-                records[index].status = .interrupted(String(reason.prefix(200)))
-                changed += 1
-                if flights[records[index].id] != nil { cancelIDs.insert(records[index].id) }
-            }
-        case let .remove(id):
-            changed = records.count { $0.id == id }
-            records.removeAll { $0.id == id }
-            logs[id.uuidString] = nil
-            if flights[id] != nil { cancelIDs.insert(id) }
-        case let .clear(includeActive):
-            let removed = records.filter { includeActive || $0.isFinished }
-            let ids = Set(removed.map(\.id))
-            records.removeAll { ids.contains($0.id) }
-            for id in ids { logs[id.uuidString] = nil }
-            cancelIDs.formUnion(ids.intersection(flights.keys))
-            changed = removed.count
-        }
         do {
-            if changed > 0 { try save() }
+            let updated = try DownloadQueue.update(file: file) { records in
+                switch request {
+                case let .enqueue(urls, prefix, kind, outputDirectory, browser):
+                    guard urls.count <= 100, !urls.isEmpty,
+                        records.count(where: { !$0.isFinished }) + urls.count <= 128,
+                        urls.allSatisfy(MediaDownloadInput.isValid),
+                        prefix.utf8.count <= 200, !prefix.contains("/"), !prefix.contains("\\"),
+                        !prefix.contains(where: { $0.isNewline }),
+                        outputDirectory.isFileURL
+                    else { throw DownloadsError("The download request is invalid.") }
+                    try FileManager.default.createDirectory(
+                        at: outputDirectory, withIntermediateDirectories: true)
+                    let template = DownloadQueue.outputTemplate(
+                        prefix: prefix, directory: outputDirectory)
+                    added = urls.map {
+                        DownloadRecord(
+                            url: $0, status: .queued, outputFilename: template, createdAt: Date(),
+                            kind: kind, browser: browser)
+                    }
+                    records.insert(contentsOf: added, at: 0)
+                    changed = added.count
+                case let .retry(id, all):
+                    for index in records.indices
+                    where (all || records[index].id == id) && records[index].canRetry {
+                        guard flights[records[index].id] == nil else { continue }
+                        records[index].status = .queued
+                        changed += 1
+                    }
+                case let .cancel(id, includeQueued, reason):
+                    for index in records.indices where id == nil || records[index].id == id {
+                        guard !records[index].isFinished,
+                            includeQueued || records[index].status != .queued
+                        else { continue }
+                        records[index].status = .interrupted(String(reason.prefix(200)))
+                        changed += 1
+                        if flights[records[index].id] != nil { cancelIDs.insert(records[index].id) }
+                    }
+                case let .remove(id):
+                    changed = records.count { $0.id == id }
+                    records.removeAll { $0.id == id }
+                    logs[id.uuidString] = nil
+                    if flights[id] != nil { cancelIDs.insert(id) }
+                case let .clear(includeActive):
+                    let removed = records.filter { includeActive || $0.isFinished }
+                    let ids = Set(removed.map(\.id))
+                    records.removeAll { ids.contains($0.id) }
+                    for id in ids { logs[id.uuidString] = nil }
+                    cancelIDs.formUnion(ids.intersection(flights.keys))
+                    changed = removed.count
+                }
+            }
+            records = updated.0
+            persistenceError = nil
         } catch {
-            records = previousRecords
             logs = previousLogs
+            persistenceError =
+                "The download queue could not be saved: \(error.localizedDescription)"
             throw error
         }
         for id in cancelIDs { flights[id]?.task.cancel() }
@@ -305,29 +315,62 @@ public actor DownloadWorker {
     }
 
     private func startNext() {
+        guard started, !stopping else { return }
+        if !isEnabled() {
+            if flights.isEmpty { schedulerLease = nil }
+            return
+        }
+        do {
+            if schedulerLease == nil {
+                guard
+                    let lease = try PersistentFileLease.acquire(
+                        at: file.appendingPathExtension("scheduler.lock"))
+                else { return }
+                schedulerLease = lease
+                try update { records in
+                    for index in records.indices {
+                        switch records[index].status {
+                        case .resolving, .downloading:
+                            records[index].status = .interrupted("Downloads restarted.")
+                        default: break
+                        }
+                    }
+                }
+            }
+        } catch {
+            schedulerLease = nil
+            persistenceError = "The download queue could not be read: \(error.localizedDescription)"
+            return
+        }
         while startOne() {}
     }
 
     private func startOne() -> Bool {
-        guard started, !stopping, flights.count < Self.maximumConcurrent, isEnabled(),
-            let executable = executable()
+        guard started, !stopping, let lease = schedulerLease,
+            flights.count < Self.maximumConcurrent, isEnabled(), let executable = executable()
         else { return false }
-        let queued = records.indices.filter { records[$0].status == .queued }
-        guard let index = queued.min(by: { records[$0].createdAt < records[$1].createdAt }) else {
-            return false
-        }
-        let record = records[index]
-        records[index].status = .resolving
-        do { try save() } catch {
-            records[index].status = .error(error.localizedDescription)
+        var selected: DownloadRecord?
+        do {
+            try update { records in
+                let queued = records.indices.filter {
+                    records[$0].status == .queued && flights[records[$0].id] == nil
+                }
+                guard let index = queued.min(by: { records[$0].createdAt < records[$1].createdAt })
+                else { return }
+                selected = records[index]
+                records[index].status = .resolving
+            }
+        } catch {
             notify()
             return false
         }
+        guard let record = selected else { return false }
         let buffer = DownloadWorkerOutput()
         let request = Self.request(record, executable: executable)
         let gallery = galleryExecutable()
         let runCommand = runCommand
         let task = Task.detached(priority: .utility) { [weak self] in
+            defer { withExtendedLifetime(lease) {} }
             do {
                 let result: CLICommandResult
                 if record.kind == .images || record.kind == .post {
@@ -384,10 +427,12 @@ public actor DownloadWorker {
     }
 
     private func interrupt(_ id: UUID, reason: String) {
-        guard let index = records.firstIndex(where: { $0.id == id }), !records[index].isFinished
-        else { return }
-        records[index].status = .interrupted(reason)
-        try? save()
+        guard flights[id] != nil else { return }
+        try? update { records in
+            guard let index = records.firstIndex(where: { $0.id == id }), !records[index].isFinished
+            else { return }
+            records[index].status = .interrupted(reason)
+        }
         flights[id]?.task.cancel()
         notify()
     }
@@ -397,43 +442,63 @@ public actor DownloadWorker {
         flight.progress?.cancel()
         logs[id.uuidString] = flight.output.snapshot.0
         var succeeded = false
-        if let index = records.firstIndex(where: { $0.id == id }), !records[index].isFinished {
-            switch result {
-            case .success(let result):
-                let paths = Self.resultPaths(result, record: records[index])
-                records[index].resultPaths = paths.isEmpty ? nil : paths
-                if result.terminationStatus == 0, !paths.isEmpty {
-                    records[index].status = .done(
-                        paths.map { ($0 as NSString).lastPathComponent }.joined(separator: ", "))
-                    records[index].resultPaths = paths
-                    succeeded = true
-                } else {
-                    let message = String(result.standardError.suffix(2_000)).trimmingCharacters(
-                        in: .whitespacesAndNewlines)
-                    records[index].status = .error(
-                        message.isEmpty
-                            ? "No completed media found. Check the post URL, update the download tools, or select a signed-in browser for login-required posts."
-                            : message)
+        try? update { records in
+            if let index = records.firstIndex(where: { $0.id == id }),
+                Self.isRunning(records[index])
+            {
+                switch result {
+                case .success(let result):
+                    let paths = Self.resultPaths(result, record: records[index])
+                    records[index].resultPaths = paths.isEmpty ? nil : paths
+                    if result.terminationStatus == 0, !paths.isEmpty {
+                        records[index].status = .done(
+                            paths.map { ($0 as NSString).lastPathComponent }.joined(separator: ", ")
+                        )
+                        records[index].resultPaths = paths
+                        succeeded = true
+                    } else {
+                        let message = String(result.standardError.suffix(2_000)).trimmingCharacters(
+                            in: .whitespacesAndNewlines)
+                        records[index].status = .error(
+                            message.isEmpty
+                                ? "No completed media found. Check the post URL, update the download tools, or select a signed-in browser for login-required posts."
+                                : message)
+                    }
+                case .failure(let error):
+                    records[index].status =
+                        error is CancellationError
+                        ? .interrupted("Cancelled") : .error(error.localizedDescription)
                 }
-            case .failure(let error):
-                records[index].status =
-                    error is CancellationError
-                    ? .interrupted("Cancelled") : .error(error.localizedDescription)
             }
+            let retained = Set(records.filter(\.isFinished).prefix(256).map(\.id))
+            records.removeAll { $0.isFinished && !retained.contains($0.id) }
         }
-        let retained = Set(records.filter(\.isFinished).prefix(256).map(\.id))
-        records.removeAll { $0.isFinished && !retained.contains($0.id) }
         let keepLogs = Set(records.prefix(32).map { $0.id.uuidString })
         logs = logs.filter { keepLogs.contains($0.key) }
-        try? save()
         notify()
         startNext()
         if succeeded { await completed() }
     }
 
-    private func save() throws {
+    private static func isRunning(_ record: DownloadRecord) -> Bool {
+        switch record.status {
+        case .resolving, .downloading: true
+        default: false
+        }
+    }
+
+    private func reload() {
         do {
-            try DownloadQueue.save(records, to: file)
+            records = try DownloadQueue.read(from: file)
+            persistenceError = nil
+        } catch {
+            persistenceError = "The download queue could not be read: \(error.localizedDescription)"
+        }
+    }
+
+    private func update(_ mutation: (inout [DownloadRecord]) throws -> Void) throws {
+        do {
+            records = try DownloadQueue.update(file: file, mutation).0
             persistenceError = nil
         } catch {
             persistenceError =
