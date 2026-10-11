@@ -94,7 +94,7 @@ struct MusicLibraryFolderCommand: AsyncParsableCommand {
     var path: String
 
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             let result: MusicFolderSelectionResult
             do {
                 result = try MusicFolderSelectionOperationExecution.select(
@@ -150,7 +150,7 @@ struct MusicListCommand: AsyncParsableCommand {
     var folder: String = ""
 
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             let target = try LibraryBridge.folder(folder)
             let listing = MusicLibraryContentOperationExecution.list(
                 target, recursive: recursive)
@@ -223,7 +223,7 @@ struct MusicNewFolderCommand: AsyncParsableCommand {
     var name: String
 
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             _ = try LibraryBridge.folder(under)
             let made: MusicFolder
             do {
@@ -267,7 +267,7 @@ struct MusicMoveCommand: AsyncParsableCommand {
     var folder: String
 
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             let found = try LibraryBridge.track(track)
             _ = try LibraryBridge.folder(folder)
             let move: MusicLibrary.Move
@@ -312,7 +312,7 @@ struct MusicRenameCommand: AsyncParsableCommand {
     var name: String
 
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             let move: MusicLibrary.Move
             do {
                 let target: MusicLibraryRenameTarget =
@@ -362,7 +362,7 @@ struct MusicRemoveCommand: AsyncParsableCommand {
     var target: String
 
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             let target: MusicLibraryRemovalTarget =
                 folder
                 ? .folder(try LibraryBridge.folder(target))
@@ -422,7 +422,7 @@ struct MusicPlayTrackCommand: AsyncParsableCommand {
     var target: String
 
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             try MusicCLIEnvironment.requirePlayer()
             guard !folder else {
                 let found = try LibraryBridge.folder(target)
@@ -467,7 +467,7 @@ struct MusicSeekCommand: AsyncParsableCommand {
     var position: Double
 
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             let fraction = try ArgumentChecks.fraction(position, "position")
             try MusicCLIEnvironment.requirePlayer()
             LibraryBridge.send(.seek(fraction))
@@ -535,7 +535,7 @@ struct MusicRepeatCommand: AsyncParsableCommand {
         key: String, label: String, state: String?, json: Bool,
         request: (Bool) -> MusicTransportRequest
     ) async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             let defaults = MusicCLIEnvironment.standardDefaults
             guard let state else {
                 let on = defaults.bool(forKey: key)
@@ -607,7 +607,9 @@ struct MusicFavoriteCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Track path, or enough of its name to be unambiguous.") var track: String
     @MainActor func run() async throws {
-        try await execute { try MusicFavouriteBridge.run(.favorite, query: track, json: json) }
+        try await MusicCommandExecution.execute {
+            try MusicFavouriteBridge.run(.favorite, query: track, json: json)
+        }
     }
 }
 
@@ -626,7 +628,9 @@ struct MusicUnfavoriteCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Track path, or enough of its name to be unambiguous.") var track: String
     @MainActor func run() async throws {
-        try await execute { try MusicFavouriteBridge.run(.unfavorite, query: track, json: json) }
+        try await MusicCommandExecution.execute {
+            try MusicFavouriteBridge.run(.unfavorite, query: track, json: json)
+        }
     }
 }
 
@@ -644,7 +648,7 @@ struct MusicRevealCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Track path, or enough of its name to be unambiguous.") var track: String
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             let found = try LibraryBridge.track(track)
             let url = await MusicLibraryOperationExecution.reveal(found.url)
             guard !json else {
@@ -673,7 +677,7 @@ struct MusicOpenLibraryCommand: AsyncParsableCommand {
             """, )
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             let url = try await MusicLibraryOperationExecution.openLibrary()
             guard !json else {
                 CLIOut.json(
@@ -706,7 +710,7 @@ struct MusicRescanCommand: AsyncParsableCommand {
     var json = false
 
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             try LibraryBridge.requireFolder()
             let tracks = MusicLibraryContentOperationExecution.rescan().count
             LibraryBridge.announce()

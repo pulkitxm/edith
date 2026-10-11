@@ -44,6 +44,16 @@ struct PlayerChoice: ParsableArguments {
     }
 }
 
+@MainActor enum MusicCommandExecution {
+    static func execute(_ body: @MainActor () async throws -> Void) async throws {
+        do { try await body() } catch let failure as CLIFailure {
+            CLIOut.report(failure); throw ExitCode(failure.kind.rawValue)
+        } catch let exit as ExitCode { throw exit } catch is CancellationError {
+            throw CancellationError()
+        } catch { CLIOut.note("error: " + error.localizedDescription); throw ExitCode(1) }
+    }
+}
+
 @MainActor enum MusicVerb {
     static func act(
         _ action: PlayerAction, forced: MusicPlayer?, json: Bool
@@ -134,7 +144,7 @@ struct MusicStatusCommand: AsyncParsableCommand {
     @OptionGroup var choice: PlayerChoice
 
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             let forced = try choice.resolved()
             guard !json else {
                 let players = forced.map { [$0] } ?? MusicPlayer.allCases
@@ -167,7 +177,7 @@ struct MusicPlayersCommand: AsyncParsableCommand {
     var json = false
 
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             let observed = await MusicSession.snapshots()
             let active = try? MusicTargeting.resolve(observed, preferred: MusicMemory.last)
             guard !json else {
@@ -208,7 +218,7 @@ struct MusicOpenCurrentCommand: AsyncParsableCommand {
     @OptionGroup var choice: PlayerChoice
 
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             try await MusicCurrentVerb.act(
                 .openCurrent, forced: choice.resolved(), json: json)
         }
@@ -235,7 +245,7 @@ struct MusicRevealCurrentCommand: AsyncParsableCommand {
     @OptionGroup var choice: PlayerChoice
 
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             try await MusicCurrentVerb.act(
                 .revealCurrent, forced: choice.resolved(), json: json)
         }
@@ -260,7 +270,9 @@ struct MusicPlayCommand: AsyncParsableCommand {
     @OptionGroup var choice: PlayerChoice
 
     @MainActor func run() async throws {
-        try await execute { try await MusicVerb.act(.play, forced: choice.resolved(), json: json) }
+        try await MusicCommandExecution.execute {
+            try await MusicVerb.act(.play, forced: choice.resolved(), json: json)
+        }
     }
 }
 
@@ -282,7 +294,9 @@ struct MusicPauseCommand: AsyncParsableCommand {
     @OptionGroup var choice: PlayerChoice
 
     @MainActor func run() async throws {
-        try await execute { try await MusicVerb.act(.pause, forced: choice.resolved(), json: json) }
+        try await MusicCommandExecution.execute {
+            try await MusicVerb.act(.pause, forced: choice.resolved(), json: json)
+        }
     }
 }
 
@@ -304,7 +318,9 @@ struct MusicStopCommand: AsyncParsableCommand {
     @OptionGroup var choice: PlayerChoice
 
     @MainActor func run() async throws {
-        try await execute { try await MusicVerb.act(.stop, forced: choice.resolved(), json: json) }
+        try await MusicCommandExecution.execute {
+            try await MusicVerb.act(.stop, forced: choice.resolved(), json: json)
+        }
     }
 }
 
@@ -326,7 +342,7 @@ struct MusicToggleCommand: AsyncParsableCommand {
     @OptionGroup var choice: PlayerChoice
 
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             try await MusicVerb.act(.toggle, forced: choice.resolved(), json: json)
         }
     }
@@ -350,7 +366,9 @@ struct MusicNextCommand: AsyncParsableCommand {
     @OptionGroup var choice: PlayerChoice
 
     @MainActor func run() async throws {
-        try await execute { try await MusicVerb.act(.next, forced: choice.resolved(), json: json) }
+        try await MusicCommandExecution.execute {
+            try await MusicVerb.act(.next, forced: choice.resolved(), json: json)
+        }
     }
 }
 
@@ -372,7 +390,7 @@ struct MusicPreviousCommand: AsyncParsableCommand {
     @OptionGroup var choice: PlayerChoice
 
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             try await MusicVerb.act(.previous, forced: choice.resolved(), json: json)
         }
     }
@@ -399,7 +417,7 @@ struct MusicVolumeCommand: AsyncParsableCommand {
     var level: Double
 
     @MainActor func run() async throws {
-        try await execute {
+        try await MusicCommandExecution.execute {
             let level = try ArgumentChecks.fraction(self.level, "volume")
             try await MusicVerb.act(.volume(level), forced: choice.resolved(), json: json)
         }
