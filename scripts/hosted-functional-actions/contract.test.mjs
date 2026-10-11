@@ -11,8 +11,8 @@ import {
   validateFunctionalActionProof,
   validateFunctionalCapability,
   validateFunctionalCaseDefinition,
-  validateFunctionalRequest,
   validateFunctionalMutationJournal,
+  validateFunctionalRequest,
   verifyFunctionalEnvelope,
 } from "./contract.mjs";
 import {
