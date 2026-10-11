@@ -116,6 +116,7 @@ test("maintained diagnostics admit only reviewed nonpublishing owner refs and im
     sha: "a".repeat(40),
   };
   const inputs = {
+    hosted_sparkle_update_sha: "",
     hosted_host_tests_sha: github.sha,
     hosted_shell_journey_sha: "",
     expected_sha: github.sha,
@@ -197,6 +198,7 @@ test("original journey remains callable at reviewed final refs without changing 
     sha: "a".repeat(40),
   };
   const inputs = {
+    hosted_sparkle_update_sha: "",
     hosted_shell_journey_sha: github.sha,
     hosted_host_tests_sha: "",
     expected_sha: github.sha,

@@ -31,6 +31,21 @@ on:
         type: string
         required: false
         default: ""
+      hosted_sparkle_update_sha:
+        description: "Reviewed synthetic standard Sparkle update commit."
+        type: string
+        required: false
+        default: ""
+      public_release_validation_sha:
+        description: "Exact reviewed current main release commit for public verification."
+        type: string
+        required: false
+        default: ""
+      public_release_validation:
+        description: "Closed source, packagesRun, hostRun, tag, updateIDs and retainedRuns JSON pins."
+        type: string
+        required: false
+        default: ""
       release:
         description: "Run every product check, then cut a release from main."
         type: boolean
@@ -57,7 +72,7 @@ permissions:
 
 jobs:
   hosted-host-tests:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_host_tests_sha != '' && inputs.hosted_shell_journey_sha == '' && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' || github.ref == 'refs/heads/feat/hosted-journey-registration' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_host_tests_sha == github.sha
+    if: github.event_name == 'workflow_dispatch' && inputs.hosted_host_tests_sha != '' && inputs.hosted_shell_journey_sha == '' && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.hosted_sparkle_update_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' || github.ref == 'refs/heads/feat/hosted-journey-registration' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_host_tests_sha == github.sha
     uses: ./.github/workflows/hosted-host-test-diagnostics.yml
     with:
       expected_sha: ${{ inputs.hosted_host_tests_sha }}
@@ -65,7 +80,7 @@ jobs:
       rebuild: ${{ inputs.rebuild }}
 
   hosted-original-shell:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_shell_journey_sha != '' && inputs.hosted_host_tests_sha == '' && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-original-shell-journey' || github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' || github.ref == 'refs/heads/feat/hosted-journey-registration' || github.ref == 'refs/heads/feat/hosted-journey-attachments' || github.ref == 'refs/heads/feat/hosted-journey-state' || github.ref == 'refs/heads/fix/hosted-journey-environment' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_shell_journey_sha == github.sha
+    if: github.event_name == 'workflow_dispatch' && inputs.hosted_shell_journey_sha != '' && inputs.hosted_host_tests_sha == '' && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.hosted_sparkle_update_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-original-shell-journey' || github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' || github.ref == 'refs/heads/feat/hosted-journey-registration' || github.ref == 'refs/heads/feat/hosted-journey-attachments' || github.ref == 'refs/heads/feat/hosted-journey-state' || github.ref == 'refs/heads/fix/hosted-journey-environment' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_shell_journey_sha == github.sha
     uses: ./.github/workflows/hosted-original-shell.yml
     with:
       expected_sha: ${{ inputs.hosted_shell_journey_sha }}
@@ -76,7 +91,7 @@ jobs:
       MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
 
   hosted-managed-views:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_managed_views_sha != '' && inputs.hosted_managed_artifacts_run != '' && inputs.hosted_managed_artifacts_sha != '' && inputs.hosted_shell_journey_sha == '' && inputs.hosted_host_tests_sha == '' && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-managed-view-execution' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_managed_views_sha == github.sha
+    if: github.event_name == 'workflow_dispatch' && inputs.hosted_managed_views_sha != '' && inputs.hosted_managed_artifacts_run != '' && inputs.hosted_managed_artifacts_sha != '' && inputs.hosted_shell_journey_sha == '' && inputs.hosted_host_tests_sha == '' && !inputs.hosted_sparkle_update_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-managed-view-execution' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_managed_views_sha == github.sha
     permissions:
       contents: read
       actions: read
@@ -91,10 +106,21 @@ jobs:
       MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
       MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
 
+  hosted-sparkle-update:
+    if: github.event_name == 'workflow_dispatch' && inputs.hosted_sparkle_update_sha != '' && inputs.hosted_host_tests_sha == '' && inputs.hosted_shell_journey_sha == '' && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-sparkle-verification' || github.ref == 'refs/heads/feat/hosted-sparkle-ui-flow' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_sparkle_update_sha == github.sha
+    uses: ./.github/workflows/hosted-sparkle-update.yml
+    with:
+      expected_sha: ${{ inputs.hosted_sparkle_update_sha }}
+      release: ${{ inputs.release }}
+      rebuild: ${{ inputs.rebuild }}
+    secrets:
+      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+
   changes:
     name: changes
     if: >-
-      !(github.event_name == 'workflow_dispatch' && (inputs.hosted_shell_journey_sha != '' || inputs.hosted_host_tests_sha != '' || inputs.hosted_managed_views_sha != '' || inputs.hosted_managed_artifacts_run != '' || inputs.hosted_managed_artifacts_sha != ''))
+      !(github.event_name == 'workflow_dispatch' && (inputs.hosted_shell_journey_sha != '' || inputs.hosted_host_tests_sha != '' || inputs.hosted_managed_views_sha != '' || inputs.hosted_managed_artifacts_run != '' || inputs.hosted_managed_artifacts_sha != '' || inputs.hosted_sparkle_update_sha != '' || inputs.public_release_validation_sha != '' || inputs.public_release_validation != ''))
       && (github.event_name != 'push'
       || (!startsWith(github.event.head_commit.message, 'Release v')
       && !startsWith(github.event.head_commit.message, 'Refresh the contributor list')))
