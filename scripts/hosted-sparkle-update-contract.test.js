@@ -307,4 +307,24 @@ test("line terminators cannot extend canonical source UUID hash account or proce
   expect(() =>
     validateSparkleFixture(fixture, environment, "/Users/fixture\n"),
   ).toThrow();
+  for (const suffix of ["\u2028", "\u2029"]) {
+    for (const key of ["birth", "executable"]) {
+      expect(() =>
+        validateSparkleFixture(
+          {
+            ...fixture,
+            producer: {
+              ...fixture.producer,
+              [key]: fixture.producer[key] + suffix,
+            },
+          },
+          environment,
+          "/Users/fixture",
+        ),
+      ).toThrow();
+    }
+    expect(() =>
+      validateSparkleFixture(fixture, environment, "/Users/fixture" + suffix),
+    ).toThrow();
+  }
 });

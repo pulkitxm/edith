@@ -3,9 +3,7 @@ import assert from "node:assert/strict";
 const exact = (value, keys) =>
   assert.deepEqual(Object.keys(value).sort(), [...keys].sort());
 const birth = (value) =>
-  typeof value === "string" &&
-  !/[\0\r\n]/.test(value) &&
-  /^[0-9]+\.[0-9]+$/.test(value);
+  typeof value === "string" && /^[0-9]+\.[0-9]+$/.exec(value)?.[0] === value;
 
 export function validateSparkleProcess(row, fixture) {
   exact(row, ["role", "pid", "birth", "uid", "executable", "running"]);
@@ -70,14 +68,15 @@ export function createSparkleProcessLedger(fixture) {
       );
       absent(before, oldObservations);
       const current = validateSparkleSnapshot(rows, fixture);
-      assert.equal(current.length, 1);
-      assert.equal(current[0].role, "host");
-      assert.equal(current[0].running, true);
+      const nextHost = current.find(({ role }) => role === "host");
+      assert(nextHost?.running);
       for (const old of before) {
-        assert.notEqual(current[0].pid, old.pid);
-        assert.notEqual(current[0].birth, old.birth);
+        for (const next of current) {
+          assert.notEqual(next.pid, old.pid);
+          assert.notEqual(next.birth, old.birth);
+        }
       }
-      installed = current[0];
+      installed = nextHost;
       return { old: oldObservations, host: installed };
     },
     reopened(rows) {
@@ -116,9 +115,9 @@ export async function retireSparkleProcesses(
   { observe, signal, pause },
 ) {
   assert(Array.isArray(rows) && rows.length > 0 && rows.length <= 6);
+  const owned = rows.map((row) => validateSparkleProcess(row, fixture));
   const unique = new Set();
-  for (const row of rows) {
-    validateSparkleProcess(row, fixture);
+  for (const row of owned) {
     const key = `${row.pid}:${row.birth}`;
     assert(!unique.has(key));
     unique.add(key);
@@ -132,7 +131,7 @@ export async function retireSparkleProcesses(
     );
     return actual;
   };
-  for (const row of [...rows].reverse()) {
+  for (const row of [...owned].reverse()) {
     if ((await current(row)).running) {
       await signal(row, "TERM");
       for (
@@ -157,5 +156,5 @@ export async function retireSparkleProcesses(
       "Owned generation remained after bounded retirement",
     );
   }
-  return Promise.all(rows.map(current));
+  return Promise.all(owned.map(current));
 }
