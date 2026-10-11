@@ -14,13 +14,14 @@ final class StudioPreviewModel {
     var failure: String?
     var isRendering = false
     private var previewTask: Task<Void, Never>?
+    @ObservationIgnored private let work = StudioTaskOwner()
 
     func refresh(
         tool: StudioTool, input: URL, settings: StudioSettings, environment: StudioEnvironment
     ) {
         previewTask?.cancel()
         isRendering = true
-        previewTask = Task { [weak self] in
+        previewTask = work.start { [weak self] in
             try? await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled else { return }
             if let facade = self?.facade {
@@ -59,6 +60,19 @@ final class StudioPreviewModel {
                 self.failure = error.localizedDescription
             }
         }
+    }
+
+    func suspendCommands() { work.shutdown() }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        await work.shutdownAndWait()
+    }
+
+    func stopAndWait() async {
+        suspendCommands()
+        cancel()
+        await work.shutdownAndWait()
     }
 
     func cancel() {
