@@ -30,6 +30,8 @@ import GhosttyTerminal
         @MainActor (Machine, [String], [String]) throws -> MachinePTYLaunch
     private var cliPTYs: [UUID: MachinePTY] = [:]
     private var terminals: [UUID: Terminal] = [:]
+    private var openingTabs: Set<UUID> = []
+    private var openingCLI: Set<UUID> = []
     private var retired: [UUID: Task<Void, Never>] = [:]
     private var drainTask: Task<Void, Never>?
     private var reaper: Task<Void, Never>?
@@ -141,12 +143,22 @@ import GhosttyTerminal
             }
             return MachineTerminalFrame()
         case .open:
-            guard terminals.count < 64,
+            guard terminals.count + retired.count + openingTabs.count < 64,
+                !openingTabs.contains(request.tabID),
                 !terminals.values.contains(where: { $0.tabID == request.tabID })
             else { throw MachineUIError.unavailable }
             let session = try session(request.machineID)
-            let pty = try MachinePTY(
-                launch: launch(session, request), columns: request.columns, rows: request.rows)
+            openingTabs.insert(request.tabID)
+            defer { openingTabs.remove(request.tabID) }
+            let pty = try await MachinePTY(
+                launch: launch(session, request), columns: request.columns, rows: request.rows
+            ) {
+                guard !self.stopped, !Task.isCancelled else { throw MachineUIError.unavailable }
+            }
+            guard !stopped, !Task.isCancelled else {
+                await pty.closeAndWait()
+                throw MachineUIError.unavailable
+            }
             let handle = UUID()
             terminals[handle] = Terminal(
                 machineID: session.id, presentationID: request.presentationID, tabID: request.tabID,
@@ -276,11 +288,23 @@ import GhosttyTerminal
 
     func runCLI(machine: Machine, arguments: [String], environment: [String]) async throws -> Int32
     {
-        guard !stopped, cliPTYs.count < 8 else { throw MachineUIError.unavailable }
+        guard !stopped, cliPTYs.count + openingCLI.count < 8 else {
+            throw MachineUIError.unavailable
+        }
         let caller =
             MachineWorkingDirectory.terminalSession.flatMap(UUID.init(uuidString:)) ?? UUID()
-        guard cliPTYs[caller] == nil else { throw MachineUIError.unavailable }
-        let pty = try MachinePTY(launch: interactiveLaunch(machine, arguments, environment))
+        guard cliPTYs[caller] == nil, !openingCLI.contains(caller) else {
+            throw MachineUIError.unavailable
+        }
+        openingCLI.insert(caller)
+        defer { openingCLI.remove(caller) }
+        let pty = try await MachinePTY(launch: interactiveLaunch(machine, arguments, environment)) {
+            guard !self.stopped, !Task.isCancelled else { throw MachineUIError.unavailable }
+        }
+        guard !stopped, !Task.isCancelled else {
+            await pty.closeAndWait()
+            throw MachineUIError.unavailable
+        }
         cliPTYs[caller] = pty
         let liveInput = ExtensionCLIContext.input
         let input = liveInput == nil ? ExtensionCLIContext.request?.standardInput ?? Data() : Data()
