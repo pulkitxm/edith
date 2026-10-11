@@ -28,7 +28,16 @@ actor AttentionBackgroundService {
     private var restoreTask: Task<Void, Error>?
     private var maintenanceTask: Task<Void, Never>?
     private var maintenanceContinuation: AsyncStream<Void>.Continuation?
-    private let ambientPolicy: ExtensionAmbientPolicy?
+    private final class PolicyStorage {
+        let ambientPolicy: ExtensionAmbientPolicy?
+
+        init(ambientPolicy: ExtensionAmbientPolicy?) {
+            self.ambientPolicy = ambientPolicy
+        }
+    }
+
+    private let policyStorage: PolicyStorage
+    private var ambientPolicy: ExtensionAmbientPolicy? { policyStorage.ambientPolicy }
     private let clock: @Sendable () -> Date
     private let sleep: @Sendable (Duration) async throws -> Void
     private var lastPeriodicIngest: Date?
@@ -60,7 +69,7 @@ actor AttentionBackgroundService {
         }
     ) {
         self.notificationCenter = notificationCenter
-        self.ambientPolicy = ambientPolicy
+        policyStorage = PolicyStorage(ambientPolicy: ambientPolicy)
         self.clock = clock
         self.sleep = sleep
         self.decider = decider

@@ -12,7 +12,11 @@ public final class GhosttyTerminalView: NSView {
     public var onWorkingDirectoryChange: ((String) -> Void)?
     public var onReady: (() -> Void)?
 
-    private(set) var surface: ghostty_surface_t?
+    private var surfaceStorage: UnsafeMutableRawPointer?
+    private(set) var surface: ghostty_surface_t? {
+        get { surfaceStorage }
+        set { surfaceStorage = newValue }
+    }
     public internal(set) var currentDirectory: String?
     public internal(set) var hoveredLink: String?
     public let allowsLocalFileLinks: Bool
@@ -20,7 +24,11 @@ public final class GhosttyTerminalView: NSView {
     private var externalExited = false
     let shouldResetTerminalAfterInterrupt: Bool
     private var theme: GhosttyTheme?
-    private var themeConfig: ghostty_config_t?
+    private var themeConfigStorage: UnsafeMutableRawPointer?
+    private var themeConfig: ghostty_config_t? {
+        get { themeConfigStorage }
+        set { themeConfigStorage = newValue }
+    }
     var temporaryDropFiles = Set<URL>()
     private var closed = false
     private var pendingExitCode: Int32?

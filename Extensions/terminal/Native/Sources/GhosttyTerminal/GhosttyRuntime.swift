@@ -6,8 +6,16 @@ public final class GhosttyRuntime {
     public static let shared = GhosttyRuntime()
 
     private let log = Logger(subsystem: "com.pulkit.edith", category: "ghostty")
-    private var app: ghostty_app_t?
-    private var config: ghostty_config_t?
+    private var appStorage: UnsafeMutableRawPointer?
+    private var configStorage: UnsafeMutableRawPointer?
+    private var app: ghostty_app_t? {
+        get { appStorage }
+        set { appStorage = newValue }
+    }
+    private var config: ghostty_config_t? {
+        get { configStorage }
+        set { configStorage = newValue }
+    }
     private var autoSecureInput = true
     private var ghosttyInitialized = false
     private var started = false
