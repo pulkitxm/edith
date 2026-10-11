@@ -28,6 +28,7 @@ export const functionalProducerSources = Object.freeze(
     "FunctionalProducer.swift",
     "FunctionalFileScopes.swift",
     "FunctionalRequestJournal.swift",
+    "FunctionalProducerReceiver.swift",
   ].map((name) => `Tests/HostedFunctionalActions/ProducerSources/${name}`),
 );
 

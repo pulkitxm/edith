@@ -9,10 +9,13 @@ final class FunctionalProducerFilesystemTests: XCTestCase {
 
     private func fixture(_ body: (URL, FunctionalPinnedPath) throws -> Void) throws {
         let temporary = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
-        let directory = temporary.appendingPathComponent("producer-model-" + UUID().uuidString.lowercased())
+        let container = temporary.appendingPathComponent("producer-model-" + UUID().uuidString.lowercased())
+        try FileManager.default.createDirectory(at: container, withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700])
+        defer { try? FileManager.default.removeItem(at: container) }
+        let directory = container.appendingPathComponent("functional-fixture-" + session)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false,
             attributes: [.posixPermissions: 0o700])
-        defer { try? FileManager.default.removeItem(at: directory) }
         for relative in ["inputs/keepAwake", "outputs/keepAwake"] {
             try FileManager.default.createDirectory(at: directory.appendingPathComponent(relative),
                 withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])

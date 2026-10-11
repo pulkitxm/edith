@@ -7,7 +7,7 @@ enum FunctionalHostBootstrap {
     static func rendezvous(operation: String, owner: String, phase: String? = nil, fields: [String: Any]) throws -> [String: Any] {
         guard HostedFunctionalActionContext.owners.contains(owner),
             phase == nil || ["initial", "updated", "reinstalled"].contains(phase!),
-            ["admit-starting-reservation", "prepared-original-peers", "admit-engine", "admit-ui", "before-original-request", "after-original-response", "native-emitted-reply", "owner-joined", "native-stop-prepared", "engine-stop-observed", "native-stop-observed"].contains(operation),
+            ["admit-starting-reservation", "prepared-original-peers", "admit-engine", "admit-ui", "before-original-request", "before-engine-receiver", "after-engine-receiver", "after-original-response", "native-emitted-reply", "owner-joined", "native-stop-prepared", "engine-stop-observed", "native-stop-observed"].contains(operation),
             !fields.keys.contains(where: { ["schema", "sourceCommit", "session", "owner", "phase", "operation", "requestID"].contains($0) })
         else { throw FunctionalFailure.invalid("source-owned bootstrap operation") }
         let root = try FunctionalPinnedPath(URL(fileURLWithPath: FunctionalHostBuild.root), directory: true, privateMode: true)

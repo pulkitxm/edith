@@ -493,7 +493,8 @@ export function installedPresentationUITestSource(
   const identifier = JSON.stringify(capability.hostIdentifier);
   const title = JSON.stringify(installedPresentationWindowTitle(capability));
   const ownedPaths = `[${capability.ownedPaths.map(({ name, path }) => `${JSON.stringify(name)}: ${JSON.stringify(path)}`).join(", ")}]`;
-  return `import Foundation
+  return `import AppKit
+import Foundation
 import XCTest
 
 @MainActor
@@ -523,6 +524,33 @@ final class HostedFunctionalInstalledUITests: XCTestCase {
                 else { self = .text(try container.decode(String.self)) }
             }
         }
+    }
+
+    private func pasteSyntheticSecureValue(_ value: String, into control: XCUIElement) throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["GITHUB_ACTIONS"] == "true", environment["RUNNER_ENVIRONMENT"] == "github-hosted",
+            environment["RUNNER_OS"] == "macOS", environment["GITHUB_REPOSITORY"] == "pulkitxm/edith",
+            environment["GITHUB_SHA"] == "${capability.sourceCommit}",
+            environment["EXPECTED_SOURCE_SHA"] == "${capability.sourceCommit}",
+            environment["EDITH_HOSTED_FUNCTIONAL_ACTIONS"] == "1",
+            value.utf8.count <= 4096, !value.utf8.contains(0)
+        else { throw NSError(domain: "Synthetic secure input admission", code: 1) }
+        let pasteboard = NSPasteboard.general
+        guard (pasteboard.pasteboardItems ?? []).isEmpty else {
+            throw NSError(domain: "Synthetic clipboard initial ownership", code: 1) }
+        let initialCount = pasteboard.changeCount
+        guard pasteboard.changeCount == initialCount else {
+            throw NSError(domain: "Synthetic clipboard changed before input", code: 1) }
+        pasteboard.clearContents()
+        guard pasteboard.setString(value, forType: .string) else {
+            throw NSError(domain: "Synthetic clipboard input", code: 1) }
+        let ownedCount = pasteboard.changeCount
+        defer {
+            if pasteboard.changeCount == ownedCount { pasteboard.clearContents() }
+        }
+        control.typeKey("v", modifierFlags: .command)
+        guard pasteboard.changeCount == ownedCount else {
+            throw NSError(domain: "Synthetic clipboard ownership changed", code: 1) }
     }
 
     func testOriginalDownloadedPresentationAction() throws {
@@ -614,8 +642,10 @@ final class HostedFunctionalInstalledUITests: XCTestCase {
             case ("replace-text", .text(let value)):
                 control.click()
                 control.typeKey("a", modifierFlags: .command)
-                control.typeText(value)
-                if step.role != "secureTextField" {
+                if step.role == "secureTextField" {
+                    try pasteSyntheticSecureValue(value, into: control)
+                } else {
+                    control.typeText(value)
                     XCTAssertTrue(wait(15) { control.value as? String == value })
                 }
             case ("choose-owned-path", .null):

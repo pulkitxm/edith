@@ -54,6 +54,13 @@ final class FunctionalRequestJournal {
         try held.requireCurrent()
     }
 
+    func requireRetired() throws {
+        guard !failed, pending.isEmpty, !records.isEmpty,
+            records.contains(where: { $0.event == .nativeReply && $0.operation == held.capability.activationOperation && $0.outcome == true })
+        else { throw FunctionalFailure.invalid("incomplete original receiver journal before retirement") }
+        try held.requireRetired()
+    }
+
     func completedRequests(operation: String) throws -> [Record] {
         try requireComplete()
         guard held.capability.operations.contains(operation) else {
@@ -83,6 +90,11 @@ final class FunctionalRequestJournal {
             guard let source = fields["ui"] as? [String: Any],
                 try FunctionalBytes.canonical(source.filter { $0.key != "codeHash" }) == FunctionalBytes.canonical(held.ui.object)
             else { throw FunctionalFailure.invalid("actual original UI source birth") }
+        }
+        if event == .hostBefore || event == .hostAfter {
+            guard let engine = fields["engine"] as? [String: Any],
+                try FunctionalBytes.canonical(engine) == FunctionalBytes.canonical(held.engine.object)
+            else { throw FunctionalFailure.invalid("actual original forwarded engine identity") }
         }
         let expectedReceiver = engineReceiver ? held.engine : caller
         guard let receiver = fields["receiver"] as? [String: Any],

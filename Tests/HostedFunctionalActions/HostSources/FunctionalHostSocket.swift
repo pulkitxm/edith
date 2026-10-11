@@ -123,6 +123,8 @@ final class FunctionalHostSocket {
     private let source: DispatchSourceRead
     private var requests = 0
     private var stopped = false
+    private var listenerCancelled = false
+    private var cancellationWaiter: CheckedContinuation<Void, Never>?
     private var failure: Error?
     private var active = Set<Int32>()
     private var tasks: [UUID: Task<Void, Never>] = [:]
@@ -161,6 +163,15 @@ final class FunctionalHostSocket {
             throw error
         }
         source = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: .main)
+        source.setCancelHandler { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.listenerCancelled = true
+                let waiter = self.cancellationWaiter
+                self.cancellationWaiter = nil
+                waiter?.resume()
+            }
+        }
         source.setEventHandler { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, !self.stopped, self.failure == nil else { return }
@@ -212,6 +223,10 @@ final class FunctionalHostSocket {
         guard !stopped else { throw FunctionalFailure.invalid("listener already retired") }
         stopped = true
         source.cancel()
+        if !listenerCancelled {
+            await withCheckedContinuation { cancellationWaiter = $0 }
+        }
+        guard listenerCancelled else { throw FunctionalFailure.invalid("producer listener cancellation did not return") }
         let joined = Array(tasks.values)
         for task in joined { task.cancel() }
         for task in joined { await task.value }

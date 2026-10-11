@@ -57,6 +57,24 @@ enum FunctionalHostApplication {
             let marked = try markedContext(context, response: response)
             return try admitRoles(owner: configuration.worker.extensionID, roles: roles, context: marked, purpose: .ui)
         }
+        ExtensionPeerServer.fixtureBeforeExecute = { invocation in
+            let owner = try engineOwner(invocation)
+            _ = try FunctionalHostBootstrap.rendezvous(operation: "before-engine-receiver", owner: owner,
+                fields: try engineInvocationFields(invocation, owner: owner))
+        }
+        ExtensionPeerServer.fixtureAfterExecute = { invocation, payload, failure in
+            let owner = try engineOwner(invocation)
+            var fields = try engineInvocationFields(invocation, owner: owner)
+            guard (payload == nil) != (failure == nil) else {
+                throw FunctionalFailure.invalid("actual engine execution outcome") }
+            if let payload {
+                var result: [String: Any] = ["ok": true, "payloadSHA256": FunctionalBytes.digest(payload),
+                    "payloadBytes": payload.count]
+                if owner != "jev" { result["payload"] = payload.base64EncodedString() }
+                fields["result"] = result
+            } else { fields["result"] = ["ok": false] }
+            _ = try FunctionalHostBootstrap.rendezvous(operation: "after-engine-receiver", owner: owner, fields: fields)
+        }
         HostRemoteSession.fixtureBeforeEngineRequest = { invocation in
             let fields = try invocationFields(invocation)
             _ = try FunctionalHostBootstrap.rendezvous(operation: "before-original-request",
@@ -82,8 +100,7 @@ enum FunctionalHostApplication {
             _ = try FunctionalHostBootstrap.rendezvous(operation: "native-emitted-reply", owner: owner, fields: [
                 "ui": try peer(observation.invocation.ui), "receiver": try kernel(observation.invocation.receiver),
                 "request": try request(observation.invocation.request, owner: owner),
-                "reply": owner == "jev" ? ["token": observation.reply.token.uuidString.lowercased(), "ok": observation.reply.ok,
-                    "payloadSHA256": FunctionalBytes.digest(observation.reply.payload), "payloadBytes": observation.reply.payload.count] : try encoded(observation.reply),
+                "reply": observedReply(observation.reply, owner: owner),
                 "encodedReplySHA256": FunctionalBytes.digest(observation.encodedReply),
             ])
         }
@@ -260,6 +277,44 @@ enum FunctionalHostApplication {
         let owner = try originalOwner(invocation.ui.executable)
         return ["ui": try peer(invocation.ui), "engine": try kernel(invocation.engine),
             "receiver": try kernel(invocation.receiver), "request": try request(invocation.request, owner: owner)]
+    }
+
+    private static func engineOwner(_ invocation: ExtensionPeerServer.FixtureInvocation) throws -> String {
+        guard let owner = ProcessInfo.processInfo.environment["EDITH_EXTENSION_ID"],
+            HostedFunctionalActionContext.owners.contains(owner),
+            invocation.receiver.executable == FunctionalHostBuild.root + "/Fixture.app/Contents/MacOS/Edith",
+            invocation.receiver.birth.pid == getpid()
+        else { throw FunctionalFailure.invalid("source original engine owner") }
+        let endpoint = try ExtensionPeerEndpoint(namespace: FunctionalHostBuild.hostIdentifier, owner: owner,
+            directory: URL(fileURLWithPath: FunctionalHostBuild.root + "/Edith Tests/worker-" + FunctionalHostBuild.session + "/ExtensionState/Commands"))
+        guard invocation.endpoint == endpoint.name else {
+            throw FunctionalFailure.invalid("actual original engine endpoint scope") }
+        return owner
+    }
+
+    private static func engineInvocationFields(_ invocation: ExtensionPeerServer.FixtureInvocation, owner: String) throws -> [String: Any] {
+        guard invocation.source.isCurrent, invocation.receiver.isCurrent,
+            invocation.receiver.birth.pid == getpid(), invocation.payload.count <= 1_048_576,
+            !invocation.endpoint.isEmpty, invocation.endpoint.utf8.count <= 108
+        else { throw FunctionalFailure.invalid("actual engine receiver source") }
+        var request: [String: Any] = ["token": invocation.token.uuidString.lowercased(),
+            "operation": invocation.command, "payloadSHA256": FunctionalBytes.digest(invocation.payload),
+            "payloadBytes": invocation.payload.count]
+        if owner != "jev" { request["payload"] = invocation.payload.base64EncodedString() }
+        let source = try FunctionalBirth.observe(invocation.source.birth.pid)
+        let receiver = try FunctionalBirth.observe(invocation.receiver.birth.pid)
+        guard invocation.source.isCurrent, invocation.receiver.isCurrent,
+            source.executable == invocation.source.executable, receiver.executable == invocation.receiver.executable
+        else { throw FunctionalFailure.invalid("actual engine socket identities changed") }
+        return ["source": source.object, "receiver": receiver.object, "request": request,
+            "endpoint": invocation.endpoint]
+    }
+
+    private static func observedReply(_ value: ExtensionEngineReply, owner: String) -> [String: Any] {
+        var result: [String: Any] = ["token": value.token.uuidString.lowercased(), "ok": value.ok,
+            "payloadSHA256": FunctionalBytes.digest(value.payload), "payloadBytes": value.payload.count]
+        if owner != "jev" { result["payload"] = value.payload.base64EncodedString() }
+        return result
     }
 
     private static func request(_ value: ExtensionEngineRequest, owner: String) throws -> [String: Any] {

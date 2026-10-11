@@ -7,11 +7,13 @@ let package = Package(
     products: [.library(name: "FunctionalActionContract", targets: ["FunctionalActionContract"])],
     dependencies: [.package(path: "../../Extensions/fixtureSupport")],
     targets: [
-        .target(name: "FunctionalActionContract"),
+        .target(
+            name: "FunctionalActionContract",
+            dependencies: [.product(name: "WorkerFixtureSupport", package: "fixtureSupport")]),
         .target(name: "FunctionalProducerModels",
             dependencies: [.product(name: "WorkerFixtureSupport", package: "fixtureSupport")],
             path: "ProducerSources",
-            exclude: ["FunctionalProducer.swift", "FunctionalOriginalUI.swift", "FunctionalSignatureProbe.swift", "FunctionalRequestJournal.swift"],
+            exclude: ["FunctionalProducer.swift", "FunctionalOriginalUI.swift", "FunctionalSignatureProbe.swift", "FunctionalRequestJournal.swift", "FunctionalProducerReceiver.swift"],
             sources: ["FunctionalIssuer.swift", "FunctionalLifecycle.swift", "FunctionalPersistence.swift", "FunctionalFileScopes.swift"]),
         .testTarget(name: "FunctionalProducerModelTests",
             dependencies: ["FunctionalProducerModels", .product(name: "WorkerFixtureSupport", package: "fixtureSupport")]),

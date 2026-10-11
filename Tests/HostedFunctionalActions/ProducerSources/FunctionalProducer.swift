@@ -265,6 +265,7 @@ enum FunctionalProducer {
         let birth = try FunctionalBirth.observe(getpid())
         guard birth.executable == root.url.path + "/Producer/functional-producer"
         else { throw FunctionalFailure.invalid("producer executable") }
+        let receiver = try FunctionalProducerReceiver(root: root, issuer: issuer, producer: birth)
         try emit(["schema": 1, "kind": "bootstrap", "sourceCommit": issuer.sourceCommit,
             "session": issuer.session, "issuerPublicKey": issuer.publicKey.base64EncodedString(), "producer": birth.object])
         var held: FunctionalHeldPresentation?
@@ -273,84 +274,93 @@ enum FunctionalProducer {
         let input = FileHandle.standardInput
         defer { try? input.close() }
         var line = Data()
-        for try await byte in input.bytes {
-            guard byte == 10 || line.count < 1_048_576 else {
-                throw FunctionalFailure.invalid("producer input bound")
+        do {
+            for try await byte in input.bytes {
+                guard byte == 10 || line.count < 1_048_576 else {
+                    throw FunctionalFailure.invalid("producer input bound")
+                }
+                if byte != 10 { line.append(byte); continue }
+                let commandBytes = line
+                line.removeAll(keepingCapacity: true)
+                try Task.checkCancellation()
+                try receiver.requireHealthy()
+                try root.requireCurrent()
+                try birth.requireCurrent()
+                count += 1
+                guard count <= 1024 else { throw FunctionalFailure.invalid("producer command bound") }
+                let command = try FunctionalBytes.object(commandBytes)
+                guard let requestID = command["requestID"] as? String, FunctionalBytes.uuid(requestID),
+                    let operation = command["operation"] as? String
+                else { throw FunctionalFailure.invalid("producer command correlation") }
+                switch operation {
+                case "hold-original":
+                    try FunctionalBytes.exact(command, ["requestID", "operation", "capability", "presentationID", "location", "section", "hostPID"])
+                    guard held == nil, let capability = command["capability"] as? [String: Any],
+                        let presentation = command["presentationID"] as? String,
+                        let location = command["location"] as? String, let section = command["section"] as? String,
+                        let hostPID = Int32(exactly: try FunctionalBytes.integer(command, "hostPID"))
+                    else { throw FunctionalFailure.invalid("held original command") }
+                    guard let owner = capability["owner"] as? String, HostedFunctionalActionContext.owners.contains(owner),
+                        phaseOrder[owner, default: 0] < 3 else { throw FunctionalFailure.invalid("source-owned journey phase exhausted") }
+                    let expectedPhase = ["initial", "updated", "reinstalled"][phaseOrder[owner, default: 0]]
+                    let current = try FunctionalHeldPresentation(capabilityBytes: FunctionalBytes.canonical(capability),
+                        presentationID: presentation, location: location, section: section, hostPID: hostPID,
+                        expectedPhase: expectedPhase, issuer: issuer)
+                    try receiver.hold(current)
+                    held = current
+                    let descriptor = try current.descriptor(location: location, section: section, issuer: issuer)
+                    try emit(["requestID": requestID, "operation": operation, "descriptor": try FunctionalBytes.object(descriptor)])
+                case "original-step":
+                    try FunctionalBytes.exact(command, ["requestID", "operation", "step"])
+                    guard let held, let step = command["step"] as? [String: Any]
+                    else { throw FunctionalFailure.invalid("missing held original UI") }
+                    let performed = try await held.performOriginalStep(step)
+                    try held.requireCurrent()
+                    try emit(["requestID": requestID, "operation": operation, "controlPerformed": performed,
+                        "receiverObservationRequired": true, "presentationID": held.presentationID])
+                case "observe-rendered":
+                    try FunctionalBytes.exact(command, ["requestID", "operation", "role", "label", "scope"])
+                    guard let held else { throw FunctionalFailure.invalid("missing held rendered presentation") }
+                    try held.prepareAccessibilityActuator()
+                    guard let original = held.originalUI,
+                        let role = command["role"] as? String, let label = command["label"] as? String,
+                        let scope = command["scope"] as? [String: Any]
+                    else { throw FunctionalFailure.invalid("rendered observation command") }
+                    let observation = try original.observeRendered(role: role, label: label,
+                        scope: JSONDecoder().decode(FunctionalOriginalUI.Step.Scope.self, from: FunctionalBytes.canonical(scope)))
+                    let envelope = try issuer.seal(["schema": 1, "sourceCommit": issuer.sourceCommit,
+                        "session": issuer.session, "owner": held.capability.owner, "phase": held.capability.phase,
+                        "capabilitySHA256": held.capabilitySHA256, "presentationID": held.presentationID,
+                        "reader": "independent-hosted-producer", "observationID": observation.identifier,
+                        "observationSHA256": observation.digest])
+                    try emit(["requestID": requestID, "operation": operation, "observation": try FunctionalBytes.object(envelope)])
+                case "retired":
+                    try FunctionalBytes.exact(command, ["requestID", "operation"])
+                    guard let current = held else { throw FunctionalFailure.invalid("no held generation") }
+                    try receiver.retire(current)
+                    phaseOrder[current.capability.owner, default: 0] += 1
+                    held = nil
+                    try emit(["requestID": requestID, "operation": operation, "ownedBirthsAbsent": true])
+                case "finish":
+                    try FunctionalBytes.exact(command, ["requestID", "operation"])
+                    guard held == nil, Set(phaseOrder.keys) == HostedFunctionalActionContext.owners,
+                        phaseOrder.values.allSatisfy({ $0 == 3 })
+                    else { throw FunctionalFailure.invalid("incomplete exact original owner journeys on finish") }
+                    try await receiver.closeAndJoin()
+                    try emit(["requestID": requestID, "operation": operation, "producerJoinedByControllerRequired": true])
+                    return
+                default: throw FunctionalFailure.unavailable("unpublished producer operation")
+                }
             }
-            if byte != 10 { line.append(byte); continue }
-            let commandBytes = line
-            line.removeAll(keepingCapacity: true)
-            try Task.checkCancellation()
-            try root.requireCurrent()
-            try birth.requireCurrent()
-            count += 1
-            guard count <= 1024 else { throw FunctionalFailure.invalid("producer command bound") }
-            let command = try FunctionalBytes.object(commandBytes)
-            guard let requestID = command["requestID"] as? String, FunctionalBytes.uuid(requestID),
-                let operation = command["operation"] as? String
-            else { throw FunctionalFailure.invalid("producer command correlation") }
-            switch operation {
-            case "hold-original":
-                try FunctionalBytes.exact(command, ["requestID", "operation", "capability", "presentationID", "location", "section", "hostPID"])
-                guard held == nil, let capability = command["capability"] as? [String: Any],
-                    let presentation = command["presentationID"] as? String,
-                    let location = command["location"] as? String, let section = command["section"] as? String,
-                    let hostPID = Int32(exactly: try FunctionalBytes.integer(command, "hostPID"))
-                else { throw FunctionalFailure.invalid("held original command") }
-                guard let owner = capability["owner"] as? String, HostedFunctionalActionContext.owners.contains(owner),
-                    phaseOrder[owner, default: 0] < 3 else { throw FunctionalFailure.invalid("source-owned journey phase exhausted") }
-                let expectedPhase = ["initial", "updated", "reinstalled"][phaseOrder[owner, default: 0]]
-                let current = try FunctionalHeldPresentation(capabilityBytes: FunctionalBytes.canonical(capability),
-                    presentationID: presentation, location: location, section: section, hostPID: hostPID,
-                    expectedPhase: expectedPhase, issuer: issuer)
-                held = current
-                let descriptor = try current.descriptor(location: location, section: section, issuer: issuer)
-                try emit(["requestID": requestID, "operation": operation, "descriptor": try FunctionalBytes.object(descriptor)])
-            case "original-step":
-                try FunctionalBytes.exact(command, ["requestID", "operation", "step"])
-                guard let held, let step = command["step"] as? [String: Any]
-                else { throw FunctionalFailure.invalid("missing held original UI") }
-                let performed = try await held.performOriginalStep(step)
-                try held.requireCurrent()
-                try emit(["requestID": requestID, "operation": operation, "controlPerformed": performed,
-                    "receiverObservationRequired": true, "presentationID": held.presentationID])
-            case "observe-rendered":
-                try FunctionalBytes.exact(command, ["requestID", "operation", "role", "label", "scope"])
-                guard let held else { throw FunctionalFailure.invalid("missing held rendered presentation") }
-                try held.prepareAccessibilityActuator()
-                guard let original = held.originalUI,
-                    let role = command["role"] as? String, let label = command["label"] as? String,
-                    let scope = command["scope"] as? [String: Any]
-                else { throw FunctionalFailure.invalid("rendered observation command") }
-                let observation = try original.observeRendered(role: role, label: label,
-                    scope: JSONDecoder().decode(FunctionalOriginalUI.Step.Scope.self, from: FunctionalBytes.canonical(scope)))
-                let envelope = try issuer.seal(["schema": 1, "sourceCommit": issuer.sourceCommit,
-                    "session": issuer.session, "owner": held.capability.owner, "phase": held.capability.phase,
-                    "capabilitySHA256": held.capabilitySHA256, "presentationID": held.presentationID,
-                    "reader": "independent-hosted-producer", "observationID": observation.identifier,
-                    "observationSHA256": observation.digest])
-                try emit(["requestID": requestID, "operation": operation, "observation": try FunctionalBytes.object(envelope)])
-            case "retired":
-                try FunctionalBytes.exact(command, ["requestID", "operation"])
-                guard let current = held else { throw FunctionalFailure.invalid("no held generation") }
-                try current.requireCompletedOriginalSteps()
-                try current.requireRetired()
-                phaseOrder[current.capability.owner, default: 0] += 1
-                held = nil
-                try emit(["requestID": requestID, "operation": operation, "ownedBirthsAbsent": true])
-            case "finish":
-                try FunctionalBytes.exact(command, ["requestID", "operation"])
-                guard held == nil, Set(phaseOrder.keys) == HostedFunctionalActionContext.owners,
-                    phaseOrder.values.allSatisfy({ $0 == 3 })
-                else { throw FunctionalFailure.invalid("incomplete exact original owner journeys on finish") }
-                try emit(["requestID": requestID, "operation": operation, "producerJoinedByControllerRequired": true])
-                return
-            default: throw FunctionalFailure.unavailable("unpublished producer operation")
-            }
+            guard line.isEmpty, held == nil, Set(phaseOrder.keys) == HostedFunctionalActionContext.owners,
+                phaseOrder.values.allSatisfy({ $0 == 3 })
+            else { throw FunctionalFailure.invalid("controller closed before exact original journeys completed") }
+            try await receiver.closeAndJoin()
+        } catch {
+            do { try await receiver.closeAndJoin() }
+            catch { throw FunctionalFailure.invalid("actual producer receiver failed to join") }
+            throw error
         }
-        guard line.isEmpty, held == nil, Set(phaseOrder.keys) == HostedFunctionalActionContext.owners,
-            phaseOrder.values.allSatisfy({ $0 == 3 })
-        else { throw FunctionalFailure.invalid("controller closed before exact original journeys completed") }
     }
 
     private static func emit(_ object: [String: Any]) throws {
