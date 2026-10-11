@@ -385,7 +385,7 @@ final class ExtensionRuntime: NSObject {
                 try admission?.requireCurrent()
                 if let admission {
                     guard input["location"] as? String == "settings",
-                        admission.descriptor.rolePath.hasSuffix("/notchShelf/app.bundle"),
+                        admission.descriptor.rolePath.hasSuffix("/notchShelf/helper.bundle"),
                         input["engineClient"] != nil
                     else { throw WorkerFixtureError.invalid }
                 }

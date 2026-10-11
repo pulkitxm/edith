@@ -7,6 +7,53 @@ import Testing
 @testable import NotchShelfExtension
 
 @MainActor @Suite(.serialized) struct NotchChromeClientTests {
+    @Test func geometryRetainsCancelledCallbackAndCoalescesLatestUntilNaturalJoin() async {
+        let requests = NotchGeometryRequests()
+        var first: CheckedContinuation<Void, Never>?
+        var latest: CheckedContinuation<Void, Never>?
+        var started: [String] = []
+        var cancelled: [Bool] = []
+        requests.replace {
+            started.append("first")
+            await withCheckedContinuation { first = $0 }
+            cancelled.append(Task.isCancelled)
+        }
+        while first == nil { await Task.yield() }
+        requests.replace { Issue.record("Superseded geometry started") }
+        requests.replace {
+            started.append("latest")
+            await withCheckedContinuation { latest = $0 }
+            cancelled.append(Task.isCancelled)
+        }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(started == ["first"])
+        first?.resume(); first = nil
+        while latest == nil { await Task.yield() }
+        #expect(started == ["first", "latest"] && cancelled == [true])
+        requests.stop()
+        var finished = false
+        let drain = Task {
+            await requests.stopAndWait(); finished = true
+        }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(!finished)
+        requests.replace { Issue.record("Stopped geometry started") }
+        latest?.resume(); latest = nil
+        await drain.value
+        #expect(finished && cancelled == [true, true])
+    }
+
+    @Test func geometryStopBeforeDriverStartsClosesAdmission() async {
+        let requests = NotchGeometryRequests()
+        var started = false
+        requests.replace { started = true }
+        requests.stop()
+        await requests.stopAndWait()
+        requests.replace { started = true }
+        await requests.stopAndWait()
+        #expect(!started)
+    }
+
     @Test func originalChromeUsesCheckedFacadeLayoutEditsAndMeasuredNativeSlots() async throws {
         let fixture = try NotchPanelFixture()
         defer { fixture.clean() }
