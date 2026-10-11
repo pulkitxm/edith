@@ -32,12 +32,30 @@ private final class CameraControlProbe: CameraCarrierControlling {
             "camera-client-" + UUID().uuidString)
         let mode: String
         var preparations = 0
+        private(set) var process: Process?
         init(mode: String = "normal") throws {
             self.mode = mode
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
             try Data(Self.server.utf8).write(to: root.appendingPathComponent("carrier.py"))
         }
-        deinit { try? FileManager.default.removeItem(at: root) }
+        deinit {
+            if let process, process.isRunning {
+                process.terminate()
+                process.waitUntilExit()
+            }
+            try? FileManager.default.removeItem(at: root)
+        }
+        var admitted: Bool {
+            FileManager.default.fileExists(atPath: root.appendingPathComponent("admitted").path)
+        }
+        var drained: Bool {
+            process?.isRunning == false
+                && FileManager.default.fileExists(
+                    atPath: root.appendingPathComponent("exited").path)
+        }
+        func releaseReply() throws {
+            try Data().write(to: root.appendingPathComponent("release"))
+        }
         func client(timeout: Duration = .seconds(2)) -> CameraCarrierClient {
             CameraCarrierClient(
                 timeout: timeout,
@@ -53,12 +71,13 @@ private final class CameraControlProbe: CameraCarrierControlling {
                     ]
                     process.standardInput = Pipe(); process.standardOutput = Pipe();
                     process.standardError = FileHandle.nullDevice
-                    try process.run(); return process
+                    try process.run(); self.process = process; return process
                 })
         }
         static let server = """
-            import json,sys,time
+            import json,pathlib,sys,time
             mode=sys.argv[1]
+            root=pathlib.Path(sys.argv[2]).parent
             active=False
             for line in sys.stdin:
                 request=json.loads(line)
@@ -71,7 +90,12 @@ private final class CameraControlProbe: CameraCarrierControlling {
                     if mode=='timeout':
                         print(json.dumps({'status':{'phase':phase,'ownsProvider':active,'pending':True}}),flush=True)
                         continue
-                    if mode=='cancel': time.sleep(0.03)
+                    if mode=='cancel':
+                        (root/'admitted').write_text(request['token'])
+                        deadline=time.monotonic()+5
+                        while not (root/'release').exists():
+                            if time.monotonic()>=deadline: raise TimeoutError('reply was not released')
+                            time.sleep(0.001)
                 elif operation in ['deactivate','prepareDisable']:
                     if mode=='restart':
                         phase='restartRequired'
@@ -98,21 +122,54 @@ private final class CameraControlProbe: CameraCarrierControlling {
         try await client.prepareDisable(providerVisible: true)
         #expect(fixture.preparations == 1)
         #expect(client.currentStatus?.ownsProvider == false)
-        #expect(
-            FileManager.default.fileExists(
-                atPath: fixture.root.appendingPathComponent("exited").path))
+        #expect(fixture.drained)
     }
 
     @Test func cancellationKeepsLateOwnershipVisibleUntilAcknowledgedDisable() async throws {
         let fixture = try Fixture(mode: "cancel")
         let client = fixture.client()
         let activation = Task { try await client.activate() }
-        try await Task.sleep(for: .milliseconds(20))
+        try await wait { fixture.admitted }
+        #expect(client.currentStatus == nil)
         activation.cancel()
         await #expect(throws: CancellationError.self) { try await activation.value }
+        #expect(client.currentStatus == nil)
+        try fixture.releaseReply()
         try await wait { client.currentStatus?.ownsProvider == true }
         try await client.prepareDisable(providerVisible: true)
         #expect(client.currentStatus?.ownsProvider == false)
+        #expect(fixture.drained)
+    }
+
+    @Test func alreadyCancelledRequestDoesNotPrepareOrLaunchCarrier() async throws {
+        let fixture = try Fixture()
+        let client = fixture.client()
+        let activation = Task { try await client.activate() }
+        activation.cancel()
+        await #expect(throws: CancellationError.self) { try await activation.value }
+        #expect(fixture.preparations == 0)
+        #expect(fixture.process == nil)
+        #expect(client.currentStatus == nil)
+        try await client.prepareDisable(providerVisible: false)
+        #expect(fixture.preparations == 0)
+    }
+
+    @Test func cancellationDuringReplyPublicationCannotReturnSuccess() async throws {
+        let fixture = try Fixture(mode: "cancel")
+        let client = fixture.client()
+        let activation = Task { try await client.activate() }
+        try await wait { fixture.admitted }
+        client.changed = { status in
+            if status.phase == "active" { activation.cancel() }
+        }
+        try fixture.releaseReply()
+        await #expect(throws: CancellationError.self) { try await activation.value }
+        #expect(client.currentStatus?.ownsProvider == true)
+        #expect(client.currentStatus?.pending == false)
+        client.changed = nil
+        try await client.prepareDisable(providerVisible: true)
+        #expect(client.currentStatus?.ownsProvider == false)
+        #expect(fixture.drained)
     }
 
     @Test func timedOutRequestPreservesOwnershipAndCleanupCanStillComplete() async throws {
