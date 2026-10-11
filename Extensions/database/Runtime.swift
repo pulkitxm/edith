@@ -1,5 +1,6 @@
 import AppKit
 import DatabaseCore
+import DatabaseEngine
 import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
@@ -11,21 +12,28 @@ final class ExtensionRuntime: NSObject {
     private var surface: DatabaseSurface?
     private var uiCommands: DatabaseUICommands?
     private var uiSessions: [UUID: (DatabaseUIClient, DatabasePageSession)] = [:]
+    private var commandDrain: Task<Void, Never>?
+    private var commandsSuspended = false
+    private var uiDrains: [UUID: Task<Void, Never>] = [:]
+    private let uiWork = DatabaseTaskOwner()
     private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
 
     @objc(prepareUIToClose:completion:)
     func prepareUIToClose(_ presentationID: NSString, completion: @escaping (NSString?) -> Void) {
-        guard let id = UUID(uuidString: presentationID as String), let (client, _) = uiSessions[id]
+        guard !commandsSuspended, let id = UUID(uuidString: presentationID as String),
+            let (client, _) = uiSessions[id]
         else {
             completion(nil)
             return
         }
-        Task {
-            do { try await client.flushColumns(); completion(nil) } catch {
-                completion("Database preferences are not saved.")
-            }
-        }
+        guard
+            uiWork.launch({
+                do { try await client.flushColumns(); completion(nil) } catch {
+                    completion("Database preferences are not saved.")
+                }
+            }) != nil
+        else { completion("Database is stopping."); return }
     }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -70,22 +78,74 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginCommandDrain() -> Task<Void, Never> {
+        let owner = session
+        let uiOwners = Array(uiSessions.values)
+        let engine = DatabaseWorkerClient.suspend()
+        let streams = cliStreams
+        commandsSuspended = true
+        _ = commands.suspend()
+        if let commandDrain { return commandDrain }
+        owner?.cancelPendingCommands()
+        uiWork.cancel()
+        for (client, owner) in uiOwners {
+            client.cancelPendingCommands(); owner.cancelPendingCommands()
+        }
+        streams?.stop()
+        let task = Task { [self] in
+            await engine?.cancelPendingRequests()
+            _ = await commands.suspendAndWait()
+            await streams?.stopAndWait()
+            await owner?.cancelAndWait()
+            for (client, owner) in uiOwners {
+                await client.cancelAndWait(); await owner.cancelAndWait()
+            }
+            await uiWork.drain()
+            while let task = uiDrains.values.first { await task.value }
+            await engine?.cancelAndWait()
+        }
+        commandDrain = task
+        return task
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        commands.shutdown()
-        cliStreams?.stop()
-        DatabasePrivacy.shutdown()
-        session?.shutdown()
-        surface?.shutdown()
-        surface = nil
-        uiCommands = nil
-        session = nil
-        Task {
-            await cliStreams?.stopAndWait()
-            cliStreams = nil
+        let owner = session
+        let ownedSurface = surface
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
             await commands.shutdownAndWait()
             await DatabaseWorkerClient.shutdown()
+            DatabasePrivacy.shutdown()
+            owner?.shutdown()
+            ownedSurface?.shutdown()
+            surface = nil
+            uiCommands = nil
+            session = nil
+            cliStreams = nil
             completion()
+        }
+    }
+
+    private func retireUI(_ client: DatabaseUIClient, _ owner: DatabasePageSession) {
+        client.cancelPendingCommands()
+        owner.cancelPendingCommands()
+        let id = UUID()
+        uiDrains[id] = Task { [self, client, owner] in
+            defer { uiDrains[id] = nil }
+            await client.cancelAndWait()
+            await owner.cancelAndWait()
+            client.shutdown(); owner.shutdown()
         }
     }
 
@@ -100,6 +160,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -138,6 +199,9 @@ final class ExtensionRuntime: NSObject {
             return NSHostingController(
                 rootView: ExtensionPageHost { DatabasePage(session: session) })
         case "configureUI":
+            guard !commandsSuspended, uiDrains.count < 16 else {
+                return ["ok": false] as NSDictionary
+            }
             guard let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "database", !configuration.uiOnly,
                 input["location"] as? String == "main", input["section"] as? String == "database",
@@ -152,14 +216,10 @@ final class ExtensionRuntime: NSObject {
             if let value = input["presentationID"] as? String, let id = UUID(uuidString: value),
                 let (client, session) = uiSessions.removeValue(forKey: id)
             {
-                session.shutdown()
-                client.shutdown()
+                retireUI(client, session)
             }
         case "stopUI":
-            for (client, session) in uiSessions.values {
-                session.shutdown()
-                client.shutdown()
-            }
+            for (client, session) in uiSessions.values { retireUI(client, session) }
             uiSessions.removeAll()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": DatabasePrivacy.refresh()

@@ -32,6 +32,7 @@ public actor DatabaseExecutor {
     private var serverCancellationReservations: Set<DatabaseOperationID> = []
     private var mutatingConnectionIDs: Set<DatabaseConnectionID> = []
     private var isShuttingDown = false
+    private var requestsSuspended = false
 
     init(
         metadataStore: any DatabaseMetadataStore,
@@ -1004,7 +1005,24 @@ public actor DatabaseExecutor {
         }
     }
 
+    func cancelPendingRequests() async {
+        requestsSuspended = true
+        let operations = Array(activeOperations.keys)
+        for id in operations {
+            _ = await cancelActiveOperation(id, reason: .sessionDisconnected)
+        }
+        for task in backgroundTasks.values { task.cancel() }
+    }
+
+    func cancelAndWait() async {
+        await cancelPendingRequests()
+        while !activeOperations.isEmpty { await Task.yield() }
+        while let task = backgroundTasks.values.first { await task.value }
+        while let task = serverCancellationTasks.values.first { await task.value }
+    }
+
     func disconnectAll() async {
+        await cancelAndWait()
         guard !isShuttingDown else { return }
         isShuttingDown = true
         let operationIDs = Array(activeOperations.keys)
@@ -1028,7 +1046,7 @@ public actor DatabaseExecutor {
         await DatabaseManagementMutationCoordinator.shared.unregisterExecutor(
             owner: runtimeOwner,
             executorID: executorID)
-        disconnectionTask.cancel()
+        await disconnectionTask.value
         for task in backgroundTasks.values {
             task.cancel()
         }
@@ -1687,13 +1705,8 @@ public actor DatabaseExecutor {
                 to: effectiveOperation.operationID)
             let payload = try await withTaskCancellationHandler {
                 try await bodyTask.value
-            } onCancel: { [weak self] in
+            } onCancel: {
                 bodyTask.cancel()
-                Task {
-                    _ = await self?.cancelActiveOperation(
-                        effectiveOperation.operationID,
-                        reason: .userRequested)
-                }
             }
             if !preservesSuccessfulBodyOnCancellation {
                 try await checkControl(context)
@@ -1815,7 +1828,7 @@ public actor DatabaseExecutor {
         _ running: DatabaseOperationRecordSummary,
         cancellation: DatabaseAdapterCancellationSignal
     ) throws {
-        guard !isShuttingDown else {
+        guard !isShuttingDown, !requestsSuspended else {
             throw DatabaseExecutionValidationError.runtimeOwnerNotActive
         }
         guard activeOperations[running.id] == nil else {
@@ -2107,6 +2120,8 @@ public actor DatabaseExecutor {
     private func finishActiveOperation(_ operationID: DatabaseOperationID) async {
         let active = activeOperations.removeValue(forKey: operationID)
         active?.deadlineTask?.cancel()
+        await active?.deadlineTask?.value
+        _ = await active?.cancellationTask?.value
         guard serverCancellationTasks[operationID] == nil else { return }
         let completion = serverCancellationCompletions.removeValue(forKey: operationID)
         serverCancellationReservations.remove(operationID)

@@ -10,6 +10,11 @@ struct DatabaseSafetyReviewSession: Identifiable, Equatable {
 @MainActor
 @Observable
 final class DatabaseWorkspaceModel {
+    private let commandTasks = DatabaseTaskOwner()
+
+    func cancelPendingCommands() { commandTasks.cancel() }
+    func cancelAndWait() async { await commandTasks.drain() }
+
     private(set) var safetyReview: DatabaseSafetyReviewSession?
     private(set) var safetyPhase = DatabaseSafetyReviewPhase.ready
     private(set) var mutationNotice: String?
@@ -45,6 +50,7 @@ final class DatabaseWorkspaceModel {
     }
 
     func shutdown() {
+        commandTasks.cancel()
         invalidatePreview()
         invalidateApply()
         safetyReview = nil
@@ -116,7 +122,7 @@ final class DatabaseWorkspaceModel {
         mutationNotice = nil
         let sender = sender
         let token = review.preview.token
-        applyTask = Task { [weak self] in
+        applyTask = commandTasks.launch { [weak self] in
             do {
                 let response = try await sender.send(
                     .mutationApply(
@@ -157,7 +163,7 @@ final class DatabaseWorkspaceModel {
         unresolvedOperationID = operationID
         safetyPhase = .cancelling
         let sender = sender
-        applyTask = Task { [weak self] in
+        applyTask = commandTasks.launch { [weak self] in
             do {
                 let response = try await sender.send(
                     .operationCancel(DatabaseOperationCancelRequest(operationID: operationID)))
@@ -188,7 +194,7 @@ final class DatabaseWorkspaceModel {
         applyOperationID = operationID
         safetyPhase = .reconciling
         let sender = sender
-        applyTask = Task { [weak self] in
+        applyTask = commandTasks.launch { [weak self] in
             await self?.performReconciliation(
                 sender: sender,
                 generation: generation,
@@ -249,7 +255,7 @@ final class DatabaseWorkspaceModel {
         let operationID = makeOperationID()
         previewOperationID = operationID
         let sender = sender
-        previewTask = Task { [weak self] in
+        previewTask = commandTasks.launch { [weak self] in
             do {
                 let response = try await sender.send(
                     .mutationPreview(
@@ -679,7 +685,7 @@ final class DatabaseWorkspaceModel {
         safetyPhase = .reconciling
         let sender = sender
         let operationID = makeOperationID()
-        applyTask = Task { [weak self] in
+        applyTask = commandTasks.launch { [weak self] in
             do {
                 let response = try await sender.send(
                     .mutationStatus(
@@ -717,7 +723,7 @@ final class DatabaseWorkspaceModel {
         safetyPhase = .cancelling
         let sender = sender
         let operationID = makeOperationID()
-        applyTask = Task { [weak self] in
+        applyTask = commandTasks.launch { [weak self] in
             do {
                 let response = try await sender.send(
                     .mutationCancel(

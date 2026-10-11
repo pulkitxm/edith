@@ -210,6 +210,11 @@ enum DatabaseCapabilityState: Equatable, Sendable {
 @MainActor
 @Observable
 final class DatabaseConnectionWorkspaceModel {
+    private let commandTasks = DatabaseTaskOwner()
+
+    func cancelPendingCommands() { commandTasks.cancel() }
+    func cancelAndWait() async { await commandTasks.drain() }
+
     private static let connectionListLimit = 100
 
     var searchText = ""
@@ -371,6 +376,10 @@ final class DatabaseConnectionWorkspaceModel {
     }
 
     func loadConnections() async {
+        _ = try? await commandTasks.perform { [self] in await loadConnectionsWork() }
+    }
+
+    private func loadConnectionsWork() async {
         let generation = listLoad.begin()
         let priorState = listState
         let previous = listState.connections
@@ -412,6 +421,10 @@ final class DatabaseConnectionWorkspaceModel {
     }
 
     func connectSelected() async {
+        _ = try? await commandTasks.perform { [self] in await connectSelectedWork() }
+    }
+
+    private func connectSelectedWork() async {
         guard let connectionID = selectedConnectionID else { return }
         let priorState = sessionState(for: connectionID)
         guard !priorState.isBusy else { return }
@@ -449,6 +462,10 @@ final class DatabaseConnectionWorkspaceModel {
     }
 
     func disconnectSelected() async {
+        _ = try? await commandTasks.perform { [self] in await disconnectSelectedWork() }
+    }
+
+    private func disconnectSelectedWork() async {
         guard let connectionID = selectedConnectionID else { return }
         let priorState = sessionState(for: connectionID)
         guard !priorState.isBusy else { return }
@@ -483,6 +500,10 @@ final class DatabaseConnectionWorkspaceModel {
     }
 
     func refreshSelectedCapabilities() async {
+        _ = try? await commandTasks.perform { [self] in await refreshSelectedCapabilitiesWork() }
+    }
+
+    private func refreshSelectedCapabilitiesWork() async {
         guard let connectionID = selectedConnectionID else { return }
         guard sessionState(for: connectionID).connectedSession != nil else { return }
         let priorState = capabilityState(for: connectionID)

@@ -5,6 +5,13 @@ import Observation
 @MainActor
 @Observable
 final class DatabaseDataWorkspaceModel {
+    private let commandTasks = DatabaseTaskOwner()
+
+    func cancelPendingCommands() { commandTasks.cancel() }
+    func cancelAndWait() async { await commandTasks.drain() }
+    var pendingCommandCount: Int { commandTasks.activeCount }
+    func waitForPendingCommands() async { await commandTasks.wait() }
+
     var targetText = ""
     var queryText = ""
     var searchQueryOperation = DatabaseSearchQueryOperation.search
@@ -270,7 +277,7 @@ final class DatabaseDataWorkspaceModel {
         resultMode = mode
         state = .loading
         let sender = sender
-        activeTask = Task { [weak self] in
+        activeTask = commandTasks.launch { [weak self] in
             do {
                 let response = try await sender.send(request)
                 try Task.checkCancellation()
