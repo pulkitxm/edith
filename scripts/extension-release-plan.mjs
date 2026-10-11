@@ -389,38 +389,164 @@ export function extensionReleaseTag({ id, version, fingerprint }) {
   return `extensions/${id}/${version}-${fingerprint.slice(0, 20)}`;
 }
 
-if (import.meta.main) {
-  const pullRequest = process.argv[2] === "--pull-request-base";
+export const validationExtensionIDs = [
+  "keepAwake",
+  "audioMixer",
+  "focusDim",
+  "windowSweaters",
+  "micMute",
+  "keystrokeHighlight",
+  "presenter",
+  "colorPicker",
+  "systemStats",
+  "emoji",
+  "homebrew",
+  "calendar",
+  "jev",
+  "system",
+  "timeLapse",
+  "cleaner",
+  "appMaintenance",
+  "blitztree",
+  "plugins",
+  "notchShelf",
+  "clipboard",
+  "music",
+  "docs",
+  "latex",
+  "companion",
+  "terminal",
+  "studio",
+  "usage",
+  "bifrost",
+  "lidAwake",
+  "attention",
+  "machines",
+  "downloads",
+  "seoAudit",
+  "virtualCamera",
+  "codeStats",
+  "herdr",
+  "quinjet",
+  "database",
+];
+
+export function assertValidationContext(validationSHA, environment) {
   if (
-    pullRequest &&
-    (process.env.GITHUB_EVENT_NAME !== "pull_request" ||
-      process.argv.length !== 4)
+    typeof validationSHA !== "string" ||
+    !/^[a-f0-9]{40}$/.test(validationSHA) ||
+    environment.EXTENSION_VALIDATION_SHA !== validationSHA ||
+    environment.GITHUB_SHA !== validationSHA ||
+    environment.GITHUB_EVENT_NAME !== "workflow_dispatch" ||
+    environment.EXTENSION_PUBLISH !== "false" ||
+    environment.GITHUB_REPOSITORY !== "pulkitxm/edith" ||
+    !["65671483", "320458784"].includes(environment.GITHUB_ACTOR_ID) ||
+    !["refs/heads/main", "refs/heads/feat/extension-marketplace"].includes(
+      environment.GITHUB_REF,
+    )
   )
     throw new Error(
-      "Pull request planning requires the exact pull request event base",
+      "All-extension validation requires an authorized nonpublishing exact-source dispatch",
     );
-  await writeHostABI();
-  const root = process.cwd();
-  const definitions = JSON.parse(
-    await readFile("Extensions/manifest.json", "utf8"),
+}
+
+export function assertValidationSource(root, validationSHA, environment) {
+  assertValidationContext(validationSHA, environment);
+  const git = (arguments_) =>
+    execFileSync("git", arguments_, { cwd: root, encoding: "utf8" });
+  if (
+    git(["rev-parse", "--verify", "HEAD^{commit}"]).trim() !== validationSHA ||
+    git(["status", "--porcelain=v1", "--untracked-files=all"]) !== ""
+  )
+    throw new Error(
+      "All-extension validation requires the exact clean source HEAD",
+    );
+}
+
+export function assertValidationExtensions(entries) {
+  const ids = entries.map(({ id }) => id);
+  if (
+    ids.length !== validationExtensionIDs.length ||
+    new Set(ids).size !== ids.length ||
+    ids.some((id) => !validationExtensionIDs.includes(id))
+  )
+    throw new Error(
+      "All-extension validation requires the exact 39 manifest IDs without duplicates",
+    );
+}
+
+export async function planValidationExtensions(
+  root,
+  definitions,
+  validationSHA,
+  environment,
+) {
+  assertValidationSource(root, validationSHA, environment);
+  assertValidationExtensions(definitions);
+  planExtensionBuilds(definitions, []);
+  const include = await planUnpublishedExtensions(root, definitions, []);
+  assertValidationExtensions(include);
+  assertValidationSource(root, validationSHA, environment);
+  return { include, mode: "validation", sourceSHA: validationSHA };
+}
+
+if (import.meta.main) {
+  const validation = ["--validate-all", "--check-validation-source"].includes(
+    process.argv[2],
   );
-  let include;
-  if (pullRequest) {
-    include = await planPullRequestExtensions(
-      root,
-      definitions,
-      process.argv[3],
-    );
+  if (validation || process.env.EXTENSION_VALIDATION_SHA) {
+    if (!validation || process.argv.length !== 4)
+      throw new Error(
+        "Validation input requires explicit exact-source validation arguments",
+      );
+    const root = process.cwd();
+    const validationSHA = process.argv[3];
+    assertValidationSource(root, validationSHA, process.env);
+    if (process.argv[2] === "--validate-all") {
+      const definitions = JSON.parse(
+        await readFile("Extensions/manifest.json", "utf8"),
+      );
+      const plan = await planValidationExtensions(
+        root,
+        definitions,
+        validationSHA,
+        process.env,
+      );
+      process.stdout.write(`${JSON.stringify(plan)}\n`);
+    }
   } else {
-    const publishedFile = process.argv[2];
-    if (!publishedFile)
-      throw new Error("Supply the verified published catalog");
-    const published = JSON.parse(await readFile(publishedFile, "utf8"));
-    include = await planUnpublishedExtensions(
-      root,
-      definitions,
-      published.packages,
+    const pullRequest = process.argv[2] === "--pull-request-base";
+    if (
+      pullRequest &&
+      (process.env.GITHUB_EVENT_NAME !== "pull_request" ||
+        process.argv.length !== 4)
+    )
+      throw new Error(
+        "Pull request planning requires the exact pull request event base",
+      );
+    await writeHostABI();
+    const root = process.cwd();
+    const definitions = JSON.parse(
+      await readFile("Extensions/manifest.json", "utf8"),
     );
+    let include;
+    if (pullRequest) {
+      include = await planPullRequestExtensions(
+        root,
+        definitions,
+        process.argv[3],
+      );
+    } else {
+      const publishedFile = process.argv[2];
+      if (!publishedFile)
+        throw new Error("Supply the verified published catalog");
+      const published = JSON.parse(await readFile(publishedFile, "utf8"));
+      include = await planUnpublishedExtensions(
+        root,
+        definitions,
+        published.packages,
+      );
+    }
+    process.stdout.write(`${JSON.stringify({ include })}\n`);
   }
-  process.stdout.write(`${JSON.stringify({ include })}\n`);
 }
