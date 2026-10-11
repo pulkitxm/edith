@@ -7,6 +7,16 @@ public struct WorkerFixtureEngineInput: Codable, Equatable, Sendable {
     public let path: String
     public let sha256: String
     public let maximumBytes: Int
+
+    @MainActor func read(_ file: WorkerFixtureUIOpenedPath) throws -> Data {
+        guard file.url.path == path, maximumBytes > 0, maximumBytes <= 268_435_456,
+            file.original.st_size > 0, file.original.st_size <= maximumBytes
+        else { throw WorkerFixtureError.invalid }
+        let data = try file.read()
+        guard data.count <= maximumBytes, WorkerFixtureUIAdmission.digest(data) == sha256
+        else { throw WorkerFixtureError.invalid }
+        return data
+    }
 }
 
 public struct WorkerFixtureEngineOutput: Codable, Equatable, Sendable {
@@ -107,6 +117,19 @@ public struct WorkerFixtureEngineContract: Codable, Equatable, Sendable {
     public func validate(
         trust: WorkerFixtureUITrust, owner expectedOwner: String, uid: UInt32,
         expectedRole: WorkerFixtureRole = .app
+    ) throws {
+        try validateBounds(trust: trust, owner: expectedOwner, uid: uid, expectedRole: expectedRole)
+    }
+
+    public func validate(
+        trust: WorkerFixtureBootstrapTrust, owner expectedOwner: String, uid: UInt32,
+        expectedRole: WorkerFixtureRole = .app
+    ) throws {
+        try validateBounds(trust: trust, owner: expectedOwner, uid: uid, expectedRole: expectedRole)
+    }
+
+    private func validateBounds<T: WorkerFixtureTrustBounds>(
+        trust: T, owner expectedOwner: String, uid: UInt32, expectedRole: WorkerFixtureRole
     ) throws {
         try trust.validate()
         guard schema == 1, owner == expectedOwner, WorkerFixtureUIContract.owners.contains(owner),

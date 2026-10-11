@@ -19,14 +19,16 @@ public struct WorkerFixtureEngineRequest: Equatable, Sendable {
     private let role: URL
     private let requests: WorkerFixtureEngineRequestGate
     private let expectedRole: WorkerFixtureRole
+    private let inputFiles: [String: WorkerFixtureUIOpenedPath]
 
     private init(
         descriptor: WorkerFixtureEngineContract, trust: WorkerFixtureUITrust,
         paths: [WorkerFixtureUIOpenedPath], host: URL, worker: URL, role: URL,
-        expectedRole: WorkerFixtureRole
+        expectedRole: WorkerFixtureRole, inputFiles: [String: WorkerFixtureUIOpenedPath]
     ) {
         self.descriptor = descriptor; self.trust = trust; self.paths = paths
         self.host = host; self.worker = worker; self.role = role; self.expectedRole = expectedRole
+        self.inputFiles = inputFiles
         requests = WorkerFixtureEngineRequestGate(
             operations: descriptor.operations, generation: descriptor.requestGeneration)
     }
@@ -126,6 +128,7 @@ public struct WorkerFixtureEngineRequest: Equatable, Sendable {
                     bundle.appendingPathComponent("Contents/Info.plist"), directory: false,
                     mode: nil, maximum: 131_072))
         }
+        var inputFiles: [String: WorkerFixtureUIOpenedPath] = [:]
         for input in descriptor.inputs {
             let file = try WorkerFixtureUIOpenedPath(
                 URL(fileURLWithPath: input.path), directory: false, mode: nil,
@@ -133,7 +136,7 @@ public struct WorkerFixtureEngineRequest: Equatable, Sendable {
             guard WorkerFixtureUIAdmission.digest(try file.read()) == input.sha256 else {
                 throw WorkerFixtureError.invalid
             }
-            paths.append(file)
+            paths.append(file); inputFiles[input.name] = file
         }
         for parent in Set(descriptor.outputs.map(\.parent)) {
             paths.append(
@@ -149,7 +152,7 @@ public struct WorkerFixtureEngineRequest: Equatable, Sendable {
         let admission = WorkerFixtureEngineAdmission(
             descriptor: descriptor, trust: trust, paths: paths,
             host: host, worker: workerBundle.bundleURL, role: roleBundle.bundleURL,
-            expectedRole: expectedRole)
+            expectedRole: expectedRole, inputFiles: inputFiles)
         try admission.requireCurrent()
         return admission
     }
@@ -195,6 +198,16 @@ public struct WorkerFixtureEngineRequest: Equatable, Sendable {
         try requests.complete(request)
     }
     public func cancelRequest(_ request: WorkerFixtureEngineRequest) { requests.cancel(request) }
+    public func readInput(named name: String) throws -> Data {
+        try requireCurrent()
+        guard let input = descriptor.inputs.first(where: { $0.name == name }),
+            let file = inputFiles[name]
+        else { throw WorkerFixtureError.invalid }
+        let data = try input.read(file)
+        try requireCurrent()
+        return data
+    }
+
     public func inputURL(named name: String) throws -> URL {
         try requireCurrent()
         guard let input = descriptor.inputs.first(where: { $0.name == name }) else {
