@@ -31,6 +31,7 @@ final class LaTeXActionCase: HostedFunctionalActionCase {
 
     func activateOriginalControl(context: HostedFunctionalActionContext) async throws {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
+        let baseline = try await readState(context: context, sourceText: Self.draft)
         await model.start()
         let source = try context.ownedPath(named: "latex-source", kind: "file")
         guard model.projects.count == 1, let project = model.projects.first,
@@ -38,21 +39,31 @@ final class LaTeXActionCase: HostedFunctionalActionCase {
             model.selectedID == project.id, model.original != nil, !model.busy
         else { throw HostedFunctionalActionError.invalid }
         let preceding = transport.originalInvocationCount
-        model.source = Self.draft + "\nSynthetic temporary edit\n"
+        let temporary = Self.draft + "\nSynthetic temporary edit\n"
+        model.source = temporary
         try await transport.waitForOriginalInvocation(Self.activationOperation, after: preceding)
+        let changed = try await readState(context: context, sourceText: temporary)
+        guard changed != baseline else { throw HostedFunctionalActionError.invalid }
         let count = transport.originalInvocationCount
         model.source = Self.draft
         try await transport.waitForOriginalInvocation(Self.activationOperation, after: count)
+        guard try await readState(context: context, sourceText: Self.draft) == baseline else {
+            throw HostedFunctionalActionError.invalid
+        }
     }
 
     func readAuthoritativeState(context: HostedFunctionalActionContext) async throws -> Data {
+        try await readState(context: context, sourceText: Self.draft)
+    }
+
+    private func readState(context: HostedFunctionalActionContext, sourceText: String) async throws -> Data {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
         let value = try JSONDecoder().decode(
             LaTeXUISnapshot.self, from: await transport.readAuthoritative("latex.ui.snapshot"))
         let source = try context.ownedPath(named: "latex-source", kind: "file")
         guard value.projects.count == 1, let project = value.projects.first,
             project.location == .disk, project.sourcePath == source.path,
-            value.selectedID == project.id, value.source == Self.draft, let original = value.original,
+            value.selectedID == project.id, value.source == sourceText, let original = value.original,
             value.pdfByteCount == 0, !value.busy, !value.buildingPDF
         else { throw HostedFunctionalActionError.invalid }
         let encoder = JSONEncoder()
