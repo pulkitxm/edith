@@ -15,7 +15,8 @@ public struct ExtensionSystemVersion: Codable, Comparable, Hashable, Sendable,
     }
 
     public init(_ version: OperatingSystemVersion) {
-        self.init(major: version.majorVersion, minor: version.minorVersion, patch: version.patchVersion)
+        self.init(
+            major: version.majorVersion, minor: version.minorVersion, patch: version.patchVersion)
     }
 
     public init?(_ value: String) {

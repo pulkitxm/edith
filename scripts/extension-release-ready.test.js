@@ -428,15 +428,40 @@ test("authenticated first bootstrap waits for its owned draft without trusting u
   expect(assets).toBe(1);
 });
 
-
 test("minor OS readiness rejects a package that skips the required support floor", () => {
   const required = [{ ...expected[0], minimumSystemVersion: "14.4.0" }];
-  expect(missingPackages(required, { packages: [{ ...record, minimumSystemVersion: "14.5.0" }] })).toEqual(required);
-  expect(missingPackages(required, { packages: [{ ...record, minimumSystemVersion: "14.4.0" }] })).toEqual([]);
-  expect(missingPackages(required, { packages: [
-    { ...record, minimumSystemVersion: "14.4.0" },
-    { ...record, version: "1.1.0", minimumSystemVersion: "14.10.0", sourceFingerprint: "b".repeat(64) },
-  ] })).toEqual(required);
+  expect(
+    missingPackages(required, {
+      packages: [{ ...record, minimumSystemVersion: "14.5.0" }],
+    }),
+  ).toEqual(required);
+  expect(
+    missingPackages(required, {
+      packages: [{ ...record, minimumSystemVersion: "14.4.0" }],
+    }),
+  ).toEqual([]);
+  expect(
+    missingPackages(required, {
+      packages: [
+        { ...record, minimumSystemVersion: "14.4.0" },
+        {
+          ...record,
+          version: "1.1.0",
+          minimumSystemVersion: "14.10.0",
+          sourceFingerprint: "b".repeat(64),
+        },
+      ],
+    }),
+  ).toEqual(required);
+  expect(
+    missingPackages(required, {
+      packages: [{ ...record, minimumSystemVersion: "14.0.0" }],
+    }),
+  ).toEqual(required);
   for (const minimumSystemVersion of [14, "14.4", "14.04.0", "14.4.0-beta"])
-    expect(() => missingPackages(required, { packages: [{ ...record, minimumSystemVersion }] })).toThrow();
+    expect(() =>
+      missingPackages(required, {
+        packages: [{ ...record, minimumSystemVersion }],
+      }),
+    ).toThrow();
 });

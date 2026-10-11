@@ -1,8 +1,8 @@
-import { validateMinimumSystemVersion } from "./extension-system-version.mjs";
 import { createPublicKey, verify } from "node:crypto";
 import { mkdtemp, open, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { validateMinimumSystemVersion } from "./extension-system-version.mjs";
 
 export const maximumEnvelopeBytes = 3 * 1024 ** 2;
 export const maximumPayloadBytes = 2 * 1024 ** 2;

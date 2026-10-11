@@ -357,6 +357,7 @@ export async function prepareHostRemoteFixture({
     };
     packages.push(package_);
     await buildExtensionUICarrier({
+      minimumSystemVersion: "14.0.0",
       hostApp: app,
       payloadDirectory,
       id: "sample",

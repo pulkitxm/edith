@@ -456,10 +456,12 @@ try {
         version,
         hostABI: "edith-host-2",
         architecture: "arm64",
+        minimumSystemVersion: "14.0.0",
         dependencies: [],
       }),
     );
     await buildExtensionUICarrier({
+      minimumSystemVersion: "14.0.0",
       hostApp: app,
       payloadDirectory: payload,
       id,

@@ -10,7 +10,8 @@ struct MarketplaceHarness {
         if arguments.first == "verify-catalog-selection" {
             do {
                 guard arguments.count == 7, let publicKey = Data(base64Encoded: arguments[2]),
-                    let systemVersion = ExtensionSystemVersion(arguments[6]), systemVersion >= .init(major: 14)
+                    let systemVersion = ExtensionSystemVersion(arguments[6]),
+                    systemVersion >= .init(major: 14)
                 else { throw MarketplaceError.invalidCatalog }
                 let bytes = try Data(contentsOf: URL(fileURLWithPath: arguments[1]))
                 guard bytes.count <= 3 * 1024 * 1024 else { throw MarketplaceError.invalidCatalog }

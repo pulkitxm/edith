@@ -1,7 +1,9 @@
 export function parseSystemVersion(value) {
   if (
     typeof value !== "string" ||
-    !/^(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})$/.test(value)
+    !/^(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})$/.test(
+      value,
+    )
   )
     throw new Error("Invalid system version");
   const parts = value.split(".").map(Number);

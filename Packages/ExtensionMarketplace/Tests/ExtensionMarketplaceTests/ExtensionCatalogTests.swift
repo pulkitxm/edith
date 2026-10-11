@@ -39,15 +39,18 @@ func fixturePackage(
         ])
     #expect(
         try catalog.installationPlan(
-            for: "keepAwake", hostABI: "host-1", architecture: "arm64", systemVersion: .init(major: 14)
+            for: "keepAwake", hostABI: "host-1", architecture: "arm64",
+            systemVersion: .init(major: 14)
         ).last?.version == "1.10.0")
     #expect(
         try catalog.installationPlan(
-            for: "keepAwake", hostABI: "host-2", architecture: "arm64", systemVersion: .init(major: 14)
+            for: "keepAwake", hostABI: "host-2", architecture: "arm64",
+            systemVersion: .init(major: 14)
         ).last?.version == "2.0.0")
     #expect(throws: MarketplaceError.incompatiblePackage) {
         try catalog.installationPlan(
-            for: "keepAwake", hostABI: "host-3", architecture: "arm64", systemVersion: .init(major: 14))
+            for: "keepAwake", hostABI: "host-3", architecture: "arm64",
+            systemVersion: .init(major: 14))
     }
 }
 

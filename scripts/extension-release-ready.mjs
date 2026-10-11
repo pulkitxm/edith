@@ -1,4 +1,3 @@
-import { compareSystemVersions, validateMinimumSystemVersion } from "./extension-system-version.mjs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,6 +11,10 @@ import {
 } from "./extension-catalog-pointer.mjs";
 import { writeHostABI } from "./extension-host-abi.mjs";
 import { extensionFingerprint } from "./extension-release-plan.mjs";
+import {
+  compareSystemVersions,
+  validateMinimumSystemVersion,
+} from "./extension-system-version.mjs";
 import { verifiedCatalogPayload } from "./verify-extension-catalog.mjs";
 
 export function verifyCatalog(envelope, publicKey) {
@@ -33,11 +36,17 @@ export function missingPackages(expected, catalog) {
       entry.minimumSystemVersion,
       ...compatible
         .map((published) => published.minimumSystemVersion)
-        .filter((system) => compareSystemVersions(system, entry.minimumSystemVersion) >= 0),
+        .filter(
+          (system) =>
+            compareSystemVersions(system, entry.minimumSystemVersion) >= 0,
+        ),
     ]);
     return [...systems].some((system) => {
       const selected = compatible
-        .filter((published) => compareSystemVersions(published.minimumSystemVersion, system) <= 0)
+        .filter(
+          (published) =>
+            compareSystemVersions(published.minimumSystemVersion, system) <= 0,
+        )
         .reduce(
           (latest, published) =>
             !latest ||
@@ -48,7 +57,10 @@ export function missingPackages(expected, catalog) {
               : latest,
           undefined,
         );
-      return selected?.sourceFingerprint !== entry.fingerprint;
+      return (
+        selected?.sourceFingerprint !== entry.fingerprint ||
+        selected?.minimumSystemVersion !== entry.minimumSystemVersion
+      );
     });
   });
 }
@@ -63,7 +75,9 @@ export async function expectedPackages(root) {
       id: entry.id,
       hostABI: entry.hostABI,
       architecture: "arm64",
-      minimumSystemVersion: validateMinimumSystemVersion(entry.minimumSystemVersion),
+      minimumSystemVersion: validateMinimumSystemVersion(
+        entry.minimumSystemVersion,
+      ),
       fingerprint: await extensionFingerprint(root, entry, definitions),
     })),
   );

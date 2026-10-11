@@ -47,7 +47,8 @@ public struct ExtensionPackageStore: Sendable {
 
     public func installedPackage(
         id: String, hostABI: String, architecture: String, version: String? = nil,
-        systemVersion: ExtensionSystemVersion = .init(ProcessInfo.processInfo.operatingSystemVersion)
+        systemVersion: ExtensionSystemVersion = .init(
+            ProcessInfo.processInfo.operatingSystemVersion)
     ) throws -> ExtensionPackage? {
         let compatible = try installedPackages().filter {
             $0.id == id && (version == nil || $0.version == version)
@@ -171,7 +172,8 @@ public struct ExtensionPackageStore: Sendable {
 
     public func prune(
         hostABI: String,
-        systemVersion: ExtensionSystemVersion = .init(ProcessInfo.processInfo.operatingSystemVersion)
+        systemVersion: ExtensionSystemVersion = .init(
+            ProcessInfo.processInfo.operatingSystemVersion)
     ) throws {
         let operation = try PackageFileLock(
             url: root.appendingPathComponent(".operation.lock"), exclusive: true)

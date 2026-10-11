@@ -184,7 +184,8 @@ private struct PersistentDataSentinels {
             contentsOf: fixture.store.root.appendingPathComponent("selected-packages.json"))
         let plan = try ExtensionCatalog(revision: 1, packages: [second.0, dependent.0])
             .installationPlan(
-                for: "companion", hostABI: "host-1", architecture: "arm64", systemVersion: .init(major: 14))
+                for: "companion", hostABI: "host-1", architecture: "arm64",
+                systemVersion: .init(major: 14))
         #expect(plan == [second.0, dependent.0])
         await #expect(throws: MarketplaceError.downloadFailed) {
             try await fixture.installer(archives: [second.0.downloadURL: second.1]).install(
@@ -264,7 +265,8 @@ private struct PersistentDataSentinels {
                 == installed.sorted { ($0.id, $0.version) < ($1.id, $1.version) })
         #expect(
             try store.installedPackage(
-                id: "usage", hostABI: "host-1", architecture: "arm64", systemVersion: .init(major: 14))
+                id: "usage", hostABI: "host-1", architecture: "arm64",
+                systemVersion: .init(major: 14))
                 == selected)
         for (package, path) in paths {
             #expect(

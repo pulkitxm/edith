@@ -275,10 +275,12 @@ func unsafeArchivesNeverWriteOutsideTheStagingArea(_ path: String) async throws 
     try fixture.store.select(future)
     #expect(
         try fixture.store.installedPackage(
-            id: old.id, hostABI: old.hostABI, architecture: "arm64", systemVersion: .init(major: 14)) == old)
+            id: old.id, hostABI: old.hostABI, architecture: "arm64", systemVersion: .init(major: 14)
+        ) == old)
     #expect(
         try fixture.store.installedPackage(
-            id: old.id, hostABI: old.hostABI, architecture: "arm64", systemVersion: .init(major: 15)) == future)
+            id: old.id, hostABI: old.hostABI, architecture: "arm64", systemVersion: .init(major: 15)
+        ) == future)
     #expect(
         try fixture.store.installedPackage(
             id: old.id, hostABI: old.hostABI, architecture: "arm64", version: future.version,

@@ -101,6 +101,7 @@ try {
     stdio: "pipe",
   });
   await buildExtensionUICarrier({
+    minimumSystemVersion: "14.0.0",
     hostApp: app,
     payloadDirectory: payload,
     id: "keepAwake",

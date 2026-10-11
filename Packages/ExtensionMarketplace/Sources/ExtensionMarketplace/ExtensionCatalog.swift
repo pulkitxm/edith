@@ -44,7 +44,8 @@ public struct ExtensionPackage: Codable, Equatable, Identifiable, Sendable {
 
     public init(
         id: String, version: String, hostABI: String, architecture: String = "arm64",
-        minimumSystemVersion: ExtensionSystemVersion = .init(major: 14), downloadURL: URL, sha256: String,
+        minimumSystemVersion: ExtensionSystemVersion = .init(major: 14), downloadURL: URL,
+        sha256: String,
         downloadBytes: Int64, installedBytes: Int64, dependencies: [String] = []
     ) {
         self.id = id
@@ -69,7 +70,9 @@ public struct ExtensionPackage: Codable, Equatable, Identifiable, Sendable {
             } && value != "." && value != ".." && !value.hasPrefix(".")
     }
 
-    public func isCompatible(hostABI: String, architecture: String, systemVersion: ExtensionSystemVersion) -> Bool {
+    public func isCompatible(
+        hostABI: String, architecture: String, systemVersion: ExtensionSystemVersion
+    ) -> Bool {
         self.hostABI == hostABI && self.architecture == architecture
             && systemVersion >= minimumSystemVersion
     }
@@ -78,7 +81,8 @@ public struct ExtensionPackage: Codable, Equatable, Identifiable, Sendable {
         hostABI: String, architecture: String, systemVersion: ExtensionSystemVersion,
         operation: () throws -> Result
     ) throws -> Result {
-        guard isCompatible(hostABI: hostABI, architecture: architecture, systemVersion: systemVersion)
+        guard
+            isCompatible(hostABI: hostABI, architecture: architecture, systemVersion: systemVersion)
         else { throw MarketplaceError.incompatiblePackage }
         return try operation()
     }
@@ -89,7 +93,8 @@ public struct ExtensionPackage: Codable, Equatable, Identifiable, Sendable {
             version.split(separator: ".").allSatisfy({
                 !$0.isEmpty && $0.allSatisfy({ $0.isASCII && $0.isNumber })
             }),
-            architecture == "arm64" || architecture == "x86_64", minimumSystemVersion >= .init(major: 14),
+            architecture == "arm64" || architecture == "x86_64",
+            minimumSystemVersion >= .init(major: 14),
             downloadBytes > 0, downloadBytes <= 512 * 1024 * 1024,
             installedBytes > 0, installedBytes <= 1024 * 1024 * 1024,
             sha256.count == 64, sha256.allSatisfy({ $0.isHexDigit && !$0.isUppercase }),

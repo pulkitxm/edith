@@ -165,7 +165,7 @@ struct HostStoragePage: View {
                             Text("\(version.package.version) · \(version.state)").font(
                                 .edithText(.callout))
                             Text(
-                                "\(version.compatible ? "Compatible with this app" : "Incompatible with this app") · ABI \(version.package.hostABI) · \(version.package.architecture) · macOS \(version.package.minimumSystemVersion)+"
+                                "\(version.compatible ? "Compatible with this app" : "Incompatible with this app") · ABI \(version.package.hostABI) · \(version.package.architecture) · macOS \(version.package.minimumSystemVersion.description)+"
                             )
                             .font(.edithText(.caption)).foregroundStyle(.secondary)
                             HostStorageSizeLine(

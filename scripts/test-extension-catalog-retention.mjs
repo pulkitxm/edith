@@ -20,7 +20,7 @@ try {
     version: `1.0.${generation}`,
     hostABI: "edith-host-2",
     architecture: "arm64",
-    minimumSystemVersion: "14.0.0",
+    minimumSystemVersion: definition.minimumSystemVersion,
     downloadBytes: 1,
     installedBytes: 1,
     sha256: "a".repeat(64),
@@ -55,7 +55,12 @@ try {
     await writeFile(path, JSON.stringify(envelope));
     return envelope;
   };
-  const select = (id, abi = "edith-host-2", architecture = "arm64", os = 14) =>
+  const select = (
+    id,
+    abi = "edith-host-2",
+    architecture = "arm64",
+    os = "15.0.0",
+  ) =>
     JSON.parse(
       execFileSync(
         resolve(harness),
@@ -103,11 +108,11 @@ try {
   for (const abi of ["edith-host-1", "edith-host-2"]) {
     for (const architecture of ["arm64", "x86_64"]) {
       assert.equal(
-        select("calendar", abi, architecture, 14)[0].version,
+        select("calendar", abi, architecture, "14.0.0")[0].version,
         "1.0.4",
       );
       assert.equal(
-        select("calendar", abi, architecture, 26)[0].version,
+        select("calendar", abi, architecture, "26.0.0")[0].version,
         "1.0.8",
       );
     }
@@ -125,7 +130,7 @@ try {
       "calendar",
       "edith-host-2",
       "arm64",
-      "14",
+      "14.0.0",
     ],
     { stdio: "pipe" },
   );
