@@ -20,6 +20,12 @@ final class HostTerminalWindows {
     private var closures: [UUID: Task<Void, Never>] = [:]
     private var failed = Set<UUID>()
     private var stopping = false
+    private var consumeKey: @MainActor (NSEvent) -> Bool = { _ in false }
+    nonisolated(unsafe) private var keyMonitor: Any?
+
+    deinit {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+    }
 
     init(
         windows: HostSectionWindows,
@@ -77,6 +83,11 @@ final class HostTerminalWindows {
             },
             removeAssociation: { [weak navigation] in navigation?.removeAssociation($0) },
             presented: { $0.isVisible && !$0.isMiniaturized && $0.isKeyWindow && NSApp.isActive })
+        consumeKey = { [weak presenter] event in
+            presenter?.consumeTerminalTabKey(
+                characters: event.charactersIgnoringModifiers, modifiers: event.modifierFlags,
+                window: NSApp.keyWindow) == true
+        }
     }
 
     var pendingCount: Int { entries.count }
@@ -136,6 +147,7 @@ final class HostTerminalWindows {
                     rootView: HostTerminalRemoteContent(controller: controller)),
                 didClose: { [weak self] in self?.close(entry.id) })
             entry.window = window; entry.controller = controller
+            installKeys()
             entry.relationship = try associate(window, entry.owner.window)
             try await ready(controller, window)
             try validate(
@@ -170,10 +182,22 @@ final class HostTerminalWindows {
         let pending = Array(opening.values)
         for task in pending { task.cancel() }
         for task in pending { _ = try? await task.value }
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
         windows.closeAll()
         for id in entries.keys { close(id) }
         for task in Array(closures.values) { await task.value }
         guard entries.isEmpty, failed.isEmpty else { throw HostWorkerError.rejected }
+    }
+
+    private func installKeys() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            let handled = MainActor.assumeIsolated {
+                guard let self, self.windows.contains(NSApp.keyWindow) else { return false }
+                return self.consumeKey(event)
+            }
+            return handled ? nil : event
+        }
     }
 
     private func close(_ id: UUID) {

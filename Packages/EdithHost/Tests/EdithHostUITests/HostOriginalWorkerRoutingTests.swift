@@ -2,6 +2,7 @@ import AppKit
 import EdithHostCore
 import ExtensionMarketplace
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import EdithHost
@@ -223,6 +224,279 @@ import Testing
                 }
             }
         }
+    }
+
+    @Test func showRestoresTheExactOriginAndLeavesItsSelectionForMicMute() async throws {
+        let fixture = WindowFixture()
+        defer { fixture.clean() }
+        let second = TestWindowHost.window(contentRect: .zero)
+        second.identifier = .init("EdithMainWindow")
+        defer { second.close() }
+        let presentation = UUID()
+        var secondSelected = "home"
+        var shown: [NSWindow] = []
+        let navigation = HostWindowNavigation(
+            defaults: fixture.defaults, activeVersions: { fixture.versions },
+            originatingWindow: { $0 == presentation ? fixture.window : nil },
+            showWindow: { shown.append($0) }, windowIsPresented: { shown.last === $0 })
+        fixture.selected = "calendar"
+        _ = navigation.register(
+            window: fixture.window, apply: { _ in Issue.record("Mic Mute changed selection") },
+            selected: { fixture.selected })
+        _ = navigation.register(
+            window: second, apply: { secondSelected = $0.page }, selected: { secondSelected })
+        try await navigation.navigate(
+            extensionID: "micMute", version: "1.0.0", presentationID: presentation, location: "home"
+        )
+        #expect(shown.count == 1 && shown[0] === fixture.window)
+        #expect(fixture.selected == "calendar" && secondSelected == "home")
+    }
+
+    @Test func missingWorkspaceOpensWaitsForRegistrationThenShowsBeforeAcknowledgment() async throws
+    {
+        let fixture = WindowFixture()
+        defer { fixture.clean() }
+        var order: [String] = []
+        var navigation: HostWindowNavigation!
+        navigation = HostWindowNavigation(
+            defaults: fixture.defaults, activeVersions: { fixture.versions },
+            openWorkspace: {
+                order.append("open")
+                Task {
+                    await Task.yield()
+                    _ = navigation.register(
+                        window: fixture.window,
+                        apply: {
+                            fixture.selected = $0.page; order.append("apply")
+                        },
+                        selected: { fixture.selected })
+                }
+            },
+            showWindow: { window in
+                #expect(window === fixture.window); order.append("show")
+            }, windowIsPresented: { _ in order.last == "show" || order.last == "ack" },
+            didApply: { _ in order.append("ack") })
+        try await navigation.navigate(extensionID: "calendar", version: "1.0.0")
+        #expect(order == ["open", "apply", "show", "ack"])
+        #expect(fixture.selected == "calendar")
+    }
+
+    @Test func staleWorkersAndMissingPresentationOwnersCannotOpenAnotherWorkspace() async throws {
+        let fixture = WindowFixture()
+        defer { fixture.clean() }
+        var opens = 0
+        let navigation = HostWindowNavigation(
+            defaults: fixture.defaults, activeVersions: { fixture.versions },
+            openWorkspace: { opens += 1 })
+        await #expect(throws: HostWindowNavigationError.inactiveOwner) {
+            try await navigation.navigate(extensionID: "calendar", version: "0.9.0")
+        }
+        await #expect(throws: HostWindowNavigationError.unavailable) {
+            try await navigation.navigate(
+                extensionID: "calendar", version: "1.0.0", presentationID: UUID(), location: "home")
+        }
+        #expect(opens == 0)
+    }
+
+    @Test(arguments: ["replace", "reregister", "cancel", "hidden"])
+    func windowDeliveryRacesCannotAcknowledge(change: String) async throws {
+        let fixture = WindowFixture()
+        defer { fixture.clean() }
+        let gate = DeliveryGate()
+        var acknowledged = false
+        let navigation = HostWindowNavigation(
+            defaults: fixture.defaults, activeVersions: { fixture.versions },
+            showWindow: { _ in await gate.wait() }, windowIsPresented: { _ in change != "hidden" },
+            didApply: { _ in acknowledged = true })
+        let token = fixture.register(navigation)
+        let task = Task { try await navigation.navigate(extensionID: "calendar", version: "1.0.0") }
+        await settle { gate.waiting }
+        if change == "replace" { fixture.versions["calendar"] = "2.0.0" }
+        if change == "reregister" {
+            navigation.unregister(token); _ = fixture.register(navigation)
+        }
+        if change == "cancel" { task.cancel() }
+        gate.release()
+        await #expect(throws: (any Error).self) { try await task.value }
+        #expect(!acknowledged)
+    }
+
+    @Test func terminalReusesOnlyItsExactWorkspaceAndFactoryThenReleasesOnClose() async throws {
+        let fixture = TerminalWindowFixture()
+        defer { fixture.clean() }
+        let service = fixture.service()
+        try await service.open(fixture.request())
+        try await service.open(fixture.request())
+        #expect(fixture.created.count == 1 && fixture.presentations == 2)
+        #expect(fixture.loaded.count == 1 && fixture.loaded[0].extensionID == "terminal")
+        #expect(fixture.loaded[0].location == "main" && fixture.loaded[0].section == nil)
+        #expect(HostTerminalUIRequest.accepts(fixture.loaded[0]))
+        #expect(fixture.associations.count == 1)
+        fixture.ownerToken = UUID()
+        try await service.open(fixture.request())
+        #expect(fixture.created.count == 2 && fixture.loaded.count == 2)
+        fixture.created[0].close()
+        await settle { service.pendingCount == 1 }
+        #expect(fixture.released == [fixture.loaded[0].presentationID])
+        try await service.stop()
+        #expect(service.pendingCount == 0 && fixture.released.count == 2)
+        #expect(fixture.removedAssociations.count == 2)
+    }
+
+    @Test(arguments: ["replace", "owner", "cancel", "hidden"])
+    func terminalReadinessRacesReleaseTheExactPresentation(change: String) async throws {
+        let fixture = TerminalWindowFixture()
+        defer { fixture.clean() }
+        let gate = DeliveryGate()
+        fixture.readyGate = gate
+        let service = fixture.service()
+        let task = Task { try await service.open(fixture.request()) }
+        await settle { gate.waiting }
+        #expect(service.pendingCount == 1 && fixture.released.isEmpty)
+        if change == "replace" { fixture.available = false }
+        if change == "owner" { fixture.ownerToken = UUID() }
+        if change == "cancel" { task.cancel() }
+        if change == "hidden" { fixture.presented = false }
+        gate.release()
+        await #expect(throws: (any Error).self) { try await task.value }
+        #expect(service.pendingCount == 0)
+        #expect(fixture.released == fixture.loaded.map(\.presentationID))
+        #expect(fixture.removedAssociations.count == 1)
+        try await service.stop()
+    }
+
+    @Test func terminalDisableDrainsAnOpeningFactoryAndRetainsFailedCleanupForRetry() async throws {
+        let fixture = TerminalWindowFixture()
+        defer { fixture.clean() }
+        let gate = DeliveryGate()
+        fixture.loadGate = gate
+        let service = fixture.service()
+        let open = Task { try await service.open(fixture.request()) }
+        await settle { gate.waiting }
+        let stop = Task { try await service.stop() }
+        await Task.yield()
+        gate.release()
+        try await stop.value
+        await #expect(throws: CancellationError.self) { try await open.value }
+        #expect(fixture.created.isEmpty && service.pendingCount == 0 && fixture.released.count == 1)
+        fixture.loadGate = nil
+        try await service.open(fixture.request())
+        fixture.releaseFails = true
+        await #expect(throws: HostWorkerError.rejected) { try await service.stop() }
+        #expect(service.pendingCount == 1)
+        await #expect(throws: HostWorkerError.rejected) {
+            try await service.open(fixture.request())
+        }
+        fixture.releaseFails = false
+        try await service.stop()
+        #expect(service.pendingCount == 0)
+    }
+
+    private func settle(_ condition: () -> Bool) async {
+        for _ in 0..<100 {
+            if condition() { return }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(condition())
+    }
+
+    @MainActor private final class WindowFixture {
+        let suite = "com.pulkit.edith.tests.original-window." + UUID().uuidString
+        let defaults: UserDefaults
+        let window = TestWindowHost.window(contentRect: .zero)
+        var selected = "home"
+        var versions = ["calendar": "1.0.0", "micMute": "1.0.0"]
+        init() {
+            defaults = UserDefaults(suiteName: suite)!
+            window.identifier = .init("EdithMainWindow")
+            window.isReleasedWhenClosed = false
+        }
+        func register(_ navigation: HostWindowNavigation) -> UUID {
+            navigation.register(
+                window: window, apply: { [self] in selected = $0.page },
+                selected: { [self] in selected })
+        }
+        func clean() { window.close(); defaults.removePersistentDomain(forName: suite) }
+    }
+
+    @MainActor private final class TerminalWindowFixture {
+        let owner = TestWindowHost.window(contentRect: .zero)
+        var ownerToken = UUID()
+        var available = true
+        var presented = true
+        var releaseFails = false
+        var created: [NSWindow] = []
+        var loaded: [HostExtensionContentRequest] = []
+        var released: [UUID] = []
+        var associations: [UUID] = []
+        var removedAssociations: [UUID] = []
+        var presentations = 0
+        var loadGate: DeliveryGate?
+        var readyGate: DeliveryGate?
+        func request() throws -> HostWorkerNavigationRequest {
+            let identity = try HostIdentity(
+                identifier: "com.pulkit.edith.tests.original-terminal",
+                supportDirectory: URL(fileURLWithPath: "/synthetic/support"))
+            return .init(
+                configuration: .init(identity: identity, extensionID: "terminal", version: "1.0.0"))
+        }
+        func service() -> HostTerminalWindows {
+            let windows = HostSectionWindows(
+                saveFrames: false,
+                makeWindow: { [self] frame in
+                    let window = TestWindowHost.window(contentRect: frame)
+                    created.append(window); return window
+                },
+                present: { [self] window in
+                    presentations += 1; window.contentView?.layoutSubtreeIfNeeded()
+                }, visibleFrame: { .init(x: 0, y: 0, width: 1440, height: 900) }
+            ) { _ in AnyView(EmptyView()) }
+            return HostTerminalWindows(
+                windows: windows,
+                owner: { [self] _ in
+                    let token = ownerToken
+                    return .init(
+                        token: token, window: owner,
+                        validate: { [self] in
+                            guard ownerToken == token, available else {
+                                throw HostWorkerError.rejected
+                            }
+                        })
+                },
+                validateOrigin: { [self] request in
+                    guard available, request.version == "1.0.0" else {
+                        throw HostWorkerError.rejected
+                    }
+                },
+                load: { [self] request in
+                    loaded.append(request)
+                    if let loadGate { await loadGate.wait() }
+                    let controller = NSViewController()
+                    controller.view = NSView(frame: .init(x: 0, y: 0, width: 880, height: 640))
+                    return controller
+                },
+                ready: { [self] _, window in
+                    window.contentView?.layoutSubtreeIfNeeded()
+                    if let readyGate { await readyGate.wait() }
+                },
+                release: { [self] id in
+                    if releaseFails { throw HostWorkerError.rejected }
+                    released.append(id)
+                },
+                associate: { [self] _, workspace in
+                    #expect(workspace === owner)
+                    let token = UUID(); associations.append(token); return token
+                }, removeAssociation: { [self] in removedAssociations.append($0) },
+                presented: { [self] _ in presented })
+        }
+        func clean() { for window in created { window.close() }; owner.close() }
+    }
+
+    @MainActor private final class DeliveryGate {
+        private var continuation: CheckedContinuation<Void, Never>?
+        var waiting: Bool { continuation != nil }
+        func wait() async { await withCheckedContinuation { continuation = $0 } }
+        func release() { continuation?.resume(); continuation = nil }
     }
 
     private func admitted(
