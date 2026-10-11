@@ -28,7 +28,10 @@ class TreeSnapshot:
             target = path.resolve(strict=True)
             if not target.is_relative_to(self.root):
                 raise ValueError("Size inventory link escapes its root")
-        elif not stat.S_ISREG(before.st_mode):
+        elif stat.S_ISREG(before.st_mode):
+            with stable_file(path) as source:
+                source.read(1)
+        else:
             raise ValueError("Size inventory contains an unsupported entry")
         if identity(path.lstat()) != self.entries[path]:
             raise ValueError("Size inventory changed during traversal")

@@ -299,6 +299,43 @@ class HostSizeReportTests(unittest.TestCase):
                 [{"id": identifier, "contractVersion": 1} for identifier in ["first", "second"]],
                 [{"id": identifier} for identifier in ["first", "second"]], {"first": "current-first", "second": "current-second"})
 
+    def test_minimum_system_version_sealed_manifest_schema_and_definition_are_equal(self):
+        self.final_fixture()
+        original = self.sealed_package("sample")
+        nested = "sample/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/sample/package.json"
+        for minimum in [None, "14.0", "014.0.0", "13.9.9", "14.0.2147483648", "15.0.0"]:
+            entries = dict(original)
+            metadata = json.loads((self.packages / "sample.json").read_text())
+            metadata["minimumSystemVersion"] = minimum
+            payload = json.loads(entries[nested])
+            payload["minimumSystemVersion"] = minimum
+            entries[nested] = json.dumps(payload).encode()
+            self.write_package_entries("sample", entries, metadata)
+            with self.subTest(minimum=minimum), self.assertRaisesRegex(ValueError, "minimum system"):
+                self.verify_host()
+        self.sealed_package("sample")
+        entries = dict(original)
+        payload = json.loads(entries[nested])
+        payload["minimumSystemVersion"] = "15.0.0"
+        entries[nested] = json.dumps(payload).encode()
+        self.write_package_entries("sample", entries)
+        with self.assertRaisesRegex(ValueError, "Sealed payload manifest"):
+            self.verify_host()
+
+    def test_package_component_scopes_include_role_runtime_and_camera_copies_once(self):
+        self.final_fixture()
+        entries = self.sealed_package("sample")
+        payload = "sample/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/sample"
+        entries.update({f"{payload}/app.bundle/Contents/MacOS/Runtime": b"r" * 37,
+                        "sample/CameraCarrier.app/Contents/MacOS/Edith": b"c" * 43,
+                        "sample/CameraCarrier.app/Contents/Frameworks/Code.framework/Code": b"f" * 53})
+        self.write_package_entries("sample", entries)
+        totals = report.measure_package_components(self.packages / "sample.zip", "sample")
+        self.assertEqual(totals["role:app:executables"]["installedBytes"], 37)
+        self.assertEqual(totals["cameraCarrier:executables"]["installedBytes"], 43)
+        self.assertEqual(totals["cameraCarrier:frameworks"]["installedBytes"], 53)
+        self.assertEqual(sum(row["installedBytes"] for row in totals.values()), sum(map(len, entries.values())))
+
     def test_current_source_reader_includes_untracked_files_and_uses_owned_root(self):
         outputs = [type("Result", (), {"stdout": "a" * 40 + "\n"})(), type("Result", (), {"stdout": "?? pending-source.swift\n"})()]
         with patch.object(report.subprocess, "run", side_effect=outputs) as command:

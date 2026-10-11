@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from size_report_filesystem import TreeSnapshot, digest_file
+from size_report_filesystem import TreeSnapshot, digest_file, stable_file
 
 
 def module(name):
@@ -30,6 +30,19 @@ class ClosedFilesystemTests(unittest.TestCase):
             with self.subTest(operation=operation.__name__), patch('size_report_filesystem.os.scandir', side_effect=PermissionError('synthetic')):
                 with self.assertRaises(PermissionError):
                     operation(self.app)
+
+    def test_unreadable_regular_files_and_changes_while_reading_are_fatal(self):
+        size = module('extension-size-report')
+        host = module('extension-host-size-report')
+        for operation in [size.measure_app, host.measure_host_components, host.tree_inventory]:
+            with self.subTest(operation=operation.__name__), patch('size_report_filesystem.os.open', side_effect=PermissionError('synthetic')):
+                with self.assertRaises(PermissionError):
+                    operation(self.app)
+        path = self.app / 'payload'
+        with self.assertRaisesRegex(ValueError, 'changed during reading'):
+            with stable_file(path) as source:
+                source.read()
+                path.write_bytes(b'changed')
 
     def test_changed_added_deleted_and_replaced_entries_are_fatal(self):
         for change in ['add', 'delete', 'replace', 'write']:
@@ -67,7 +80,6 @@ class ClosedFilesystemTests(unittest.TestCase):
         tests = module('test-extension-size-report')
         fixture = tests.ExtensionSizeReportTests()
         fixture.package(self.root)
-        self.app.rmdir() if not list(self.app.iterdir()) else None
         import shutil
         shutil.rmtree(self.app)
         for name in ['orphan.zip', 'unknown.json', 'sample.zip.sha256']:

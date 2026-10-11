@@ -1,6 +1,7 @@
 import argparse
 import hashlib
 import json
+import importlib.util
 from pathlib import Path
 import tempfile
 import stat
@@ -41,11 +42,12 @@ def artifact_inventory(directory, expected, additional=None):
             raise ValueError("Invalid additional release artifact")
         allowed[name] = category
     result = []
+    files = set(snapshot.files)
     for path in snapshot.entries:
         if path == snapshot.root:
             continue
         name = path.relative_to(snapshot.root).as_posix()
-        if name not in allowed or path not in snapshot.files:
+        if name not in allowed or path not in files:
             raise ValueError(f"Unexpected artifact inventory entry: {name}; packages must match every extension")
         result.append({"name": name, "category": allowed[name], "bytes": snapshot.entries[path][3],
                        "sha256": digest_file(path)})
@@ -133,16 +135,34 @@ def main():
     parser.add_argument("--packages", required=True, type=Path)
     parser.add_argument("--manifest", type=Path, default=Path("Extensions/manifest.json"))
     parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--host-build", required=True, type=Path)
     parser.add_argument("--package-source", required=True)
     parser.add_argument("--output", required=True, type=Path)
     arguments = parser.parse_args()
     baseline = json.loads(arguments.baseline.read_text())
     expected = [entry["id"] for entry in json.loads(arguments.manifest.read_text())]
+    specification = importlib.util.spec_from_file_location("host_size_validation", Path(__file__).with_name("extension-host-size-report.py"))
+    validation = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(validation)
+    source = validation.read_source_state(Path.cwd())
+    build = json.loads(read_bytes(arguments.host_build))
+    validation.validate_final_source(arguments.source_commit, source, build)
+    if build.get("hostExecutableSHA256") != digest_file(arguments.app / "Contents/MacOS/Edith"):
+        raise ValueError("Host build metadata differs from measured app")
     result = compare(baseline, measure_app(arguments.app), measure_packages(arguments.packages, expected))
+    result["releaseArtifactInventory"] = artifact_inventory(arguments.packages, expected)
+    result["releaseArtifactBytesByCategory"] = {}
+    for asset in result["releaseArtifactInventory"]:
+        category = asset["category"]
+        result["releaseArtifactBytesByCategory"][category] = result["releaseArtifactBytesByCategory"].get(category, 0) + asset["bytes"]
+    validation.validate_final_source(arguments.source_commit, validation.read_source_state(Path.cwd()), build)
     result["measurement"] = {
         "baselineSourceCommit": baseline["sourceCommit"],
         "appSourceCommit": arguments.source_commit,
         "packageSource": arguments.package_source,
+        "appSourceCommitVerified": True,
+        "hostBuild": {key: build[key] for key in validation.BUILD_FIELDS if key in build},
+        "currentPackageSourceFingerprintsVerified": False,
         "architecture": "arm64",
         "appZipMethod": "Regular files only, symlinks excluded, ZIP deflate level 9. Comparison metric, not a shipping installer.",
         "installedMethod": "Logical file bytes including packaged models, excluding filesystem block rounding, receipts, external downloaded models, caches, user data and retained previous versions.",
