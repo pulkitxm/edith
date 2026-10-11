@@ -18,6 +18,9 @@ final class ExtensionRuntime: NSObject {
 
     private var fixture: WorkerFixtureAdmission?
     private let commands = ExtensionCommandRegistry()
+    private var suspended = false
+    private var suspension: Task<Void, Never>?
+    private var retiredPresentations: [UUID: Task<Void, Never>] = [:]
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -72,13 +75,54 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        commands.suspend()
+        suspended = true
+        let service = service
+        let presentation = presentation
+        presentation?.stop()
+        let panel = fixture == nil ? EmojiPanel.shared : nil
+        service?.shutdown()
+        panel?.cancelPendingWork()
+        if suspension == nil {
+            let presentations = Array(retiredPresentations.values)
+            suspension = Task { [self, service, panel, presentation] in
+                await commands.suspendAndWait()
+                await service?.drain()
+                await panel?.drain()
+                await presentation?.stopAndWait()
+                for task in presentations { await task.value }
+            }
+        }
+        let pending = suspension
+        Task { [self] in
+            await pending?.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        Task {
-            await commands.shutdownAndWait()
-            _ = execute(["operation": "stop"])
-            completion()
+        suspendCommands { [self] in
+            Task { [self] in
+                await commands.shutdownAndWait()
+                _ = execute(["operation": "stop"])
+                for task in Array(retiredPresentations.values) { await task.value }
+                completion()
+            }
         }
+    }
+
+    private func retirePresentation() {
+        guard let presentation else { return }
+        presentation.stop()
+        let id = UUID()
+        retiredPresentations[id] = Task { [self, presentation] in
+            await presentation.stopAndWait()
+            retiredPresentations[id] = nil
+        }
+        self.presentation = nil
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
@@ -92,22 +136,23 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
-            guard let configuration = ExtensionUIConfiguration(context: input),
+            guard !suspended, retiredPresentations.isEmpty,
+                let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "emoji",
                 configuration.defaultsSuite
                     == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
-            presentation?.stop()
+            retirePresentation()
             presentation = ControlPresentation(client: configuration.engineClient)
             return ["ok": true] as NSDictionary
         case "stopUI":
-            presentation?.stop()
-            presentation = nil
+            retirePresentation()
             return ["ok": true] as NSDictionary
         case "prepareToStop":
             commands.shutdown()
             return ["ok": true] as NSDictionary
         case "start":
+            guard !suspended else { return ["ok": false] as NSDictionary }
             do {
                 fixture = try WorkerFixtureAdmission.current(
                     extensionID: "emoji", context: input,
@@ -180,8 +225,8 @@ final class ExtensionRuntime: NSObject {
             IPC.post(IPC.Name.settingsChanged)
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
-            presentation?.stop()
-            presentation = nil
+            suspendCommands(completion: {})
+            retirePresentation()
             commands.shutdown()
             if fixture == nil { EmojiPanel.shared.hide(); EmojiPanel.shared.store = nil }
             service?.shutdown()
@@ -197,13 +242,16 @@ final class ExtensionRuntime: NSObject {
     }
 
     private func showPanel() {
-        guard fixture == nil else { return }
+        guard !suspended, fixture == nil else { return }
         EmojiPanel.shared.show()
     }
 
     private func registerHotKey() {
-        guard fixture == nil else { return }
-        HotKeyRegistrar.install(HotKeyCatalog.emoji) { EmojiPanel.shared.toggle() }
+        guard !suspended, fixture == nil else { return }
+        HotKeyRegistrar.install(HotKeyCatalog.emoji) { [weak self] in
+            guard self?.suspended == false else { return }
+            EmojiPanel.shared.toggle()
+        }
     }
 }
 

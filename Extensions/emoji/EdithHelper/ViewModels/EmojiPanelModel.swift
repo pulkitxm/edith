@@ -51,6 +51,11 @@ final class EmojiPanelModel {
     @ObservationIgnored private var renderedCounts: [String: Int] = [:]
     @ObservationIgnored private var generation: UInt64 = 0
     @ObservationIgnored private(set) var searchTask: Task<Void, Never>?
+    @ObservationIgnored private var searchToken: UUID?
+    @ObservationIgnored private var pendingSearch: (String, UInt64)?
+    @ObservationIgnored private var focusTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingFocus: (@MainActor () -> Void)?
+    @ObservationIgnored private var stopped = false
 
     init(catalog: EmojiCatalog, frequent: [Emoji], search: Search? = nil) {
         self.catalog = catalog
@@ -74,28 +79,79 @@ final class EmojiPanelModel {
     }
 
     func setQuery(_ value: String) {
+        guard !stopped else { return }
         query = value
         generation &+= 1
-        let requestedGeneration = generation
         searchTask?.cancel()
         let normalized = EmojiSearch.normalize(value)
         guard !normalized.isEmpty else {
+            pendingSearch = nil
             isSearching = false
-            searchTask = nil
             apply(baseProjection, resetSelection: true)
             return
         }
         isSearching = true
+        pendingSearch = (normalized, generation)
+        startSearch()
+    }
+
+    private func startSearch() {
+        guard !stopped, searchTask == nil, let (normalized, requestedGeneration) = pendingSearch
+        else {
+            return
+        }
+        pendingSearch = nil
+        let token = UUID()
+        searchToken = token
         let search = search
-        searchTask = Task { [weak self] in
+        searchTask = Task { [self] in
+            defer {
+                if searchToken == token {
+                    searchToken = nil
+                    searchTask = nil
+                    startSearch()
+                }
+            }
             let result = await search(normalized)
-            guard !Task.isCancelled else { return }
-            self?.publishSearch(
-                result, normalizedQuery: normalized, generation: requestedGeneration)
+            guard !stopped, !Task.isCancelled else { return }
+            publishSearch(result, normalizedQuery: normalized, generation: requestedGeneration)
         }
     }
 
+    func scheduleFocus(_ operation: @escaping @MainActor () -> Void) {
+        guard !stopped else { return }
+        pendingFocus = operation
+        startFocus()
+    }
+
+    private func startFocus() {
+        guard !stopped, focusTask == nil, pendingFocus != nil else { return }
+        focusTask = Task { [self] in
+            defer {
+                focusTask = nil
+                startFocus()
+            }
+            await Task.yield()
+            guard !stopped, !Task.isCancelled else { return }
+            let operation = pendingFocus
+            pendingFocus = nil
+            operation?()
+        }
+    }
+
+    func stop() {
+        stopped = true
+        cancelSearch()
+    }
+
+    func stopAndWait() async {
+        stop()
+        await searchTask?.value
+        await focusTask?.value
+    }
+
     func updateFrequent(_ frequent: [Emoji]) {
+        guard !stopped else { return }
         let updated = Self.baseSections(catalog: catalog, frequent: frequent)
         guard updated != baseSections else { return }
         baseSections = updated
@@ -106,6 +162,7 @@ final class EmojiPanelModel {
     }
 
     func reset(frequent: [Emoji]) {
+        guard !stopped else { return }
         cancelSearch()
         query = ""
         let updated = Self.baseSections(catalog: catalog, frequent: frequent)
@@ -119,7 +176,9 @@ final class EmojiPanelModel {
     func cancelSearch() {
         generation &+= 1
         searchTask?.cancel()
-        searchTask = nil
+        pendingSearch = nil
+        focusTask?.cancel()
+        pendingFocus = nil
         isSearching = false
     }
 

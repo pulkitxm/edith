@@ -121,6 +121,8 @@ final class ControlPresentation {
     private var defaultsObserver: NSObjectProtocol?
     private var baseline: [String: Any] = [:]
     private var reading = false
+    private var readTask: Task<Void, Never>?
+    private var callbacks: [UUID: Task<Void, Never>] = [:]
     private static let pendingPreferencesKey = "utilityControlsPendingPreferences"
     private var applying = false
     private var stopped = false
@@ -233,7 +235,20 @@ final class ControlPresentation {
     func refresh() async {
         guard active, !stopped, !reading, writing == nil, actions.isEmpty else { return }
         reading = true
-        defer { reading = false }
+        let task = Task { [self] in
+            defer { reading = false; readTask = nil }
+            guard !Task.isCancelled else { return }
+            await readPreferences()
+        }
+        readTask = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func readPreferences() async {
         let revision = revision
         let request = load.begin()
         defer { if load.owns(request), load.isRunning { load.cancel(request) } }
@@ -298,18 +313,44 @@ final class ControlPresentation {
         }
     }
 
+    func scheduleRefresh() {
+        guard active, !stopped, callbacks.isEmpty else { return }
+        let id = UUID()
+        callbacks[id] = Task { [self] in
+            defer { callbacks[id] = nil }
+            guard !Task.isCancelled else { return }
+            await refresh()
+        }
+    }
+
     func stop() {
         guard !stopped else { return }
         stopped = true
+        let values = ControlPresentationContract.values(
+            from: defaults, keys: ControlPresentationContract.writable)
+        if !(values as NSDictionary).isEqual(to: baseline) {
+            do { try queuePreferences(values) } catch { self.error = error.localizedDescription }
+        }
         revision += 1
         load.cancel()
-        writing?.cancel(); writing = nil
-        actions.values.forEach { $0.cancel() }; actions.removeAll()
+        writing?.cancel()
+        readTask?.cancel()
+        for task in actions.values { task.cancel() }
+        for task in callbacks.values { task.cancel() }
         IPC.stopObserving(observer); observer = nil
         if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver) }
         defaultsObserver = nil
         client?.invalidate()
     }
+
+    func stopAndWait() async {
+        stop()
+        let pending =
+            [writing, readTask].compactMap { $0 }
+            + Array(actions.values) + Array(callbacks.values)
+        for task in pending { await task.value }
+    }
+
 }
 
 import EdithExtensionUI
@@ -346,6 +387,6 @@ struct ControlSettingsHost<Content: View>: View {
 
     private func retry() {
         presentation.changed()
-        Task { await presentation.refresh() }
+        presentation.scheduleRefresh()
     }
 }

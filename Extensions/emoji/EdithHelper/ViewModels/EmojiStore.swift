@@ -29,6 +29,7 @@ final class EmojiStore: FeatureModule {
     private var settingsObserver: NSObjectProtocol?
     private var insertionTasks: [UUID: Task<Void, Never>] = [:]
     private var insertionCompletions: [UUID: @MainActor (Bool) -> Void] = [:]
+    private var callbackTasks: [UUID: Task<Void, Never>] = [:]
     private var isShutDown = false
     private let insertionDelay: Duration
     private let typeCharacter: @MainActor (String) -> Bool
@@ -81,7 +82,9 @@ final class EmojiStore: FeatureModule {
         skinTone = EmojiSkinTone.stored(forKey: AppStorageKeys.Emoji.skinTone, store: defaults)
         refreshFrequent()
         settingsObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
-            Task { @MainActor in self?.adoptSettings() }
+            MainActor.assumeIsolated {
+                self?.startCallback { [weak self] in self?.adoptSettings() }
+            }
         }
     }
 
@@ -91,10 +94,26 @@ final class EmojiStore: FeatureModule {
         if let settingsObserver { IPC.stopObserving(settingsObserver) }
         settingsObserver = nil
         insertionTasks.values.forEach { $0.cancel() }
-        insertionTasks.removeAll()
+        callbackTasks.values.forEach { $0.cancel() }
         let completions = insertionCompletions.values
         insertionCompletions.removeAll()
         completions.forEach { $0(false) }
+    }
+
+    private func startCallback(_ operation: @escaping @MainActor () -> Void) {
+        guard !isShutDown else { return }
+        let id = UUID()
+        callbackTasks[id] = Task { [self] in
+            defer { callbackTasks[id] = nil }
+            guard !isShutDown, !Task.isCancelled else { return }
+            operation()
+        }
+    }
+
+    func drain() async {
+        shutdown()
+        let pending = Array(insertionTasks.values) + Array(callbackTasks.values)
+        for task in pending { await task.value }
     }
 
     func emoji(inGroup index: Int) -> [Emoji] {
@@ -134,13 +153,17 @@ final class EmojiStore: FeatureModule {
         }
         let id = UUID()
         insertionCompletions[id] = completion
-        insertionTasks[id] = Task { @MainActor [weak self] in
+        insertionTasks[id] = Task { @MainActor [self] in
+            defer {
+                insertionTasks[id] = nil
+                finishInsertion(id: id, inserted: false)
+            }
             do {
-                try await Task.sleep(for: self?.insertionDelay ?? .zero)
+                try await Task.sleep(for: insertionDelay)
             } catch {
                 return
             }
-            guard let self, !Task.isCancelled else { return }
+            guard !isShutDown, !Task.isCancelled else { return }
             let inserted = self.typeCharacter(character)
             if inserted { self.record(character) }
             self.finishInsertion(id: id, inserted: inserted)
@@ -172,7 +195,6 @@ final class EmojiStore: FeatureModule {
     }
 
     private func finishInsertion(id: UUID, inserted: Bool) {
-        insertionTasks[id] = nil
         let completion = insertionCompletions.removeValue(forKey: id)
         completion?(inserted)
     }
