@@ -355,10 +355,13 @@ test("independent peer observation acknowledges exact source and owned generatio
   ];
   let running = false;
   let auditCalls = 0;
+  let samples = 0;
   let acknowledgedBeforeHostObservation = false;
   const commandStarted = Promise.withResolvers();
   const firstSampleCompleted = Promise.withResolvers();
   const continueObservation = Promise.withResolvers();
+  const acknowledgementPublished = Promise.withResolvers();
+  const commandExited = Promise.withResolvers();
   try {
     const result = await runManagedOwner({
       fixture,
@@ -368,9 +371,13 @@ test("independent peer observation acknowledges exact source and owned generatio
       environment,
       configure: () => {},
       pause: async () => {
-        firstSampleCompleted.resolve();
-        await continueObservation.promise;
-        await new Promise((resolve) => setImmediate(resolve));
+        if (++samples === 1) {
+          firstSampleCompleted.resolve();
+          await continueObservation.promise;
+        } else {
+          acknowledgementPublished.resolve();
+          await commandExited.promise;
+        }
       },
       audit: async () => {
         const snapshot = running ? [host] : [];
@@ -390,22 +397,11 @@ test("independent peer observation acknowledges exact source and owned generatio
           } catch (error) {
             if (error.code !== "ENOENT") throw error;
             continueObservation.resolve();
+            await acknowledgementPublished.promise;
           }
-          const deadline = Date.now() + 1000;
-          let acknowledgement;
-          while (Date.now() < deadline) {
-            try {
-              acknowledgement = JSON.parse(
-                await readFile(
-                  join(fixture.directory, "managed-peer-ack.json"),
-                ),
-              );
-              break;
-            } catch (error) {
-              if (error.code !== "ENOENT") throw error;
-              await new Promise((resolve) => setTimeout(resolve, 1));
-            }
-          }
+          const acknowledgement = JSON.parse(
+            await readFile(join(fixture.directory, "managed-peer-ack.json")),
+          );
           expect(acknowledgement.sourceCommit).toBe(source);
           expect(acknowledgement.extensionID).toBe("music");
           expect(acknowledgement.processes).toEqual(
@@ -420,10 +416,10 @@ test("independent peer observation acknowledges exact source and owned generatio
             JSON.stringify(proof),
             { mode: 0o600 },
           );
-          running = false;
         } finally {
           running = false;
           continueObservation.resolve();
+          commandExited.resolve();
         }
       },
     });
@@ -432,6 +428,223 @@ test("independent peer observation acknowledges exact source and owned generatio
     expect(result.observedOwnedProcesses).toHaveLength(3);
     expect(result.cleanup.independentlyPinnedGenerationsExited).toBe(true);
     expect(result.cleanup.actions).toEqual([]);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("owned peers cannot acknowledge or complete without an independent Host observation", async () => {
+  const fixture = await setup();
+  const host = {
+    pid: 101,
+    generation: "100.1",
+    uid: process.getuid(),
+    executable: join(fixture.app, "Contents/MacOS/Edith"),
+    hostIdentifier: fixture.identifier,
+  };
+  const peers = [
+    { ...host, role: "host" },
+    { ...host, pid: 102, role: "engine" },
+    {
+      ...host,
+      pid: 103,
+      role: "ui",
+      executable: managedProcessPaths(fixture).ui,
+    },
+  ];
+  const commandStarted = Promise.withResolvers();
+  const sampleCompleted = Promise.withResolvers();
+  const commandExited = Promise.withResolvers();
+  let running = false;
+  try {
+    await expect(
+      runManagedOwner({
+        fixture,
+        owner,
+        plan: "plan",
+        resultBundle: "result",
+        environment,
+        configure: () => {},
+        audit: async () => [],
+        inspectOwned: async () => {
+          await commandStarted.promise;
+          return running ? peers : [];
+        },
+        pause: async () => {
+          sampleCompleted.resolve();
+          await commandExited.promise;
+        },
+        cleanupControl: async () => [],
+        runCommand: async () => {
+          running = true;
+          commandStarted.resolve();
+          try {
+            await sampleCompleted.promise;
+            await expect(
+              readFile(join(fixture.directory, "managed-peer-ack.json")),
+            ).rejects.toHaveProperty("code", "ENOENT");
+            await writeFile(
+              join(fixture.directory, "result-managed-shipping.json"),
+              JSON.stringify(proof),
+              { mode: 0o600 },
+            );
+          } finally {
+            running = false;
+            commandExited.resolve();
+          }
+        },
+      }),
+    ).rejects.toThrow(
+      "No actual independently observed fixture Host execution",
+    );
+    const cleanup = JSON.parse(
+      await readFile(join(fixture.directory, "cleanup-result.json")),
+    );
+    expect(cleanup.observedGenerations).toHaveLength(3);
+    expect(cleanup.managedViewPassed).toBe(false);
+    await expect(
+      readFile(join(fixture.directory, "execution-result.json")),
+    ).rejects.toHaveProperty("code", "ENOENT");
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+for (const invalid of ["identifier", "uid", "executable", "generation"]) {
+  test(`independent Host with invalid ${invalid} cannot acknowledge owned peers`, async () => {
+    const fixture = await setup();
+    const host = {
+      pid: 101,
+      generation: "100.1",
+      uid: process.getuid(),
+      executable: join(fixture.app, "Contents/MacOS/Edith"),
+      hostIdentifier: fixture.identifier,
+    };
+    const foreign = {
+      ...host,
+      ...(invalid === "identifier" && { hostIdentifier: "foreign.fixture" }),
+      ...(invalid === "uid" && { uid: process.getuid() + 1 }),
+      ...(invalid === "executable" && { executable: "/foreign/Edith" }),
+      ...(invalid === "generation" && { generation: "unknown" }),
+    };
+    const commandStarted = Promise.withResolvers();
+    const auditRequested = Promise.withResolvers();
+    let running = false;
+    let auditCalls = 0;
+    try {
+      await expect(
+        runManagedOwner({
+          fixture,
+          owner,
+          plan: "plan",
+          resultBundle: "result",
+          environment,
+          configure: () => {},
+          audit: async () => {
+            if (++auditCalls === 2) {
+              await commandStarted.promise;
+              auditRequested.resolve();
+              return [foreign];
+            }
+            return [];
+          },
+          inspectOwned: async () => {
+            return running ? [{ ...host, pid: 102, role: "engine" }] : [];
+          },
+          cleanupControl: async () => [],
+          runCommand: async () => {
+            running = true;
+            commandStarted.resolve();
+            try {
+              await auditRequested.promise;
+              await expect(
+                readFile(join(fixture.directory, "managed-peer-ack.json")),
+              ).rejects.toHaveProperty("code", "ENOENT");
+              await writeFile(
+                join(fixture.directory, "result-managed-shipping.json"),
+                JSON.stringify(proof),
+                { mode: 0o600 },
+              );
+            } finally {
+              running = false;
+            }
+          },
+        }),
+      ).rejects.toHaveProperty("code", "ERR_ASSERTION");
+      await expect(
+        readFile(join(fixture.directory, "execution-result.json")),
+      ).rejects.toHaveProperty("code", "ENOENT");
+      const cleanup = JSON.parse(
+        await readFile(join(fixture.directory, "cleanup-result.json")),
+      );
+      expect(cleanup.observedGenerations).toEqual([]);
+      expect(cleanup.managedViewPassed).toBe(false);
+    } finally {
+      await rm(fixture.directory, { recursive: true, force: true });
+    }
+  });
+}
+
+test("command exit waits for an in-flight independent Host observation to finish", async () => {
+  const fixture = await setup();
+  const host = {
+    pid: 101,
+    generation: "100.1",
+    uid: process.getuid(),
+    executable: join(fixture.app, "Contents/MacOS/Edith"),
+    hostIdentifier: fixture.identifier,
+  };
+  const commandStarted = Promise.withResolvers();
+  const hostCaptured = Promise.withResolvers();
+  const commandExited = Promise.withResolvers();
+  let running = false;
+  let auditCalls = 0;
+  try {
+    const result = await runManagedOwner({
+      fixture,
+      owner,
+      plan: "plan",
+      resultBundle: "result",
+      environment,
+      configure: () => {},
+      audit: async () => {
+        if (++auditCalls !== 2) return [];
+        await commandStarted.promise;
+        expect(running).toBe(true);
+        const snapshot = [{ ...host }];
+        hostCaptured.resolve();
+        await commandExited.promise;
+        expect(running).toBe(false);
+        return snapshot;
+      },
+      inspectOwned: async () => [],
+      cleanupControl: async () => [],
+      runCommand: async () => {
+        running = true;
+        commandStarted.resolve();
+        try {
+          await hostCaptured.promise;
+          await writeFile(
+            join(fixture.directory, "result-managed-shipping.json"),
+            JSON.stringify(proof),
+            { mode: 0o600 },
+          );
+        } finally {
+          running = false;
+          commandExited.resolve();
+        }
+      },
+    });
+    expect(result.hostObservations).toEqual([
+      { pid: host.pid, generation: host.generation, uid: host.uid },
+    ]);
+    expect(result.observedOwnedProcesses).toEqual([
+      { pid: host.pid, generation: host.generation, role: "host" },
+    ]);
+    expect(result.cleanup.actions).toEqual([]);
+    await expect(
+      readFile(join(fixture.directory, "managed-peer-ack.json")),
+    ).rejects.toHaveProperty("code", "ENOENT");
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
