@@ -132,9 +132,9 @@ ${updated}`,
     const end = source.indexOf("    private func sparkleAction(");
     assert(end > source.indexOf(manualReplacement));
     source = `${beginning}${arm}
+        XCTAssertTrue(application.buttons["Cancel Update"].firstMatch.waitForExistence(timeout: 30))
+        try click(application.buttons["Cancel Update"].firstMatch, in: application)
         try await sparkleAction("verifySparkleRejection", fixture: fixture)
-        XCTAssertTrue(application.buttons["OK"].firstMatch.waitForExistence(timeout: 15))
-        try click(application.buttons["OK"].firstMatch, in: application)
         XCTAssertFalse(application.buttons["Install and Relaunch"].exists)
         try verifyProtected(fixture)
         journeyFinished = true

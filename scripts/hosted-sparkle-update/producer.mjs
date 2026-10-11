@@ -23,6 +23,7 @@ export function admitSparkleProducer(environment, sourceCommit) {
       "refs/heads/feat/hosted-sparkle-update",
       "refs/heads/feat/hosted-sparkle-execution",
       "refs/heads/feat/hosted-sparkle-ui-flow",
+      "refs/heads/feat/hosted-sparkle-verification",
     ].includes(environment.GITHUB_REF),
   );
   assert(
