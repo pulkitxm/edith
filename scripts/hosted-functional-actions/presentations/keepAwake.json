@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "owner": "keepAwake",
+  "location": "settings",
+  "section": "keepAwake",
+  "operation": "keepAwake.ui.update",
+  "steps": [
+    {
+      "role": "checkBox",
+      "label": "Keep awake",
+      "action": "set-checkbox",
+      "value": false
+    },
+    {
+      "role": "checkBox",
+      "label": "Keep awake",
+      "action": "set-checkbox",
+      "value": true
+    }
+  ],
+  "sources": [
+    {
+      "path": "Extensions/keepAwake/Runtime.swift",
+      "sha256": "b00cc9599bc1179b44478e56877cc7e28ab30006e8478141481333836a615407"
+    },
+    {
+      "path": "Extensions/keepAwake/Views/KeepAwakeSettings.swift",
+      "sha256": "501b0d046998c83a0153df6430c74c3e8a8571de26e03a0188b22babc76a0b2a"
+    }
+  ]
+}
