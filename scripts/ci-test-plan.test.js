@@ -11,6 +11,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { planSwiftTests } from "./ci-test-plan.mjs";
+import {
+  extensionFingerprint,
+  planExtensionBuilds,
+  planPullRequestBuilds,
+} from "./extension-release-plan.mjs";
 
 const definitions = JSON.parse(
   readFileSync("Extensions/manifest.json", "utf8"),
@@ -84,9 +89,20 @@ test.each([
 ])(
   "test-only edits select the exact standalone owner %s",
   (id, path, targets, ghostty) => {
-    expect(planSwiftTests([`Extensions/${id}/${path}`]).include).toEqual([
+    const changed = [`Extensions/${id}/${path}`];
+    const owners = definitions.map((definition) => ({
+      ...definition,
+      sameExecutableWorker: false,
+    }));
+    expect(planSwiftTests(changed).include).toEqual([
       { lane: `extension-${id}`, extension: id, targets, ghostty },
     ]);
+    expect(planExtensionBuilds(owners, changed).map(({ id }) => id)).toEqual([
+      id,
+    ]);
+    expect(planPullRequestBuilds(definitions, changed, definitions)).toEqual(
+      [],
+    );
   },
 );
 
@@ -540,9 +556,6 @@ test("every tracked standalone package declares an executable owning test target
 });
 
 test("shared fixture test sources select one umbrella without a release build", async () => {
-  const { extensionFingerprint, planExtensionBuilds } = await import(
-    "./extension-release-plan.mjs"
-  );
   const paths = [
     "Extensions/fixtureSupport/Tests/WorkerFixtureAdmissionTests.swift",
     "Extensions/fixtureSupport/Tests/Support/EngineFixture.swift",
@@ -550,12 +563,24 @@ test("shared fixture test sources select one umbrella without a release build", 
   expect(planSwiftTests(paths).include).toEqual([
     { lane: "feature-models", targets: "ci-extension-support" },
   ]);
-  expect(planExtensionBuilds(definitions, paths)).toEqual([]);
+  expect(planPullRequestBuilds(definitions, paths, definitions)).toEqual([]);
+  expect(planExtensionBuilds(definitions, paths)).toEqual(definitions);
+  expect(definitions).toHaveLength(39);
+  for (const path of [
+    "Packages/EdithHost/Sources/EdithHost/HostWorkerStartAdmission.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostCoreAdmission.swift",
+    "Extensions/fixtureSupport/Package.swift",
+    "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
+    "Extensions/fixtureSupport/FutureAdmission.swift",
+  ])
+    expect(planPullRequestBuilds(definitions, [path], definitions)).toEqual(
+      definitions,
+    );
   const root = mkdtempSync(join(tmpdir(), "fixture-test-fingerprint-"));
   const definition = {
     id: "focusDim",
     inputs: ["Extensions/focusDim"],
-    sharedInputs: ["Extensions/fixtureSupport/WorkerFixtureAdmission.swift"],
+    sharedInputs: ["Extensions/fixtureSupport"],
     dependencies: [],
   };
   try {
@@ -567,13 +592,19 @@ test("shared fixture test sources select one umbrella without a release build", 
       join(root, "Extensions/focusDim/Runtime.swift"),
       "owned runtime",
     );
-    const helper = join(root, definition.sharedInputs[0]);
+    const helper = join(
+      root,
+      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
+    );
     writeFileSync(helper, "owned admission");
     const original = await extensionFingerprint(root, definition, [definition]);
-    writeFileSync(join(root, paths[0]), "updated admission regression");
-    expect(await extensionFingerprint(root, definition, [definition])).toBe(
-      original,
-    );
+    for (const path of paths) {
+      mkdirSync(join(root, path, ".."), { recursive: true });
+      writeFileSync(join(root, path), "updated admission regression");
+      expect(await extensionFingerprint(root, definition, [definition])).toBe(
+        original,
+      );
+    }
     writeFileSync(helper, "updated production admission");
     expect(await extensionFingerprint(root, definition, [definition])).not.toBe(
       original,
