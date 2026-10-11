@@ -10,6 +10,24 @@ import SwiftUI
 
 @MainActor
 final class HostRemoteApplication {
+    #if EDITH_FUNCTIONAL_FIXTURE
+    struct FixtureStopPreparation {
+        let token: UUID
+        let configuration: HostRemoteConfiguration?
+        let roles: [String]
+        let presentations: [UUID]
+    }
+    static var fixtureObserveStopPreparation: ((FixtureStopPreparation) throws -> Void)?
+    static var fixtureObserveCommandRetirement: ((UUID) throws -> Void)?
+    private var fixtureRetirementObserver: NSObjectProtocol?
+    private var fixtureRetirementFailure: Error?
+    static var fixtureAdmitConfiguration: ((HostRemoteConfiguration) async throws -> Void)?
+    static var fixtureAdmitBeforeConstruction:
+        (
+            (HostRemoteConfiguration, HostRemotePresentation, NSDictionary, [URL]) throws ->
+                [HostFixtureRoleAdmission]
+        )?
+    #endif
     static let shared: HostRemoteApplication = {
         do { return try HostRemoteApplication() } catch {
             exit(1)
@@ -27,6 +45,9 @@ final class HostRemoteApplication {
     private var presentationRuntimes: [UUID: ExtensionBundleRuntime] = [:]
     private var terminalRenderer = HostRemoteTerminalRenderer()
     private var stopping = false
+    private let stopPreparation = HostWorkerPreparation()
+    private var exitScheduled = false
+    private var exitTask: Task<Void, Never>?
 
     private init() throws {
         let bundle = Bundle.main
@@ -52,6 +73,27 @@ final class HostRemoteApplication {
         self.extensionID = extensionID
         self.version = version
         payload = bundle.bundleURL.appendingPathComponent("Contents/Resources/Payload")
+        #if EDITH_FUNCTIONAL_FIXTURE
+        fixtureRetirementObserver = NotificationCenter.default.addObserver(
+            forName: ExtensionCommandRegistry.ownerJoinedNotification, object: nil, queue: nil
+        ) { [weak self] notification in
+            guard let value = notification.userInfo?["token"] as? String,
+                let token = UUID(uuidString: value)
+            else { return }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                do {
+                    guard let observe = Self.fixtureObserveCommandRetirement else {
+                        throw HostWorkerError.rejected
+                    }
+                    try observe(token)
+                } catch {
+                    self.fixtureRetirementFailure = error
+                    self.shutdown()
+                }
+            }
+        }
+        #endif
         let hostExecutable = URL(fileURLWithPath: executable)
         if hostIdentifier == "com.pulkit.edith",
             executable != "/Applications/Edith.app/Contents/MacOS/Edith"
@@ -100,6 +142,11 @@ final class HostRemoteApplication {
     }
 
     private func execute(_ command: HostRemoteCommand) async throws -> Data {
+        if command.operation == "stop" {
+            try await beginShutdown(token: command.token).value.get()
+            scheduleExit()
+            return Data()
+        }
         guard !stopping else { throw HostWorkerError.exited }
         switch command.operation {
         case "configure":
@@ -108,6 +155,12 @@ final class HostRemoteApplication {
                 HostRemoteConfiguration.self, from: command.payload)
             try next.validate(
                 hostIdentifier: hostIdentifier, extensionID: extensionID, version: version)
+            #if EDITH_FUNCTIONAL_FIXTURE
+            guard let admit = Self.fixtureAdmitConfiguration else { throw HostWorkerError.rejected }
+            try await admit(next)
+            try Task.checkCancellation()
+            guard !stopping, configuration == nil else { throw HostWorkerError.rejected }
+            #endif
             let suite = Bundle.main.bundleIdentifier!
             setenv("EDITH_APPLICATION_IDENTIFIER", hostIdentifier, 1)
             setenv("EDITH_EXTENSION_ID", extensionID, 1)
@@ -159,9 +212,6 @@ final class HostRemoteApplication {
                     context: ["presentationID": id.uuidString])
             }
             return Data()
-        case "stop":
-            shutdown()
-            return Data()
         default: throw HostWorkerError.rejected
         }
     }
@@ -171,27 +221,6 @@ final class HostRemoteApplication {
     ) throws -> ExtensionBundlePresentation {
         guard let configuration, !stopping else { throw HostWorkerError.rejected }
         try presentation.validate(session: configuration.session, extensionID: extensionID)
-        if runtimes.isEmpty {
-            let team = ExtensionCodeSignature.teamIdentifier()
-            let development = try configuration.worker.identity().development
-            for role in [ExtensionBundleRuntime.Role.app, .helper, .agent] {
-                let bundle = payload.appendingPathComponent(extensionID).appendingPathComponent(
-                    "\(role.rawValue).bundle")
-                guard FileManager.default.fileExists(atPath: bundle.path) else { continue }
-                runtimes.append(
-                    try ExtensionBundleRuntime(
-                        readOnlyPackage: configuration.package, directory: payload, role: role,
-                        hostABI: HostContract.compatibility,
-                        verify: { url in
-                            if development {
-                                try ExtensionCodeSignature.verifyDevelopment(url)
-                            } else {
-                                guard let team else { throw MarketplaceError.invalidSignature }
-                                try ExtensionCodeSignature.verify(url, teamIdentifier: team)
-                            }
-                        }))
-            }
-        }
         let input = NSMutableDictionary(dictionary: [
             "remoteUI": true, "uiOnly": configuration.uiOnly,
             "location": presentation.request.location,
@@ -221,6 +250,95 @@ final class HostRemoteApplication {
             input["tile"] = try JSONEncoder().encode(surface.tile)
             input["target"] = surface.target.rawValue
         }
+        #if EDITH_FUNCTIONAL_FIXTURE
+        guard let admit = Self.fixtureAdmitBeforeConstruction else {
+            throw HostWorkerError.rejected
+        }
+        input["dataDirectory"] = try configuration.worker.identity().extensionDirectory(extensionID)
+            .path
+        let roles = [ExtensionBundleRuntime.Role.app, .helper, .agent].map {
+            payload.appendingPathComponent(extensionID).appendingPathComponent(
+                "\($0.rawValue).bundle")
+        }.filter { FileManager.default.fileExists(atPath: $0.path) }
+        guard !roles.isEmpty else { throw HostWorkerError.rejected }
+        let admissionContext = input.mutableCopy() as! NSMutableDictionary
+        admissionContext["operation"] = "configureUI"
+        let admissions = try admit(configuration, presentation, admissionContext, roles)
+        try HostFixtureRoleAdmission.validate(
+            admissions, available: roles,
+            markerKeys: [
+                "sourceCommit", "session", "phase", "descriptorPath", "capabilitySHA256",
+            ])
+        var selectedRuntimes: [(ExtensionBundleRuntime, HostFixtureRoleAdmission)] = []
+        let team = ExtensionCodeSignature.teamIdentifier()
+        let development = try configuration.worker.identity().development
+        for admission in admissions {
+            guard
+                let role = ExtensionBundleRuntime.Role(
+                    rawValue: admission.roleDirectory.deletingPathExtension().lastPathComponent)
+            else { throw HostWorkerError.rejected }
+            let runtime = try admission.withCurrent {
+                if let retained = runtimes.first(where: { $0.role == role }) { return retained }
+                let created = try ExtensionBundleRuntime(
+                    readOnlyPackage: configuration.package, directory: payload, role: role,
+                    hostABI: HostContract.compatibility,
+                    verify: { url in
+                        if development {
+                            try ExtensionCodeSignature.verifyDevelopment(url)
+                        } else {
+                            guard let team else { throw MarketplaceError.invalidSignature }
+                            try ExtensionCodeSignature.verify(url, teamIdentifier: team)
+                        }
+                    })
+                runtimes.append(created)
+                return created
+            }
+            selectedRuntimes.append((runtime, admission))
+        }
+        #else
+        if runtimes.isEmpty {
+            let team = ExtensionCodeSignature.teamIdentifier()
+            let development = try configuration.worker.identity().development
+            for role in [ExtensionBundleRuntime.Role.app, .helper, .agent] {
+                let bundle = payload.appendingPathComponent(extensionID).appendingPathComponent(
+                    "\(role.rawValue).bundle")
+                guard FileManager.default.fileExists(atPath: bundle.path) else { continue }
+                runtimes.append(
+                    try ExtensionBundleRuntime(
+                        readOnlyPackage: configuration.package, directory: payload, role: role,
+                        hostABI: HostContract.compatibility,
+                        verify: { url in
+                            if development {
+                                try ExtensionCodeSignature.verifyDevelopment(url)
+                            } else {
+                                guard let team else { throw MarketplaceError.invalidSignature }
+                                try ExtensionCodeSignature.verify(url, teamIdentifier: team)
+                            }
+                        }))
+            }
+        }
+        #endif
+        #if EDITH_FUNCTIONAL_FIXTURE
+        for (runtime, admission) in selectedRuntimes {
+            input["hostedFunctionalFixture"] = admission.contextMarker
+            let result = try admission.withCurrent {
+                let response = try runtime.response(
+                    id: extensionID, operation: "configureUI", context: input)
+                guard response["ok"] as? Bool == true else {
+                    return nil as ExtensionBundlePresentation?
+                }
+                return try runtime.presentation(
+                    id: extensionID, context: input, compact: presentation.compact,
+                    visible: presentation.visible, width: presentation.availableWidth,
+                    intrinsic: !["main", "settings", "music.detail"].contains(
+                        presentation.request.location))
+            }
+            if let result {
+                presentationRuntimes[presentation.request.presentationID] = runtime
+                return result
+            }
+        }
+        #else
         for runtime in runtimes {
             let response = try runtime.response(
                 id: extensionID, operation: "configureUI", context: input)
@@ -235,6 +353,7 @@ final class HostRemoteApplication {
                 return result
             }
         }
+        #endif
         throw HostWorkerError.rejected
     }
 
@@ -253,18 +372,62 @@ final class HostRemoteApplication {
         }
     }
 
-    private func shutdown() {
-        guard !stopping else { return }
+    private func beginShutdown(token: UUID = UUID()) throws -> Task<Result<Void, Error>, Never> {
         stopping = true
-        slots.forEach { $0.release() }
-        presentationRuntimes.removeAll()
-        terminalRenderer = HostRemoteTerminalRenderer()
-        for runtime in runtimes { _ = try? runtime.response(id: extensionID, operation: "stopUI") }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [self] in
-            endpoint.invalidate()
+        endpoint.closeMutationAdmission()
+        let retainedRuntimes = runtimes
+        let presentations = slots.compactMap { $0.request?.presentationID }
+        slots.forEach { $0.beginClosing() }
+        return try stopPreparation.begin(token: token) { [self] in
+            await endpoint.prepareToStop(excluding: token)
+            for slot in slots { await slot.prepareToStop() }
+            for runtime in retainedRuntimes { try await runtime.suspendRemoteUICommandsAll() }
+            for runtime in retainedRuntimes {
+                for presentationID in presentations {
+                    try await runtime.preparePresentationToClose(
+                        id: extensionID, presentationID: presentationID)
+                }
+                try await runtime.prepareRemoteUIToStopAll()
+                let response = try runtime.response(id: extensionID, operation: "stopUI")
+                guard response["ok"] as? Bool == true else { throw HostWorkerError.rejected }
+            }
+            #if EDITH_FUNCTIONAL_FIXTURE
+            if let failure = fixtureRetirementFailure { throw failure }
+            guard let observe = Self.fixtureObserveStopPreparation else {
+                throw HostWorkerError.rejected
+            }
+            try observe(
+                FixtureStopPreparation(
+                    token: token, configuration: configuration,
+                    roles: retainedRuntimes.map { $0.role.rawValue }, presentations: presentations))
+            #endif
+            slots.forEach { $0.release(reset: false) }
+            presentationRuntimes.removeAll()
+            terminalRenderer = HostRemoteTerminalRenderer()
+        }
+    }
+
+    private func shutdown() {
+        let cleanup = Result { try beginShutdown() }
+        Task { [self] in
+            do {
+                try await cleanup.get().value.get()
+                scheduleExit()
+            } catch {}
+        }
+    }
+
+    private func scheduleExit() {
+        guard !exitScheduled else { return }
+        exitScheduled = true
+        exitTask = Task { [self] in
+            try? await Task.sleep(for: .milliseconds(50))
+            await endpoint.invalidateAndWait()
+            for slot in slots { await slot.invalidateAndWait() }
             exit(0)
         }
     }
+
 }
 
 private struct HostRemoteExtensionConfiguration: AppExtensionConfiguration {
@@ -292,6 +455,7 @@ private final class HostRemoteSceneSlot {
     private let executable: URL
     private let requirement: String
     private var generation = UUID()
+    private var retiringEndpoints: [UUID: Task<Void, Never>] = [:]
 
     init(
         index: Int, executable: URL, requirement: String,
@@ -334,7 +498,22 @@ private final class HostRemoteSceneSlot {
         closing = false
     }
 
-    func beginClosing() { closing = true }
+    func beginClosing() {
+        closing = true
+        endpoint?.closeMutationAdmission()
+    }
+
+    func prepareToStop() async {
+        beginClosing()
+        await endpoint?.prepareToStop()
+        for task in retiringEndpoints.values { await task.value }
+    }
+
+    func invalidateAndWait() async {
+        if let endpoint { await endpoint.invalidateAndWait() }
+        for task in retiringEndpoints.values { await task.value }
+        retiringEndpoints.removeAll()
+    }
 
     private func execute(_ command: HostRemoteCommand) throws -> Data {
         if HostTerminalUIRequest.Operation(rawValue: command.operation) != nil {
@@ -393,15 +572,22 @@ private final class HostRemoteSceneSlot {
         presentation = nil
     }
 
-    func release() {
+    func release(reset: Bool = true) {
         generation = UUID()
         clearView()
         bootstrap.replace(nil)
-        endpoint?.invalidate()
+        if let endpoint {
+            endpoint.invalidate()
+            let token = UUID()
+            retiringEndpoints[token] = Task { [self] in
+                await endpoint.invalidateAndWait()
+                retiringEndpoints[token] = nil
+            }
+        }
         endpoint = nil
         request = nil
         session = nil
-        try? resetEndpoint()
+        if reset { try? resetEndpoint() }
     }
 }
 

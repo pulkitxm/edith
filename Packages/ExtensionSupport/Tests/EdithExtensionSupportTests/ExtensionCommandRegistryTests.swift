@@ -13,6 +13,58 @@ private actor CommandCleanupGate {
 }
 
 @MainActor @Suite struct ExtensionCommandRegistryTests {
+    #if EDITH_FUNCTIONAL_FIXTURE
+    @Test func retirementEventWaitsForActualOwnerTaskAfterCallerCancellation() async throws {
+        let registry = ExtensionCommandRegistry()
+        let token = UUID()
+        var owner: CheckedContinuation<Void, Never>?
+        var callbackReturned = false
+        var joined = 0
+        let observer = NotificationCenter.default.addObserver(
+            forName: ExtensionCommandRegistry.ownerJoinedNotification, object: registry, queue: nil
+        ) { notification in
+            MainActor.assumeIsolated {
+                #expect(notification.userInfo?["token"] as? String == token.uuidString)
+                joined += 1
+            }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        registry.invoke(
+            ["token": token.uuidString, "command": "synthetic.hold", "payload": Data()],
+            completion: { _, _ in callbackReturned = true },
+            execute: { _, _ in
+                await withCheckedContinuation { owner = $0 }
+                return Data()
+            })
+        let ownerDeadline = ContinuousClock.now + .seconds(2)
+        while owner == nil, ContinuousClock.now < ownerDeadline { await Task.yield() }
+        try #require(owner != nil)
+        defer { owner?.resume() }
+        registry.cancel(token.uuidString)
+        #expect(callbackReturned)
+        var suspensionCompleted = false
+        let suspension = Task {
+            let result = await registry.suspendAndWait()
+            suspensionCompleted = true
+            return result
+        }
+        let joinDeadline = ContinuousClock.now + .seconds(2)
+        while registry.pendingJoins == 0, ContinuousClock.now < joinDeadline { await Task.yield() }
+        try #require(registry.pendingJoins > 0)
+        #expect(joined == 0)
+        owner?.resume()
+        owner = nil
+        let completionDeadline = ContinuousClock.now + .seconds(2)
+        while !suspensionCompleted, ContinuousClock.now < completionDeadline { await Task.yield() }
+        try #require(suspensionCompleted)
+        let suspended = await suspension.value
+        #expect(joined == 1)
+        #expect(registry.resume(suspended))
+        await registry.suspendAndWait()
+        #expect(joined == 1)
+    }
+    #endif
+
     @Test(arguments: [false, true])
     func shutdownAwaitsCancelledCommandCleanup(cancelFirst: Bool) async throws {
         let registry = ExtensionCommandRegistry()
@@ -103,6 +155,62 @@ private actor CommandCleanupGate {
         for gate in gates { await gate.release() }
         await registry.shutdownAndWait()
         #expect(!unexpected)
+    }
+
+    @Test func suspensionJoinsActualOwnerAfterCallerCancellationAndAllowsSafeRetry() async throws {
+        let registry = ExtensionCommandRegistry()
+        let gate = CommandCleanupGate()
+        let token = UUID().uuidString
+        var callerCompleted = false
+        var ownerExited = false
+        registry.invoke(
+            ["token": token, "command": "fixture", "payload": Data()] as NSDictionary,
+            completion: { _, _ in callerCompleted = true }
+        ) { _, _ in
+            await gate.pause()
+            ownerExited = true
+            return Data()
+        }
+        while !(await gate.entered) { await Task.yield() }
+        registry.cancel(token)
+        #expect(callerCompleted)
+        #expect(!ownerExited)
+        let suspension = registry.suspend()
+        #expect(!registry.resume(suspension))
+        var drained = false
+        let drain = Task {
+            await registry.suspendAndWait(); drained = true
+        }
+        await Task.yield()
+        #expect(!drained)
+        var admitted = false
+        registry.invoke(
+            ["token": UUID().uuidString, "command": "fixture", "payload": Data()] as NSDictionary,
+            completion: { data, error in #expect(data == nil && error != nil) }
+        ) { _, _ in
+            admitted = true; return Data()
+        }
+        #expect(!admitted)
+        await gate.release()
+        await drain.value
+        #expect(ownerExited)
+        #expect(registry.resume(suspension))
+        let next = registry.suspend()
+        #expect(next != suspension)
+        #expect(!registry.resume(suspension))
+        #expect(registry.resume(next))
+        var result: Data?
+        registry.invoke(
+            ["token": UUID().uuidString, "command": "fixture", "payload": Data()] as NSDictionary,
+            completion: { data, error in
+                result = data as Data?; #expect(error == nil)
+            }
+        ) { _, _ in Data("original-result".utf8) }
+        while result == nil { await Task.yield() }
+        #expect(result == Data("original-result".utf8))
+        let final = registry.suspend()
+        await registry.shutdownAndWait()
+        #expect(!registry.resume(final))
     }
 
 }

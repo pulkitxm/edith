@@ -14,6 +14,7 @@ public final class HostRemoteChannel {
     private var pending: [UUID: Pending] = [:]
     private var invalidated = false
     private let events: HostRemoteEngineReceiver
+    nonisolated private let callbacks = HostRemoteCallbackRetirement()
 
     public init(
         connection: NSXPCConnection,
@@ -29,10 +30,10 @@ public final class HostRemoteChannel {
         connection.exportedInterface = NSXPCInterface(with: HostRemoteEvents.self)
         connection.exportedObject = events
         connection.invalidationHandler = { @Sendable [weak self] in
-            Task { @MainActor [weak self] in self?.invalidate() }
+            self?.callbacks.schedule { [weak self] in self?.invalidate() }
         }
         connection.interruptionHandler = { @Sendable [weak self] in
-            Task { @MainActor [weak self] in self?.invalidate() }
+            self?.callbacks.schedule { [weak self] in self?.invalidate() }
         }
         connection.resume()
     }
@@ -85,7 +86,7 @@ public final class HostRemoteChannel {
             channel.events.authenticate(peer)
             return channel
         } catch {
-            channel.invalidate()
+            await channel.invalidateAndWait()
             throw error
         }
     }
@@ -99,23 +100,25 @@ public final class HostRemoteChannel {
         let bytes = try HostRemoteWire.encode(command)
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
-                let deadline = Task { [weak self] in
-                    do { try await Task.sleep(for: timeout) } catch { return }
-                    self?.finish(command.token, result: .failure(HostWorkerError.timedOut))
-                    self?.cancel(command.token)
-                }
+                guard
+                    let deadline = callbacks.schedule({ [weak self] in
+                        do { try await Task.sleep(for: timeout) } catch { return }
+                        self?.finish(command.token, result: .failure(HostWorkerError.timedOut))
+                        self?.cancel(command.token)
+                    })
+                else { continuation.resume(throwing: HostWorkerError.exited); return }
                 pending[command.token] = Pending(continuation: continuation, timeout: deadline)
                 guard
                     let proxy = connection.remoteObjectProxyWithErrorHandler({
                         @Sendable [weak self] _ in
-                        Task { @MainActor [weak self] in self?.invalidate() }
+                        self?.callbacks.schedule { [weak self] in self?.invalidate() }
                     }) as? HostRemoteControl
                 else {
                     invalidate()
                     return
                 }
                 proxy.exchange(bytes) { @Sendable [weak self] data in
-                    Task { @MainActor [weak self] in
+                    self?.callbacks.schedule { [weak self] in
                         do {
                             let reply = try HostRemoteWire.decode(HostRemoteReply.self, from: data)
                             guard reply.token == command.token else {
@@ -133,8 +136,8 @@ public final class HostRemoteChannel {
                     cancel(command.token)
                 }
             }
-        } onCancel: {
-            Task { @MainActor [weak self] in
+        } onCancel: { [weak self] in
+            self?.callbacks.schedule { [weak self] in
                 self?.finish(command.token, result: .failure(CancellationError()))
                 self?.cancel(command.token)
             }
@@ -144,6 +147,7 @@ public final class HostRemoteChannel {
     public func invalidate() {
         guard !invalidated else { return }
         invalidated = true
+        callbacks.close()
         connection.invalidationHandler = nil
         connection.interruptionHandler = nil
         connection.invalidate()
@@ -152,6 +156,12 @@ public final class HostRemoteChannel {
             finish(token, result: .failure(HostWorkerError.exited))
         }
         didInvalidate?()
+    }
+
+    public func invalidateAndWait() async {
+        invalidate()
+        await callbacks.closeAndWait()
+        await events.invalidateAndWait()
     }
 
     private func finish(_ token: UUID, result: Result<HostRemoteReply, any Error>) {
@@ -174,30 +184,38 @@ public final class HostRemoteChannel {
         connection.remoteObjectInterface = NSXPCInterface(with: HostRemoteBootstrap.self)
         connection.resume()
         let completion = EndpointCompletion()
-        return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                completion.continuation = continuation
-                completion.timeout = Task {
-                    do { try await Task.sleep(for: .seconds(5)) } catch { return }
-                    completion.finish(.failure(HostWorkerError.timedOut))
+        let outcome: Result<Endpoint, any Error>
+        do {
+            let endpoint = try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    completion.continuation = continuation
+                    completion.timeout = completion.callbacks.schedule {
+                        do { try await Task.sleep(for: .seconds(5)) } catch { return }
+                        completion.finish(.failure(HostWorkerError.timedOut))
+                    }
+                    guard
+                        let proxy = connection.remoteObjectProxyWithErrorHandler({ @Sendable _ in
+                            completion.callbacks.schedule {
+                                completion.finish(.failure(HostWorkerError.exited))
+                            }
+                        }) as? HostRemoteBootstrap
+                    else {
+                        completion.finish(.failure(HostWorkerError.invalidResponse))
+                        return
+                    }
+                    proxy.endpoint { @Sendable endpoint in
+                        let value = Endpoint(value: endpoint)
+                        completion.callbacks.schedule { completion.finish(.success(value)) }
+                    }
+                    if Task.isCancelled { completion.finish(.failure(CancellationError())) }
                 }
-                guard
-                    let proxy = connection.remoteObjectProxyWithErrorHandler({ @Sendable _ in
-                        Task { @MainActor in completion.finish(.failure(HostWorkerError.exited)) }
-                    }) as? HostRemoteBootstrap
-                else {
-                    completion.finish(.failure(HostWorkerError.invalidResponse))
-                    return
-                }
-                proxy.endpoint { @Sendable endpoint in
-                    let value = Endpoint(value: endpoint)
-                    Task { @MainActor in completion.finish(.success(value)) }
-                }
-                if Task.isCancelled { completion.finish(.failure(CancellationError())) }
+            } onCancel: {
+                completion.callbacks.schedule { completion.finish(.failure(CancellationError())) }
             }
-        } onCancel: {
-            Task { @MainActor in completion.finish(.failure(CancellationError())) }
-        }
+            outcome = .success(endpoint)
+        } catch { outcome = .failure(error) }
+        await completion.callbacks.closeAndWait()
+        return try outcome.get()
     }
 
     private struct Endpoint: @unchecked Sendable {
@@ -205,6 +223,7 @@ public final class HostRemoteChannel {
     }
 
     @MainActor private final class EndpointCompletion {
+        nonisolated let callbacks = HostRemoteCallbackRetirement()
         var continuation: CheckedContinuation<Endpoint, any Error>?
         var timeout: Task<Void, Never>?
 

@@ -134,7 +134,7 @@ import Testing
         #expect(fixture.sessions.pendingDisableIDs == ["sample"])
         #expect(fixture.sessions.automaticallyEnabledIDs.isEmpty)
         #expect(fixture.sessions.activeIDs.isEmpty)
-        #expect(fixture.sessions.states["sample"] == .active)
+        #expect(fixture.sessions.states["sample"] == .failed)
         #expect(fixture.sessions.processIdentifiers["sample"] == pid)
         #expect(fixture.sessions.versions["sample"] == "1.0.0")
         try await fixture.sessions.disable(id: "sample")
@@ -162,11 +162,43 @@ import Testing
         try await fixture.sessions.enable(fixture.package("1.0.0"))
         let pid = fixture.sessions.processIdentifiers["sample"]
         #expect(await fixture.sessions.shutdown() == false)
-        #expect(fixture.sessions.states["sample"] == .active)
+        #expect(fixture.sessions.states["sample"] == .failed)
         #expect(fixture.sessions.enabledIDs == ["sample"])
         #expect(fixture.sessions.processIdentifiers["sample"] == pid)
         #expect(await fixture.sessions.shutdown())
         #expect(fixture.sessions.processIdentifiers.isEmpty)
+    }
+
+    @Test func failedStopAcknowledgementCannotBecomeSuccessfulQuitAfterExit() async throws {
+        let fixture = try Fixture(mode: "reject-stop-unless-recovery")
+        defer { fixture.clean() }
+        try await fixture.sessions.enable(fixture.package("1.0.0"))
+        #expect(await fixture.sessions.shutdown() == false)
+        #expect(fixture.sessions.processIdentifiers.isEmpty)
+        #expect(fixture.sessions.pendingRecoveryIDs == ["sample"])
+        #expect(fixture.sessions.enabledIDs == ["sample"])
+        #expect(fixture.sessions.automaticallyEnabledIDs.isEmpty)
+        #expect(await fixture.sessions.shutdown())
+        #expect(fixture.sessions.pendingRecoveryIDs.isEmpty)
+        #expect(fixture.sessions.enabledIDs == ["sample"])
+        #expect(fixture.records.workers.last?.configuration.recoveryOnly == true)
+    }
+
+    @Test func freshSessionRestoresPendingStopBeforeNormalEnable() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        fixture.defaults.set(["sample"], forKey: "enabledExtensions")
+        fixture.defaults.set(["sample"], forKey: "pendingStopRecoveryExtensions")
+        let restarted = try Fixture(suite: fixture.suite)
+        #expect(restarted.sessions.automaticallyEnabledIDs.isEmpty)
+        await restarted.sessions.restore(packages: ["sample": fixture.package("1.0.0")])
+        #expect(restarted.sessions.pendingRecoveryIDs.isEmpty)
+        #expect(restarted.sessions.activeIDs == ["sample"])
+        #expect(restarted.sessions.enabledIDs == ["sample"])
+        #expect(restarted.records.workers.count == 2)
+        #expect(restarted.records.workers.first?.configuration.recoveryOnly == true)
+        #expect(restarted.records.workers.last?.configuration.recoveryOnly == false)
+        #expect(await restarted.sessions.shutdown())
     }
 
     @Test func pendingDisableSurvivesFreshSessionAndRecoversWithoutNormalStartup() async throws {

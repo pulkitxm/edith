@@ -4,6 +4,24 @@ import Foundation
 
 @MainActor
 public final class HostWorker {
+    #if EDITH_FUNCTIONAL_FIXTURE
+    public struct FixtureStopReceipt: Codable, Sendable {
+        public let configuration: HostWorkerConfiguration
+        public let reason: HostWorkerStopReason
+        public let worker: ExtensionProcessIdentity?
+        public let preparationRequest: HostWorkerRequest?
+        public let preparationResponse: HostWorkerResponse?
+        public let stopRequest: HostWorkerRequest?
+        public let stopResponse: HostWorkerResponse?
+        public let observedBirths: [ExtensionProcessIdentity]
+        public let signalAttempts: [HostWorkerSignalAttempt]
+        public let terminationStatus: Int32?
+        public let terminationReason: Int?
+    }
+    public static var fixtureBeforeConfiguration:
+        ((HostWorker, ExtensionProcessIdentity) async throws -> Void)?
+    public static var fixtureObserveStop: ((FixtureStopReceipt) throws -> Void)?
+    #endif
     private struct Pending {
         let continuation: CheckedContinuation<HostWorkerResponse, any Error>
         let timeout: Task<Void, Never>
@@ -11,6 +29,7 @@ public final class HostWorker {
 
     public private(set) var configuration: HostWorkerConfiguration
     public private(set) var ready = false
+    public private(set) var requiresRecovery = false
     public var didExit: (@MainActor () -> Void)?
     public var didRequestNavigation:
         (@MainActor (HostWorkerNavigationRequest) async throws -> Void)?
@@ -31,10 +50,20 @@ public final class HostWorker {
     }
     private var navigation: [UUID: NavigationPending] = [:]
     private var preparationToken: UUID?
+    private var preparationTokens = Set<UUID>()
+    private var preparationRequest: HostWorkerRequest?
+    private var preparationResponse: HostWorkerResponse?
+    private var workerIdentity: ExtensionProcessIdentity?
     private var launched = false
     private var exited = false
     private var ownedProcessGroups = HostWorkerProcessGroups()
     private var groupRefresh: Task<Void, Never>?
+    private var exitDrain: Task<Void, Never>?
+    private var exitNotified = false
+    public var isStopped: Bool {
+        ownedProcessGroups.refresh(owner: process.processIdentifier)
+        return !process.isRunning && ownedProcessGroups.isEmpty
+    }
     private var readSource: DispatchSourceRead?
     private var outputIsNonblocking = false
 
@@ -90,8 +119,23 @@ public final class HostWorker {
         do {
             try sharedState()?.clear(configuration.extensionID)
             try process.run()
+            guard let birth = ExtensionProcessIdentity.read(process.processIdentifier) else {
+                throw HostWorkerError.invalidResponse
+            }
+            workerIdentity = birth
+            try ownedProcessGroups.captureWorker(birth)
             try input.fileHandleForReading.close()
             try output.fileHandleForWriting.close()
+            #if EDITH_FUNCTIONAL_FIXTURE
+            guard let prepare = Self.fixtureBeforeConfiguration else {
+                throw HostWorkerError.rejected
+            }
+            try await prepare(self, birth)
+            try Task.checkCancellation()
+            guard workerIdentity == birth, birth.isAlive, process.isRunning else {
+                throw HostWorkerError.rejected
+            }
+            #endif
             let response = try await request(
                 HostWorkerRequest(operation: "start", configuration: configuration))
             guard response.version == configuration.version else {
@@ -118,6 +162,7 @@ public final class HostWorker {
         } catch {
             terminate()
             try? await awaitExit()
+            try? await awaitOwnedExit()
             throw error
         }
     }
@@ -156,34 +201,81 @@ public final class HostWorker {
     }
 
     public func prepareDisable(timeout: Duration? = nil) async throws {
-        guard ready else { return }
-        guard preparationToken == nil else { throw HostWorkerError.rejected }
-        let request = HostWorkerRequest(operation: "prepareDisable")
-        preparationToken = request.token
+        try await prepare(operation: "prepareDisable", timeout: timeout)
+    }
+
+    private func prepare(
+        operation: String, reason: HostWorkerStopReason? = nil, timeout: Duration? = nil
+    ) async throws {
+        guard launched, !exited, process.isRunning else { return }
+        guard let workerIdentity, workerIdentity.isAlive else { throw HostWorkerError.exited }
+        guard pending.isEmpty else { throw HostWorkerError.rejected }
+        ready = false
         cancelNavigation(acknowledge: true)
-        defer { preparationToken = nil }
+        if let preparationResponse {
+            if preparationResponse.ok {
+                guard preparationRequest?.operation == operation else {
+                    throw HostWorkerError.rejected
+                }
+                return
+            }
+            self.preparationResponse = nil
+            preparationRequest = nil
+            preparationToken = nil
+        }
+        let request =
+            preparationRequest
+            ?? HostWorkerRequest(operation: operation, stopReason: reason)
+        guard request.operation == operation else { throw HostWorkerError.rejected }
+        guard preparationTokens.count < 64 || preparationTokens.contains(request.token) else {
+            throw HostWorkerError.rejected
+        }
+        preparationTokens.insert(request.token)
+        preparationRequest = request
+        preparationToken = request.token
         _ = try await self.request(request, timeout: timeout)
     }
 
-    public func stop(reason: HostWorkerStopReason = .disable) async throws {
-        if ready, reason == .applicationQuit, configuration.extensionID == "lidAwake",
+    public func prepareStop(reason: HostWorkerStopReason) async throws {
+        if reason == .applicationQuit, configuration.extensionID == "lidAwake",
             !configuration.recoveryOnly
         {
-            guard preparationToken == nil else { throw HostWorkerError.rejected }
-            let preparation = HostWorkerRequest(
-                operation: "prepareApplicationQuit", stopReason: reason)
-            preparationToken = preparation.token
-            cancelNavigation(acknowledge: true)
-            defer { preparationToken = nil }
-            _ = try await request(preparation)
+            try await prepare(operation: "prepareApplicationQuit", reason: reason)
         } else {
             try await prepareDisable()
         }
+    }
+
+    public func stop(reason: HostWorkerStopReason = .disable) async throws {
+        guard !isStopped || !requiresRecovery else {
+            throw HostWorkerError.disableRejected("Cleanup must be retried in a recovery worker.")
+        }
+        try await prepareStop(reason: reason)
         ready = false
+        var failure: Error?
+        #if EDITH_FUNCTIONAL_FIXTURE
+        var stopRequest: HostWorkerRequest?
+        var stopResponse: HostWorkerResponse?
+        #endif
         if process.isRunning {
-            _ = try? await request(
-                HostWorkerRequest(operation: "stop", stopReason: reason),
-                timeout: min(requestTimeout, .seconds(3)))
+            do {
+                let stop = HostWorkerRequest(operation: "stop", stopReason: reason)
+                #if EDITH_FUNCTIONAL_FIXTURE
+                stopRequest = stop
+                #endif
+                let response = try await request(
+                    stop,
+                    timeout: min(requestTimeout, .seconds(3)))
+                #if EDITH_FUNCTIONAL_FIXTURE
+                stopResponse = response
+                #endif
+                guard response.version == configuration.version else {
+                    throw HostWorkerError.invalidResponse
+                }
+            } catch {
+                requiresRecovery = true
+                failure = error
+            }
             try? input.fileHandleForWriting.close()
             do { try await awaitExit() } catch {
                 terminate()
@@ -192,6 +284,25 @@ public final class HostWorker {
         }
         finish()
         terminateGroup()
+        try await awaitOwnedExit()
+        notifyExit()
+        if let failure { throw failure }
+        guard !requiresRecovery else {
+            throw HostWorkerError.disableRejected("Cleanup must be retried in a recovery worker.")
+        }
+        #if EDITH_FUNCTIONAL_FIXTURE
+        guard let observe = Self.fixtureObserveStop else { throw HostWorkerError.rejected }
+        let terminated = process.processIdentifier > 1 && !process.isRunning
+        try observe(
+            FixtureStopReceipt(
+                configuration: configuration, reason: reason, worker: workerIdentity,
+                preparationRequest: preparationRequest, preparationResponse: preparationResponse,
+                stopRequest: stopRequest, stopResponse: stopResponse,
+                observedBirths: ownedProcessGroups.observedBirths,
+                signalAttempts: ownedProcessGroups.signalAttempts,
+                terminationStatus: terminated ? process.terminationStatus : nil,
+                terminationReason: terminated ? process.terminationReason.rawValue : nil))
+        #endif
     }
 
     private func request(_ request: HostWorkerRequest, timeout: Duration? = nil) async throws
@@ -250,7 +361,20 @@ public final class HostWorker {
                     continue
                 }
                 let response = try JSONDecoder().decode(HostWorkerResponse.self, from: data)
-                if abandoned.remove(response.token) != nil { continue }
+                if response.token == preparationToken {
+                    guard let workerIdentity, workerIdentity.isAlive,
+                        (!response.ok && response.version == nil)
+                            || response.version == configuration.version
+                    else { throw HostWorkerError.invalidResponse }
+                    preparationResponse = response
+                    requiresRecovery = !response.ok
+                    abandoned.remove(response.token)
+                    guard pending[response.token] != nil else { continue }
+                } else if preparationTokens.contains(response.token) {
+                    continue
+                } else if abandoned.remove(response.token) != nil {
+                    continue
+                }
                 guard let request = pending.removeValue(forKey: response.token) else {
                     throw HostWorkerError.invalidResponse
                 }
@@ -394,12 +518,15 @@ public final class HostWorker {
     private func cancelRequest(_ token: UUID, error: any Error) {
         guard token == preparationToken else { fail(error); return }
         guard let request = pending.removeValue(forKey: token) else { return }
+        ready = false
+        requiresRecovery = true
         abandoned.insert(token)
         request.timeout.cancel()
         request.continuation.resume(throwing: error)
     }
 
     private func fail(_ error: any Error) {
+        if preparationToken != nil { requiresRecovery = true }
         cancelNavigation()
         ready = false
         let requests = pending.values
@@ -413,15 +540,10 @@ public final class HostWorker {
 
     private func terminate() {
         cancelNavigation()
-        if process.isRunning {
-            let pid = process.processIdentifier
-            if getpgid(pid) == pid {
-                kill(-pid, SIGKILL)
-            } else {
-                kill(pid, SIGKILL)
-            }
-        }
         terminateGroup()
+        if process.isRunning, let workerIdentity, workerIdentity.isAlive {
+            ownedProcessGroups.terminateCaptured(workerIdentity)
+        }
     }
 
     private func terminateGroup() {
@@ -436,6 +558,23 @@ public final class HostWorker {
             guard ContinuousClock.now < deadline else { throw HostWorkerError.stillRunning }
             try await Task.sleep(for: .milliseconds(20))
         }
+    }
+
+    private func awaitOwnedExit() async throws {
+        let deadline = ContinuousClock.now + .seconds(3)
+        while true {
+            ownedProcessGroups.refresh(owner: process.processIdentifier)
+            if ownedProcessGroups.isEmpty { return }
+            guard ContinuousClock.now < deadline else { throw HostWorkerError.stillRunning }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    private func notifyExit() {
+        guard !exitNotified, isStopped else { return }
+        exitNotified = true
+        try? sharedState()?.clear(configuration.extensionID)
+        didExit?()
     }
 
     private func sharedState() -> ExtensionSharedState? {
@@ -463,7 +602,8 @@ public final class HostWorker {
             request.continuation.resume(throwing: HostWorkerError.exited)
         }
         terminateGroup()
-        try? sharedState()?.clear(configuration.extensionID)
-        didExit?()
+        exitDrain = Task { [self] in
+            do { try await awaitOwnedExit(); notifyExit() } catch {}
+        }
     }
 }

@@ -11,6 +11,7 @@ final class HostRemoteEngineCalls {
     private let authorize: @MainActor () -> Bool
     private var pending: [UUID: Pending] = [:]
     private var invalidated = false
+    nonisolated private let callbacks = HostRemoteCallbackRetirement()
 
     init(connection: NSXPCConnection, authorize: @escaping @MainActor () -> Bool) {
         self.connection = connection
@@ -25,20 +26,22 @@ final class HostRemoteEngineCalls {
         let data = try ExtensionEngineWire.encode(request)
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
-                let timeout = Task { [weak self] in
-                    do { try await Task.sleep(for: .seconds(request.timeout)) } catch { return }
-                    self?.cancel(request.token)
-                    self?.finish(request.token, result: .failure(HostWorkerError.timedOut))
-                }
+                guard
+                    let timeout = callbacks.schedule({ [weak self] in
+                        do { try await Task.sleep(for: .seconds(request.timeout)) } catch { return }
+                        self?.cancel(request.token)
+                        self?.finish(request.token, result: .failure(HostWorkerError.timedOut))
+                    })
+                else { continuation.resume(throwing: HostWorkerError.exited); return }
                 pending[request.token] = Pending(continuation: continuation, timeout: timeout)
                 guard
                     let proxy = connection.remoteObjectProxyWithErrorHandler({
                         @Sendable [weak self] _ in
-                        Task { @MainActor [weak self] in self?.invalidate() }
+                        self?.callbacks.schedule { [weak self] in self?.invalidate() }
                     }) as? HostRemoteEvents
                 else { invalidate(); return }
                 proxy.invoke(data) { @Sendable [weak self] bytes in
-                    Task { @MainActor [weak self] in
+                    self?.callbacks.schedule { [weak self] in
                         do {
                             let reply = try ExtensionEngineWire.decode(
                                 ExtensionEngineReply.self, from: bytes)
@@ -57,8 +60,8 @@ final class HostRemoteEngineCalls {
                     finish(request.token, result: .failure(CancellationError()))
                 }
             }
-        } onCancel: {
-            Task { @MainActor [weak self] in
+        } onCancel: { [weak self] in
+            self?.callbacks.schedule { [weak self] in
                 self?.cancel(request.token)
                 self?.finish(request.token, result: .failure(CancellationError()))
             }
@@ -80,6 +83,12 @@ final class HostRemoteEngineCalls {
             finish(token, result: .failure(HostWorkerError.exited))
         }
         invalidated = true
+        callbacks.close()
+    }
+
+    func invalidateAndWait() async {
+        invalidate()
+        await callbacks.closeAndWait()
     }
 
     private func finish(_ token: UUID, result: Result<Data, any Error>) {
@@ -95,12 +104,18 @@ final class HostRemoteEngineReceiver: NSObject, HostRemoteEvents, @unchecked Sen
         let task: Task<Void, Never>
         let timeout: Task<Void, Never>
         let completion: Completion
+        #if EDITH_FUNCTIONAL_FIXTURE
+        let invocation: HostRemoteSession.FixtureNativeRequest
+        let observe: (HostRemoteSession.FixtureNativeReply) throws -> Void
+        #endif
     }
     private let receiveEvent: @MainActor (HostRemoteEvent) -> Void
     private let execute: Execute
+    private let callbacks = HostRemoteCallbackRetirement()
     @MainActor private var peer: HostRemoteProcessIdentity?
     @MainActor private var pending: [UUID: Pending] = [:]
     @MainActor private var invalidated = false
+    @MainActor private let ownership = HostRemoteInvocationRetirement()
 
     init(receive: @escaping @MainActor (HostRemoteEvent) -> Void, execute: @escaping Execute) {
         receiveEvent = receive
@@ -113,7 +128,7 @@ final class HostRemoteEngineReceiver: NSObject, HostRemoteEvents, @unchecked Sen
         guard let event = try? HostRemoteWire.decode(HostRemoteEvent.self, from: data) else {
             return
         }
-        Task { @MainActor [self] in
+        callbacks.schedule { [self] in
             guard !invalidated, peer?.isRunning == true else { return }
             receiveEvent(event)
         }
@@ -121,19 +136,26 @@ final class HostRemoteEngineReceiver: NSObject, HostRemoteEvents, @unchecked Sen
 
     func invoke(_ data: Data, reply: @escaping (Data) -> Void) {
         let completion = Completion(reply: reply)
-        Task { @MainActor [self] in
+        let callback = callbacks.schedule { [self] in
             guard
                 let request = try? ExtensionEngineWire.decode(
                     ExtensionEngineRequest.self, from: data)
             else { completion.rejectMalformed(); return }
-            guard !invalidated, peer?.isRunning == true, (try? request.validate()) != nil,
-                pending.count < 8, pending[request.token] == nil
+            guard !invalidated, let peer, peer.isRunning, (try? request.validate()) != nil,
+                ownership.accepts(request.token), pending[request.token] == nil
             else { completion.finish(token: request.token, ok: false); return }
+            #if EDITH_FUNCTIONAL_FIXTURE
+            guard let observe = HostRemoteSession.fixtureObserveNativeReply,
+                let receiver = try? HostRemoteKernelIdentity.read(getpid())
+            else { completion.finish(token: request.token, ok: false); return }
+            let invocation = HostRemoteSession.FixtureNativeRequest(
+                ui: peer, receiver: receiver, request: request)
+            #endif
             let execution = Task { @MainActor [self] in
                 do {
                     let payload = try await execute(request)
                     try Task.checkCancellation()
-                    guard !invalidated, peer?.isRunning == true,
+                    guard !invalidated, self.peer == peer, peer.isRunning,
                         payload.count <= ExtensionEngineWire.maximumPayloadBytes,
                         (try? JSONSerialization.jsonObject(
                             with: payload, options: .fragmentsAllowed)) != nil
@@ -141,43 +163,79 @@ final class HostRemoteEngineReceiver: NSObject, HostRemoteEvents, @unchecked Sen
                     finish(request.token, payload: payload)
                 } catch { finish(request.token) }
             }
-            let timeout = Task { @MainActor [weak self] in
-                do { try await Task.sleep(for: .seconds(request.timeout)) } catch { return }
-                self?.finish(request.token)
+            ownership.retain(execution, token: request.token)
+            guard
+                let timeout = callbacks.schedule({ [weak self] in
+                    do { try await Task.sleep(for: .seconds(request.timeout)) } catch { return }
+                    self?.finish(request.token)
+                })
+            else {
+                ownership.cancel(request.token)
+                completion.finish(token: request.token, ok: false)
+                return
             }
+            #if EDITH_FUNCTIONAL_FIXTURE
+            pending[request.token] = Pending(
+                task: execution, timeout: timeout, completion: completion,
+                invocation: invocation, observe: observe)
+            #else
             pending[request.token] = Pending(
                 task: execution, timeout: timeout, completion: completion)
+            #endif
         }
+        if callback == nil { reply(Data()) }
     }
 
     func cancelEngine(_ token: String) {
         guard token.utf8.count == 36, let token = UUID(uuidString: token) else { return }
-        Task { @MainActor [self] in finish(token) }
+        callbacks.schedule { [self] in finish(token) }
     }
 
     @MainActor func invalidate() {
         guard !invalidated else { return }
         invalidated = true
+        callbacks.close()
+        ownership.close()
         for token in Array(pending.keys) { finish(token) }
+    }
+
+    @MainActor func invalidateAndWait() async {
+        invalidate()
+        await callbacks.closeAndWait()
+        await ownership.closeAndWait()
     }
 
     @MainActor private func finish(_ token: UUID, payload: Data? = nil) {
         guard let request = pending.removeValue(forKey: token) else { return }
-        request.task.cancel()
+        ownership.cancel(token)
         request.timeout.cancel()
-        request.completion.finish(token: token, ok: payload != nil, payload: payload ?? Data())
+        let reply = ExtensionEngineReply(
+            token: token, ok: payload != nil, payload: payload ?? Data())
+        let encoded = request.completion.finish(token: token, ok: reply.ok, payload: reply.payload)
+        #if EDITH_FUNCTIONAL_FIXTURE
+        if let encoded {
+            do {
+                try request.observe(
+                    HostRemoteSession.FixtureNativeReply(
+                        invocation: request.invocation, reply: reply, encodedReply: encoded))
+            } catch { invalidate() }
+        }
+        #endif
     }
 
     private final class Completion: @unchecked Sendable {
         private let reply: (Data) -> Void
         @MainActor private var finished = false
         init(reply: @escaping (Data) -> Void) { self.reply = reply }
-        @MainActor func finish(token: UUID, ok: Bool, payload: Data = Data()) {
-            guard !finished else { return }
+        @discardableResult
+        @MainActor func finish(token: UUID, ok: Bool, payload: Data = Data()) -> Data? {
+            guard !finished else { return nil }
             finished = true
-            reply(
+            let encoded =
                 (try? ExtensionEngineWire.encode(
-                    ExtensionEngineReply(token: token, ok: ok, payload: payload))) ?? Data())
+                    ExtensionEngineReply(token: token, ok: ok, payload: payload))) ?? Data()
+            reply(encoded)
+            return encoded
         }
         @MainActor func rejectMalformed() {
             guard !finished else { return }

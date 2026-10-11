@@ -91,7 +91,7 @@ import Testing
         let worker = try fixture("ignore-stop")
         try await worker.start()
         let pid = try #require(worker.processIdentifier)
-        try await worker.stop()
+        await #expect(throws: HostWorkerError.timedOut) { try await worker.stop() }
         #expect(worker.processIdentifier == nil)
         #expect(kill(pid, 0) == -1)
     }
@@ -120,7 +120,11 @@ import Testing
         }
         let childPID = try #require(Int32(String(contentsOf: file, encoding: .utf8)))
         if mode != "child-group-crash" { #expect(kill(childPID, 0) == 0) }
-        try await worker.stop()
+        if mode == "child-group-ignore-stop" {
+            await #expect(throws: HostWorkerError.timedOut) { try await worker.stop() }
+        } else {
+            try await worker.stop()
+        }
         let deadline = ContinuousClock.now + .seconds(2)
         while kill(childPID, 0) == 0, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(20))
@@ -128,21 +132,21 @@ import Testing
         #expect(kill(childPID, 0) == -1)
     }
 
-    @Test func rejectedRestorationKeepsTheWorkerUsableUntilRetry() async throws {
+    @Test func rejectedRestorationKeepsTheWorkerClosedUntilRetry() async throws {
         let worker = try fixture("reject-disable-once")
         try await worker.start()
         let pid = try #require(worker.processIdentifier)
         await #expect(
             throws: HostWorkerError.disableRejected("Restore sleep settings and try again.")
         ) { try await worker.stop() }
-        #expect(worker.ready)
+        #expect(!worker.ready)
         #expect(worker.processIdentifier == pid)
-        #expect(try await worker.status().ok)
+        await #expect(throws: HostWorkerError.rejected) { _ = try await worker.status() }
         try await worker.stop()
         #expect(kill(pid, 0) == -1)
     }
 
-    @Test func restorationCancellationAndItsLateReplyDoNotKillTheWorker() async throws {
+    @Test func restorationCancellationAndLateReplyStayClosedUntilStop() async throws {
         let worker = try fixture("late-disable")
         try await worker.start()
         let pid = try #require(worker.processIdentifier)
@@ -150,27 +154,44 @@ import Testing
         try await Task.sleep(for: .milliseconds(40))
         task.cancel()
         await #expect(throws: CancellationError.self) { try await task.value }
-        #expect(worker.ready)
+        #expect(!worker.ready)
         #expect(worker.processIdentifier == pid)
         try await Task.sleep(for: .milliseconds(350))
-        #expect(try await worker.status().ok)
+        await #expect(throws: HostWorkerError.rejected) { _ = try await worker.status() }
         try await worker.stop()
         #expect(kill(pid, 0) == -1)
     }
 
-    @Test func restorationTimeoutPreservesTheWorkerAndAcceptsTheLateReply() async throws {
+    @Test func restorationTimeoutAcceptsLateReplyWithoutReopening() async throws {
         let worker = try fixture("late-disable")
         try await worker.start()
         let pid = try #require(worker.processIdentifier)
         await #expect(throws: HostWorkerError.timedOut) {
             try await worker.prepareDisable(timeout: .milliseconds(120))
         }
-        #expect(worker.ready)
+        #expect(!worker.ready)
         #expect(worker.processIdentifier == pid)
         try await Task.sleep(for: .milliseconds(300))
-        #expect(try await worker.status().ok)
+        await #expect(throws: HostWorkerError.rejected) { _ = try await worker.status() }
         try await worker.stop()
         #expect(kill(pid, 0) == -1)
+    }
+
+    @Test func wrongVersionCleanupAcknowledgementNeverBecomesSuccessfulStop() async throws {
+        let worker = try fixture("wrong-disable-version")
+        try await worker.start()
+        await #expect(throws: HostWorkerError.invalidResponse) { try await worker.prepareDisable() }
+        #expect(!worker.ready)
+        let deadline = ContinuousClock.now + .seconds(3)
+        while !worker.isStopped {
+            guard ContinuousClock.now < deadline else { throw HostWorkerError.stillRunning }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        await #expect(
+            throws: HostWorkerError.disableRejected("Cleanup must be retried in a recovery worker.")
+        ) { try await worker.stop() }
+        #expect(worker.isStopped)
+        #expect(worker.requiresRecovery)
     }
 
     @Test func ownedNavigationIsDeliveredOnlyAfterStart() async throws {

@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import ExtensionMarketplace
 import Foundation
 import Observation
@@ -35,6 +36,12 @@ public final class HostExtensionSessions {
             didChange()
         }
     }
+    public private(set) var pendingRecoveryIDs: Set<String> {
+        didSet {
+            defaults.set(pendingRecoveryIDs.sorted(), forKey: "pendingStopRecoveryExtensions")
+            didChange()
+        }
+    }
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let create: @MainActor (ExtensionPackage) throws -> HostWorker
     @ObservationIgnored private var workers: [String: HostWorker] = [:]
@@ -46,6 +53,8 @@ public final class HostExtensionSessions {
         self.defaults = defaults
         self.create = create
         pendingDisableIDs = Set(defaults.stringArray(forKey: "pendingDisableExtensions") ?? [])
+        pendingRecoveryIDs = Set(
+            defaults.stringArray(forKey: "pendingStopRecoveryExtensions") ?? [])
         ambientPolicyCoordinator.changed = { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -59,13 +68,34 @@ public final class HostExtensionSessions {
     public var enabledIDs: Set<String> {
         Set(defaults.stringArray(forKey: Self.enabledExtensionsKey) ?? [])
     }
-    public var automaticallyEnabledIDs: Set<String> { enabledIDs.subtracting(pendingDisableIDs) }
+    public var automaticallyEnabledIDs: Set<String> {
+        enabledIDs.subtracting(pendingDisableIDs).subtracting(pendingRecoveryIDs)
+    }
     public var activeIDs: Set<String> {
         Set(states.keys.filter { states[$0] == .active }).subtracting(pendingDisableIDs)
+            .subtracting(pendingRecoveryIDs)
     }
     public var processIdentifiers: [String: Int32] {
         workers.compactMapValues(\.processIdentifier)
     }
+
+    #if EDITH_FUNCTIONAL_FIXTURE
+    public func fixtureStartingWorker(
+        configuration: HostWorkerConfiguration, birth: ExtensionProcessIdentity
+    ) throws -> HostWorker {
+        let id = configuration.extensionID
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard states[id] == .starting, !activeIDs.contains(id),
+            !pendingDisableIDs.contains(id), !pendingRecoveryIDs.contains(id),
+            let worker = workers[id], !worker.ready, !worker.requiresRecovery,
+            !worker.configuration.recoveryOnly,
+            try encoder.encode(worker.configuration) == encoder.encode(configuration),
+            worker.processIdentifier == birth.pid, birth.isAlive
+        else { throw HostWorkerError.rejected }
+        return worker
+    }
+    #endif
 
     public func requestDisable(ids: Set<String>) {
         pendingDisableIDs.formUnion(ids.intersection(enabledIDs.union(workers.keys)))
@@ -74,11 +104,17 @@ public final class HostExtensionSessions {
     }
 
     public func restore(packages: [String: ExtensionPackage]) async {
-        for id in enabledIDs.union(pendingDisableIDs).sorted() {
+        for id in enabledIDs.union(pendingDisableIDs).union(pendingRecoveryIDs).sorted() {
             guard let package = packages[id] else { states[id] = .notInstalled; continue }
             if pendingDisableIDs.contains(id) {
                 self.packages[id] = package
                 do { try await disable(id: id) } catch { failures.insert(id) }
+            } else if pendingRecoveryIDs.contains(id) {
+                self.packages[id] = package
+                do {
+                    try await stop(id: id, remember: false, reason: .shutdown)
+                    if enabledIDs.contains(id) { try await enable(package) }
+                } catch { failures.insert(id) }
             } else {
                 do { try await enable(package) } catch { failures.insert(id) }
             }
@@ -93,6 +129,9 @@ public final class HostExtensionSessions {
         if pendingDisableIDs.contains(id) {
             packages[id] = package
             try await disable(id: id, remember: false)
+        } else if pendingRecoveryIDs.contains(id) {
+            packages[id] = package
+            try await stop(id: id, remember: false, reason: .disable)
         }
         if let worker = workers[id], worker.ready {
             if worker.configuration.recoveryOnly {
@@ -105,6 +144,11 @@ public final class HostExtensionSessions {
                 save(enabledIDs.union([id]))
                 return
             }
+        }
+        if let worker = workers[id] {
+            try await worker.stop()
+            guard worker.isStopped else { throw HostWorkerError.stillRunning }
+            workers[id] = nil
         }
         pendingDisableIDs.remove(id)
         states[id] = .starting
@@ -160,9 +204,10 @@ public final class HostExtensionSessions {
             save(enabledIDs.union([id]))
             ambientPolicyCoordinator.invalidate()
         } catch {
-            if let worker = workers[id] { try? await worker.stop() }
-            workers[id] = nil
-            versions[id] = nil
+            if let worker = workers[id] {
+                try? await worker.stop()
+                if worker.isStopped { workers[id] = nil; versions[id] = nil }
+            }
             states[id] = .failed
             failures.insert(id)
             throw error
@@ -182,8 +227,14 @@ public final class HostExtensionSessions {
         ambientPolicyCoordinator.release(owner: id)
         ambientPolicyCoordinator.invalidate()
         do {
+            if let worker = workers[id], worker.isStopped, worker.requiresRecovery {
+                workers[id] = nil
+                pendingRecoveryIDs.insert(id)
+            }
+            if let worker = workers[id] { try await worker.prepareStop(reason: reason) }
             try await willDisable(id)
-            if workers[id]?.ready != true, pendingDisableIDs.contains(id) {
+            if workers[id] == nil, pendingDisableIDs.contains(id) || pendingRecoveryIDs.contains(id)
+            {
                 guard let package = packages[id] else { throw HostWorkerError.rejected }
                 let worker = try package.admitting(
                     hostABI: HostContract.compatibility, architecture: "arm64",
@@ -194,14 +245,14 @@ public final class HostExtensionSessions {
             }
             if let worker = workers[id] { try await worker.stop(reason: reason) }
         } catch {
-            states[id] =
-                workers[id]?.ready == true && workers[id]?.configuration.recoveryOnly != true
-                ? .active : .failed
+            if !pendingDisableIDs.contains(id) { pendingRecoveryIDs.insert(id) }
+            states[id] = .failed
             failures.insert(id)
             throw error
         }
         if remember || pendingDisableIDs.contains(id) { save(enabledIDs.subtracting([id])) }
         pendingDisableIDs.remove(id)
+        pendingRecoveryIDs.remove(id)
         workers[id] = nil
         packages[id] = nil
         versions[id] = nil
@@ -291,14 +342,16 @@ public final class HostExtensionSessions {
 
     @discardableResult public func shutdown(reason: HostWorkerStopReason = .shutdown) async -> Bool
     {
+        var completed = true
         for id in Set(workers.keys).union(HostRemoteSession.extensionIDs).union(
-            HostRemoteCarrierCheckIn.extensionIDs)
-        {
+            HostRemoteCarrierCheckIn.extensionIDs
+        ).union(pendingDisableIDs).union(pendingRecoveryIDs) {
             do { try await stop(id: id, remember: false, reason: reason) } catch {
+                completed = false
                 failures.insert(id)
             }
         }
-        return workers.isEmpty && HostRemoteSession.extensionIDs.isEmpty
+        return completed && workers.isEmpty && HostRemoteSession.extensionIDs.isEmpty
             && HostRemoteCarrierCheckIn.extensionIDs.isEmpty
     }
 

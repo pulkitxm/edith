@@ -112,53 +112,86 @@ public final class ExtensionBundleRuntime {
         instance.active = false
     }
 
-    public func prepareDisableAll() async throws {
-        let selector = NSSelectorFromString("prepareDisableWithCompletion:")
-        for instance in loaded.values
-        where instance.active && instance.object.responds(to: selector) {
+    public func suspendCommandsAll() async throws {
+        try await suspendCommands(includeInactive: false)
+    }
+
+    private func suspendCommands(includeInactive: Bool) async throws {
+        let selector = NSSelectorFromString("suspendCommandsWithCompletion:")
+        for instance in loaded.values where instance.active || includeInactive {
+            guard instance.object.responds(to: NSSelectorFromString("invoke:completion:")) else {
+                continue
+            }
+            guard instance.object.responds(to: selector) else {
+                throw MarketplaceError.invalidBundle
+            }
             let completion = BundleCommandCompletion()
-            _ = try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { continuation in
-                    guard completion.begin(continuation) else { return }
-                    typealias Prepare =
-                        @convention(c) (AnyObject, Selector, @convention(block) (NSError?) -> Void)
-                        -> Void
-                    let prepare = unsafeBitCast(
-                        instance.object.method(for: selector), to: Prepare.self)
-                    let callback: @convention(block) (NSError?) -> Void = { error in
-                        if let error {
-                            completion.finish(.failure(error))
-                        } else {
-                            completion.finish(.success(Data()))
-                        }
-                    }
-                    prepare(instance.object, selector, callback)
+            _ = try await withCheckedThrowingContinuation { continuation in
+                guard completion.begin(continuation) else { return }
+                typealias Suspend =
+                    @convention(c) (AnyObject, Selector, @convention(block) () -> Void) -> Void
+                let suspend = unsafeBitCast(instance.object.method(for: selector), to: Suspend.self)
+                let callback: @convention(block) () -> Void = {
+                    completion.finish(.success(Data()))
                 }
-            } onCancel: {
-                completion.finish(.failure(CancellationError()))
+                suspend(instance.object, selector, callback)
             }
         }
     }
 
-    public func prepareToStopAll() async throws {
-        let selector = NSSelectorFromString("prepareToStopWithCompletion:")
+    public func prepareDisableAll() async throws {
+        try await suspendCommandsAll()
+        let selector = NSSelectorFromString("prepareDisableWithCompletion:")
         for instance in loaded.values
         where instance.active && instance.object.responds(to: selector) {
             let completion = BundleCommandCompletion()
-            _ = try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { continuation in
-                    guard completion.begin(continuation) else { return }
-                    typealias Prepare =
-                        @convention(c) (AnyObject, Selector, @convention(block) () -> Void) -> Void
-                    let prepare = unsafeBitCast(
-                        instance.object.method(for: selector), to: Prepare.self)
-                    let callback: @convention(block) () -> Void = {
+            _ = try await withCheckedThrowingContinuation { continuation in
+                guard completion.begin(continuation) else { return }
+                typealias Prepare =
+                    @convention(c) (AnyObject, Selector, @convention(block) (NSError?) -> Void)
+                    -> Void
+                let prepare = unsafeBitCast(instance.object.method(for: selector), to: Prepare.self)
+                let callback: @convention(block) (NSError?) -> Void = { error in
+                    if let error {
+                        completion.finish(.failure(error))
+                    } else {
                         completion.finish(.success(Data()))
                     }
-                    prepare(instance.object, selector, callback)
                 }
-            } onCancel: {
-                completion.finish(.failure(CancellationError()))
+                prepare(instance.object, selector, callback)
+            }
+        }
+    }
+
+    public func suspendRemoteUICommandsAll() async throws {
+        guard readOnlyPackage != nil else { throw MarketplaceError.invalidBundle }
+        try await suspendCommands(includeInactive: true)
+    }
+
+    public func prepareRemoteUIToStopAll() async throws {
+        guard readOnlyPackage != nil else { throw MarketplaceError.invalidBundle }
+        try await suspendCommands(includeInactive: true)
+        try await prepareToStop(includeInactive: true)
+    }
+
+    public func prepareToStopAll() async throws {
+        try await prepareToStop(includeInactive: false)
+    }
+
+    private func prepareToStop(includeInactive: Bool) async throws {
+        let selector = NSSelectorFromString("prepareToStopWithCompletion:")
+        for instance in loaded.values
+        where (instance.active || includeInactive) && instance.object.responds(to: selector) {
+            let completion = BundleCommandCompletion()
+            _ = try await withCheckedThrowingContinuation { continuation in
+                guard completion.begin(continuation) else { return }
+                typealias Prepare =
+                    @convention(c) (AnyObject, Selector, @convention(block) () -> Void) -> Void
+                let prepare = unsafeBitCast(instance.object.method(for: selector), to: Prepare.self)
+                let callback: @convention(block) () -> Void = {
+                    completion.finish(.success(Data()))
+                }
+                prepare(instance.object, selector, callback)
             }
         }
     }

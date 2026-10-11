@@ -8,6 +8,11 @@ import Foundation
 
 @MainActor
 final class HostWorkerApplication {
+    #if EDITH_FUNCTIONAL_FIXTURE
+    static var fixtureAdmitBeforeConstruction:
+        ((HostWorkerConfiguration, NSDictionary, [URL]) throws -> [HostFixtureRoleAdmission])?
+    static var fixtureObserveCommandRetirement: ((UUID) throws -> Void)?
+    #endif
     private let control: HostWorkerControl
     private var frames = HostWorkerFrames()
     private var runtimes: [ExtensionBundleRuntime] = []
@@ -18,7 +23,8 @@ final class HostWorkerApplication {
     private let nativeAdmission = ExtensionNativeTaskAdmission()
     private var resourceObservers: [NSObjectProtocol] = []
     private var stopping = false
-    private var preparingDisable = false
+    private let preparation = HostWorkerPreparation()
+    private var preparingDisable: Bool { preparation.isClosed }
     private var preparedApplicationQuit = false
     private var peerServer: ExtensionPeerServer?
     private var shutdownTask: Task<Void, Never>?
@@ -33,6 +39,21 @@ final class HostWorkerApplication {
 
     func run() {
         NSApplication.shared.setActivationPolicy(.accessory)
+        #if EDITH_FUNCTIONAL_FIXTURE
+        resourceObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: ExtensionCommandRegistry.ownerJoinedNotification, object: nil, queue: nil
+            ) { [weak self] notification in
+                let token = (notification.userInfo?["token"] as? String).flatMap(
+                    UUID.init(uuidString:))
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    guard let token, let observe = Self.fixtureObserveCommandRetirement
+                    else { self.shutdown(); return }
+                    do { try observe(token) } catch { self.shutdown() }
+                }
+            })
+        #endif
         for (name, registered) in [
             (ExtensionCommandOwnership.registerNotification, true),
             (ExtensionCommandOwnership.releaseNotification, false),
@@ -136,20 +157,17 @@ final class HostWorkerApplication {
     }
 
     private func prepareDisable(_ request: HostWorkerRequest) {
-        guard !preparingDisable else {
-            try? control.send(
-                HostWorkerResponse(
-                    token: request.token, ok: false,
-                    message: "The extension is still restoring system settings. Wait and try again."
-                ))
-            return
-        }
-        preparingDisable = true
         navigation?.cancelPending()
+        let cleanup = Result {
+            try preparation.begin(token: request.token) {
+                for runtime in self.runtimes { try await runtime.suspendCommandsAll() }
+                await self.peerServer?.cancelAndJoinRequests()
+                for runtime in self.runtimes { try await runtime.prepareDisableAll() }
+            }
+        }
         Task { [self] in
-            defer { preparingDisable = false }
             do {
-                for runtime in runtimes { try await runtime.prepareDisableAll() }
+                try await cleanup.get().value.get()
                 try control.send(
                     HostWorkerResponse(
                         token: request.token, ok: true, version: configuration?.version))
@@ -166,21 +184,21 @@ final class HostWorkerApplication {
     }
 
     private func prepareApplicationQuit(_ request: HostWorkerRequest) {
-        guard !preparingDisable, !preparedApplicationQuit,
-            request.stopReason == .applicationQuit, let configuration,
+        guard request.stopReason == .applicationQuit, let configuration,
             configuration.extensionID == "lidAwake", !configuration.recoveryOnly,
             let engine = runtimes.first(where: { $0.role == .app })
         else {
             try? control.send(HostWorkerResponse(token: request.token, ok: false))
             return
         }
-        preparingDisable = true
         navigation?.cancelPending()
-        peerServer?.shutdown()
-        peerServer = nil
-        Task { [self] in
-            defer { preparingDisable = false }
-            do {
+        let retiringServer = peerServer
+        retiringServer?.shutdown()
+        let cleanup = Result {
+            try preparation.begin(token: request.token, operation: "applicationQuit") {
+                for runtime in self.runtimes { try await runtime.suspendCommandsAll() }
+                await retiringServer?.shutdownAndWait()
+                if self.peerServer === retiringServer { self.peerServer = nil }
                 guard let host = ExtensionProcessIdentity.read(getppid()) else {
                     throw HostWorkerError.rejected
                 }
@@ -191,12 +209,17 @@ final class HostWorkerApplication {
                         "hostPID": host.pid, "hostGeneration": host.generation,
                     ])
                 guard response["ok"] as? Bool == true else { throw HostWorkerError.rejected }
-                for runtime in runtimes where runtime !== engine {
+                for runtime in self.runtimes where runtime !== engine {
                     try await runtime.prepareDisableAll()
                 }
                 try await engine.prepareToStopAll()
-                guard !stopping, host.isAlive else { throw HostWorkerError.rejected }
-                preparedApplicationQuit = true
+                guard !self.stopping, host.isAlive else { throw HostWorkerError.rejected }
+                self.preparedApplicationQuit = true
+            }
+        }
+        Task { [self] in
+            do {
+                try await cleanup.get().value.get()
                 try control.send(
                     HostWorkerResponse(
                         token: request.token, ok: true, version: configuration.version))
@@ -212,6 +235,9 @@ final class HostWorkerApplication {
     }
 
     private func execute(_ request: HostWorkerRequest) throws {
+        guard !preparingDisable || request.operation == "status" else {
+            throw HostWorkerError.rejected
+        }
         if request.operation == "start" {
             guard configuration == nil, let next = request.configuration,
                 next.identifier == Bundle.main.bundleIdentifier
@@ -255,6 +281,9 @@ final class HostWorkerApplication {
                 values[key] = value
             }
             let context = values as NSDictionary
+            #if EDITH_FUNCTIONAL_FIXTURE
+            var fixtureAdmissions: [String: HostFixtureRoleAdmission] = [:]
+            #endif
             let environment = ProcessInfo.processInfo.environment
             let fixtureIntent = HostWorkerStartAdmission.hasFixtureIntent(
                 identifier: identity.identifier, environment: environment)
@@ -290,6 +319,24 @@ final class HostWorkerApplication {
                                 directory: url, identifier: bundle.bundleIdentifier,
                                 version: next.version, hostABI: HostContract.compatibility))
                     }
+                    #if EDITH_FUNCTIONAL_FIXTURE
+                    guard fixtureIntent, let admit = Self.fixtureAdmitBeforeConstruction else {
+                        throw HostWorkerError.rejected
+                    }
+                    let admissions = try admit(next, context, fixtureRoles.map(\.directory))
+                    try HostFixtureRoleAdmission.validate(
+                        admissions, available: fixtureRoles.map(\.directory),
+                        markerKeys: [
+                            "sourceCommit", "session", "phase", "descriptorPath",
+                            "capabilitySHA256", "requestGeneration",
+                        ])
+                    for admission in admissions {
+                        fixtureAdmissions[
+                            admission.roleDirectory.deletingPathExtension().lastPathComponent] =
+                            admission
+                    }
+                    #endif
+                    #if !EDITH_FUNCTIONAL_FIXTURE
                     if fixtureIntent {
                         try HostWorkerStartAdmission.admitFixture(
                             identifier: identity.identifier, owner: package.id,
@@ -301,7 +348,12 @@ final class HostWorkerApplication {
                             defaultsSuite: identity.extensionDefaultsSuite(package.id),
                             roles: fixtureRoles, environment: environment)
                     }
+                    #endif
+                    #if EDITH_FUNCTIONAL_FIXTURE
+                    return roles.filter { fixtureAdmissions[$0.rawValue] != nil }
+                    #else
                     return roles
+                    #endif
                 },
                 appearance: {
                     configuration = next
@@ -311,22 +363,53 @@ final class HostWorkerApplication {
                         try JSONEncoder().encode(next).base64EncodedString(), 1)
                     setenv("EDITH_EXTENSION_NATIVE_PARENT", String(getpid()), 1)
                     setenv("EDITH_EXTENSION_NATIVE_TOKEN", nativeAdmission.token, 1)
+                    #if EDITH_FUNCTIONAL_FIXTURE
+                    for admission in fixtureAdmissions.values { try admission.requireCurrent() }
+                    #endif
                     try applyAppearance(next)
                 },
                 start: { role in
+                    #if EDITH_FUNCTIONAL_FIXTURE
+                    guard let admission = fixtureAdmissions[role.rawValue] else {
+                        throw HostWorkerError.rejected
+                    }
+                    try admission.withCurrent {
+                        var roleValues = values
+                        roleValues["hostedFunctionalFixture"] = admission.contextMarker
+                        let runtime = ExtensionBundleRuntime(
+                            store: store, role: role, hostABI: HostContract.compatibility,
+                            packageVersion: next.version, verify: verify)
+                        runtimes.append(runtime)
+                        try runtime.start(id: package.id, context: roleValues as NSDictionary)
+                    }
+                    #else
                     let runtime = ExtensionBundleRuntime(
                         store: store, role: role, hostABI: HostContract.compatibility,
                         packageVersion: next.version, verify: verify)
                     runtimes.append(runtime)
                     try runtime.start(id: package.id, context: context)
+                    #endif
                 })
             if next.recoveryOnly { return }
             let endpoint = try ExtensionPeerEndpoint(
                 namespace: identity.identifier, owner: package.id,
                 directory: identity.root.appendingPathComponent("ExtensionState/Commands"))
-            let server = ExtensionPeerServer(endpoint: endpoint) {
+            let server = ExtensionPeerServer(
+                endpoint: endpoint,
+                controlsDuringDrain: ["extension.process.register", "surface.context"]
+            ) {
                 [weak self] token, command, payload in
-                guard let self, !self.stopping else { throw ExtensionPeerError.unavailable }
+                guard let self else { throw ExtensionPeerError.unavailable }
+                if command == "extension.process.register" {
+                    guard payload.count <= 128,
+                        let object = try JSONSerialization.jsonObject(with: payload)
+                            as? [String: Any],
+                        Set(object.keys) == ["pid"], let pid = object["pid"] as? Int32
+                    else { throw ExtensionPeerError.invalidRequest }
+                    try self.nativeAdmission.registerDescendant(pid)
+                    return Data("{\"registered\":true}".utf8)
+                }
+                guard !self.stopping else { throw ExtensionPeerError.unavailable }
                 if command == "extension.native.authorize" {
                     guard !self.preparingDisable, payload.count <= 512,
                         let object = try JSONSerialization.jsonObject(with: payload)
@@ -343,15 +426,6 @@ final class HostWorkerApplication {
                     try self.nativeAdmission.authorize(pid, token: capability)
                     return try JSONEncoder().encode(next)
                 }
-                if command == "extension.process.register" {
-                    guard payload.count <= 128,
-                        let object = try JSONSerialization.jsonObject(with: payload)
-                            as? [String: Any],
-                        Set(object.keys) == ["pid"], let pid = object["pid"] as? Int32
-                    else { throw ExtensionPeerError.invalidRequest }
-                    try self.nativeAdmission.registerDescendant(pid)
-                    return Data("{\"registered\":true}".utf8)
-                }
                 if command == "surface.context" {
                     guard payload.isEmpty, let context = SurfaceHostContext.current else {
                         throw ExtensionPeerError.invalidRequest
@@ -363,6 +437,7 @@ final class HostWorkerApplication {
                     try await self.showWindow()
                     return Data("{\"opened\":true}".utf8)
                 }
+                guard !self.preparingDisable else { throw ExtensionPeerError.unavailable }
                 guard
                     let runtime = self.runtimes.first(where: {
                         $0.supportsCommands(id: package.id)
@@ -381,6 +456,7 @@ final class HostWorkerApplication {
         guard let configuration else { throw HostWorkerError.rejected }
         switch request.operation {
         case "synchronize", "ambientPolicy":
+            guard !preparingDisable else { throw HostWorkerError.rejected }
             guard let route = HostWorkerSynchronization(rawValue: request.operation) else {
                 throw HostWorkerError.rejected
             }
@@ -415,25 +491,39 @@ final class HostWorkerApplication {
         guard !stopping else { return }
         stopping = true
         navigation?.invalidate()
-        peerServer?.shutdown()
-        peerServer = nil
         FileHandle.standardInput.readabilityHandler = nil
         parentWatcher?.cancel()
         parentWatcher = nil
         if let windowObserver { NotificationCenter.default.removeObserver(windowObserver) }
         windowObserver = nil
-        resourceObservers.forEach(NotificationCenter.default.removeObserver)
-        resourceObservers.removeAll()
         shutdownTask = Task { [self] in
-            if reason != .applicationQuit || !preparedApplicationQuit {
-                for runtime in runtimes { try? await runtime.prepareDisableAll() }
+            var failure: Error?
+            do {
+                if preparation.isClosed {
+                    try await preparation.join()
+                } else if reason != .applicationQuit || !preparedApplicationQuit {
+                    try await preparation.prepare {
+                        for runtime in self.runtimes { try await runtime.suspendCommandsAll() }
+                        for runtime in self.runtimes { try await runtime.prepareDisableAll() }
+                    }
+                }
+            } catch { failure = error }
+            for runtime in runtimes {
+                do { try await runtime.prepareToStopAll() } catch { failure = error }
             }
-            for runtime in runtimes { try? await runtime.prepareToStopAll() }
-            for runtime in runtimes { try? runtime.stopAll() }
+            let retiringServer = peerServer
+            await retiringServer?.shutdownAndWait()
+            peerServer = nil
+            for runtime in runtimes {
+                do { try runtime.stopAll() } catch { failure = error }
+            }
             if let token {
                 try? control.send(
-                    HostWorkerResponse(token: token, ok: true, version: configuration?.version))
+                    HostWorkerResponse(
+                        token: token, ok: failure == nil, version: configuration?.version))
             }
+            resourceObservers.forEach(NotificationCenter.default.removeObserver)
+            resourceObservers.removeAll()
             try? control.close()
             exit(0)
         }

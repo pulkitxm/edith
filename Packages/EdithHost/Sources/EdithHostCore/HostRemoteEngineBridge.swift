@@ -16,18 +16,19 @@ public final class HostRemoteEngineBridge: NSObject {
             let request = try? ExtensionEngineWire.decode(ExtensionEngineRequest.self, from: data),
             request.presentationID == presentationID, (try? request.validate()) != nil
         else { completion(Data()); return }
-        Task { @MainActor [endpoint] in
-            let payload = try? await endpoint.invokeEngine(request)
-            completion(
-                (try? ExtensionEngineWire.encode(
-                    ExtensionEngineReply(
-                        token: request.token, ok: payload != nil, payload: payload ?? Data())))
-                    ?? Data())
-        }
+        let reply = Completion(send: completion)
+        endpoint.beginEngineRequest(request) { reply.finish($0) }
     }
 
     @objc public func cancel(_ token: String) {
         guard token.utf8.count == 36, let token = UUID(uuidString: token) else { return }
         endpoint.cancelEngine(token)
     }
+
+    private final class Completion: @unchecked Sendable {
+        private let send: (Data) -> Void
+        init(send: @escaping (Data) -> Void) { self.send = send }
+        @MainActor func finish(_ data: Data) { send(data) }
+    }
+
 }
