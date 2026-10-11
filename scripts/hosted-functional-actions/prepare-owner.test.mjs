@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import { functionalCanonicalJSON } from "./contract.mjs";
+import { functionalActionOwners } from "./owners.mjs";
 import { functionalPairBuildPlan } from "./prepare-owner.mjs";
 
 const sourceCommit = "a".repeat(40);
@@ -14,12 +15,80 @@ const pinPaths = [
   "scripts/build-extension-package.mjs",
   "scripts/hosted-managed-views/verify-package.py",
   "scripts/hosted-functional-actions/prepare-owner.mjs",
+  "scripts/hosted-functional-actions/fixture-trust.mjs",
+  "Extensions/fixtureSupport/WorkerFixtureRolePolicy.swift",
   "Extensions/fixtureSupport/WorkerFixtureUIAdmission.swift",
   "Extensions/fixtureSupport/WorkerFixtureUIContract.swift",
   "Extensions/fixtureSupport/WorkerFixtureUITrust.swift",
   "Tests/HostedFunctionalActions/ProducerSources/FunctionalSignatureProbe.swift",
 ];
+function policyFixture() {
+  const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
+  const helpers = new Set([
+    "keepAwake",
+    "focusDim",
+    "windowSweaters",
+    "micMute",
+    "keystrokeHighlight",
+    "presenter",
+    "colorPicker",
+    "systemStats",
+    "emoji",
+    "notchShelf",
+    "clipboard",
+  ]);
+  const manifest = Buffer.from(
+    JSON.stringify(
+      functionalActionOwners.map((owner) => ({
+        id: owner,
+        roles: { [helpers.has(owner) ? "helper" : "app"]: [] },
+      })),
+    ),
+  );
+  const cases = functionalActionOwners.map((owner) => {
+    const bytes = Buffer.from(
+      `struct ${owner}ActionCase { static let owner = "${owner}" }`,
+    );
+    return {
+      owner,
+      path: `Tests/HostedFunctionalActions/OwnerCases/${owner}ActionCase.swift`,
+      bytes,
+      sha256: digest(bytes),
+    };
+  });
+  const policies = functionalActionOwners.map((owner) => ({
+    owner,
+    primaryRole: helpers.has(owner) ? "helper" : "app",
+    operations: [`${owner}.probe`],
+    presentations: [
+      {
+        location: ["notchShelf", "systemStats"].includes(owner)
+          ? "settings"
+          : "main",
+        section: ["notchShelf", "systemStats"].includes(owner)
+          ? "extension"
+          : owner,
+      },
+    ],
+    inputs: [],
+    outputs: [],
+    fileScopes: [],
+    manifestSHA256: digest(manifest),
+    caseSHA256: cases.find((entry) => entry.owner === owner).sha256,
+  }));
+  const policyBytes = Buffer.from(functionalCanonicalJSON(policies));
+  return {
+    policyBytes,
+    admittedPolicies: {
+      sourceCommit,
+      policySHA256: digest(policyBytes),
+      manifest: { bytes: manifest, sha256: digest(manifest) },
+      cases,
+    },
+  };
+}
 function fixture() {
+  const policy = policyFixture();
   const artifactBytes = Buffer.from(
     functionalCanonicalJSON({
       schema: 1,
@@ -44,6 +113,7 @@ function fixture() {
   );
   return {
     owner: "plugins",
+    ...policy,
     artifactBytes,
     admittedArtifact: {
       sourceCommit,
@@ -54,7 +124,19 @@ function fixture() {
     },
     sourcePins: {
       sourceCommit,
-      files: pinPaths.map((path) => ({ path, sha256: "d".repeat(64) })),
+      files: [
+        ...pinPaths.map((path) => ({
+          path,
+          sha256:
+            path === "Extensions/manifest.json"
+              ? policy.admittedPolicies.manifest.sha256
+              : "d".repeat(64),
+        })),
+        ...policy.admittedPolicies.cases.map(({ path, sha256 }) => ({
+          path,
+          sha256,
+        })),
+      ],
     },
     environment: {
       GITHUB_ACTIONS: "true",
@@ -118,7 +200,9 @@ test("pair preparation rejects local execution, source drift, ad hoc signing and
       f.sourcePins.sourceCommit = "e".repeat(40);
     },
     (f) => {
-      f.sourcePins.files.pop();
+      f.sourcePins.files = f.sourcePins.files.filter(
+        (entry) => entry.path !== pinPaths.at(-1),
+      );
     },
     (f) => {
       f.sourcePins.files.push(f.sourcePins.files[0]);
@@ -136,5 +220,211 @@ test("pair preparation rejects local execution, source drift, ad hoc signing and
     const f = fixture();
     mutate(f);
     assert.throws(() => functionalPairBuildPlan(f));
+  }
+});
+
+test("pair preparation binds all compiled policy bytes to independently frozen manifest and case sources", () => {
+  const fixturePlan = fixture();
+  assert.equal(
+    functionalPairBuildPlan(fixturePlan).policySHA256,
+    fixturePlan.admittedPolicies.policySHA256,
+  );
+  for (const mutate of [
+    (f) => {
+      delete f.policyBytes;
+    },
+    (f) => {
+      delete f.admittedPolicies;
+    },
+    (f) => {
+      f.admittedPolicies.sourceCommit = "e".repeat(40);
+    },
+    (f) => {
+      f.admittedPolicies.policySHA256 = "e".repeat(64);
+    },
+    (f) => {
+      f.admittedPolicies.manifest.sha256 = "e".repeat(64);
+    },
+    (f) => {
+      f.admittedPolicies.cases[0].bytes = Buffer.from("foreign source");
+    },
+    (f) => {
+      f.sourcePins.files.find(
+        (entry) => entry.path === f.admittedPolicies.cases[0].path,
+      ).sha256 = "e".repeat(64);
+    },
+    (f) => {
+      f.sourcePins.files.find(
+        (entry) => entry.path === "Extensions/manifest.json",
+      ).sha256 = "e".repeat(64);
+    },
+    (f) => {
+      f.admittedPolicies.cases[0].owner = "foreign";
+    },
+  ]) {
+    const f = fixture();
+    mutate(f);
+    assert.throws(() => functionalPairBuildPlan(f));
+  }
+});
+
+function syntheticFileScope() {
+  return {
+    name: "synthetic-state",
+    kind: "file",
+    purpose: "mutable-state",
+    root: "owner-outputs",
+    components: [{ phase: true }, { literal: "synthetic-state.bin" }],
+    maximumBytes: 4096,
+    maximumEntries: 1,
+    initialState: "present",
+    allowedStates: ["present", "absent"],
+    immutableFiles: [],
+    mutableFiles: [],
+  };
+}
+
+function replacePolicyBytes(f, policies) {
+  f.policyBytes = Buffer.from(functionalCanonicalJSON(policies));
+  f.admittedPolicies.policySHA256 = createHash("sha256")
+    .update(f.policyBytes)
+    .digest("hex");
+}
+
+test("pair preparation carries admitted synthetic file scopes into the generated trust anchor", () => {
+  const f = fixture();
+  const originalDigest = f.admittedPolicies.policySHA256;
+  const policies = JSON.parse(f.policyBytes.toString("utf8"));
+  policies.find((policy) => policy.owner === f.owner).fileScopes = [
+    syntheticFileScope(),
+  ];
+  replacePolicyBytes(f, policies);
+  const plan = functionalPairBuildPlan(f);
+  assert.notEqual(plan.policySHA256, originalDigest);
+  assert.equal(plan.policySHA256, f.admittedPolicies.policySHA256);
+  assert(
+    plan.anchor.source.includes(
+      'WorkerFixtureFileScope(name: "synthetic-state", kind: .file, purpose: .mutableState, root: .ownerOutputs',
+    ),
+  );
+  assert(
+    plan.anchor.source.includes(
+      'components: [.phase, .literal("synthetic-state.bin")]',
+    ),
+  );
+});
+
+test("pair preparation rejects omitted and malformed file scopes even with matching policy digests", () => {
+  for (const [name, mutate] of [
+    [
+      "omitted field",
+      (policy) => {
+        delete policy.fileScopes;
+      },
+    ],
+    [
+      "null scopes",
+      (policy) => {
+        policy.fileScopes = null;
+      },
+    ],
+    [
+      "object scopes",
+      (policy) => {
+        policy.fileScopes = {};
+      },
+    ],
+    [
+      "incomplete scope",
+      (policy) => {
+        policy.fileScopes = [{ name: "synthetic-state" }];
+      },
+    ],
+    [
+      "foreign authority",
+      (policy) => {
+        policy.fileScopes[0].root = "shared-root";
+      },
+    ],
+    [
+      "traversal",
+      (policy) => {
+        policy.fileScopes[0].components = [{ literal: ".." }];
+      },
+    ],
+    [
+      "unbounded bytes",
+      (policy) => {
+        policy.fileScopes[0].maximumBytes = 268435457;
+      },
+    ],
+    [
+      "invalid entries",
+      (policy) => {
+        policy.fileScopes[0].maximumEntries = 2;
+      },
+    ],
+    [
+      "widened states",
+      (policy) => {
+        policy.fileScopes[0].allowedStates.push("foreign");
+      },
+    ],
+    [
+      "duplicate scopes",
+      (policy) => {
+        policy.fileScopes.push(structuredClone(policy.fileScopes[0]));
+      },
+    ],
+    [
+      "extra authority",
+      (policy) => {
+        policy.fileScopes[0].unrestricted = true;
+      },
+    ],
+  ]) {
+    const f = fixture();
+    const policies = JSON.parse(f.policyBytes.toString("utf8"));
+    const policy = policies.find((entry) => entry.owner !== f.owner);
+    policy.fileScopes = [syntheticFileScope()];
+    mutate(policy);
+    replacePolicyBytes(f, policies);
+    assert.throws(
+      () => functionalPairBuildPlan(f),
+      { code: "ERR_ASSERTION" },
+      name,
+    );
+  }
+});
+
+test("pair preparation requires every admitted policy source pin and matching source bytes", () => {
+  for (const mutate of [
+    (f) => {
+      f.admittedPolicies.manifest.bytes = Buffer.from("[]");
+    },
+    (f) => {
+      f.admittedPolicies.cases.pop();
+    },
+    (f) => {
+      f.admittedPolicies.cases[0].path = "Tests/foreign.swift";
+    },
+    ...[
+      "scripts/hosted-functional-actions/fixture-trust.mjs",
+      "Extensions/fixtureSupport/WorkerFixtureRolePolicy.swift",
+      "Extensions/manifest.json",
+    ].map((path) => (f) => {
+      f.sourcePins.files = f.sourcePins.files.filter(
+        (entry) => entry.path !== path,
+      );
+    }),
+    (f) => {
+      f.sourcePins.files = f.sourcePins.files.filter(
+        (entry) => entry.path !== f.admittedPolicies.cases.at(-1).path,
+      );
+    },
+  ]) {
+    const f = fixture();
+    mutate(f);
+    assert.throws(() => functionalPairBuildPlan(f), { code: "ERR_ASSERTION" });
   }
 });

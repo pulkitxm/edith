@@ -12,7 +12,10 @@ import {
 import { join, resolve } from "node:path";
 import { requireRegularTree } from "../build-contained-host-runtime.mjs";
 import { functionalCanonicalJSON } from "./contract.mjs";
-import { functionalFixtureTrustSource } from "./fixture-trust.mjs";
+import {
+  functionalFixtureRolePolicySource,
+  functionalFixtureTrustSource,
+} from "./fixture-trust.mjs";
 import { functionalActionOwners } from "./owners.mjs";
 
 const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
@@ -25,11 +28,22 @@ export function functionalPairBuildPlan({
   owner,
   artifactBytes,
   admittedArtifact,
+  policyBytes,
+  admittedPolicies,
   sourcePins,
   environment,
 }) {
   assert(functionalActionOwners.includes(owner));
-  const anchor = functionalFixtureTrustSource(artifactBytes, admittedArtifact);
+  const policy = functionalFixtureRolePolicySource(
+    policyBytes,
+    admittedPolicies,
+  );
+  const anchor = functionalFixtureTrustSource(
+    artifactBytes,
+    admittedArtifact,
+    policyBytes,
+    admittedPolicies,
+  );
   const artifact = JSON.parse(artifactBytes.toString("utf8"));
   assert.equal(environment.GITHUB_ACTIONS, "true");
   assert.equal(environment.RUNNER_ENVIRONMENT, "github-hosted");
@@ -89,18 +103,32 @@ export function functionalPairBuildPlan({
     "scripts/build-extension-package.mjs",
     "scripts/hosted-managed-views/verify-package.py",
     "scripts/hosted-functional-actions/prepare-owner.mjs",
+    "scripts/hosted-functional-actions/fixture-trust.mjs",
+    "Extensions/fixtureSupport/WorkerFixtureRolePolicy.swift",
     "Extensions/fixtureSupport/WorkerFixtureUIAdmission.swift",
     "Extensions/fixtureSupport/WorkerFixtureUIContract.swift",
     "Extensions/fixtureSupport/WorkerFixtureUITrust.swift",
     "Tests/HostedFunctionalActions/ProducerSources/FunctionalSignatureProbe.swift",
   ])
     assert(files.has(path), `Missing independently admitted source: ${path}`);
+  assert.equal(policy.sourceCommit, sourcePins.sourceCommit);
+  assert.equal(
+    files.get("Extensions/manifest.json"),
+    admittedPolicies.manifest.sha256,
+  );
+  for (const entry of admittedPolicies.cases)
+    assert.equal(
+      files.get(entry.path),
+      entry.sha256,
+      `Policy case source changed: ${entry.owner}`,
+    );
   const versions = ["1.0.0", "1.1.0"];
   return Object.freeze({
     owner,
     sourceCommit: sourcePins.sourceCommit,
     pairScope: "synthetic-development",
     anchor,
+    policySHA256: policy.policySHA256,
     host: Object.freeze(structuredClone(artifact.host)),
     root: artifact.root,
     hostIdentifier: artifact.hostIdentifier,
@@ -164,6 +192,8 @@ export async function prepareFunctionalOwnerPair({
   owner,
   artifactBytes,
   admittedArtifact,
+  policyBytes,
+  admittedPolicies,
   sourcePins,
   environment = process.env,
 }) {
@@ -172,6 +202,8 @@ export async function prepareFunctionalOwnerPair({
     owner,
     artifactBytes,
     admittedArtifact,
+    policyBytes,
+    admittedPolicies,
     sourcePins,
     environment,
   });
