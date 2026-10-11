@@ -3,7 +3,7 @@ import Darwin
 import Foundation
 import Security
 
-final class FunctionalPinnedPath {
+final class FunctionalPinnedPath: Sendable {
     let url: URL
     private let descriptor: Int32
     private let original: stat

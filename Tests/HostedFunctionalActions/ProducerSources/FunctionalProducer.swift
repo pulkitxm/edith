@@ -18,6 +18,8 @@ final class FunctionalHeldPresentation {
     private let worker: URL
     private let roleFiles: [(FunctionalPinnedPath, String)]
     private(set) var originalUI: FunctionalOriginalUI?
+    private let compiledRecipe: [String: Any]
+    private var nextStep = 0
 
     init(capabilityBytes: Data, presentationID: String, location: String, section: String,
         hostPID: Int32, issuer: FunctionalIssuer) throws
@@ -33,9 +35,24 @@ final class FunctionalHeldPresentation {
             context.operations == FunctionalProducerBuild.operations[context.owner],
             context.activationOperation == FunctionalProducerBuild.activationOperations[context.owner],
             presentationID == Self.derivePresentationID(capabilityBytes),
-            ["main", "settings"].contains(location),
-            section == context.owner || location == "settings" && ["general", "appearance", "extensions"].contains(section)
+            let recipeBytes = FunctionalProducerBuild.recipes[context.owner],
+            let pathPolicyBytes = FunctionalProducerBuild.ownedPathPolicies[context.owner]
         else { throw FunctionalFailure.invalid("compiled capability scope") }
+        let recipe = try FunctionalBytes.object(recipeBytes)
+        guard recipe["location"] as? String == location, recipe["section"] as? String == section,
+            let policy = try JSONSerialization.jsonObject(with: pathPolicyBytes) as? [[String: String]],
+            Set(policy.map { $0["name"] ?? "" }) == Set(context.ownedPaths.map(\.name)),
+            policy.count == context.ownedPaths.count
+        else { throw FunctionalFailure.invalid("independently compiled presentation and path policy") }
+        for entry in context.ownedPaths {
+            guard let expected = policy.first(where: { $0["name"] == entry.name }),
+                expected["kind"] == entry.kind, let relative = expected["relativePath"],
+                entry.path == context.fixtureRoot + "/" + relative,
+                let purpose = expected["purpose"],
+                ["saved-data", "immutable-input", "writable-directory", "absent-output"].contains(purpose)
+            else { throw FunctionalFailure.invalid("caller-selected file authority") }
+        }
+        compiledRecipe = recipe
         engine = try FunctionalBirth.observe(context.engine.pid)
         ui = try FunctionalBirth.observe(context.ui.pid)
         producer = try FunctionalBirth.observe(getpid())
@@ -84,6 +101,37 @@ final class FunctionalHeldPresentation {
                 guard let self else { throw FunctionalFailure.invalid("released presentation") }
                 try self.requireCurrent()
             })
+    }
+
+    func performOriginalStep(_ supplied: [String: Any]) async throws -> Bool {
+        try requireCurrent()
+        guard let originalUI, let steps = compiledRecipe["steps"] as? [[String: Any]],
+            nextStep < steps.count else { throw FunctionalFailure.invalid("source recipe exhausted") }
+        var expected = steps[nextStep]
+        func resolveLabel(_ entry: [String: Any]) throws -> [String: Any] {
+            var entry = entry
+            if let reference = entry["ownedLabel"] as? [String: String] {
+                guard reference["component"] == "basename", let name = reference["name"],
+                    let path = capability.ownedPaths.first(where: { $0.name == name })
+                else { throw FunctionalFailure.invalid("source-owned label binding") }
+                entry["label"] = URL(fileURLWithPath: path.path).lastPathComponent
+            }
+            return entry
+        }
+        expected = try resolveLabel(expected)
+        var scope = try resolveLabel(expected["scope"] as? [String: Any] ?? [
+            "kind": "window", "label": "Synthetic functional " + capability.owner + " " + capability.phase + " " + capability.session,
+        ])
+        if let anchor = scope["anchor"] as? [String: Any] { scope["anchor"] = try resolveLabel(anchor) }
+        expected["scope"] = scope
+        if expected["ownedPath"] == nil { expected["ownedPath"] = NSNull() }
+        guard try FunctionalBytes.canonical(expected) == FunctionalBytes.canonical(supplied)
+        else { throw FunctionalFailure.invalid("caller-selected original action") }
+        let decoded = try JSONDecoder().decode(FunctionalOriginalUI.Step.self, from: FunctionalBytes.canonical(expected))
+        let result = try await originalUI.perform(decoded, deadline: .now.advanced(by: .seconds(30)))
+        try requireCurrent()
+        nextStep += 1
+        return result
     }
 
     func descriptor(location: String, section: String, issuer: FunctionalIssuer) throws -> Data {
@@ -224,12 +272,11 @@ enum FunctionalProducer {
                 try emit(["requestID": requestID, "operation": operation, "descriptor": try FunctionalBytes.object(descriptor)])
             case "original-step":
                 try FunctionalBytes.exact(command, ["requestID", "operation", "step"])
-                guard let held, let original = held.originalUI, let step = command["step"] as? [String: Any]
+                guard let held, let step = command["step"] as? [String: Any]
                 else { throw FunctionalFailure.invalid("missing held original UI") }
-                let decoded = try JSONDecoder().decode(FunctionalOriginalUI.Step.self, from: FunctionalBytes.canonical(step))
-                try await original.perform(decoded, deadline: .now.advanced(by: .seconds(30)))
+                let performed = try await held.performOriginalStep(step)
                 try held.requireCurrent()
-                try emit(["requestID": requestID, "operation": operation, "controlPerformed": true,
+                try emit(["requestID": requestID, "operation": operation, "controlPerformed": performed,
                     "receiverObservationRequired": true, "presentationID": held.presentationID])
             case "observe-rendered":
                 try FunctionalBytes.exact(command, ["requestID", "operation", "role", "label", "scope"])

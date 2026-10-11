@@ -11,14 +11,24 @@ final class FunctionalOriginalUI {
         let value: Value
         let scope: Scope
         let ownedPath: String?
+        let selector: String?
+        let ownedLabel: OwnedLabel?
+        let when: String?
+        struct OwnedLabel: Decodable {
+            let name: String
+            let component: String
+        }
 
         struct Scope: Decodable {
             let kind: String
             let label: String
             let anchor: Anchor?
+            let ownedLabel: OwnedLabel?
             struct Anchor: Decodable {
                 let role: String
                 let label: String
+                let selector: String?
+                let ownedLabel: OwnedLabel?
             }
         }
 
@@ -92,18 +102,38 @@ final class FunctionalOriginalUI {
         try requireHeld()
     }
 
-    func perform(_ step: Step, deadline: ContinuousClock.Instant) async throws {
-        guard performed < 128, (!step.label.isEmpty || step.scope.kind == "button" && step.scope.anchor != nil), step.label.utf8.count <= 512,
+    func perform(_ step: Step, deadline: ContinuousClock.Instant) async throws -> Bool {
+        guard performed < 128, (!step.label.isEmpty || step.ownedLabel != nil || step.scope.anchor != nil), step.label.utf8.count <= 512,
             let role = Self.roles[step.role]
         else { throw FunctionalFailure.invalid("original control step") }
         try requireHeld()
-        let control = try await wait(deadline: deadline) { try self.uniqueControl(role: role, label: step.label, scope: step.scope) }
+        let control = try await wait(deadline: deadline) { try self.uniqueControl(role: role, label: step.label, scope: step.scope, selector: step.selector ?? "label") }
         try requireHeld()
         let secure = try attribute(control, kAXSubroleAttribute) as? String == kAXSecureTextFieldSubrole
         guard step.role != "secureTextField" || secure,
             step.role != "textField" || !secure,
             try step.action == "choose-owned-path" || attribute(control, kAXEnabledAttribute) as? Bool == true
         else { throw FunctionalFailure.invalid("disabled original control") }
+        try requireOwnedLabel(step.ownedLabel, actual: step.label)
+        try requireOwnedLabel(step.scope.ownedLabel, actual: step.scope.label)
+        if let anchor = step.scope.anchor { try requireOwnedLabel(anchor.ownedLabel, actual: anchor.label) }
+        if let condition = step.when {
+            let skip: Bool
+            switch condition {
+            case "value-differs":
+                guard step.action == "set-checkbox", case .boolean(let desired) = step.value,
+                    let current = try attribute(control, kAXValueAttribute) as? NSNumber,
+                    current.intValue == 0 || current.intValue == 1
+                else { throw FunctionalFailure.invalid("source checkbox condition") }
+                skip = current.boolValue == desired
+            case "not-selected":
+                guard step.action == "click", let selected = try attribute(control, kAXSelectedAttribute) as? Bool
+                else { throw FunctionalFailure.invalid("source selected condition") }
+                skip = selected
+            default: throw FunctionalFailure.invalid("source step condition")
+            }
+            if skip { performed += 1; try requireHeld(); return false }
+        }
         switch (step.action, step.value) {
         case ("set-checkbox", .boolean(let desired)):
             guard step.role == "checkBox", step.ownedPath == nil,
@@ -117,7 +147,7 @@ final class FunctionalOriginalUI {
                 return current?.boolValue == desired ? control : nil
             }
         case ("replace-text", .text(let text)):
-            guard ["textField", "secureTextField"].contains(step.role), step.ownedPath == nil,
+            guard ["textField", "secureTextField", "textArea"].contains(step.role), step.ownedPath == nil,
                 text.utf8.count <= 4096, !text.utf8.contains(0)
             else { throw FunctionalFailure.invalid("synthetic text step") }
             try set(control, kAXValueAttribute, text as CFString)
@@ -129,7 +159,7 @@ final class FunctionalOriginalUI {
         case ("choose-owned-path", .null):
             guard step.role == "button", let name = step.ownedPath,
                 let owned = ownedPaths[name], step.scope.kind == "panel",
-                ["Save", "Choose", "Open"].contains(step.label)
+                ["Save", "Choose", "Open", "Scan"].contains(step.label)
             else { throw FunctionalFailure.invalid("named synthetic chooser capability") }
             try owned.requireCurrent()
             try await choose(owned, confirmation: step, deadline: deadline)
@@ -147,6 +177,37 @@ final class FunctionalOriginalUI {
                 guard let value = try self.attribute(control, kAXValueAttribute) as? NSNumber else { return nil }
                 return abs(value.doubleValue - desired) <= 0.000001 ? control : nil
             }
+        case ("set-column-width", .number(let width)):
+            guard step.role == "column", width.isFinite, width >= 64, width <= 2048,
+                let position = try attribute(control, kAXPositionAttribute),
+                let size = try attribute(control, kAXSizeAttribute),
+                CFGetTypeID(position) == AXValueGetTypeID(), CFGetTypeID(size) == AXValueGetTypeID()
+            else { throw FunctionalFailure.invalid("original column geometry") }
+            var point = CGPoint.zero
+            var dimensions = CGSize.zero
+            guard AXValueGetValue(unsafeDowncast(position, to: AXValue.self), .cgPoint, &point),
+                AXValueGetValue(unsafeDowncast(size, to: AXValue.self), .cgSize, &dimensions),
+                dimensions.width > 0, dimensions.height >= 8, abs(dimensions.width - width) >= 1
+            else { throw FunctionalFailure.invalid("original column must resize") }
+            let start = CGPoint(x: point.x + dimensions.width - 1, y: point.y + 4)
+            let end = CGPoint(x: start.x + width - dimensions.width, y: start.y)
+            for (type, location) in [(CGEventType.leftMouseDown, start), (.leftMouseDragged, end), (.leftMouseUp, end)] {
+                try requireHeld(); try host.requireCurrent()
+                guard let event = CGEvent(mouseEventSource: nil, mouseType: type,
+                    mouseCursorPosition: location, mouseButton: .left)
+                else { throw FunctionalFailure.invalid("original column native drag") }
+                event.postToPid(host.pid)
+            }
+            _ = try await wait(deadline: deadline) {
+                guard let value = try self.attribute(control, kAXSizeAttribute), CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+                var size = CGSize.zero
+                guard AXValueGetValue(unsafeDowncast(value, to: AXValue.self), .cgSize, &size) else { return nil }
+                return abs(size.width - width) <= 2 ? control : nil
+            }
+        case ("show-menu", .null):
+            guard ["row", "button", "staticText"].contains(step.role), step.ownedPath == nil,
+                AXUIElementPerformAction(control, kAXShowMenuAction as CFString) == .success
+            else { throw FunctionalFailure.invalid("original context menu") }
         case ("increment", .null), ("decrement", .null):
             guard step.role == "stepper", step.ownedPath == nil else { throw FunctionalFailure.invalid("original stepper") }
             let action = step.action == "increment" ? kAXIncrementAction : kAXDecrementAction
@@ -164,6 +225,7 @@ final class FunctionalOriginalUI {
         }
         performed += 1
         try requireHeld()
+        return true
     }
 
     func observeRendered(role: String, label: String, scope: Step.Scope) throws -> Observation {
@@ -227,18 +289,25 @@ final class FunctionalOriginalUI {
         try host.requireCurrent()
     }
 
-    private func uniqueControl(role: String, label: String, scope: Step.Scope) throws -> AXUIElement? {
+    private func requireOwnedLabel(_ label: Step.OwnedLabel?, actual: String) throws {
+        guard let label else { return }
+        guard label.component == "basename", let path = ownedPaths[label.name], path.url.lastPathComponent == actual
+        else { throw FunctionalFailure.invalid("source-owned basename label") }
+        try path.requireCurrent()
+    }
+
+    private func uniqueControl(role: String, label: String, scope: Step.Scope, selector: String = "label") throws -> AXUIElement? {
         guard let scopeRole = Self.scopes[scope.kind], !scope.label.isEmpty || scope.anchor != nil
         else { throw FunctionalFailure.invalid("original scope") }
         let roots: [AXUIElement]
         if scope.kind == "menu" || scope.kind == "panel" {
-            roots = try descendants(application).filter { try scopeMatches($0, role: scopeRole, scope: scope, controlRole: role, controlLabel: label) }
+            roots = try descendants(application).filter { try scopeMatches($0, role: scopeRole, scope: scope, controlRole: role, controlLabel: label, controlSelector: selector) }
         } else {
             guard let windows = try attribute(application, kAXWindowsAttribute) as? [AXUIElement]
             else { throw FunctionalFailure.invalid("original windows") }
             let selected = try windows.filter { try matches($0, role: kAXWindowRole, label: windowTitle) }
             guard selected.count == 1 else { return nil }
-            roots = scope.kind == "window" ? selected : try descendants(selected[0]).filter { try scopeMatches($0, role: scopeRole, scope: scope, controlRole: role, controlLabel: label) }
+            roots = scope.kind == "window" ? selected : try descendants(selected[0]).filter { try scopeMatches($0, role: scopeRole, scope: scope, controlRole: role, controlLabel: label, controlSelector: selector) }
         }
         let innermost = try roots.filter { candidate in
             let descendants = try descendants(candidate)
@@ -246,12 +315,12 @@ final class FunctionalOriginalUI {
         }
         guard innermost.count <= 1 else { throw FunctionalFailure.invalid("ambiguous original scope") }
         guard let root = innermost.first else { return nil }
-        let controls = try ([root] + descendants(root)).filter { try matches($0, role: role, label: label) }
+        let controls = try ([root] + descendants(root)).filter { try matches($0, role: role, label: label, selector: selector) }
         guard controls.count <= 1 else { throw FunctionalFailure.invalid("ambiguous original control") }
         return controls.first
     }
 
-    private func scopeMatches(_ element: AXUIElement, role: String, scope: Step.Scope, controlRole: String, controlLabel: String) throws -> Bool {
+    private func scopeMatches(_ element: AXUIElement, role: String, scope: Step.Scope, controlRole: String, controlLabel: String, controlSelector: String) throws -> Bool {
         guard try attribute(element, kAXRoleAttribute) as? String == role else { return false }
         if !scope.label.isEmpty, try !matches(element, role: role, label: scope.label) { return false }
         guard let anchor = scope.anchor else { return true }
@@ -259,8 +328,8 @@ final class FunctionalOriginalUI {
             !anchor.label.isEmpty, anchor.label.utf8.count <= 512
         else { throw FunctionalFailure.invalid("original scope source anchor") }
         let children = try descendants(element)
-        guard try children.filter({ try matches($0, role: anchorRole, label: anchor.label) }).count == 1 else { return false }
-        return try ([element] + children).filter({ try matches($0, role: controlRole, label: controlLabel) }).count == 1
+        guard try children.filter({ try matches($0, role: anchorRole, label: anchor.label, selector: anchor.selector ?? "label") }).count == 1 else { return false }
+        return try ([element] + children).filter({ try matches($0, role: controlRole, label: controlLabel, selector: controlSelector) }).count == 1
     }
 
     private func descendants(_ element: AXUIElement) throws -> [AXUIElement] {
@@ -278,9 +347,12 @@ final class FunctionalOriginalUI {
         return output
     }
 
-    private func matches(_ element: AXUIElement, role: String, label: String) throws -> Bool {
+    private func matches(_ element: AXUIElement, role: String, label: String, selector: String = "label") throws -> Bool {
         guard try attribute(element, kAXRoleAttribute) as? String == role else { return false }
+        guard ["label", "help", "placeholder"].contains(selector) else { throw FunctionalFailure.invalid("source selector") }
         if label.isEmpty { return true }
+        if selector == "help" { return try attribute(element, kAXHelpAttribute) as? String == label }
+        if selector == "placeholder" { return try attribute(element, kAXPlaceholderValueAttribute) as? String == label }
         let title = try attribute(element, kAXTitleAttribute) as? String
         let identifier = try attribute(element, kAXIdentifierAttribute) as? String
         let description = try attribute(element, kAXDescriptionAttribute) as? String
