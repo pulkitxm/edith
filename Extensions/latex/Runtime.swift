@@ -11,6 +11,7 @@ final class ExtensionRuntime: NSObject {
     private var engineClient: ExtensionEngineClient?
     private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
+    private var suspended = false
     private var suspension: Task<Void, Never>?
     private var uiRetirements: [UUID: Task<Void, Never>] = [:]
 
@@ -41,6 +42,7 @@ final class ExtensionRuntime: NSObject {
     @objc(suspendCommandsWithCompletion:)
     func suspendCommands(completion: @escaping () -> Void) {
         commands.suspend()
+        suspended = true
         let worker = worker
         let model = uiModel
         let streams = cliStreams
@@ -68,6 +70,7 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        suspendCommands(completion: {})
         stopUI()
         let streams = cliStreams; cliStreams = nil; streams?.stop()
         commands.shutdown()
@@ -77,6 +80,7 @@ final class ExtensionRuntime: NSObject {
             await worker?.shutdown()
             await streams?.stopAndWait()
             await commands.shutdownAndWait()
+            for task in Array(uiRetirements.values) { await task.value }
             completion()
         }
     }
@@ -92,6 +96,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
+            guard !suspended, uiRetirements.isEmpty else { return ["ok": false] as NSDictionary }
             guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "latex", let client = configuration.engineClient,
                 Self.hasEditorResources
@@ -101,6 +106,7 @@ final class ExtensionRuntime: NSObject {
             TextEditingCommands.install()
         case "stopUI": stopUI()
         case "start":
+            guard !suspended else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
                 Self.hasEditorResources

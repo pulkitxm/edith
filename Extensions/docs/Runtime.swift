@@ -13,6 +13,7 @@ final class ExtensionRuntime: NSObject {
     private var cliStreams: ExtensionCLIStreams?
     private var stopped = false
     private var activeCalls = 0
+    private var suspended = false
     private var suspension: Task<Void, Never>?
     private var uiRetirements: [UUID: Task<Void, Never>] = [:]
 
@@ -46,6 +47,7 @@ final class ExtensionRuntime: NSObject {
     @objc(suspendCommandsWithCompletion:)
     func suspendCommands(completion: @escaping () -> Void) {
         commands.suspend()
+        suspended = true
         let browser = browser
         let uiBrowser = uiBrowser
         let streams = cliStreams
@@ -71,6 +73,7 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        suspendCommands(completion: {})
         stopped = true
         let streams = cliStreams; cliStreams = nil; streams?.stop()
         commands.shutdown()
@@ -83,6 +86,7 @@ final class ExtensionRuntime: NSObject {
             await streams?.stopAndWait()
             await commands.shutdownAndWait()
             browser?.shutdown()
+            for task in Array(uiRetirements.values) { await task.value }
             completion()
         }
     }
@@ -98,6 +102,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
+            guard !suspended, uiRetirements.isEmpty else { return ["ok": false] as NSDictionary }
             guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "docs", let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
@@ -116,6 +121,7 @@ final class ExtensionRuntime: NSObject {
             uiBrowser = nil
             engineClient?.invalidate(); engineClient = nil
         case "start":
+            guard !suspended else { return ["ok": false] as NSDictionary }
             guard !stopped, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
