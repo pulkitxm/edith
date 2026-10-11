@@ -278,20 +278,21 @@ public enum DownloadOperationExecution {
         file: URL = DownloadQueue.file
     ) throws -> DownloadMutationResult {
 
-        var records = DownloadQueue.load(from: file)
-        var changed = 0
-        for index in records.indices where id == nil || records[index].id == id {
-            let cancellable =
-                switch records[index].status {
-                case .queued: includeQueued
-                case .resolving, .downloading: true
-                case .done, .error, .interrupted: false
-                }
-            guard cancellable else { continue }
-            records[index].status = .interrupted(reason)
-            changed += 1
+        let (records, changed) = try DownloadQueue.update(file: file) { records in
+            var changed = 0
+            for index in records.indices where id == nil || records[index].id == id {
+                let cancellable =
+                    switch records[index].status {
+                    case .queued: includeQueued
+                    case .resolving, .downloading: true
+                    case .done, .error, .interrupted: false
+                    }
+                guard cancellable else { continue }
+                records[index].status = .interrupted(reason)
+                changed += 1
+            }
+            return changed
         }
-        if changed > 0 { try DownloadQueue.save(records, to: file) }
         return DownloadMutationResult(changed: changed, records: records)
     }
 

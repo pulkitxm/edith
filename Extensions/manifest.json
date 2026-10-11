@@ -2394,7 +2394,7 @@
       "scripts/build-extension-support.mjs",
       "scripts/build-extension-ui-carrier.mjs",
       "scripts/build-contained-host-runtime.mjs",
-      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
+      "Packages/ExtensionSupport"
     ],
     "dependencies": [],
     "contractVersion": 1,

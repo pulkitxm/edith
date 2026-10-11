@@ -15,6 +15,18 @@ public enum MusicStorage {
 
     public static var dataDir: URL { ExtensionData.root }
 
+    public static var downloadQueueFile: URL {
+        resolvedDownloadQueueFile(environment: ProcessInfo.processInfo.environment)
+    }
+
+    public static func resolvedDownloadQueueFile(environment: [String: String]) -> URL {
+        let root = ExtensionData.resolve(environment: environment, fallback: ExtensionData.root)
+        let file = ExtensionData.productionDirectory(
+            "data/downloads.json", fallback: root.appendingPathComponent("downloads.json"),
+            environment: environment)
+        return URL(fileURLWithPath: file.path, isDirectory: false)
+    }
+
     public static func selectedMusicDirectory(
         defaults: UserDefaults = SharedDefaults.store,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser

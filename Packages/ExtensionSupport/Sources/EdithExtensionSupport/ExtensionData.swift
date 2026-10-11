@@ -23,7 +23,11 @@ public enum ExtensionData {
         "notchShelf": ["Shelf", "notch-browser"], "latex": ["latex"],
         "calendar": ["Snapshots/calendar-agenda.json"],
         "appMaintenance": ["app-update-center.json", "app-maintenance-snapshot.json"],
-        "music": ["music", "thumbnails", "music-library-index.json", "shared-state"],
+        "music": [
+            "music", "thumbnails", "music-library-index.json", "shared-state",
+            "data/downloads.json", "data/downloads.json.lock", "data/downloads.json.scheduler.lock",
+            "data/downloads.json.activity.json", "data/downloads.json.activity.json.lock",
+        ],
         "seoAudit": ["SEOAudit"], "machines": ["machines"], "codeStats": ["code-stats"],
         "virtualCamera": ["virtual-camera"],
         "companion": [
@@ -31,7 +35,10 @@ public enum ExtensionData {
             "machines/companion-outbox",
         ],
         "database": ["database"], "timeLapse": ["video-projects/TimeLapses"],
-        "downloads": ["data/downloads.json"],
+        "downloads": [
+            "data/downloads.json", "data/downloads.json.lock", "data/downloads.json.scheduler.lock",
+            "data/downloads.json.activity.json", "data/downloads.json.activity.json.lock",
+        ],
     ]
 
     public static func selectedMusicDirectory(defaults: UserDefaults, homeDirectory: URL) -> URL? {
