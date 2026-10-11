@@ -161,6 +161,7 @@ final class HostWorkerApplication {
         let cleanup = Result {
             try preparation.begin(token: request.token) {
                 for runtime in self.runtimes { try await runtime.suspendCommandsAll() }
+                await self.peerServer?.cancelAndJoinRequests()
                 for runtime in self.runtimes { try await runtime.prepareDisableAll() }
             }
         }
@@ -191,11 +192,13 @@ final class HostWorkerApplication {
             return
         }
         navigation?.cancelPending()
-        peerServer?.shutdown()
-        peerServer = nil
+        let retiringServer = peerServer
+        retiringServer?.shutdown()
         let cleanup = Result {
             try preparation.begin(token: request.token, operation: "applicationQuit") {
                 for runtime in self.runtimes { try await runtime.suspendCommandsAll() }
+                await retiringServer?.shutdownAndWait()
+                if self.peerServer === retiringServer { self.peerServer = nil }
                 guard let host = ExtensionProcessIdentity.read(getppid()) else {
                     throw HostWorkerError.rejected
                 }
@@ -391,7 +394,10 @@ final class HostWorkerApplication {
             let endpoint = try ExtensionPeerEndpoint(
                 namespace: identity.identifier, owner: package.id,
                 directory: identity.root.appendingPathComponent("ExtensionState/Commands"))
-            let server = ExtensionPeerServer(endpoint: endpoint) {
+            let server = ExtensionPeerServer(
+                endpoint: endpoint,
+                controlsDuringDrain: ["extension.process.register", "surface.context"]
+            ) {
                 [weak self] token, command, payload in
                 guard let self else { throw ExtensionPeerError.unavailable }
                 if command == "extension.process.register" {
@@ -505,7 +511,8 @@ final class HostWorkerApplication {
             for runtime in runtimes {
                 do { try await runtime.prepareToStopAll() } catch { failure = error }
             }
-            peerServer?.shutdown()
+            let retiringServer = peerServer
+            await retiringServer?.shutdownAndWait()
             peerServer = nil
             for runtime in runtimes {
                 do { try runtime.stopAll() } catch { failure = error }

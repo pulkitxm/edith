@@ -76,6 +76,7 @@ public final class HostRemoteSession {
     private var bootstrap: NSXPCConnection?
     private var channel: HostRemoteChannel?
     private var handles: [UUID: HostRemoteSceneHandle] = [:]
+    private var retiringChannels: [UUID: Task<Void, Never>] = [:]
     private var stopping = false
     private var stopRequested = false
     private var stopFailure: Error?
@@ -169,7 +170,7 @@ public final class HostRemoteSession {
         -> HostRemoteSceneHandle
     {
         guard isAvailable,
-            handles.count < HostRemoteSceneDescriptor.maximumScenes,
+            handles.count + retiringChannels.count < HostRemoteSceneDescriptor.maximumScenes,
             handles[request.presentationID] == nil,
             !configuration.uiOnly || (request.location == "settings" && request.surface == nil)
         else { throw HostWorkerError.rejected }
@@ -361,6 +362,16 @@ public final class HostRemoteSession {
         }
     }
 
+    fileprivate func retireChannel(_ channel: HostRemoteChannel) {
+        channel.invalidate()
+        let token = UUID()
+        let task = Task { [self] in
+            await channel.invalidateAndWait()
+            retiringChannels[token] = nil
+        }
+        retiringChannels[token] = task
+    }
+
     public func release(_ presentationID: UUID) async throws {
         guard let handle = handles[presentationID] else { return }
         if !stopping, !stopped, handle.isPresented { try await handle.prepareToClose() }
@@ -456,6 +467,9 @@ public final class HostRemoteSession {
             fixturePreparedChannel = nil
         }
         #endif
+        #if EDITH_FUNCTIONAL_FIXTURE
+        let fixtureReceiverCount = retiringChannels.count + (channel == nil ? 0 : 1)
+        #endif
         if let channel {
             let request = HostRemoteCommand(operation: "stop")
             #if EDITH_FUNCTIONAL_FIXTURE
@@ -473,8 +487,10 @@ public final class HostRemoteSession {
                 throw error
             }
             channel.didInvalidate = nil
-            channel.invalidate()
+            await channel.invalidateAndWait()
         }
+        for task in retiringChannels.values { await task.value }
+        retiringChannels.removeAll()
         channel = nil
         bootstrap?.invalidate()
         bootstrap = nil
@@ -517,6 +533,7 @@ public final class HostRemoteSession {
         var joinedTasks = [("launch", launching != nil), ("configure", configuring != nil)]
             .filter { $0.1 }.map { $0.0 }
         if preparingPeer != nil { joinedTasks.append("bootstrap") }
+        if fixtureReceiverCount > 0 { joinedTasks.append("engine-receivers") }
         let receipt = FixtureStopReceipt(
             configuration: configuration, ui: peer, engine: engineIdentity,
             observedBirths: nativeProcesses.observedBirths,
@@ -734,7 +751,7 @@ public final class HostRemoteSceneHandle {
 
     fileprivate func detach() {
         closed = true
-        channel?.invalidate()
+        if let channel { session.retireChannel(channel) }
         channel = nil
         bootstrap?.invalidate()
         bootstrap = nil
