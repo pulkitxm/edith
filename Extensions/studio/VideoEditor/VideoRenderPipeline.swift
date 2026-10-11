@@ -374,6 +374,7 @@ struct VideoRenderPipeline {
         let annotations = project.annotations
         let cameraFullscreenRegions = project.cameraFullscreenRegions
         let finalSegments = segments
+        let segmentIndex = VideoSegmentIndex(ranges: segments.map(\.outputRange))
         let finalGenerators = frameGenerators
         let finalCameras = cameras
         let finalCursors = cursors
@@ -387,13 +388,12 @@ struct VideoRenderPipeline {
         let videoComposition = AVMutableVideoComposition(asset: composition) { request in
             let time = request.compositionTime.seconds
             guard
-                let segment = finalSegments.last(where: {
-                    $0.outputRange.containsTime(request.compositionTime)
-                })
+                let index = segmentIndex.index(at: request.compositionTime)
             else {
                 request.finish(with: request.sourceImage, context: imageContext)
                 return
             }
+            let segment = finalSegments[index]
             var sourceImage = finalStills[segment.clip.assetID] ?? request.sourceImage
             if sourceImage.extent.isInfinite || sourceImage.extent.isEmpty
                 || sourceImage.extent.isNull
