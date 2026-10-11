@@ -8,6 +8,7 @@ import Foundation
     private let downloader: YoutubeDownloader
     private var stopped = false
     private var panel: NSOpenPanel?
+    private let callbacks = MusicTaskOwner()
 
     init(worker: MusicWorker, queue: DownloadWorker = .shared, downloader: YoutubeDownloader? = nil)
     {
@@ -101,7 +102,7 @@ import Foundation
             let response = await withTaskCancellationHandler {
                 await panel.begin()
             } onCancel: {
-                Task { @MainActor in panel.cancel(nil) }
+                callbacks.enqueue { panel.cancel(nil) }
             }
             try Task.checkCancellation()
             guard !stopped else { throw ExtensionPeerError.unavailable }
@@ -121,5 +122,14 @@ import Foundation
         }
     }
 
-    func stop() { stopped = true; panel?.cancel(nil); panel = nil }
+    func stop() {
+        stopped = true
+        callbacks.shutdown()
+        panel?.cancel(nil); panel = nil
+    }
+
+    func stopAndWait() async {
+        stop()
+        await callbacks.shutdownAndWait()
+    }
 }

@@ -22,6 +22,7 @@ struct EmbeddedMusicUISettings: Codable, Sendable {
     @ObservationIgnored private var invoke: Invoke?
     @ObservationIgnored private var readTask: Task<Void, Never>?
     @ObservationIgnored private var writeTask: Task<Void, Never>?
+    @ObservationIgnored private var ownedTasks: [UUID: Task<Void, Never>] = [:]
     private var lifecycle: UInt64 = 0
     private var revision: UInt64 = 0
     private var pending: [EmbeddedMusicUIActionKind: Double] = [:]
@@ -41,7 +42,7 @@ struct EmbeddedMusicUISettings: Codable, Sendable {
         revision &+= 1; readTask?.cancel()
         let token = lifecycle
         let currentRevision = revision
-        let task = Task { [weak self] in
+        let task = ownedTask { [weak self] in
             guard let self else { return }
             do {
                 let value = try await read(invoke)
@@ -93,16 +94,34 @@ struct EmbeddedMusicUISettings: Codable, Sendable {
         pending[kind] = value; requested[kind] = value
         guard writeTask == nil else { return }
         let token = lifecycle
-        writeTask = Task { [weak self] in
+        writeTask = ownedTask { [weak self] in
             guard let self else { return }; await self.write(token: token)
         }
     }
 
     func stop() {
         lifecycle &+= 1; revision &+= 1; closed = true
-        readTask?.cancel(); readTask = nil; writeTask?.cancel(); writeTask = nil
+        for task in ownedTasks.values { task.cancel() }
+        readTask = nil; writeTask = nil
         invoke = nil; pending = [:]; requested = [:]; order = []
         preferences = EmbeddedMusicUIPreferences(); loaded = false; error = nil
+    }
+
+    func stopAndWait() async {
+        stop()
+        let tasks = Array(ownedTasks.values)
+        for task in tasks { await task.value }
+    }
+
+    private func ownedTask(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
+        let id = UUID()
+        let task = Task { [weak self] in
+            defer { self?.ownedTasks[id] = nil }
+            guard !Task.isCancelled else { return }
+            await operation()
+        }
+        ownedTasks[id] = task
+        return task
     }
 
     private func write(token: UInt64) async {

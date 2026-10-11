@@ -26,13 +26,7 @@ import WebKit
     ) {
         self.worker = worker
         self.version = version
-        self.invalidateHostSlots =
-            invalidateHostSlots ?? {
-                guard let namespace = ExtensionSharedState.current?.namespace else { return }
-                DistributedNotificationCenter.default().postNotificationName(
-                    .init(namespace + ".musicHostSlots"), object: nil, userInfo: nil,
-                    deliverImmediately: true)
-            }
+        self.invalidateHostSlots = invalidateHostSlots ?? MusicUIPreferenceEngine.invalidateHostSlots
         self.browser =
             browser
             ?? MusicBrowserPresentation(
@@ -446,6 +440,7 @@ import WebKit
     func drain() async {
         await browser.drain()
         await tasks.shutdownAndWait()
+        await downloads?.stopAndWait()
     }
 
     func stop() {
@@ -455,7 +450,7 @@ import WebKit
         MusicHostNavigation.reset()
         browser.stop()
         libraryPanel?.cancel(nil); libraryPanel = nil
-        downloads?.stop(); downloads = nil; resumeAudio = false; closeVideo()
+        downloads?.stop(); resumeAudio = false; closeVideo()
         worker.accounts.spotify.receiveUIEvent = nil
         events.removeAll()
     }

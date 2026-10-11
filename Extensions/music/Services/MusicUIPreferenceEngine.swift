@@ -19,6 +19,13 @@ import Foundation
         self.object = object; self.boolean = boolean; self.set = set
     }
 
+    static func invalidateHostSlots() {
+        guard let namespace = ExtensionSharedState.current?.namespace else { return }
+        DistributedNotificationCenter.default().postNotificationName(
+            .init(namespace + ".musicHostSlots"), object: nil, userInfo: nil,
+            deliverImmediately: true)
+    }
+
     static func accepts(_ kind: MusicUIActionKind) -> Bool {
         [.crossfade, .barCollapsed, .barAutoHide, .gridView, .fadeLength].contains(kind)
     }

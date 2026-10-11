@@ -514,11 +514,13 @@ public enum TrackMeta {
             return indexed
         }
         await gate.acquire()
-        defer { Task { await gate.release() } }
-        guard !Task.isCancelled else { return nil }
-        guard let seconds = await loadAssetDuration(track.url) else { return nil }
+        guard !Task.isCancelled, let seconds = await loadAssetDuration(track.url) else {
+            await gate.release()
+            return nil
+        }
         cacheLock.withLock { durationCache[track.url] = seconds }
         await Task.detached { MusicLibraryIndex.store(duration: seconds, for: track.url) }.value
+        await gate.release()
         return seconds
     }
 
@@ -564,15 +566,19 @@ public enum TrackMeta {
             return stored
         }
         await gate.acquire()
-        defer { Task { await gate.release() } }
-        guard !Task.isCancelled else { return nil }
+        guard !Task.isCancelled else {
+            await gate.release()
+            return nil
+        }
         if let image = await loadArtwork(for: track.url) {
             let thumbnail = ThumbnailStore.store(image, key: key) ?? image
             artworkCache.setObject(thumbnail, forKey: track.url as NSURL)
             await Task.detached { MusicLibraryIndex.store(artworkKey: key, for: track.url) }.value
+            await gate.release()
             return thumbnail
         }
         cacheLock.withLock { _ = artworkMisses.insert(track.url) }
+        await gate.release()
         return nil
     }
 
