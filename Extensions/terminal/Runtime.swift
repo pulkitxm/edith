@@ -15,6 +15,8 @@ final class ExtensionRuntime: NSObject {
     }
     private var presentations: [UUID: Presentation] = [:]
     private let commands = ExtensionCommandRegistry()
+    private var admissionClosed = false
+    private var uiStops: [UUID: Task<Void, Never>] = [:]
     private let makeEngine: @MainActor () -> TerminalEngine
 
     override init() {
@@ -40,31 +42,44 @@ final class ExtensionRuntime: NSObject {
 
     @objc(suspendCommandsWithCompletion:)
     func suspendCommands(completion: @escaping () -> Void) {
+        admissionClosed = true
         _ = commands.suspend()
+        stopUI()
         let engine = engine
         engine?.beginSuspension()
         Task { [self, engine] in
             _ = await commands.suspendAndWait()
             do { try await engine?.stopAndWait() } catch { return }
+            for task in Array(uiStops.values) { await task.value }
             completion()
         }
     }
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        admissionClosed = true
         commands.shutdown()
+        stopUI()
         let engine = engine
         engine?.beginSuspension()
         Task { [self, engine] in
             await commands.shutdownAndWait()
             do { try await engine?.stopAndWait() } catch { return }
+            for task in Array(uiStops.values) { await task.value }
             stopEngine()
             completion()
         }
     }
 
     @objc func execute(_ input: NSDictionary) -> AnyObject {
-        switch input["operation"] as? String {
+        let operation = input["operation"] as? String
+        if admissionClosed {
+            guard
+                ["describe", "status", "cancelCommand", "stop", "stopUI", "terminalUIStatus"]
+                    .contains(operation ?? "")
+            else { return ["ok": false] as NSDictionary }
+        }
+        switch operation {
         case "describe":
             let bundle = Bundle(for: ExtensionRuntime.self)
             return [
@@ -89,11 +104,11 @@ final class ExtensionRuntime: NSObject {
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
             let id = client.presentationID
-            guard presentations[id] != nil || presentations.count < 16 else {
+            guard uiStops.count < 16, presentations[id] != nil || presentations.count < 16 else {
                 client.invalidate()
                 return ["ok": false] as NSDictionary
             }
-            presentations[id]?.model.stopAll()
+            if let previous = presentations.removeValue(forKey: id) { retire(previous) }
             presentations[id] = Presentation(
                 model: TerminalTabsModel(client: TerminalRemoteClient(client: client)),
                 events: TerminalUIEventTracker(presentationID: id))
@@ -154,12 +169,27 @@ final class ExtensionRuntime: NSObject {
     private func stopUI(_ id: UUID? = nil) {
         guard !presentations.isEmpty else { return }
         for identifier in id.map({ [$0] }) ?? Array(presentations.keys) {
-            presentations.removeValue(forKey: identifier)?.model.stopAll()
+            if let presentation = presentations.removeValue(forKey: identifier) {
+                retire(presentation)
+            }
         }
-        if presentations.isEmpty {
-            GhosttyRuntime.shared.shutdown()
-            TextEditingCommands.shutdown()
+        finishUIStop()
+    }
+
+    private func retire(_ presentation: Presentation) {
+        let id = UUID()
+        presentation.model.stopAll()
+        uiStops[id] = Task { [self, presentation] in
+            await presentation.model.stopAllAndWait()
+            uiStops[id] = nil
+            finishUIStop()
         }
+    }
+
+    private func finishUIStop() {
+        guard presentations.isEmpty, uiStops.isEmpty else { return }
+        GhosttyRuntime.shared.shutdown()
+        TextEditingCommands.shutdown()
     }
 
     private func stopEngine() {
