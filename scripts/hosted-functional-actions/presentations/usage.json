@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "owner": "usage",
+  "location": "settings",
+  "section": "usage",
+  "operation": "usage.ui.preferences.set",
+  "steps": [
+    {
+      "role": "checkBox",
+      "label": "Pace my Claude usage",
+      "action": "set-checkbox",
+      "value": false
+    },
+    {
+      "role": "checkBox",
+      "label": "Pace my Claude usage",
+      "action": "set-checkbox",
+      "value": true
+    }
+  ],
+  "sources": [
+    {
+      "path": "Extensions/usage/Runtime.swift",
+      "sha256": "ea4e7f11920d2c08547454b3df5c1470bd61146a480d10b8c676e8274e2696ab"
+    },
+    {
+      "path": "Extensions/usage/Views/UsageSettingsRows.swift",
+      "sha256": "0da8d31dc80397c9be52fdea42fff44b07102af88adc3f255888359228053ee8"
+    },
+    {
+      "path": "Extensions/usage/ViewModels/UsageUIClient.swift",
+      "sha256": "00e6d65a36e3610c5a4f7b9b94d7458b32e9255df07620dc8672919f9c8c1720"
+    }
+  ]
+}
