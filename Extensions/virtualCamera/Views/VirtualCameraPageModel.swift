@@ -519,6 +519,7 @@ final class VirtualCameraPageModel: ObservableObject {
         guard !stopped else { return }
         flushSave()
         stopped = true
+        extensionManager.beginSuspension()
         for task in tasks.values { task.cancel() }
         for task in localRequests.values { task.cancel() }
         attachments = 1

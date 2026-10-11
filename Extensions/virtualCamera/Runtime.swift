@@ -434,6 +434,9 @@ enum CameraCarrierLaunchEnvironment {
     func beginDrain() {
         draining = true
         ui.beginSuspension()
+        model.beginSuspension()
+        manager.beginSuspension()
+        engine.beginSuspension()
         if drainTask == nil {
             drainTask = Task { [self] in
                 CameraExtensionBridge.shutdown()
