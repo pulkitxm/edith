@@ -79,7 +79,8 @@ import Foundation
     private var selected: UUID?
     private var polling: Task<Void, Never>?
     private var pollTasks: [UUID: Task<Void, Never>] = [:]
-    private var retired: [UUID: Task<Void, Never>] = [:]
+    private var retired: [ObjectIdentifier: TerminalPTY] = [:]
+    private var closingTasks: [ObjectIdentifier: (epoch: UUID, task: Task<Void, Error>)] = [:]
     private var failures: [UUID: any Error] = [:]
     private var nextNumber = 1
     private let launch: @MainActor () -> TerminalLaunch
@@ -176,6 +177,7 @@ import Foundation
             failures[owned.id] = nil
             if selected == owned.id { selected = tabs.last?.id }
         case "terminal.restart":
+            try requireRetirementCapacity()
             let request = try decoder.decode(SessionRequest.self, from: payload)
             let previous = try tab(request, allowFailed: true)
             let plan = launch()
@@ -241,12 +243,22 @@ import Foundation
 
     func stop() { beginSuspension() }
 
-    func stopAndWait() async {
+    func stopAndWait() async throws {
         beginSuspension()
         let polling = Array(pollTasks.values)
-        let pending = Array(retired.values)
+        for terminal in Array(retired.values) { retire(terminal) }
+        let pending = Array(closingTasks)
         for task in polling { await task.value }
-        for task in pending { await task.value }
+        for (id, pending) in pending {
+            do { try await pending.task.value } catch {
+                if closingTasks[id]?.epoch == pending.epoch { closingTasks[id] = nil }
+                throw error
+            }
+            if closingTasks[id]?.epoch == pending.epoch {
+                retired[id] = nil
+                closingTasks[id] = nil
+            }
+        }
         await files.stopAndWait()
         self.polling = nil
         failures.removeAll()
@@ -256,14 +268,26 @@ import Foundation
 
     private func retire(_ terminal: TerminalPTY) {
         terminal.close()
-        let id = UUID()
-        retired[id] = Task { [self, terminal] in
-            defer { retired[id] = nil }
-            await terminal.closeAndWait()
+        let id = ObjectIdentifier(terminal)
+        retired[id] = terminal
+        guard closingTasks[id] == nil else { return }
+        let epoch = UUID()
+        let task = Task { [self, terminal] in
+            try await terminal.closeAndWait()
+            if closingTasks[id]?.epoch == epoch {
+                retired[id] = nil
+                closingTasks[id] = nil
+            }
         }
+        closingTasks[id] = (epoch, task)
+    }
+
+    private func requireRetirementCapacity() throws {
+        guard retired.count < 64 else { throw ExtensionPeerError.unavailable }
     }
 
     private func open() throws {
+        try requireRetirementCapacity()
         guard tabs.count < TerminalTabsModel.maximumTabs else {
             throw ExtensionPeerError.rejected("The terminal tab limit has been reached.")
         }

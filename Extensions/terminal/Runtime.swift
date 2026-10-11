@@ -45,7 +45,7 @@ final class ExtensionRuntime: NSObject {
         engine?.beginSuspension()
         Task { [self, engine] in
             _ = await commands.suspendAndWait()
-            await engine?.stopAndWait()
+            do { try await engine?.stopAndWait() } catch { return }
             completion()
         }
     }
@@ -57,7 +57,7 @@ final class ExtensionRuntime: NSObject {
         engine?.beginSuspension()
         Task { [self, engine] in
             await commands.shutdownAndWait()
-            await engine?.stopAndWait()
+            do { try await engine?.stopAndWait() } catch { return }
             stopEngine()
             completion()
         }
