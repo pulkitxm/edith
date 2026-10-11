@@ -126,6 +126,68 @@ class ReleaseAggregateTests(unittest.TestCase):
                          + sum(path.stat().st_size for path in self.assets.iterdir())
                          + evidence['totalEvidenceBytes'] + evidence['signedLinkBytes'])
 
+    def test_verified_retained_version_preserves_current39_and_counts_actual_catalog_bytes(self):
+        before = self.aggregate()
+        old = {**self.catalog['packages'][0], 'version': '0.9.0',
+               'sourceFingerprint': 'b' * 64, 'sha256': 'c' * 64}
+        catalog = {'schemaVersion': 1, 'revision': 1,
+                   'packages': self.catalog['packages'] + [old]}
+        key = self.write_signed_catalog(catalog)
+        result = self.aggregate(catalog_key=key, catalog_verify=report.verify_catalog)
+        self.assertEqual(len(result['frozenPackageHost']['packages']), 39)
+        self.assertEqual(len(result['nativeEvidence']['links']), 39)
+        self.assertEqual(result['shippingAppPlusAll39LogicalBytes'], before['shippingAppPlusAll39LogicalBytes'])
+        self.assertEqual(result['shippingDMGPlusAll39ZIPBytes'], before['shippingDMGPlusAll39ZIPBytes'])
+        for name in ['catalog-1.json', 'pointer.json']:
+            asset = next(row for row in result['releaseAssets'] if row['name'] == name)
+            self.assertEqual(asset['bytes'], (self.assets / name).stat().st_size)
+            self.assertEqual(asset['sha256'], report.digest_file(self.assets / name))
+        self.assertEqual(result['scopedReleaseAssetBytes'],
+                         sum(row['bytes'] for row in self.frozen['releaseArtifactInventory'])
+                         + sum(path.stat().st_size for path in self.assets.iterdir())
+                         + result['nativeEvidence']['totalEvidenceBytes']
+                         + result['nativeEvidence']['signedLinkBytes'])
+
+    def test_verified_retained_other_supported_tiers_do_not_replace_current_identity(self):
+        current = self.catalog['packages'][0]
+        for change in [{'hostABI': 'edith-host-1'}, {'architecture': 'x86_64'},
+                       {'version': '0.9.0', 'minimumSystemVersion': '15.0.0'}]:
+            with self.subTest(change=change):
+                retained = {**current, **change, 'sourceFingerprint': 'b' * 64, 'sha256': 'c' * 64}
+                catalog = {'schemaVersion': 1, 'revision': 1,
+                           'packages': self.catalog['packages'] + [retained]}
+                key = self.write_signed_catalog(catalog)
+                result = self.aggregate(catalog_key=key, catalog_verify=report.verify_catalog)
+                self.assertEqual(result['frozenPackageHost']['packages'][0], current)
+                self.assertEqual(len(result['nativeEvidence']['links']), 39)
+
+    def test_duplicate_current_identity_is_rejected_even_with_ambiguous_metadata(self):
+        for change in [{}, {'sha256': 'b' * 64}]:
+            catalog = copy.deepcopy(self.catalog)
+            catalog['packages'].append({**catalog['packages'][0], **change})
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'duplicate package identity'):
+                self.aggregate(catalog_verify=lambda *args: catalog)
+            key = self.write_signed_catalog({'schemaVersion': 1, 'revision': 1, **catalog})
+            with self.assertRaises(subprocess.CalledProcessError):
+                report.verify_catalog(self.assets / 'catalog-1.json', self.assets / 'pointer.json', key)
+
+    def test_verified_retained_row_cannot_cover_a_missing_current_identity(self):
+        for change in [{'version': '0.9.0'}, {'hostABI': 'edith-host-1'}, {'architecture': 'x86_64'}]:
+            catalog = copy.deepcopy(self.catalog)
+            catalog['packages'][0].update(change)
+            key = self.write_signed_catalog({'schemaVersion': 1, 'revision': 1, **catalog})
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'missing a current frozen package identity'):
+                self.aggregate(catalog_key=key, catalog_verify=report.verify_catalog)
+
+    def test_verified_current_identity_metadata_mismatch_cannot_fall_back_to_retained_row(self):
+        catalog = copy.deepcopy(self.catalog)
+        current = catalog['packages'][0]
+        catalog['packages'].append({**current, 'version': '0.9.0'})
+        current['installedBytes'] += 1
+        key = self.write_signed_catalog({'schemaVersion': 1, 'revision': 1, **catalog})
+        with self.assertRaisesRegex(ValueError, 'differs from exact frozen package metadata'):
+            self.aggregate(catalog_key=key, catalog_verify=report.verify_catalog)
+
     def test_old_or_dirty_frozen_host_and_stale_fingerprints_are_rejected(self):
         for field in ['sourceCommit', 'sourceTreeDirty']:
             frozen = copy.deepcopy(self.frozen)
@@ -183,13 +245,12 @@ class ReleaseAggregateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'changed'):
             self.aggregate(qualify=qualify)
 
-    def test_maintained_catalog_signature_and_pointer_verification_with_synthetic_bytes(self):
+    def write_signed_catalog(self, catalog):
         script = """import {createPrivateKey,createPublicKey,sign} from 'node:crypto';
 const key = createPrivateKey({key:Buffer.concat([Buffer.from('302e020100300506032b657004220420','hex'),Buffer.alloc(32,7)]),format:'der',type:'pkcs8'});
 const publicKey = createPublicKey(key).export({format:'jwk'}).x;
 const payload = Buffer.from(process.argv[1]);
 process.stdout.write(JSON.stringify({key:Buffer.from(publicKey,'base64url').toString('base64'),envelope:{payload:payload.toString('base64'),signature:sign(null,payload,key).toString('base64')}}));"""
-        catalog = {'schemaVersion': 1, 'revision': 1, 'packages': self.catalog['packages']}
         value = json.loads(subprocess.run(['node', '--input-type=module', '-e', script, json.dumps(catalog)],
             check=True, capture_output=True, text=True).stdout)
         path = self.assets / 'catalog-1.json'
@@ -197,11 +258,18 @@ process.stdout.write(JSON.stringify({key:Buffer.from(publicKey,'base64url').toSt
         pointer = self.assets / 'pointer.json'
         pointer.write_text(json.dumps({'schemaVersion': 1, 'revision': 1, 'assetName': path.name,
             'bytes': path.stat().st_size, 'sha256': report.digest_file(path)}))
-        verified = report.verify_catalog(path, pointer, value['key'])
+        return value['key']
+
+    def test_maintained_catalog_signature_and_pointer_verification_with_synthetic_bytes(self):
+        catalog = {'schemaVersion': 1, 'revision': 1, 'packages': self.catalog['packages']}
+        key = self.write_signed_catalog(catalog)
+        path = self.assets / 'catalog-1.json'
+        pointer = self.assets / 'pointer.json'
+        verified = report.verify_catalog(path, pointer, key)
         self.assertEqual(verified, catalog)
         pointer.write_text(pointer.read_text().replace('catalog-1.json', 'catalog-2.json'))
         with self.assertRaises(subprocess.CalledProcessError):
-            report.verify_catalog(path, pointer, value['key'])
+            report.verify_catalog(path, pointer, key)
 
     def test_cli_rechecks_frozen_packages_after_independent_shipping_qualification(self):
         root = self.fixture.root
