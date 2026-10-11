@@ -14,14 +14,53 @@ import {
 import { basename, join, resolve } from "node:path";
 import { extensionUIExtensionPoint } from "./build-extension-ui-carrier.mjs";
 
+function hostUntrackedInputs(execute = execFileSync) {
+  return (
+    execute("git", ["ls-files", "--others", "--exclude-standard", "-z"], {
+      encoding: "utf8",
+    }) ||
+    execute(
+      "git",
+      [
+        "ls-files",
+        "--others",
+        "-z",
+        "--",
+        "Packages/EdithHost/Sources",
+        "Packages/ExtensionMarketplace/Sources",
+        "Packages/ExtensionSupport/Sources",
+        "Extensions/fixtureSupport",
+        ":(glob,exclude)**/.build/**",
+        ":(glob,exclude)**/.swiftpm/**",
+        ":(glob,exclude)**/.DS_Store",
+      ],
+      { encoding: "utf8" },
+    )
+  );
+}
+
+function requireTrackedHostSource(execute = execFileSync) {
+  assert.equal(
+    hostUntrackedInputs(execute),
+    "",
+    "Untracked source inputs cannot qualify a host build",
+  );
+}
+
+function hostSourceDirty(execute = execFileSync) {
+  return (
+    execute("git", ["status", "--porcelain", "--untracked-files=all"], {
+      encoding: "utf8",
+    }).length > 0 || hostUntrackedInputs(execute).length > 0
+  );
+}
+
 const root = process.cwd();
+requireTrackedHostSource();
 const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
   encoding: "utf8",
 }).trim();
-const sourceTreeDirty =
-  execFileSync("git", ["status", "--porcelain", "--untracked-files=no"], {
-    encoding: "utf8",
-  }).trim().length > 0;
+const sourceTreeDirty = hostSourceDirty();
 const packageDirectory = resolve(root, "Packages/EdithHost");
 const destination = resolve(root, "local/minimal-host/Edith.app");
 const developer =
@@ -279,12 +318,13 @@ assert.equal(
   sourceCommit,
   "Source commit changed while building the host",
 );
+const finalSourceTreeDirty = hostSourceDirty();
 await writeFile(
   join(destination, "..", "build-metadata.json"),
   `${JSON.stringify(
     {
       sourceCommit,
-      sourceTreeDirty,
+      sourceTreeDirty: sourceTreeDirty || finalSourceTreeDirty,
       configuration: "Release",
       optimization: "Osize",
       linkTimeOptimization: "full",
