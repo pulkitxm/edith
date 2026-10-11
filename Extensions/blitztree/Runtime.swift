@@ -316,6 +316,7 @@ private final class BlitzTreeFixtureFiles: @unchecked Sendable {
     @MainActor
     static func admit(_ admission: WorkerFixtureEngineAdmission) throws -> BlitzTreeFixtureFiles {
         try admission.requireCurrent()
+        try requireExclusiveNamespaceAuthority()
         guard let trust = WorkerFixtureUITrustAnchor.admitted,
             let phase = WorkerFixtureFilePhase(rawValue: admission.descriptor.phase)
         else { throw WorkerFixtureError.invalid }
@@ -369,6 +370,11 @@ private final class BlitzTreeFixtureFiles: @unchecked Sendable {
             victim: victim, metadata: metadata)
         try admission.requireCurrent()
         return files
+    }
+
+    private static func requireExclusiveNamespaceAuthority() throws {
+        throw ExtensionPeerError.rejected(
+            "The signed private namespace mutation lease is unavailable.")
     }
 
     private static func sourceScopes() throws -> [WorkerFixtureFileScope] {
