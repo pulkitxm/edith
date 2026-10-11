@@ -51,6 +51,11 @@ final class NotchShelfController {
     private(set) var activeIDs: Set<String> = []
     private(set) var surfaceSnapshots: [String: SurfaceSnapshot] = [:]
     private var glanceTask: Task<Void, Never>?
+    private var glanceTasks: [UUID: Task<Void, Never>] = [:]
+    private var callbackTasks: [UUID: Task<Void, Never>] = [:]
+    private var promiseOwners: [UUID: NotchPromiseCallbackOwnership] = [:]
+    private var shareWaiters: [CheckedContinuation<Void, Never>] = []
+    private var teardown: Task<Void, Never>?
     private var stopped = false
     private var startsServices = false
     private let hostOwned: Bool
@@ -97,6 +102,7 @@ final class NotchShelfController {
     private var pendingDragOutIDs: Set<UUID> = []
     private var internalDragItemIDs: Set<UUID> = []
     private var sharePickerDelegate: SharePickerDelegate?
+    private var sharePicker: NSSharingServicePicker?
     private var shareStagedFiles: ShelfStagedFiles?
     private var dragStagedFiles: ShelfStagedFiles?
     private var isSharing = false
@@ -142,22 +148,26 @@ final class NotchShelfController {
         rebuildPanels()
         surfaceSettingsObserver = NotchWorkerIPC.observe(NotchWorkerIPC.Name.settingsChanged) {
             [weak self] in
-            self?.layouts.reload()
-            self?.synchronize()
-            self?.homeContentHeight = nil
-            self?.updatePanelFrames()
+            guard let self, !self.stopped else { return }
+            self.layouts.reload()
+            self.synchronize()
+            self.homeContentHeight = nil
+            self.updatePanelFrames()
         }
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.rebuildPanels() }
+            MainActor.assumeIsolated { self?.rebuildPanels() }
         }
         spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.updateFullScreenVisibility() }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                Task { @MainActor in self?.updateFullScreenVisibility() }
+            MainActor.assumeIsolated {
+                self?.updateFullScreenVisibility()
+                self?.enqueueCallback {
+                    do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
+                    self?.updateFullScreenVisibility()
+                }
             }
         }
         if !hostOwned {
@@ -276,8 +286,11 @@ final class NotchShelfController {
     }
 
     func beginGlanceRefresh() {
+        guard !stopped else { return }
         glanceTask?.cancel()
-        glanceTask = Task { [weak self] in
+        let token = UUID()
+        let task = Task { [weak self] in
+            defer { self?.glanceTasks[token] = nil }
             while !Task.isCancelled {
                 guard let self, !self.stopped else { return }
                 let providers = self.glanceProviderIDs
@@ -295,19 +308,23 @@ final class NotchShelfController {
                     do {
                         let snapshot = try await self.requests.snapshot(
                             providerID: id, target: .notch, tile: tile)
-                        guard !Task.isCancelled, self.activeIDs.contains(id),
+                        guard !self.stopped, !Task.isCancelled, self.activeIDs.contains(id),
                             !self.privacy.hides(widget)
                         else { continue }
                         self.recordSurfaceSnapshot(snapshot)
                         self.updatePanelFrames()
                     } catch {
+                        guard !self.stopped, !Task.isCancelled else { return }
                         self.surfaceSnapshots.removeValue(forKey: id)
                     }
                 }
                 do { try await Task.sleep(for: .seconds(15)) } catch { return }
+                guard !self.stopped else { return }
                 self.updatePanelFrames()
             }
         }
+        glanceTask = task
+        glanceTasks[token] = task
     }
 
     private var alertsEnabled: Bool { flag(AppStorageKeys.Notch.alertsEnabled, default: true) }
@@ -388,21 +405,32 @@ final class NotchShelfController {
         hideAlert()
     }
 
-    func shutdown() {
+    private func enqueueCallback(
+        whileStopping: Bool = false, _ operation: @escaping @MainActor () async -> Void
+    ) {
+        guard whileStopping || !stopped else { return }
+        let token = UUID()
+        callbackTasks[token] = Task {
+            defer { callbackTasks[token] = nil }
+            await operation()
+        }
+    }
+
+    func beginSuspension() {
+        guard !stopped else { return }
         stopped = true
         hostDragRemoval?.cancel(); hostDragRemoval = nil
         context.sharedState.stopObserving(contextObserver); contextObserver = nil
-        glanceTask?.cancel(); glanceTask = nil
+        for task in glanceTasks.values { task.cancel() }
+        for task in callbackTasks.values { task.cancel() }
         requests.shutdown()
         privacy.shutdown()
-        surfaceSnapshots = [:]
         if let dragMonitor { NSEvent.removeMonitor(dragMonitor) }
         dragMonitor = nil
         stopMoveMonitor()
         alertDetectors?.stop()
         alertDetectors = nil
-        alertWorkItem?.cancel()
-        alertWorkItem = nil
+        alertWorkItem?.cancel(); alertWorkItem = nil
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
         if let spaceObserver {
@@ -413,24 +441,48 @@ final class NotchShelfController {
         shelfOperationObserver = nil
         if let surfaceSettingsObserver { NotchWorkerIPC.stopObserving(surfaceSettingsObserver) }
         surfaceSettingsObserver = nil
-        collapseWorkItem?.cancel()
-        collapseWorkItem = nil
-        panelSettleWorkItem?.cancel()
-        panelSettleWorkItem = nil
-        gateWorkItem?.cancel()
-        gateWorkItem = nil
+        collapseWorkItem?.cancel(); collapseWorkItem = nil
+        panelSettleWorkItem?.cancel(); panelSettleWorkItem = nil
+        gateWorkItem?.cancel(); gateWorkItem = nil
         browser?.shutdown()
-        browser = nil
         browserEngine?.stop()
-        isSharing = false
-        sharePickerDelegate = nil
-        shareStagedFiles = nil
-        dragStagedFiles = nil
-        store.shutdown()
+        store.beginSuspension()
+        if let sharePicker { sharePickerDelegate?.closeIfWaiting(sharePicker) }
         for panel in panels.values { panel.orderOut(nil) }
+    }
+
+    func stopAndWait() async {
+        beginSuspension()
+        for task in Array(glanceTasks.values) { await task.value }
+        await requests.shutdownAndWait()
+        for owner in Array(promiseOwners.values) { await owner.wait() }
+        if isSharing {
+            await withCheckedContinuation { shareWaiters.append($0) }
+        }
+        for task in Array(callbackTasks.values) { await task.value }
+        await store.stopAndWait()
+        await browser?.shutdownAndWait()
+        await browserEngine?.stopAndWait()
+    }
+
+    func shutdown() {
+        beginSuspension()
+        guard teardown == nil else { return }
         panels.removeAll()
         collapsedSizes.removeAll()
+        teardown = Task {
+            await stopAndWait()
+            glanceTask = nil
+            surfaceSnapshots = [:]
+            browser = nil
+            sharePickerDelegate = nil
+            shareStagedFiles = nil
+            dragStagedFiles = nil
+            await store.shutdownAndWait()
+        }
     }
+
+    func shutdownAndWait() async { shutdown(); await teardown?.value }
 
     private func flag(_ key: String, default def: Bool) -> Bool {
         context.defaults.object(forKey: key) as? Bool ?? def
@@ -455,6 +507,7 @@ final class NotchShelfController {
     }
 
     func rebuildPanels() {
+        guard !stopped else { return }
         if hostOwned { updateFullScreenVisibility(); onPanelStateChanged?(); return }
         activeTab = NotchTab.validSelection(activeTab, visible: visibleTabs)
         let builtin = NSScreen.screens.first {
@@ -519,6 +572,7 @@ final class NotchShelfController {
     }
 
     private func updateFullScreenVisibility() {
+        guard !stopped else { return }
         for screen in NSScreen.screens {
             guard let id = screen.displayID else { continue }
             let fullScreen = isFullScreenSpace(screen)
@@ -1174,6 +1228,7 @@ final class NotchShelfController {
     }
 
     private func performShelfOperation(_ info: [AnyHashable: Any]) {
+        guard !stopped else { return }
         guard
             let outcome = ShelfOperationRequestRouter.route(
                 info, isSharing: isSharing,
@@ -1254,7 +1309,7 @@ final class NotchShelfController {
     private func showSharePicker(
         _ staged: ShelfStagedFiles, anchor item: ShelfItem, selection: ShelfPinnedSelection
     ) -> Bool {
-        guard !isSharing else { return false }
+        guard !stopped, !isSharing else { return false }
         let mouse = NSEvent.mouseLocation
         let panel =
             panels.values.first { $0.frame.contains(mouse) }
@@ -1265,15 +1320,23 @@ final class NotchShelfController {
         shareStagedFiles = staged
         collapseWorkItem?.cancel()
         let delegate = SharePickerDelegate { [weak self] in
-            self?.isSharing = false
-            self?.sharePickerDelegate = nil
-            self?.store.releaseActionSelection()
-            self?.shareStagedFiles = nil
-            self?.collapseAfterDelay()
+            guard let self else { return }
+            self.enqueueCallback(whileStopping: true) {
+                self.isSharing = false
+                self.sharePickerDelegate = nil
+                self.sharePicker = nil
+                self.store.releaseActionSelection()
+                self.shareStagedFiles = nil
+                let waiting = self.shareWaiters
+                self.shareWaiters.removeAll()
+                for continuation in waiting { continuation.resume() }
+                if !self.stopped { self.collapseAfterDelay() }
+            }
         }
         sharePickerDelegate = delegate
         let picker = NSSharingServicePicker(items: staged.urls)
         picker.delegate = delegate
+        sharePicker = picker
         let size = view.bounds.size
         let index = items.firstIndex(where: { $0.id == item.id }) ?? 0
         let position = NotchGeometry.itemPosition(stored: item.position, index: index, in: size)
@@ -1392,35 +1455,58 @@ final class NotchShelfController {
     }
 
     private func receivePromise(_ receiver: NSFilePromiseReceiver, at location: CGPoint?) {
+        guard !stopped else { return }
         let id = UUID()
         guard let destination = store.promiseDestination(id: id) else { return }
+        store.holdPromiseDestination(id: id)
+        let owner = NotchPromiseCallbackOwnership(receiver: receiver)
+        promiseOwners[id] = owner
         receiver.receivePromisedFiles(
             atDestination: destination, options: [:], operationQueue: .main
-        ) {
-            [weak self] url, error in
-            Task { @MainActor in
+        ) { [weak self, owner] url, error in
+            MainActor.assumeIsolated {
                 guard let self else { return }
-                guard error == nil else {
-                    self.store.discardPromiseDestination(id: id)
-                    self.presentShelfFailure(
-                        error?.localizedDescription ?? "the promised file failed")
-                    return
-                }
-                self.store.adoptWhenAvailable(fileAt: url, id: id) { [weak self] item in
-                    guard let self else { return }
-                    guard let item else {
-                        self.items = self.store.items
-                        self.presentShelfFailure(
-                            "the promised file could not be added to the shelf")
+                self.enqueueCallback(whileStopping: true) {
+                    defer {
+                        owner.returned(name: url.lastPathComponent)
+                        if owner.completed {
+                            self.store.releasePromiseDestination(id: id)
+                            self.promiseOwners[id] = nil
+                        }
+                    }
+                    guard !self.stopped else {
+                        self.store.discardPromiseDestination(id: id)
                         return
                     }
-                    if let location { self.store.setPosition(location, for: item) }
-                    self.items = self.store.items
-                    self.shelfOperationError = nil
-                    self.fireHaptic()
+                    guard error == nil else {
+                        self.store.discardPromiseDestination(id: id)
+                        self.presentShelfFailure(
+                            error?.localizedDescription ?? "the promised file failed")
+                        return
+                    }
+                    guard let itemID = owner.itemID(name: url.lastPathComponent, receiverID: id)
+                    else {
+                        self.store.discardPromiseDestination(id: id)
+                        return
+                    }
+                    self.store.adoptWhenAvailable(fileAt: url, id: id, itemID: itemID) {
+                        [weak self] item in
+                        guard let self, !self.stopped else { return }
+                        guard let item else {
+                            self.items = self.store.items
+                            self.presentShelfFailure(
+                                "the promised file could not be added to the shelf")
+                            return
+                        }
+                        if let location { self.store.setPosition(location, for: item) }
+                        self.items = self.store.items
+                        self.shelfOperationError = nil
+                        self.fireHaptic()
+                    }
                 }
             }
         }
+        owner.bind(names: receiver.fileNames)
     }
 
     private func addFile(at url: URL, location: CGPoint?) {
@@ -1438,18 +1524,105 @@ final class NotchShelfController {
     }
 }
 
-final class SharePickerDelegate: NSObject, NSSharingServicePickerDelegate {
+@MainActor
+final class NotchPromiseCallbackOwnership {
+    private let receiver: AnyObject
+    private var expectedNames: Set<String>?
+    private var returnedNames: Set<String> = []
+    private var itemIDs: [String: UUID] = [:]
+    private var ambiguous = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    private(set) var completed = false
+
+    init(receiver: AnyObject) { self.receiver = receiver }
+
+    func bind(names: [String]) {
+        guard expectedNames == nil, !names.isEmpty, names.count <= 1000,
+            Set(names).count == names.count,
+            names.allSatisfy({
+                !$0.isEmpty && $0.utf8.count <= 1024 && !$0.utf8.contains(0)
+                    && !$0.contains("/") && $0 != "." && $0 != ".."
+            })
+        else { ambiguous = true; return }
+        expectedNames = Set(names)
+        finishIfReturned()
+    }
+
+    func itemID(name: String, receiverID: UUID) -> UUID? {
+        guard !ambiguous, let expectedNames, expectedNames.contains(name), itemIDs[name] == nil
+        else { ambiguous = true; return nil }
+        let id = itemIDs.isEmpty ? receiverID : UUID()
+        itemIDs[name] = id
+        return id
+    }
+
+    func returned(name: String) {
+        guard returnedNames.insert(name).inserted else { ambiguous = true; return }
+        finishIfReturned()
+    }
+
+    func wait() async {
+        defer { withExtendedLifetime(receiver) {} }
+        guard !completed else { return }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+
+    private func finishIfReturned() {
+        guard let expectedNames else { return }
+        guard !ambiguous, returnedNames.isSubset(of: expectedNames)
+        else { ambiguous = true; return }
+        guard returnedNames == expectedNames else { return }
+        completed = true
+        let pending = waiting
+        waiting.removeAll()
+        for continuation in pending { continuation.resume() }
+    }
+}
+
+@MainActor
+final class SharePickerDelegate: NSObject, NSSharingServicePickerDelegate, NSSharingServiceDelegate
+{
     private let onEnd: @MainActor @Sendable () -> Void
+    private var selectedService: NSSharingService?
+    private var completed = false
 
     init(onEnd: @escaping @MainActor @Sendable () -> Void) {
         self.onEnd = onEnd
     }
 
+    func closeIfWaiting(_ picker: NSSharingServicePicker) {
+        if selectedService == nil, !completed { picker.close() }
+    }
+
+    func sharingServicePicker(
+        _ sharingServicePicker: NSSharingServicePicker,
+        delegateFor sharingService: NSSharingService
+    ) -> (any NSSharingServiceDelegate)? {
+        selectedService = sharingService
+        return self
+    }
+
     func sharingServicePicker(
         _ sharingServicePicker: NSSharingServicePicker, didChoose service: NSSharingService?
     ) {
-        let onEnd = onEnd
-        Task { @MainActor in onEnd() }
+        if let service { selectedService = service } else if selectedService == nil { finish() }
+    }
+
+    func sharingService(_ service: NSSharingService, didShareItems items: [Any]) {
+        if selectedService === service { finish() }
+    }
+
+    func sharingService(
+        _ service: NSSharingService, didFailToShareItems items: [Any], error: any Error
+    ) {
+        if selectedService === service { finish() }
+    }
+
+    private func finish() {
+        guard !completed else { return }
+        completed = true
+        selectedService = nil
+        onEnd()
     }
 }
 
