@@ -18,6 +18,7 @@ import Foundation
     private var stopped = false
     private let downloads: NotchBrowserDownloadEngine
     private var importExpiry: Task<Void, Never>?
+    private var timerTasks: [UUID: Task<Void, Never>] = [:]
     private var heldOwner: UUID?
     private let now: () -> Date
     private let leaseGeneration = UUID()
@@ -309,7 +310,7 @@ import Foundation
             lease: lease)
         imported = (descriptor, data)
         importExpiry?.cancel()
-        importExpiry = Task { [weak self] in
+        importExpiry = startTimer { [weak self] in
             do { try await Task.sleep(for: .seconds(60)) } catch { return }
             if self?.imported?.0.id == descriptor.id { self?.imported = nil }
         }
@@ -337,6 +338,7 @@ import Foundation
     func stop() {
         cliQueue.stop()
         stopped = true; importTask?.cancel(); imported = nil; cookieKey = nil; changed = nil
+        for task in timerTasks.values { task.cancel() }
         importExpiry?.cancel(); importExpiry = nil; downloads.stop()
         for task in leaseExpiries.values { task.cancel() }
         leaseExpiries = [:]; leases = [:]
@@ -345,6 +347,21 @@ import Foundation
         let task = importTask
         stop()
         _ = await task?.value
+        for timer in Array(timerTasks.values) { await timer.value }
+        await downloads.stopAndWait()
+    }
+
+    private func startTimer(_ operation: @escaping @MainActor () async -> Void) -> Task<
+        Void, Never
+    >? {
+        guard !stopped else { return nil }
+        let token = UUID()
+        let task = Task { [weak self] in
+            defer { self?.timerTasks[token] = nil }
+            await operation()
+        }
+        timerTasks[token] = task
+        return task
     }
 
     private func validateLease(_ request: NotchBrowserRemoteRequest) throws -> NotchBrowserLease {
@@ -369,7 +386,7 @@ import Foundation
 
     private func scheduleExpiry(_ lease: NotchBrowserLease) {
         leaseExpiries.removeValue(forKey: lease.presentationID)?.cancel()
-        leaseExpiries[lease.presentationID] = Task { [weak self] in
+        leaseExpiries[lease.presentationID] = startTimer { [weak self] in
             do { try await Task.sleep(for: .seconds(120)) } catch { return }
             guard self?.leases[lease.presentationID] == lease else { return }
             self?.release(owner: lease.presentationID)

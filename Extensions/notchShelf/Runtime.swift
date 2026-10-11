@@ -376,13 +376,16 @@ final class ExtensionRuntime: NSObject {
         let streams = cliStreams
         let browserCommands = browserStreams
         let ownedController = controller
-        let cameraEngine = panelEngine?.cameraEngine
+        let ownedPanel = panelEngine
+        let cameraEngine = ownedPanel?.cameraEngine
+        ownedPanel?.beginSuspension()
         streams?.stop()
         browserCommands?.stop()
         ownedController?.beginSuspension()
         cameraEngine?.shutdown()
         suspensionTask = Task {
             await commands.suspendAndWait()
+            await ownedPanel?.suspendAndWait()
             await streams?.stopAndWait()
             await browserCommands?.stopAndWait()
             for task in Array(uiDrains.values) { await task.value }
@@ -408,7 +411,7 @@ final class ExtensionRuntime: NSObject {
         let ownedPanel = panelEngine
         shutdownTask = Task {
             await suspending?.value
-            ownedPanel?.stop()
+            await ownedPanel?.stopAndWait()
             await ownedController?.shutdownAndWait()
             for scene in suspendedUIScenes { await scene.chrome?.stopAndWait() }
             await commands.shutdownAndWait()
