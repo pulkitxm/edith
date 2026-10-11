@@ -33,7 +33,26 @@ export function sparkleEntryOverlay(
                 signingRequirement: ${JSON.stringify(signingRequirement)})
         } catch { exit(1) }
         HostApplication.main()`;
-  return replaceExact(source, before, after);
+  let result = replaceExact(
+    source,
+    before,
+    after.replace(
+      "guard arguments.isEmpty else { HostCommandCLI.main(arguments: arguments) }",
+      "guard arguments.isEmpty else { exit(1) }",
+    ),
+  );
+  result = replaceExact(
+    result,
+    '        let arguments = Array(CommandLine.arguments.dropFirst())\n        if ProcessInfo.processInfo.environment["EDITH_CLI"] == "1"',
+    `        let arguments = Array(CommandLine.arguments.dropFirst())
+        guard getenv("EDITH_CLI") == nil,
+            !arguments.isEmpty || getenv("EDITH_EXTENSION_WORKER") == nil,
+            arguments.isEmpty || arguments[0].hasPrefix("--extension-")
+                || arguments[0].hasPrefix("--contained-extension-")
+        else { exit(1) }
+        if ProcessInfo.processInfo.environment["EDITH_CLI"] == "1"`,
+  );
+  return result;
 }
 
 export function sparkleUpdaterOverlay(source) {

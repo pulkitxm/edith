@@ -22,9 +22,19 @@ test("only the copied empty-argument host branch authenticates before constructi
   expect(start).toBeGreaterThan(
     result.indexOf('arguments == ["--extension-worker"]'),
   );
-  expect(start).toBeGreaterThan(result.indexOf("guard arguments.isEmpty else"));
+  expect(start).toBeGreaterThan(
+    result.indexOf("guard arguments.isEmpty else { exit(1) }"),
+  );
   expect(start).toBeLessThan(result.indexOf("HostApplication.main()"));
   expect(result).toContain("catch { exit(1) }");
+  expect(result.indexOf('guard getenv("EDITH_CLI") == nil')).toBeLessThan(
+    result.indexOf(
+      'if ProcessInfo.processInfo.environment["EDITH_CLI"] == "1"',
+    ),
+  );
+  expect(result).not.toContain(
+    "guard arguments.isEmpty else { HostCommandCLI.main(arguments: arguments) }",
+  );
   expect(result).toContain(pins.sourceCommit);
   expect(result).toContain(pins.issuerPublicKey);
   expect(source).not.toContain("HostSparkleBootstrap");
