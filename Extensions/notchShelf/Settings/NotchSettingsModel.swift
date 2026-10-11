@@ -9,7 +9,7 @@ import Observation
     private(set) var busy = false
     private(set) var stopped = false
     private let invoke: Invoke?
-    private var actionTask: Task<Void, Never>?
+    private var requests: [UUID: Task<Void, Never>] = [:]
     private var generation = UUID()
 
     init(client: ExtensionEngineClient?) {
@@ -27,16 +27,26 @@ import Observation
     var available: Bool { invoke != nil && !stopped }
 
     func refresh() async {
-        guard available, !busy, let invoke else { return }
+        guard available, !busy, requests.count < 8, let invoke else { return }
         generation = UUID()
         let token = generation
-        do {
-            let data = try await invoke("notch.settings.read", Data("{}".utf8))
-            try apply(data, token: token)
-        } catch {
-            if !stopped, generation == token, !Task.isCancelled {
-                self.error = error.localizedDescription
+        let task = Task { [self] in
+            defer { requests[token] = nil }
+            do {
+                try Task.checkCancellation()
+                let data = try await invoke("notch.settings.read", Data("{}".utf8))
+                try apply(data, token: token)
+            } catch {
+                if !stopped, generation == token, !Task.isCancelled {
+                    self.error = error.localizedDescription
+                }
             }
+        }
+        requests[token] = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
         }
     }
 
@@ -49,7 +59,7 @@ import Observation
     }
 
     func perform(_ operation: String, payload: Data = Data("{}".utf8)) {
-        guard available, !busy, let invoke,
+        guard available, !busy, requests.count < 8, let invoke,
             [
                 "notch.settings.write", "notch.customize", "notch.browser.detach",
                 "notch.bluetooth.settings",
@@ -59,12 +69,15 @@ import Observation
         let token = generation
         busy = true
         error = nil
-        actionTask = Task { [weak self] in
+        requests[token] = Task { [weak self] in
             guard let self else { return }
             defer {
-                if self.generation == token { self.busy = false; self.actionTask = nil }
+                self.requests[token] = nil
+                if self.generation == token { self.busy = false }
             }
             do {
+                try Task.checkCancellation()
+                guard !self.stopped else { return }
                 let data = try await invoke(operation, payload)
                 try self.apply(data, token: token)
             } catch {
@@ -78,10 +91,15 @@ import Observation
     func stop() {
         stopped = true
         generation = UUID()
-        actionTask?.cancel()
-        actionTask = nil
+        for task in requests.values { task.cancel() }
         busy = false
         error = nil
+    }
+
+    func stopAndWait() async {
+        stop()
+        let pending = Array(requests.values)
+        for task in pending { await task.value }
     }
 
     private func apply(_ data: Data, token: UUID) throws {

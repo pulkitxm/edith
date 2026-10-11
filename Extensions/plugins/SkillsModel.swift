@@ -30,6 +30,7 @@ import Observation
     var ownedInstaller: SkillInstaller { installer }
     private let remote: PluginsUIBridge?
     private var remoteGeneration = 0
+    private var remoteRequests: [UUID: Task<Void, Never>] = [:]
     private static let agentSelectionsKey = "plugins.agentSelections"
 
     init(
@@ -122,6 +123,7 @@ import Observation
     }
 
     public func setSelected(_ id: String, enabled: Bool) {
+        guard !isStopped, !Task.isCancelled else { return }
         if remote != nil {
             if enabled { selectedAgentIDs.insert(id) } else { selectedAgentIDs.remove(id) }
             ownRemoteAction(.init(action: "select", agentID: id, enabled: enabled))
@@ -186,13 +188,14 @@ import Observation
     private var remoteInstallLaunch: Task<Void, Never>?
     var remoteInstallIsPending: Bool { remoteInstallLaunch != nil }
     func beginRemoteInstall() {
-        guard remoteInstallLaunch == nil else { return }
+        guard !isStopped, remoteInstallLaunch == nil else { return }
         remoteInstallLaunch = Task { [weak self] in
             await self?.install(); self?.remoteInstallLaunch = nil
         }
     }
 
     private func ownRemoteAction(_ request: PluginsUIAction) {
+        guard !isStopped, jobs.count < 8 else { return }
         let id = UUID()
         jobs[id] = Task { [weak self] in
             defer { self?.jobs[id] = nil }
@@ -201,7 +204,22 @@ import Observation
     }
 
     private func remoteAction(_ request: PluginsUIAction) async {
-        guard let remote, !isStopped else { return }
+        guard !isStopped, !Task.isCancelled, remoteRequests.count < 8 else { return }
+        let id = UUID()
+        let task = Task { [self] in
+            defer { remoteRequests[id] = nil }
+            await performRemoteAction(request)
+        }
+        remoteRequests[id] = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func performRemoteAction(_ request: PluginsUIAction) async {
+        guard let remote, !isStopped, !Task.isCancelled else { return }
         remoteGeneration &+= 1
         let generation = remoteGeneration
         let loading = discoveryLoad.begin(preservingContent: discoveryLoad.hasContent)
@@ -230,18 +248,25 @@ import Observation
         }
     }
 
-    public func shutdown() async {
+    public func stop() {
         isStopped = true
-        remoteInstallLaunch?.cancel()
         remoteGeneration &+= 1
         installationID = UUID()
         discoveryLoad.reset()
+        discoveryTask?.cancel()
+        remoteInstallLaunch?.cancel()
+        for task in jobs.values { task.cancel() }
+        for task in remoteRequests.values { task.cancel() }
+    }
+
+    public func shutdown() async {
+        stop()
         let discovering = discoveryTask
-        discovering?.cancel()
         let tasks = Array(jobs.values)
-        for task in tasks { task.cancel() }
+        let remoteTasks = Array(remoteRequests.values)
         await discovering?.value
         for task in tasks { await task.value }
+        for task in remoteTasks { await task.value }
         await remoteInstallLaunch?.value; remoteInstallLaunch = nil
         await documents.shutdown()
         discoveryTask = nil
