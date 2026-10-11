@@ -21,9 +21,10 @@ public enum MusicStorage {
 
     public static func resolvedDownloadQueueFile(environment: [String: String]) -> URL {
         let root = ExtensionData.resolve(environment: environment, fallback: ExtensionData.root)
-        return ExtensionData.productionDirectory(
+        let file = ExtensionData.productionDirectory(
             "data/downloads.json", fallback: root.appendingPathComponent("downloads.json"),
             environment: environment)
+        return URL(fileURLWithPath: file.path, isDirectory: false)
     }
 
     public static func selectedMusicDirectory(

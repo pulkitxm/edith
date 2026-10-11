@@ -62,6 +62,7 @@ public actor DownloadWorker {
     private var records: [DownloadRecord]
     private let loadError: String?
     private var persistenceError: String?
+    private var readError: String?
     private struct Flight {
         var task: Task<Void, Never>
         var progress: Task<Void, Never>?
@@ -187,7 +188,7 @@ public actor DownloadWorker {
         return DownloadWorkerSnapshot(
             records: snapshotRecords, logs: snapshotLogs, enabled: isEnabled(),
             running: !flights.isEmpty, generation: generation, revision: revision,
-            problem: loadError ?? persistenceError, executable: executable()
+            problem: loadError ?? readError ?? persistenceError, executable: executable()
         )
     }
 
@@ -316,7 +317,7 @@ public actor DownloadWorker {
 
     private func startNext() {
         guard started, !stopping else { return }
-        if !isEnabled() {
+        if !isEnabled() || executable() == nil {
             if flights.isEmpty { schedulerLease = nil }
             return
         }
@@ -339,7 +340,7 @@ public actor DownloadWorker {
             }
         } catch {
             schedulerLease = nil
-            persistenceError = "The download queue could not be read: \(error.localizedDescription)"
+            readError = "The download queue could not be read: \(error.localizedDescription)"
             return
         }
         while startOne() {}
@@ -369,9 +370,16 @@ public actor DownloadWorker {
         let request = Self.request(record, executable: executable)
         let gallery = galleryExecutable()
         let runCommand = runCommand
+        let file = file
         let task = Task.detached(priority: .utility) { [weak self] in
             defer { withExtendedLifetime(lease) {} }
             do {
+                try Task.checkCancellation()
+                guard
+                    try DownloadQueue.read(from: file).contains(where: {
+                        $0.id == record.id && Self.isRunning($0)
+                    })
+                else { throw CancellationError() }
                 let result: CLICommandResult
                 if record.kind == .images || record.kind == .post {
                     guard let gallery else {
@@ -414,14 +422,24 @@ public actor DownloadWorker {
         if !isEnabled() {
             for id in Array(flights.keys) { interrupt(id, reason: "Downloads are disabled.") }
         }
+        var progress: [UUID: DownloadStatus] = [:]
         var changed = false
         for id in Array(flights.keys) {
             guard var flight = flights[id] else { continue }
-            let revision = flight.output.snapshot.2
+            let output = flight.output.snapshot
+            let revision = output.2
             guard revision != flight.publishedRevision else { continue }
             flight.publishedRevision = revision
             flights[id] = flight
+            if let status = output.1 { progress[id] = status }
             changed = true
+        }
+        if !progress.isEmpty {
+            try? update { records in
+                for index in records.indices where Self.isRunning(records[index]) {
+                    if let status = progress[records[index].id] { records[index].status = status }
+                }
+            }
         }
         if changed { notify() }
     }
@@ -490,9 +508,9 @@ public actor DownloadWorker {
     private func reload() {
         do {
             records = try DownloadQueue.read(from: file)
-            persistenceError = nil
+            readError = nil
         } catch {
-            persistenceError = "The download queue could not be read: \(error.localizedDescription)"
+            readError = "The download queue could not be read: \(error.localizedDescription)"
         }
     }
 
