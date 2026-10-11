@@ -105,4 +105,60 @@ private actor CommandCleanupGate {
         #expect(!unexpected)
     }
 
+    @Test func suspensionJoinsActualOwnerAfterCallerCancellationAndAllowsSafeRetry() async throws {
+        let registry = ExtensionCommandRegistry()
+        let gate = CommandCleanupGate()
+        let token = UUID().uuidString
+        var callerCompleted = false
+        var ownerExited = false
+        registry.invoke(
+            ["token": token, "command": "fixture", "payload": Data()] as NSDictionary,
+            completion: { _, _ in callerCompleted = true }
+        ) { _, _ in
+            await gate.pause()
+            ownerExited = true
+            return Data()
+        }
+        while !(await gate.entered) { await Task.yield() }
+        registry.cancel(token)
+        #expect(callerCompleted)
+        #expect(!ownerExited)
+        let suspension = registry.suspend()
+        #expect(!registry.resume(suspension))
+        var drained = false
+        let drain = Task {
+            await registry.suspendAndWait(); drained = true
+        }
+        await Task.yield()
+        #expect(!drained)
+        var admitted = false
+        registry.invoke(
+            ["token": UUID().uuidString, "command": "fixture", "payload": Data()] as NSDictionary,
+            completion: { data, error in #expect(data == nil && error != nil) }
+        ) { _, _ in
+            admitted = true; return Data()
+        }
+        #expect(!admitted)
+        await gate.release()
+        await drain.value
+        #expect(ownerExited)
+        #expect(registry.resume(suspension))
+        let next = registry.suspend()
+        #expect(next != suspension)
+        #expect(!registry.resume(suspension))
+        #expect(registry.resume(next))
+        var result: Data?
+        registry.invoke(
+            ["token": UUID().uuidString, "command": "fixture", "payload": Data()] as NSDictionary,
+            completion: { data, error in
+                result = data as Data?; #expect(error == nil)
+            }
+        ) { _, _ in Data("original-result".utf8) }
+        while result == nil { await Task.yield() }
+        #expect(result == Data("original-result".utf8))
+        let final = registry.suspend()
+        await registry.shutdownAndWait()
+        #expect(!registry.resume(final))
+    }
+
 }

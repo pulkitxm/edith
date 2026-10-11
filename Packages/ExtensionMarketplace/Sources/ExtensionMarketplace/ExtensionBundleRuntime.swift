@@ -112,30 +112,49 @@ public final class ExtensionBundleRuntime {
         instance.active = false
     }
 
+    public func suspendCommandsAll() async throws {
+        let selector = NSSelectorFromString("suspendCommandsWithCompletion:")
+        for instance in loaded.values where instance.active {
+            guard instance.object.responds(to: NSSelectorFromString("invoke:completion:")) else {
+                continue
+            }
+            guard instance.object.responds(to: selector) else {
+                throw MarketplaceError.invalidBundle
+            }
+            let completion = BundleCommandCompletion()
+            _ = try await withCheckedThrowingContinuation { continuation in
+                guard completion.begin(continuation) else { return }
+                typealias Suspend =
+                    @convention(c) (AnyObject, Selector, @convention(block) () -> Void) -> Void
+                let suspend = unsafeBitCast(instance.object.method(for: selector), to: Suspend.self)
+                let callback: @convention(block) () -> Void = {
+                    completion.finish(.success(Data()))
+                }
+                suspend(instance.object, selector, callback)
+            }
+        }
+    }
+
     public func prepareDisableAll() async throws {
+        try await suspendCommandsAll()
         let selector = NSSelectorFromString("prepareDisableWithCompletion:")
         for instance in loaded.values
         where instance.active && instance.object.responds(to: selector) {
             let completion = BundleCommandCompletion()
-            _ = try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { continuation in
-                    guard completion.begin(continuation) else { return }
-                    typealias Prepare =
-                        @convention(c) (AnyObject, Selector, @convention(block) (NSError?) -> Void)
-                        -> Void
-                    let prepare = unsafeBitCast(
-                        instance.object.method(for: selector), to: Prepare.self)
-                    let callback: @convention(block) (NSError?) -> Void = { error in
-                        if let error {
-                            completion.finish(.failure(error))
-                        } else {
-                            completion.finish(.success(Data()))
-                        }
+            _ = try await withCheckedThrowingContinuation { continuation in
+                guard completion.begin(continuation) else { return }
+                typealias Prepare =
+                    @convention(c) (AnyObject, Selector, @convention(block) (NSError?) -> Void)
+                    -> Void
+                let prepare = unsafeBitCast(instance.object.method(for: selector), to: Prepare.self)
+                let callback: @convention(block) (NSError?) -> Void = { error in
+                    if let error {
+                        completion.finish(.failure(error))
+                    } else {
+                        completion.finish(.success(Data()))
                     }
-                    prepare(instance.object, selector, callback)
                 }
-            } onCancel: {
-                completion.finish(.failure(CancellationError()))
+                prepare(instance.object, selector, callback)
             }
         }
     }
@@ -145,20 +164,15 @@ public final class ExtensionBundleRuntime {
         for instance in loaded.values
         where instance.active && instance.object.responds(to: selector) {
             let completion = BundleCommandCompletion()
-            _ = try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { continuation in
-                    guard completion.begin(continuation) else { return }
-                    typealias Prepare =
-                        @convention(c) (AnyObject, Selector, @convention(block) () -> Void) -> Void
-                    let prepare = unsafeBitCast(
-                        instance.object.method(for: selector), to: Prepare.self)
-                    let callback: @convention(block) () -> Void = {
-                        completion.finish(.success(Data()))
-                    }
-                    prepare(instance.object, selector, callback)
+            _ = try await withCheckedThrowingContinuation { continuation in
+                guard completion.begin(continuation) else { return }
+                typealias Prepare =
+                    @convention(c) (AnyObject, Selector, @convention(block) () -> Void) -> Void
+                let prepare = unsafeBitCast(instance.object.method(for: selector), to: Prepare.self)
+                let callback: @convention(block) () -> Void = {
+                    completion.finish(.success(Data()))
                 }
-            } onCancel: {
-                completion.finish(.failure(CancellationError()))
+                prepare(instance.object, selector, callback)
             }
         }
     }
