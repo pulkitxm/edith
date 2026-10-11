@@ -11,6 +11,7 @@ import tempfile
 
 import host_release_proof
 from macho_code_identity import executable_identity
+from release_evidence_sizes import measure_native_evidence, verify_native_evidence
 from size_report_filesystem import TreeSnapshot, digest_file, read_bytes
 from verify_shipping_host import inspect_layout
 
@@ -99,7 +100,9 @@ def validate_toolchain_receipt(receipt, source, executable_hash, metadata):
 
 
 def aggregate_release(frozen, shipping_app, shipping_metadata, assets, catalog_name, pointer_name,
-                      catalog_key, toolchain_receipt, *, qualify, catalog_verify=verify_catalog, code_identity=executable_identity, dmg_verify=verify_dmg_app):
+                      catalog_key, toolchain_receipt, evidence_assets, native_links, *, qualify,
+                      catalog_verify=verify_catalog, code_identity=executable_identity, dmg_verify=verify_dmg_app,
+                      evidence_verify=verify_native_evidence):
     host = load_report_module()
     source = frozen['measurement']['expectedSourceCommit']
     host.validate_final_source(source, frozen['measurement']['currentSource'], frozen['measurement']['hostBuild'])
@@ -119,10 +122,15 @@ def aggregate_release(frozen, shipping_app, shipping_metadata, assets, catalog_n
     app_snapshot, asset_snapshot = TreeSnapshot(shipping_app), TreeSnapshot(assets)
     if not re.fullmatch(r'catalog-[1-9][0-9]*\.json', catalog_name or ''):
         raise ValueError('Expected immutable signed catalog filename')
-    if pointer_name != Path(pointer_name).name or pointer_name in {'Edith.dmg', 'appcast.xml', catalog_name}:
+    if pointer_name != Path(pointer_name).name or pointer_name in {
+            'Edith.dmg', 'appcast.xml', catalog_name, 'host-release-proof.json',
+            'build-metadata.json', 'toolchain-provenance.json'}:
         raise ValueError('Invalid catalog pointer filename')
     allowed = {'Edith.dmg': 'shippingDMG', 'appcast.xml': 'signedAppcast',
-               catalog_name: 'signedCatalog', pointer_name: 'catalogPointer'}
+               catalog_name: 'signedCatalog', pointer_name: 'catalogPointer',
+               'host-release-proof.json': 'hostReleaseProof', 'build-metadata.json': 'hostBuildMetadata',
+               'toolchain-provenance.json': 'hostToolchainReceipt'}
+    required = set(allowed)
     for name in list(allowed):
         allowed[name + '.sha256'] = 'detachedChecksums'
     measured_assets = []
@@ -136,7 +144,7 @@ def aggregate_release(frozen, shipping_app, shipping_metadata, assets, catalog_n
         measured_assets.append({'name': name, 'category': allowed[name],
                                 'bytes': path.stat().st_size, 'sha256': digest_file(path)})
     by_name = {asset['name']: asset for asset in measured_assets}
-    if not {'Edith.dmg', 'appcast.xml', catalog_name, pointer_name}.issubset(by_name):
+    if not required.issubset(by_name):
         raise ValueError('Missing final release asset')
     for name in by_name:
         if name.endswith('.sha256'):
@@ -156,6 +164,10 @@ def aggregate_release(frozen, shipping_app, shipping_metadata, assets, catalog_n
         raise ValueError('Independently qualified shipping release differs from measured artifacts')
     shipping_hash = digest_file(shipping_app / 'Contents/MacOS/Edith')
     toolchain = validate_toolchain_receipt(toolchain_receipt, source, shipping_hash, shipping_metadata)
+    for name, expected in [('host-release-proof.json', proof), ('build-metadata.json', preserved),
+                           ('toolchain-provenance.json', toolchain)]:
+        if json.loads(read_bytes(assets / name)) != expected:
+            raise ValueError('Published host receipt differs from independent qualification')
     shipping_code = code_identity(shipping_app / 'Contents/MacOS/Edith')
     if (shipping_hash != proof.get('hostExecutableSHA256')
             or shipping_hash != shipping_metadata.get('hostExecutableSHA256')
@@ -206,8 +218,10 @@ def aggregate_release(frozen, shipping_app, shipping_metadata, assets, catalog_n
             raise ValueError('Signed catalog minimum system version differs')
     if dmg_verify(assets / 'Edith.dmg', shipping_app) is not True:
         raise ValueError('DMG signed app binding was not verified')
+    evidence = measure_native_evidence(evidence_assets, native_links, catalog_packages, catalog_key, evidence_verify)
     totals = {}
-    for asset in frozen['releaseArtifactInventory'] + measured_assets:
+    evidence_inventory = [asset for release in evidence['releases'] for asset in release['closedAssetInventory']]
+    for asset in frozen['releaseArtifactInventory'] + measured_assets + evidence['links'] + evidence_inventory:
         category = asset['category']
         totals[category] = totals.get(category, 0) + asset['bytes']
     app_snapshot.verify()
@@ -219,12 +233,13 @@ def aggregate_release(frozen, shipping_app, shipping_metadata, assets, catalog_n
                 'installedLogicalBytes': installed, 'codeIdentity': shipping_code, 'treeInventory': shipping_inventory,
                 'resourceCodeIdentities': resource_code, 'dmgContainedAppVerified': True},
             'releaseAssets': sorted(measured_assets, key=lambda asset: asset['name']),
+            'nativeEvidence': evidence,
             'releaseAssetBytesByCategory': totals, 'scopedReleaseAssetBytes': sum(totals.values()),
             'shippingAppPlusAll39LogicalBytes': installed + sum(package['installedBytes'] for package in frozen['packages']),
             'shippingDMGPlusAll39ZIPBytes': by_name['Edith.dmg']['bytes'] + sum(package['downloadBytes'] for package in frozen['packages']),
             'measurement': {'installedMethod': 'Actual logical regular-file bytes, including packaged models and every copied executable/framework once. No duplicate-byte deductions.',
                 'compressedMethod': 'Actual signed shipping DMG and package ZIP bytes. Frozen host comparison ZIP remains a separate comparison metric.',
-                'releaseAssetsScope': 'One current shipping DMG, signed appcast, current39 ZIPs and metadata, allowed provenance receipts, supplied detached checksums, one verified signed catalog and pointer. Excludes older releases and proof/report documents.',
+                'releaseAssetsScope': 'One current shipping DMG, signed appcast, qualified host proof, sanitized build metadata, toolchain receipt, current39 ZIPs and metadata, allowed provenance receipts, supplied detached checksums, one verified signed catalog and pointer, all39 signed native evidence links and every asset of their original evidence releases. Shared evidence releases counted once per immutable tag; original archives include duplicated package and frozen-host bytes without deductions. Excludes unreferenced older releases and report documents.',
                 'codeRelationship': 'Exact normalized unsigned arm64 host code equality; unchanged frozen resources except release Info.plist and code-signature records. Source stamping is independently qualified by maintained host_release_proof.',
                 'limitations': 'Local artifact qualification does not establish remote publication, lifecycle, visual, hardware or managed-view verification.'}}
 
@@ -232,17 +247,18 @@ def aggregate_release(frozen, shipping_app, shipping_metadata, assets, catalog_n
 def main():
     parser = argparse.ArgumentParser()
     for name in ['baseline', 'frozen-app', 'frozen-build', 'packages', 'shipping-app', 'shipping-build',
-                 'source-root', 'release-source-root', 'assets', 'toolchain-receipt', 'output']:
+                 'source-root', 'release-source-root', 'assets', 'toolchain-receipt', 'evidence-assets', 'native-links', 'output']:
         parser.add_argument('--' + name, type=Path, required=True)
     for name in ['source', 'tag', 'version', 'build', 'catalog-name', 'pointer-name']:
         parser.add_argument('--' + name, required=True)
     parser.add_argument('--notarization', choices=['verified', 'skipped'], required=True)
     args = parser.parse_args()
     for name in ['baseline', 'frozen_app', 'frozen_build', 'packages', 'shipping_app', 'shipping_build',
-                 'source_root', 'release_source_root', 'assets', 'toolchain_receipt', 'output']:
+                 'source_root', 'release_source_root', 'assets', 'toolchain_receipt', 'evidence_assets', 'native_links', 'output']:
         setattr(args, name, getattr(args, name).absolute())
     host = load_report_module()
     frozen_snapshot, packages_snapshot = TreeSnapshot(args.frozen_app), TreeSnapshot(args.packages)
+    evidence_snapshot, links_snapshot = TreeSnapshot(args.evidence_assets), TreeSnapshot(args.native_links)
     documents = {path: digest_file(path) for path in [args.baseline, args.frozen_build, args.shipping_build, args.toolchain_receipt]}
     with source_directory(args.source_root):
         current = host.read_source_state(Path.cwd())
@@ -260,13 +276,19 @@ def main():
             raise ValueError('Pinned catalog key is ambiguous')
         result = aggregate_release(frozen, args.shipping_app, json.loads(read_bytes(args.shipping_build)),
             args.assets, args.catalog_name, args.pointer_name, matches[0], json.loads(read_bytes(args.toolchain_receipt)),
+            args.evidence_assets, args.native_links,
             qualify=lambda app, dmg, appcast, built: qualify_release(app, dmg, appcast, built,
                 args.release_source_root, args.source, args.tag, args.version, args.build, args.notarization))
         frozen_snapshot.verify()
         packages_snapshot.verify()
+        evidence_snapshot.verify()
+        links_snapshot.verify()
         if any(digest_file(path) != expected for path, expected in documents.items()):
             raise ValueError('Final aggregate input document changed')
         result['signedShippingHost']['toolchainReceiptSHA256'] = documents[args.toolchain_receipt]
+        published_toolchain = next(row for row in result['releaseAssets'] if row['name'] == 'toolchain-provenance.json')
+        if published_toolchain['sha256'] != documents[args.toolchain_receipt]:
+            raise ValueError('Toolchain receipt bytes differ from release asset')
         host.validate_final_source(args.source, host.read_source_state(Path.cwd()), metadata)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + '\n')

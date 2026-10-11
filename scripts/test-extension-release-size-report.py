@@ -67,6 +67,12 @@ class ReleaseAggregateTests(unittest.TestCase):
             'hostExecutableSHA256': report.digest_file(self.exe), 'xcode': self.metadata['xcode'],
             'sdk': self.metadata['sdk'], 'builderSignature': 'ad-hoc'}
         self.catalog = {'packages': copy.deepcopy(self.frozen['packages'])}
+        for name, value in [('host-release-proof.json', self.proof), ('build-metadata.json', self.metadata),
+                            ('toolchain-provenance.json', self.toolchain)]:
+            (self.assets / name).write_text(json.dumps(value))
+        self.evidence_fixture = module('test-release-evidence-sizes')
+        self.evidence_assets, self.native_links = self.evidence_fixture.fixture(
+            self.fixture.root, {row['id']: row for row in self.catalog['packages']})
 
     def fixture_module(self):
         return self.fixture_source.report
@@ -76,7 +82,8 @@ class ReleaseAggregateTests(unittest.TestCase):
             'assets': self.assets, 'catalog_name': 'catalog-1.json', 'pointer_name': 'pointer.json',
             'catalog_key': 'synthetic-key', 'toolchain_receipt': self.toolchain, 'qualify': lambda *args: (self.proof, self.metadata),
             'catalog_verify': lambda *args: self.catalog, 'code_identity': self.fixture_module().executable_identity,
-            'dmg_verify': lambda *args: True}
+            'dmg_verify': lambda *args: True, 'evidence_assets': self.evidence_assets, 'native_links': self.native_links,
+            'evidence_verify': self.evidence_fixture.verified}
         arguments.update(changes)
         return report.aggregate_release(**arguments)
 
@@ -87,7 +94,11 @@ class ReleaseAggregateTests(unittest.TestCase):
         self.assertTrue(result['signedShippingHost']['dmgContainedAppVerified'])
         self.assertEqual(result['signedShippingHost']['toolchainReceipt']['xcode'], self.metadata['xcode'])
         self.assertEqual(result['shippingAppPlusAll39LogicalBytes'], self.proof['installedBytes'] + sum(row['installedBytes'] for row in self.frozen['packages']))
-        self.assertEqual(result['scopedReleaseAssetBytes'], sum(row['bytes'] for row in self.frozen['releaseArtifactInventory']) + sum(path.stat().st_size for path in self.assets.iterdir()))
+        evidence = result['nativeEvidence']
+        self.assertEqual(result['scopedReleaseAssetBytes'], sum(row['bytes'] for row in self.frozen['releaseArtifactInventory'])
+            + sum(path.stat().st_size for path in self.assets.iterdir()) + evidence['totalEvidenceBytes'] + evidence['signedLinkBytes'])
+        self.assertEqual(result['releaseAssetBytesByCategory']['originalNativeEvidenceArchives'], evidence['originalArchiveBytes'])
+        self.assertEqual(result['releaseAssetBytesByCategory']['signedNativeEvidenceLinks'], evidence['signedLinkBytes'])
         self.assertEqual(result['artifactPublication'], 'not-verified')
 
     def test_old_or_dirty_frozen_host_and_stale_fingerprints_are_rejected(self):
@@ -187,6 +198,7 @@ process.stdout.write(JSON.stringify({key:Buffer.from(publicKey,'base64url').toSt
             arguments.extend(['--' + name, str(path)])
         for name, path in {'source-root': root, 'release-source-root': root, 'frozen-app': self.fixture.app,
                            'shipping-app': self.shipping, 'assets': self.assets, 'packages': self.fixture.packages,
+                           'evidence-assets': self.evidence_assets, 'native-links': self.native_links,
                            'output': root / 'output.json'}.items():
             arguments.extend(['--' + name, str(path)])
         for name, value in {'source': 'a' * 40, 'tag': 'v1.2.3', 'version': '1.2.3', 'build': '123',
@@ -200,6 +212,32 @@ process.stdout.write(JSON.stringify({key:Buffer.from(publicKey,'base64url').toSt
             with self.assertRaisesRegex(ValueError, 'changed during measurement'):
                 report.main()
         self.assertFalse((root / 'output.json').exists())
+
+    def test_every_host_receipt_is_measured_and_bound_to_independent_qualification(self):
+        for name in ['host-release-proof.json', 'build-metadata.json', 'toolchain-provenance.json']:
+            path = self.assets / name
+            original = path.read_bytes()
+            path.unlink()
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'Missing final release asset'):
+                self.aggregate()
+            path.write_text('{}')
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'host receipt differs'):
+                self.aggregate()
+            path.write_bytes(original)
+
+    def test_native_link_failures_and_evidence_mutations_fail_final_aggregation(self):
+        link = next(self.native_links.iterdir())
+        original = json.loads(link.read_text())
+        link.write_text(json.dumps({**original, 'evidenceSHA256': 'b' * 64}))
+        with self.assertRaisesRegex(ValueError, 'original lineage'):
+            self.aggregate()
+        link.write_text(json.dumps(original))
+        def mutate(envelopes, links, key):
+            result = self.evidence_fixture.verified(envelopes, links, key)
+            (envelopes[0].parent / 'extension-plan-1.zip').write_bytes(b'changed original evidence')
+            return result
+        with self.assertRaisesRegex(ValueError, 'bytes or hash'):
+            self.aggregate(evidence_verify=mutate)
 
     def test_toolchain_receipt_is_closed_bounded_and_bound_to_final_executable(self):
         for change in [{'schema': True}, {'sourceCommit': 'b' * 40}, {'hostExecutableSHA256': 'b' * 64},
