@@ -8,6 +8,10 @@ import Foundation
 
 @MainActor
 final class HostWorkerApplication {
+    #if EDITH_FUNCTIONAL_FIXTURE
+    static var fixtureAdmitBeforeConstruction:
+        ((HostWorkerConfiguration, NSDictionary, [URL]) throws -> NSDictionary)?
+    #endif
     private let control: HostWorkerControl
     private var frames = HostWorkerFrames()
     private var runtimes: [ExtensionBundleRuntime] = []
@@ -257,7 +261,7 @@ final class HostWorkerApplication {
                 guard let key = key as? String else { throw HostWorkerError.rejected }
                 values[key] = value
             }
-            let context = values as NSDictionary
+            var context = values as NSDictionary
             let environment = ProcessInfo.processInfo.environment
             let fixtureIntent = HostWorkerStartAdmission.hasFixtureIntent(
                 identifier: identity.identifier, environment: environment)
@@ -293,6 +297,23 @@ final class HostWorkerApplication {
                                 directory: url, identifier: bundle.bundleIdentifier,
                                 version: next.version, hostABI: HostContract.compatibility))
                     }
+                    #if EDITH_FUNCTIONAL_FIXTURE
+                    guard fixtureIntent, let admit = Self.fixtureAdmitBeforeConstruction else {
+                        throw HostWorkerError.rejected
+                    }
+                    let additions = try admit(next, context, fixtureRoles.map(\.directory))
+                    guard
+                        Set(additions.allKeys.compactMap { $0 as? String })
+                            == ["hostedFunctionalFixture"], additions.count == 1,
+                        let marker = additions["hostedFunctionalFixture"] as? [String: String],
+                        Set(marker.keys) == [
+                            "sourceCommit", "session", "phase", "descriptorPath",
+                            "capabilitySHA256", "requestGeneration",
+                        ], marker.values.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 4096 })
+                    else { throw HostWorkerError.rejected }
+                    values["hostedFunctionalFixture"] = marker
+                    context = values as NSDictionary
+                    #endif
                     if fixtureIntent {
                         try HostWorkerStartAdmission.admitFixture(
                             identifier: identity.identifier, owner: package.id,

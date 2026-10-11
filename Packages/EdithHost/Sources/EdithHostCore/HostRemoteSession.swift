@@ -6,6 +6,17 @@ import Foundation
 
 @MainActor
 public final class HostRemoteSession {
+    #if EDITH_FUNCTIONAL_FIXTURE
+    public struct FixtureEngineInvocation: Sendable {
+        public let ui: HostRemoteProcessIdentity
+        public let engine: HostRemoteKernelIdentity
+        public let receiver: HostRemoteKernelIdentity
+        public let request: ExtensionEngineRequest
+    }
+    public static var fixtureBeforeEngineRequest: ((FixtureEngineInvocation) throws -> Void)?
+    public static var fixtureObserveEngineResult:
+        ((FixtureEngineInvocation, Result<Data, Error>) throws -> Void)?
+    #endif
     public let identity: AppExtensionIdentity
     public let configuration: HostRemoteConfiguration
     public let engineIdentity: HostRemoteKernelIdentity?
@@ -370,13 +381,30 @@ public final class HostRemoteSession {
                     request.presentationID == handle.presentationID, handle.isReserved,
                     self.engineIdentity?.isRunning == true
                 else { throw HostWorkerError.rejected }
-                let result = try await self.executeEngine(request)
-                try Task.checkCancellation()
-                guard !handle.closed, !self.stopping, !self.stopped,
-                    self.handles[handle.presentationID] === handle,
-                    self.engineIdentity?.isRunning == true
+                #if EDITH_FUNCTIONAL_FIXTURE
+                guard let ui = self.peer, ui.isRunning, let engine = self.engineIdentity,
+                    let before = Self.fixtureBeforeEngineRequest,
+                    let observe = Self.fixtureObserveEngineResult
                 else { throw HostWorkerError.rejected }
-                return result
+                let invocation = FixtureEngineInvocation(
+                    ui: ui, engine: engine, receiver: try HostRemoteKernelIdentity.read(getpid()),
+                    request: request)
+                try before(invocation)
+                #endif
+                let outcome: Result<Data, Error>
+                do {
+                    let result = try await self.executeEngine(request)
+                    try Task.checkCancellation()
+                    guard !handle.closed, !self.stopping, !self.stopped,
+                        self.handles[handle.presentationID] === handle,
+                        self.engineIdentity?.isRunning == true
+                    else { throw HostWorkerError.rejected }
+                    outcome = .success(result)
+                } catch { outcome = .failure(error) }
+                #if EDITH_FUNCTIONAL_FIXTURE
+                try observe(invocation, outcome)
+                #endif
+                return try outcome.get()
             })
         do {
             guard let peer = channel.peer, handles[handle.presentationID] === handle else {
