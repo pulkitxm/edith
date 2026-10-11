@@ -53,12 +53,16 @@ final class ExtensionRuntime: NSObject {
             extensionID: "codeStats", context: input,
             roleBundle: Bundle(for: ExtensionRuntime.self), expectedRole: .app)
         #else
-        guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
-            input["hostedFunctionalFixture"] == nil
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+            environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil,
+            input["hostedFunctionalFixture"] == nil,
+            (input["hostIdentifier"] as? String)?.hasPrefix("com.pulkit.edith.tests.") != true,
+            environment["EDITH_APPLICATION_IDENTIFIER"]?.hasPrefix("com.pulkit.edith.tests.") != true,
+            environment["EDITH_SHARED_DEFAULTS_SUITE"]?.hasPrefix("com.pulkit.edith.tests.") != true,
+            Bundle.main.bundleIdentifier?.hasPrefix("com.pulkit.edith.tests.") != true
         else { throw ExtensionPeerError.invalidRequest }
-        return try WorkerFixtureAdmission.current(
-            extensionID: "codeStats", context: input,
-            roleBundle: Bundle(for: ExtensionRuntime.self))
+        return nil
         #endif
     }
 
