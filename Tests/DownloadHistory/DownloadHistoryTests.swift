@@ -239,6 +239,13 @@ import Testing
         for _ in 0..<3 { ids.append(try await observer.enqueue(root: root)) }
         await scheduler.refresh()
         await gate.waitForStart(3)
+        let archived = (0..<35).map { index in
+            MusicHistory.DownloadRecord(
+                url: URL(string: "https://example.invalid/newer-archive\(index)")!,
+                status: .done("synthetic-archive.m4a"), outputFilename: nil,
+                createdAt: Date().addingTimeInterval(Double(index + 100)), kind: .audio)
+        }
+        _ = try MusicHistory.DownloadQueue.update(file: file) { $0.append(contentsOf: archived) }
         await scheduler.refresh()
         try await observer.start()
         #expect(await observer.running() == 3)
@@ -265,6 +272,11 @@ import Testing
             try await group.waitForAll()
         }
         #expect(await observer.logs() == scheduler.logs())
+        let archivedIDs = Set(archived.map(\.id))
+        _ = try MusicHistory.DownloadQueue.update(file: file) {
+            $0.removeAll { archivedIDs.contains($0.id) }
+        }
+        await scheduler.refresh()
         await gate.release(1)
         await gate.release(2)
         await gate.release(3)

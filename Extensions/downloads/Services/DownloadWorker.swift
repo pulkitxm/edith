@@ -229,8 +229,10 @@ public actor DownloadWorker {
                 snapshotRecords[index].status = status
             }
         }
-        let active = flights.keys.sorted { $0.uuidString < $1.uuidString }
-        let retained = active + snapshotRecords.map(\.id).filter { !flights.keys.contains($0) }
+        let active = Set(flights.keys).union(activity.active).sorted {
+            $0.uuidString < $1.uuidString
+        }
+        let retained = active + snapshotRecords.map(\.id).filter { !active.contains($0) }
         snapshotLogs = DownloadSchedulerActivity.boundedLogs(snapshotLogs, retained: retained)
         return DownloadWorkerSnapshot(
             records: snapshotRecords, logs: snapshotLogs, enabled: isEnabled(),
