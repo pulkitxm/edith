@@ -75,7 +75,7 @@ import Foundation
     }
 }
 
-@MainActor struct MusicLibraryFolderCommand: AsyncParsableCommand {
+struct MusicLibraryFolderCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "library", abstract: "Choose the folder Edith uses as its music library.",
         discussion: """
@@ -93,7 +93,7 @@ import Foundation
     @Argument(help: "Folder to use. A leading tilde expands to your home folder.")
     var path: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let result: MusicFolderSelectionResult
             do {
@@ -120,7 +120,7 @@ import Foundation
     }
 }
 
-@MainActor struct MusicListCommand: AsyncParsableCommand {
+struct MusicListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls",
         abstract: "List the music library, a folder at a time.",
@@ -149,7 +149,7 @@ import Foundation
     @Argument(help: "Folder to list, relative to the library root.")
     var folder: String = ""
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let target = try LibraryBridge.folder(folder)
             let listing = MusicLibraryContentOperationExecution.list(
@@ -201,7 +201,7 @@ import Foundation
     }
 }
 
-@MainActor struct MusicNewFolderCommand: AsyncParsableCommand {
+struct MusicNewFolderCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "mkdir", abstract: "Make a folder in the library.",
         discussion: """
@@ -222,7 +222,7 @@ import Foundation
     @Argument(help: "What to call it.")
     var name: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             _ = try LibraryBridge.folder(under)
             let made: MusicFolder
@@ -245,7 +245,7 @@ import Foundation
     }
 }
 
-@MainActor struct MusicMoveCommand: AsyncParsableCommand {
+struct MusicMoveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "mv", abstract: "Move a track into a folder.",
         discussion: """
@@ -266,7 +266,7 @@ import Foundation
     @Argument(help: "Destination folder, relative to the library root.")
     var folder: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let found = try LibraryBridge.track(track)
             _ = try LibraryBridge.folder(folder)
@@ -287,7 +287,7 @@ import Foundation
     }
 }
 
-@MainActor struct MusicRenameCommand: AsyncParsableCommand {
+struct MusicRenameCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "rename", abstract: "Rename a track or a folder.",
         discussion: """
@@ -311,7 +311,7 @@ import Foundation
     @Argument(help: "The new name, without the extension.")
     var name: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let move: MusicLibrary.Move
             do {
@@ -336,7 +336,7 @@ import Foundation
     }
 }
 
-@MainActor struct MusicRemoveCommand: AsyncParsableCommand {
+struct MusicRemoveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "rm",
         abstract: "Move a track or folder to the Trash.",
@@ -361,7 +361,7 @@ import Foundation
     @Argument(help: "Track path or folder path.")
     var target: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let target: MusicLibraryRemovalTarget =
                 folder
@@ -398,7 +398,7 @@ import Foundation
     }
 }
 
-@MainActor struct MusicPlayTrackCommand: AsyncParsableCommand {
+struct MusicPlayTrackCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "start",
         abstract: "Play one track, or everything in a folder.",
@@ -421,7 +421,7 @@ import Foundation
     @Argument(help: "Track path or title, or a folder path with --folder.")
     var target: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             try MusicCLIEnvironment.requirePlayer()
             guard !folder else {
@@ -448,7 +448,7 @@ import Foundation
     }
 }
 
-@MainActor struct MusicSeekCommand: AsyncParsableCommand {
+struct MusicSeekCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "seek", abstract: "Jump to a point in the current track, from 0 to 1.",
         discussion: """
@@ -466,7 +466,7 @@ import Foundation
     @Argument(help: "Where to jump to, as a fraction of the track from 0 to 1.")
     var position: Double
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let fraction = try ArgumentChecks.fraction(position, "position")
             try MusicCLIEnvironment.requirePlayer()
@@ -480,7 +480,7 @@ import Foundation
     }
 }
 
-@MainActor struct MusicShuffleCommand: AsyncParsableCommand {
+struct MusicShuffleCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "shuffle", abstract: "Turn shuffle on or off.",
         discussion: """
@@ -498,14 +498,14 @@ import Foundation
     @Argument(help: "on or off. Leave it out to report what it is.")
     var state: String?
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await MusicToggleState.apply(
             key: AppStorageKeys.Music.shuffling, label: "shuffle", state: state, json: json,
             request: MusicTransportRequest.shuffle)
     }
 }
 
-@MainActor struct MusicRepeatCommand: AsyncParsableCommand {
+struct MusicRepeatCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "repeat", abstract: "Turn repeat on or off.",
         discussion: """
@@ -523,7 +523,7 @@ import Foundation
     @Argument(help: "on or off. Leave it out to report what it is.")
     var state: String?
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await MusicToggleState.apply(
             key: AppStorageKeys.Music.looping, label: "repeat", state: state, json: json,
             request: MusicTransportRequest.repeat)
@@ -593,7 +593,7 @@ import Foundation
     }
 }
 
-@MainActor struct MusicFavoriteCommand: AsyncParsableCommand {
+struct MusicFavoriteCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "favorite", abstract: "Add a track to favourites.",
         discussion: """
@@ -606,12 +606,12 @@ import Foundation
             """, aliases: ["favourite"])
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Track path, or enough of its name to be unambiguous.") var track: String
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute { try MusicFavouriteBridge.run(.favorite, query: track, json: json) }
     }
 }
 
-@MainActor struct MusicUnfavoriteCommand: AsyncParsableCommand {
+struct MusicUnfavoriteCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "unfavorite", abstract: "Remove a track from favourites.",
         discussion: """
@@ -625,12 +625,12 @@ import Foundation
         aliases: ["unfavourite"])
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Track path, or enough of its name to be unambiguous.") var track: String
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute { try MusicFavouriteBridge.run(.unfavorite, query: track, json: json) }
     }
 }
 
-@MainActor struct MusicRevealCommand: AsyncParsableCommand {
+struct MusicRevealCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "reveal", abstract: "Reveal a track in Finder.",
         discussion: """
@@ -643,7 +643,7 @@ import Foundation
             """, )
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @Argument(help: "Track path, or enough of its name to be unambiguous.") var track: String
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let found = try LibraryBridge.track(track)
             let url = await MusicLibraryOperationExecution.reveal(found.url)
@@ -660,7 +660,7 @@ import Foundation
     }
 }
 
-@MainActor struct MusicOpenLibraryCommand: AsyncParsableCommand {
+struct MusicOpenLibraryCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "open", abstract: "Open the music library in Finder.",
         discussion: """
@@ -672,7 +672,7 @@ import Foundation
             ed music open --json
             """, )
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let url = try await MusicLibraryOperationExecution.openLibrary()
             guard !json else {
@@ -688,7 +688,7 @@ import Foundation
     }
 }
 
-@MainActor struct MusicRescanCommand: AsyncParsableCommand {
+struct MusicRescanCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "rescan",
         abstract: "Read the music folder again after changing it outside Edith.",
@@ -705,7 +705,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             try LibraryBridge.requireFolder()
             let tracks = MusicLibraryContentOperationExecution.rescan().count

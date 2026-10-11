@@ -58,7 +58,8 @@ struct EmbeddedNotchNowPlaying: Equatable {
     private var revision: UInt64 = 0
     private var selectedSource: String?
 
-    init(request: SurfaceSnapshotRequest, remote: EmbeddedMusicRemote = .shared) {
+    init(request: SurfaceSnapshotRequest, remote: EmbeddedMusicRemote? = nil) {
+        let remote = remote ?? .shared
         self.detailed = true; self.presentationID = nil; self.expectedVersion = nil;
         self.request = request;
         self.invoke = { operation, payload in
