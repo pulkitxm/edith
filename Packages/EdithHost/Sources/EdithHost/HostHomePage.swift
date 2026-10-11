@@ -7,7 +7,7 @@ import SwiftUI
 
 struct HostHomePage: View {
     let marketplace: HostMarketplace
-    let customize: () -> Void
+    let customize: (String?) -> Void
     let extensions: () -> Void
     var openExtension: ((String) -> Void)? = nil
     var presenter: (any HostExtensionContentPresenting)? = nil
@@ -29,7 +29,7 @@ struct HostHomePage: View {
         PageScaffold(pinnedHeader: true) {
             HostHomeHeader(
                 dark: scheme == .dark, editing: $editing, layouts: marketplace.surfaceLayouts,
-                customize: customize)
+                customize: { customize(nil) })
         } content: {
             if let workflowSetup { workflowSetup }
             SurfaceCanvas(
@@ -41,10 +41,7 @@ struct HostHomePage: View {
                         if let anchor { layout.move(id, before: anchor) }; selectedTile = id
                     }
                 },
-                inspect: {
-                    marketplace.surfaces.preferences.set($0, forKey: HostSurfaceEditorKeys.widget);
-                    customize()
-                },
+                inspect: { customize($0) },
                 reorder: { id, anchor in
                     marketplace.surfaceLayouts.update(.home) { $0.move(id, before: anchor) }
                 },

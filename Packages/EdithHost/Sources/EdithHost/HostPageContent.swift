@@ -118,5 +118,9 @@ struct HostPageContent: View {
             marketplace: marketplace, destination: destination, presenter: presenter,
             openExtension: openExtension)
     }
-    private func customize() { settings = "surfaces"; select("settings") }
+    private func customize(_ tileID: String?) {
+        HostSurfaceEditorRequest(target: .home, tileID: tileID).save(
+            to: marketplace.surfaces.preferences)
+        settings = "surfaces"; select("settings")
+    }
 }
