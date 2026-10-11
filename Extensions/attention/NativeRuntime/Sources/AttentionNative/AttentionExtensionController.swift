@@ -26,9 +26,27 @@ public final class AttentionExtensionController: NSObject {
     private var stopped = false
     private var stoppingTask: Task<Void, Never>?
     private var activeCalls = 0
-    private let commands = ExtensionCommandRegistry()
-    private let ambientPolicy: ExtensionAmbientPolicy
-    private let admitFixture: (NSDictionary) throws -> WorkerFixtureAdmission?
+    @MainActor
+    private final class Storage {
+        let commands = ExtensionCommandRegistry()
+        let ambientPolicy: ExtensionAmbientPolicy
+        let admitFixture: (NSDictionary) throws -> WorkerFixtureAdmission?
+
+        init(
+            ambientPolicy: ExtensionAmbientPolicy,
+            admitFixture: @escaping (NSDictionary) throws -> WorkerFixtureAdmission?
+        ) {
+            self.ambientPolicy = ambientPolicy
+            self.admitFixture = admitFixture
+        }
+    }
+
+    private let storage: Storage
+    private var commands: ExtensionCommandRegistry { storage.commands }
+    private var ambientPolicy: ExtensionAmbientPolicy { storage.ambientPolicy }
+    private var admitFixture: (NSDictionary) throws -> WorkerFixtureAdmission? {
+        storage.admitFixture
+    }
 
     private let notifySettingsChanged: () -> Void
 
@@ -49,12 +67,12 @@ public final class AttentionExtensionController: NSObject {
         }, ambientPolicy: ExtensionAmbientPolicy? = nil
     ) {
         self.notifySettingsChanged = notifySettingsChanged
-        self.admitFixture = admitFixture
-        self.ambientPolicy =
-            ambientPolicy
-            ?? ExtensionAmbientPolicy(jobs: [
-                "attention.ingest": ExtensionAmbientCadence(ambient: 900, live: 900)
-            ])
+        storage = Storage(
+            ambientPolicy: ambientPolicy
+                ?? ExtensionAmbientPolicy(jobs: [
+                    "attention.ingest": ExtensionAmbientCadence(ambient: 900, live: 900)
+                ]),
+            admitFixture: admitFixture)
         self.bundle = bundle
         super.init()
     }

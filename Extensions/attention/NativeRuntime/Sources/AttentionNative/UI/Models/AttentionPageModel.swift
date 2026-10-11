@@ -68,7 +68,8 @@ final class AttentionPageModel {
         didSet { if breakdownSort != oldValue { refilterBreakdown() } }
     }
     private(set) var breakdown = AttentionBreakdownProjection()
-    let breakdownLoad = ContentLoad()
+    private let loadStorage = LoadStorage()
+    var breakdownLoad: ContentLoad { loadStorage.breakdown }
     private(set) var levelFilter: AttentionProductivity?
     private(set) var sphereFilter: AttentionSphere?
     private(set) var categoryFilter: String?
@@ -76,7 +77,7 @@ final class AttentionPageModel {
     var searchText = "" {
         didSet { if searchText != oldValue { scheduleSearch() } }
     }
-    let loading = ContentLoad()
+    var loading: ContentLoad { loadStorage.page }
     var loaded: Bool { loading.hasContent }
     var pending: Bool { loading.isRunning }
     private(set) var hasStoredEvents = false
@@ -94,6 +95,12 @@ final class AttentionPageModel {
     private var breakdownTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
     private var settingsTask: Task<Void, Never>?
+
+    @MainActor
+    private final class LoadStorage {
+        let breakdown = ContentLoad()
+        let page = ContentLoad()
+    }
 
     init(
         repository: AttentionRepository = AttentionRepository(), uiClient: AttentionUIClient? = nil

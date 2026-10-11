@@ -3,7 +3,14 @@ import Darwin
 import Foundation
 
 final class AttentionDatabase: @unchecked Sendable {
-    private let pool: DatabasePool
+    private final class Storage {
+        let pool: DatabasePool
+
+        init(pool: DatabasePool) { self.pool = pool }
+    }
+
+    private let storage: Storage
+    private var pool: DatabasePool { storage.pool }
     init(url: URL) throws {
         let directory = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(
@@ -14,7 +21,7 @@ final class AttentionDatabase: @unchecked Sendable {
         configuration.prepareDatabase { database in
             try database.execute(sql: "PRAGMA synchronous = FULL")
         }
-        pool = try DatabasePool(path: url.path, configuration: configuration)
+        storage = Storage(pool: try DatabasePool(path: url.path, configuration: configuration))
         try pool.write { database in
             try database.execute(
                 sql:
