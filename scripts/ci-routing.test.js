@@ -201,7 +201,7 @@ test("pull requests build the release app that main releases rebuild", () => {
 test("Swift lanes exercise only independent host and extension packages", () => {
   const job = ciJobs["swift-test"];
   expect(job.strategy["fail-fast"]).toBe(false);
-  expect(job.strategy["max-parallel"]).toBe(3);
+  expect(job.strategy["max-parallel"]).toBeUndefined();
   expect(job.strategy.matrix).toBe(
     ["$", "{{ fromJSON(needs.changes.outputs.swift_matrix) }}"].join(""),
   );
