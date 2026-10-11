@@ -287,7 +287,7 @@ extension CompanionClient {
             return remote.chat(message: message, conversationID: conversationId, persona: persona)
         }
         return AsyncThrowingStream { continuation in
-            let task = Task {
+            let task = CompanionTransport.shared.producers.launch {
                 do {
                     var request = URLRequest(url: url(for: "chat"))
                     request.httpMethod = "POST"
@@ -326,6 +326,7 @@ extension CompanionClient {
                     continuation.finish(throwing: error)
                 }
             }
+            guard let task else { continuation.finish(throwing: CancellationError()); return }
             continuation.onTermination = { _ in task.cancel() }
         }
     }

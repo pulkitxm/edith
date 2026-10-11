@@ -12,6 +12,7 @@ final class CompanionMonitor {
     private let now: @MainActor () -> Date
     private let sleep: @MainActor (Duration) async throws -> Void
     private var lastCompleted: Date?
+    private let commandTasks = CompanionTaskOwner()
     private var periodic: Task<Void, Never>?
     private var started = false
     private(set) var latest: CompanionHealthSnapshot?
@@ -42,9 +43,8 @@ final class CompanionMonitor {
     func reschedule() {
         guard started, !isStopped else { return }
         loop?.cancel()
-        loop = Task { [weak self] in
+        loop = commandTasks.launch { [weak self] in
             guard let self, !self.isStopped else { return }
-            await self.delivery.resume()
             while !Task.isCancelled {
                 guard !self.isStopped, let interval = self.interval(),
                     interval.isFinite, interval > 0
@@ -93,7 +93,21 @@ final class CompanionMonitor {
         return await refresh()
     }
 
+    func cancelPendingCommands() {
+        isStopped = true
+        started = false
+        commandTasks.cancel()
+        loop?.cancel()
+        periodic?.cancel()
+        pending?.cancel()
+    }
+
+    func cancelDelivery() async { await delivery.cancelPending() }
+
     func stop() async {
+        cancelPendingCommands()
+        await cancelDelivery()
+        await commandTasks.drain()
         isStopped = true; started = false
         let loop = loop; self.loop = nil; loop?.cancel()
         let periodic = periodic; self.periodic = nil; periodic?.cancel()
