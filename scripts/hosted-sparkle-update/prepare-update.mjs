@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { createHash, sign } from "node:crypto";
+import { createHash, createPublicKey, sign } from "node:crypto";
 import {
   chmod,
   lstat,
@@ -117,6 +117,7 @@ export async function inventorySparkleApp(
   assert.equal(info.CFBundleShortVersionString, version);
   assert.equal(info.CFBundleVersion, version === "1.0.0" ? "1" : "2");
   assert.deepEqual(info.NSAppTransportSecurity, sparkleLoopbackTransport);
+  assert.equal(info.SUVerifyUpdateBeforeExtraction, true);
   execute("codesign", ["--verify", "--deep", "--strict", app], {
     stdio: "pipe",
     timeout: 10000,
@@ -158,6 +159,16 @@ export async function prepareSparkleUpdate({
 }) {
   assert.equal(process.env.EDITH_HOSTED_SPARKLE_UPDATE, "1");
   assert.equal(process.env.GITHUB_SHA, buildReceipt.sourceCommit);
+  assert.equal(
+    createPublicKey(issuer)
+      .export({ format: "der", type: "spki" })
+      .subarray(-32)
+      .toString("base64"),
+    buildReceipt.issuerPublicKey,
+  );
+  assert.equal(hash(requirement), buildReceipt.signingRequirementSHA256);
+  assert.equal(session.length, 36);
+  assert.equal(identifier, `com.pulkit.edith.tests.remote-${session}`);
   assert.equal(producer.pid, process.pid);
   assert.equal(producer.uid, process.getuid());
   assert.equal(producer.executable, await realpath(process.execPath));
@@ -226,6 +237,7 @@ export async function prepareSparkleUpdate({
     info.NSAppTransportSecurity = sparkleLoopbackTransport;
     info.SUEnableAutomaticChecks = false;
     info.SUAutomaticallyUpdate = false;
+    info.SUVerifyUpdateBeforeExtraction = true;
     info.SUScheduledCheckInterval = 86400;
     execute(
       "python3",

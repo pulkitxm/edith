@@ -67,6 +67,7 @@ import Security
                 == value.feedURL.absoluteString,
             Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
                 == (version == "1.0.0" ? "1" : "2"),
+            Bundle.main.object(forInfoDictionaryKey: "SUVerifyUpdateBeforeExtraction") as? Bool == true,
             let transport = Bundle.main.object(forInfoDictionaryKey: "NSAppTransportSecurity")
                 as? NSDictionary,
             transport.isEqual(to: [
