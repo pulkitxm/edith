@@ -70,6 +70,13 @@ final class ExtensionRuntime: NSObject {
     private var uiGeneration: UUID?
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private var stopping = false
+    private var suspensionTask: Task<Void, Never>?
+    private var suspensionFinished = false
+    private var suspensionCompletions: [() -> Void] = []
+    private var shutdownTask: Task<Void, Never>?
+    private var shutdownFinished = false
+    private var shutdownCompletions: [() -> Void] = []
+    private var suspendedUIModels: [SkillsModel] = []
     private var surface: PluginsSurface?
     private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
@@ -134,28 +141,67 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        if suspensionFinished { completion(); return }
+        suspensionCompletions.append(completion)
+        guard suspensionTask == nil else { return }
         stopping = true
+        commands.suspend()
         #if EDITH_FUNCTIONAL_FIXTURE
         fixturePolicy?.stop()
         #endif
         if fixtureActive { fixtureTerminated = true }
-        stopUI()
-        let streams = cliStreams; cliStreams = nil; streams?.stop()
-        let stoppingModel = model; model = nil; surface = nil
+        stopUI(preservingMetadata: true)
+        let streams = cliStreams
+        let stoppingModel = model
+        streams?.stop()
         stoppingModel?.stop()
-        commands.shutdown()
-        Task {
-            await stoppingModel?.shutdown()
+        suspensionTask = Task {
+            await commands.suspendAndWait()
+            await stoppingModel?.stopAndWait()
             await streams?.stopAndWait()
-            await commands.shutdownAndWait()
             for task in Array(uiDrains.values) { await task.value }
-            completion()
+            suspensionFinished = true
+            let completions = suspensionCompletions
+            suspensionCompletions.removeAll()
+            for completion in completions { completion() }
+            suspensionTask = nil
         }
     }
 
-    private func stopUI() {
+    @objc(prepareToStopWithCompletion:)
+    func prepareToStop(completion: @escaping () -> Void) {
+        if shutdownFinished { completion(); return }
+        shutdownCompletions.append(completion)
+        guard shutdownTask == nil else { return }
+        let ordinaryModel = !fixtureActive && model != nil
+        suspendCommands(completion: {})
+        commands.shutdown()
+        let suspending = suspensionTask
+        let stoppingModel = model
+        shutdownTask = Task {
+            await suspending?.value
+            await stoppingModel?.shutdown()
+            for owner in suspendedUIModels { await owner.shutdown() }
+            await commands.shutdownAndWait()
+            if ordinaryModel { SkillBrand.shutdown() }
+            if ordinaryModel || !suspendedUIModels.isEmpty { TextEditingCommands.shutdown() }
+            suspendedUIModels.removeAll()
+            model = nil; surface = nil; cliStreams = nil
+            #if EDITH_FUNCTIONAL_FIXTURE
+            fixture = nil; fixtureContext = nil; fixturePolicy = nil
+            #endif
+            fixtureActive = false
+            shutdownFinished = true
+            let completions = shutdownCompletions
+            shutdownCompletions.removeAll()
+            for completion in completions { completion() }
+            shutdownTask = nil
+        }
+    }
+
+    private func stopUI(preservingMetadata: Bool = false) {
         let hadUI = engineClient != nil || uiModel != nil
         uiGeneration = nil
         #if EDITH_FUNCTIONAL_FIXTURE
@@ -165,13 +211,18 @@ final class ExtensionRuntime: NSObject {
         let stoppingModel = uiModel; uiModel = nil
         stoppingModel?.stop()
         if let stoppingModel {
+            if preservingMetadata { suspendedUIModels.append(stoppingModel) }
             let id = UUID()
             uiDrains[id] = Task {
-                await stoppingModel.shutdown()
+                if preservingMetadata {
+                    await stoppingModel.stopAndWait()
+                } else {
+                    await stoppingModel.shutdown()
+                }
                 uiDrains[id] = nil
             }
         }
-        if hadUI { TextEditingCommands.shutdown() }
+        if hadUI, !preservingMetadata { TextEditingCommands.shutdown() }
     }
 
     #if EDITH_FUNCTIONAL_FIXTURE
@@ -350,18 +401,8 @@ final class ExtensionRuntime: NSObject {
             return NSHostingController(rootView: ExtensionPageHost { PluginsPage(model: model) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
-        case "stop":
-            let ordinaryModel = !fixtureActive && model != nil
-            prepareToStop(completion: {})
-            if ordinaryModel {
-                SkillBrand.shutdown()
-                TextEditingCommands.shutdown()
-            }
-            #if EDITH_FUNCTIONAL_FIXTURE
-            fixture = nil
-            #endif
-            fixtureActive = false
-        case "status": return ["ok": true, "running": model != nil] as NSDictionary
+        case "stop": prepareToStop(completion: {})
+        case "status": return ["ok": true, "running": model != nil && !stopping] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
