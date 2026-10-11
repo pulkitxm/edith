@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import StudioExtension
 
+@Suite(.timeLimit(.minutes(1)))
 @MainActor struct StudioConcurrencyBoundaryTests {
     @MainActor private final class WeakOwner {
         weak var value: StudioUILongOperations?
@@ -54,19 +55,23 @@ import Testing
         do {
             try await StudioUIOperationContext.$requestedToken.withValue(first) {
                 #expect(StudioUIOperationContext.requestedToken == first)
-                #expect(await Task.detached { StudioUIOperationContext.requestedToken }.value == nil)
+                #expect(
+                    await Task.detached { StudioUIOperationContext.requestedToken }.value == nil)
                 throw Failure.expected
             }
         } catch Failure.expected {}
         #expect(StudioUIOperationContext.requestedToken == nil)
     }
 
-    @Test func lateProgressCannotChangeCompletedOrReplacementWork() async throws {
+    @Test func lateProgressCannotChangeCompletedOrSameTokenReplacementWork() async throws {
         let operations = StudioUILongOperations()
         let (states, updates) = AsyncStream<StudioUIOperationState>.makeStream()
         operations.onChange = { updates.yield($0) }
         let work = Work()
-        let started = try operations.start { try await work.run($0) }
+        let token = UUID()
+        let started = try StudioUIOperationContext.$requestedToken.withValue(token) {
+            try operations.start { try await work.run($0) }
+        }
         await work.waitForStart()
         work.progress?(0.8)
         work.progress?(0.2)
@@ -82,15 +87,26 @@ import Testing
         #expect(completed.phase == "completed" && completed.progress == 1)
         _ = try operations.invoke("studio.ui.work.end", payload: handle)
         let replacement = Work()
-        let next = try operations.start { try await replacement.run($0) }
+        let next = try StudioUIOperationContext.$requestedToken.withValue(token) {
+            try operations.start { try await replacement.run($0) }
+        }
+        #expect(next.token == started.token)
         await replacement.waitForStart()
-        work.progress?(1)
+        work.progress?(0.9)
         for _ in 0..<20 { await Task.yield() }
         let nextHandle = try JSONEncoder().encode(["token": next.token.uuidString])
         let current = try JSONDecoder().decode(
             StudioUIOperationState.self,
             from: operations.invoke("studio.ui.work.read", payload: nextHandle))
         #expect(current.phase == "running" && current.progress == 0)
+        replacement.progress?(0.25)
+        for await state in states where state.token == next.token {
+            if state.phase == "running" && state.progress == 0.25 { break }
+        }
+        let updated = try JSONDecoder().decode(
+            StudioUIOperationState.self,
+            from: operations.invoke("studio.ui.work.read", payload: nextHandle))
+        #expect(updated.phase == "running" && updated.progress == 0.25)
         let stop = Task { await operations.stopAndWait() }
         await Task.yield()
         replacement.complete()
@@ -113,7 +129,8 @@ import Testing
             if state.phase != "running" { break }
         }
         let data = try #require(try operations?.invoke("studio.ui.work.read", payload: handle))
-        #expect(try JSONDecoder().decode(StudioUIOperationState.self, from: data).phase == "cancelled")
+        #expect(
+            try JSONDecoder().decode(StudioUIOperationState.self, from: data).phase == "cancelled")
         await operations?.stopAndWait()
         operations = nil
         #expect(released.value == nil)

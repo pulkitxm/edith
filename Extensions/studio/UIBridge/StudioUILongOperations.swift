@@ -14,17 +14,20 @@ enum StudioUIOperationContext {
 }
 
 @MainActor final class StudioUILongOperations {
+    @MainActor private final class Attempt {}
     @MainActor private final class ProgressSink {
         private weak var owner: StudioUILongOperations?
         private let token: UUID
+        private let attempt: Attempt
 
-        init(owner: StudioUILongOperations, token: UUID) {
+        init(owner: StudioUILongOperations, token: UUID, attempt: Attempt) {
             self.owner = owner
             self.token = token
+            self.attempt = attempt
         }
 
         nonisolated func report(_ fraction: Double) {
-            Task { @MainActor [self] in owner?.progress(token, fraction) }
+            Task { @MainActor [self] in owner?.progress(token, attempt: attempt, fraction) }
         }
     }
     var onChange: ((StudioUIOperationState) -> Void)?
@@ -44,10 +47,13 @@ enum StudioUIOperationContext {
         }
         let body = try JSONSerialization.data(
             withJSONObject: object, options: [.withoutEscapingSlashes])
-        return try await StudioUIOperationContext.$requestedToken.withValue(token) { try await operation(body) }
+        return try await StudioUIOperationContext.$requestedToken.withValue(token) {
+            try await operation(body)
+        }
     }
 
     private struct Entry {
+        let attempt: Attempt
         let task: Task<Void, Never>
         var state: StudioUIOperationState
         let retained: Bool
@@ -80,7 +86,8 @@ enum StudioUIOperationContext {
         let state = StudioUIOperationState(
             token: token, phase: "running", progress: 0,
             result: nil, failure: nil)
-        let sink = ProgressSink(owner: self, token: token)
+        let attempt = Attempt()
+        let sink = ProgressSink(owner: self, token: token, attempt: attempt)
         let progress: @Sendable (Double) -> Void = { sink.report($0) }
         let task = Task { [weak self] in
             do {
@@ -89,16 +96,19 @@ enum StudioUIOperationContext {
                 guard result.count <= ExtensionEngineWire.maximumPayloadBytes else {
                     throw ExtensionPeerError.invalidRequest
                 }
-                self?.finish(token, phase: "completed", result: result, failure: nil)
+                self?.finish(
+                    token, attempt: attempt, phase: "completed", result: result, failure: nil)
             } catch is CancellationError {
-                self?.finish(token, phase: "cancelled", result: nil, failure: nil)
+                self?.finish(token, attempt: attempt, phase: "cancelled", result: nil, failure: nil)
             } catch {
                 self?.finish(
-                    token, phase: "failed", result: nil, failure: error.localizedDescription)
+                    token, attempt: attempt, phase: "failed", result: nil,
+                    failure: error.localizedDescription)
             }
         }
         entries[token] = Entry(
-            task: task, state: state, retained: retained, started: .now, accessed: .now)
+            attempt: attempt, task: task, state: state, retained: retained, started: .now,
+            accessed: .now)
         if timer == nil {
             timer = Task { [weak self] in
                 while !Task.isCancelled {
@@ -168,8 +178,9 @@ enum StudioUIOperationContext {
         entries.removeAll(); cancelled.removeAll()
     }
 
-    private func progress(_ token: UUID, _ fraction: Double) {
-        guard let entry = entries[token], !entry.ended, entry.state.phase == "running",
+    private func progress(_ token: UUID, attempt: Attempt, _ fraction: Double) {
+        guard let entry = entries[token], entry.attempt === attempt, !entry.ended,
+            entry.state.phase == "running",
             fraction.isFinite
         else { return }
         entries[token]?.state = StudioUIOperationState(
@@ -179,8 +190,10 @@ enum StudioUIOperationContext {
         if let state = entries[token]?.state { onChange?(state) }
     }
 
-    private func finish(_ token: UUID, phase: String, result: Data?, failure: String?) {
-        guard let entry = entries[token] else { return }
+    private func finish(
+        _ token: UUID, attempt: Attempt, phase: String, result: Data?, failure: String?
+    ) {
+        guard let entry = entries[token], entry.attempt === attempt else { return }
         if entry.ended {
             onChange?(
                 StudioUIOperationState(
