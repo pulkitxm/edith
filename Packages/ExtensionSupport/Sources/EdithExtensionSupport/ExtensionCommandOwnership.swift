@@ -60,13 +60,16 @@ public final class ExtensionOwnedProcessGroup: @unchecked Sendable {
 
     init(
         leader: ExtensionProcessIdentity,
-        read: @escaping @Sendable (Int32) -> ExtensionProcessIdentity? = ExtensionProcessIdentity
-            .read,
+        read: @escaping @Sendable (Int32) -> ExtensionProcessIdentity? = {
+            ExtensionProcessIdentity.read($0)
+        },
         group: @escaping @Sendable (Int32) -> Int32 = { getpgid($0) },
-        members: @escaping @Sendable (Int32) throws -> [Int32] = ExtensionOwnedProcessGroup.members,
-        descendants: @escaping @Sendable (Int32) throws -> [ExtensionProcessIdentity] =
-            ExtensionOwnedProcessGroup
-            .descendants,
+        members: @escaping @Sendable (Int32) throws -> [Int32] = {
+            try ExtensionOwnedProcessGroup.members($0)
+        },
+        descendants: @escaping @Sendable (Int32) throws -> [ExtensionProcessIdentity] = {
+            try ExtensionOwnedProcessGroup.descendants($0)
+        },
         exists: @escaping @Sendable (Int32) -> Bool = { kill($0, 0) == 0 || errno != ESRCH },
         send: @escaping @Sendable (Int32, Int32) -> Int32 = { kill($0, $1) }
     ) throws {
