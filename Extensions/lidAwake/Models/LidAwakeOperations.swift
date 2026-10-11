@@ -293,6 +293,8 @@ public final class LidAwakeOperationModel: ObservableObject {
 
     private let performer: Performer
     private var task: Task<Void, Never>?
+    private var ownedTasks: [UUID: Task<Void, Never>] = [:]
+    private var commandWorkClosed = false
     private var generation: UInt = 0
 
     public init(
@@ -303,14 +305,17 @@ public final class LidAwakeOperationModel: ObservableObject {
 
     @discardableResult
     public func perform(_ request: LidAwakeRequest) -> Task<Void, Never>? {
-        guard !applying else { return nil }
+        guard !applying, !commandWorkClosed, ownedTasks.count < 8 else { return nil }
         task?.cancel()
         generation &+= 1
         let generation = generation
         applying = true
         errorMessage = nil
+        let token = UUID()
         let task = Task { @MainActor [weak self, performer] in
+            defer { self?.ownedTasks[token] = nil }
             do {
+                try Task.checkCancellation()
                 let snapshot = try await performer(request)
                 guard let self, self.generation == generation else { return }
                 lastSnapshot = snapshot
@@ -322,18 +327,22 @@ public final class LidAwakeOperationModel: ObservableObject {
             guard let self, self.generation == generation else { return }
             applying = false
         }
+        ownedTasks[token] = task
         self.task = task
         return task
     }
 
     @discardableResult
     public func refreshStatus() -> Task<Void, Never>? {
-        guard !applying else { return nil }
+        guard !applying, !commandWorkClosed, ownedTasks.count < 8 else { return nil }
         task?.cancel()
         generation &+= 1
         let generation = generation
+        let token = UUID()
         let task = Task { @MainActor [weak self, performer] in
+            defer { self?.ownedTasks[token] = nil }
             do {
+                try Task.checkCancellation()
                 let snapshot = try await performer(.status)
                 guard let self, self.generation == generation else { return }
                 lastSnapshot = snapshot
@@ -344,6 +353,7 @@ public final class LidAwakeOperationModel: ObservableObject {
                 errorMessage = error.localizedDescription
             }
         }
+        ownedTasks[token] = task
         self.task = task
         return task
     }
@@ -355,9 +365,20 @@ public final class LidAwakeOperationModel: ObservableObject {
 
     public func cancel() {
         generation &+= 1
-        task?.cancel()
+        for task in ownedTasks.values { task.cancel() }
         task = nil
         applying = false
+    }
+
+    public func beginCommandDrain() {
+        commandWorkClosed = true
+        cancel()
+    }
+
+    public func cancelPendingWorkAndWait() async {
+        beginCommandDrain()
+        let pending = Array(ownedTasks.values)
+        for task in pending { await task.value }
     }
 }
 
