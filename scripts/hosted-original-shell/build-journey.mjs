@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { relocateHostedHostManifest } from "../hosted-host-manifest.mjs";
 import {
   fixtureNavigationOverlay,
   fixturePermissionOverlay,
@@ -24,12 +25,10 @@ await cp("Packages/EdithHost/Sources", join(packageDirectory, "Sources"), {
 await cp("Packages/EdithHost/Tests", join(packageDirectory, "Tests"), {
   recursive: true,
 });
-let manifest = await readFile("Packages/EdithHost/Package.swift", "utf8");
-for (const dependency of ["ExtensionMarketplace", "ExtensionSupport"])
-  manifest = manifest.replace(
-    `.package(path: "../${dependency}")`,
-    `.package(path: ${JSON.stringify(resolve("Packages", dependency))})`,
-  );
+const manifest = await relocateHostedHostManifest(
+  await readFile("Packages/EdithHost/Package.swift", "utf8"),
+  resolve(process.cwd()),
+);
 await writeFile(join(packageDirectory, "Package.swift"), manifest);
 const sources = join(packageDirectory, "Sources/EdithHost");
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
