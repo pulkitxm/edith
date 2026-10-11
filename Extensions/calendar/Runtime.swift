@@ -16,6 +16,7 @@ final class ExtensionRuntime: NSObject {
     private var uiEngine: CalendarUIEngine?
     private var navigation: CalendarHostNavigation?
     private var fixture: CalendarFixtureBackend?
+    private var commandDrain: Task<Void, Never>?
     private let commands = ExtensionCommandRegistry()
     private var uiPresentations: [UUID: CalendarUIPresentation] = [:]
 
@@ -70,21 +71,54 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginCommandDrain() -> Task<Void, Never> {
+        let engine = uiEngine
+        let owner = store
+        let navigator = navigation
+        _ = commands.suspend()
+        if let commandDrain { return commandDrain }
+        engine?.shutdown()
+        owner?.shutdown()
+        navigator?.invalidate()
+        CalendarPermission.shutdown()
+        let task = Task { [self] in
+            _ = await commands.suspendAndWait()
+            await engine?.stopAndWait()
+            await owner?.stopAndWait()
+            await navigator?.stopAndWait()
+            await CalendarPermission.stopAndWait()
+        }
+        commandDrain = task
+        return task
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
         stopping = true
         commands.shutdown()
         uiEngine?.shutdown()
         store?.shutdown()
         navigation?.invalidate()
         CalendarPermission.shutdown()
-        Task {
+        let ownedPresentation = presentation
+        Task { [self] in
+            await drain.value
             await commands.shutdownAndWait()
             await uiEngine?.stopAndWait()
             await store?.stopAndWait()
             await navigation?.stopAndWait()
             await CalendarPermission.stopAndWait()
-            presentation?.shutdown()
+            ownedPresentation?.shutdown()
             completion()
         }
     }
@@ -100,6 +134,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
+            guard commandDrain == nil else { return ["ok": false] as NSDictionary }
             guard !stopping, Bundle.main.bundleURL.pathExtension != "appex",
                 uiPresentations.isEmpty,
                 let suite = input["defaultsSuite"] as? String,
@@ -140,6 +175,7 @@ final class ExtensionRuntime: NSObject {
                 store.start()
             }
         case "configureUI":
+            guard commandDrain == nil else { return ["ok": false] as NSDictionary }
             uiPresentations = uiPresentations.filter { $0.value.isRetained }
             guard store == nil, let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "calendar", let client = configuration.engineClient,

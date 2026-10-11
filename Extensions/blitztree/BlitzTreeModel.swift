@@ -226,6 +226,7 @@ final class BlitzTreeModel {
     }
 
     private func launch(_ action: @escaping @MainActor (Progress) async -> Void) {
+        guard !stopped, !suspending, tasks.count < 64 else { return }
         let id = UUID()
         let cancellation = Progress(totalUnitCount: 0)
         current = (id, cancellation)

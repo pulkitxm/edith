@@ -75,13 +75,13 @@ public final class CalendarStore: FeatureModule {
         changeObserver = NotificationCenter.default.addObserver(
             forName: .EKEventStoreChanged, object: Self.eventStore, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.scheduleRefresh() }
+            MainActor.assumeIsolated { self?.scheduleRefresh() }
         }
         wakeCenter = NSWorkspace.shared.notificationCenter
         wakeObserver = wakeCenter?.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.scheduleRefresh() }
+            MainActor.assumeIsolated { self?.scheduleRefresh() }
         }
     }
 

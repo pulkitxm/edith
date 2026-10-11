@@ -31,6 +31,7 @@ final class CalendarPermissionModel {
     private var stopped = false
     private var workerID: UUID?
     private var grantID: UUID?
+    private var grantTask: Task<Void, Never>?
     nonisolated(unsafe) private var worker: Task<Void, Never>?
 
     init(
@@ -95,8 +96,14 @@ final class CalendarPermissionModel {
         guard !stopped, grantID == nil else { return }
         let id = UUID()
         grantID = id
-        grant { [weak self] in
-            Task { @MainActor [weak self] in self?.grantFinished(id) }
+        let response = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        grantTask = Task { [self] in
+            defer { grantTask = nil }
+            for await _ in response.stream { grantFinished(id) }
+        }
+        grant {
+            response.continuation.yield(())
+            response.continuation.finish()
         }
     }
 
@@ -119,6 +126,7 @@ final class CalendarPermissionModel {
     func stopAndWait() async {
         shutdown()
         await waitForRefresh()
+        await grantTask?.value
     }
 
     func waitForRefresh() async {

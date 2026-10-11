@@ -782,7 +782,7 @@ final class AppMaintenanceModel {
     }
 
     private func launch(_ action: @escaping @MainActor (MaintenanceCancellation) async -> Void) {
-        guard !stopped, !suspending else { return }
+        guard !stopped, !suspending, ownedTasks.count < 64 else { return }
         cancelOperation()
         let id = UUID()
         let cancellation = MaintenanceCancellation()

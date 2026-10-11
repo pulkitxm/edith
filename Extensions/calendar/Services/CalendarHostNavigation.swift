@@ -26,6 +26,9 @@ struct CalendarNavigationRequest: Codable, Equatable, Sendable {
     private let bridge: NSObject
     private var pending: [UUID: Pending] = [:]
     private var invalidated = false
+    private var callbacks: [UUID: Task<Void, Never>] = [:]
+    private var deadlines: [UUID: Task<Void, Never>] = [:]
+    private var cancellations: [UUID: Task<Void, Never>] = [:]
 
     init?(bridge: NSObject?) {
         guard let bridge, bridge.responds(to: NSSelectorFromString("navigate:completion:")),
@@ -37,14 +40,24 @@ struct CalendarNavigationRequest: Codable, Equatable, Sendable {
     func navigate(_ request: CalendarNavigationRequest) async throws {
         try request.validate()
         try Task.checkCancellation()
-        guard !invalidated, pending.count < 8 else { throw ExtensionPeerError.unavailable }
+        guard !invalidated, callbacks.count < 8 else { throw ExtensionPeerError.unavailable }
         let id = UUID()
+        let canceled = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        cancellations[id] = Task { [self] in
+            defer { cancellations[id] = nil }
+            for await _ in canceled.stream {
+                finish(id, result: .failure(CancellationError()), cancel: true)
+            }
+        }
+        defer { canceled.continuation.finish() }
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
-                let deadline = Task { [weak self] in
+                let deadline = Task { [self] in
+                    defer { deadlines[id] = nil }
                     do { try await Task.sleep(for: .seconds(5)) } catch { return }
-                    self?.finish(id, result: .failure(ExtensionPeerError.unavailable), cancel: true)
+                    self.finish(id, result: .failure(ExtensionPeerError.unavailable), cancel: true)
                 }
+                deadlines[id] = deadline
                 pending[id] = Pending(token: nil, continuation: continuation, deadline: deadline)
                 let selector = NSSelectorFromString("navigate:completion:")
                 typealias Navigate =
@@ -52,16 +65,20 @@ struct CalendarNavigationRequest: Codable, Equatable, Sendable {
                         AnyObject, Selector, NSDictionary, @convention(block) (NSString?) -> Void
                     ) -> NSString?
                 let navigate = unsafeBitCast(bridge.method(for: selector), to: Navigate.self)
-                let completion: @convention(block) (NSString?) -> Void = {
-                    @Sendable [weak self] message in
-                    let message = message as String?
-                    Task { @MainActor [weak self] in
-                        self?.finish(
+                let response = AsyncStream<String?>.makeStream(bufferingPolicy: .bufferingNewest(1))
+                callbacks[id] = Task { [self] in
+                    defer { callbacks[id] = nil }
+                    for await message in response.stream {
+                        finish(
                             id,
                             result: message.map {
                                 .failure(ExtensionPeerError.rejected($0))
                             } ?? .success(()))
                     }
+                }
+                let completion: @convention(block) (NSString?) -> Void = { message in
+                    response.continuation.yield(message as String?)
+                    response.continuation.finish()
                 }
                 let token = navigate(bridge, selector, request.dictionary, completion)
                 if let token, UUID(uuidString: token as String) != nil {
@@ -74,9 +91,7 @@ struct CalendarNavigationRequest: Codable, Equatable, Sendable {
                 }
             }
         } onCancel: {
-            Task { @MainActor [weak self] in
-                self?.finish(id, result: .failure(CancellationError()), cancel: true)
-            }
+            canceled.continuation.yield(())
         }
         try Task.checkCancellation()
     }
@@ -90,9 +105,10 @@ struct CalendarNavigationRequest: Codable, Equatable, Sendable {
     }
 
     func stopAndWait() async {
-        let deadlines = pending.values.map(\.deadline)
         invalidate()
-        for task in deadlines { await task.value }
+        while let task = deadlines.values.first { await task.value }
+        while let task = callbacks.values.first { await task.value }
+        while let task = cancellations.values.first { await task.value }
     }
 
     private func finish(
