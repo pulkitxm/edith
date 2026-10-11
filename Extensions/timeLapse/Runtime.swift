@@ -11,6 +11,8 @@ final class ExtensionRuntime: NSObject {
     private var uiRecorder: NSObject?
     private var uiClient: ExtensionEngineClient?
     private var uiOperations: NSObject?
+    private var draining = false
+    private var uiStops: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -71,16 +73,46 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        _ = commands.suspend()
+        draining = true
+        stopUI()
+        let recorder = recorder, operations = uiOperations
+        if #available(macOS 15.0, *) {
+            (operations as? TimeLapseUICommands)?.shutdown()
+            (recorder as? TimeLapseRecorder)?.beginSuspension()
+        }
+        Task { [self, recorder, operations] in
+            _ = await commands.suspendAndWait()
+            if #available(macOS 15.0, *) {
+                await (operations as? TimeLapseUICommands)?.shutdownAndWait()
+                await (recorder as? TimeLapseRecorder)?.suspendAndWait()
+            }
+            for task in Array(uiStops.values) { await task.value }
+            completion()
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        Task {
+        commands.shutdown()
+        draining = true
+        stopUI()
+        let recorder = recorder, operations = uiOperations
+        if #available(macOS 15.0, *) {
+            (operations as? TimeLapseUICommands)?.shutdown()
+            (recorder as? TimeLapseRecorder)?.beginSuspension()
+        }
+        Task { [self, recorder, operations] in
             await commands.shutdownAndWait()
             if #available(macOS 15.0, *) {
-                await (uiOperations as? TimeLapseUICommands)?.shutdownAndWait()
+                await (operations as? TimeLapseUICommands)?.shutdownAndWait()
             }
             if #available(macOS 15.0, *), let recorder = recorder as? TimeLapseRecorder {
                 await recorder.shutdown()
             }
+            for task in Array(uiStops.values) { await task.value }
             completion()
         }
     }
@@ -96,7 +128,8 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard #available(macOS 15.0, *), let suite = input["defaultsSuite"] as? String,
+            guard !draining, #available(macOS 15.0, *),
+                let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else {
                 return ["ok": false] as NSDictionary
@@ -106,7 +139,8 @@ final class ExtensionRuntime: NSObject {
                 uiOperations = TimeLapseUICommands(recorder: created)
             }
         case "configureUI":
-            guard let configuration = ExtensionUIConfiguration(context: input),
+            guard !draining, uiStops.isEmpty,
+                let configuration = ExtensionUIConfiguration(context: input),
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
             stopUI(); uiClient = client
@@ -129,10 +163,9 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
-            commands.shutdown()
-            if #available(macOS 15.0, *) { (uiOperations as? TimeLapseUICommands)?.shutdown() }
-            uiOperations = nil
-            recorder = nil
+            prepareToStop { [self] in
+                uiOperations = nil; recorder = nil
+            }
         case "status": return ["ok": true, "running": recorder != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
@@ -140,8 +173,15 @@ final class ExtensionRuntime: NSObject {
     }
     private func stopUI() {
         let recorder = uiRecorder; uiRecorder = nil
+        if #available(macOS 15.0, *) { (recorder as? TimeLapseRecorder)?.beginSuspension() }
+        if let recorder {
+            let id = UUID()
+            uiStops[id] = Task { [self, recorder] in
+                defer { uiStops[id] = nil }
+                if #available(macOS 15.0, *) { await (recorder as? TimeLapseRecorder)?.shutdown() }
+            }
+        }
         uiClient?.invalidate(); uiClient = nil
-        Task { if #available(macOS 15.0, *) { await (recorder as? TimeLapseRecorder)?.shutdown() } }
     }
 }
 

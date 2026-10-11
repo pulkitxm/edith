@@ -39,6 +39,9 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     private var previewConsumers: Set<UUID> = []
     var previewVisible: Bool { !previewConsumers.isEmpty }
     private var stopped = false
+    private var tasks: [UUID: Task<Void, Never>] = [:]
+    private var cancellableTasks: Set<UUID> = []
+    private let callbacks = TimeLapseRecorderCallbacks()
     private var startTask: Task<Void, Never>?
     private var stopTask: Task<Void, Never>?
     private var activeSession: UUID?
@@ -66,7 +69,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
                 let data = try await engineClient.invoke("recording.ui.export", payload: payload)
                 let job = try JSONDecoder().decode(TimeLapseUIExportStatus.self, from: data)
                 let poll = try JSONEncoder().encode(["token": job.token])
-                try await withTaskCancellationHandler {
+                do {
                     while true {
                         try Task.checkCancellation()
                         let result = try await engineClient.invoke(
@@ -82,11 +85,25 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
                         }
                         try await Task.sleep(for: .milliseconds(150))
                     }
-                } onCancel: {
-                    Task { @MainActor in
+                } catch {
+                    guard Task.isCancelled else { throw error }
+                    let retirement = Task {
                         _ = try? await engineClient.invoke(
                             "recording.ui.exportCancel", payload: poll)
+                        while true {
+                            if let result = try? await engineClient.invoke(
+                                "recording.ui.exportPoll", payload: poll),
+                                let status = try? JSONDecoder().decode(
+                                    TimeLapseUIExportStatus.self, from: result),
+                                status.token == job.token, status.complete
+                            {
+                                return
+                            }
+                            try? await Task.sleep(for: .milliseconds(150))
+                        }
                     }
+                    await retirement.value
+                    throw CancellationError()
                 }
             })
         super.init()
@@ -110,6 +127,16 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     }
 
     func refreshRemote() async {
+        guard !stopped else { return }
+        let task = launch { [self] in await refreshRemoteOwned() }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func refreshRemoteOwned() async {
         guard let engineClient, !stopped else { return }
         let revision = remoteRevision
         do {
@@ -167,6 +194,19 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
                 async let microphones = TimeLapseMicrophoneChoice.load()
                 return try await (sources, microphones)
             }
+    ) async {
+        guard !stopped else { return }
+        let task = launch { [self] in await loadSourcesOwned(operation: operation) }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func loadSourcesOwned(
+        operation:
+            @escaping @Sendable () async throws -> (TimeLapseSources, [TimeLapseMicrophoneChoice])
     ) async {
         guard !stopped, !busy, !recording else { return }
         if let engineClient {
@@ -236,7 +276,9 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         guard !stopped else { return }
         if let engineClient {
             permissionTask?.cancel()
-            permissionTask = Task { _ = try? await engineClient.invoke("recording.ui.permission") }
+            permissionTask = launch { [self] in
+                _ = try? await engineClient.invoke("recording.ui.permission")
+            }
         } else {
             _ = CGRequestScreenCaptureAccess()
         }
@@ -262,7 +304,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
             }
             return
         }
-        let task = Task { await startRecording() }
+        let task = launch { [self] in await startRecording() }
         startTask = task
         await withTaskCancellationHandler {
             await task.value
@@ -310,17 +352,18 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
             activeSession = session.id
             let directory = Self.libraryURL.appendingPathComponent(
                 session.id.uuidString, isDirectory: true)
+            let callbacks = callbacks
             let writer = try TimeLapseWriter(
                 directory: directory, session: session, sourceCount: filters.count,
                 failure: { [weak self] message in
-                    Task { @MainActor in
+                    callbacks.submit {
                         guard let self, self.activeSession == session.id else { return }
                         self.error = message
                         await self.stop(reason: message)
                     }
                 },
                 progress: { [weak self] frames, bytes, seconds in
-                    Task { @MainActor in
+                    callbacks.submit {
                         guard let self, self.activeSession == session.id else { return }
                         self.frames = frames; self.bytes = bytes; self.playbackSeconds = seconds
                     }
@@ -422,8 +465,22 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
             writer.startTimer()
         } catch {
             self.error = error.localizedDescription
-            for stream in streams { try? await stream.stopCapture() }
-            streams.removeAll()
+            let pendingStreams = streams
+            let retirement = launch(cancellable: false) { [self] in
+                for stream in pendingStreams {
+                    while true {
+                        do {
+                            try await stream.stopCapture()
+                            streams.removeAll { $0 === stream }
+                            break
+                        } catch {
+                            self.error = error.localizedDescription
+                            try? await Task.sleep(for: .milliseconds(100))
+                        }
+                    }
+                }
+            }
+            await retirement.value
             outputs.removeAll()
             if let writer { _ = await writer.stop(reason: error.localizedDescription) }
             self.writer = nil
@@ -447,7 +504,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         }
         if let stopTask { await stopTask.value; return }
         guard !busy, writer != nil else { return }
-        let task = Task { await stopRecording(reason: reason) }
+        let task = launch(cancellable: false) { [self] in await stopRecording(reason: reason) }
         stopTask = task
         await task.value
         stopTask = nil
@@ -457,8 +514,13 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         guard let writer else { return }
         busy = true
         for stream in streams {
-            do { try await stream.stopCapture() } catch {
+            do {
+                try await stream.stopCapture()
+                streams.removeAll { $0 === stream }
+            } catch {
                 self.error = error.localizedDescription
+                busy = false
+                return
             }
         }
         streams.removeAll()
@@ -475,19 +537,55 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     }
 
     nonisolated func stream(_ stream: SCStream, didStopWithError error: any Error) {
-        Task { @MainActor in
+        callbacks.submit { [self] in
             guard streams.contains(where: { $0 === stream }) else { return }
             self.error = error.localizedDescription
             await stop(reason: error.localizedDescription)
         }
     }
 
-    func shutdown() async {
+    private func launch(
+        cancellable: Bool = true, _ operation: @escaping @MainActor () async -> Void
+    ) -> Task<Void, Never> {
+        let id = UUID()
+        let task = Task { [self] in
+            defer { tasks[id] = nil; cancellableTasks.remove(id) }
+            guard !Task.isCancelled else { return }
+            await operation()
+        }
+        tasks[id] = task
+        if cancellable { cancellableTasks.insert(id) }
+        return task
+    }
+
+    func beginSuspension() {
         stopped = true
+        library.beginSuspension()
+        callbacks.close()
         permissionTask?.cancel()
         sourceLoad.cancel()
         startTask?.cancel()
-        await startTask?.value
+        for id in cancellableTasks { tasks[id]?.cancel() }
+    }
+
+    func suspendAndWait() async {
+        beginSuspension()
+        let pending = Array(tasks.values)
+        for task in pending { await task.value }
+        await callbacks.wait()
+        await library.suspendAndWait()
+        if engineClient == nil {
+            while writer != nil || !streams.isEmpty {
+                await stop()
+                if writer != nil || !streams.isEmpty {
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+            }
+        }
+    }
+
+    func shutdown() async {
+        await suspendAndWait()
         if engineClient != nil {
             await library.shutdown(); await thumbnailLoader.shutdown(); thumbnailCache.removeAll();
             preview = nil
@@ -532,5 +630,29 @@ private final class TimeLapseCaptureOutput: NSObject, SCStreamOutput {
         case .microphone: writer.ingest(sampleBuffer, source: index, kind: "microphone")
         @unknown default: break
         }
+    }
+}
+
+private final class TimeLapseRecorderCallbacks: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stopped = false
+    private var tasks: [UUID: Task<Void, Never>] = [:]
+
+    func submit(_ operation: @escaping @MainActor @Sendable () async -> Void) {
+        lock.withLock {
+            guard !stopped else { return }
+            let id = UUID()
+            tasks[id] = Task { @MainActor [self] in
+                defer { _ = lock.withLock { tasks.removeValue(forKey: id) } }
+                await operation()
+            }
+        }
+    }
+
+    func close() { lock.withLock { stopped = true } }
+
+    func wait() async {
+        let pending = lock.withLock { Array(tasks.values) }
+        for task in pending { await task.value }
     }
 }

@@ -11,6 +11,7 @@ final class TimeLapseLibraryModel {
     let exportLoad = ContentLoad()
     var exporting: Bool { exportLoad.isRunning }
     var message: String?
+    @ObservationIgnored private var reads: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var exportTask: Task<Void, Never>?
     @ObservationIgnored private let read: @Sendable (URL) async throws -> [TimeLapseRecording]
     @ObservationIgnored private let write:
@@ -35,6 +36,21 @@ final class TimeLapseLibraryModel {
 
     func refresh(root: URL? = nil, excluding active: URL? = nil) async {
         guard !stopped else { return }
+        let id = UUID()
+        let task = Task { [self] in
+            defer { reads[id] = nil }
+            guard !stopped, !Task.isCancelled else { return }
+            await refreshOwned(root: root, excluding: active)
+        }
+        reads[id] = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func refreshOwned(root: URL?, excluding active: URL?) async {
         let root = root ?? TimeLapseRecorder.libraryURL
         let read = read
         await loading.perform {
@@ -80,12 +96,23 @@ final class TimeLapseLibraryModel {
         }
     }
 
-    func shutdown() async {
+    func beginSuspension() {
         stopped = true
         loading.cancel()
         exportLoad.cancel()
         exportTask?.cancel()
-        await exportTask?.value
+        for task in reads.values { task.cancel() }
+    }
+
+    func suspendAndWait() async {
+        beginSuspension()
+        let pending = Array(reads.values), exporting = exportTask
+        for task in pending { await task.value }
+        await exporting?.value
+    }
+
+    func shutdown() async {
+        await suspendAndWait()
         recordings = []
         message = nil
     }
