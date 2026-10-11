@@ -5,8 +5,11 @@ let package = Package(
     name: "HostedFunctionalActions",
     platforms: [.macOS(.v14)],
     products: [.library(name: "FunctionalActionContract", targets: ["FunctionalActionContract"])],
+    dependencies: [.package(path: "../../Extensions/fixtureSupport")],
     targets: [
-        .target(name: "FunctionalActionContract"),
+        .target(
+            name: "FunctionalActionContract",
+            dependencies: [.product(name: "WorkerFixtureSupport", package: "fixtureSupport")]),
         .testTarget(
             name: "FunctionalActionContractTests", dependencies: ["FunctionalActionContract"]),
     ]

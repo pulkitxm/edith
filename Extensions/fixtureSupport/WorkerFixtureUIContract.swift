@@ -28,6 +28,10 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
         "machines", "downloads", "seoAudit", "virtualCamera", "codeStats", "herdr",
         "quinjet", "database",
     ]
+    static let helperOwners: Set<String> = [
+        "focusDim", "micMute", "systemStats", "windowSweaters", "colorPicker", "emoji",
+        "presenter", "keystrokeHighlight", "keepAwake", "notchShelf",
+    ]
     public let schema: Int
     public let sourceCommit: String
     public let session: String
@@ -52,7 +56,7 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
 
     public static func validateUIContext(
         _ context: NSDictionary, environment: [String: String], owner: String,
-        workerIdentifier: String
+        workerIdentifier: String, role: WorkerFixtureRole = .app
     ) throws {
         guard Self.owners.contains(owner),
             let host = context["hostIdentifier"] as? String,
@@ -62,7 +66,7 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
             let remote = context["remoteUI"] as? NSNumber,
             CFGetTypeID(remote) == CFBooleanGetTypeID(), remote.boolValue,
             let only = context["uiOnly"] as? NSNumber,
-            CFGetTypeID(only) == CFBooleanGetTypeID(), !only.boolValue,
+            CFGetTypeID(only) == CFBooleanGetTypeID(), only.boolValue == (role == .helper),
             context["extensionID"] as? String == owner,
             let location = context["location"] as? String,
             ["main", "settings"].contains(location),
@@ -70,6 +74,11 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
             section == owner
                 || (location == "settings"
                     && ["general", "appearance", "extensions"].contains(section)),
+            role != .helper
+                || (helperOwners.contains(owner) && location == "settings"
+                    && section == owner && context["operation"] as? String == "configureUI"
+                    && context["engineClient"] == nil
+                    && context["tile"] == nil && context["target"] == nil),
             let presentation = context["presentationID"] as? String,
             uuid(presentation.lowercased()),
             context["defaultsSuite"] as? String == workerIdentifier,
@@ -81,7 +90,7 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
 
     public static func verify(_ bytes: Data, issuerKey: Data) throws -> Self {
         guard issuerKey.count == 32, !bytes.isEmpty, bytes.count <= 131_072,
-            let envelope = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+            let envelope = try? WorkerFixtureJSON.object(bytes, maximumBytes: 131_072),
             Set(envelope.keys) == ["schema", "payload", "signature"],
             let schema = envelope["schema"] as? NSNumber,
             CFGetTypeID(schema) != CFBooleanGetTypeID(), schema == 1,
@@ -93,7 +102,7 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
             try canonicalJSON(envelope) == bytes
         else { throw WorkerFixtureError.invalid }
         let data = Data(payload.utf8)
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+        guard let object = try? WorkerFixtureJSON.object(data, maximumBytes: 65_536),
             Set(object.keys) == [
                 "schema", "sourceCommit", "session", "owner", "phase", "presentationID",
                 "location", "section", "capabilitySHA256",
@@ -145,12 +154,14 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
             dataDirectory == expectedData, Self.canonical(dataDirectory),
             dataDirectory.hasPrefix(root + "/"),
             workerPath == expectedWorker, Self.canonical(workerPath),
-            workerPath.hasPrefix(root + "/"),
-            workerPath.hasSuffix(
-                "/Extensions/" + owner + "/edith-host-2/arm64/" + version + "/" + owner
-                    + "/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex"),
+            workerPath == root
+                + "/Extensions/" + owner + "/edith-host-2/arm64/" + version + "/" + owner
+                + "/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex",
             rolePath == expectedRole,
-            rolePath == workerPath + "/Contents/Resources/Payload/" + owner + "/app.bundle",
+            rolePath == workerPath + "/Contents/Resources/Payload/" + owner + "/app.bundle"
+                || (Self.helperOwners.contains(owner) && location == "settings" && section == owner
+                    && rolePath == workerPath + "/Contents/Resources/Payload/" + owner
+                        + "/helper.bundle"),
             hostABI == "edith-host-2", version == expectedVersion, Self.version(version),
             dataDirectory == root + "/data/" + owner,
             Self.hex(packageSHA256, count: 64),

@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 const sourcePaths = [
+  "Extensions/fixtureSupport/WorkerFixtureJSON.swift",
   "Tests/HostedFunctionalActions/Sources/FunctionalActionContract/HostedFunctionalActionContext.swift",
   "Packages/ExtensionSupport/Sources/EdithExtensionSupport/ExtensionEngine.swift",
   "Tests/HostedFunctionalActions/RuntimeSources/HostedFunctionalActionTransport.swift",
@@ -26,7 +27,7 @@ export async function runFunctionalTransportContract(root, output) {
   for (const [index, source] of sources.entries()) {
     const path = join(output, sourcePaths[index].split("/").at(-1));
     const text = source.replace(
-      /^import (?:EdithExtensionSupport|FunctionalActionContract)\n/gm,
+      /^import (?:EdithExtensionSupport|FunctionalActionContract|WorkerFixtureSupport)\n/gm,
       "",
     );
     await writeFile(path, text, { flag: "wx", mode: 0o600 });

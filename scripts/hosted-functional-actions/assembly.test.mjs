@@ -12,17 +12,18 @@ const contextPath =
   "Tests/HostedFunctionalActions/Sources/FunctionalActionContract/HostedFunctionalActionContext.swift";
 const transportPath =
   "Tests/HostedFunctionalActions/RuntimeSources/HostedFunctionalActionTransport.swift";
+const jsonPath = "Extensions/fixtureSupport/WorkerFixtureJSON.swift";
 const casePath =
   "Tests/HostedFunctionalActions/OwnerCases/keepAwakeActionCase.swift";
 
 test("actual native case assembly preserves original activation and the shared checked endpoint", async () => {
   const sources = await Promise.all(
-    [contextPath, transportPath, casePath].map((path) =>
+    [contextPath, transportPath, casePath, jsonPath].map((path) =>
       readFile(root + path, "utf8"),
     ),
   );
   const result = functionalCaseAssembly("keepAwake", ...sources);
-  assert.equal(result.length, 3);
+  assert.equal(result.length, 4);
   assert(
     result[1].source.includes(
       "try await endpoint.invoke(operation, payload: payload, timeout: timeout)",
@@ -45,7 +46,7 @@ test("assembly is restricted to a private copied native test target and never ov
   const admittedSnapshot = {
     sourceCommit: "a".repeat(40),
     files: await Promise.all(
-      [contextPath, transportPath, casePath].map(async (path) => ({
+      [contextPath, transportPath, casePath, jsonPath].map(async (path) => ({
         path,
         sha256: createHash("sha256")
           .update(await readFile(root + path))
@@ -64,8 +65,8 @@ test("assembly is restricted to a private copied native test target and never ov
     },
     createDirectory: async () => {},
   });
-  assert.equal(output.originalSourceFiles.length, 3);
-  assert.equal(written.length, 3);
+  assert.equal(output.originalSourceFiles.length, 4);
+  assert.equal(written.length, 4);
   assert(
     written.every(
       ({ options }) => options.flag === "wx" && options.mode === 0o600,

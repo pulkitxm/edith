@@ -43,9 +43,20 @@ public final class WorkerFixtureUIAdmission {
             || context["hostedFunctionalFixture"] != nil
             || environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
         guard intent else { return nil }
+        let roleKind: WorkerFixtureRole
+        if roleBundle.bundleIdentifier == "com.pulkit.edith.extensions." + extensionID + ".app" {
+            roleKind = .app
+        } else if roleBundle.bundleIdentifier == "com.pulkit.edith.extensions." + extensionID
+            + ".helper",
+            WorkerFixtureUIContract.helperOwners.contains(extensionID)
+        {
+            roleKind = .helper
+        } else {
+            throw WorkerFixtureError.invalid
+        }
         try WorkerFixtureUIContract.validateUIContext(
             context, environment: environment, owner: extensionID,
-            workerIdentifier: workerBundle.bundleIdentifier ?? "")
+            workerIdentifier: workerBundle.bundleIdentifier ?? "", role: roleKind)
         guard let trust = WorkerFixtureUITrustAnchor.admitted,
             WorkerFixtureUIContract.owners.contains(extensionID),
             let hostIdentifier = suppliedHost,
@@ -53,7 +64,7 @@ public final class WorkerFixtureUIAdmission {
             let remote = context["remoteUI"] as? NSNumber,
             CFGetTypeID(remote) == CFBooleanGetTypeID(), remote.boolValue,
             let only = context["uiOnly"] as? NSNumber,
-            CFGetTypeID(only) == CFBooleanGetTypeID(), !only.boolValue,
+            CFGetTypeID(only) == CFBooleanGetTypeID(), only.boolValue == (roleKind == .helper),
             context["extensionID"] as? String == extensionID,
             let location = context["location"] as? String,
             let section = context["section"] as? String,
@@ -68,9 +79,7 @@ public final class WorkerFixtureUIAdmission {
             let phase = marker["phase"],
             let capabilitySHA256 = marker["capabilitySHA256"],
             marker["descriptorPath"] == trust.root + "/functional-ui-" + extensionID + ".json",
-            let client = context["engineClient"] as? NSObject,
-            client.responds(to: NSSelectorFromString("invoke:completion:")),
-            client.responds(to: NSSelectorFromString("cancel:")),
+            roleKind == .helper || Self.validEngineClient(context["engineClient"]),
             workerBundle.bundleIdentifier == hostIdentifier + ".extension." + extensionID
                 + ".worker",
             context["defaultsSuite"] as? String == workerBundle.bundleIdentifier,
@@ -78,7 +87,8 @@ public final class WorkerFixtureUIAdmission {
             environment["EDITH_EXTENSION_ID"] == extensionID,
             environment["EDITH_SHARED_DEFAULTS_SUITE"] == workerBundle.bundleIdentifier,
             workerBundle.bundleURL.pathExtension == "appex",
-            roleBundle.bundleIdentifier == "com.pulkit.edith.extensions." + extensionID + ".app",
+            roleBundle.bundleIdentifier == "com.pulkit.edith.extensions." + extensionID + "."
+                + roleKind.rawValue,
             let version = roleBundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
                 as? String,
             roleBundle.object(forInfoDictionaryKey: "EdithHostABI") as? String == "edith-host-2",
@@ -98,7 +108,18 @@ public final class WorkerFixtureUIAdmission {
         let root = host.deletingLastPathComponent()
         let session = String(hostIdentifier.dropFirst("com.pulkit.edith.tests.worker-".count))
         guard WorkerFixtureUIContract.uuid(session),
-            root.path.hasSuffix("/functional-fixture-" + session),
+            root.path.hasSuffix("/functional-fixture-" + session)
+        else { throw WorkerFixtureError.invalid }
+        try trust.validate()
+        guard root.path == trust.root, session == trust.session,
+            hostIdentifier == trust.hostIdentifier,
+            dataDirectory == trust.root + "/data/" + extensionID,
+            workerBundle.bundleURL.path == trust.root + "/Extensions/" + extensionID
+                + "/edith-host-2/arm64/" + version + "/" + extensionID
+                + "/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex",
+            roleBundle.bundleURL.path == workerBundle.bundleURL.path
+                + "/Contents/Resources/Payload/" + extensionID + "/" + roleKind.rawValue
+                + ".bundle",
             let hostBundle = Bundle(url: host)
         else { throw WorkerFixtureError.invalid }
         var paths: [WorkerFixtureUIOpenedPath] = []
@@ -192,18 +213,25 @@ public final class WorkerFixtureUIAdmission {
                 identifier: descriptor.hostIdentifier + ".extension." + descriptor.owner
                     + ".worker", requirement: nil) == trust.workerCertificateSHA256,
             try Self.verifySignature(
-                role, identifier: "com.pulkit.edith.extensions." + descriptor.owner + ".app",
+                role,
+                identifier: "com.pulkit.edith.extensions." + descriptor.owner + "."
+                    + role.lastPathComponent.replacingOccurrences(of: ".bundle", with: ""),
                 requirement: nil) == trust.roleCertificateSHA256
         else { throw WorkerFixtureError.invalid }
         try paths.forEach { try $0.validate() }
     }
 
-    private static func digest(_ data: Data) -> String {
+    private static func validEngineClient(_ value: Any?) -> Bool {
+        guard let client = value as? NSObject else { return false }
+        return client.responds(to: NSSelectorFromString("invoke:completion:"))
+            && client.responds(to: NSSelectorFromString("cancel:"))
+    }
+
+    static func digest(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
-    private static func observe(_ expected: WorkerFixtureUIProcess) throws -> WorkerFixtureUIProcess
-    {
+    static func observe(_ expected: WorkerFixtureUIProcess) throws -> WorkerFixtureUIProcess {
         try expected.validate(uid: getuid())
         var first = proc_bsdinfo(); var last = proc_bsdinfo()
         let size = Int32(MemoryLayout<proc_bsdinfo>.size)
@@ -234,7 +262,7 @@ public final class WorkerFixtureUIAdmission {
         return result
     }
 
-    private static func verifySignature(
+    static func verifySignature(
         _ url: URL, identifier: String, requirement expression: String?
     ) throws -> Data {
         var code: SecStaticCode?; var requirement: SecRequirement?
@@ -265,7 +293,7 @@ public final class WorkerFixtureUIAdmission {
     }
 }
 
-private final class WorkerFixtureUIOpenedPath {
+final class WorkerFixtureUIOpenedPath {
     let url: URL
     let descriptor: Int32
     let original: stat
