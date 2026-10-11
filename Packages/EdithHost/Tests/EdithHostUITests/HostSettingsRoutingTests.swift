@@ -9,7 +9,7 @@ import Testing
 @MainActor @Suite(.serialized) struct HostSettingsRoutingTests {
     @Test(arguments: [
         "usage", "music", "jev", "downloads", "clipboard", "bifrost", "codeStats", "lidAwake",
-        "attention", "appMaintenance", "studio",
+        "attention", "appMaintenance", "studio", "quinjet", "notchShelf",
     ])
     func activeFormsRequireTheSelectedEngineVersionAndUseTheirExactExport(id: String) throws {
         let package = package(id)
@@ -46,7 +46,10 @@ import Testing
     }
 
     @Test func absentIncompatibleForeignAndRetiringPackagesCannotCreateAnySettingsRequest() {
-        for id in ["emoji", "usage", "music", "attention", "appMaintenance", "studio"] {
+        for id in [
+            "emoji", "usage", "music", "attention", "appMaintenance", "studio", "quinjet",
+            "notchShelf",
+        ] {
             #expect(request(id, installed: nil, state: .active, version: "1.0.0") == nil)
             for installed in [
                 package(id, hostABI: "obsolete"), package(id, architecture: "x86_64"),
@@ -67,12 +70,17 @@ import Testing
     }
 
     @Test(arguments: [
-        "herdr", "machines", "database", "docs", "quinjet",
-        "notchShelf", "unknown",
+        "herdr", "machines", "database", "docs", "unknown",
     ])
     func unverifiedFormsNeverSubstituteAMainPageOrNotificationPane(id: String) {
         #expect(HostExtensionSettingsPolicy.route(for: id) == nil)
         #expect(request(id, installed: package(id), state: .active, version: "1.0.0") == nil)
+    }
+
+    @Test(arguments: ["emoji", "micMute", "systemStats"])
+    func activePreferenceFormsRejectAReplacedOrMissingWorkerVersion(id: String) {
+        #expect(request(id, installed: package(id), state: .active, version: "0.9.0") == nil)
+        #expect(request(id, installed: package(id), state: .active, version: nil) == nil)
     }
 
     @Test func reviewAdapterUsesActualCompatibleSelectionAndLeavesDisabledWorkersUnstarted() throws
