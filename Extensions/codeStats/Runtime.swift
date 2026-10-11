@@ -74,6 +74,8 @@ final class ExtensionRuntime: NSObject {
 
     @objc(suspendCommandsWithCompletion:)
     func suspendCommands(completion: @escaping () -> Void) {
+        let commands = self.commands
+        commands.suspend()
         Task {
             await commands.suspendAndWait()
             completion()

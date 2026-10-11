@@ -20,7 +20,7 @@ export const definition = {
       },
       {
         "path": "Extensions/codeStats/Runtime.swift",
-        "sha256": "b00339c2a18ae8453971df4a890cade4b3573b16a6ca53086910dad54acade44"
+        "sha256": "25cfa25d56ba41c3343871b2530ed9c4e80c3bef2f7bc056ce8517cb7164a8e9"
       }
     ],
     "mutation": {
