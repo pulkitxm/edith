@@ -54,6 +54,7 @@ final class CompanionSetupModel: Identifiable {
     private(set) var savingReason = false
     let onFinish: (Bool) -> Void
     private let remote: CompanionUIBridge?
+    private let commandTasks = CompanionTaskOwner()
     private var remoteTask: Task<Void, Never>?
 
     init(remote: CompanionUIBridge? = nil, onFinish: @escaping (Bool) -> Void) {
@@ -71,7 +72,7 @@ final class CompanionSetupModel: Identifiable {
 
     func begin(home: CompanionHomeModel, reasonerConfigured: Bool) {
         if remote != nil {
-            remoteTask = Task {
+            remoteTask = commandTasks.launch { [self] in
                 await remoteAction(
                     "begin", configured: reasonerConfigured, reachable: home.reachable)
             };
@@ -99,6 +100,10 @@ final class CompanionSetupModel: Identifiable {
     }
 
     func probeHosts() async {
+        _ = try? await commandTasks.perform { [self] in await probeHostsWork() }
+    }
+
+    private func probeHostsWork() async {
         if remote != nil { await remoteAction("probe"); return }
         guard !probing else { return }
         probing = true
@@ -110,6 +115,10 @@ final class CompanionSetupModel: Identifiable {
     }
 
     func runDeploy() async {
+        _ = try? await commandTasks.perform { [self] in await runDeployWork() }
+    }
+
+    private func runDeployWork() async {
         if remote != nil { await remoteAction("deploy"); return }
         guard !deploying else { return }
         if selectedHost == nil { await probeHosts() }
@@ -123,12 +132,22 @@ final class CompanionSetupModel: Identifiable {
         stages = [:]
         defer { deploying = false }
         do {
-            let deployment = try await CompanionMindRuntimeOperationExecution.deploy {
-                try await CompanionStackControl.deploy(
-                    host: host, config: CompanionConfigStore.load(),
-                    progress: { stage, detail in
-                        Task { @MainActor in self.advance(to: stage, detail: detail) }
-                    })
+            let updates = AsyncStream<(CompanionDeployStage, String)>.makeStream(
+                bufferingPolicy: .bufferingNewest(64))
+            let deployment = try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask { @MainActor [self] in
+                    for await (stage, detail) in updates.stream {
+                        advance(to: stage, detail: detail)
+                    }
+                }
+                defer { updates.continuation.finish() }
+                return try await CompanionMindRuntimeOperationExecution.deploy {
+                    try await CompanionStackControl.deploy(
+                        host: host, config: CompanionConfigStore.load(),
+                        progress: { stage, detail in
+                            updates.continuation.yield((stage, detail))
+                        })
+                }
             }
             finishStages()
             deployed = deployment
@@ -158,7 +177,8 @@ final class CompanionSetupModel: Identifiable {
             }
         } catch { if !Task.isCancelled { deployError = error.localizedDescription } }
     }
-    func shutdown() { remoteTask?.cancel(); remoteTask = nil }
+    func shutdown() { commandTasks.cancel(); remoteTask?.cancel() }
+    func cancelAndWait() async { shutdown(); await commandTasks.drain() }
 
     private func advance(to stage: CompanionDeployStage, detail: String) {
         for earlier in CompanionDeployStage.allCases {
@@ -196,6 +216,11 @@ final class CompanionSetupModel: Identifiable {
     }
 
     func loadReasoner(reachable: Bool) async {
+        _ = try? await commandTasks.perform { [self] in await loadReasonerWork(reachable: reachable)
+        }
+    }
+
+    private func loadReasonerWork(reachable: Bool) async {
         guard reachable else { return }
         guard let settings = try? await client.reasonSettings() else { return }
         if settings.configured {
@@ -206,6 +231,10 @@ final class CompanionSetupModel: Identifiable {
     }
 
     func saveAndVerifyReasoner() async {
+        _ = try? await commandTasks.perform { [self] in await saveAndVerifyReasonerWork() }
+    }
+
+    private func saveAndVerifyReasonerWork() async {
         guard !savingReason, !verifying else { return }
         savingReason = true
         verifying = true

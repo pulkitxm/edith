@@ -17,6 +17,7 @@ struct BifrostUIChange: Codable { let key: String; let value: String }
     private let invoke: (String, Data) async throws -> Data
     private var tasks: [UUID: Task<Void, Never>] = [:]
     private var stopped = false
+    private var readTask: Task<Void, Never>?
     private var applying = false
     private var observer: NSObjectProtocol?
     private var previous: [String: String] = [:]
@@ -42,11 +43,25 @@ struct BifrostUIChange: Codable { let key: String; let value: String }
             forName: UserDefaults.didChangeNotification,
             object: SharedDefaults.store, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.settingsChanged() }
+            MainActor.assumeIsolated { self?.settingsChanged() }
         }
     }
 
     func load() async {
+        guard !stopped, readTask == nil else { return }
+        let task = Task { [self] in
+            defer { readTask = nil }
+            await loadWork()
+        }
+        readTask = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func loadWork() async {
         guard !stopped else { return }
         do {
             let data = try await invoke("bifrost.ui.settings", Data("{}".utf8))
@@ -97,7 +112,7 @@ struct BifrostUIChange: Codable { let key: String; let value: String }
         return BifrostIndexStore.shared.load()
     }
     private func send(_ operation: String, payload: Data? = Data("{}".utf8)) {
-        guard !stopped, let payload else { return }
+        guard !stopped, tasks.count < 64, let payload else { return }
         let id = UUID()
         tasks[id] = Task { [weak self] in
             defer { self?.tasks[id] = nil }
@@ -107,12 +122,22 @@ struct BifrostUIChange: Codable { let key: String; let value: String }
             } catch { if !Task.isCancelled { self?.error = error.localizedDescription } }
         }
     }
-    func shutdown() {
+    func stopAndWait() async {
+        stop()
+        await readTask?.value
+        while let task = tasks.values.first { await task.value }
+    }
+
+    func stop() {
         stopped = true
         for task in tasks.values { task.cancel() }
-        tasks.removeAll()
+        readTask?.cancel()
         if let observer { NotificationCenter.default.removeObserver(observer) }
-        observer = nil; index = nil; loaded = false
+        observer = nil
+    }
+    func shutdown() {
+        stop()
+        index = nil; loaded = false
     }
     private static func text(_ key: String) -> String {
         if boolKeys.contains(key) {

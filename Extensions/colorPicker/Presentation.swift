@@ -121,6 +121,7 @@ final class ControlPresentation {
     private var defaultsObserver: NSObjectProtocol?
     private var baseline: [String: Any] = [:]
     private var reading = false
+    private var readTask: Task<Void, Never>?
     private static let pendingPreferencesKey = "utilityControlsPendingPreferences"
     private var applying = false
     private var stopped = false
@@ -231,6 +232,20 @@ final class ControlPresentation {
     }
 
     func refresh() async {
+        guard !stopped, readTask == nil else { return }
+        let task = Task { [self] in
+            defer { readTask = nil }
+            await refreshWork()
+        }
+        readTask = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func refreshWork() async {
         guard active, !stopped, !reading, writing == nil, actions.isEmpty else { return }
         reading = true
         defer { reading = false }
@@ -301,13 +316,20 @@ final class ControlPresentation {
         }
     }
 
+    func stopAndWait() async {
+        stop()
+        await readTask?.value
+        await writing?.value
+        while let task = actions.values.first { await task.value }
+    }
+
     func stop() {
         guard !stopped else { return }
         stopped = true
         revision += 1
         load.cancel()
-        writing?.cancel(); writing = nil
-        actions.values.forEach { $0.cancel() }; actions.removeAll()
+        writing?.cancel(); readTask?.cancel()
+        actions.values.forEach { $0.cancel() }
         IPC.stopObserving(observer); observer = nil
         if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver) }
         defaultsObserver = nil

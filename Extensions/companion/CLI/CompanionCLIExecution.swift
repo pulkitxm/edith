@@ -16,6 +16,11 @@ import Foundation
         for (_, handle, streams) in streamed.values { try? streams.cancel(handle) }
         return active.values.map { $0.0 } + streamed.values.map { $0.0 }
     }
+    static func stopChatsAndWait() async {
+        _ = stopChats()
+        let pending = Array(chats.values)
+        for (_, task) in pending { _ = await task.result }
+    }
     static func stream(_ streams: ExtensionCLIStreams, operation: String, payload: Data) throws
         -> Data
     {

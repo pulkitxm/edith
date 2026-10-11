@@ -46,6 +46,8 @@ extension BifrostPanel: BifrostWorkerPanel {}
     private let panel: BifrostWorkerPanelOwnership
     private var ownsPreview = false
     private var ownsHotKey = false
+    private var hostChanges: AsyncStream<Void>.Continuation?
+    private var hostTask: Task<Void, Never>?
 
     init(
         fixture: Bool = BifrostFixture.enabled,
@@ -85,9 +87,17 @@ extension BifrostPanel: BifrostWorkerPanel {}
         observer = BifrostIPC.observe(BifrostIPC.Name.requestBifrostPanel) { [weak panel] in
             panel?.toggle()
         }
+        let changes = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        hostChanges = changes.continuation
+        hostTask = Task { [self] in
+            for await _ in changes.stream {
+                guard !stopped, !Task.isCancelled else { return }
+                BifrostIPC.post(BifrostIPC.Name.settingsChanged)
+            }
+        }
         hostObserver = ExtensionSharedState.current?.observe { owner in
             guard owner == "host" || owner == "presenter" else { return }
-            Task { @MainActor in BifrostIPC.post(BifrostIPC.Name.settingsChanged) }
+            changes.continuation.yield(())
         }
         configureHotKey()
     }
@@ -107,13 +117,25 @@ extension BifrostPanel: BifrostWorkerPanel {}
         if ownsPreview { await BifrostClipboardPreviewService.shared.shutdown() }
     }
 
+    func cancelPendingCommands() {
+        store.cancelPendingCommands()
+        hostChanges?.finish()
+        hostTask?.cancel()
+        if let observer { BifrostIPC.stopObserving(observer) }; observer = nil
+        if let hostObserver { ExtensionSharedState.current?.stopObserving(hostObserver) }
+        hostObserver = nil
+        if ownsHotKey { HotKeyRegistrar.shutdown(); ownsHotKey = false }
+    }
+
     func drain() async {
-        shutdown()
+        cancelPendingCommands()
         await store.drain()
+        await hostTask?.value
         if ownsPreview { await BifrostClipboardPreviewService.shared.shutdown() }
     }
 
     func shutdown() {
+        cancelPendingCommands()
         guard !stopped else { return }; stopped = true
         if let observer { BifrostIPC.stopObserving(observer) }; observer = nil
         if let hostObserver { ExtensionSharedState.current?.stopObserving(hostObserver) }

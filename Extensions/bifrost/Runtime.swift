@@ -15,6 +15,10 @@ final class ExtensionRuntime: NSObject {
     private var cliStreams: ExtensionCLIStreams?
     private var stopped = false
     private var activeCalls = 0
+    private var commandDrain: Task<Void, Never>?
+    private var resourceStop: Task<Void, Never>?
+    private var commandsSuspended = false
+    private var uiDrains: [UUID: Task<Void, Never>] = [:]
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -44,10 +48,45 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
+            await resourceStop?.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginCommandDrain() -> Task<Void, Never> {
+        let owner = worker
+        let uiOwner = uiContext
+        let streams = cliStreams
+        commandsSuspended = true
+        _ = commands.suspend()
+        if let commandDrain { return commandDrain }
+        owner?.cancelPendingCommands()
+        uiOwner?.stop()
+        streams?.stop()
+        if let commandDrain { return commandDrain }
+        let task = Task { [self] in
+            _ = await commands.suspendAndWait()
+            await owner?.drain()
+            await streams?.stopAndWait()
+            await uiOwner?.stopAndWait()
+            while let task = uiDrains.values.first { await task.value }
+        }
+        commandDrain = task
+        return task
+    }
+
     @objc(prepareDisableWithCompletion:)
     func prepareDisable(completion: @escaping (NSError?) -> Void) {
-        Task {
-            do { try await worker?.prepareDisable(); completion(nil) } catch {
+        let owner = worker
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
+            do { try await owner?.prepareDisable(); completion(nil) } catch {
                 completion(error as NSError)
             }
         }
@@ -55,18 +94,46 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        stopped = true
-        let streams = cliStreams; cliStreams = nil; streams?.stop()
-        commands.shutdown()
-        let stopping = worker
-        stopping?.shutdown()
-        Task {
-            await stopping?.drain()
-            while activeCalls > 0 { await Task.yield() }
-            await streams?.stopAndWait()
-            await commands.shutdownAndWait()
-            completion()
+        let stop = beginResourceStop()
+        Task { [self] in
+            await stop.value
+            withExtendedLifetime(self) { completion() }
         }
+    }
+
+    private func beginResourceStop() -> Task<Void, Never> {
+        if let resourceStop { return resourceStop }
+        let owner = worker
+        let streams = cliStreams
+        let drain = beginCommandDrain()
+        if let resourceStop { return resourceStop }
+        stopped = true
+        retireUI()
+        worker = nil; surface = nil; cliStreams = nil
+        let task = Task { [self] in
+            await drain.value
+            await commands.shutdownAndWait()
+            owner?.shutdown()
+            await owner?.drain()
+            await streams?.stopAndWait()
+            while activeCalls > 0 { await Task.yield() }
+            TextEditingCommands.shutdown(); InputFocus.uninstall()
+        }
+        resourceStop = task
+        return task
+    }
+
+    private func retireUI() {
+        guard let owner = uiContext else { return }
+        owner.stop()
+        let id = UUID()
+        uiDrains[id] = Task { [self, owner] in
+            defer { uiDrains[id] = nil }
+            await owner.stopAndWait()
+            owner.shutdown()
+        }
+        uiContext = nil; BifrostUIContext.current = nil
+        engineClient?.invalidate(); engineClient = nil
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
@@ -80,6 +147,9 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
+            guard !commandsSuspended, uiDrains.count < 8 else {
+                return ["ok": false] as NSDictionary
+            }
             guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "bifrost", let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
@@ -88,10 +158,10 @@ final class ExtensionRuntime: NSObject {
             uiContext = context; BifrostUIContext.current = context
             TextEditingCommands.install()
         case "stopUI":
-            uiContext?.shutdown(); uiContext = nil; BifrostUIContext.current = nil
-            engineClient?.invalidate(); engineClient = nil
+            retireUI()
             TextEditingCommands.shutdown()
         case "start":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard !stopped, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
                 SurfaceHostContext.current != nil
@@ -104,14 +174,16 @@ final class ExtensionRuntime: NSObject {
                 TextEditingCommands.install()
             }
         case "view":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard let context = uiContext else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost { BifrostSettings(context: context) })
-        case "synchronize": worker?.configureHotKey()
+        case "synchronize":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
+            worker?.configureHotKey()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
-            prepareToStop(completion: {}); worker = nil; surface = nil
-            TextEditingCommands.shutdown(); InputFocus.uninstall()
+            _ = beginResourceStop()
         case "status": return ["ok": true, "running": !stopped && worker != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }

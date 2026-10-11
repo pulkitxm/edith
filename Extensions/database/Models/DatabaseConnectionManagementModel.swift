@@ -71,6 +71,11 @@ struct DatabaseConnectionManagementUncertainOutcome: Equatable, Sendable {
 @MainActor
 @Observable
 final class DatabaseConnectionManagementModel {
+    private let commandTasks = DatabaseTaskOwner()
+
+    func cancelPendingCommands() { commandTasks.cancel() }
+    func cancelAndWait() async { await commandTasks.drain() }
+
     static let maximumFailureCharacters = 320
 
     private(set) var activeConnectionID: DatabaseConnectionID?
@@ -234,7 +239,7 @@ final class DatabaseConnectionManagementModel {
     private func perform<Value: Sendable>(
         connectionID: DatabaseConnectionID,
         operation: DatabaseConnectionManagementOperation,
-        action: () async throws -> Value
+        action: @escaping () async throws -> Value
     ) async -> Value? {
         guard self.operation == nil else {
             failure = Self.bounded("Another database connection change is still in progress.")
@@ -250,7 +255,7 @@ final class DatabaseConnectionManagementModel {
             self.operation = nil
         }
         do {
-            return try await action()
+            return try await commandTasks.perform(action)
         } catch is CancellationError {
             return nil
         } catch {

@@ -15,6 +15,7 @@ import SwiftUI
     private let invalidate: @MainActor () -> Void
     private var revision = 0
     private var tail: Task<Void, Never>?
+    private var readTask: Task<Void, Never>?
     private var tasks: [UUID: Task<Void, Never>] = [:]
 
     convenience init(engine: ExtensionEngineClient) {
@@ -31,6 +32,20 @@ import SwiftUI
     }
 
     func load() async {
+        guard !stopped, readTask == nil else { return }
+        let task = Task { [self] in
+            defer { readTask = nil }
+            await loadWork()
+        }
+        readTask = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func loadWork() async {
         guard !stopped else { return }
         let current = revision
         do {
@@ -115,13 +130,19 @@ import SwiftUI
 
     func finish() async { await tail?.value }
 
+    func stopAndWait() async {
+        stop()
+        await readTask?.value
+        while let task = tasks.values.first { await task.value }
+        await tail?.value
+    }
+
     func stop() {
         guard !stopped else { return }
         stopped = true
         revision += 1
         tasks.values.forEach { $0.cancel() }
-        tasks.removeAll()
-        tail = nil
+        readTask?.cancel()
         invalidate()
     }
 }

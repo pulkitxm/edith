@@ -7,6 +7,15 @@ import Observation
 @MainActor
 @Observable
 final class ClipboardHistoryModel {
+    @ObservationIgnored private let commandTasks = ClipboardTaskOwner()
+
+    func cancelPendingCommands() {
+        commandTasks.cancel()
+        started = false
+    }
+
+    func cancelAndWait() async { await commandTasks.drain() }
+
     private(set) var entries: [ClipboardEntry] = []
     private(set) var error: String?
     private(set) var copiedID: String?
@@ -34,12 +43,12 @@ final class ClipboardHistoryModel {
     }
 
     func start() {
-        guard !started else { return }
+        guard !commandTasks.closed, !started else { return }
         started = true
         generation += 1
         if observesNotifications {
             observer = IPC.observe(IPC.Name.clipboardChanged) { [weak self] in
-                Task { @MainActor in self?.reload() }
+                MainActor.assumeIsolated { self?.reload() }
             }
         }
         reload()
@@ -63,6 +72,7 @@ final class ClipboardHistoryModel {
     }
 
     func shutdown() async {
+        await cancelAndWait()
         let tasks = [refreshTask, mutationTail].compactMap { $0 } + Array(mutations.values)
         stop()
         for task in tasks { await task.value }
@@ -70,10 +80,11 @@ final class ClipboardHistoryModel {
     }
 
     func reload() {
+        guard !commandTasks.closed else { return }
         guard mutations.isEmpty else { pendingRefresh = true; return }
         guard refreshTask == nil else { pendingRefresh = true; return }
         let generation = generation
-        refreshTask = Task { [weak self] in
+        refreshTask = commandTasks.launch { [weak self] in
             defer { if self?.generation == generation { self?.refreshTask = nil } }
             repeat {
                 self?.pendingRefresh = false
@@ -131,7 +142,7 @@ final class ClipboardHistoryModel {
         if let mutation { history.begin(id, mutation: mutation); entries = history.entries }
         let generation = generation
         let predecessor = mutationTail
-        mutations[id] = Task { [weak self] in
+        mutations[id] = commandTasks.launch { [weak self] in
             var succeeded = false
             defer {
                 if let self, self.generation == generation {

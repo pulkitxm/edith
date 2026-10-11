@@ -8,6 +8,10 @@ import UniformTypeIdentifiers
 @MainActor
 @Observable
 final class CompanionSettingsModel {
+    private let commandTasks = CompanionTaskOwner()
+    func cancelPendingCommands() { commandTasks.cancel() }
+    func cancelAndWait() async { await commandTasks.drain() }
+
     var provider = "anthropic"
     var model = ""
     var url = ""
@@ -50,6 +54,10 @@ final class CompanionSettingsModel {
     }
 
     func load() async {
+        _ = try? await commandTasks.perform { [self] in await loadWork() }
+    }
+
+    private func loadWork() async {
         let client = client
         let refreshDrafts = !loaded
         await loading.perform(operation: {
@@ -65,6 +73,10 @@ final class CompanionSettingsModel {
     }
 
     func saveTokens() async {
+        _ = try? await commandTasks.perform { [self] in await saveTokensWork() }
+    }
+
+    private func saveTokensWork() async {
         guard !savingTokens else { return }
         let github = githubToken.trimmingCharacters(in: .whitespaces)
         let notion = notionToken.trimmingCharacters(in: .whitespaces)
@@ -91,6 +103,10 @@ final class CompanionSettingsModel {
     }
 
     func clearToken(_ which: String) async {
+        _ = try? await commandTasks.perform { [self] in await clearTokenWork(which) }
+    }
+
+    private func clearTokenWork(_ which: String) async {
         guard !savingTokens else { return }
         savingTokens = true
         defer { savingTokens = false }
@@ -108,6 +124,12 @@ final class CompanionSettingsModel {
     }
 
     func importExport(source: String, url: URL) async {
+        _ = try? await commandTasks.perform { [self] in
+            await importExportWork(source: source, url: url)
+        }
+    }
+
+    private func importExportWork(source: String, url: URL) async {
         guard !importing else { return }
         importing = true
         defer { importing = false }
@@ -122,6 +144,10 @@ final class CompanionSettingsModel {
     }
 
     func syncNotion() async {
+        _ = try? await commandTasks.perform { [self] in await syncNotionWork() }
+    }
+
+    private func syncNotionWork() async {
         guard !syncingNotion else { return }
         syncingNotion = true
         defer { syncingNotion = false }
@@ -137,6 +163,10 @@ final class CompanionSettingsModel {
     }
 
     func syncGithub() async {
+        _ = try? await commandTasks.perform { [self] in await syncGithubWork() }
+    }
+
+    private func syncGithubWork() async {
         guard !syncingGithub else { return }
         syncingGithub = true
         defer { syncingGithub = false }
@@ -159,6 +189,10 @@ final class CompanionSettingsModel {
     }
 
     func save() async {
+        _ = try? await commandTasks.perform { [self] in await saveWork() }
+    }
+
+    private func saveWork() async {
         guard !saving else { return }
         saving = true
         defer { saving = false }
@@ -182,6 +216,10 @@ final class CompanionSettingsModel {
     }
 
     func test() async {
+        _ = try? await commandTasks.perform { [self] in await testWork() }
+    }
+
+    private func testWork() async {
         guard !testing else { return }
         testing = true
         testResult = nil
@@ -198,6 +236,10 @@ final class CompanionSettingsModel {
     }
 
     func exportData(into directory: URL) async {
+        _ = try? await commandTasks.perform { [self] in await exportDataWork(into: directory) }
+    }
+
+    private func exportDataWork(into directory: URL) async {
         guard !exporting else { return }
         exporting = true
         defer { exporting = false }
@@ -212,6 +254,10 @@ final class CompanionSettingsModel {
     }
 
     func restoreData(from path: URL) async {
+        _ = try? await commandTasks.perform { [self] in await restoreDataWork(from: path) }
+    }
+
+    private func restoreDataWork(from path: URL) async {
         guard !restoring else { return }
         restoring = true
         defer { restoring = false }
@@ -233,6 +279,10 @@ final class CompanionSettingsModel {
     }
 
     func reindex() async {
+        _ = try? await commandTasks.perform { [self] in await reindexWork() }
+    }
+
+    private func reindexWork() async {
         guard !reindexing else { return }
         reindexing = true
         defer { reindexing = false }
@@ -247,6 +297,10 @@ final class CompanionSettingsModel {
     }
 
     func rebuildDerived() async {
+        _ = try? await commandTasks.perform { [self] in await rebuildDerivedWork() }
+    }
+
+    private func rebuildDerivedWork() async {
         guard !rebuilding else { return }
         rebuilding = true
         defer { rebuilding = false }
@@ -261,6 +315,10 @@ final class CompanionSettingsModel {
     }
 
     func wipeEverything() async {
+        _ = try? await commandTasks.perform { [self] in await wipeEverythingWork() }
+    }
+
+    private func wipeEverythingWork() async {
         guard !wiping else { return }
         wiping = true
         defer { wiping = false }

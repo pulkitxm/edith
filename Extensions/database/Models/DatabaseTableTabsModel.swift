@@ -69,6 +69,8 @@ final class DatabaseTableTabsModel {
     private(set) var tabs: [DatabaseTableTab] = []
     private(set) var selectedID: UUID?
     private(set) var connectionID: DatabaseConnectionID?
+    private var stopped = false
+    private var retirements: [ObjectIdentifier: Task<Void, Never>] = [:]
     private let initialData: DatabaseDataWorkspaceModel
     private let makeData: @MainActor () -> DatabaseDataWorkspaceModel
     private let makeColumns: @MainActor () -> DatabaseColumnsModel
@@ -90,7 +92,8 @@ final class DatabaseTableTabsModel {
 
     func prepare(for connection: DatabaseConnectionSummary?) {
         guard connectionID != connection?.id else { return }
-        for tab in tabs { tab.data.cancel() }
+        guard !stopped else { return }
+        for tab in tabs { retire(tab.data) }
         tabs = []
         selectedID = nil
         connectionID = connection?.id
@@ -98,6 +101,7 @@ final class DatabaseTableTabsModel {
     }
 
     func open(_ object: DatabaseObjectIdentifier, connection: DatabaseConnectionSummary) {
+        guard !stopped, tabs.count + retirements.count < 256 else { return }
         prepare(for: connection)
         if let existing = tabs.first(where: { $0.object == object }) {
             selectedID = existing.id
@@ -125,10 +129,33 @@ final class DatabaseTableTabsModel {
         tab.data.finishMutation(connection)
     }
 
+    private func retire(_ owner: DatabaseDataWorkspaceModel) {
+        owner.cancel()
+        let id = ObjectIdentifier(owner)
+        guard owner.pendingCommandCount > 0, retirements[id] == nil else { return }
+        retirements[id] = Task { [self, owner] in
+            defer { retirements[id] = nil }
+            await owner.waitForPendingCommands()
+        }
+    }
+
+    func cancelPendingCommands() {
+        stopped = true
+        initialData.cancelPendingCommands()
+        for tab in tabs { tab.data.cancelPendingCommands() }
+    }
+
+    func cancelAndWait() async {
+        cancelPendingCommands()
+        await initialData.cancelAndWait()
+        for tab in tabs { await tab.data.cancelAndWait() }
+        while let task = retirements.values.first { await task.value }
+    }
+
     func close(_ id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         let tab = tabs.remove(at: index)
-        tab.data.cancel()
+        retire(tab.data)
         if selectedID == id {
             selectedID = tabs.isEmpty ? nil : tabs[min(index, tabs.count - 1)].id
         }

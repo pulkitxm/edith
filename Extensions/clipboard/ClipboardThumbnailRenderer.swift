@@ -60,8 +60,16 @@ public enum ClipboardThumbnailRenderer {
             do {
                 let value = try await withTaskCancellationHandler {
                     try Task.checkCancellation()
-                    let representation = try? await QLThumbnailGenerator.shared
-                        .generateBestRepresentation(for: request.request)
+                    let representation: QLThumbnailRepresentation? = await withCheckedContinuation {
+                        continuation in
+                        QLThumbnailGenerator.shared.generateBestRepresentation(for: request.request)
+                        {
+                            [request] representation, _ in
+                            withExtendedLifetime(request) {
+                                continuation.resume(returning: representation)
+                            }
+                        }
+                    }
                     try Task.checkCancellation()
                     return representation.flatMap { png($0.cgImage) }
                 } onCancel: {

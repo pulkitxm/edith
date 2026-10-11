@@ -7,6 +7,11 @@ import Observation
 @MainActor
 @Observable
 final class DatabasePageModel {
+    private let commandTasks = DatabaseTaskOwner()
+
+    func cancelPendingCommands() { commandTasks.cancel() }
+    func cancelAndWait() async { await commandTasks.drain() }
+
     enum Readiness: Hashable {
         case checking
         case repairing
@@ -45,6 +50,15 @@ final class DatabasePageModel {
     }
 
     private func run(
+        _ pendingState: Readiness,
+        operation: @escaping @Sendable () async throws -> Void
+    ) async {
+        _ = try? await commandTasks.perform { [self] in
+            await runWork(pendingState, operation: operation)
+        }
+    }
+
+    private func runWork(
         _ pendingState: Readiness,
         operation: @Sendable () async throws -> Void
     ) async {

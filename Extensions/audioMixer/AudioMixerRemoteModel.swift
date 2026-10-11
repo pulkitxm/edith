@@ -28,13 +28,14 @@ final class AudioMixerRemoteModel: AudioMixerPresenting {
     private var revision = 0
     private var stopped = false
     private var attachments = 0
+    private var tasks: [UUID: Task<Void, Never>] = [:]
 
     init(client: ExtensionEngineClient) { self.client = client }
     func viewAppeared() {
         guard !stopped else { return }
         attachments += 1
         guard attachments == 1 else { return }
-        poll = Task {
+        poll = track { [self] in
             while !Task.isCancelled {
                 await refresh()
                 do { try await Task.sleep(for: .seconds(2)) } catch { return }
@@ -50,7 +51,7 @@ final class AudioMixerRemoteModel: AudioMixerPresenting {
         guard !stopped else { return }
         action?.cancel()
         revision += 1
-        action = Task { await refresh() }
+        action = track { [self] in await refresh() }
     }
     func setVolume(_ app: MixerApp, _ volume: Float) {
         guard !stopped, volume.isFinite, (0...1).contains(volume),
@@ -63,7 +64,7 @@ final class AudioMixerRemoteModel: AudioMixerPresenting {
         let request = AudioMixerRuntimeRequest(
             request: .volume, volume: Double(volume), deadline: Date().addingTimeInterval(8),
             target: .init(objectID: app.objectID, pid: app.pid, bundleID: app.bundleID))
-        action = Task {
+        action = track { [self] in
             do {
                 let payload = try JSONSerialization.data(withJSONObject: request.payload)
                 let data = try await client.invoke("audioMixer.request", payload: payload)
@@ -99,10 +100,27 @@ final class AudioMixerRemoteModel: AudioMixerPresenting {
                 volume: Float(record.normalizedVolume))
         }
     }
+    private func track(_ work: @escaping @MainActor () async -> Void) -> Task<Void, Never>? {
+        guard !stopped, tasks.count < 64 else { return nil }
+        let id = UUID()
+        let task = Task {
+            defer { tasks[id] = nil }
+            await work()
+        }
+        tasks[id] = task
+        return task
+    }
+
+    func stopAndWait() async {
+        stop()
+        while let task = tasks.values.first { await task.value }
+    }
+
     func stop() {
         stopped = true; revision += 1
         poll?.cancel(); poll = nil
         action?.cancel(); action = nil
         attachments = 0
+        for task in tasks.values { task.cancel() }
     }
 }

@@ -36,23 +36,19 @@ import WorkerFixtureTestSupport
                         contentsOf: admission.home.appendingPathComponent("worker-fixture.json")))
                     as? [String: Any])
         }
-        func admit(_ context: NSDictionary) throws -> WorkerFixtureAdmission? {
-            let identifier = values["hostIdentifier"] as! String
-            return try WorkerFixtureAdmission.admit(
+        @MainActor func admit(_ context: NSDictionary) throws -> KeepAwakeRuntime.FixtureAuthority?
+        {
+            #if EDITH_FUNCTIONAL_FIXTURE
+            return try WorkerFixtureEngineAdmission.current(
                 extensionID: "keepAwake", context: context,
-                environment: [
-                    "EDITH_EXTENSION_FIXTURE_HOME": admission.home.path,
-                    "EDITH_EXTENSION_DATA_ROOT": admission.dataDirectory.path,
-                    "EDITH_APPLICATION_IDENTIFIER": identifier, "EDITH_EXTENSION_ID": "keepAwake",
-                    "EDITH_SHARED_DEFAULTS_SUITE": identifier + ".extensions.keepAwake",
-                ],
-                hostIdentifier: identifier,
-                hostBundle: admission.home.deletingLastPathComponent().appendingPathComponent(
-                    "Fixture.app"),
-                roleDirectory: URL(fileURLWithPath: values["roleDirectory"] as! String),
-                roleIdentifier: "com.pulkit.edith.extensions.keepAwake.helper",
-                version: "1.0.0", hostABI: "edith-host-2")
+                roleBundle: Bundle(for: KeepAwakeRuntime.self), expectedRole: .helper)
+            #else
+            return try WorkerFixtureAdmission.current(
+                extensionID: "keepAwake", context: context,
+                roleBundle: Bundle(for: KeepAwakeRuntime.self))
+            #endif
         }
+
     }
 
     private func invoke(_ runtime: KeepAwakeRuntime, command: String, payload: Data) async throws
@@ -73,27 +69,27 @@ import WorkerFixtureTestSupport
         }
     }
 
-    @Test func checkedFixtureRunsOriginalSurfaceControlsAndDrainsWithoutLiveDependencies()
+    @Test func injectedOrdinaryFactoryRunsOriginalSurfaceControlsAndDrains()
         async throws
     {
-        let fixture = try EngineFixture(owner: "keepAwake")
-        defer { fixture.remove() }
-        let input = try Input(fixture)
         let defaults = try #require(MemoryDefaults(suiteName: UUID().uuidString))
+        let context: NSDictionary = [
+            "operation": "start",
+            "defaultsSuite": "com.pulkit.edith.tests.injected." + UUID().uuidString,
+        ]
         var defaultCreations = 0
-        var liveCreations = 0
+        var storeCreations = 0
         let runtime = KeepAwakeRuntime(
-            admitFixture: input.admit,
+            admitFixture: { _ in nil },
             makeDefaults: { _ in
                 defaultCreations += 1; return defaults
             },
             makeProductionStore: { values in
-                liveCreations += 1
-                Issue.record("Admitted fixture reached live Store dependencies")
+                storeCreations += 1
                 return KeepAwakeStore.fixture(defaults: values)
             })
-        #expect((runtime.execute(input.context) as? NSDictionary)?["ok"] as? Bool == true)
-        #expect(defaultCreations == 1 && liveCreations == 0)
+        #expect((runtime.execute(context) as? NSDictionary)?["ok"] as? Bool == true)
+        #expect(defaultCreations == 1 && storeCreations == 1)
         let request = SurfaceSnapshotRequest(target: .home, tile: .init(.actions))
         let before = try await invoke(
             runtime, command: "surface.snapshot", payload: request.encoded(providerID: "keepAwake"))
@@ -124,6 +120,15 @@ import WorkerFixtureTestSupport
             (runtime.execute(["operation": "status"]) as? NSDictionary)?["preventingSleep"] as? Bool
                 == false)
         await withCheckedContinuation { continuation in
+            runtime.suspendCommands { continuation.resume() }
+        }
+        #expect(
+            (runtime.execute(["operation": "synchronize"]) as? NSDictionary)?["ok"] as? Bool
+                == false)
+        #expect(
+            (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool == true
+        )
+        await withCheckedContinuation { continuation in
             runtime.prepareToStop { continuation.resume() }
         }
         #expect(
@@ -139,7 +144,7 @@ import WorkerFixtureTestSupport
         "schema", "foreign-host", "foreign-role", "stale-version", "public-marker",
         "missing-marker", "symlink-marker", "foreign-suite", "foreign-data",
     ])
-    func invalidIntentFailsBeforeDefaultsAndLiveStore(mode: String) throws {
+    func unsignedLegacyIntentFailsBeforeDefaultsAndStore(mode: String) throws {
         let fixture = try EngineFixture(owner: "keepAwake")
         defer { fixture.remove() }
         let input = try Input(fixture)

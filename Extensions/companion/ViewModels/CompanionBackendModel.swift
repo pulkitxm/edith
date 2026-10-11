@@ -7,10 +7,15 @@ import Observation
 @Observable
 final class CompanionBackendModel: CompanionRefreshable {
     private let remote: CompanionUIBridge?
+    private let commandTasks = CompanionTaskOwner()
     private var remoteTask: Task<Void, Never>?
     private var remoteStopped = false
     init(remote: CompanionUIBridge? = nil) { self.remote = remote }
-    func shutdown() { remoteStopped = true; remoteTask?.cancel(); remoteTask = nil }
+    func cancelPendingCommands() {
+        remoteStopped = true; commandTasks.cancel(); remoteTask?.cancel()
+    }
+    func cancelAndWait() async { cancelPendingCommands(); await commandTasks.drain() }
+    func shutdown() { cancelPendingCommands() }
     private(set) var hosts: [CompanionHost] = []
     private(set) var deployment: CompanionDeployment?
     private(set) var services: [CompanionServiceStatus] = []
@@ -38,10 +43,18 @@ final class CompanionBackendModel: CompanionRefreshable {
     var runningCount: Int { services.filter(\.running).count }
 
     func refreshSnapshot() async {
+        _ = try? await commandTasks.perform { [self] in await refreshSnapshotWork() }
+    }
+
+    private func refreshSnapshotWork() async {
         if remote != nil { await remoteAction("snapshot") } else { load() }
     }
 
     func refresh() async {
+        _ = try? await commandTasks.perform { [self] in await refreshWork() }
+    }
+
+    private func refreshWork() async {
         if remote != nil { await remoteAction("refresh"); return }
         load()
         async let probed: Void = probeHosts()
@@ -63,6 +76,10 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func probeHosts() async {
+        _ = try? await commandTasks.perform { [self] in await probeHostsWork() }
+    }
+
+    private func probeHostsWork() async {
         if remote != nil { await remoteAction("probe"); return }
         guard !probing else { return }
         probing = true
@@ -72,6 +89,10 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func refreshServices() async {
+        _ = try? await commandTasks.perform { [self] in await refreshServicesWork() }
+    }
+
+    private func refreshServicesWork() async {
         if remote != nil { await remoteAction("services"); return }
         guard let deployment else {
             services = []
@@ -81,21 +102,36 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func deploy() async {
+        _ = try? await commandTasks.perform { [self] in await deployWork() }
+    }
+
+    private func deployWork() async {
         if remote != nil { await remoteAction("deploy"); return }
         guard let host = selectedHost else { return }
         await perform("Setting up on \(host.name)") {
-            let deployment = try await CompanionMindRuntimeOperationExecution.deploy {
-                try await CompanionStackControl.deploy(
-                    host: host, config: self.config,
-                    log: { line in
-                        Task { @MainActor in self.lastLog += line + "\n" }
-                    })
+            let updates = AsyncStream<String>.makeStream(bufferingPolicy: .bufferingNewest(64))
+            let deployment = try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask { @MainActor [self] in
+                    for await line in updates.stream { lastLog += line + "\n" }
+                }
+                defer { updates.continuation.finish() }
+                return try await CompanionMindRuntimeOperationExecution.deploy {
+                    try await CompanionStackControl.deploy(
+                        host: host, config: self.config,
+                        log: { line in
+                            updates.continuation.yield(line)
+                        })
+                }
             }
             self.deployment = deployment
         }
     }
 
     func destroy() async {
+        _ = try? await commandTasks.perform { [self] in await destroyWork() }
+    }
+
+    private func destroyWork() async {
         if remote != nil { await remoteAction("destroy"); return }
         guard let deployment else { return }
         await perform("Destroying") {
@@ -119,6 +155,10 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func start() async {
+        _ = try? await commandTasks.perform { [self] in await startWork() }
+    }
+
+    private func startWork() async {
         if remote != nil { await remoteAction("start"); return }
         guard let deployment else { return }
         await perform("Starting") {
@@ -127,6 +167,10 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func stop() async {
+        _ = try? await commandTasks.perform { [self] in await stopWork() }
+    }
+
+    private func stopWork() async {
         if remote != nil { await remoteAction("stop"); return }
         guard let deployment else { return }
         await perform("Stopping") {
@@ -135,6 +179,10 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func restart() async {
+        _ = try? await commandTasks.perform { [self] in await restartWork() }
+    }
+
+    private func restartWork() async {
         if remote != nil { await remoteAction("restart"); return }
         guard let deployment else { return }
         await perform("Restarting") {
@@ -143,6 +191,10 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func readLogs(_ service: String?) async {
+        _ = try? await commandTasks.perform { [self] in await readLogsWork(service) }
+    }
+
+    private func readLogsWork(_ service: String?) async {
         if remote != nil { await remoteAction("logs", service: service); return }
         guard let deployment else { return }
         await perform("Reading logs") {
@@ -226,7 +278,9 @@ final class CompanionBackendModel: CompanionRefreshable {
         _ action: String, kind: CompanionSecretKind? = nil, bundle: Data? = nil
     ) {
         remoteTask?.cancel()
-        remoteTask = Task { await remoteAction(action, kind: kind, bundle: bundle) }
+        remoteTask = commandTasks.launch { [self] in
+            await remoteAction(action, kind: kind, bundle: bundle)
+        }
     }
     private func remoteAction(
         _ action: String, service: String? = nil, kind: CompanionSecretKind? = nil,

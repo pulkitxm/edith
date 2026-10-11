@@ -20,6 +20,8 @@ public actor DatabaseEngine: DatabaseBrokerCommandSending {
     private var resources: Resources?
     private var starting: Task<Resources, Error>?
     private var isStopped = false
+    private var requestsSuspended = false
+    private var requests: [UUID: Task<DatabaseBrokerCommandResponse, Error>] = [:]
     private var sequence: UInt64 = 0
 
     public init(root: URL, keychainService: String = DatabaseKeychainSecretStore.defaultService) {
@@ -47,18 +49,48 @@ public actor DatabaseEngine: DatabaseBrokerCommandSending {
     public func send(_ request: DatabaseBrokerCommandRequest) async throws
         -> DatabaseBrokerCommandResponse
     {
-        let resources = try await start()
-        guard !isStopped else { throw DatabaseEngineError.stopped }
-        try Task.checkCancellation()
-        sequence &+= 1
-        let envelope = DatabaseBrokerEnvelope(
-            requestID: UUID(), operationID: request.operationID, sequence: sequence,
-            kind: .request, payload: request)
-        return try await resources.dispatcher.dispatch(envelope, responseSequence: 0).payload
+        guard !isStopped, !requestsSuspended, requests.count < 256 else {
+            throw DatabaseEngineError.stopped
+        }
+        let id = UUID()
+        let task = Task { [self] in
+            let resources = try await start()
+            guard !isStopped, !requestsSuspended else { throw DatabaseEngineError.stopped }
+            try Task.checkCancellation()
+            sequence &+= 1
+            let envelope = DatabaseBrokerEnvelope(
+                requestID: UUID(), operationID: request.operationID, sequence: sequence,
+                kind: .request, payload: request)
+            return try await resources.dispatcher.dispatch(envelope, responseSequence: 0).payload
+        }
+        requests[id] = task
+        defer { requests[id] = nil }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    public func cancelPendingRequests() async {
+        requestsSuspended = true
+        starting?.cancel()
+        for task in requests.values { task.cancel() }
+        await resources?.executor.cancelPendingRequests()
+    }
+
+    public func cancelAndWait() async {
+        await cancelPendingRequests()
+        let starting = starting
+        _ = try? await starting?.value
+        let pending = Array(requests.values)
+        for task in pending { _ = await task.result }
+        await resources?.executor.cancelAndWait()
     }
 
     public func shutdown() async {
         isStopped = true
+        await cancelAndWait()
         starting?.cancel()
         let pending = starting
         starting = nil

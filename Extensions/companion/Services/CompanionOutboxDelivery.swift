@@ -10,9 +10,10 @@ public actor CompanionOutboxDelivery {
 
     private let directory: URL
     private let send: Send
-    private let notify: @Sendable () -> Void
+    private let notify: @Sendable () async -> Void
     private var active: Task<CompanionOutboxDrain, Never>?
     private var cancelled = false
+    private var settlement: Task<Void, Never>?
 
     public init(
         directory: URL = CompanionOutbox.directory,
@@ -22,8 +23,8 @@ public actor CompanionOutboxDelivery {
                 mtime: ISO8601DateFormatter().string(from: item.recordedAt)
             ).status
         },
-        notify: @escaping @Sendable () -> Void = {
-            Task { @MainActor in IPC.post(CompanionBackgroundOperation.outboxChanged) }
+        notify: @escaping @Sendable () async -> Void = {
+            await MainActor.run { IPC.post(CompanionBackgroundOperation.outboxChanged) }
         }
     ) {
         self.directory = directory
@@ -45,21 +46,25 @@ public actor CompanionOutboxDelivery {
         guard active == nil, !cancelled else { return }
         let task = makeDeliveryTask(endpoint: endpoint)
         active = task
-        Task {
+        settlement = Task {
             _ = await task.value
             if active == task { active = nil }
+            settlement = nil
         }
     }
 
-    public func cancel() async {
+    public func cancelPending() {
         cancelled = true
-        let task = active
-        task?.cancel()
-        active = nil
-        _ = await task?.value
+        active?.cancel()
     }
 
-    public func resume() { cancelled = false }
+    public func cancel() async {
+        cancelPending()
+        let task = active
+        _ = await task?.value
+        await settlement?.value
+        if active == task { active = nil }
+    }
 
     private func makeDeliveryTask(endpoint: URL) -> Task<CompanionOutboxDrain, Never> {
         let directory = directory
@@ -70,7 +75,7 @@ public actor CompanionOutboxDelivery {
                 item, data in
                 try await send(endpoint, item, data)
             }
-            if !result.isEmpty { notify() }
+            if !result.isEmpty { await notify() }
             return result
         }
     }

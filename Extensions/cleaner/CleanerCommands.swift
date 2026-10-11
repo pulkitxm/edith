@@ -11,13 +11,16 @@ enum CleanerCommands {
             guard !model.scanning else {
                 throw ExtensionPeerError.rejected("Cleaner already has an operation in progress.")
             }
+            try Task.checkCancellation()
+            model.scan()
+            let work = model.commandWork
+            let cancel = model.commandCancellation()
             return try await withTaskCancellationHandler {
-                model.scan()
-                await model.finishWork()
+                await work?.value
                 try Task.checkCancellation()
                 return try preview(model)
             } onCancel: {
-                Task { @MainActor in model.cancelScan() }
+                cancel()
             }
         case "cleaner.preview": return try preview(model)
         case "cleaner.clean":
@@ -30,13 +33,16 @@ enum CleanerCommands {
                 throw ExtensionPeerError.rejected(
                     "Confirm a current Cleaner preview before moving items to the Trash.")
             }
+            try Task.checkCancellation()
+            model.clean(categoryID: input.categoryID)
+            let work = model.commandWork
+            let cancel = model.commandCancellation()
             return try await withTaskCancellationHandler {
-                model.clean(categoryID: input.categoryID)
-                await model.finishWork()
+                await work?.value
                 try Task.checkCancellation()
                 return try status(model)
             } onCancel: {
-                Task { @MainActor in model.cancelScan() }
+                cancel()
             }
         default: throw ExtensionPeerError.rejected("Cleaner does not support this command.")
         }

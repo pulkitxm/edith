@@ -6,6 +6,10 @@ import SwiftUI
 @MainActor
 @Observable
 final class CompanionDeskModel: CompanionRefreshable {
+    private let commandTasks = CompanionTaskOwner()
+    func cancelPendingCommands() { commandTasks.cancel() }
+    func cancelAndWait() async { await commandTasks.drain() }
+
     private(set) var question: CompanionQuestion?
     private(set) var budget: (asked: Int, total: Int) = (0, 3)
     private(set) var beliefs: [CompanionBelief] = []
@@ -32,6 +36,10 @@ final class CompanionDeskModel: CompanionRefreshable {
     }
 
     func refresh() async {
+        _ = try? await commandTasks.perform { [self] in await refreshWork() }
+    }
+
+    private func refreshWork() async {
         let client = client
         await loading.perform(operation: {
             async let beliefs = client.beliefs(limit: 12)
@@ -52,6 +60,10 @@ final class CompanionDeskModel: CompanionRefreshable {
     }
 
     func askNext() async {
+        _ = try? await commandTasks.perform { [self] in await askNextWork() }
+    }
+
+    private func askNextWork() async {
         guard !busy else { return }
         busy = true
         defer { busy = false }
@@ -72,6 +84,10 @@ final class CompanionDeskModel: CompanionRefreshable {
     }
 
     func answer() async {
+        _ = try? await commandTasks.perform { [self] in await answerWork() }
+    }
+
+    private func answerWork() async {
         guard let question, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             !busy
         else { return }
@@ -90,6 +106,10 @@ final class CompanionDeskModel: CompanionRefreshable {
     }
 
     func skip() async {
+        _ = try? await commandTasks.perform { [self] in await skipWork() }
+    }
+
+    private func skipWork() async {
         guard let question, !busy else { return }
         busy = true
         defer { busy = false }
@@ -103,6 +123,10 @@ final class CompanionDeskModel: CompanionRefreshable {
     }
 
     func mute() async {
+        _ = try? await commandTasks.perform { [self] in await muteWork() }
+    }
+
+    private func muteWork() async {
         guard let question, !busy else { return }
         busy = true
         defer { busy = false }
@@ -117,6 +141,11 @@ final class CompanionDeskModel: CompanionRefreshable {
     }
 
     func markReal(_ discrepancy: CompanionDiscrepancy, note: String) async {
+        _ = try? await commandTasks.perform { [self] in await markRealWork(discrepancy, note: note)
+        }
+    }
+
+    private func markRealWork(_ discrepancy: CompanionDiscrepancy, note: String) async {
         guard !busy else { return }
         busy = true
         defer { busy = false }

@@ -10,6 +10,10 @@ final class ExtensionRuntime: NSObject {
     private var model: BlitzTreeModel?
     private var uiModel: BlitzTreeModel?
     private var uiClient: ExtensionEngineClient?
+    private var commandDrain: Task<Void, Never>?
+    private var resourceStop: Task<Void, Never>?
+    private var commandsSuspended = false
+    private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -35,14 +39,58 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
+            await resourceStop?.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginCommandDrain() -> Task<Void, Never> {
+        let owner = model
+        let uiOwner = uiModel
+        commandsSuspended = true
+        _ = commands.suspend()
+        if let commandDrain { return commandDrain }
+        owner?.cancelPendingCommands()
+        uiOwner?.cancelPendingCommands()
+        if let commandDrain { return commandDrain }
+        let task = Task { [self] in
+            _ = await commands.suspendAndWait()
+            await owner?.cancelAndWait()
+            await uiOwner?.cancelAndWait()
+            while let task = uiDrains.values.first { await task.value }
+        }
+        commandDrain = task
+        return task
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        stopUI()
-        Task {
-            await commands.shutdownAndWait()
-            await model?.shutdown()
-            completion()
+        let stop = beginResourceStop()
+        Task { [self] in
+            await stop.value
+            withExtendedLifetime(self) { completion() }
         }
+    }
+
+    private func beginResourceStop() -> Task<Void, Never> {
+        if let resourceStop { return resourceStop }
+        let owner = model
+        let drain = beginCommandDrain()
+        if let resourceStop { return resourceStop }
+        stopUI()
+        model = nil
+        let task = Task { [self] in
+            await drain.value
+            await commands.shutdownAndWait()
+            await owner?.shutdown()
+        }
+        resourceStop = task
+        return task
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
@@ -56,11 +104,15 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             if model == nil { model = BlitzTreeModel() }
         case "configureUI":
+            guard !commandsSuspended, uiDrains.count < 8 else {
+                return ["ok": false] as NSDictionary
+            }
             guard let configuration = ExtensionUIConfiguration(context: input),
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
@@ -68,15 +120,14 @@ final class ExtensionRuntime: NSObject {
             TextEditingCommands.install()
         case "stopUI": stopUI()
         case "view":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost { BlitzTreePage(model: model) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
-            commands.shutdown()
-            model = nil
-            stopUI()
+            _ = beginResourceStop()
         case "status": return ["ok": true, "running": model != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
@@ -87,7 +138,12 @@ final class ExtensionRuntime: NSObject {
         TextEditingCommands.shutdown()
         let model = uiModel; uiModel = nil
         uiClient?.invalidate(); uiClient = nil
-        Task { await model?.shutdown() }
+        model?.cancelPendingCommands()
+        let id = UUID()
+        uiDrains[id] = Task { [self] in
+            defer { uiDrains[id] = nil }
+            await model?.shutdown()
+        }
     }
 }
 

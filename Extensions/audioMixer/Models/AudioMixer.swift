@@ -147,6 +147,7 @@ final class AppVolumeTap: AudioMixerTapControlling, @unchecked Sendable {
     private var aggregateID: AudioDeviceID = 0
     private var procID: AudioDeviceIOProcID?
     private let queue = DispatchQueue(label: "com.pulkit.edith.audiomixer.tap")
+    private let retirement = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
     private var gain: Float
 
     func setGain(_ value: Float) {
@@ -241,18 +242,28 @@ final class AppVolumeTap: AudioMixerTapControlling, @unchecked Sendable {
 
     func destroy() {
         if let procID {
-            AudioDeviceStop(aggregateID, procID)
-            AudioDeviceDestroyIOProcID(aggregateID, procID)
+            guard AudioDeviceStop(aggregateID, procID) == noErr,
+                AudioDeviceDestroyIOProcID(aggregateID, procID) == noErr
+            else { return }
+            queue.sync {}
         }
         procID = nil
         if aggregateID != 0 {
-            AudioHardwareDestroyAggregateDevice(aggregateID)
+            guard AudioHardwareDestroyAggregateDevice(aggregateID) == noErr else { return }
             aggregateID = 0
         }
         if tapID != 0 {
-            AudioHardwareDestroyProcessTap(tapID)
+            guard AudioHardwareDestroyProcessTap(tapID) == noErr else { return }
             tapID = 0
         }
+        retirement.continuation.finish()
+    }
+
+    var isQuiescent: Bool { procID == nil && aggregateID == 0 && tapID == 0 }
+
+    func waitForQuiescence() async {
+        if isQuiescent { return }
+        for await _ in retirement.stream {}
     }
 
     deinit { destroy() }
@@ -290,6 +301,9 @@ final class MixerEngine: AudioMixerPresenting {
     private var gains: [AudioObjectID: Float] = [:]
     private var failedAdjustment: (app: MixerApp, value: Float)?
     private var actionErrorObjectID: AudioObjectID?
+    private var suspending = false
+    private var monitorTasks: [UUID: Task<Void, Never>] = [:]
+    private var tapDrains: [UUID: Task<Void, Never>] = [:]
     private var monitoringTask: Task<Void, Never>?
     private(set) var isStopped = false
 
@@ -302,7 +316,7 @@ final class MixerEngine: AudioMixerPresenting {
     }
 
     func viewAppeared() {
-        guard !isStopped else { return }
+        guard !isStopped, !suspending else { return }
         visibleViewCount += 1
         refresh()
         reconcileMonitoring()
@@ -314,7 +328,7 @@ final class MixerEngine: AudioMixerPresenting {
     }
 
     func refresh() {
-        guard !isStopped else { return }
+        guard !isStopped, !suspending else { return }
         do {
             apply(try snapshotLoader())
             discoveryError = nil
@@ -326,7 +340,8 @@ final class MixerEngine: AudioMixerPresenting {
     }
 
     func setVolume(_ app: MixerApp, _ requestedValue: Float) {
-        guard !isStopped, requestedValue.isFinite, (0...1).contains(requestedValue) else { return }
+        guard !isStopped, !suspending, requestedValue.isFinite, (0...1).contains(requestedValue)
+        else { return }
         guard apps.contains(where: { Self.sameProcess($0, app) }) else {
             actionError = "\(app.name) is no longer producing audio."
             actionErrorObjectID = app.objectID
@@ -335,7 +350,7 @@ final class MixerEngine: AudioMixerPresenting {
         }
         let value = max(0, min(1, requestedValue))
         if value == 1 {
-            taps.removeValue(forKey: app.objectID)?.destroy()
+            if let tap = taps.removeValue(forKey: app.objectID) { retire(tap) }
             gains.removeValue(forKey: app.objectID)
             publish(app.objectID, volume: 1)
             actionError = nil
@@ -386,6 +401,24 @@ final class MixerEngine: AudioMixerPresenting {
         setVolume(app, failedAdjustment.value)
     }
 
+    func cancelPendingCommands() {
+        suspending = true
+        monitoringTask?.cancel()
+        for task in monitorTasks.values { task.cancel() }
+        destroyAllTaps()
+    }
+
+    func cancelAndWait() async {
+        cancelPendingCommands()
+        while let task = monitorTasks.values.first { await task.value }
+        while let task = tapDrains.values.first { await task.value }
+    }
+
+    func shutdownAndWait() async {
+        await cancelAndWait()
+        shutdown()
+    }
+
     func shutdown() {
         isStopped = true
         monitoringTask?.cancel()
@@ -431,7 +464,7 @@ final class MixerEngine: AudioMixerPresenting {
             retiredIDs.append(objectID)
         }
         for objectID in retiredIDs {
-            taps.removeValue(forKey: objectID)?.destroy()
+            if let tap = taps.removeValue(forKey: objectID) { retire(tap) }
             gains.removeValue(forKey: objectID)
         }
         for objectID in Array(gains.keys)
@@ -471,15 +504,29 @@ final class MixerEngine: AudioMixerPresenting {
     }
 
     private func destroyAllTaps() {
-        for tap in taps.values { tap.destroy() }
+        for tap in taps.values { retire(tap) }
         taps.removeAll()
     }
 
+    private func retire(_ tap: any AudioMixerTapControlling) {
+        tap.destroy()
+        guard let native = tap as? AppVolumeTap, !native.isQuiescent else { return }
+        suspending = true
+        let id = UUID()
+        tapDrains[id] = Task { [self] in
+            defer { tapDrains[id] = nil }
+            await native.waitForQuiescence()
+        }
+    }
+
     private func reconcileMonitoring() {
-        let shouldMonitor = visibleViewCount > 0 || !taps.isEmpty
+        let shouldMonitor = !suspending && !isStopped && (visibleViewCount > 0 || !taps.isEmpty)
         if shouldMonitor, monitoringTask == nil {
+            guard monitorTasks.isEmpty else { return }
             isMonitoring = true
-            monitoringTask = Task { @MainActor [weak self] in
+            let id = UUID()
+            let task = Task { @MainActor [weak self] in
+                defer { self?.monitorTasks[id] = nil; self?.reconcileMonitoring() }
                 while !Task.isCancelled {
                     do {
                         try await Task.sleep(for: .seconds(1))
@@ -489,6 +536,8 @@ final class MixerEngine: AudioMixerPresenting {
                     self?.refresh()
                 }
             }
+            monitorTasks[id] = task
+            monitoringTask = task
         } else if !shouldMonitor {
             monitoringTask?.cancel()
             monitoringTask = nil

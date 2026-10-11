@@ -75,13 +75,13 @@ public final class CalendarStore: FeatureModule {
         changeObserver = NotificationCenter.default.addObserver(
             forName: .EKEventStoreChanged, object: Self.eventStore, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.scheduleRefresh() }
+            MainActor.assumeIsolated { self?.scheduleRefresh() }
         }
         wakeCenter = NSWorkspace.shared.notificationCenter
         wakeObserver = wakeCenter?.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.scheduleRefresh() }
+            MainActor.assumeIsolated { self?.scheduleRefresh() }
         }
     }
 
@@ -121,7 +121,7 @@ public final class CalendarStore: FeatureModule {
     }
 
     private func launch(_ work: @escaping @MainActor () async -> Void) -> Task<Void, Never>? {
-        guard !stopped else { return nil }
+        guard !stopped, ownedTasks.count < 64 else { return nil }
         let id = UUID()
         let task = Task { [weak self] in
             defer { self?.ownedTasks.removeValue(forKey: id) }

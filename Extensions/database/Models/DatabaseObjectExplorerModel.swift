@@ -39,6 +39,11 @@ struct DatabaseExplorerGroup: Identifiable, Equatable, Sendable {
 @MainActor
 @Observable
 final class DatabaseObjectExplorerModel {
+    private let commandTasks = DatabaseTaskOwner()
+
+    func cancelPendingCommands() { commandTasks.cancel() }
+    func cancelAndWait() async { await commandTasks.drain() }
+
     var searchText = ""
     private(set) var state = DatabaseObjectExplorerState.idle
     private(set) var groups: [DatabaseExplorerGroup] = []
@@ -172,7 +177,7 @@ final class DatabaseObjectExplorerModel {
         groups[index].state = .loading
         let requestGeneration = generation
         let sender = sender
-        let task = Task { [weak self] in
+        let task = commandTasks.launch { [weak self] in
             do {
                 let response = try await sender.send(
                     .browse(
@@ -215,7 +220,7 @@ final class DatabaseObjectExplorerModel {
         generation = requestGeneration
         state = .loading
         let sender = sender
-        let task = Task { [weak self] in
+        let task = commandTasks.launch { [weak self] in
             do {
                 let response = try await sender.send(
                     .browse(
@@ -245,7 +250,7 @@ final class DatabaseObjectExplorerModel {
         generation = requestGeneration
         state = .loading
         let sender = sender
-        let task = Task { [weak self] in
+        let task = commandTasks.launch { [weak self] in
             do {
                 let response = try await sender.send(
                     .browse(

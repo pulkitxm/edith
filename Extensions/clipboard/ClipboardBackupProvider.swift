@@ -173,7 +173,24 @@ import IOKit.ps
         events?.changed()
     }
 
+    func cancelPendingCommands() {
+        stopping = true
+        bootstrapCancelled = true
+        cancellation?.cancel()
+        work?.cancel()
+        events?.cancelPendingCommands()
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+        observers.removeAll()
+    }
+
+    func cancelAndWait() async {
+        cancelPendingCommands()
+        await events?.shutdown()
+        _ = await work?.result
+    }
+
     func shutdown() async {
+        await cancelAndWait()
         stopping = true
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         observers.removeAll()
@@ -479,6 +496,12 @@ private final class ClipboardBackupCancellation: @unchecked Sendable {
         await owned?.value
         pending = false
         cancelling = false
+    }
+
+    func cancelPendingCommands() {
+        stopping = true
+        pending = false
+        task?.cancel()
     }
 
     func shutdown() async {

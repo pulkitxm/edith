@@ -27,6 +27,7 @@ final class CompanionLibraryModel: CompanionRefreshable {
     var loadingDetail: Bool { detailLoad.isRunning }
     private(set) var error: String?
     let playback = AudioPlayback()
+    private let commandTasks = CompanionTaskOwner()
     private var searchTask: Task<Void, Never>?
     private let reads: CompanionLibraryReads
 
@@ -34,7 +35,14 @@ final class CompanionLibraryModel: CompanionRefreshable {
         self.reads = reads
     }
 
+    func cancelPendingCommands() {
+        commandTasks.cancel(); searchTask?.cancel(); playback.cancelPendingCommands()
+    }
+
+    func cancelAndWait() async { cancelPendingCommands(); await commandTasks.drain() }
+
     func shutdown() {
+        cancelPendingCommands()
         searchTask?.cancel(); searchTask = nil
         loading.reset(); detailLoad.reset(); searchLoad.reset(); playback.stop()
     }
@@ -44,6 +52,10 @@ final class CompanionLibraryModel: CompanionRefreshable {
     }
 
     func refresh() async {
+        _ = try? await commandTasks.perform { [self] in await refreshWork() }
+    }
+
+    private func refreshWork() async {
         await loading.perform(operation: reads.episodes) { value in
             episodes = value
             error = nil
@@ -52,6 +64,7 @@ final class CompanionLibraryModel: CompanionRefreshable {
     }
 
     func searchChanged() {
+        guard !commandTasks.closed else { return }
         searchTask?.cancel()
         searchLoad.cancel()
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -62,7 +75,7 @@ final class CompanionLibraryModel: CompanionRefreshable {
         searchLoad.reset()
         hits = []
         let client = client
-        searchTask = Task {
+        searchTask = commandTasks.launch { [self] in
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
             await searchLoad.perform(
@@ -84,6 +97,10 @@ final class CompanionLibraryModel: CompanionRefreshable {
     }
 
     func select(_ id: String, retry: Bool = false) async {
+        _ = try? await commandTasks.perform { [self] in await selectWork(id, retry: retry) }
+    }
+
+    private func selectWork(_ id: String, retry: Bool) async {
         guard selectedId != id || retry else { return }
         playback.stop()
         selectedId = id
@@ -126,6 +143,10 @@ final class CompanionLibraryModel: CompanionRefreshable {
     }
 
     func openExternally() async {
+        _ = try? await commandTasks.perform { [self] in await openExternallyWork() }
+    }
+
+    private func openExternallyWork() async {
         guard let detail else { return }
         do {
             if let remote = CompanionTransport.shared.remoteBridge {
@@ -143,6 +164,10 @@ final class CompanionLibraryModel: CompanionRefreshable {
     }
 
     func indexNow() async {
+        _ = try? await commandTasks.perform { [self] in await indexNowWork() }
+    }
+
+    private func indexNowWork() async {
         indexing = true
         defer { indexing = false }
         do {
@@ -157,6 +182,10 @@ final class CompanionLibraryModel: CompanionRefreshable {
     }
 
     func ingest(urls: [URL]) async {
+        _ = try? await commandTasks.perform { [self] in await ingestWork(urls: urls) }
+    }
+
+    private func ingestWork(urls: [URL]) async {
         guard !urls.isEmpty, !ingesting else { return }
         ingesting = true
         defer { ingesting = false }
@@ -255,17 +284,19 @@ final class AudioPlayback {
     private(set) var currentTime: TimeInterval = 0
     private var player: AVAudioPlayer?
     private var timer: Timer?
+    private var suspending = false
 
     var duration: TimeInterval { player?.duration ?? 0 }
     var loaded: Bool { player != nil }
 
     func load(_ data: Data) {
+        guard !suspending else { return }
         stop()
         player = try? AVAudioPlayer(data: data)
     }
 
     func toggle() {
-        guard let player else { return }
+        guard !suspending, let player else { return }
         if playing {
             player.pause()
             playing = false
@@ -274,9 +305,16 @@ final class AudioPlayback {
             player.play()
             playing = true
             timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
-                Task { @MainActor in self?.refresh() }
+                MainActor.assumeIsolated { self?.refresh() }
             }
         }
+    }
+
+    func cancelPendingCommands() {
+        suspending = true
+        player?.pause()
+        playing = false
+        timer?.invalidate(); timer = nil
     }
 
     func stop() {

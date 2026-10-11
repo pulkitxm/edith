@@ -16,7 +16,7 @@
       "sources": [
         {
           "path": "Extensions/keepAwake/Runtime.swift",
-          "sha256": "b00cc9599bc1179b44478e56877cc7e28ab30006e8478141481333836a615407"
+          "sha256": "339eef12101fe94907551438d7e1200a945cb1e9b0a325ae52f006fe534ea75f"
         },
         {
           "path": "Extensions/keepAwake/Presentation.swift",
@@ -38,11 +38,11 @@
       "sources": [
         {
           "path": "Extensions/audioMixer/Runtime.swift",
-          "sha256": "6e68c912bbaf83d75cefb03211776c8e6c9282297d3cf6661acb356f05f07169"
+          "sha256": "a438493bbdbe725bc82b7a20d3cc3abe1af9f320655bd186bc53c4192b8aa448"
         },
         {
           "path": "Extensions/audioMixer/AudioMixerRemoteModel.swift",
-          "sha256": "cd0212fc1d45e74f42a2d3cfc0683eb2e67b7fdc6a1fa6574d2a51ae471a432d"
+          "sha256": "55871991b1fd9eb44d3f767f9f5612649ffe05cdb7d8bc85c9b554d0fb394513"
         }
       ]
     },
@@ -170,11 +170,11 @@
       "sources": [
         {
           "path": "Extensions/colorPicker/Runtime.swift",
-          "sha256": "587315e09fba218e8adf8aa8692577a06242cf94d54150c98d5f21055f8de4e6"
+          "sha256": "79bbd639ca3afeaa64d12772a6e7f2470c164383989fed1d63b9c3d22cfbe5f1"
         },
         {
           "path": "Extensions/colorPicker/Presentation.swift",
-          "sha256": "29d9bb0935dbe619fb68cbcfc7d98e1f416c5240ad0b706625517fb9d957bdfe"
+          "sha256": "e845a0cfdeb5eacdd54b981a2ccbf9d0af420bc6549819194a80b6be43a973b7"
         }
       ]
     },
@@ -258,11 +258,11 @@
       "sources": [
         {
           "path": "Extensions/calendar/Runtime.swift",
-          "sha256": "923eccb6e2cba5aed3ec5b9c74dde78befce60b1cb9e7a4baec0271bbe846e78"
+          "sha256": "3e4c0f228f879bc12560defb0150719af5c95b8ae2b3c12d43f3f9c2155c789a"
         },
         {
           "path": "Extensions/calendar/Views/CalendarUIPresentation.swift",
-          "sha256": "5b24e34108ec2e764ecb65445fde7c6ee5056261aabc27938ed2d3431b5e6279"
+          "sha256": "d31f4c2f66c9a7d5a009143a798bbca0898b886cb550ac2055e6db40f432718f"
         }
       ]
     },
@@ -346,11 +346,11 @@
       "sources": [
         {
           "path": "Extensions/cleaner/Runtime.swift",
-          "sha256": "afb9adbb30c85f1924c857f2cc70c8ea087f7ae9ac01df5d420f9524b0ad02f3"
+          "sha256": "2b903a8b6fbb6cf79a2dbfddd826c919de2b580053e237b1b54f133a5f6a45d3"
         },
         {
           "path": "Extensions/cleaner/CleanerModel.swift",
-          "sha256": "d9b0e1d46fadd2dd158fe9dffbba09cbc5a7ab50b1c301a549fbee43f7186456"
+          "sha256": "1cd1c40c5730dca290dd672d01d4e68fe2b59bbcbe2e0008dd5adecb245f53cf"
         }
       ]
     },
@@ -368,11 +368,11 @@
       "sources": [
         {
           "path": "Extensions/appMaintenance/Runtime.swift",
-          "sha256": "d25ec4484c71ff8de2de837733efddff5f9ebb8a76b1209d6c35b6b649b6c300"
+          "sha256": "4218e414f26fdbdc4fe42cf21e83b399bd1655b4ab8c59b9cce8a94bfc3590ae"
         },
         {
           "path": "Extensions/appMaintenance/AppMaintenanceModel.swift",
-          "sha256": "1de0cffcba577bb0aee3c66790a4ccac1250bc291a29525f39ae3de5177341b5"
+          "sha256": "06a427bbafe672c3991dde1fae51de3e7e431da818bf8eb1bb40658d7f61545a"
         }
       ]
     },
@@ -390,11 +390,11 @@
       "sources": [
         {
           "path": "Extensions/blitztree/Runtime.swift",
-          "sha256": "00ca9d2d9bf7090e9ff11e24271688396ab37f9920989b44dc800edb6bdd7b30"
+          "sha256": "94bc766dbc0feaae64224e615e123eb2195151cfcecb4c899ad2786559813bd2"
         },
         {
           "path": "Extensions/blitztree/BlitzTreeModel.swift",
-          "sha256": "031fef0a7426a9c8e14af7dde854a2ae3ee8fc788626a81c5471cf0dd22c552d"
+          "sha256": "1d8bc9d009f638404666d2847b3eb7628d0ad5d8383b06f96fc3e25848b40888"
         }
       ]
     },
@@ -456,11 +456,11 @@
       "sources": [
         {
           "path": "Extensions/clipboard/Runtime.swift",
-          "sha256": "0f69469483a50e1212b26640f1fe8681bb7130ca70ae15de4d62bfdfe0942526"
+          "sha256": "409e052b2478664e6644afb0ecc6fa8ab444d27e99d0e5f0035451b286c1e109"
         },
         {
           "path": "Extensions/clipboard/ClipboardPresentation.swift",
-          "sha256": "ad654574c5c6c0b176d8038f36601dedb12d3a70ff72b4ee98ed263e0e0cbd21"
+          "sha256": "cd8b366315ababd086d8c76f1b1e612e29af946934378bc364d22b5dac31e06e"
         }
       ]
     },
@@ -544,11 +544,11 @@
       "sources": [
         {
           "path": "Extensions/companion/Runtime.swift",
-          "sha256": "dd5aa8869a0428673ad204554ae402fec3fa7397503c06e8681a79ead2442c8a"
+          "sha256": "fa270082e3641a5221afd76f10e348d5bf30c52c8954829f848b7ef00f842812"
         },
         {
           "path": "Extensions/companion/ViewModels/CompanionWorkspaceSession.swift",
-          "sha256": "49018dbe7af8cacffd9f1e4271741df7520f9d8c1f83344099534b68e4a090e1"
+          "sha256": "f9c8d4e1e04a75bdf36861520483eab72980ab089fdd418a6c926d630bc6870f"
         }
       ]
     },
@@ -632,11 +632,11 @@
       "sources": [
         {
           "path": "Extensions/bifrost/Runtime.swift",
-          "sha256": "51bfa3fe323d9da4551657c8b019008545ad6ffae3df5448fd4a7902de0f17c6"
+          "sha256": "8dbbbe893d2d7cea09e595b09f1f0e9e4270deaa362babdb935e510727846d3a"
         },
         {
           "path": "Extensions/bifrost/BifrostUIContext.swift",
-          "sha256": "73f7c8c6ad21d4987a6d44dc5afe88abf45579f8aa72a9a5cb7a3ca206a84917"
+          "sha256": "f25ba3694c5325d3beff6f2d1b339aa22ac322e50a319eab0ef5cba842ac7db5"
         }
       ]
     },
@@ -848,11 +848,11 @@
       "sources": [
         {
           "path": "Extensions/database/Runtime.swift",
-          "sha256": "50fc5d1eea5e788afb1f19bb97d4b5ec4ae1cf8361bc072ad9c2a94484ceee72"
+          "sha256": "f359e70b84264c60290e66605989c383ccc869f4dd7cd554203c1c134fa910fa"
         },
         {
           "path": "Extensions/database/DatabaseUIClient.swift",
-          "sha256": "eb5b1e22c3a832f18090d84abfda9c7247ba22f29cebd1feaaf5811a39f72c08"
+          "sha256": "846c116a8406461546e4a631964d8e350c7ac0ee82622c27783cf0f6519fa209"
         }
       ]
     }

@@ -10,23 +10,22 @@ import SwiftUI
 @MainActor
 @objc(EdithKeepAwakeExtensionRuntime)
 final class KeepAwakeRuntime: NSObject {
+    #if EDITH_FUNCTIONAL_FIXTURE
+    typealias FixtureAuthority = WorkerFixtureEngineAdmission
+    #else
+    typealias FixtureAuthority = WorkerFixtureAdmission
+    #endif
     private var store: KeepAwakeStore?
     private var defaults: UserDefaults?
     private var defaultsSuite: String?
-    private let admitFixture: (NSDictionary) throws -> WorkerFixtureAdmission?
+    private let admitFixture: (NSDictionary) throws -> FixtureAuthority?
     private let makeDefaults: (String) -> UserDefaults?
     private let makeProductionStore: @MainActor (UserDefaults) -> KeepAwakeStore
 
-    override convenience init() {
-        self.init(admitFixture: {
-            try WorkerFixtureAdmission.current(
-                extensionID: "keepAwake", context: $0,
-                roleBundle: Bundle(for: KeepAwakeRuntime.self))
-        })
-    }
+    override convenience init() { self.init(admitFixture: Self.admitFixtureContext) }
 
     init(
-        admitFixture: @escaping (NSDictionary) throws -> WorkerFixtureAdmission?,
+        admitFixture: @escaping (NSDictionary) throws -> FixtureAuthority?,
         makeDefaults: @escaping (String) -> UserDefaults? = { UserDefaults(suiteName: $0) },
         makeProductionStore: @escaping @MainActor (UserDefaults) -> KeepAwakeStore = {
             KeepAwakeStore(defaults: $0)
@@ -40,48 +39,176 @@ final class KeepAwakeRuntime: NSObject {
 
     private var presentation: ControlPresentation?
 
+    private var commandDrain: Task<Void, Never>?
+    private var resourceStop: Task<Void, Never>?
+    private var commandsSuspended = false
+    private var presentationDrains: [UUID: Task<Void, Never>] = [:]
+    #if EDITH_FUNCTIONAL_FIXTURE
+    private var signedFixture: WorkerFixtureEngineAdmission?
+    #endif
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
+        #if !EDITH_FUNCTIONAL_FIXTURE
+        guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+            request["hostedFunctionalFixture"] == nil
+        else { completion(nil, "The functional fixture is unavailable."); return }
+        #endif
+        let token = (request["token"] as? String).flatMap(UUID.init(uuidString:))
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            if command.hasPrefix("keepAwake.ui.") {
-                guard let self, self.store != nil else { throw ExtensionPeerError.unavailable }
-                let defaults = self.defaults ?? SharedDefaults.store
-                switch command {
-                case "keepAwake.ui.read":
-                    guard payload == Data("{}".utf8) else {
-                        throw ExtensionPeerError.invalidRequest
-                    }
-                case "keepAwake.ui.update":
-                    try ControlPresentationContract.update(payload, defaults: defaults)
-                    self.store?.syncPreventSleep()
-                case "keepAwake.ui.action":
-                    _ = try JSONDecoder().decode(
-                        ControlPresentationAction.self, from: payload)
-                    throw ExtensionPeerError.invalidRequest
-                default: throw ExtensionPeerError.invalidRequest
-                }
-                return try ControlPresentationContract.snapshot(
-                    defaults: defaults, state: ControlPresentationState())
+            guard let self, let token else { throw ExtensionPeerError.invalidRequest }
+            try Task.checkCancellation()
+            #if EDITH_FUNCTIONAL_FIXTURE
+            let admission = self.signedFixture
+            let admitted = try admission?.beginRequest(
+                token: token, operation: command, payload: payload)
+            do {
+                let data = try await self.executeCommand(command, payload: payload)
+                try Task.checkCancellation()
+                if let admitted { try admission?.completeRequest(admitted) }
+                return data
+            } catch {
+                if let admitted { admission?.cancelRequest(admitted) }
+                throw error
             }
-            guard let self, let store = self.store, let defaults = self.defaults else {
-                throw ExtensionPeerError.unavailable
-            }
-            return try await KeepAwakeSurface.execute(
-                command, payload: payload, store: store, defaults: defaults)
+            #else
+            return try await self.executeCommand(command, payload: payload)
+            #endif
         }
+    }
+
+    private static func admitFixtureContext(_ input: NSDictionary) throws -> FixtureAuthority? {
+        #if EDITH_FUNCTIONAL_FIXTURE
+        return try WorkerFixtureEngineAdmission.current(
+            extensionID: "keepAwake", context: input,
+            roleBundle: Bundle(for: KeepAwakeRuntime.self), expectedRole: .helper)
+        #else
+        guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+            input["hostedFunctionalFixture"] == nil
+        else { throw WorkerFixtureError.invalid }
+        return try WorkerFixtureAdmission.current(
+            extensionID: "keepAwake", context: input, roleBundle: Bundle(for: KeepAwakeRuntime.self)
+        )
+        #endif
+    }
+
+    private func checkFixtureCurrent() throws {
+        #if EDITH_FUNCTIONAL_FIXTURE
+        try signedFixture?.requireCurrent()
+        #else
+        guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil else {
+            throw WorkerFixtureError.invalid
+        }
+        #endif
+    }
+
+    private func executeCommand(_ command: String, payload: Data) async throws -> Data {
+        if command.hasPrefix("keepAwake.ui.") {
+            guard self.store != nil else { throw ExtensionPeerError.unavailable }
+            let defaults = self.defaults ?? SharedDefaults.store
+            switch command {
+            case "keepAwake.ui.read":
+                guard payload == Data("{}".utf8) else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+            case "keepAwake.ui.update":
+                try ControlPresentationContract.update(payload, defaults: defaults)
+                self.store?.syncPreventSleep()
+            case "keepAwake.ui.action":
+                _ = try JSONDecoder().decode(
+                    ControlPresentationAction.self, from: payload)
+                throw ExtensionPeerError.invalidRequest
+            default: throw ExtensionPeerError.invalidRequest
+            }
+            return try ControlPresentationContract.snapshot(
+                defaults: defaults, state: ControlPresentationState())
+        }
+        guard let store = self.store, let defaults = self.defaults else {
+            throw ExtensionPeerError.unavailable
+        }
+        return try await KeepAwakeSurface.execute(
+            command, payload: payload, store: store, defaults: defaults)
+    }
+
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
+            await resourceStop?.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginCommandDrain() -> Task<Void, Never> {
+        let owner = store
+        let uiOwner = presentation
+        commandsSuspended = true
+        _ = commands.suspend()
+        if let commandDrain { return commandDrain }
+        owner?.cancelPendingCommands()
+        uiOwner?.stop()
+        if let commandDrain { return commandDrain }
+        let task = Task { [self] in
+            _ = await commands.suspendAndWait()
+            await uiOwner?.stopAndWait()
+            while let task = presentationDrains.values.first { await task.value }
+            withExtendedLifetime(owner) {}
+        }
+        commandDrain = task
+        return task
     }
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        Task {
+        let stop = beginResourceStop()
+        Task { [self] in
+            await stop.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginResourceStop() -> Task<Void, Never> {
+        if let resourceStop { return resourceStop }
+        let owner = store
+        let drain = beginCommandDrain()
+        if let resourceStop { return resourceStop }
+        stopPresentation()
+        store = nil; defaults = nil; defaultsSuite = nil
+        let task = Task { [self] in
+            await drain.value
             await commands.shutdownAndWait()
-            _ = execute(["operation": "stop"])
-            completion()
+            owner?.shutdown()
+        }
+        resourceStop = task
+        return task
+    }
+
+    private func stopPresentation() {
+        let owner = presentation
+        presentation = nil
+        owner?.stop()
+        guard let owner else { return }
+        let id = UUID()
+        presentationDrains[id] = Task { [self] in
+            defer { presentationDrains[id] = nil }
+            await owner.stopAndWait()
         }
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
+        #if !EDITH_FUNCTIONAL_FIXTURE
+        if ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] != nil
+            || input["hostedFunctionalFixture"] != nil
+        {
+            let allowed = [
+                "describe", "status", "stop", "stopUI", "prepareToStop", "cancelCommand",
+            ]
+            guard let operation = input["operation"] as? String, allowed.contains(operation) else {
+                return ["ok": false] as NSDictionary
+            }
+        }
+        #endif
         switch input["operation"] as? String {
         case "describe":
             return [
@@ -93,42 +220,82 @@ final class KeepAwakeRuntime: NSObject {
                 "role": "helper",
             ] as NSDictionary
         case "configureUI":
+            guard !commandsSuspended, presentationDrains.count < 8 else {
+                return ["ok": false] as NSDictionary
+            }
             guard let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "keepAwake",
                 configuration.defaultsSuite
                     == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
-            presentation?.stop()
+            stopPresentation()
             presentation = ControlPresentation(client: configuration.engineClient)
             return ["ok": true] as NSDictionary
         case "stopUI":
-            presentation?.stop()
-            presentation = nil
+            stopPresentation()
             return ["ok": true] as NSDictionary
         case "prepareToStop":
-            commands.shutdown()
+            _ = beginResourceStop()
             return ["ok": true] as NSDictionary
         case "start":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
             else { return ["ok": false] as NSDictionary }
             do {
-                let fixture = try admitFixture(input)
-                guard let suite = input["defaultsSuite"] as? String,
-                    defaultsSuite == nil || defaultsSuite == suite,
-                    let defaults = makeDefaults(suite)
-                else { return ["ok": false] as NSDictionary }
-                if store == nil {
-                    store =
-                        fixture == nil
-                        ? makeProductionStore(defaults) : KeepAwakeStore.fixture(defaults: defaults)
+                let verified = try admitFixture(input)
+                #if EDITH_FUNCTIONAL_FIXTURE
+                if let signedFixture {
+                    guard let verified, verified.descriptor == signedFixture.descriptor else {
+                        throw WorkerFixtureError.invalid
+                    }
+                    try signedFixture.requireCurrent()
                 }
-                self.defaults = defaults
+                #endif
+                guard let suite = input["defaultsSuite"] as? String,
+                    defaultsSuite == nil || defaultsSuite == suite
+                else { return ["ok": false] as NSDictionary }
+                #if EDITH_FUNCTIONAL_FIXTURE
+                let admission = signedFixture ?? verified
+                signedFixture = admission
+                #else
+                let admission = verified
+                #endif
+                let construct: (WorkerFixtureAdmission?) throws -> (UserDefaults, KeepAwakeStore) =
+                    { [self] namespace in
+                        #if EDITH_FUNCTIONAL_FIXTURE
+                        if let namespace { try namespace.requireCurrent() }
+                        #endif
+                        guard let values = makeDefaults(suite) else {
+                            throw ExtensionPeerError.unavailable
+                        }
+                        let owner =
+                            store
+                            ?? (namespace == nil
+                                ? makeProductionStore(values)
+                                : KeepAwakeStore.fixture(defaults: values))
+                        values.set(true, forKey: KeepAwakeKeys.enabled)
+                        owner.syncPreventSleep()
+                        return (values, owner)
+                    }
+                let (values, owner): (UserDefaults, KeepAwakeStore)
+                #if EDITH_FUNCTIONAL_FIXTURE
+                if let admission {
+                    (values, owner) = try admission.withPlatformFixture(
+                        extensionID: "keepAwake", expectedRole: .helper
+                    ) { try construct($0) }
+                } else {
+                    (values, owner) = try construct(nil)
+                }
+                #else
+                (values, owner) = try construct(admission)
+                #endif
+                store = owner
+                defaults = values
                 defaultsSuite = suite
-                defaults.set(true, forKey: KeepAwakeKeys.enabled)
-                store?.syncPreventSleep()
                 return ["ok": true] as NSDictionary
             } catch { return ["ok": false] as NSDictionary }
         case "view":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard let presentation else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost {
@@ -138,19 +305,17 @@ final class KeepAwakeRuntime: NSObject {
                     }
                 })
         case "synchronize":
-            store?.syncPreventSleep()
-            return ["ok": true] as NSDictionary
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
+            do {
+                try checkFixtureCurrent()
+                store?.syncPreventSleep()
+                return ["ok": true] as NSDictionary
+            } catch { return ["ok": false] as NSDictionary }
         case "cancelCommand":
             commands.cancel(input["token"] as? String ?? "")
             return ["ok": true] as NSDictionary
         case "stop":
-            presentation?.stop()
-            presentation = nil
-            commands.shutdown()
-            store?.shutdown()
-            store = nil
-            defaults = nil
-            defaultsSuite = nil
+            _ = beginResourceStop()
             return ["ok": true] as NSDictionary
         case "status":
             return [

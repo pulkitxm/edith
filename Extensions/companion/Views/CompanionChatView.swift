@@ -63,6 +63,7 @@ final class CompanionChatModel {
     private(set) var councilRunning = false
     private(set) var councilQuestion: String?
     private(set) var focusTick = 0
+    private let commandTasks = CompanionTaskOwner()
     private var streamTask: Task<Void, Never>?
 
     private var client: CompanionClient {
@@ -70,6 +71,10 @@ final class CompanionChatModel {
     }
 
     func loadPersonas() async {
+        _ = try? await commandTasks.perform { [self] in await loadPersonasWork() }
+    }
+
+    private func loadPersonasWork() async {
         personas = (try? await client.personas()) ?? []
     }
 
@@ -80,6 +85,10 @@ final class CompanionChatModel {
     }
 
     func askCouncil() async {
+        _ = try? await commandTasks.perform { [self] in await askCouncilWork() }
+    }
+
+    private func askCouncilWork() async {
         guard !councilRunning, !streaming else { return }
         guard let question = councilSubject else {
             failure = ChatFailure(
@@ -109,6 +118,10 @@ final class CompanionChatModel {
     }
 
     func loadConversations() async {
+        _ = try? await commandTasks.perform { [self] in await loadConversationsWork() }
+    }
+
+    private func loadConversationsWork() async {
         let client = client
         await loading.perform(operation: {
             try await CompanionChatLibraryOperationExecution.conversations(
@@ -120,6 +133,10 @@ final class CompanionChatModel {
     }
 
     func open(_ id: String) async {
+        _ = try? await commandTasks.perform { [self] in await openWork(id) }
+    }
+
+    private func openWork(_ id: String) async {
         if streaming { stop() }
         activeConversationId = id
         messages = []
@@ -157,6 +174,10 @@ final class CompanionChatModel {
     }
 
     func delete(_ id: String) async {
+        _ = try? await commandTasks.perform { [self] in await deleteWork(id) }
+    }
+
+    private func deleteWork(_ id: String) async {
         do {
             let client = client
             _ = try await CompanionChatLibraryOperationExecution.forget(id: id) { id in
@@ -170,6 +191,7 @@ final class CompanionChatModel {
     }
 
     func send() {
+        guard !commandTasks.closed else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !streaming else { return }
         guard !messageLoad.isRunning else { return }
@@ -187,7 +209,7 @@ final class CompanionChatModel {
                 id: replyId, role: "assistant", content: "", citations: [], streaming: true,
                 model: model))
         generation = CompanionGeneration.track { [weak self] in self?.stop() }
-        streamTask = Task {
+        streamTask = commandTasks.launch { [self] in
             await stream(text: text, userId: userId, replyId: replyId)
         }
     }
@@ -198,6 +220,10 @@ final class CompanionChatModel {
         self.failure = nil
         send()
     }
+
+    func cancelPendingCommands() { commandTasks.cancel(); streamTask?.cancel() }
+
+    func cancelAndWait() async { cancelPendingCommands(); await commandTasks.drain() }
 
     func stop() {
         streamTask?.cancel()

@@ -61,9 +61,10 @@ public actor ClipboardThumbnailService {
             flights[request.id] = Flight(request: request, continuation: continuation)
             queue.append(request.id)
             let timeout = timeout
-            deadlines[request.id] = Task { [weak self] in
+            deadlines[request.id] = Task { [self] in
+                defer { deadlines[request.id] = nil }
                 do { try await Task.sleep(for: .seconds(timeout)) } catch { return }
-                await self?.expire(request.id)
+                expire(request.id)
             }
             startNext()
         }
@@ -81,12 +82,20 @@ public actor ClipboardThumbnailService {
         complete(id, result: .failure(CancellationError()))
     }
 
-    public func stop() async {
+    public func cancelPending() {
         stopped = true
+        for id in Array(flights.keys) { cancel(id) }
+        for task in workers.values { task.cancel() }
+        for task in deadlines.values { task.cancel() }
+    }
+
+    public func stop() async {
+        cancelPending()
         let active = Array(workers.values)
         for id in Array(flights.keys) { cancel(id) }
         for worker in active { worker.cancel() }
         for worker in active { await worker.value }
+        while let task = deadlines.values.first { await task.value }
         cache.removeAll()
         cacheOrder.removeAll()
         cacheBytes = 0
@@ -186,7 +195,7 @@ public actor ClipboardThumbnailService {
     }
 
     private func complete(_ id: UUID, result: Result<ClipboardThumbnailSnapshot, Error>) {
-        deadlines.removeValue(forKey: id)?.cancel()
+        deadlines[id]?.cancel()
         queue.removeAll { $0 == id }
         flights.removeValue(forKey: id)?.continuation.resume(with: result)
     }

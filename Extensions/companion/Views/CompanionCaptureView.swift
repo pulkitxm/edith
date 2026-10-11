@@ -13,19 +13,72 @@ final class CompanionRecordingResources {
     var speechTask: SFSpeechRecognitionTask?
     var ticker: Timer?
     var hasTap = false
+    private let callbackLock = NSLock()
+    private var accepting = true
+    private var activeCallbacks = 0
+    private var callbackWaiter: CheckedContinuation<Void, Never>?
+    @MainActor private var drain: Task<Void, Never>?
+    let updates = AsyncStream<Update>.makeStream(bufferingPolicy: .bufferingNewest(1))
+    var updateTask: Task<Void, Never>?
+
+    enum Update: Sendable {
+        case transcript(String)
+        case level(Double)
+    }
+
+    func callback(_ body: () -> Void) {
+        let admitted = callbackLock.withLock { () -> Bool in
+            guard accepting else { return false }
+            activeCallbacks += 1
+            return true
+        }
+        guard admitted else { return }
+        defer {
+            let waiter = callbackLock.withLock { () -> CheckedContinuation<Void, Never>? in
+                activeCallbacks -= 1
+                guard !accepting, activeCallbacks == 0 else { return nil }
+                defer { callbackWaiter = nil }
+                return callbackWaiter
+            }
+            waiter?.resume()
+        }
+        body()
+    }
+
+    @MainActor func stopAndWait() async {
+        if let drain { await drain.value; return }
+        stop()
+        let task = Task { [self] in await waitForReturn() }
+        drain = task
+        await task.value
+    }
+
+    @MainActor private func waitForReturn() async {
+        await withCheckedContinuation { continuation in
+            let empty = callbackLock.withLock { () -> Bool in
+                guard activeCallbacks != 0 else { return true }
+                callbackWaiter = continuation
+                return false
+            }
+            if empty { continuation.resume() }
+        }
+        while let speechTask, speechTask.state != .completed {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        updates.continuation.finish()
+        await updateTask?.value
+        speechRequest = nil; speechTask = nil; speech = nil; file = nil
+    }
 
     func stop() {
+        callbackLock.withLock { accepting = false }
         if hasTap { engine.inputNode.removeTap(onBus: 0) }
         hasTap = false
         engine.stop()
         speechRequest?.endAudio()
         speechTask?.cancel()
-        speechRequest = nil
-        speechTask = nil
-        speech = nil
         ticker?.invalidate()
         ticker = nil
-        file = nil
     }
 
     deinit { stop() }
@@ -57,8 +110,10 @@ final class CompanionCaptureModel {
     @ObservationIgnored private let recordingFactory:
         @MainActor () throws -> CompanionRecordingResources
     @ObservationIgnored private let remote: CompanionUIBridge?
+    private let commandTasks = CompanionTaskOwner()
     @ObservationIgnored private var remoteTask: Task<Void, Never>?
     private var remoteStopped = false
+    private var recordingDrains: [UUID: Task<Void, Never>] = [:]
     private var remotePolling: Task<Void, Never>?
     private var fileURL: URL?
     private var startedAt: Date?
@@ -77,7 +132,10 @@ final class CompanionCaptureModel {
         self.recordingFactory = recordingFactory
         guard remote == nil, observeOutbox else { return }
         outboxObserver = IPC.observe(CompanionBackgroundOperation.outboxChanged) { [weak self] in
-            Task { @MainActor in await self?.refreshWaiting() }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                _ = self.commandTasks.launch { [self] in await self.refreshWaiting() }
+            }
         }
     }
 
@@ -85,7 +143,25 @@ final class CompanionCaptureModel {
         if let outboxObserver { IPC.stopObserving(outboxObserver) }
     }
 
+    func cancelPendingCommands() {
+        remoteStopped = true
+        commandTasks.cancel()
+        startGeneration += 1
+        remoteTask?.cancel(); remotePolling?.cancel()
+        if let outboxObserver { IPC.stopObserving(outboxObserver) }
+        outboxObserver = nil
+        retireRecording()
+    }
+
+    func cancelAndWait() async {
+        cancelPendingCommands()
+        await commandTasks.drain()
+        await recordingResources?.stopAndWait()
+        while let task = recordingDrains.values.first { await task.value }
+    }
+
     func shutdown() {
+        cancelPendingCommands()
         if remote != nil {
             remoteStopped = true; remotePolling?.cancel(); remotePolling = nil;
             remoteTask?.cancel(); remoteTask = nil; return
@@ -102,6 +178,10 @@ final class CompanionCaptureModel {
     }
 
     func toggleRecording() async {
+        _ = try? await commandTasks.perform { [self] in await toggleRecordingWork() }
+    }
+
+    private func toggleRecordingWork() async {
         if remote != nil { await remoteAction("toggle"); return }
         guard captureActive, !starting, !remembering else { return }
         switch phase {
@@ -136,7 +216,9 @@ final class CompanionCaptureModel {
 
         let recording: CompanionRecordingResources
         do {
-            recording = try recordingResources ?? recordingFactory()
+            guard recordingDrains.count < 8 else { return }
+            retireRecording()
+            recording = try recordingFactory()
             recordingResources = recording
         } catch {
             self.error = "Could not initialize the microphone: \(error.localizedDescription)"
@@ -185,13 +267,12 @@ final class CompanionCaptureModel {
             }
             recording.speechRequest = request
             recording.speechTask = recognizer.recognitionTask(with: request) {
-                [weak self] result, _ in
-                guard let text = result?.bestTranscription.formattedString else { return }
-                Task { @MainActor in
-                    guard let self, self.startGeneration == generation,
-                        self.phase == .recording
-                    else { return }
-                    self.transcript = text
+                [weak recording] result, _ in
+                guard let recording else { return }
+                recording.callback {
+                    if let text = result?.bestTranscription.formattedString {
+                        recording.updates.continuation.yield(.transcript(text))
+                    }
                 }
             }
         }
@@ -199,17 +280,24 @@ final class CompanionCaptureModel {
         let mono = AVAudioFormat(
             commonFormat: .pcmFormatFloat32, sampleRate: format.sampleRate, channels: 1,
             interleaved: false)
-        input.installTap(onBus: 0, bufferSize: 4096, format: mono) {
-            [weak self, weak recording] buffer, _ in
-            guard let recording else { return }
-            try? recording.file?.write(from: buffer)
-            recording.speechRequest?.append(buffer)
-            let rms = Self.rms(buffer)
-            Task { @MainActor in
-                guard let self, self.startGeneration == generation, self.phase == .recording else {
-                    return
+        recording.updateTask = Task { [weak self, recording] in
+            for await update in recording.updates.stream {
+                guard let self, !commandTasks.closed, startGeneration == generation,
+                    phase == .recording
+                else { continue }
+                switch update {
+                case .transcript(let text): transcript = text
+                case .level(let value): level = value
                 }
-                self.level = rms
+            }
+        }
+        input.installTap(onBus: 0, bufferSize: 4096, format: mono) {
+            [weak recording] buffer, _ in
+            guard let recording else { return }
+            recording.callback {
+                try? recording.file?.write(from: buffer)
+                recording.speechRequest?.append(buffer)
+                recording.updates.continuation.yield(.level(Self.rms(buffer)))
             }
         }
         recording.hasTap = true
@@ -219,6 +307,7 @@ final class CompanionCaptureModel {
             try recording.engine.start()
         } catch {
             recording.stop()
+            await recording.stopAndWait()
             if let fileURL { try? FileManager.default.removeItem(at: fileURL) }
             fileURL = previousURL
             self.error = "Could not start the microphone: \(error.localizedDescription)"
@@ -231,8 +320,10 @@ final class CompanionCaptureModel {
         phase = .recording
         recording.ticker = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) {
             [weak self] _ in
-            Task { @MainActor in
-                guard let self, self.phase == .recording, let startedAt = self.startedAt else {
+            MainActor.assumeIsolated {
+                guard let self, !self.commandTasks.closed, self.phase == .recording,
+                    let startedAt = self.startedAt
+                else {
                     return
                 }
                 self.duration = Date().timeIntervalSince(startedAt)
@@ -240,9 +331,24 @@ final class CompanionCaptureModel {
         }
     }
 
+    private func retireRecording() {
+        guard let owner = recordingResources else { return }
+        owner.stop()
+        let id = UUID()
+        recordingDrains[id] = Task { [self, owner] in
+            defer { recordingDrains[id] = nil }
+            await owner.stopAndWait()
+        }
+        recordingResources = nil
+    }
+
+    private func waitForRecordings() async {
+        while let task = recordingDrains.values.first { await task.value }
+    }
+
     private func stopRecording() {
         startGeneration += 1
-        recordingResources?.stop()
+        retireRecording()
         if let startedAt { duration = Date().timeIntervalSince(startedAt) }
         startedAt = nil
         level = 0
@@ -250,11 +356,14 @@ final class CompanionCaptureModel {
     }
 
     func setCaptureActive(_ active: Bool) {
+        guard !commandTasks.closed else { return }
         if remote != nil {
             remoteTask?.cancel(); remotePolling?.cancel(); remotePolling = nil
-            remoteTask = Task { await remoteAction(active ? "activate" : "deactivate") }
+            remoteTask = commandTasks.launch { [self] in
+                await remoteAction(active ? "activate" : "deactivate")
+            }
             if active {
-                remotePolling = Task { [weak self] in
+                remotePolling = commandTasks.launch { [weak self] in
                     while !Task.isCancelled {
                         guard let self, !remoteStopped else { return }
                         await remoteAction("snapshot")
@@ -275,23 +384,31 @@ final class CompanionCaptureModel {
     }
 
     func discard() {
-        if remote != nil { remoteTask = Task { await remoteAction("discard") }; return }
-        leaveCapture()
-        if let fileURL {
-            try? FileManager.default.removeItem(at: fileURL)
+        guard !commandTasks.closed else { return }
+        if remote != nil {
+            remoteTask = commandTasks.launch { [self] in await remoteAction("discard") }; return
         }
-        fileURL = nil
-        transcript = ""
-        duration = 0
-        phase = .idle
+        leaveCapture()
+        _ = commandTasks.launch { [self] in
+            await waitForRecordings()
+            guard !commandTasks.closed else { return }
+            if let fileURL { try? FileManager.default.removeItem(at: fileURL) }
+            fileURL = nil; transcript = ""; duration = 0; phase = .idle
+        }
     }
 
     func remember() async {
+        _ = try? await commandTasks.perform { [self] in await rememberWork() }
+    }
+
+    private func rememberWork() async {
         if remote != nil { await remoteAction("remember"); return }
         guard let fileURL, !remembering else { return }
         leaveCapture()
         remembering = true
         defer { remembering = false }
+        await waitForRecordings()
+        guard !commandTasks.closed else { return }
         let kept = await Task.detached(priority: .utility) {
             CompanionOutbox.keep(fileURL)
         }.value
@@ -310,6 +427,10 @@ final class CompanionCaptureModel {
     }
 
     func refreshWaiting() async {
+        _ = try? await commandTasks.perform { [self] in await refreshWaitingWork() }
+    }
+
+    private func refreshWaitingWork() async {
         if remote != nil { await remoteAction("snapshot"); return }
         waiting = await Task.detached(priority: .utility) {
             CompanionOutbox.waiting()
@@ -317,6 +438,10 @@ final class CompanionCaptureModel {
     }
 
     func drainOutbox() async {
+        _ = try? await commandTasks.perform { [self] in await drainOutboxWork() }
+    }
+
+    private func drainOutboxWork() async {
         if remote != nil { await remoteAction("drain"); return }
         guard !draining, !waiting.isEmpty else { return }
         draining = true
@@ -332,6 +457,10 @@ final class CompanionCaptureModel {
     }
 
     func rememberNote() async {
+        _ = try? await commandTasks.perform { [self] in await rememberNoteWork() }
+    }
+
+    private func rememberNoteWork() async {
         if remote != nil { await remoteAction("note"); return }
         let text = note.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !savingNote else { return }

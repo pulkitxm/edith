@@ -11,6 +11,10 @@ final class ExtensionRuntime: NSObject {
     private var uiClient: ExtensionEngineClient?
     private var engine: AnyObject?
     private var surface: AnyObject?
+    private var commandDrain: Task<Void, Never>?
+    private var resourceStop: Task<Void, Never>?
+    private var commandsSuspended = false
+    private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -73,6 +77,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
                 SurfaceHostContext.current != nil
@@ -83,6 +88,9 @@ final class ExtensionRuntime: NSObject {
                 surface = AudioMixerSurface(engine: mixer)
             }
         case "configureUI":
+            guard !commandsSuspended, uiDrains.count < 8 else {
+                return ["ok": false] as NSDictionary
+            }
             guard let configuration = ExtensionUIConfiguration(context: input),
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
@@ -90,6 +98,7 @@ final class ExtensionRuntime: NSObject {
             if #available(macOS 14.4, *) { uiModel = AudioMixerRemoteModel(client: client) }
         case "stopUI": stopUI()
         case "view":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard uiClient != nil else { return ["ok": false] as NSDictionary }
             if #available(macOS 14.4, *), let engine = uiModel as? AudioMixerRemoteModel {
                 return NSHostingController(
@@ -108,9 +117,7 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
-            commands.shutdown()
-            if #available(macOS 14.4, *) { (engine as? MixerEngine)?.shutdown() }
-            engine = nil; surface = nil
+            _ = beginResourceStop()
         case "status": return ["ok": true, "running": engine != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
@@ -118,17 +125,73 @@ final class ExtensionRuntime: NSObject {
     }
 
     private func stopUI() {
-        if #available(macOS 14.4, *) { (uiModel as? AudioMixerRemoteModel)?.stop() }
+        if #available(macOS 14.4, *), let owner = uiModel as? AudioMixerRemoteModel {
+            owner.stop()
+            let id = UUID()
+            uiDrains[id] = Task { [self] in
+                defer { uiDrains[id] = nil }
+                await owner.stopAndWait()
+            }
+        }
         uiModel = nil; uiClient?.invalidate(); uiClient = nil
+    }
+
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
+            await resourceStop?.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginCommandDrain() -> Task<Void, Never> {
+        let owner = engine
+        let uiOwner = uiModel
+        commandsSuspended = true
+        _ = commands.suspend()
+        if let commandDrain { return commandDrain }
+        if #available(macOS 14.4, *) {
+            (owner as? MixerEngine)?.cancelPendingCommands()
+            (uiOwner as? AudioMixerRemoteModel)?.stop()
+        }
+        if let commandDrain { return commandDrain }
+        let task = Task { [self] in
+            _ = await commands.suspendAndWait()
+            if #available(macOS 14.4, *) {
+                await (owner as? MixerEngine)?.cancelAndWait()
+                await (uiOwner as? AudioMixerRemoteModel)?.stopAndWait()
+            }
+            while let task = uiDrains.values.first { await task.value }
+        }
+        commandDrain = task
+        return task
     }
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        Task {
-            await commands.shutdownAndWait()
-            if #available(macOS 14.4, *) { (engine as? MixerEngine)?.shutdown() }
-            completion()
+        let stop = beginResourceStop()
+        Task { [self] in
+            await stop.value
+            withExtendedLifetime(self) { completion() }
         }
+    }
+
+    private func beginResourceStop() -> Task<Void, Never> {
+        if let resourceStop { return resourceStop }
+        let owner = engine
+        let drain = beginCommandDrain()
+        if let resourceStop { return resourceStop }
+        stopUI()
+        engine = nil; surface = nil
+        let task = Task { [self] in
+            await drain.value
+            await commands.shutdownAndWait()
+            if #available(macOS 14.4, *) { await (owner as? MixerEngine)?.shutdownAndWait() }
+        }
+        resourceStop = task
+        return task
     }
 
     @available(macOS 14.4, *)

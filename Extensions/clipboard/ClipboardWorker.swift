@@ -113,9 +113,24 @@ import Foundation
         }
     }
 
-    func shutdown() async {
-        guard !isStopped else { return }
+    func cancelPendingCommands() {
         isStopped = true
+        store.cancelPendingCommands()
+        history.cancelPendingCommands()
+    }
+
+    func cancelAndWait() async {
+        cancelPendingCommands()
+        async let storeDrain: Void = store.cancelAndWait()
+        async let historyDrain: Void = history.cancelAndWait()
+        await service.cancelPendingCommands()
+        await service.cancelAndWait()
+        _ = await (storeDrain, historyDrain)
+        await ClipboardPreviewCancellation.shared.shutdown()
+    }
+
+    func shutdown() async {
+        await cancelAndWait()
         panel.shutdown()
         async let storeStop: Void = store.stop()
         async let historyStop: Void = history.shutdown()
@@ -123,5 +138,62 @@ import Foundation
         _ = await (storeStop, historyStop)
         await ClipboardPreviewCancellation.shared.shutdown()
         ClipboardThumbnail.clear()
+    }
+}
+
+@MainActor
+final class ClipboardTaskOwner {
+    private struct Entry {
+        let task: Task<Void, Never>
+        let cancel: @Sendable () -> Void
+    }
+
+    private var entries: [UUID: Entry] = [:]
+    private(set) var closed = false
+
+    func launch(_ work: @escaping @MainActor () async -> Void) -> Task<Void, Never>? {
+        guard !closed, entries.count < 64 else { return nil }
+        let id = UUID()
+        let task = Task {
+            defer { entries[id] = nil }
+            await work()
+        }
+        entries[id] = Entry(task: task, cancel: { task.cancel() })
+        return task
+    }
+
+    func perform<Value: Sendable>(
+        _ work: @escaping @MainActor () async throws -> Value
+    ) async throws -> Value {
+        guard !closed, entries.count < 64 else { throw CancellationError() }
+        let id = UUID()
+        let task = Task { try await work() }
+        let joined = Task {
+            _ = await task.result
+            entries[id] = nil
+        }
+        entries[id] = Entry(task: joined, cancel: { task.cancel() })
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    var activeCount: Int { entries.count }
+
+    func wait() async {
+        let active = Array(entries.values)
+        for entry in active { await entry.task.value }
+    }
+
+    func cancel() {
+        closed = true
+        for entry in entries.values { entry.cancel() }
+    }
+
+    func drain() async {
+        cancel()
+        while let entry = entries.values.first { await entry.task.value }
     }
 }

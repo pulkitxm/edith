@@ -16,10 +16,17 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
     private(set) var loaded = false
     private(set) var failure: String?
     private var stopped = false
+    private let commandTasks = DatabaseTaskOwner()
 
     init(engine: ExtensionEngineClient) { self.engine = engine }
 
     func send(_ request: DatabaseBrokerCommandRequest) async throws -> DatabaseBrokerCommandResponse
+    {
+        try await commandTasks.perform { [self] in try await sendWork(request) }
+    }
+
+    private func sendWork(_ request: DatabaseBrokerCommandRequest) async throws
+        -> DatabaseBrokerCommandResponse
     {
         let payload = try JSONEncoder().encode(request)
         let bytes = try await engine.invoke("database.execute", payload: payload)
@@ -30,6 +37,10 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
     }
 
     func load() async {
+        _ = try? await commandTasks.perform { [self] in await loadWork() }
+    }
+
+    private func loadWork() async {
         do {
             let bytes = try await engine.invoke("database.ui.state")
             let state = try JSONDecoder().decode(DatabaseUIState.self, from: bytes)
@@ -50,6 +61,10 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
     }
 
     func refreshPrivacy() async {
+        _ = try? await commandTasks.perform { [self] in await refreshPrivacyWork() }
+    }
+
+    private func refreshPrivacyWork() async {
         do {
             let bytes = try await engine.invoke("database.ui.privacy")
             let state = try JSONDecoder().decode(Bool.self, from: bytes)
@@ -85,7 +100,7 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
 
     private func startColumnWriter() {
         guard columnWriter == nil else { return }
-        columnWriter = Task { [weak self] in
+        columnWriter = commandTasks.launch { [weak self] in
             guard let self else { return }
             defer { self.columnWriter = nil }
             while let value = self.pendingColumns, !self.stopped {
@@ -101,10 +116,10 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
                         updates: self.pendingColumns ?? Data(#"{"version":1,"layouts":[]}"#.utf8))
                     self.failure = nil
                 } catch {
-                    guard !Task.isCancelled, !self.stopped else { return }
                     self.pendingColumns = try? DatabaseColumnsModel.mergedLayouts(
                         stored: value,
                         updates: self.pendingColumns ?? Data(#"{"version":1,"layouts":[]}"#.utf8))
+                    guard !Task.isCancelled, !self.stopped else { return }
                     self.failure =
                         "Column customization could not be saved. Retry before closing Database."
                     return
@@ -124,15 +139,26 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
         guard pendingColumns == nil, !stopped else { throw ExtensionEngineError.unavailable }
     }
 
-    func repair() async throws { _ = try await engine.invoke("database.ui.repair") }
+    func repair() async throws {
+        try await commandTasks.perform { [self] in _ = try await engine.invoke("database.ui.repair")
+        }
+    }
 
     func prepare(_ id: DatabaseConnectionID) async throws {
+        try await commandTasks.perform { [self] in try await prepareWork(id) }
+    }
+
+    private func prepareWork(_ id: DatabaseConnectionID) async throws {
         _ = try await engine.invoke(
             "database.ui.prepare",
             payload: JSONEncoder().encode(DatabaseConnectionGetRequest(connectionID: id)))
     }
 
     func store(_ secret: Data, for reference: DatabaseSecretReference) async throws {
+        try await commandTasks.perform { [self] in try await storeWork(secret, for: reference) }
+    }
+
+    private func storeWork(_ secret: Data, for reference: DatabaseSecretReference) async throws {
         _ = try await engine.invoke(
             "database.ui.credential.store",
             payload: JSONEncoder().encode(
@@ -140,6 +166,10 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
     }
 
     func delete(_ reference: DatabaseSecretReference) async throws {
+        try await commandTasks.perform { [self] in try await deleteWork(reference) }
+    }
+
+    private func deleteWork(_ reference: DatabaseSecretReference) async throws {
         _ = try await engine.invoke(
             "database.ui.credential.delete",
             payload: JSONEncoder().encode(DatabaseUICredential(reference: reference, secret: nil)))
@@ -158,10 +188,20 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
         throw DatabaseBrokerCommandClientError.invalidRequest
     }
 
-    func shutdown() {
+    func cancelPendingCommands() {
         stopped = true
+        commandTasks.cancel()
         columnWriter?.cancel()
-        columnWriter = nil
+    }
+
+    func cancelAndWait() async {
+        cancelPendingCommands()
+        await commandTasks.drain()
+        await columnWriter?.value
+    }
+
+    func shutdown() {
+        cancelPendingCommands()
         pendingColumns = nil
         privateContent = true
         engine.invalidate()

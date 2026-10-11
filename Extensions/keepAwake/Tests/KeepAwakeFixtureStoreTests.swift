@@ -5,6 +5,24 @@ import Testing
 @testable import KeepAwakeExtension
 
 @Suite @MainActor struct KeepAwakeFixtureStoreTests {
+    @Test func suspensionPreservesAssertionAndClosesCallbackAdmission() async throws {
+        let suite = "com.pulkit.edith.tests.keep-awake-drain." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: KeepAwakeKeys.enabled)
+        defaults.set(true, forKey: AppStorageKeys.General.preventSleep)
+        let store = KeepAwakeStore.fixture(defaults: defaults)
+        #expect(store.preventingSleep)
+        store.cancelPendingCommands()
+        defaults.set(false, forKey: AppStorageKeys.General.preventSleep)
+        store.syncPreventSleep()
+        NotificationCenter.default.post(name: UserDefaults.didChangeNotification, object: defaults)
+        for _ in 0..<50 { await Task.yield() }
+        #expect(store.preventingSleep)
+        store.shutdown()
+        #expect(!store.preventingSleep)
+    }
+
     @Test func syntheticAssertionTracksOriginalControlsAndShutdown() async throws {
         let suite = "com.pulkit.edith.tests.keep-awake-store." + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))

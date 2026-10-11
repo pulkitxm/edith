@@ -51,6 +51,7 @@ struct CalendarUISceneRoute: Equatable {
 @MainActor
 final class CalendarUIPresentation {
     private var pendingFacade: CalendarUIFacade?
+    private var drain: Task<Void, Never>?
     private weak var presentedFacade: CalendarUIFacade?
     var isRetained: Bool { pendingFacade != nil || presentedFacade != nil }
     private let route: CalendarUISceneRoute
@@ -98,7 +99,17 @@ final class CalendarUIPresentation {
         }
     }
 
+    func stop() {
+        guard drain == nil else { return }
+        let owner = pendingFacade ?? presentedFacade
+        owner?.stop()
+        drain = Task { await owner?.stopAndWait() }
+    }
+
+    func stopAndWait() async { stop(); await drain?.value }
+
     func shutdown() {
+        stop()
         (pendingFacade ?? presentedFacade)?.shutdown()
         pendingFacade = nil
         presentedFacade = nil

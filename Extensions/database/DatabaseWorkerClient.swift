@@ -8,12 +8,21 @@ struct DatabaseWorkerClient: DatabaseBrokerCommandSending {
     private nonisolated(unsafe) static var engine: DatabaseEngine?
     private nonisolated(unsafe) static var storage: URL?
     private nonisolated(unsafe) static var service = ""
+    private nonisolated(unsafe) static var suspended = false
 
     static func start(root: URL, keychainService: String) {
         lock.withLock {
+            guard !suspended else { return }
             storage = root
             service = keychainService
             engine = DatabaseEngine(root: root, keychainService: keychainService)
+        }
+    }
+
+    static func suspend() -> DatabaseEngine? {
+        lock.withLock {
+            suspended = true
+            return engine
         }
     }
 
@@ -35,11 +44,11 @@ struct DatabaseWorkerClient: DatabaseBrokerCommandSending {
     }
 
     static func restart() async throws {
-        let current = lock.withLock { engine }
+        let current = lock.withLock { suspended ? nil : engine }
         guard let current else { throw DatabaseEngineError.stopped }
         await current.shutdown()
         let replacement = lock.withLock { () -> DatabaseEngine? in
-            guard engine === current, let storage else { return nil }
+            guard !suspended, engine === current, let storage else { return nil }
             let replacement = DatabaseEngine(root: storage, keychainService: service)
             engine = replacement
             return replacement
@@ -50,7 +59,7 @@ struct DatabaseWorkerClient: DatabaseBrokerCommandSending {
 
     func send(_ request: DatabaseBrokerCommandRequest) async throws -> DatabaseBrokerCommandResponse
     {
-        guard let current = Self.lock.withLock({ Self.engine }) else {
+        guard let current = Self.lock.withLock({ Self.suspended ? nil : Self.engine }) else {
             throw DatabaseEngineError.stopped
         }
         return try await current.send(request)
