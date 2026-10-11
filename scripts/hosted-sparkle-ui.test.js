@@ -8,6 +8,10 @@ test("all original acceptance stages remain around standard updater controls wit
     "utf8",
   );
   const source = sparkleJourneyUIOverlay(original);
+  expect(source).toContain("final class OriginalShellJourneyTests: XCTestCase");
+  expect(source).toContain(
+    "func testOriginalCalendarInstallCustomizeReplaceUpdateDisableAndRemove()",
+  );
   for (const stage of [
     "empty-idle",
     "recommended-calendar-installed",

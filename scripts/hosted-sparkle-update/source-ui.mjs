@@ -86,16 +86,15 @@ const method = `    private func sparkleAction(_ operation: String, fixture: Jou
 
 export function sparkleJourneyUIOverlay(original, recipe = "valid") {
   assert(["valid", "wrong-signature", "tampered-archive"].includes(recipe));
-  let source = replaceOne(
-    original,
-    "final class OriginalShellJourneyTests: XCTestCase",
-    "final class HostedSparkleJourneyTests: XCTestCase",
+  assert(
+    original.includes("final class OriginalShellJourneyTests: XCTestCase"),
   );
-  source = replaceOne(
-    source,
-    "func testOriginalCalendarInstallCustomizeReplaceUpdateDisableAndRemove()",
-    "func testActualSparkleUpdateThroughOriginalCalendarJourney()",
+  assert(
+    original.includes(
+      "func testOriginalCalendarInstallCustomizeReplaceUpdateDisableAndRemove()",
+    ),
   );
+  let source = original;
   source = replaceOne(
     source,
     "        let application = XCUIApplication(bundleIdentifier: fixture.identifier)",
