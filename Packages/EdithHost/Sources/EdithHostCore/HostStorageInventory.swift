@@ -133,26 +133,12 @@ public struct HostStorageInventory: Sendable {
                 let key =
                     "package:\(id):\(package.hostABI):\(package.architecture):\(package.version)"
                 let directory = store.directory(for: package)
-                let carrier = directory.appendingPathComponent(
-                    id + "/ExtensionCarrier.app/Contents")
-                let worker = carrier.appendingPathComponent(
-                    "Extensions/ExtensionWorker.appex/Contents")
-                let payload = worker.appendingPathComponent("Resources/Payload/" + id)
-                let executableIDs = [key + ":carrier-executable", key + ":worker-executable"]
-                let frameworkPaths =
-                    [carrier, worker]
-                    + ExtensionBundleRuntime.Role.allCases.map {
-                        payload.appendingPathComponent($0.rawValue + ".bundle/Contents")
-                    }
-                let frameworkIDs = frameworkPaths.indices.map { key + ":frameworks:\($0)" }
-                scopes.append(.init(id: key, root: directory, expected: true))
-                for (scopeID, root) in zip(executableIDs, [carrier, worker]) {
-                    scopes.append(.init(id: scopeID, root: root.appendingPathComponent("MacOS")))
-                }
-                for (scopeID, root) in zip(frameworkIDs, frameworkPaths) {
-                    scopes.append(
-                        .init(id: scopeID, root: root.appendingPathComponent("Frameworks")))
-                }
+                let layout = HostStoragePackageScopes(
+                    key: key, directory: directory, extensionID: id,
+                    roles: ExtensionBundleRuntime.Role.allCases.map(\.rawValue))
+                let executableIDs = layout.executableScopeIDs
+                let frameworkIDs = layout.frameworkScopeIDs
+                scopes.append(contentsOf: layout.scopes)
                 let selected = marketplace.installed[id] == package
                 let running =
                     marketplace.sessions.versions[id] == package.version
