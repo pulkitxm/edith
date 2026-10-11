@@ -149,6 +149,11 @@ struct HostStoragePage: View {
                     HostStorageSizeLine(
                         title: "Owned extension user data",
                         bytes: measurement.sum(entry.dataScopeIDs))
+                    if !entry.sharedDataScopeIDs.isEmpty {
+                        HostStorageSizeLine(
+                            title: "Shared user data, counted once in the total",
+                            bytes: measurement.sum(entry.sharedDataScopeIDs))
+                    }
                     Text(
                         entry.compressedDownloadBytes.map {
                             "Signed catalog compressed download: \(HostStorageSizeLine.format($0)) · version \(entry.catalogVersion ?? "unknown")"
@@ -183,6 +188,10 @@ struct HostStoragePage: View {
                         }
                     }
                     if !entry.versions.isEmpty || marketplace.pendingRemovalIDs.contains(entry.id) {
+                        Text(
+                            "Removal targets all package versions above. Their logical bytes are measured file contents; allocated blocks may be shared. User data, shared files and selected music folders are retained. Refresh shows the actual remaining storage."
+                        )
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
                         HStack {
                             if marketplace.pendingRemovalIDs.contains(entry.id) {
                                 Text("Pending removal, still on disk until released").font(

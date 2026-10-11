@@ -26,6 +26,7 @@ public struct HostStorageExtension: Sendable, Identifiable {
     public var dataScopeID: String { "data:" + id }
     public var preservedDataScopeIDs: [String] = []
     public var sharedPreferences = false
+    public var sharedDataScopeIDs: [String] = []
     public var dataScopeIDs: [String] {
         [dataScopeID] + preservedDataScopeIDs + (sharedPreferences ? [] : ["preferences:" + id])
     }
@@ -115,7 +116,6 @@ public struct HostStorageInventory: Sendable {
                 !identity.persistentExtensionLocations(id).contains(custom)
             {
                 let key = "music-selected-directory"
-                preservedIDs.append(key)
                 scopes.append(.init(id: key, root: custom))
             }
             var versions: [HostStorageVersion] = []
@@ -176,7 +176,26 @@ public struct HostStorageInventory: Sendable {
                     pendingRemoval: marketplace.pendingRemovalIDs.contains(id),
                     preservedDataScopeIDs: preservedIDs, sharedPreferences: !identity.development))
         }
-        self.scopes = scopes
+        if let selected = scopes.first(where: { $0.id == "music-selected-directory" }),
+            scopes.contains(where: {
+                $0.id != selected.id
+                    && $0.root.standardizedFileURL == selected.root.standardizedFileURL
+            })
+        {
+            scopes.removeAll { $0.id == selected.id }
+        }
+        let data = HostStorageDataScopes(
+            scopes: scopes,
+            owners: Dictionary(uniqueKeysWithValues: extensions.map { ($0.id, $0.dataScopeIDs) }))
+        for index in extensions.indices {
+            let entry = extensions[index]
+            let owned = Set(data.ownedIDs[entry.id] ?? [])
+            extensions[index].preservedDataScopeIDs = entry.preservedDataScopeIDs.filter {
+                owned.contains($0)
+            }
+            extensions[index].sharedDataScopeIDs = data.sharedIDs[entry.id] ?? []
+        }
+        self.scopes = data.scopes
         self.extensions = extensions
         self.appVersion = appVersion
         hostABI = HostContract.compatibility
@@ -188,6 +207,14 @@ public struct HostStorageInventory: Sendable {
             .init(
                 id: "extension-data", title: "Extension user data",
                 scopeIDs: extensions.flatMap(\.dataScopeIDs)),
+            .init(
+                id: "shared-extension-data", title: "Shared extension user data",
+                scopeIDs: data.sharedScopeIDs),
+            .init(
+                id: "selected-music-directory",
+                title: "Selected music directory, including any other files",
+                scopeIDs: scopes.contains { $0.id == "music-selected-directory" }
+                    ? ["music-selected-directory"] : []),
             .init(
                 id: "cache", title: "Archives, staging, cache and package metadata",
                 scopeIDs: ["package-cache", "cache", "catalog-cache"]
