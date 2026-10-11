@@ -206,7 +206,7 @@ import Testing
         let deadline = ContinuousClock.now + .seconds(2)
         repeat {
             let value = try await snapshot(surface, tile)
-            if value.metrics.first { $0.id == "permissions" }?.value == "1" { return value }
+            if value.metrics.first(where: { $0.id == "permissions" })?.value == "1" { return value }
             try await Task.sleep(for: .milliseconds(5))
         } while ContinuousClock.now < deadline
         throw ExtensionPeerError.unavailable
