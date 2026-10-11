@@ -89,7 +89,7 @@ private final class MachineLogBuffer: @unchecked Sendable {
         guard !stopped else { throw MachineUIError.unavailable }
         switch request.operation {
         case .start:
-            guard logs.count < 8 else { throw MachineUIError.unavailable }
+            guard logs.count + retired.count < 8 else { throw MachineUIError.unavailable }
             let session = try session(request.machineID)
             guard let container = containers(session).first(where: { $0.id == request.containerID })
             else { throw MachineUIError.invalidRequest }

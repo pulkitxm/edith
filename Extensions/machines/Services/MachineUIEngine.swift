@@ -134,7 +134,7 @@ import Foundation
                 "machines.ui.terminal",
             ]
             .contains(value.operation),
-            value.payload.count <= 2_097_152, jobs.count < 4
+            value.payload.count <= 2_097_152, jobs.count + retired.count < 4
         else { throw MachineUIError.invalidRequest }
         let fileRequest =
             value.operation == "machines.ui.files"
