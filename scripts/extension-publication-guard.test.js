@@ -660,7 +660,7 @@ test("zero-matrix workflow verifies the frozen runtime before trusted draft fina
   ).toBe(true);
 });
 
-test("the actual no-argument publisher finalizes a zero-build draft and refuses stale or corrupt retries", () => {
+test("the actual no-argument publisher refuses unqualified zero-build drafts and stale or corrupt retries", () => {
   const directory = mkdtempSync(join(tmpdir(), "catalog-publisher-cli-"));
   const binary = join(directory, "bin");
   mkdirSync(binary);
@@ -697,6 +697,8 @@ test("the actual no-argument publisher finalizes a zero-build draft and refuses 
     PATH: `${binary}:${process.env.PATH}`,
     HOME: directory,
     FIXTURE_STATE: stateFile,
+    GITHUB_ACTIONS: "true",
+    RUNNER_ENVIRONMENT: "github-hosted",
     GITHUB_REPOSITORY: "synthetic/fixture",
     GITHUB_SHA: target,
     GITHUB_REF: "refs/heads/main",
@@ -732,9 +734,11 @@ test("the actual no-argument publisher finalizes a zero-build draft and refuses 
     writeFileSync(stateFile, JSON.stringify(state));
     for (let index = 0; index < 2; index++) {
       const result = run();
-      expect(result.status).toBe(0);
-      expect(JSON.parse(result.stdout)).toEqual({ published: [], revision: 1 });
-      expect(JSON.parse(readFileSync(stateFile)).mutations).toBe(1);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("native-evidence.json");
+      const unchanged = JSON.parse(readFileSync(stateFile));
+      expect(unchanged.mutations).toBe(0);
+      expect(unchanged.release.draft).toBe(true);
     }
     for (const invalid of ["stale", "corrupt"]) {
       const invalidState = JSON.parse(readFileSync(stateFile));
@@ -748,7 +752,7 @@ test("the actual no-argument publisher finalizes a zero-build draft and refuses 
       expect(rejected.status).not.toBe(0);
       if (invalid === "corrupt")
         expect(rejected.stderr).not.toContain("main changed");
-      expect(JSON.parse(readFileSync(stateFile)).mutations).toBe(1);
+      expect(JSON.parse(readFileSync(stateFile)).mutations).toBe(0);
     }
   } finally {
     rmSync(directory, { recursive: true, force: true });
