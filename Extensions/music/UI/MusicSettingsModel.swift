@@ -99,11 +99,22 @@ struct EmbeddedMusicUISettings: Codable, Sendable {
         }
     }
 
-    func stop() {
+    func suspendCommands() {
         lifecycle &+= 1; revision &+= 1; closed = true
         for task in ownedTasks.values { task.cancel() }
         readTask = nil; writeTask = nil
-        invoke = nil; pending = [:]; requested = [:]; order = []
+        pending = [:]; requested = [:]; order = []
+    }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        let tasks = Array(ownedTasks.values)
+        for task in tasks { await task.value }
+    }
+
+    func stop() {
+        suspendCommands()
+        invoke = nil
         preferences = EmbeddedMusicUIPreferences(); loaded = false; error = nil
     }
 
