@@ -42,6 +42,7 @@ struct QuinjetSettingsState: Codable {
         guard !stopped else { return }
         generation += 1
         let current = generation
+        defer { if generation == current { loading = false } }
         let previous = work
         previous?.cancel()
         loading = true

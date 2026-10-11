@@ -661,6 +661,12 @@ final class QuinjetPageModel {
         guard !stopped, !draining, !Task.isCancelled else { return }
         let epoch = UUID()
         readEpochs[key] = epoch
+        defer {
+            if readEpochs[key] == epoch {
+                reads[key] = nil
+                readEpochs[key] = nil
+            }
+        }
         let previous = reads[key]
         previous?.cancel()
         await previous?.value
@@ -671,10 +677,6 @@ final class QuinjetPageModel {
             await task.value
         } onCancel: {
             task.cancel()
-        }
-        if readEpochs[key] == epoch {
-            reads[key] = nil
-            readEpochs[key] = nil
         }
     }
 
