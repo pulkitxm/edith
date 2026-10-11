@@ -11,6 +11,7 @@ import Testing
         let fixture = try NotchPanelFixture()
         defer { fixture.clean() }
         var created: [NotchShelfController] = []
+        #if EDITH_FUNCTIONAL_FIXTURE
         let runtime = ExtensionRuntime(
             fixtureAdmission: { _ in nil },
             contextSource: { fixture.context },
@@ -23,6 +24,20 @@ import Testing
                 created.append(controller)
                 return controller
             })
+        #else
+        let runtime = ExtensionRuntime(
+            validateOrdinaryContext: { _ in },
+            contextSource: { fixture.context },
+            connectedDisplays: { [42: CGSize(width: 1280, height: 900)] },
+            createController: { context, displays in
+                let controller = NotchShelfController(
+                    context: context, startsServices: false,
+                    root: fixture.root.appendingPathComponent("Shelf"), hostDisplays: displays,
+                    bluetoothPrivacyRequired: { false })
+                created.append(controller)
+                return controller
+            })
+        #endif
         let suite = try #require(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
         _ = runtime.execute(["operation": "start", "defaultsSuite": suite])
         #expect(created.isEmpty)

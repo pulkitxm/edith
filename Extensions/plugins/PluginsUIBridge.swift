@@ -5,6 +5,7 @@ struct PluginsUISnapshot: Codable {
     let agents: [SkillAgent]
     let presentedSkillID: String?
     let selectedAgentIDs: Set<String>
+    let savedAgentSelections: [String: Bool]?
     let isInstalling: Bool
     let installationError: String?
     let installationLog: String
@@ -13,8 +14,9 @@ struct PluginsUISnapshot: Codable {
     let installerAvailable: Bool
     let singleAgentOverride: Bool
 
-    @MainActor init(model: SkillsModel) {
+    @MainActor init(model: SkillsModel) throws {
         agents = model.agents; presentedSkillID = model.presentedSkill?.id
+        savedAgentSelections = try model.savedAgentSelections()
         selectedAgentIDs = model.selectedAgentIDs;
         isInstalling = model.isInstalling || model.remoteInstallIsPending
         installationError = model.installationError; installationLog = model.installationLog

@@ -202,15 +202,37 @@ export function managedContextOverlay(source, sourceCommit, fingerprints) {
 
 export function managedFactoryOverlay(source, owner) {
   assert(["plugins", "studio"].includes(owner));
-  return replaceExact(
-    source,
-    '                guard try admitFixture(input) == nil else { return ["ok": false] as NSDictionary }',
-    `                if input["hostedManagedFixture"] != nil {
-                    guard HostedManagedFactoryAdmission.accepts(input, extensionID: "${owner}",
-                        role: Bundle(for: ExtensionRuntime.self), worker: Bundle.main)
-                    else { return ["ok": false] as NSDictionary }
-                } else {
-                    guard try admitFixture(input) == nil else { return ["ok": false] as NSDictionary }
-                }`,
+  assert(
+    !source.includes("HostedManagedFactoryAdmission.accepts("),
+    "Managed factory source already contains fixture admission",
   );
+  const ordinaryAdmission = {
+    plugins: `            #else
+            do { try validateOrdinaryContext(input) } catch {
+                fixtureRejected = true; return ["ok": false] as NSDictionary
+            }
+            #endif`,
+    studio:
+      '                guard try admitFixture(input) == nil else { return ["ok": false] as NSDictionary }',
+  }[owner];
+  const managedAdmission = `if input["hostedManagedFixture"] != nil {
+                guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+                    input["hostedFunctionalFixture"] == nil,
+                    HostedManagedFactoryAdmission.accepts(input, extensionID: "${owner}",
+                    role: Bundle(for: ExtensionRuntime.self), worker: Bundle.main)
+                else { return ["ok": false] as NSDictionary }
+            } else {`;
+  const replacement =
+    owner === "plugins"
+      ? `            #else
+            ${managedAdmission}
+                do { try validateOrdinaryContext(input) } catch {
+                    fixtureRejected = true; return ["ok": false] as NSDictionary
+                }
+            }
+            #endif`
+      : `                ${managedAdmission}
+                    guard try admitFixture(input) == nil else { return ["ok": false] as NSDictionary }
+                }`;
+  return replaceExact(source, ordinaryAdmission, replacement);
 }

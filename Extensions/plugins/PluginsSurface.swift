@@ -13,7 +13,7 @@ import Foundation
         }
     ) { self.model = model; self.hidden = hidden }
 
-    func execute(_ command: String, payload: Data) async throws -> Data {
+    static func request(_ command: String, payload: Data) throws -> SurfaceSnapshotRequest {
         let request: SurfaceSnapshotRequest
         switch command {
         case "surface.snapshot":
@@ -26,6 +26,11 @@ import Foundation
             request = action.snapshot
         default: throw ExtensionPeerError.invalidRequest
         }
+        return request
+    }
+
+    func execute(_ command: String, payload: Data) async throws -> Data {
+        let request = try Self.request(command, payload: payload)
         guard !model.isStopped else { throw ExtensionPeerError.unavailable }
         if hidden() { return try snapshot(request.tile).encoded() }
         await model.discoverAgents()

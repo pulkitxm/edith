@@ -66,7 +66,20 @@ test("only two factory overlays change admission while actual model/view/control
     const source = await readFile(`Extensions/${owner}/Runtime.swift`, "utf8");
     const result = managedFactoryOverlay(source, owner);
     expect(result).toContain("HostedManagedFactoryAdmission.accepts(input");
-    expect(result).toContain("guard try admitFixture(input) == nil");
+    const ordinaryAdmission =
+      owner === "plugins"
+        ? "try validateOrdinaryContext(input)"
+        : "guard try admitFixture(input) == nil";
+    expect(result).toContain(ordinaryAdmission);
+    expect(result).toContain(`extensionID: "${owner}"`);
+    const managedGuard = result.slice(
+      result.indexOf('if input["hostedManagedFixture"] != nil'),
+      result.indexOf("HostedManagedFactoryAdmission.accepts(input"),
+    );
+    expect(managedGuard).toContain(
+      'ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil',
+    );
+    expect(managedGuard).toContain('input["hostedFunctionalFixture"] == nil');
     expect(result).toContain("ExtensionUIConfiguration(context:");
     expect(result).toContain("configuration.engineClient");
     expect(result).toContain('case "view":');
@@ -76,6 +89,23 @@ test("only two factory overlays change admission while actual model/view/control
       return value.slice(start, next);
     };
     expect(startCase(result)).toBe(startCase(source));
+    const viewCase = (value) => {
+      const start = value.indexOf('case "view":');
+      const next = value.indexOf("\n        case ", start + 1);
+      return value.slice(start, next);
+    };
+    expect(viewCase(result)).toBe(viewCase(source));
+    expect(() => managedFactoryOverlay(result, owner)).toThrow();
+    expect(() => managedFactoryOverlay(source + source, owner)).toThrow();
+    expect(() =>
+      managedFactoryOverlay(source, owner === "plugins" ? "studio" : "plugins"),
+    ).toThrow();
+    expect(() =>
+      managedFactoryOverlay(
+        source.replace(ordinaryAdmission, "changedAdmission(input)"),
+        owner,
+      ),
+    ).toThrow();
   }
   expect(() => managedFactoryOverlay("", "music")).toThrow();
 });

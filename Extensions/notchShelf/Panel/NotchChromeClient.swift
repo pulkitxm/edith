@@ -16,7 +16,7 @@ import Observation
     private var observer: NSObjectProtocol?
     private var refreshTask: Task<Void, Never>?
     private var actionTask: Task<Void, Never>?
-    private var geometryTask: Task<Void, Never>?
+    private let geometryRequests = NotchGeometryRequests()
     private var readAgain = false
     private var actionCount = 0
     private var lastHomeHeight: Double?
@@ -78,13 +78,13 @@ import Observation
         guard !stopped else { return }
         let refreshing = refreshTask
         let acting = actionTask
-        let geometry = geometryTask
+        let geometry = geometryRequests
         let thumbnails = Array(thumbnailTasks.values)
         stopped = true
         generation = UUID()
         refreshTask?.cancel(); refreshTask = nil
         actionTask?.cancel(); actionTask = nil
-        geometryTask?.cancel(); geometryTask = nil
+        geometryRequests.stop()
         for task in thumbnailTasks.values { task.cancel() }
         thumbnailTasks = [:]
         if let observer { DistributedNotificationCenter.default().removeObserver(observer) }
@@ -95,7 +95,7 @@ import Observation
         drainBrowser()
         let drains = Array(browserDrains.values)
         teardown = Task {
-            await refreshing?.value; await acting?.value; await geometry?.value
+            await refreshing?.value; await acting?.value; await geometry.stopAndWait()
             for task in thumbnails { _ = await task.value }
             for task in drains { await task.value }
         }
@@ -327,10 +327,9 @@ import Observation
         let sorted = slots.sorted { $0.id.uuidString < $1.id.uuidString }
         guard sorted != reported else { return }
         reported = sorted
-        geometryTask?.cancel()
         let token = generation
-        geometryTask = Task { [weak self] in
-            guard let self else { return }
+        geometryRequests.replace { [weak self] in
+            guard let self, !stopped, generation == token, !Task.isCancelled else { return }
             do {
                 _ = try await invoke(
                     "notch.panel.geometry",
@@ -448,5 +447,44 @@ import Observation
         let result = await task.value
         thumbnailTasks[item.id] = nil
         return result
+    }
+}
+
+@MainActor final class NotchGeometryRequests {
+    typealias Operation = @MainActor () async -> Void
+    private var pending: Operation?
+    private var active: Task<Void, Never>?
+    private var drain: Task<Void, Never>?
+    private var stopped = false
+
+    func replace(_ operation: @escaping Operation) {
+        guard !stopped else { return }
+        pending = operation
+        active?.cancel()
+        guard drain == nil else { return }
+        drain = Task { [self] in
+            defer { active = nil; drain = nil }
+            while !stopped, let operation = pending {
+                pending = nil
+                let task = Task {
+                    guard !Task.isCancelled else { return }
+                    await operation()
+                }
+                active = task
+                await task.value
+                active = nil
+            }
+        }
+    }
+
+    func stop() {
+        stopped = true
+        pending = nil
+        active?.cancel()
+    }
+
+    func stopAndWait() async {
+        stop()
+        await drain?.value
     }
 }

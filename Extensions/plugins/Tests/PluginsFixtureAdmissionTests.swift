@@ -31,23 +31,125 @@ import WorkerFixtureTestSupport
                 try JSONSerialization.jsonObject(with: Data(contentsOf: marker))
                     as? [String: Any])
         }
-        func admit(_ context: NSDictionary) throws -> WorkerFixtureAdmission? {
-            let identifier = values["hostIdentifier"] as! String
-            return try WorkerFixtureAdmission.admit(
+        @MainActor
+        func admit(_ context: NSDictionary) throws -> WorkerFixtureEngineAdmission? {
+            try WorkerFixtureEngineAdmission.current(
                 extensionID: "plugins", context: context,
-                environment: [
-                    "EDITH_EXTENSION_FIXTURE_HOME": admission.home.path,
-                    "EDITH_EXTENSION_DATA_ROOT": admission.dataDirectory.path,
-                    "EDITH_APPLICATION_IDENTIFIER": identifier, "EDITH_EXTENSION_ID": "plugins",
-                    "EDITH_SHARED_DEFAULTS_SUITE": identifier + ".extensions.plugins",
-                ],
-                hostIdentifier: identifier,
-                hostBundle: admission.home.deletingLastPathComponent().appendingPathComponent(
-                    "Fixture.app"),
-                roleDirectory: URL(fileURLWithPath: values["roleDirectory"] as! String),
-                roleIdentifier: "com.pulkit.edith.extensions.plugins.app",
-                version: "1.0.0", hostABI: "edith-host-2")
+                roleBundle: Bundle(for: ExtensionRuntime.self))
         }
+
+    }
+
+    @MainActor private func makeRuntime(
+        _ input: Input, defaults: @escaping (String) -> UserDefaults?
+    ) -> ExtensionRuntime {
+        #if EDITH_FUNCTIONAL_FIXTURE
+        return ExtensionRuntime(admitFixture: input.admit, fixtureDefaults: defaults)
+        #else
+        return ExtensionRuntime(validateOrdinaryContext: { context in
+            guard try input.admit(context) == nil else { throw WorkerFixtureError.invalid }
+        })
+        #endif
+    }
+
+    @MainActor @Test func originalRuntimeRejectsFunctionalContextBeforeModelConstruction() async {
+        for operation in ["start", "configureUI"] {
+            let runtime = ExtensionRuntime()
+            let reply =
+                runtime.execute([
+                    "operation": operation, "defaultsSuite": "synthetic-unavailable-suite",
+                    "hostedFunctionalFixture": false,
+                ]) as? NSDictionary
+            #expect(reply?["ok"] as? Bool == false)
+            #expect(
+                (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
+                    == false)
+            await withCheckedContinuation { continuation in
+                runtime.prepareToStop { continuation.resume() }
+            }
+        }
+    }
+
+    @Test func signedAgentBytesAdmitOnlyMaintainedUniqueIdentifiers() throws {
+        let agents = try PluginsFixtureTools.admittedAgents(
+            Data("{\"agentIDs\":[\"cursor\",\"amp\"]}".utf8))
+        #expect(Set(agents.map(\.id)) == ["amp", "cursor"])
+        for payload in [
+            "{}", "{\"agentIDs\":[]}", "{\"agentIDs\":[\"unknown\"]}",
+            "{\"agentIDs\":[\"amp\",\"amp\"]}", "{\"agentIDs\":[1]}",
+            "{\"agentIDs\":[\"amp\"],\"path\":\"/external\"}",
+            "{\"agentIDs\":[\"amp\"],\"agentIDs\":[\"cursor\"]}",
+            "{\"agentIDs\":[\"amp\"],\"agent\\u0049Ds\":[\"cursor\"]}",
+        ] {
+            #expect(throws: (any Error).self) {
+                try PluginsFixtureTools.admittedAgents(Data(payload.utf8))
+            }
+        }
+    }
+
+    @MainActor @Test func admittedOriginalControlsPersistWithoutDiscoveryOrInstallation()
+        async throws
+    {
+        let suite =
+            "com.pulkit.edith.tests.worker-" + UUID().uuidString + ".extension.plugins.worker"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let data = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let agents = try PluginsFixtureTools.admittedAgents(Data("{\"agentIDs\":[\"amp\"]}".utf8))
+        func makeModel() -> SkillsModel {
+            PluginsFixtureTools.makeAdmittedModel(
+                defaults: defaults, dataDirectory: data, agents: agents)
+        }
+        func action(_ value: PluginsUIAction, model: SkillsModel) async throws -> PluginsUISnapshot
+        {
+            try JSONDecoder().decode(
+                PluginsUISnapshot.self,
+                from: await PluginsUIBridge.execute(
+                    "plugins.ui.action", payload: JSONEncoder().encode(value), model: model))
+        }
+        let model = makeModel()
+        let discovered = try await action(.init(action: "discover"), model: model)
+        #expect(discovered.agents.map(\.id) == ["amp"] && !discovered.installerAvailable)
+        let skill = EdithSkillLibrary.skills[0]
+        let presented = try await action(.init(action: "present", skillID: skill.id), model: model)
+        #expect(presented.selectedAgentIDs == ["amp"] && presented.savedAgentSelections == nil)
+        let selected = try await action(
+            .init(action: "select", agentID: "amp", enabled: false), model: model)
+        #expect(
+            selected.selectedAgentIDs.isEmpty && selected.savedAgentSelections == ["amp": false])
+        #expect(
+            defaults.dictionary(forKey: "plugins.agentSelections") as? [String: Bool] == [
+                "amp": false
+            ])
+        await model.shutdown()
+        let recreated = makeModel()
+        _ = try await action(.init(action: "discover"), model: recreated)
+        let restored = try await action(
+            .init(action: "present", skillID: skill.id), model: recreated)
+        #expect(
+            restored.selectedAgentIDs.isEmpty && restored.savedAgentSelections == ["amp": false])
+        await recreated.shutdown()
+        #expect(!FileManager.default.fileExists(atPath: data.path))
+    }
+
+    @MainActor @Test func savedSelectionsDistinguishAbsentEmptyAndRejectNonBooleanStorage() throws {
+        let suite =
+            "com.pulkit.edith.tests.worker-" + UUID().uuidString + ".extension.plugins.worker"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = PluginsFixtureTools.makeAdmittedModel(
+            defaults: defaults, dataDirectory: FileManager.default.temporaryDirectory,
+            agents: [])
+        #expect(try model.savedAgentSelections() == nil)
+        defaults.set([String: Bool](), forKey: "plugins.agentSelections")
+        #expect(try model.savedAgentSelections() == [:])
+        defaults.set(["amp": false], forKey: "plugins.agentSelections")
+        #expect(try model.savedAgentSelections() == ["amp": false])
+        defaults.set(["amp": 1], forKey: "plugins.agentSelections")
+        #expect(throws: (any Error).self) { try model.savedAgentSelections() }
+        defaults.set("invalid", forKey: "plugins.agentSelections")
+        #expect(throws: (any Error).self) { try model.savedAgentSelections() }
+        model.stop()
     }
 
     @MainActor @Test func strictMarkerConstructsOnlyOwnedUnavailableToolsAndRealInertModel()
@@ -83,11 +185,11 @@ import WorkerFixtureTestSupport
             try await model.documents.load(EdithSkillLibrary.skills[0])
         }
         await model.shutdown()
-        let runtime = ExtensionRuntime(
-            admitFixture: input.admit, fixtureDefaults: { _ in defaults })
-        #expect((runtime.execute(input.context) as? NSDictionary)?["ok"] as? Bool == true)
+        let runtime = makeRuntime(input, defaults: { _ in defaults })
+        #expect((runtime.execute(input.context) as? NSDictionary)?["ok"] as? Bool == false)
         #expect(
-            (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool == true
+            (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
+                == false
         )
         _ = runtime.execute(["operation": "stopUI"])
         let snapshotPayload = try SurfaceSnapshotRequest(
@@ -101,8 +203,8 @@ import WorkerFixtureTestSupport
                 ],
                 completion: { continuation.resume(returning: ($0, $1)) })
         }
-        #expect(snapshot.0 != nil)
-        #expect(snapshot.1 == nil)
+        #expect(snapshot.0 == nil)
+        #expect(snapshot.1 != nil)
         let blocked: (NSData?, NSString?) = await withCheckedContinuation { continuation in
             runtime.invoke(
                 ["token": UUID().uuidString, "command": "plugins.cli", "payload": Data()],
@@ -137,9 +239,9 @@ import WorkerFixtureTestSupport
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o644], ofItemAtPath: input.marker.path)
         }
-        let runtime = ExtensionRuntime(
-            admitFixture: input.admit,
-            fixtureDefaults: { _ in
+        let runtime = makeRuntime(
+            input,
+            defaults: { _ in
                 Issue.record("Invalid admission reached defaults construction"); return nil
             })
         #expect((runtime.execute(input.context) as? NSDictionary)?["ok"] as? Bool == false)
@@ -167,5 +269,33 @@ import WorkerFixtureTestSupport
         try FileManager.default.createSymbolicLink(
             at: tools.toolbin, withDestinationURL: admission.dataDirectory)
         #expect(throws: (any Error).self) { try PluginsFixtureTools(admission: admission) }
+    }
+
+    @MainActor @Test func unsignedMarkerCannotPerformOriginalSelectionActions() async throws {
+        let fixture = try EngineFixture(owner: "plugins")
+        defer { fixture.remove() }
+        let input = try Input(fixture)
+        let runtime = makeRuntime(
+            input,
+            defaults: { _ in
+                Issue.record("Unsigned marker reached preferences construction")
+                return nil
+            })
+        #expect((runtime.execute(input.context) as? NSDictionary)?["ok"] as? Bool == false)
+        for payload in [
+            "{\"action\":\"discover\"}",
+            "{\"action\":\"select\",\"agentID\":\"amp\",\"enabled\":false}",
+        ] {
+            let reply: (NSData?, NSString?) = await withCheckedContinuation { continuation in
+                runtime.invoke([
+                    "token": UUID().uuidString, "command": "plugins.ui.action",
+                    "payload": Data(payload.utf8),
+                ]) { continuation.resume(returning: ($0, $1)) }
+            }
+            #expect(reply.0 == nil && reply.1 != nil)
+        }
+        await withCheckedContinuation { continuation in
+            runtime.prepareToStop { continuation.resume() }
+        }
     }
 }
