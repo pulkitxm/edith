@@ -123,30 +123,40 @@ final class DocsBrowser {
         guard !stopped else { return }
         filter = String(text.prefix(256))
         filterGeneration &+= 1
-        let generation = filterGeneration
-        retire(filterTask)
-        filterTask = nil
-        let groups = library?.groups ?? []
-        guard !text.trimmingCharacters(in: .whitespaces).isEmpty else {
+        filterTask?.cancel()
+        if filter.trimmingCharacters(in: .whitespaces).isEmpty {
             appliedFilter = ""
-            sidebarGroups = Self.listing(groups)
+            sidebarGroups = Self.listing(library?.groups ?? [])
+        }
+        startFilter()
+    }
+
+    private func startFilter() {
+        guard !stopped, filterTask == nil, !filter.trimmingCharacters(in: .whitespaces).isEmpty
+        else {
             return
         }
+        let generation = filterGeneration
+        let groups = library?.groups ?? []
         let delay = filterDelay
         let matchPages = matchPages
-        let query = String(text.prefix(256))
-        filterTask = Task { [weak self] in
+        let query = filter
+        filterTask = Task { [self] in
+            defer {
+                filterTask = nil
+                if generation != filterGeneration { startFilter() }
+            }
             try? await Task.sleep(for: delay)
-            guard !Task.isCancelled, let self, self.filterGeneration == generation else { return }
+            guard !Task.isCancelled, !stopped, filterGeneration == generation else { return }
             let matched = await Task.detached { matchPages(groups, query) }.value
-            guard !Task.isCancelled, self.filterGeneration == generation else { return }
-            self.appliedFilter = query
-            self.sidebarGroups = matched
+            guard !Task.isCancelled, !stopped, filterGeneration == generation else { return }
+            appliedFilter = query
+            sidebarGroups = matched
         }
     }
 
     func settleFilter() async {
-        await filterTask?.value
+        while let task = filterTask { await task.value }
     }
 
     private static func listing(_ groups: [DocsGroup]) -> [(DocsGroup, [DocsPage])] {
@@ -211,10 +221,13 @@ final class DocsBrowser {
 
     func ask(_ request: String, decider: JevDeciding?) async {
         guard let library, !stopped, request.utf8.count <= 4096 else { return }
-        retire(askTask)
+        let previous = askTask
+        previous?.cancel()
         askSerial += 1
         let serial = askSerial
         asking = true
+        _ = await previous?.value
+        guard !stopped, !Task.isCancelled, serial == askSerial else { return }
         let task = Task {
             if let remote = self.remote {
                 return (try? await remote.answer(request, library: library))
@@ -271,8 +284,7 @@ final class DocsBrowser {
     func clearQuestion() -> Bool {
         guard !question.isEmpty || answer != nil else { return false }
         askSerial += 1
-        retire(askTask)
-        askTask = nil
+        askTask?.cancel()
         question = ""
         answer = nil
         asking = false
