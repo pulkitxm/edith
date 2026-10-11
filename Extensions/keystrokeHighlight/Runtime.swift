@@ -16,6 +16,7 @@ final class ExtensionRuntime: NSObject {
     private var presentation: ControlPresentation?
 
     private var fixture: WorkerFixtureAdmission?
+    private var engineAdmission: WorkerFixtureEngineAdmission?
     private let commands = ExtensionCommandRegistry()
     private var suspended = false
     private var suspension: Task<Void, Never>?
@@ -24,47 +25,62 @@ final class ExtensionRuntime: NSObject {
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            if command.hasPrefix("keystrokeHighlight.ui.") {
-                guard let self, self.observer != nil else { throw ExtensionPeerError.unavailable }
-                let defaults = SharedDefaults.store
-                switch command {
-                case "keystrokeHighlight.ui.read":
-                    guard payload == Data("{}".utf8) else {
-                        throw ExtensionPeerError.invalidRequest
-                    }
-                case "keystrokeHighlight.ui.update":
-                    try ControlPresentationContract.update(payload, defaults: defaults)
-                    self.synchronize()
-                case "keystrokeHighlight.ui.action":
-                    let action = try JSONDecoder().decode(
-                        ControlPresentationAction.self, from: payload)
-                    guard action.action == "inputMonitoring", action.value.isEmpty else {
-                        throw ExtensionPeerError.invalidRequest
-                    }
-                    guard self.fixture == nil else { throw ExtensionPeerError.unavailable }
-                    _ = CGRequestListenEventAccess()
-                    self.synchronize()
-                default: throw ExtensionPeerError.invalidRequest
-                }
-                return try ControlPresentationContract.snapshot(
-                    defaults: defaults, state: ControlPresentationState())
+            guard let self, let identifier = request["token"] as? String,
+                let token = UUID(uuidString: identifier)
+            else { throw ExtensionPeerError.invalidRequest }
+            let admission = self.engineAdmission
+            let admitted = try admission?.beginRequest(
+                token: token, operation: command, payload: payload)
+            defer {
+                if let admitted { admission?.cancelRequest(admitted) }
             }
-            guard let self, self.observer != nil else { throw ExtensionPeerError.unavailable }
-            return try await SurfaceCommandService.execute(
-                providerID: "keystrokeHighlight", command: command,
-                payload: payload,
-                snapshot: { _ in
-                    KeystrokeHighlightSurface.snapshot(
-                        active: SharedDefaults.store.bool(
-                            forKey: AppStorageKeys.KeystrokeHighlight.active))
-                },
-                perform: { action in
-                    SharedDefaults.store.set(
-                        action == "enable", forKey: AppStorageKeys.KeystrokeHighlight.active)
-                    self.synchronize()
-                    IPC.post(IPC.Name.settingsChanged)
-                })
+            let reply = try await self.executeCommand(command, payload: payload)
+            if let admitted { try admission?.completeRequest(admitted) }
+            return reply
         }
+    }
+
+    private func executeCommand(_ command: String, payload: Data) async throws -> Data {
+        if command.hasPrefix("keystrokeHighlight.ui.") {
+            guard self.observer != nil else { throw ExtensionPeerError.unavailable }
+            let defaults = SharedDefaults.store
+            switch command {
+            case "keystrokeHighlight.ui.read":
+                guard payload == Data("{}".utf8) else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+            case "keystrokeHighlight.ui.update":
+                try ControlPresentationContract.update(payload, defaults: defaults)
+                self.synchronize()
+            case "keystrokeHighlight.ui.action":
+                let action = try JSONDecoder().decode(
+                    ControlPresentationAction.self, from: payload)
+                guard action.action == "inputMonitoring", action.value.isEmpty else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                guard self.fixture == nil else { throw ExtensionPeerError.unavailable }
+                _ = CGRequestListenEventAccess()
+                self.synchronize()
+            default: throw ExtensionPeerError.invalidRequest
+            }
+            return try ControlPresentationContract.snapshot(
+                defaults: defaults, state: ControlPresentationState())
+        }
+        guard self.observer != nil else { throw ExtensionPeerError.unavailable }
+        return try await SurfaceCommandService.execute(
+            providerID: "keystrokeHighlight", command: command,
+            payload: payload,
+            snapshot: { _ in
+                KeystrokeHighlightSurface.snapshot(
+                    active: SharedDefaults.store.bool(
+                        forKey: AppStorageKeys.KeystrokeHighlight.active))
+            },
+            perform: { action in
+                SharedDefaults.store.set(
+                    action == "enable", forKey: AppStorageKeys.KeystrokeHighlight.active)
+                self.synchronize()
+                IPC.post(IPC.Name.settingsChanged)
+            })
     }
 
     @objc(suspendCommandsWithCompletion:)
@@ -103,6 +119,32 @@ final class ExtensionRuntime: NSObject {
                 completion()
             }
         }
+    }
+
+    private func startService(_ input: NSDictionary) -> Bool {
+        guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
+        else { return false }
+        guard let suite = input["defaultsSuite"] as? String,
+            suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+        else { return false }
+        if fixture == nil {
+            HotKeyRegistrar.configure(
+                ExtensionHotKeyBinding(
+                    id: HotKeyCatalog.keystrokeHighlight, carbonID: 9,
+                    prefix: "keystrokeHighlightHotKey", defaultCode: kVK_ANSI_K,
+                    defaultModifiers: controlKey | optionKey | cmdKey))
+        }
+        SharedDefaults.store.set(true, forKey: AppStorageKeys.KeystrokeHighlight.enabled)
+        if SharedDefaults.store.object(forKey: AppStorageKeys.KeystrokeHighlight.active) == nil {
+            SharedDefaults.store.set(true, forKey: AppStorageKeys.KeystrokeHighlight.active)
+        }
+        synchronize()
+        if observer == nil {
+            observer = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
+                MainActor.assumeIsolated { self?.synchronize() }
+            }
+        }
+        return true
     }
 
     private func retirePresentation() {
@@ -145,33 +187,24 @@ final class ExtensionRuntime: NSObject {
         case "start":
             guard !suspended else { return ["ok": false] as NSDictionary }
             do {
-                fixture = try WorkerFixtureAdmission.current(
+                let admission = try WorkerFixtureEngineAdmission.current(
                     extensionID: "keystrokeHighlight", context: input,
-                    roleBundle: Bundle(for: ExtensionRuntime.self))
-            } catch { return ["ok": false] as NSDictionary }
-            guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
-            else { return ["ok": false] as NSDictionary }
-            guard let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            if fixture == nil {
-                HotKeyRegistrar.configure(
-                    ExtensionHotKeyBinding(
-                        id: HotKeyCatalog.keystrokeHighlight, carbonID: 9,
-                        prefix: "keystrokeHighlightHotKey", defaultCode: kVK_ANSI_K,
-                        defaultModifiers: controlKey | optionKey | cmdKey))
-            }
-            SharedDefaults.store.set(true, forKey: AppStorageKeys.KeystrokeHighlight.enabled)
-            if SharedDefaults.store.object(forKey: AppStorageKeys.KeystrokeHighlight.active) == nil
-            {
-                SharedDefaults.store.set(true, forKey: AppStorageKeys.KeystrokeHighlight.active)
-            }
-            synchronize()
-            if observer == nil {
-                observer = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
-                    MainActor.assumeIsolated { self?.synchronize() }
+                    roleBundle: Bundle(for: ExtensionRuntime.self), expectedRole: .helper)
+                engineAdmission = admission
+                let started: Bool
+                if let admission {
+                    started = try admission.withPlatformFixture(
+                        extensionID: "keystrokeHighlight", expectedRole: .helper
+                    ) { namespace in
+                        fixture = namespace
+                        return startService(input)
+                    }
+                } else {
+                    fixture = nil
+                    started = startService(input)
                 }
-            }
+                return ["ok": started] as NSDictionary
+            } catch { return ["ok": false] as NSDictionary }
         case "view":
             guard let presentation else { return ["ok": false] as NSDictionary }
             return NSHostingController(
@@ -185,7 +218,11 @@ final class ExtensionRuntime: NSObject {
                         }
                     }
                 })
-        case "synchronize": synchronize()
+        case "synchronize":
+            do { try engineAdmission?.requireCurrent() } catch {
+                return ["ok": false] as NSDictionary
+            }
+            synchronize()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
             suspendCommands(completion: {})
