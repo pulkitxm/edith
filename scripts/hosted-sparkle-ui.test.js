@@ -64,6 +64,11 @@ test("each closed negative recipe clicks actual updater and requires producer-ob
     const source = sparkleJourneyUIOverlay(original, recipe);
     expect(source).toContain('buttons["Install Update"]');
     expect(source).toContain('sparkleAction("verifySparkleRejection"');
+    expect(source).toContain('buttons["Cancel Update"].firstMatch');
+    expect(
+      source.indexOf('try click(application.buttons["Cancel Update"]'),
+    ).toBeLessThan(source.indexOf('sparkleAction("verifySparkleRejection"'));
+    expect(source).not.toContain('buttons["OK"]');
     expect(source).not.toContain('buttons["Install and Relaunch"].firstMatch');
     expect(source.split("application.launch()")).toHaveLength(2);
     expect(source).not.toContain("XCTAssertEqual(snapshots.count, 13)");

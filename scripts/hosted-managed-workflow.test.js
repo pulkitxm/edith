@@ -25,6 +25,7 @@ const github = {
   sha: "a".repeat(40),
 };
 const inputs = {
+  hosted_sparkle_update_sha: "",
   hosted_managed_views_sha: github.sha,
   hosted_managed_artifacts_run: "42",
   hosted_managed_artifacts_sha: "b".repeat(40),
@@ -88,6 +89,7 @@ test("managed request excludes ordinary builds and other hosted fixtures rather 
     );
     const prior = {
       ...inputs,
+      hosted_sparkle_update_sha: "",
       hosted_host_tests_sha: github.sha,
       hosted_shell_journey_sha: "",
       hosted_managed_views_sha: "",

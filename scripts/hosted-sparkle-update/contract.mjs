@@ -70,6 +70,7 @@ export function validateSparkleFixture(value, environment, accountHome) {
       "refs/heads/feat/hosted-sparkle-update",
       "refs/heads/feat/hosted-sparkle-execution",
       "refs/heads/feat/hosted-sparkle-ui-flow",
+      "refs/heads/feat/hosted-sparkle-verification",
     ].includes(environment.GITHUB_REF),
   );
   assert.equal(environment.GITHUB_SHA, value.sourceCommit);
