@@ -52,8 +52,11 @@ struct QuinjetSettingsState: Codable {
                 QuinjetSettingsMutation(baseline: state.preference, preference: next))
         else { return }
         work?.cancel()
+        loading = true
         work = Task { await perform("quinjet.settings.save", payload: payload) }
     }
+
+    func dismissError() { error = nil }
 
     private func perform(_ operation: String, payload: Data) async {
         guard !stopped else { return }
