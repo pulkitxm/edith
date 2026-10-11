@@ -20,26 +20,28 @@ const integer = (value, maximum = Number.MAX_SAFE_INTEGER) =>
 export function request(value) {
   assert(typeof value === "string" && Buffer.byteLength(value) <= 2048);
   const keys = [
-    ...value.matchAll(/"(source|nativeRun|packagesRun|hostRun|tag)"\s*:/g),
+    ...value.matchAll(/"(source|packagesRun|hostRun|tag|updateIDs)"\s*:/g),
   ].map((match) => match[1]);
   assert.equal(keys.length, 5);
   assert.equal(new Set(keys).size, 5);
   const result = JSON.parse(value);
   assert.deepEqual(Object.keys(result).sort(), [
     "hostRun",
-    "nativeRun",
     "packagesRun",
     "source",
     "tag",
+    "updateIDs",
   ]);
   assert.match(result.source, commit);
   assert.match(
     result.tag,
     /^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/,
   );
-  for (const key of ["nativeRun", "packagesRun", "hostRun"])
-    integer(result[key]);
-  assert.notEqual(result.nativeRun, result.packagesRun);
+  for (const key of ["packagesRun", "hostRun"]) integer(result[key]);
+  assert(Array.isArray(result.updateIDs) && result.updateIDs.length <= 39);
+  assert.equal(new Set(result.updateIDs).size, result.updateIDs.length);
+  for (const id of result.updateIDs)
+    assert.match(id, /^[A-Za-z][A-Za-z0-9_-]{0,63}$/);
   return result;
 }
 

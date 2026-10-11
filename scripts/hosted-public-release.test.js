@@ -107,17 +107,17 @@ describe("Public release admission", () => {
   test("the request is bounded and closed with exact source and separate immutable runs", () => {
     const value = {
       source,
-      nativeRun: 1,
       packagesRun: 2,
       hostRun: 3,
       tag: "v1.2.3",
+      updateIDs: [],
     };
     expect(request(JSON.stringify(value))).toEqual(value);
     for (const change of [
       { extra: true },
       { source: "main" },
       { tag: "v01.2.3" },
-      { nativeRun: 2 },
+      { updateIDs: ["owner0", "owner0"] },
       { packagesRun: 0 },
     ])
       expect(() => request(JSON.stringify({ ...value, ...change }))).toThrow();
