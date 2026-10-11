@@ -127,10 +127,6 @@ final class MachinePTY {
             }
             if identity.isAlive { _ = kill(identifier, SIGKILL) }
             while true {
-                guard identity.isAlive else {
-                    try? await Task.sleep(for: .milliseconds(10))
-                    continue
-                }
                 if identity.isAlive, getpgid(identifier) == identifier {
                     _ = kill(-identifier, SIGKILL)
                 }
@@ -142,6 +138,10 @@ final class MachinePTY {
                         P_PID, id_t(identifier), &information, WEXITED | WNOHANG | WNOWAIT)
                 } while observed < 0 && errno == EINTR
                 let leaderReturned = observed == 0 && information.si_pid == identifier
+                guard identity.isAlive || leaderReturned else {
+                    try? await Task.sleep(for: .milliseconds(10))
+                    continue
+                }
                 guard let remaining = Self.sessionMembers(identifier) else {
                     try? await Task.sleep(for: .milliseconds(10))
                     continue
