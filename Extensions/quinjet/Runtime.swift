@@ -34,18 +34,34 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        _ = commands.suspend()
+        let startup = startup, worker = worker
+        startup?.cancel()
+        worker?.beginSuspension()
+        Task { [self, startup, worker] in
+            _ = await commands.suspendAndWait()
+            await startup?.value
+            await worker?.cancelPendingWork()
+            completion()
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         startup?.cancel()
         commands.shutdown()
-        Task {
+        let startup = startup, worker = worker
+        worker?.beginSuspension()
+        Task { [self, startup, worker] in
             await worker?.cancelPendingWork()
             await commands.shutdownAndWait()
             await startup?.value
             await worker?.shutdown()
-            worker = nil
+            self.worker = nil
             surface = nil
-            startup = nil
+            self.startup = nil
             completion()
         }
     }

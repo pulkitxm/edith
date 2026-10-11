@@ -11,6 +11,8 @@ import Foundation
     let automaticActions: Bool
     private(set) var isStopped = false
     private var started = false
+    private var draining = false
+    private var drainTask: Task<Void, Never>?
     private var cliStreams: ExtensionCLIStreams?
     private lazy var uiEngine = QuinjetUIEngine(worker: self)
     private var maintenance: Task<Void, Never>?
@@ -53,13 +55,14 @@ import Foundation
     }
 
     private func startOwned() async {
-        guard !started, !isStopped else { return }
+        guard !started, !isStopped, !draining else { return }
         started = true
         QuinjetPrivacy.shared.start()
         model.setSessionLaunchEnabled(automaticActions)
         guard automaticActions else { return }
         _ = try? await refresh()
         _ = try? await QuinjetMachines.shared.refresh()
+        guard !Task.isCancelled, !draining, !isStopped else { return }
         maintenance = QuinjetWorkOwnership.start { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
@@ -73,7 +76,7 @@ import Foundation
         if let machineID { remote = try await resolveRemote(machineID) } else { remote = nil }
         let loaded = try await QuinjetOperationExecution.projects(remote: remote, using: client)
         try Task.checkCancellation()
-        guard !isStopped, loaded.count <= 1024,
+        guard !isStopped, !draining, loaded.count <= 1024,
             loaded.allSatisfy({
                 $0.commonDir.utf8.count <= 4096 && $0.name.utf8.count <= 1024
                     && !$0.commonDir.utf8.contains(0) && $0.worktrees.count <= 1024
@@ -149,7 +152,7 @@ import Foundation
     }
 
     private func executeOwned(_ command: String, payload: Data) async throws -> Data {
-        guard !isStopped else { throw ExtensionPeerError.unavailable }
+        guard !isStopped, !draining else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
         if command == "quinjet.cli.catalog" {
             guard payload.count <= 16384,
@@ -294,14 +297,27 @@ import Foundation
         let result = try await model.performSessionOperation(
             .init(operation: operation, session: selector, worktreePath: path))
         try Task.checkCancellation()
-        guard !isStopped else { throw ExtensionPeerError.unavailable }
+        guard !isStopped, !draining else { throw ExtensionPeerError.unavailable }
         return try JSONEncoder().encode(result)
     }
-    func cancelPendingWork() async {
-        await terminalSessions.stopAllAndWait()
+    func beginSuspension() {
+        draining = true
         maintenance?.cancel()
         model.cancelDiscovery()
-        await cliStreams?.stopAndWait()
+        cliStreams?.stop()
+        if drainTask == nil {
+            drainTask = Task { [self] in
+                await terminalSessions.stopAllAndWait()
+                await cliStreams?.stopAndWait()
+                await QuinjetWorkOwnership.shutdown()
+                await maintenance?.value
+            }
+        }
+    }
+
+    func cancelPendingWork() async {
+        beginSuspension()
+        await drainTask?.value
     }
 
     func shutdown() async {
