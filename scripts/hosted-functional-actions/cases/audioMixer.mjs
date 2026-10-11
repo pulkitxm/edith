@@ -14,7 +14,18 @@ export const definition = {
         "path": "Extensions/audioMixer/Views/AudioMixerView.swift",
         "sha256": "38faf31c950adb0f4d5f9846a68221288a8d542a0daa2d49f54d674a2938af55"
       }
-    ]
+    ],
+    "mutation": {
+      "kind": "state-transition",
+      "payloadKeys": [
+        "request",
+        "app",
+        "volume",
+        "requestID",
+        "deadline",
+        "target"
+      ]
+    }
   },
   "operations": [
     "audioMixer.ui.snapshot",

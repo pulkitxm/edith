@@ -14,7 +14,15 @@ export const definition = {
         "path": "Extensions/clipboard/ClipboardPage.swift",
         "sha256": "531daf9d5e1eab3ea7c89834eb95a3984415a38d9bb401d2f47c5ae7ae3c0708"
       }
-    ]
+    ],
+    "mutation": {
+      "kind": "state-transition",
+      "payloadKeys": [
+        "kind",
+        "ids",
+        "copiedAt"
+      ]
+    }
   },
   "operations": [
     "clipboard.snapshot",

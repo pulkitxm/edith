@@ -18,7 +18,13 @@ export const definition = {
         "path": "Extensions/database/Views/DatabaseNativeTableView.swift",
         "sha256": "12e179e4e5dc9de17d6c711d7f7986c2e5732974e1adec020515c6fffe2fc577"
       }
-    ]
+    ],
+    "mutation": {
+      "kind": "state-transition",
+      "payloadKeys": [
+        "data"
+      ]
+    }
   },
   "operations": [
     "database.ui.state",

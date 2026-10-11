@@ -14,7 +14,19 @@ export const definition = {
         "path": "Extensions/herdr/Views/HerdrSettingsPage.swift",
         "sha256": "5e0c325da5a7f7cf0ba37c02cf3b9c1e06c5269d4c6d75af4a6c84ad8efce237"
       }
-    ]
+    ],
+    "mutation": {
+      "kind": "state-transition",
+      "payloadKeys": [
+        "blocked",
+        "finished",
+        "errors",
+        "stuck",
+        "openDiff",
+        "monitoring",
+        "stuckMinutes"
+      ]
+    }
   },
   "operations": [
     "herdr.settings.read",

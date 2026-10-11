@@ -14,7 +14,15 @@ export const definition = {
         "path": "Extensions/machines/UI/Views/AddMachineSheet.swift",
         "sha256": "c1a5fa458787693ecd01391fcada5d4d6b7e980e3a460061d17c2e18f2606736"
       }
-    ]
+    ],
+    "mutation": {
+      "kind": "state-transition",
+      "payloadKeys": [
+        "operation",
+        "machine",
+        "secrets"
+      ]
+    }
   },
   "operations": [
     "machines.ui.state",

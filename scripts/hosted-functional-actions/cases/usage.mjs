@@ -14,7 +14,13 @@ export const definition = {
         "path": "Extensions/usage/ViewModels/UsageUIClient.swift",
         "sha256": "00e6d65a36e3610c5a4f7b9b94d7458b32e9255df07620dc8672919f9c8c1720"
       }
-    ]
+    ],
+    "mutation": {
+      "kind": "state-transition",
+      "payloadKeys": [
+        "values"
+      ]
+    }
   },
   "operations": [
     "usage.ui.preferences",

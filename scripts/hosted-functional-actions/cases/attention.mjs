@@ -10,7 +10,29 @@ export const definition = {
         "path": "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionTrackingSettings.swift",
         "sha256": "5a4d230f6ca81c06708adb21c3b084c09e0182e7fc3a512f065d5ace2af99843"
       }
-    ]
+    ],
+    "mutation": {
+      "kind": "state-transition",
+      "payloadKeys": [
+        "enabled",
+        "trackingEnabled",
+        "browserTrackingEnabled",
+        "idleThreshold",
+        "privacyLevel",
+        "windowTitlesEnabled",
+        "iCloudBackupEnabled",
+        "serverPort",
+        "serverToken",
+        "categories",
+        "rules",
+        "agentTrackingEnabled",
+        "mediaTrackingEnabled",
+        "jevCategorizationEnabled",
+        "focusBlockMinimum",
+        "ignoredBundleIDs",
+        "profileNote"
+      ]
+    }
   },
   "operations": [
     "attention.settings.get",

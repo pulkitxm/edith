@@ -14,7 +14,15 @@ export const definition = {
         "path": "Extensions/seoAudit/Views/SEOAuditPage.swift",
         "sha256": "8f21320bf901edff73a04f3494f1658fa49a5d8053c7028b93e4e4e65a51b7dc"
       }
-    ]
+    ],
+    "mutation": {
+      "kind": "state-transition",
+      "payloadKeys": [
+        "action",
+        "id",
+        "name"
+      ]
+    }
   },
   "operations": [
     "seoAudit.ui.action"

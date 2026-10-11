@@ -14,7 +14,14 @@ export const definition = {
         "path": "Extensions/quinjet/Views/QuinjetSettingsPage.swift",
         "sha256": "98dd1bd6f3de0ab2f8ec6b23fc458b78e40ff3122208f193aee9b8dc9762061a"
       }
-    ]
+    ],
+    "mutation": {
+      "kind": "state-transition",
+      "payloadKeys": [
+        "baseline",
+        "preference"
+      ]
+    }
   },
   "operations": [
     "quinjet.settings.read",

@@ -14,7 +14,16 @@ export const definition = {
         "path": "Extensions/latex/LaTeXPage.swift",
         "sha256": "d8c1b580c4adfcafa22808dda53b3187ce3cca778be77f37eba0407352caf997"
       }
-    ]
+    ],
+    "mutation": {
+      "kind": "state-transition",
+      "payloadKeys": [
+        "action",
+        "projectID",
+        "revision",
+        "text"
+      ]
+    }
   },
   "operations": [
     "latex.ui.snapshot",

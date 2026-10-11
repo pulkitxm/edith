@@ -22,7 +22,11 @@ export const definition = {
         "path": "Extensions/terminal/Native/Package.swift",
         "sha256": "7afd4a4d699e8c8a18ba088f053132b5cdc1a58be9aa5c03a45c870cc2c9f6fc"
       }
-    ]
+    ],
+    "mutation": {
+      "kind": "owned-output",
+      "payloadKeys": []
+    }
   },
   "operations": [
     "terminal.preferences",

@@ -14,7 +14,13 @@ export const definition = {
         "path": "Extensions/codeStats/Views/CodeStatsSetupView.swift",
         "sha256": "f2df959cff9b1f76017530d9e54a629aa781f0037bf9936b4abbb71fb9d184b9"
       }
-    ]
+    ],
+    "mutation": {
+      "kind": "state-transition",
+      "payloadKeys": [
+        "folder"
+      ]
+    }
   },
   "operations": [
     "codeStats.ui.folder",

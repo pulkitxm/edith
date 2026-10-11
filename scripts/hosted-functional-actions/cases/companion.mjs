@@ -14,7 +14,14 @@ export const definition = {
         "path": "Extensions/companion/Views/CompanionSettingsView.swift",
         "sha256": "ffe6a181e49a9718239f689ce9902c8b78ac0c7f44e292f8e46af77451274508"
       }
-    ]
+    ],
+    "mutation": {
+      "kind": "state-transition",
+      "payloadKeys": [
+        "action",
+        "config"
+      ]
+    }
   },
   "operations": [
     "companion.ui.backend"

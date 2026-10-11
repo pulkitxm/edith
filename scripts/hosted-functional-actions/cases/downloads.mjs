@@ -26,7 +26,14 @@ export const definition = {
         "path": "Extensions/downloads/Models/DownloadQueue.swift",
         "sha256": "58c18bb891afbad0d2872244a86a569a22621b11d111d9c08eb1265cf4f9005d"
       }
-    ]
+    ],
+    "mutation": {
+      "kind": "state-transition",
+      "payloadKeys": [
+        "action",
+        "kind"
+      ]
+    }
   },
   "operations": [
     "downloads.ui.configuration",
