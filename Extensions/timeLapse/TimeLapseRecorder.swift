@@ -29,6 +29,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     var sourceRevision = 0
     let sourceLoad = ContentLoad()
     let library: TimeLapseLibraryModel
+    private let exportLibrary: TimeLapseExportLibrary?
     private var engineClient: ExtensionEngineClient?
     private var remoteRevision = 0
     private var permissionTask: Task<Void, Never>?
@@ -51,12 +52,14 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     private var sleepAssertions: [IOPMAssertionID] = []
 
     override init() {
+        exportLibrary = nil
         library = TimeLapseLibraryModel()
         super.init()
     }
 
     init(engineClient: ExtensionEngineClient) {
         self.engineClient = engineClient
+        exportLibrary = nil
         library = TimeLapseLibraryModel(
             read: { _ in
                 let data = try await engineClient.invoke("recording.ui.library")
@@ -107,6 +110,36 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
                 }
             })
         super.init()
+    }
+
+    init(exportLibrary: TimeLapseExportLibrary) {
+        self.exportLibrary = exportLibrary
+        library = TimeLapseLibraryModel(
+            read: { _ in try await exportLibrary.recordings() },
+            write: { recording, quality, destination in
+                try await exportLibrary.export(recording, quality: quality, to: destination)
+            })
+        super.init()
+    }
+
+    var exportOnly: Bool { exportLibrary != nil }
+
+    func requireExportLibraryCurrent() throws { try exportLibrary?.requireCurrent() }
+
+    func readRecordings() async throws -> [TimeLapseRecording] {
+        if let exportLibrary { return try exportLibrary.recordings() }
+        let root = Self.libraryURL
+        return try await BlockingWork.perform { try TimeLapseRecording.load(in: root) }
+    }
+
+    func exportRecording(
+        _ recording: TimeLapseRecording, quality: TimeLapseExportQuality, to destination: URL
+    ) async throws {
+        if let exportLibrary {
+            try await exportLibrary.export(recording, quality: quality, to: destination)
+        } else {
+            try await TimeLapseExporter.export(recording, quality: quality, to: destination)
+        }
     }
 
     func uiSnapshot() -> TimeLapseUISnapshot {
@@ -172,7 +205,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     }
 
     var canStart: Bool {
-        !stopped && !busy && !recording && !sourceLoad.isRunning
+        !exportOnly && !stopped && !busy && !recording && !sourceLoad.isRunning
             && (sourceMode == "displays" ? !selectedDisplays.isEmpty : !selectedWindows.isEmpty)
     }
 
@@ -209,6 +242,16 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
             @escaping @Sendable () async throws -> (TimeLapseSources, [TimeLapseMicrophoneChoice])
     ) async {
         guard !stopped, !busy, !recording else { return }
+        if let exportLibrary {
+            do {
+                try exportLibrary.requireCurrent()
+                displays = []; windows = []; microphones = []
+                selectedDisplays = []; selectedWindows = []
+                if !sourceLoad.hasContent { sourceRevision += 1 }
+                sourceLoad.setContent()
+            } catch { sourceLoad.fail(sourceLoad.begin(), message: error.localizedDescription) }
+            return
+        }
         if let engineClient {
             await sourceLoad.perform(operation: {
                 let data = try await engineClient.invoke("recording.ui.sources")
@@ -232,6 +275,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     }
 
     func sourceThumbnail(mode: String, id: UInt32) async -> CGImage? {
+        guard !exportOnly else { return nil }
         if let engineClient {
             guard !stopped else { return nil }
             do {
@@ -273,7 +317,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     }
 
     func requestScreenPermission() {
-        guard !stopped else { return }
+        guard !stopped, !exportOnly else { return }
         if let engineClient {
             permissionTask?.cancel()
             permissionTask = launch { [self] in
@@ -723,5 +767,49 @@ struct TimeLapseSavedRecordingScope: Sendable {
         guard recording.id == sessionID, Self.matches(recording.directory, directory),
             quality == .original, Self.matches(url, destination)
         else { throw TimeLapseError.invalidSession }
+    }
+}
+
+@MainActor final class TimeLapseExportLibrary {
+    let scope: TimeLapseSavedRecordingScope
+    private let current: () throws -> Void
+    private let read: () throws -> Data
+    private let write: (TimeLapseRecording, TimeLapseExportQuality, URL) async throws -> Void
+
+    init(
+        scope: TimeLapseSavedRecordingScope, current: @escaping () throws -> Void,
+        read: @escaping () throws -> Data,
+        write: @escaping (TimeLapseRecording, TimeLapseExportQuality, URL) async throws -> Void
+    ) throws {
+        self.scope = scope
+        self.current = current
+        self.read = read
+        self.write = write
+        _ = try recordings()
+    }
+
+    func requireCurrent() throws { try current() }
+
+    func recordings() throws -> [TimeLapseRecording] {
+        try current()
+        let recording = try scope.recording(from: read())
+        try current()
+        return [recording]
+    }
+
+    func export(_ selection: TimeLapseRecording, quality: TimeLapseExportQuality, to url: URL)
+        async throws
+    {
+        try scope.requireExport(selection, quality: quality, to: url)
+        guard let recording = try recordings().first else { throw TimeLapseError.invalidSession }
+        try Task.checkCancellation()
+        do {
+            try await write(recording, quality, url)
+            try current()
+            try Task.checkCancellation()
+        } catch {
+            try current()
+            throw error
+        }
     }
 }

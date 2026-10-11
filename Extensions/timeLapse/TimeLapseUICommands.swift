@@ -49,6 +49,15 @@ struct TimeLapseUIImage: Codable { let image: Data? }
     init(recorder: TimeLapseRecorder) { self.recorder = recorder }
     func execute(_ command: String, payload: Data) async throws -> Data {
         guard !stopped else { throw ExtensionPeerError.unavailable }
+        try recorder.requireExportLibraryCurrent()
+        if recorder.exportOnly {
+            guard
+                [
+                    "recording.ui.snapshot", "recording.ui.sources", "recording.ui.library",
+                    "recording.ui.export", "recording.ui.exportPoll", "recording.ui.exportCancel",
+                ].contains(command)
+            else { throw ExtensionPeerError.invalidRequest }
+        }
         switch command {
         case "recording.ui.snapshot":
             let values = try JSONDecoder().decode([String: Bool].self, from: payload)
@@ -104,18 +113,13 @@ struct TimeLapseUIImage: Codable { let image: Data? }
             _ = CGRequestScreenCaptureAccess()
         case "recording.ui.library":
             try empty(payload)
-            let root = TimeLapseRecorder.libraryURL
-            return try JSONEncoder().encode(
-                try await BlockingWork.perform { try TimeLapseRecording.load(in: root) })
+            return try JSONEncoder().encode(try await recorder.readRecordings())
         case "recording.ui.export":
             let input = try JSONDecoder().decode(TimeLapseUIExport.self, from: payload)
             guard input.destination.hasPrefix("/"), !input.destination.utf8.contains(0) else {
                 throw ExtensionPeerError.invalidRequest
             }
-            let root = TimeLapseRecorder.libraryURL
-            let recordings = try await BlockingWork.perform {
-                try TimeLapseRecording.load(in: root)
-            }
+            let recordings = try await recorder.readRecordings()
             guard let recording = recordings.first(where: { $0.id == input.id }),
                 recording.directory != recorder.lastDirectory || !recorder.recording
             else { throw ExtensionPeerError.invalidRequest }
@@ -126,7 +130,7 @@ struct TimeLapseUIImage: Codable { let image: Data? }
             exportStatus = .init(token: token, complete: false, error: nil)
             exportTask = launch { [self] in
                 do {
-                    try await TimeLapseExporter.export(
+                    try await recorder.exportRecording(
                         recording, quality: input.quality,
                         to: URL(fileURLWithPath: input.destination))
                     if !stopped { exportStatus = .init(token: token, complete: true, error: nil) }
@@ -146,11 +150,14 @@ struct TimeLapseUIImage: Codable { let image: Data? }
                 values["token"] == status.token
             else { throw ExtensionPeerError.invalidRequest }
             if command == "recording.ui.exportCancel" {
-                exportTask?.cancel()
+                let pending = exportTask
+                pending?.cancel()
+                await pending?.value
             } else if !status.complete {
                 renewExportLease(status.token)
             }
-            return try JSONEncoder().encode(status)
+            try recorder.requireExportLibraryCurrent()
+            return try JSONEncoder().encode(exportStatus)
         default: throw ExtensionPeerError.invalidRequest
         }
         try Task.checkCancellation()
