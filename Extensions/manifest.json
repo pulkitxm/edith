@@ -2010,7 +2010,7 @@
     ],
     "dependencies": [],
     "supportProducts": {
-      "privileged": null
+      "privileged": "EdithExtensionSupport"
     },
     "testTargets": [
       "ci-extension-lid-awake"
@@ -2471,7 +2471,7 @@
     "supportProducts": {
       "app": "EdithExtensionCommands",
       "cameraCarrier": "EdithExtensionSupport",
-      "privileged": null
+      "privileged": "EdithExtensionSupport"
     },
     "roles": {
       "app": [

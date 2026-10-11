@@ -215,7 +215,7 @@ ci-extension-blitztree:
 .PHONY: ci-extension-lid-awake
 ci-extension-lid-awake:
 	$(call UTILITY_EXTENSION_NATIVE_TEST,lidAwake)
-	swiftc -typecheck -swift-version 5 -module-name LidAwakePrivilegedRole -target arm64-apple-macos14.0 Extensions/lidAwake/Privileged/LidAwakePrivilegedController.swift Extensions/lidAwake/Privileged/LidAwakePrivilegedRuntime.swift Extensions/lidAwake/Services/LidAwakeCommand.swift Extensions/lidAwake/Services/LidAwakeCommandProcess.swift
+	swiftc -typecheck -swift-version 5 -module-name LidAwakePrivilegedRole -target arm64-apple-macos14.0 -I Extensions/lidAwake/.build/arm64-apple-macosx/debug/Modules Extensions/lidAwake/Privileged/LidAwakePrivilegedController.swift Extensions/lidAwake/Privileged/LidAwakePrivilegedRuntime.swift Extensions/lidAwake/Services/LidAwakeCommand.swift Extensions/lidAwake/Services/LidAwakeCommandProcess.swift
 
 .PHONY: ci-extension-audio-mixer
 ci-extension-audio-mixer:

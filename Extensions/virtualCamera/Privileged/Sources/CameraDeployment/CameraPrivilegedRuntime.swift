@@ -1,11 +1,11 @@
 import Darwin
 import Foundation
+import EdithExtensionSupport
 
 @MainActor @objc(EdithCameraPrivilegedRuntime)
 final class CameraPrivilegedRuntime: NSObject {
     private var ownsSession = false
-    private var commandsSuspended = false
-    private var commandTasks: [UUID: Task<Void, Never>] = [:]
+    private let commands = ExtensionCommandRegistry()
     private var retirement: CameraMicrophoneRetirement?
     private var installer: CameraSealedInstallation?
     private var fixtureProviderActive = false
@@ -26,19 +26,18 @@ final class CameraPrivilegedRuntime: NSObject {
     }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        guard !commandsSuspended else { completion(nil, "The extension is disabled."); return }
-        let id = UUID()
-        commandTasks[id] = Task { [self] in
+        commands.invoke(request, completion: completion) { [self] command, payload in
             do {
                 try Task.checkCancellation()
-                guard let command = request["command"] as? String,
-                    let payload = request["payload"] as? Data, payload.count <= 8192,
-                    let values = try JSONSerialization.jsonObject(with: payload) as? [String: String]
+                guard payload.count <= 8192,
+                    let values = try JSONSerialization.jsonObject(with: payload)
+                        as? [String: String]
                 else { throw CocoaError(.coderReadCorrupt) }
                 let result: [String: Any]
                 switch command {
                 case "installCarrier":
-                    guard values.count == 1, let source = values["source"], source.utf8.count <= 4096,
+                    guard values.count == 1, let source = values["source"],
+                        source.utf8.count <= 4096,
                         source.hasPrefix("/")
                     else { throw CocoaError(.coderReadCorrupt) }
                     if fixture {
@@ -49,7 +48,8 @@ final class CameraPrivilegedRuntime: NSObject {
                         result = ["path": source]
                     } else {
                         let installed = try makeInstaller().installCarrier(
-                            source: URL(fileURLWithPath: source), providerExited: try providerExited())
+                            source: URL(fileURLWithPath: source),
+                            providerExited: try providerExited())
                         result = ["path": installed.path]
                     }
                 case "beginSession":
@@ -72,21 +72,18 @@ final class CameraPrivilegedRuntime: NSObject {
                     result = ["restartRequired": try retireMicrophone()]
                 default: throw CocoaError(.coderReadCorrupt)
                 }
-                completion(
-                    try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
-                        as NSData, nil)
-            } catch { completion(nil, String(error.localizedDescription.prefix(1024)) as NSString) }
+                return try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
+            } catch {
+                throw ExtensionPeerError.rejected(String(error.localizedDescription.prefix(1024)))
+            }
         }
     }
 
     @objc(suspendCommandsWithCompletion:)
     func suspendCommands(completion: @escaping () -> Void) {
-        commandsSuspended = true
-        let tasks = Array(commandTasks.values)
-        for task in tasks { task.cancel() }
+        commands.suspend()
         Task { [self] in
-            for task in tasks { await task.value }
-            commandTasks.removeAll()
+            await commands.suspendAndWait()
             completion()
         }
     }
