@@ -257,6 +257,8 @@ final class StudioPDFEditorModel {
         loadSignatures()
     }
 
+    func waitForPendingWork() async { await work.waitForPendingWork() }
+
     func suspendCommands() { work.shutdown() }
 
     func suspendCommandsAndWait() async {

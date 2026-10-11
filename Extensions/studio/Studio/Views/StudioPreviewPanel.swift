@@ -62,6 +62,8 @@ final class StudioPreviewModel {
         }
     }
 
+    func waitForPendingWork() async { await work.waitForPendingWork() }
+
     func suspendCommands() { work.shutdown() }
 
     func suspendCommandsAndWait() async {

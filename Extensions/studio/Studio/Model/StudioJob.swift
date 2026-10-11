@@ -149,6 +149,12 @@ final class StudioJob: Identifiable {
         StudioRunRegistry.release(self)
     }
 
+    func waitForPendingWork() async {
+        let pending = task
+        await pending?.value
+        await preview.waitForPendingWork()
+    }
+
     func stopAndWait() async {
         let pending = task
         cancel()

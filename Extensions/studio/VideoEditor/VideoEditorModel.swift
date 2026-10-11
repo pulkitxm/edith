@@ -26,6 +26,8 @@ final class VideoEditorModel {
     private var remoteClient: StudioUIVideoClient?
     private var transcriptionTask: Task<Void, Never>?
     private var importTask: Task<Void, Never>?
+    private let work = StudioTaskOwner()
+    private var pendingSynchronization: [Task<Void, Never>] = []
     var exporter: VideoExporter { facade?.exporter ?? VideoExporter.shared }
     var previewMetadata: VideoPreviewMetadata? {
         remoteMetadata ?? pipeline.map(VideoPreviewMetadata.init)
@@ -218,7 +220,7 @@ final class VideoEditorModel {
         if let remoteClient { remoteClient.startProject(urls); return }
         newProject()
         importTask?.cancel()
-        importTask = Task { await addMedia(urls) }
+        importTask = startWork { [self] in await addMedia(urls) }
     }
 
     func openProject() {
@@ -243,7 +245,7 @@ final class VideoEditorModel {
         generation += 1
         let version = generation
         pendingLoads += 1
-        openTask = Task { [weak self] in
+        openTask = startWork { [weak self] in
             guard let self else { return }
             defer { pendingLoads -= 1 }
             do {
@@ -476,7 +478,7 @@ final class VideoEditorModel {
                 guard let self, response == .OK else { return }
                 let urls = panel.urls
                 self.importTask?.cancel()
-                self.importTask = Task { await self.addMedia(urls) }
+                self.importTask = self.startWork { [self] in await self.addMedia(urls) }
             }
         }
     }
@@ -1046,7 +1048,7 @@ final class VideoEditorModel {
         else { return }
         isTranscribing = true
         transcriptionTask?.cancel()
-        transcriptionTask = Task {
+        transcriptionTask = startWork { [self] in
             do {
                 let words = try await VideoTranscription.transcribe(asset.url)
                 mutate { $0.addTranscription(assetID: asset.id, words: words) }
@@ -1141,7 +1143,7 @@ final class VideoEditorModel {
             panel.allowedContentTypes = [.png, .jpeg, .heic]
             guard panel.runModal() == .OK, let url = panel.url
             else { return }
-            Task {
+            startWork { [self] in
                 let data: Data?
                 if let facade {
                     data = try? await facade.readFile(url)
@@ -1345,7 +1347,7 @@ final class VideoEditorModel {
             return
         }
         source.root["zoomRanges"] = []
-        focusPreviewTask = Task {
+        focusPreviewTask = startWork { [self] in
             do {
                 try await Task.sleep(for: .milliseconds(40))
                 let preview = try await previewBuilder(source)
@@ -1390,7 +1392,7 @@ final class VideoEditorModel {
             return
         }
         isRebuildingPreview = true
-        rebuildTask = Task {
+        rebuildTask = startWork { [self] in
             defer {
                 if version == generation { isRebuildingPreview = false }
             }
@@ -1488,21 +1490,43 @@ final class VideoEditorModel {
 
     func runRemoteFile(_ operation: @escaping @MainActor () async throws -> Void) {
         importTask?.cancel()
-        importTask = Task { [weak self] in
+        importTask = startWork { [weak self] in
             do { try await operation() } catch {
                 if !Task.isCancelled { self?.errorMessage = error.localizedDescription }
             }
         }
     }
 
+    @discardableResult
+    func startWork(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never>? {
+        work.start(operation)
+    }
+
+    func waitForPendingWork() async {
+        await work.waitForPendingWork()
+        await audioTask?.value
+    }
+
+    func suspendCommands() {
+        work.shutdown()
+        audioTask?.cancel()
+        if let tasks = liveSync?.stop() { pendingSynchronization.append(contentsOf: tasks) }
+    }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        let synchronization = pendingSynchronization
+        let audio = audioTask
+        await work.shutdownAndWait()
+        await audio?.value
+        for task in synchronization { await task.value }
+        pendingSynchronization.removeAll()
+    }
+
     func stopAndWait() async {
-        let owned = [
-            rebuildTask, openTask, focusPreviewTask, audioTask, transcriptionTask, importTask,
-        ].compactMap { $0 }
-        let synchronization = liveSync?.stop()
+        suspendCommands()
         close()
-        for task in synchronization ?? [] { await task.value }
-        for task in owned { await task.value }
+        await suspendCommandsAndWait()
     }
 
 }

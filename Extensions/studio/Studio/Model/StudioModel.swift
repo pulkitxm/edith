@@ -128,6 +128,10 @@ final class StudioModel {
     private(set) var isStopped = false
     private var projectRemovalTasks: [UUID: Task<Void, Never>] = [:]
     private var workflowsTask: Task<Void, Never>?
+    @ObservationIgnored private var retiredImages: [UUID: StudioImageEditorModel] = [:]
+    @ObservationIgnored private var retiredPDFs: [UUID: StudioPDFEditorModel] = [:]
+    @ObservationIgnored private var retiredVideos: [UUID: VideoEditorModel] = [:]
+    @ObservationIgnored private var retiredJobs: [UUID: StudioJob] = [:]
     @ObservationIgnored private var imageEditors: [URL: StudioImageEditorModel] = [:]
     @ObservationIgnored private var pdfEditors: [URL: StudioPDFEditorModel] = [:]
     @ObservationIgnored private var videoEditors: [String: VideoEditorModel] = [:]
@@ -576,9 +580,12 @@ final class StudioModel {
 
     func goHome() {
         switch route {
-        case let .imageEditor(url): imageEditors.removeValue(forKey: url)?.close()
-        case let .pdfEditor(url, _): pdfEditors.removeValue(forKey: url)?.cancelLoading()
-        case .videoEditor: videoEditors.removeValue(forKey: route.navigationToken)?.close()
+        case let .imageEditor(url):
+            if let editor = imageEditors.removeValue(forKey: url) { retire(editor) }
+        case let .pdfEditor(url, _):
+            if let editor = pdfEditors.removeValue(forKey: url) { retire(editor) }
+        case .videoEditor:
+            if let editor = videoEditors.removeValue(forKey: route.navigationToken) { retire(editor) }
         case .commandVideoEditor:
             commandEditor?.close(for: self)
             commandEditor = nil
@@ -609,10 +616,40 @@ final class StudioModel {
         return editor
     }
 
+    private func retire(_ editor: StudioImageEditorModel) {
+        editor.close()
+        let id = UUID()
+        retiredImages[id] = editor
+        work.start { [weak self] in
+            await editor.waitForPendingWork()
+            self?.retiredImages[id] = nil
+        }
+    }
+
+    private func retire(_ editor: StudioPDFEditorModel) {
+        editor.cancelLoading()
+        let id = UUID()
+        retiredPDFs[id] = editor
+        work.start { [weak self] in
+            await editor.waitForPendingWork()
+            self?.retiredPDFs[id] = nil
+        }
+    }
+
+    private func retire(_ editor: VideoEditorModel) {
+        editor.close()
+        let id = UUID()
+        retiredVideos[id] = editor
+        work.start { [weak self] in
+            await editor.waitForPendingWork()
+            self?.retiredVideos[id] = nil
+        }
+    }
+
     func closeEditors() {
-        for editor in imageEditors.values { editor.close() }
-        for editor in pdfEditors.values { editor.cancelLoading() }
-        for editor in videoEditors.values { editor.close() }
+        for editor in imageEditors.values { retire(editor) }
+        for editor in pdfEditors.values { retire(editor) }
+        for editor in videoEditors.values { retire(editor) }
         commandEditor?.close(for: self)
         imageEditors.removeAll()
         pdfEditors.removeAll()
@@ -812,27 +849,53 @@ final class StudioModel {
 
     func suspendCommands() {
         work.shutdown()
-        for job in jobs { job.cancel(); job.preview.cancel() }
+        for job in jobs + Array(retiredJobs.values) { job.cancel(); job.preview.suspendCommands() }
+        for editor in Array(imageEditors.values) + Array(retiredImages.values) { editor.suspendCommands() }
+        for editor in Array(pdfEditors.values) + Array(retiredPDFs.values) { editor.suspendCommands() }
+        for editor in Array(videoEditors.values) + Array(retiredVideos.values) { editor.suspendCommands() }
     }
 
     func suspendCommandsAndWait() async {
         suspendCommands()
-        let owned = jobs
         await work.shutdownAndWait()
+        await drainEditors()
+        let owned = jobs + Array(retiredJobs.values)
         for job in owned { await job.stopAndWait() }
+        await StudioRecentWriter.shared.drain()
     }
 
     func stopAndWait() async {
-        let owned = jobs
+        suspendCommands()
         shutdown()
         await work.shutdownAndWait()
+        await drainEditors()
+        let owned = jobs + Array(retiredJobs.values)
         for job in owned { await job.stopAndWait() }
+        await StudioRecentWriter.shared.drain()
+        retiredImages.removeAll(); retiredPDFs.removeAll(); retiredVideos.removeAll(); retiredJobs.removeAll()
+    }
+
+    private func drainEditors() async {
+        let images = Array(imageEditors.values) + Array(retiredImages.values)
+        let pdfs = Array(pdfEditors.values) + Array(retiredPDFs.values)
+        let videos = Array(videoEditors.values) + Array(retiredVideos.values)
+        for editor in images { await editor.suspendCommandsAndWait() }
+        for editor in pdfs { await editor.suspendCommandsAndWait() }
+        for editor in videos { await editor.suspendCommandsAndWait() }
     }
 
     private func trimJobs() {
         guard jobs.count > 12 else { return }
         var kept: [StudioJob] = []
         for job in jobs where kept.count < 12 || job.isRunning { kept.append(job) }
+        let retained = Set(kept.map(\.id))
+        for job in jobs where !retained.contains(job.id) {
+            retiredJobs[job.id] = job
+            work.start { [weak self] in
+                await job.waitForPendingWork()
+                self?.retiredJobs[job.id] = nil
+            }
+        }
         jobs = kept
     }
 }
@@ -883,6 +946,10 @@ final class StudioTaskOwner: Sendable {
 
     @MainActor func shutdownAndWait() async {
         shutdown()
+        await waitForPendingWork()
+    }
+
+    @MainActor func waitForPendingWork() async {
         let owned = state.snapshot()
         for task in owned { await task.value }
     }
@@ -896,6 +963,12 @@ final class StudioRecentWriter: @unchecked Sendable {
 
     func write(_ runs: [StudioRecentRun]) {
         queue.async { StudioLibraryStore.saveRecent(runs) }
+    }
+
+    func drain() async {
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume() }
+        }
     }
 }
 
