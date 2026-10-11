@@ -10,6 +10,7 @@ public final class HostWorkerPreparation {
     private var generation = 0
     private var operation: String?
     private var outcomes: [UUID: Result<Void, Error>] = [:]
+    private var outcomeOperations: [UUID: String] = [:]
 
     public init() {}
 
@@ -20,11 +21,21 @@ public final class HostWorkerPreparation {
         _ action: @escaping @MainActor () async throws -> Void
     ) async throws {
         isClosed = true
-        guard self.operation == nil || self.operation == operation else {
+        guard operation == "disable" || operation == "applicationQuit" else {
+            throw Failure.mismatchedOperation
+        }
+        if let outcome = outcomes[token] {
+            guard outcomeOperations[token] == operation else { throw Failure.mismatchedOperation }
+            try outcome.get()
+            return
+        }
+        let recoveringQuit =
+            self.operation == "applicationQuit" && operation == "disable"
+            && !running && !isPrepared
+        guard self.operation == nil || self.operation == operation || recoveringQuit else {
             throw Failure.mismatchedOperation
         }
         self.operation = operation
-        if let outcome = outcomes[token] { try outcome.get(); return }
         if isPrepared { return }
         guard outcomes.count < 64 else { throw Failure.exhaustedRetries }
         let selectedGeneration: Int
@@ -43,6 +54,7 @@ public final class HostWorkerPreparation {
         }
         let result = await selected.value
         outcomes[token] = result
+        outcomeOperations[token] = operation
         if generation == selectedGeneration {
             running = false
             if case .success = result { isPrepared = true }

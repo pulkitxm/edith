@@ -11,6 +11,7 @@ public final class HostWorker {
 
     public private(set) var configuration: HostWorkerConfiguration
     public private(set) var ready = false
+    public private(set) var requiresRecovery = false
     public var didExit: (@MainActor () -> Void)?
     public var didRequestNavigation:
         (@MainActor (HostWorkerNavigationRequest) async throws -> Void)?
@@ -218,15 +219,24 @@ public final class HostWorker {
     }
 
     public func stop(reason: HostWorkerStopReason = .disable) async throws {
+        guard !isStopped || !requiresRecovery else {
+            throw HostWorkerError.disableRejected("Cleanup must be retried in a recovery worker.")
+        }
         try await prepareStop(reason: reason)
         ready = false
         var failure: Error?
         if process.isRunning {
             do {
-                _ = try await request(
+                let response = try await request(
                     HostWorkerRequest(operation: "stop", stopReason: reason),
                     timeout: min(requestTimeout, .seconds(3)))
-            } catch { failure = error }
+                guard response.version == configuration.version else {
+                    throw HostWorkerError.invalidResponse
+                }
+            } catch {
+                requiresRecovery = true
+                failure = error
+            }
             try? input.fileHandleForWriting.close()
             do { try await awaitExit() } catch {
                 terminate()
@@ -238,6 +248,9 @@ public final class HostWorker {
         try await awaitOwnedExit()
         notifyExit()
         if let failure { throw failure }
+        guard !requiresRecovery else {
+            throw HostWorkerError.disableRejected("Cleanup must be retried in a recovery worker.")
+        }
     }
 
     private func request(_ request: HostWorkerRequest, timeout: Duration? = nil) async throws
@@ -298,9 +311,11 @@ public final class HostWorker {
                 let response = try JSONDecoder().decode(HostWorkerResponse.self, from: data)
                 if response.token == preparationToken {
                     guard let workerIdentity, workerIdentity.isAlive,
-                        response.version == nil || response.version == configuration.version
+                        (!response.ok && response.version == nil)
+                            || response.version == configuration.version
                     else { throw HostWorkerError.invalidResponse }
                     preparationResponse = response
+                    requiresRecovery = !response.ok
                     abandoned.remove(response.token)
                     guard pending[response.token] != nil else { continue }
                 } else if preparationTokens.contains(response.token) {
@@ -452,12 +467,14 @@ public final class HostWorker {
         guard token == preparationToken else { fail(error); return }
         guard let request = pending.removeValue(forKey: token) else { return }
         ready = false
+        requiresRecovery = true
         abandoned.insert(token)
         request.timeout.cancel()
         request.continuation.resume(throwing: error)
     }
 
     private func fail(_ error: any Error) {
+        if preparationToken != nil { requiresRecovery = true }
         cancelNavigation()
         ready = false
         let requests = pending.values

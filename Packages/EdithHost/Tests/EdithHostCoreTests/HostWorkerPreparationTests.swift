@@ -70,4 +70,57 @@ import Testing
         #expect(calls == 2)
     }
 
+    @Test func failedQuitCanRestoreOnNewTokenOnlyAfterActualOwnerReturns() async throws {
+        let preparation = HostWorkerPreparation()
+        let quitToken = UUID()
+        var waiter: CheckedContinuation<Void, Never>?
+        var restored = false
+        let quit = Task {
+            try await preparation.prepare(token: quitToken, operation: "applicationQuit") {
+                await withCheckedContinuation { waiter = $0 }
+                throw CocoaError(.userCancelled)
+            }
+        }
+        while waiter == nil { await Task.yield() }
+        await #expect(throws: HostWorkerPreparation.Failure.self) {
+            try await preparation.prepare(operation: "disable") { restored = true }
+        }
+        #expect(!restored)
+        waiter?.resume()
+        await #expect(throws: CocoaError.self) { try await quit.value }
+        await #expect(throws: HostWorkerPreparation.Failure.self) {
+            try await preparation.prepare(token: quitToken, operation: "disable") {
+                restored = true
+            }
+        }
+        #expect(!restored)
+        try await preparation.prepare(operation: "disable") { restored = true }
+        #expect(restored)
+        #expect(preparation.isClosed)
+        #expect(preparation.isPrepared)
+        await #expect(throws: CocoaError.self) {
+            try await preparation.prepare(token: quitToken, operation: "applicationQuit") {
+                Issue.record("The acknowledged failed quit ran twice")
+            }
+        }
+    }
+
+    @Test func failedDisableCannotSwitchToQuitOrUnknownOperation() async throws {
+        let preparation = HostWorkerPreparation()
+        await #expect(throws: CocoaError.self) {
+            try await preparation.prepare { throw CocoaError(.userCancelled) }
+        }
+        for operation in ["applicationQuit", "unknown"] {
+            await #expect(throws: HostWorkerPreparation.Failure.self) {
+                try await preparation.prepare(operation: operation) {
+                    Issue.record("An unrelated cleanup operation was admitted")
+                }
+            }
+        }
+        #expect(preparation.isClosed)
+        #expect(!preparation.isPrepared)
+        try await preparation.prepare {}
+        #expect(preparation.isPrepared)
+    }
+
 }

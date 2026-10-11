@@ -177,6 +177,23 @@ import Testing
         #expect(kill(pid, 0) == -1)
     }
 
+    @Test func wrongVersionCleanupAcknowledgementNeverBecomesSuccessfulStop() async throws {
+        let worker = try fixture("wrong-disable-version")
+        try await worker.start()
+        await #expect(throws: HostWorkerError.invalidResponse) { try await worker.prepareDisable() }
+        #expect(!worker.ready)
+        let deadline = ContinuousClock.now + .seconds(3)
+        while !worker.isStopped {
+            guard ContinuousClock.now < deadline else { throw HostWorkerError.stillRunning }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        await #expect(
+            throws: HostWorkerError.disableRejected("Cleanup must be retried in a recovery worker.")
+        ) { try await worker.stop() }
+        #expect(worker.isStopped)
+        #expect(worker.requiresRecovery)
+    }
+
     @Test func ownedNavigationIsDeliveredOnlyAfterStart() async throws {
         let worker = try fixture("navigation")
         var received = 0

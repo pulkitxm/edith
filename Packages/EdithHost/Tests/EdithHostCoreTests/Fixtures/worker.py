@@ -63,6 +63,12 @@ for line in sys.stdin:
     if mode in ["ignore-stop", "child-group-ignore-stop"] and operation == "stop":
         time.sleep(30)
     response = {"token": request["token"], "ok": mode != "reject"}
+    if operation in ["prepareDisable", "prepareApplicationQuit", "stop"]:
+        response["version"] = configuration["version"]
+        if operation == "prepareDisable" and mode == "wrong-disable-version":
+            response["version"] = "99.0.0"
+    if operation == "stop" and mode == "reject-stop-unless-recovery" and not configuration["recoveryOnly"]:
+        response["ok"] = False
     if operation == "show" and mode == "folder-choice":
         event = {"kind": "navigation", "token": str(uuid.uuid4()).upper(), "extensionID": configuration["extensionID"], "version": configuration["version"], "presentationID": str(uuid.uuid4()).upper(), "location": "settings", "section": "agentActivity", "folderChoice": True}
         navigation_requests[event["token"]] = request["token"]
