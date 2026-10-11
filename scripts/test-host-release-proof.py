@@ -119,7 +119,7 @@ class HostReleaseProofTests(unittest.TestCase):
         path = self.root / 'Resources/Info.plist'
         path.parent.mkdir()
         path.write_bytes(plistlib.dumps({**original, 'CFBundleShortVersionString': '1.2.3', 'CFBundleVersion': '123'}))
-        calls = lambda args: self.source + '\n' if args[1] == 'rev-parse' else 'Resources/Info.plist\n'
+        calls = lambda args: self.source + '\n' if args[1] == 'rev-parse' else '' if args[1] == 'ls-files' else 'Resources/Info.plist\n'
         with patch('host_release_proof.document', return_value=path.read_bytes()), patch('host_release_proof.subprocess.check_output', side_effect=[plistlib.dumps(original), plistlib.dumps(original), self.index.read_bytes(), self.index.read_bytes()]):
             self.assertTrue(pinned_sources(self.source, '1.2.3', '123', calls)[2])
         changed = {**original, 'SUPublicEDKey': 'foreign', 'CFBundleShortVersionString': '1.2.3', 'CFBundleVersion': '123'}
@@ -129,6 +129,44 @@ class HostReleaseProofTests(unittest.TestCase):
             pinned_sources(self.source, '1.2.3', '123', lambda args: 'b' * 40)
         with patch('host_release_proof.document', return_value=path.read_bytes()), patch('host_release_proof.subprocess.check_output', side_effect=[plistlib.dumps(original), plistlib.dumps(original), self.index.read_bytes(), b'[]']), self.assertRaises(ValueError):
             pinned_sources(self.source, '1.2.3', '123', calls)
+
+    def test_untracked_source_rejects_before_reading_any_tracked_or_built_artifact(self):
+        for path in ['Packages/EdithHost/Sources/EdithHost/Unexpected.swift', 'Packages/EdithHost/Sources/NewRole/Unexpected.swift', 'Packages/EdithHost/Sources/EdithHost/with space.swift']:
+            calls = []
+            def run(arguments):
+                calls.append(arguments)
+                return self.source + '\n' if arguments[1] == 'rev-parse' else path + '\0'
+            with patch('host_release_proof.document') as document, patch('host_release_proof.subprocess.check_output') as read, self.assertRaisesRegex(ValueError, 'Untracked source inputs'):
+                pinned_sources(self.source, '1.2.3', '123', run)
+            self.assertEqual(calls, [['git', 'rev-parse', 'HEAD'], ['git', 'ls-files', '--others', '--exclude-standard', '-z']])
+            document.assert_not_called()
+            read.assert_not_called()
+
+    def test_ignored_outputs_allow_clean_source_and_other_tracked_changes_reject(self):
+        calls = []
+        def clean(arguments):
+            calls.append(arguments)
+            return self.source + '\n' if arguments[1] == 'rev-parse' else ''
+        with patch('host_release_proof.subprocess.check_output', side_effect=[plistlib.dumps(self.info), self.index.read_bytes(), self.index.read_bytes()]):
+            self.assertFalse(pinned_sources(self.source, '1.2.3', '123', clean)[2])
+        self.assertEqual(calls, [['git', 'rev-parse', 'HEAD'], ['git', 'ls-files', '--others', '--exclude-standard', '-z'], ['git', 'diff', '--name-only', 'HEAD']])
+        def changed(arguments):
+            return self.source + '\n' if arguments[1] == 'rev-parse' else '' if arguments[1] == 'ls-files' else 'Packages/EdithHost/Sources/EdithHost/HostEntry.swift\n'
+        with patch('host_release_proof.subprocess.check_output') as read, self.assertRaisesRegex(ValueError, 'Unexpected source changes'):
+            pinned_sources(self.source, '1.2.3', '123', changed)
+        read.assert_not_called()
+
+    def test_exact_two_plist_stamp_exception_retains_the_pinned_feed_and_key(self):
+        original = {'CFBundleShortVersionString': '0.1.0', 'CFBundleVersion': '1', 'SUPublicEDKey': self.key, 'SUFeedURL': 'https://example.invalid/appcast.xml'}
+        paths = ['Resources/Info.plist', 'Resources/HelperInfo.plist']
+        stamped = {**original, 'CFBundleShortVersionString': '1.2.3', 'CFBundleVersion': '123'}
+        def run(arguments):
+            return self.source + '\n' if arguments[1] == 'rev-parse' else '' if arguments[1] == 'ls-files' else '\n'.join(paths) + '\n'
+        with patch('host_release_proof.document', return_value=plistlib.dumps(stamped)), patch('host_release_proof.subprocess.check_output', side_effect=[plistlib.dumps(original), plistlib.dumps(original), plistlib.dumps(original), self.index.read_bytes(), self.index.read_bytes()]):
+            self.assertTrue(pinned_sources(self.source, '1.2.3', '123', run)[2])
+        for field in ['SUPublicEDKey', 'SUFeedURL']:
+            with patch('host_release_proof.document', return_value=plistlib.dumps({**stamped, field: 'foreign'})), patch('host_release_proof.subprocess.check_output', return_value=plistlib.dumps(original)), self.assertRaisesRegex(ValueError, 'beyond release version stamping'):
+                pinned_sources(self.source, '1.2.3', '123', run)
 
     def test_workflow_records_proof_after_signing_without_changing_public_assets_or_executing_host(self):
         workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/ci.yml').read_text()
