@@ -34,7 +34,16 @@ final class AudioMixerActionCase: HostedFunctionalActionCase {
             try await Task.sleep(for: .milliseconds(20))
         }
         guard model.apps.count == 1, let app = model.apps.first,
-            app.objectID == 41, app.pid == 900, app.bundleID == "org.example.synthetic.audio"
+            app.objectID == 41, app.pid == 900, app.bundleID == "org.example.synthetic.audio",
+            app.volume != 0.375
+        else { throw HostedFunctionalActionError.invalid }
+        let before = try JSONDecoder().decode(
+            AudioMixerUISnapshot.self,
+            from: await transport.readAuthoritative("audioMixer.ui.snapshot"))
+        guard before.error == nil, before.apps.count == 1, let observed = before.apps.first,
+            observed.objectID == app.objectID, observed.pid == app.pid,
+            observed.bundleID == app.bundleID, observed.normalizedVolume != 0.375,
+            Float(observed.normalizedVolume) == app.volume
         else { throw HostedFunctionalActionError.invalid }
         let count = transport.originalInvocationCount
         model.setVolume(app, 0.375)
