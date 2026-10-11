@@ -81,12 +81,20 @@ public enum MeetingAudioDevices {
         var address = AudioObjectPropertyAddress(
             mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain)
-        var value: CFString?
-        var size = UInt32(MemoryLayout<CFString?>.size)
-        guard AudioObjectGetPropertyData(id, &address, 0, nil, &size, &value) == noErr else {
-            return nil
+        return readString { size, output in
+            AudioObjectGetPropertyData(id, &address, 0, nil, &size, output)
         }
-        return value as String?
+    }
+
+    static func readString(
+        property: (inout UInt32, UnsafeMutableRawPointer) -> OSStatus
+    ) -> String? {
+        var value: Unmanaged<CFString>?
+        let expectedSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        var size = expectedSize
+        let status = withUnsafeMutablePointer(to: &value) { property(&size, $0) }
+        guard status == noErr, size == expectedSize, let value else { return nil }
+        return value.takeRetainedValue() as String
     }
 
     private static func channels(_ id: AudioDeviceID, scope: AudioObjectPropertyScope) -> Int {
