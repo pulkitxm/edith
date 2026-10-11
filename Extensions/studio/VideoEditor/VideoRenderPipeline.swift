@@ -82,6 +82,60 @@ enum ZoomAnimation {
 }
 
 struct VideoRenderPipeline {
+    private struct FrameConfiguration: Sendable {
+        let webcamLayout: String
+        let webcamSize: Double
+        let webcamPosition: [String: Double]
+        let webcamMask: String
+        let webcamMirrored: Bool
+        let cursorHighlight: Bool
+
+        init(project: VideoProject) {
+            webcamLayout = project.webcamLayout
+            webcamSize = project.webcamSize
+            webcamPosition = project.webcamPosition
+            webcamMask = project.webcamMaskShape
+            webcamMirrored = project.webcamMirrored
+            cursorHighlight = project.cursorHighlight
+        }
+    }
+
+    private final class MP4ExportSession: @unchecked Sendable {
+        private let session: AVAssetExportSession
+        private let lock = NSLock()
+        private var cancelled = false
+
+        init(_ session: AVAssetExportSession) { self.session = session }
+
+        var progress: Double { lock.withLock { Double(session.progress) } }
+
+        func start(_ completion: @escaping @Sendable () -> Void) {
+            lock.withLock {
+                if cancelled {
+                    completion()
+                } else {
+                    session.exportAsynchronously(completionHandler: completion)
+                }
+            }
+        }
+
+        func cancel() {
+            lock.withLock {
+                cancelled = true
+                session.cancelExport()
+            }
+        }
+
+        func checkCompletion() throws {
+            try lock.withLock {
+                guard session.status == .completed else {
+                    if cancelled || session.status == .cancelled { throw CancellationError() }
+                    throw session.error ?? RenderError.exportFailed("MP4 export failed")
+                }
+            }
+        }
+    }
+
     struct CursorSample: Sendable {
         let timeMs: Double
         let x: Double
@@ -384,6 +438,7 @@ struct VideoRenderPipeline {
         let cursorImage = pointerImage()
         let imageContext = VideoImageContext.context(for: project.videoSettings.colorSpace)
         let captionRasters = VideoCaptionRasterCache(annotations: annotations)
+        let frameConfiguration = FrameConfiguration(project: project)
         let videoComposition = AVMutableVideoComposition(asset: composition) { request in
             let time = request.compositionTime.seconds
             guard
@@ -440,15 +495,15 @@ struct VideoRenderPipeline {
                     captionRasters: captionRasters,
                     backdrop: backdrop,
                     padding: padding, presentation: presentation,
-                    webcam: webcam, webcamLayout: project.webcamLayout,
-                    webcamSize: project.webcamSize,
-                    webcamPosition: project.webcamPosition,
-                    webcamMask: project.webcamMaskShape,
-                    webcamMirrored: project.webcamMirrored,
+                    webcam: webcam, webcamLayout: frameConfiguration.webcamLayout,
+                    webcamSize: frameConfiguration.webcamSize,
+                    webcamPosition: frameConfiguration.webcamPosition,
+                    webcamMask: frameConfiguration.webcamMask,
+                    webcamMirrored: frameConfiguration.webcamMirrored,
                     cameraFullscreenRegions: cameraFullscreenRegions,
                     cursor: cursor.current,
                     renderedCursor: renderedCursor.current, cursorImage: cursorImage,
-                    cursorClicked: project.cursorHighlight && cursor.clicked)
+                    cursorClicked: frameConfiguration.cursorHighlight && cursor.clicked)
             else {
                 request.finish(
                     with: RenderError.exportFailed(
@@ -604,25 +659,23 @@ struct VideoRenderPipeline {
         }
         session.videoComposition = videoComposition; session.audioMix = audioMix
         session.outputURL = temporary; session.outputFileType = .mp4
+        let owner = MP4ExportSession(session)
         let reporter = Task {
             while !Task.isCancelled {
-                progress(Double(session.progress))
+                progress(owner.progress)
                 do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
             }
         }
         await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
-                session.exportAsynchronously { continuation.resume() }
+                owner.start { continuation.resume() }
             }
         } onCancel: {
-            session.cancelExport()
+            owner.cancel()
         }
         reporter.cancel(); await reporter.value
         try Task.checkCancellation()
-        guard session.status == .completed else {
-            if session.status == .cancelled { throw CancellationError() }
-            throw session.error ?? RenderError.exportFailed("MP4 export failed")
-        }
+        try owner.checkCompletion()
         try Self.publishExport(temporary, to: url)
         progress(1)
     }
