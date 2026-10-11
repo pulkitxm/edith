@@ -161,6 +161,7 @@ def collect_proof(bundle, dmg, appcast, metadata, pinned_info, expected_index, s
     if notary == 'verified':
         run(['xcrun', 'stapler', 'validate', str(dmg)])
         run(['spctl', '-a', '-t', 'open', '--context', 'context:primary-signature', str(dmg)])
+    require(digest(bundle / 'Contents/MacOS/Edith') == executable_hash, 'Shipping executable changed during qualification')
     sanitized = {name: metadata[name] for name in METADATA_FIELDS}
     validate_metadata(sanitized)
     return {'schema': 1, 'sourceCommit': source, 'version': version, 'build': build, 'installedBytes': installed, 'extensionPayloadBytes': 0, 'indexedExtensions': 39, 'indexSHA256': hashlib.sha256(index_bytes).hexdigest(), 'hostExecutableSHA256': executable_hash, 'certificateCategory': categories[0], 'teamIdentifier': teams[0], 'verifiedDesignatedRequirement': requirement, 'deepStrictSignatureVerified': True, 'dmgBytes': dmg_status.st_size, 'dmgSHA256': dmg_hash, 'dmgURL': url, 'appcastSHA256': hashlib.sha256(appcast_bytes).hexdigest(), 'sparklePublicKey': key, 'sparkleEd25519Verified': True, 'notarization': notary, 'publicationVerified': False, 'managedViewsVerified': False, 'hardwareVerified': False}, sanitized
@@ -210,6 +211,7 @@ def main():
     info, index, dirty = pinned_sources(args.source, args.version, args.build)
     metadata = json_document(args.bundle.parent / 'build-metadata.json')
     builder = json_document(args.builder_metadata)
+    require(all(metadata.get(name) == builder.get(name) for name in ('xcode', 'sdk')), 'Shipping toolchain differs from measured builder metadata')
     require(metadata['sourceTreeDirty'] is dirty, 'Build metadata source state differs')
     proof, sanitized = collect_proof(args.bundle, args.dmg, args.appcast, metadata, info, index, args.source, args.tag, args.version, args.build, args.notarization)
     proof['sourceQualification'] = 'release-version-stamp-only' if dirty else 'clean'

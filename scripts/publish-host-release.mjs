@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync, statSync } from "node:fs";
+import { createHash, createPublicKey, verify } from "node:crypto";
+import { lstatSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { verifyCurrentMain } from "./extension-release-ready.mjs";
 import { releaseAssetMatchesFile } from "./release-asset-read.mjs";
 import {
@@ -11,10 +12,42 @@ import {
 } from "./release-asset-upload.mjs";
 import { lookupRelease } from "./release-lookup.mjs";
 
+const hostAssets = [
+  "Edith.dmg",
+  "appcast.xml",
+  "host-release-proof.json",
+  "build-metadata.json",
+  "toolchain-provenance.json",
+];
+
+function assetSnapshot(directory) {
+  return hostAssets
+    .map((name) => {
+      const file = resolve(directory, name);
+      const status = lstatSync(file);
+      if (
+        !status.isFile() ||
+        status.nlink !== 1 ||
+        status.size < 1 ||
+        status.size > (name === "Edith.dmg" ? 1024 ** 3 : 1024 ** 2)
+      )
+        throw new Error("Invalid bounded release asset");
+      return createHash("sha256").update(readFileSync(file)).digest("hex");
+    })
+    .join(":");
+}
+
+function requireAssetSnapshot(directory, snapshot) {
+  if (assetSnapshot(directory) !== snapshot)
+    throw new Error("Host release assets changed after preflight");
+}
+
 export function preflightHostRelease({
   directory,
   repository,
   tag,
+  source,
+  rebuild = false,
   execute = execFileSync,
 }) {
   if (
@@ -22,27 +55,58 @@ export function preflightHostRelease({
     !/^v\d+\.\d+\.\d+$/.test(tag)
   )
     throw new Error("Invalid release identity");
-  const assets = ["Edith.dmg", "appcast.xml"];
-  for (const name of assets) {
-    if (statSync(resolve(directory, name)).size === 0)
-      throw new Error("Empty release asset");
-  }
-  const appcast = readFileSync(resolve(directory, "appcast.xml"), "utf8");
+  const snapshot = assetSnapshot(directory);
+  const qualification = JSON.parse(
+    execFileSync(
+      "python3",
+      [
+        fileURLToPath(new URL("./host_release_assets.py", import.meta.url)),
+        resolve(directory),
+        "--repository",
+        repository,
+        "--tag",
+        tag,
+        "--source",
+        source,
+        ...(rebuild ? ["--rebuild"] : []),
+      ],
+      {
+        encoding: "utf8",
+        timeout: 60_000,
+        killSignal: "SIGKILL",
+        maxBuffer: 1024 ** 2,
+        stdio: "pipe",
+      },
+    ),
+  );
+  const key = createPublicKey({
+    key: Buffer.concat([
+      Buffer.from("302a300506032b6570032100", "hex"),
+      Buffer.from(qualification.sparklePublicKey, "base64"),
+    ]),
+    format: "der",
+    type: "spki",
+  });
   if (
-    !appcast.includes(
-      `https://github.com/${repository}/releases/download/${tag}/Edith.dmg`,
-    ) ||
-    !/sparkle:edSignature="[^"\s]+"/.test(appcast)
+    !verify(
+      null,
+      readFileSync(resolve(directory, "Edith.dmg")),
+      key,
+      Buffer.from(qualification.sparkleSignature, "base64"),
+    )
   )
-    throw new Error("Invalid signed appcast");
-  for (const name of assets) {
+    throw new Error(
+      "Appcast signature differs from the qualified Sparkle key or DMG",
+    );
+  for (const name of hostAssets) {
     preflightReleaseAsset({
       repository,
       file: resolve(directory, name),
       execute,
     });
   }
-  return assets;
+  requireAssetSnapshot(directory, snapshot);
+  return [...hostAssets];
 }
 
 export async function publishHostRelease({
@@ -73,7 +137,19 @@ export async function publishHostRelease({
   },
 }) {
   if (!/^[0-9a-f]{40}$/.test(target)) throw new Error("Invalid release target");
-  const assets = preflightHostRelease({ directory, repository, tag, execute });
+  const snapshot = assetSnapshot(directory);
+  const assets = preflightHostRelease({
+    directory,
+    repository,
+    tag,
+    source: sourceTarget,
+    rebuild,
+    execute,
+  });
+  const verifyInputs = async () => {
+    await verifySource();
+    requireAssetSnapshot(directory, snapshot);
+  };
   const gh = (...args) =>
     execute("gh", args, {
       encoding: "utf8",
@@ -83,11 +159,11 @@ export async function publishHostRelease({
     });
   const mutate = (...args) =>
     executeReleaseMutation([...args, "--repo", repository], { execute });
-  await verifySource();
+  await verifyInputs();
   let release = lookupRelease({ repository, tag, execute });
   if (!release) {
     if (rebuild) throw new Error("Cannot rebuild a missing release");
-    await verifySource();
+    await verifyInputs();
     mutate(
       "release",
       "create",
@@ -99,10 +175,11 @@ export async function publishHostRelease({
       "--draft",
       "--generate-notes",
     );
-    await verifySource();
+    await verifyInputs();
     release = lookupRelease({ repository, tag, execute });
     if (!release) throw new Error("Created host release is not available");
   }
+  const changes = [];
   for (const name of assets) {
     const file = resolve(directory, name);
     const matches = release.assets.filter((asset) => asset.name === name);
@@ -115,26 +192,31 @@ export async function publishHostRelease({
         asset: existing,
         file,
       });
-      await verifySource();
+      await verifyInputs();
       if (identical) continue;
       if (!release.draft)
         throw new Error(
           `Published host assets are immutable: ${name}. Publish a new version.`,
         );
       if (!rebuild) throw new Error(`Existing release asset differs: ${name}`);
-      await verifySource();
+    }
+    if (!release.draft)
+      throw new Error(
+        `Published host asset is missing: ${name}. Publish a new version.`,
+      );
+    changes.push({ name, file, existing });
+  }
+  for (const { file, existing } of changes) {
+    await verifyInputs();
+    if (existing) {
       gh(
         "api",
         "--method",
         "DELETE",
         `repos/${repository}/releases/assets/${existing.id}`,
       );
+      await verifyInputs();
     }
-    if (!release.draft)
-      throw new Error(
-        `Published host asset is missing: ${name}. Publish a new version.`,
-      );
-    await verifySource();
     await uploadReleaseAsset({
       repository,
       releaseID: release.id,
@@ -142,9 +224,9 @@ export async function publishHostRelease({
       file,
       execute,
     });
-    await verifySource();
+    await verifyInputs();
   }
-  await verifySource();
+  await verifyInputs();
   if (!release.draft) return { tag, assets, unchanged: true };
   mutate(
     "release",
@@ -155,7 +237,7 @@ export async function publishHostRelease({
     "--make-latest",
     "true",
   );
-  await verifySource();
+  await verifyInputs();
   const published = lookupRelease({ repository, tag, execute });
   if (!published || published.draft || published.id !== release.id)
     throw new Error("Published host release state was not confirmed");
@@ -171,6 +253,8 @@ if (
     directory: resolve(process.argv[preflight ? 3 : 2]),
     repository: process.env.GITHUB_REPOSITORY,
     tag: process.env.RELEASE_TAG,
+    source: process.env.BUILT_SHA,
+    rebuild: Boolean(process.env.REBUILD),
   };
   if (preflight) {
     preflightHostRelease(configuration);

@@ -112,7 +112,7 @@ class HostReleaseProofTests(unittest.TestCase):
         builder = self.builder_metadata()
         builder_path = self.root / 'builder.json'
         builder_path.write_text(json.dumps(builder))
-        (self.root / 'build-metadata.json').write_text(json.dumps(self.metadata))
+        (self.root / 'build-metadata.json').write_text(json.dumps({**self.metadata, 'xcode': builder['xcode'], 'sdk': builder['sdk']}))
         output = self.root / 'proof'
         arguments = ['host_release_proof.py', str(self.bundle), str(self.dmg), str(self.appcast), str(output), '--builder-metadata', str(builder_path), '--source', self.source, '--tag', 'v1.2.3', '--version', '1.2.3', '--build', '123', '--notarization', 'skipped']
         with patch('sys.argv', arguments), patch.dict('os.environ', {'GITHUB_SHA': self.source, 'REBUILD': ''}), patch('host_release_proof.pinned_sources', return_value=(self.info, self.index.read_bytes(), False)), patch('host_release_proof.collect_proof', return_value=(proof, sanitized)):
@@ -121,6 +121,26 @@ class HostReleaseProofTests(unittest.TestCase):
         self.assertEqual(json_document(output / 'build-metadata.json'), sanitized)
         self.assertEqual(len(json_document(output / 'build-metadata.json')), 7)
         self.assertEqual(json_document(output / 'toolchain-provenance.json'), collect_toolchain(builder, proof, sanitized))
+
+    def test_final_executable_changes_during_qualification_reject(self):
+        def changed(key, signature, path):
+            self.exe.write_bytes(b'changed synthetic host')
+        with self.assertRaisesRegex(ValueError, 'changed during qualification'):
+            self.proof(signature=changed)
+
+    def test_toolchain_maximum_bounds_and_raw_builder_missing_fields(self):
+        proof, sanitized = self.proof()
+        builder = self.builder_metadata()
+        prefix = 'Xcode 26.0\nBuild version '
+        builder.update(xcode=prefix + 'A' * (256 - len(prefix)), sdk='1.' + '0' * 30)
+        receipt = collect_toolchain(builder, proof, sanitized)
+        self.assertEqual(len(receipt['xcode']), 256)
+        self.assertEqual(len(receipt['sdk']), 32)
+        for name in builder:
+            missing = dict(builder)
+            del missing[name]
+            with self.subTest(missing=name), self.assertRaises(ValueError):
+                collect_toolchain(missing, proof, sanitized)
 
     def test_wrong_source_version_build_configuration_executable_and_key_fail(self):
         for change in [{'sourceCommit': 'b' * 40}, {'hostExecutableSHA256': 'b' * 64}, {'configuration': 'Debug'}, {'architecture': 'x86_64'}]:
