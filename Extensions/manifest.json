@@ -318,7 +318,9 @@
   },
   {
     "id": "systemStats",
-    "testTargets": ["ci-extension-system-stats"],
+    "testTargets": [
+      "ci-extension-system-stats"
+    ],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
     "minimumSystemVersion": "14.0.0",
@@ -341,7 +343,9 @@
         "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
       ]
     },
-    "inputs": ["Extensions/systemStats"],
+    "inputs": [
+      "Extensions/systemStats"
+    ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/extension-system-version.mjs",
@@ -791,6 +795,7 @@
         "Extensions/plugins/SkillPreviewSheet.swift",
         "Extensions/plugins/SkillsModel.swift",
         "Extensions/plugins/PluginsFixtureTools.swift",
+        "Extensions/plugins/PluginsFixturePolicy.swift",
         "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
       ]
     },
@@ -916,10 +921,13 @@
         "Extensions/notchShelf/Browser/Remote/NotchBrowserCommandClient.swift",
         "Extensions/notchShelf/CLI/BrowserCommands.swift",
         "Extensions/notchShelf/CLI/BrowserCLIExecution.swift",
+        "Extensions/notchShelf/Settings/NotchFixturePreferences.swift",
         "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
       ]
     },
-    "inputs": ["Extensions/notchShelf"],
+    "inputs": [
+      "Extensions/notchShelf"
+    ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/extension-system-version.mjs",
@@ -934,11 +942,15 @@
     "supportProduct": "EdithExtensionCommands",
     "surfaceContractVersion": 1,
     "sameExecutableWorker": true,
-    "testTargets": ["ci-extension-notch-native"]
+    "testTargets": [
+      "ci-extension-notch-native"
+    ]
   },
   {
     "id": "clipboard",
-    "testTargets": ["ci-extension-clipboard-native"],
+    "testTargets": [
+      "ci-extension-clipboard-native"
+    ],
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -1155,16 +1167,24 @@
   },
   {
     "id": "docs",
-    "testTargets": ["ci-extension-docs", "ci-extension-docs-native"],
+    "testTargets": [
+      "ci-extension-docs",
+      "ci-extension-docs-native"
+    ],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": ["EdithExtensionDocuments", "EdithExtensionCommands"],
+    "supportProduct": [
+      "EdithExtensionDocuments",
+      "EdithExtensionCommands"
+    ],
     "nativePackage": "Packages/EdithDocsWorker",
     "nativeProduct": "EdithDocsWorker",
-    "nativeResources": ["EdithDocsWorker_EdithDocsWorker.bundle"],
+    "nativeResources": [
+      "EdithDocsWorker_EdithDocsWorker.bundle"
+    ],
     "roles": {
       "app": [
         "Extensions/docs/CLI/DocsCLIExecution.swift",
@@ -1178,7 +1198,10 @@
         "Extensions/docs/Surface.swift"
       ]
     },
-    "inputs": ["Extensions/docs", "Packages/EdithDocsWorker"],
+    "inputs": [
+      "Extensions/docs",
+      "Packages/EdithDocsWorker"
+    ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/extension-system-version.mjs",
@@ -1207,13 +1230,20 @@
   },
   {
     "id": "latex",
-    "testTargets": ["ci-extension-latex-native"],
+    "testTargets": [
+      "ci-extension-latex-native"
+    ],
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
-    "supportProduct": ["EdithExtensionArchive", "EdithExtensionCommands"],
-    "inputs": ["Extensions/latex"],
+    "supportProduct": [
+      "EdithExtensionArchive",
+      "EdithExtensionCommands"
+    ],
+    "inputs": [
+      "Extensions/latex"
+    ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/extension-system-version.mjs",
@@ -1266,13 +1296,17 @@
   },
   {
     "id": "companion",
-    "testTargets": ["ci-extension-companion-native"],
+    "testTargets": [
+      "ci-extension-companion-native"
+    ],
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
     "supportProduct": "EdithExtensionCommands",
-    "inputs": ["Extensions/companion"],
+    "inputs": [
+      "Extensions/companion"
+    ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/extension-system-version.mjs",
@@ -1860,7 +1894,9 @@
         "Extensions/usage/Resources/share-icon.png"
       ]
     },
-    "inputs": ["Extensions/usage"],
+    "inputs": [
+      "Extensions/usage"
+    ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/extension-system-version.mjs",
@@ -1875,7 +1911,9 @@
     ],
     "dependencies": [],
     "sameExecutableWorker": true,
-    "testTargets": ["ci-extension-usage-native"]
+    "testTargets": [
+      "ci-extension-usage-native"
+    ]
   },
   {
     "id": "bifrost",
@@ -1942,7 +1980,9 @@
         "Extensions/bifrost/Views/BifrostSettings.swift"
       ]
     },
-    "inputs": ["Extensions/bifrost"],
+    "inputs": [
+      "Extensions/bifrost"
+    ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/extension-system-version.mjs",
@@ -1955,7 +1995,10 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
-    "testTargets": ["ci-extension-bifrost", "ci-extension-bifrost-native"],
+    "testTargets": [
+      "ci-extension-bifrost",
+      "ci-extension-bifrost-native"
+    ],
     "sameExecutableWorker": true
   },
   {
@@ -2144,7 +2187,9 @@
   },
   {
     "id": "machines",
-    "testTargets": ["ci-extension-machines"],
+    "testTargets": [
+      "ci-extension-machines"
+    ],
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -2152,14 +2197,18 @@
     "supportProduct": "EdithExtensionDocuments",
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
-    "nativeResources": ["TerminalNative_GhosttyTerminal.bundle"],
+    "nativeResources": [
+      "TerminalNative_GhosttyTerminal.bundle"
+    ],
     "nativeLicenses": [
       {
         "source": "Extensions/terminal/Native/LICENSE-GHOSTTY",
         "destination": "Ghostty-LICENSE"
       }
     ],
-    "inputs": ["Extensions/machines"],
+    "inputs": [
+      "Extensions/machines"
+    ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/extension-system-version.mjs",
@@ -2358,7 +2407,10 @@
     },
     "sameExecutableWorker": true,
     "supportProducts": {
-      "app": ["EdithExtensionDocuments", "EdithExtensionCommands"]
+      "app": [
+        "EdithExtensionDocuments",
+        "EdithExtensionCommands"
+      ]
     }
   },
   {
@@ -2389,7 +2441,9 @@
         "Extensions/downloads/Worker.swift"
       ]
     },
-    "inputs": ["Extensions/downloads"],
+    "inputs": [
+      "Extensions/downloads"
+    ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/extension-system-version.mjs",
@@ -2409,7 +2463,9 @@
   },
   {
     "id": "seoAudit",
-    "testTargets": ["ci-extension-seo-audit-native"],
+    "testTargets": [
+      "ci-extension-seo-audit-native"
+    ],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
     "minimumSystemVersion": "14.0.0",
@@ -2447,7 +2503,9 @@
         "Extensions/seoAudit/Views/SEOAuditProjectView.swift"
       ]
     },
-    "inputs": ["Extensions/seoAudit"],
+    "inputs": [
+      "Extensions/seoAudit"
+    ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/extension-system-version.mjs",
@@ -2639,7 +2697,9 @@
   },
   {
     "id": "codeStats",
-    "testTargets": ["ci-extension-code-stats-native"],
+    "testTargets": [
+      "ci-extension-code-stats-native"
+    ],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
     "minimumSystemVersion": "14.0.0",
@@ -2709,7 +2769,9 @@
         "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
       ]
     },
-    "inputs": ["Extensions/codeStats"],
+    "inputs": [
+      "Extensions/codeStats"
+    ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/extension-system-version.mjs",
@@ -2733,17 +2795,24 @@
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
     "minimumSystemVersion": "14.0.0",
-    "supportProduct": ["EdithExtensionDocuments", "EdithExtensionCommands"],
+    "supportProduct": [
+      "EdithExtensionDocuments",
+      "EdithExtensionCommands"
+    ],
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
-    "nativeResources": ["TerminalNative_GhosttyTerminal.bundle"],
+    "nativeResources": [
+      "TerminalNative_GhosttyTerminal.bundle"
+    ],
     "nativeLicenses": [
       {
         "source": "Extensions/terminal/Native/LICENSE-GHOSTTY",
         "destination": "Ghostty-LICENSE"
       }
     ],
-    "inputs": ["Extensions/herdr"],
+    "inputs": [
+      "Extensions/herdr"
+    ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/extension-system-version.mjs",
@@ -2756,8 +2825,12 @@
       "scripts/build-contained-host-runtime.mjs"
     ],
     "dependencies": [],
-    "nativeTaskRoles": ["app"],
-    "testTargets": ["ci-extension-herdr"],
+    "nativeTaskRoles": [
+      "app"
+    ],
+    "testTargets": [
+      "ci-extension-herdr"
+    ],
     "roles": {
       "app": [
         "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
@@ -2977,17 +3050,24 @@
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
     "minimumSystemVersion": "14.0.0",
-    "supportProduct": ["EdithExtensionDocuments", "EdithExtensionCommands"],
+    "supportProduct": [
+      "EdithExtensionDocuments",
+      "EdithExtensionCommands"
+    ],
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
-    "nativeResources": ["TerminalNative_GhosttyTerminal.bundle"],
+    "nativeResources": [
+      "TerminalNative_GhosttyTerminal.bundle"
+    ],
     "nativeLicenses": [
       {
         "source": "Extensions/terminal/Native/LICENSE-GHOSTTY",
         "destination": "Ghostty-LICENSE"
       }
     ],
-    "inputs": ["Extensions/quinjet"],
+    "inputs": [
+      "Extensions/quinjet"
+    ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/extension-system-version.mjs",
@@ -2999,8 +3079,12 @@
       "scripts/build-contained-host-runtime.mjs"
     ],
     "dependencies": [],
-    "nativeTaskRoles": ["app"],
-    "testTargets": ["ci-extension-quinjet"],
+    "nativeTaskRoles": [
+      "app"
+    ],
+    "testTargets": [
+      "ci-extension-quinjet"
+    ],
     "roles": {
       "app": [
         "Extensions/quinjet/Models/QuinjetLaunchModels.swift",
