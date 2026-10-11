@@ -82,10 +82,11 @@ import WorkerFixtureTestSupport
         #expect(discovered.agents.map(\.id) == ["amp"] && !discovered.installerAvailable)
         let skill = EdithSkillLibrary.skills[0]
         let presented = try await action(.init(action: "present", skillID: skill.id), model: model)
-        #expect(presented.selectedAgentIDs == ["amp"])
+        #expect(presented.selectedAgentIDs == ["amp"] && presented.savedAgentSelections == nil)
         let selected = try await action(
             .init(action: "select", agentID: "amp", enabled: false), model: model)
-        #expect(selected.selectedAgentIDs.isEmpty)
+        #expect(
+            selected.selectedAgentIDs.isEmpty && selected.savedAgentSelections == ["amp": false])
         #expect(
             defaults.dictionary(forKey: "plugins.agentSelections") as? [String: Bool] == [
                 "amp": false
@@ -95,9 +96,30 @@ import WorkerFixtureTestSupport
         _ = try await action(.init(action: "discover"), model: recreated)
         let restored = try await action(
             .init(action: "present", skillID: skill.id), model: recreated)
-        #expect(restored.selectedAgentIDs.isEmpty)
+        #expect(
+            restored.selectedAgentIDs.isEmpty && restored.savedAgentSelections == ["amp": false])
         await recreated.shutdown()
         #expect(!FileManager.default.fileExists(atPath: data.path))
+    }
+
+    @MainActor @Test func savedSelectionsDistinguishAbsentEmptyAndRejectNonBooleanStorage() throws {
+        let suite =
+            "com.pulkit.edith.tests.worker-" + UUID().uuidString + ".extension.plugins.worker"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = PluginsFixtureTools.makeAdmittedModel(
+            defaults: defaults, dataDirectory: FileManager.default.temporaryDirectory,
+            agents: [])
+        #expect(try model.savedAgentSelections() == nil)
+        defaults.set([String: Bool](), forKey: "plugins.agentSelections")
+        #expect(try model.savedAgentSelections() == [:])
+        defaults.set(["amp": false], forKey: "plugins.agentSelections")
+        #expect(try model.savedAgentSelections() == ["amp": false])
+        defaults.set(["amp": 1], forKey: "plugins.agentSelections")
+        #expect(throws: (any Error).self) { try model.savedAgentSelections() }
+        defaults.set("invalid", forKey: "plugins.agentSelections")
+        #expect(throws: (any Error).self) { try model.savedAgentSelections() }
+        model.stop()
     }
 
     @MainActor @Test func strictMarkerConstructsOnlyOwnedUnavailableToolsAndRealInertModel()

@@ -1,5 +1,6 @@
 import EdithExtensionSupport
 import EdithExtensionUI
+import CoreFoundation
 import Foundation
 import Observation
 
@@ -120,6 +121,23 @@ import Observation
         } onCancel: {
             task.cancel()
         }
+    }
+
+    func savedAgentSelections() throws -> [String: Bool]? {
+        guard defaults.synchronize() else { throw ExtensionPeerError.unavailable }
+        guard let stored = defaults.object(forKey: Self.agentSelectionsKey) else { return nil }
+        guard let fields = stored as? [String: Any], fields.count <= 128 else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        var selections: [String: Bool] = [:]
+        for (key, value) in fields {
+            guard !key.isEmpty, key.utf8.count <= 128,
+                let value = value as? NSNumber,
+                CFGetTypeID(value) == CFBooleanGetTypeID()
+            else { throw ExtensionPeerError.invalidRequest }
+            selections[key] = value.boolValue
+        }
+        return selections
     }
 
     public func setSelected(_ id: String, enabled: Bool) {
