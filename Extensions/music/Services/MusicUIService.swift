@@ -415,26 +415,9 @@ import WebKit
         case .videoOpen: try openVideo(action.path)
         case .videoClose:
             if video?.track.relativePath == action.path { closeVideo() }
-        case .crossfade, .barCollapsed, .barAutoHide, .gridView:
-            let value = try fraction(action)
-            guard value == 0 || value == 1 else { throw ExtensionPeerError.invalidRequest }
-            let key: String
-            switch action.kind {
-            case .crossfade: key = MusicFade.enabledKey
-            case .barCollapsed: key = AppStorageKeys.Music.barCollapsed
-            case .barAutoHide: key = AppStorageKeys.Music.barAutoHide
-            default: key = AppStorageKeys.Music.gridView
-            }
-            let changed = SharedDefaults.store.object(forKey: key) as? Bool != (value == 1)
-            SharedDefaults.store.set(value == 1, forKey: key)
-            if changed, [.barCollapsed, .barAutoHide].contains(action.kind) {
-                invalidateHostSlots()
-            }
-        case .fadeLength:
-            guard let value = action.value, MusicFade.secondsRange.contains(value) else {
-                throw ExtensionPeerError.invalidRequest
-            }
-            SharedDefaults.store.set(value, forKey: MusicFade.secondsKey)
+        case .crossfade, .barCollapsed, .barAutoHide, .gridView, .fadeLength:
+            try MusicUIPreferenceEngine(defaults: SharedDefaults.store).perform(
+                action, invalidateHostSlots: invalidateHostSlots)
         case .installTool:
             guard MusicTools.names.contains(action.target) else {
                 throw ExtensionPeerError.invalidRequest
@@ -466,20 +449,7 @@ import WebKit
     }
 
     private func preferences() -> MusicUIPreferences {
-        let defaults = SharedDefaults.store
-        let seconds =
-            defaults.object(forKey: MusicFade.secondsKey) as? Double
-            ?? MusicFade.defaultSeconds
-        return MusicUIPreferences(
-            crossfade: defaults.object(forKey: MusicFade.enabledKey) as? Bool ?? true,
-            fadeLength: seconds.isFinite
-                ? min(
-                    max(seconds, MusicFade.secondsRange.lowerBound),
-                    MusicFade.secondsRange.upperBound)
-                : MusicFade.defaultSeconds,
-            barCollapsed: defaults.bool(forKey: AppStorageKeys.Music.barCollapsed),
-            barAutoHide: defaults.bool(forKey: AppStorageKeys.Music.barAutoHide),
-            gridView: defaults.bool(forKey: AppStorageKeys.Music.gridView))
+        MusicUIPreferenceEngine(defaults: SharedDefaults.store).preferences()
     }
 
     private func playbackSnapshot() -> PlayerSnapshot {
