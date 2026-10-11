@@ -5,6 +5,7 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { extensionFingerprint } from "../extension-release-plan.mjs";
+import { relocateHostedHostManifest } from "../hosted-host-manifest.mjs";
 import { loadManagedViewReview } from "./contract.mjs";
 import {
   managedContextOverlay,
@@ -39,18 +40,10 @@ for (const directory of ["Sources", "Tests"]) {
     { recursive: true },
   );
 }
-let manifest = await readFile(
-  join(root, "Packages/EdithHost/Package.swift"),
-  "utf8",
+const manifest = await relocateHostedHostManifest(
+  await readFile(join(root, "Packages/EdithHost/Package.swift"), "utf8"),
+  root,
 );
-for (const dependency of ["ExtensionMarketplace", "ExtensionSupport"]) {
-  const anchor = `.package(path: "../${dependency}")`;
-  assert.equal(manifest.split(anchor).length, 2);
-  manifest = manifest.replace(
-    anchor,
-    `.package(path: ${JSON.stringify(join(root, "Packages", dependency))})`,
-  );
-}
 await writeFile(join(packageDirectory, "Package.swift"), manifest);
 const sources = join(packageDirectory, "Sources/EdithHost");
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
