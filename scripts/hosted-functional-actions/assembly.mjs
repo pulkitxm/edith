@@ -34,6 +34,7 @@ export async function assembleFunctionalCaseSources({
   root,
   owner,
   targetDirectory,
+  admittedSnapshot,
   read = readFile,
   write = writeFile,
   createDirectory = mkdir,
@@ -55,6 +56,23 @@ export async function assembleFunctionalCaseSources({
   const sources = await Promise.all(
     sourcePaths.map((path) => read(join(root, path), "utf8")),
   );
+  assert.match(admittedSnapshot.sourceCommit, /^[0-9a-f]{40}$/);
+  assert.deepEqual(Object.keys(admittedSnapshot).sort(), [
+    "files",
+    "sourceCommit",
+  ]);
+  assert.deepEqual(
+    admittedSnapshot.files.map((pin) => pin.path).sort(),
+    [...sourcePaths].sort(),
+  );
+  for (const [index, path] of sourcePaths.entries()) {
+    const pin = admittedSnapshot.files.find((item) => item.path === path);
+    assert.deepEqual(Object.keys(pin).sort(), ["path", "sha256"]);
+    assert.equal(
+      createHash("sha256").update(sources[index]).digest("hex"),
+      pin.sha256,
+    );
+  }
   const assembled = functionalCaseAssembly(owner, ...sources);
   await createDirectory(targetDirectory, { recursive: true, mode: 0o700 });
   for (const file of assembled)
@@ -62,8 +80,15 @@ export async function assembleFunctionalCaseSources({
       flag: "wx",
       mode: 0o600,
     });
+  for (const [index, path] of sourcePaths.entries())
+    assert.equal(
+      await read(join(root, path), "utf8"),
+      sources[index],
+      "Admitted native source changed during assembly",
+    );
   return Object.freeze({
     owner,
+    sourceCommit: admittedSnapshot.sourceCommit,
     originalSourceFiles: sourcePaths.map((path, index) => ({
       path,
       sha256: createHash("sha256").update(sources[index]).digest("hex"),

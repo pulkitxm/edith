@@ -1,6 +1,51 @@
+import CoreFoundation
+import CryptoKit
 import Foundation
 
 public enum HostedFunctionalActionError: Error { case invalid }
+
+public enum HostedFunctionalJSON {
+    public static func object(_ data: Data) throws -> [String: Any] {
+        guard !data.isEmpty, data.count <= 1_048_576,
+            let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { throw HostedFunctionalActionError.invalid }
+        let bytes = Array(data)
+        var index = 0
+        var scopes: [Set<String>?] = []
+        while index < bytes.count {
+            let byte = bytes[index]
+            if byte == 123 || byte == 91 {
+                guard scopes.count < 64 else { throw HostedFunctionalActionError.invalid }
+                scopes.append(byte == 123 ? Set<String>() : nil)
+            } else if byte == 125 || byte == 93 {
+                guard !scopes.isEmpty else { throw HostedFunctionalActionError.invalid }
+                scopes.removeLast()
+            } else if byte == 34 {
+                let start = index
+                index += 1
+                while index < bytes.count && bytes[index] != 34 {
+                    if bytes[index] == 92 { index += 1 }
+                    index += 1
+                }
+                guard index < bytes.count else { throw HostedFunctionalActionError.invalid }
+                var next = index + 1
+                while next < bytes.count && [9, 10, 13, 32].contains(bytes[next]) { next += 1 }
+                if next < bytes.count && bytes[next] == 58 {
+                    guard !scopes.isEmpty, var names = scopes[scopes.count - 1],
+                        let key = try JSONSerialization.jsonObject(
+                            with: Data(bytes[start...index]), options: .fragmentsAllowed)
+                            as? String,
+                        names.insert(key).inserted
+                    else { throw HostedFunctionalActionError.invalid }
+                    scopes[scopes.count - 1] = names
+                }
+            }
+            index += 1
+        }
+        guard scopes.isEmpty else { throw HostedFunctionalActionError.invalid }
+        return object
+    }
+}
 
 public struct HostedFunctionalProcessIdentity: Codable, Equatable, Sendable {
     public let pid: Int32
@@ -218,4 +263,212 @@ public protocol HostedFunctionalActionCase {
     func readAuthoritativeState(context: HostedFunctionalActionContext) async throws -> Data
     func readPersistentState(context: HostedFunctionalActionContext) async throws -> Data?
     func shutdownPresentation() async
+}
+
+public struct HostedFunctionalMutationJournal: Codable, Equatable, Sendable {
+    public struct Baseline: Codable, Equatable, Sendable {
+        public let reader: String
+        public let observationID: String
+        public let sequence: Int
+        public let readbackSHA256: String?
+        public let expectedSHA256: String?
+
+        enum CodingKeys: String, CodingKey {
+            case reader, observationID, sequence, readbackSHA256, expectedSHA256
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var values = encoder.container(keyedBy: CodingKeys.self)
+            try values.encode(reader, forKey: .reader)
+            try values.encode(observationID, forKey: .observationID)
+            try values.encode(sequence, forKey: .sequence)
+            try values.encode(readbackSHA256, forKey: .readbackSHA256)
+            try values.encode(expectedSHA256, forKey: .expectedSHA256)
+        }
+    }
+
+    public struct Request: Codable, Equatable, Sendable {
+        public let schema: Int
+        public let sourceCommit: String
+        public let session: String
+        public let owner: String
+        public let phase: String
+        public let capabilitySHA256: String
+        public let requestID: String
+        public let operation: String
+        public let payloadSHA256: String
+    }
+
+    public struct Acknowledgement: Codable, Equatable, Sendable {
+        public let request: Request
+        public let engine: HostedFunctionalProcessIdentity
+        public let success: Bool
+        public let responseSHA256: String
+        public let sequence: Int
+    }
+
+    public struct Observation: Codable, Equatable, Sendable {
+        public let observationID: String
+        public let sequence: Int
+        public let observationSHA256: String
+        public let expectedSHA256: String
+    }
+
+    public struct Transition: Codable, Equatable, Sendable {
+        public let kind: String
+        public let reader: String
+        public let capabilitySHA256: String
+        public let requestID: String
+        public let before: Observation
+        public let after: Observation
+    }
+
+    public struct Record: Codable, Equatable, Sendable {
+        public let request: Request
+        public let activationID: String
+        public let origin: String
+        public let ui: HostedFunctionalProcessIdentity
+        public let engine: HostedFunctionalProcessIdentity
+        public let payload: String
+        public let sendSequence: Int
+        public let acknowledgement: Acknowledgement
+        public let transition: Transition
+    }
+
+    public let schema: Int
+    public let sourceCommit: String
+    public let session: String
+    public let owner: String
+    public let phase: String
+    public let capabilitySHA256: String
+    public let presentationID: String
+    public let baseline: Baseline
+    public let loadSequence: Int
+    public let records: [Record]
+    public let sealedThroughSequence: Int
+
+    public static func verify(_ bytes: Data, issuerKey: Data) throws -> Self {
+        guard issuerKey.count == 32, bytes.count <= 2_097_152,
+            let envelope = try? HostedFunctionalJSON.object(bytes),
+            Set(envelope.keys) == ["schema", "payload", "signature"],
+            let schema = envelope["schema"] as? NSNumber,
+            CFGetTypeID(schema) != CFBooleanGetTypeID(), schema == 1,
+            let payload = envelope["payload"] as? String,
+            !payload.isEmpty, payload.utf8.count <= 1_048_576,
+            let encoded = envelope["signature"] as? String,
+            let signature = Data(base64Encoded: encoded), signature.count == 64,
+            signature.base64EncodedString() == encoded
+        else { throw HostedFunctionalActionError.invalid }
+        let data = Data(payload.utf8)
+        _ = try HostedFunctionalJSON.object(data)
+        let journal = try JSONDecoder().decode(Self.self, from: data)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        guard try encoder.encode(journal) == data,
+            try Curve25519.Signing.PublicKey(rawRepresentation: issuerKey)
+                .isValidSignature(signature, for: data)
+        else { throw HostedFunctionalActionError.invalid }
+        return journal
+    }
+
+    public func validate(
+        context: HostedFunctionalActionContext, capabilitySHA256: String,
+        presentationID: String, persistenceApplicable: Bool, mutationKind: String,
+        payloadKeys: [String], selectedRequestID: String, persistenceSequence: Int
+    ) throws -> Record {
+        guard schema == 1, sourceCommit == context.sourceCommit, session == context.session,
+            owner == context.owner, phase == context.phase,
+            self.capabilitySHA256 == capabilitySHA256,
+            HostedFunctionalActionContext.validHash(capabilitySHA256),
+            self.presentationID == presentationID, Self.uuid(presentationID),
+            baseline.reader == "independent-hosted-producer", Self.uuid(baseline.observationID),
+            baseline.sequence > 0, baseline.sequence < loadSequence,
+            !records.isEmpty, records.count <= 128,
+            ["state-transition", "owned-output"].contains(mutationKind),
+            payloadKeys.count <= 32, Set(payloadKeys).count == payloadKeys.count,
+            payloadKeys.allSatisfy({
+                $0.range(of: "^[A-Za-z][A-Za-z0-9_]{0,63}$", options: .regularExpression) != nil
+            }),
+            !payloadKeys.isEmpty
+                || (owner == "terminal" && context.activationOperation == "terminal.open")
+        else { throw HostedFunctionalActionError.invalid }
+        if persistenceApplicable {
+            guard let hash = baseline.readbackSHA256,
+                HostedFunctionalActionContext.validHash(hash), baseline.expectedSHA256 == hash
+            else { throw HostedFunctionalActionError.invalid }
+        } else {
+            guard baseline.readbackSHA256 == nil, baseline.expectedSHA256 == nil else {
+                throw HostedFunctionalActionError.invalid
+            }
+        }
+        var sequence = loadSequence
+        var identifiers: Set<String> = [baseline.observationID]
+        for record in records {
+            let request = record.request
+            let acknowledgement = record.acknowledgement
+            let transition = record.transition
+            guard request.schema == 1, request.sourceCommit == sourceCommit,
+                request.session == session, request.owner == owner, request.phase == phase,
+                request.capabilitySHA256 == capabilitySHA256, Self.uuid(request.requestID),
+                identifiers.insert(request.requestID).inserted,
+                context.operations.contains(request.operation),
+                !request.operation.split(separator: ".").contains(where: {
+                    ["read", "snapshot", "state", "list", "schema", "get", "poll"].contains(
+                        String($0))
+                }),
+                Self.uuid(record.activationID), record.origin == "authenticated-original-control",
+                record.ui == context.ui, record.engine == context.engine,
+                let bytes = Data(base64Encoded: record.payload), !bytes.isEmpty,
+                bytes.count <= 1_048_576, bytes.base64EncodedString() == record.payload,
+                Self.digest(bytes) == request.payloadSHA256,
+                acknowledgement.request == request, acknowledgement.engine == context.engine,
+                acknowledgement.success,
+                HostedFunctionalActionContext.validHash(acknowledgement.responseSHA256),
+                record.sendSequence > 0, record.sendSequence < acknowledgement.sequence,
+                ["state-transition", "owned-output"].contains(transition.kind),
+                transition.reader == "independent-hosted-producer",
+                transition.capabilitySHA256 == capabilitySHA256,
+                transition.requestID == request.requestID
+            else { throw HostedFunctionalActionError.invalid }
+            let object = try HostedFunctionalJSON.object(bytes)
+            if request.operation == context.activationOperation {
+                guard Set(object.keys) == Set(payloadKeys) else {
+                    throw HostedFunctionalActionError.invalid
+                }
+            }
+            for observation in [transition.before, transition.after] {
+                guard Self.uuid(observation.observationID),
+                    identifiers.insert(observation.observationID).inserted,
+                    observation.sequence > 0,
+                    HostedFunctionalActionContext.validHash(observation.observationSHA256),
+                    observation.expectedSHA256 == observation.observationSHA256
+                else { throw HostedFunctionalActionError.invalid }
+            }
+            guard sequence < transition.before.sequence,
+                transition.before.sequence < record.sendSequence,
+                acknowledgement.sequence < transition.after.sequence
+            else { throw HostedFunctionalActionError.invalid }
+            sequence = transition.after.sequence
+        }
+        guard sealedThroughSequence > sequence, sealedThroughSequence >= persistenceSequence,
+            let selected = records.last, selected.request.requestID == selectedRequestID,
+            selected.request.operation == context.activationOperation,
+            selected.transition.kind == mutationKind,
+            selected.transition.before.observationSHA256
+                != selected.transition.after.observationSHA256
+        else { throw HostedFunctionalActionError.invalid }
+        return selected
+    }
+
+    private static func uuid(_ value: String) -> Bool {
+        guard UUID(uuidString: value)?.uuidString.lowercased() == value,
+            value.utf8.count == 36
+        else { return false }
+        let bytes = Array(value.utf8)
+        return bytes[14] == 52 && [56, 57, 97, 98].contains(bytes[19])
+    }
+
+    private static func digest(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
 }

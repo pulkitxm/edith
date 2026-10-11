@@ -5,6 +5,7 @@ export const definition = {
     kind: "native-accessibility",
     control: "Keep awake",
     operation: "keepAwake.ui.update",
+    mutation: { kind: "state-transition", payloadKeys: ["values", "removed"] },
     sources: [
       {
         path: "Extensions/keepAwake/Views/KeepAwakeSettings.swift",

@@ -4,12 +4,20 @@ import FunctionalActionContract
 
 @MainActor
 final class HostedFunctionalActionTransport: NSObject {
+    struct Request {
+        let token: UUID
+        let operation: String
+        let payload: Data
+        let origin: String
+        let activationID: UUID?
+    }
     struct Invocation {
         let token: UUID
         let operation: String
         let payload: Data
         let response: Data
         let origin: String
+        let activationID: UUID?
     }
 
     let context: HostedFunctionalActionContext
@@ -17,14 +25,28 @@ final class HostedFunctionalActionTransport: NSObject {
     private let endpoint: ExtensionPeerEndpoint
     private let verifyCurrent: @MainActor () async throws -> Void
     private let observe: @MainActor (Invocation) async throws -> Void
-    private var calls: [UUID: Task<Void, Never>] = [:]
+    private let observeBeforeSend: @MainActor (Request) async throws -> Void
+    private let readPersistentBeforeConstruction: @MainActor () async throws -> Data?
+    private let observePersistentBefore: @MainActor (Data?) async throws -> Void
+    private let validatePayload: @MainActor (String, Data) throws -> Void
+    private var calls: [UUID: Task<Data, Error>] = [:]
+    private var bridges: [UUID: Task<Void, Never>] = [:]
     private var completed: [Invocation] = []
     private var stopped = false
+    private var started = 0
+    private var activationID: UUID?
+    private var baselineCaptureStarted = false
+    private var baselineCaptured = false
+    private var persistentBaseline: Data?
 
     init(
         context: HostedFunctionalActionContext, presentationID: UUID,
         verifyCurrent: @escaping @MainActor () async throws -> Void,
-        observe: @escaping @MainActor (Invocation) async throws -> Void
+        observe: @escaping @MainActor (Invocation) async throws -> Void,
+        validatePayload: @escaping @MainActor (String, Data) throws -> Void,
+        observeBeforeSend: @escaping @MainActor (Request) async throws -> Void,
+        observePersistentBefore: @escaping @MainActor (Data?) async throws -> Void,
+        readPersistentBeforeConstruction: @escaping @MainActor () async throws -> Data?
     ) throws {
         let commands = try context.ownedPath(named: "commands", kind: "directory")
         let expected = URL(fileURLWithPath: context.dataDirectory, isDirectory: true)
@@ -35,6 +57,10 @@ final class HostedFunctionalActionTransport: NSObject {
         self.presentationID = presentationID
         self.verifyCurrent = verifyCurrent
         self.observe = observe
+        self.validatePayload = validatePayload
+        self.observeBeforeSend = observeBeforeSend
+        self.observePersistentBefore = observePersistentBefore
+        self.readPersistentBeforeConstruction = readPersistentBeforeConstruction
         endpoint = try ExtensionPeerEndpoint(
             namespace: context.hostIdentifier, owner: context.owner, directory: commands)
         super.init()
@@ -49,10 +75,24 @@ final class HostedFunctionalActionTransport: NSObject {
 
     var originalInvocationCount: Int { completed.filter { $0.origin == "original-control" }.count }
 
-    var originalActionAcknowledged: Bool {
-        completed.contains {
-            $0.origin == "original-control" && $0.operation == context.activationOperation
+    func beginActivation() throws -> UUID {
+        guard !stopped, baselineCaptured, calls.isEmpty, bridges.isEmpty, activationID == nil else {
+            throw HostedFunctionalActionError.invalid
         }
+        let id = UUID()
+        activationID = id
+        return id
+    }
+
+    func endActivation(_ id: UUID) throws -> Invocation {
+        guard !stopped, activationID == id, calls.isEmpty,
+            let invocation = completed.last(where: {
+                $0.activationID == id && $0.origin == "original-control"
+                    && $0.operation == context.activationOperation
+            })
+        else { throw HostedFunctionalActionError.invalid }
+        activationID = nil
+        return invocation
     }
 
     func invokeOriginal(_ operation: String, payload: Data) async throws -> Data {
@@ -84,31 +124,66 @@ final class HostedFunctionalActionTransport: NSObject {
     func requireCurrent() async throws {
         guard !stopped else { throw HostedFunctionalActionError.invalid }
         try await verifyCurrent()
+        try requireRunning()
+    }
+
+    func capturePersistentBeforeConstruction() async throws -> Data? {
+        try requireRunning()
+        guard started == 0, calls.isEmpty, bridges.isEmpty, activationID == nil else {
+            throw HostedFunctionalActionError.invalid
+        }
+        if baselineCaptured { return persistentBaseline }
+        guard !baselineCaptureStarted else { throw HostedFunctionalActionError.invalid }
+        baselineCaptureStarted = true
+        try await verifyCurrent()
+        try requireRunning()
+        let value = try await readPersistentBeforeConstruction()
+        try requireRunning()
+        guard value.map({ !$0.isEmpty && $0.count <= 1_048_576 }) ?? true else {
+            throw HostedFunctionalActionError.invalid
+        }
+        try await verifyCurrent()
+        try requireRunning()
+        try await observePersistentBefore(value)
+        try requireRunning()
+        persistentBaseline = value
+        baselineCaptured = true
+        return value
     }
 
     func shutdown() async {
         stopped = true
+        activationID = nil
         let pending = Array(calls.values)
+        let callbacks = Array(bridges.values)
         pending.forEach { $0.cancel() }
-        for task in pending { await task.value }
+        callbacks.forEach { $0.cancel() }
+        for task in pending { _ = await task.result }
+        for task in callbacks { await task.value }
         calls.removeAll()
+        bridges.removeAll()
     }
 
     @objc(invoke:completion:)
     func invoke(_ data: NSData, completion: @escaping @Sendable (NSData) -> Void) {
         do {
-            let request = try ExtensionEngineWire.decode(
-                ExtensionEngineRequest.self, from: data as Data)
-            try request.validate()
-            guard request.presentationID == presentationID, !stopped, calls.count < 8,
-                calls[request.token] == nil
+            let object = try HostedFunctionalJSON.object(data as Data)
+            guard
+                Set(object.keys) == ["token", "presentationID", "operation", "payload", "timeout"]
             else { throw HostedFunctionalActionError.invalid }
-            calls[request.token] = Task { [self] in
-                defer { calls[request.token] = nil }
+            let request = try JSONDecoder().decode(ExtensionEngineRequest.self, from: data as Data)
+            try request.validate()
+            guard request.presentationID == presentationID, !stopped,
+                calls.count + bridges.count < 8,
+                calls[request.token] == nil, bridges[request.token] == nil
+            else { throw HostedFunctionalActionError.invalid }
+            bridges[request.token] = Task { [self] in
+                defer { bridges[request.token] = nil }
                 do {
                     let response = try await invoke(
                         request.operation, payload: request.payload, token: request.token,
                         origin: "original-control", timeout: request.timeout)
+                    try requireRunning()
                     completion(
                         try ExtensionEngineWire.encode(
                             ExtensionEngineReply(token: request.token, ok: true, payload: response))
@@ -129,30 +204,73 @@ final class HostedFunctionalActionTransport: NSObject {
     func cancel(_ token: NSString) {
         guard let id = UUID(uuidString: token as String) else { return }
         calls[id]?.cancel()
+        bridges[id]?.cancel()
     }
 
     private func invoke(
         _ operation: String, payload: Data, token: UUID, origin: String, timeout: Double = 10
     ) async throws -> Data {
-        try Task.checkCancellation()
+        try requireRunning()
+        guard baselineCaptured else { throw HostedFunctionalActionError.invalid }
         try context.requireOperation(operation)
-        guard !stopped, completed.count < 128, payload.count <= 1_048_576,
-            (try? JSONSerialization.jsonObject(with: payload, options: .fragmentsAllowed)) != nil,
+        _ = try HostedFunctionalJSON.object(payload)
+        try validatePayload(operation, payload)
+        guard calls.count < 8, calls[token] == nil, started < 128,
             timeout.isFinite, timeout > 0, timeout <= 30
         else { throw HostedFunctionalActionError.invalid }
+        started += 1
+        let activation = activationID
+        let task = Task { [self] in
+            try await perform(
+                operation, payload: payload, token: token, origin: origin,
+                activation: activation, timeout: timeout)
+        }
+        calls[token] = task
+        defer { calls[token] = nil }
+        let response = try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        try requireRunning()
+        return response
+    }
+
+    private func perform(
+        _ operation: String, payload: Data, token: UUID, origin: String,
+        activation: UUID?, timeout: Double
+    ) async throws -> Data {
+        try requireRunning()
         try await verifyCurrent()
+        try requireRunning()
+        try await observeBeforeSend(
+            Request(
+                token: token, operation: operation, payload: payload,
+                origin: origin, activationID: activation))
+        try requireRunning()
+        try await verifyCurrent()
+        try requireRunning()
         let response = try await endpoint.invoke(operation, payload: payload, timeout: timeout)
-        try Task.checkCancellation()
+        try requireRunning()
         try await verifyCurrent()
+        try requireRunning()
         guard !stopped, response.count <= 1_048_576 else {
             throw HostedFunctionalActionError.invalid
         }
         let invocation = Invocation(
-            token: token, operation: operation, payload: payload, response: response, origin: origin
+            token: token, operation: operation, payload: payload, response: response,
+            origin: origin,
+            activationID: activation
         )
         try await observe(invocation)
+        try requireRunning()
         completed.append(invocation)
         return response
+    }
+
+    private func requireRunning() throws {
+        try Task.checkCancellation()
+        guard !stopped else { throw HostedFunctionalActionError.invalid }
     }
 }
 
@@ -169,15 +287,13 @@ enum HostedFunctionalActionNativeDriver {
             throw HostedFunctionalActionError.invalid
         }
         try await transport.requireCurrent()
-        let action = try makeCase()
+        let before = try await transport.capturePersistentBeforeConstruction()
+        let action: Case
+        do { action = try makeCase() } catch { await transport.shutdown(); throw error }
         do {
-            let before =
-                context.phase == "initial"
-                ? nil : try await action.readPersistentState(context: context)
+            let activation = try transport.beginActivation()
             try await action.activateOriginalControl(context: context)
-            guard transport.originalActionAcknowledged else {
-                throw HostedFunctionalActionError.invalid
-            }
+            _ = try transport.endActivation(activation)
             try await transport.requireCurrent()
             let authoritative = try await action.readAuthoritativeState(context: context)
             guard !authoritative.isEmpty, authoritative.count <= 1_048_576 else {
