@@ -377,4 +377,106 @@ struct ExtensionPackageFilesystemTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: outside.path).isEmpty)
     }
 
+    @Test func nonregularPackageFilesAreRejectedWithoutBlocking() throws {
+        let environmentKey = "EXTENSION_PACKAGE_FIFO_PROBE"
+        if let target = ProcessInfo.processInfo.environment[environmentKey] {
+            alarm(3)
+            defer { alarm(0) }
+            let fixture = try PackageFixture()
+            defer { fixture.clean() }
+            let package = fixturePackage()
+            try fixture.store.commit([package])
+            let fifo: URL
+            switch target {
+            case "installed":
+                fifo = fixture.store.root.appendingPathComponent("installed.json")
+                try FileManager.default.removeItem(at: fifo)
+            case "selected":
+                fifo = fixture.store.root.appendingPathComponent("selected-packages.json")
+            case "pending":
+                fifo = fixture.store.root.appendingPathComponent("pending-removals.json")
+            case "operation":
+                fifo = fixture.store.root.appendingPathComponent(".operation.lock")
+            case "lease":
+                fifo = fixture.store.leaseURL(for: package)
+                try FileManager.default.createDirectory(
+                    at: fifo.deletingLastPathComponent(), withIntermediateDirectories: false)
+            case "copy":
+                fifo = fixture.directory.appendingPathComponent("staged/special-file")
+                try FileManager.default.createDirectory(
+                    at: fifo.deletingLastPathComponent(), withIntermediateDirectories: false)
+            default:
+                throw MarketplaceError.invalidCatalog
+            }
+            #expect(mkfifo(fifo.path, 0o600) == 0)
+            switch target {
+            case "installed":
+                #expect(throws: MarketplaceError.invalidArchive) {
+                    try fixture.store.installedPackages()
+                }
+            case "selected":
+                #expect(throws: MarketplaceError.invalidArchive) {
+                    try fixture.store.installedPackage(
+                        id: package.id, hostABI: package.hostABI, architecture: package.architecture
+                    )
+                }
+            case "pending":
+                #expect(throws: MarketplaceError.invalidArchive) {
+                    try fixture.store.pendingRemovals()
+                }
+            case "operation":
+                #expect(throws: MarketplaceError.invalidArchive) {
+                    try fixture.store.remove(id: package.id)
+                }
+            case "lease":
+                #expect(throws: MarketplaceError.invalidArchive) {
+                    try fixture.store.lease(package)
+                }
+            default:
+                #expect(throws: MarketplaceError.invalidArchive) {
+                    try PackageDirectory(fixture.store.root, create: false).install(
+                        package, from: fifo.deletingLastPathComponent())
+                }
+                #expect(
+                    !FileManager.default.fileExists(
+                        atPath: fixture.store.directory(for: package).path))
+            }
+            var info = stat()
+            #expect(lstat(fifo.path, &info) == 0)
+            #expect(info.st_mode & S_IFMT == S_IFIFO)
+            return
+        }
+        for target in ["installed", "selected", "pending", "operation", "lease", "copy"] {
+            let child = Process()
+            child.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+            var arguments = Array(CommandLine.arguments.dropFirst())
+            if let filter = arguments.firstIndex(of: "--filter"), filter + 1 < arguments.count {
+                arguments[filter + 1] = "nonregularPackageFilesAreRejectedWithoutBlocking"
+            } else {
+                arguments += ["--filter", "nonregularPackageFilesAreRejectedWithoutBlocking"]
+            }
+            child.arguments = arguments
+            var environment = ProcessInfo.processInfo.environment
+            environment[environmentKey] = target
+            child.environment = environment
+            let output = Pipe()
+            child.standardOutput = output
+            child.standardError = output
+            try child.run()
+            let deadline = ContinuousClock.now + .seconds(5)
+            while child.isRunning, ContinuousClock.now < deadline { usleep(10_000) }
+            let timedOut = child.isRunning
+            if timedOut { kill(child.processIdentifier, SIGKILL) }
+            child.waitUntilExit()
+            let captured = try output.fileHandleForReading.readToEnd() ?? Data()
+            let result = String(decoding: captured, as: UTF8.self)
+            #expect(!timedOut, "FIFO probe timed out: \(target)")
+            #expect(
+                result.contains("Test nonregularPackageFilesAreRejectedWithoutBlocking() passed"),
+                "FIFO probe did not complete its selected test: \(target): \(result)")
+            #expect(child.terminationReason == .exit, "FIFO probe terminated: \(target): \(result)")
+            #expect(child.terminationStatus == 0, "FIFO probe failed: \(target): \(result)")
+        }
+    }
+
 }

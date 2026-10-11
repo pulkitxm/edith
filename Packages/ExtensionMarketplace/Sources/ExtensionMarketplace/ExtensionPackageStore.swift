@@ -227,7 +227,8 @@ public final class PackageFileLock: @unchecked Sendable {
     public init(url: URL, exclusive: Bool) throws {
         let parent = try PackageDirectory(url.deletingLastPathComponent(), create: true)
         descriptor = openat(
-            parent.descriptor, url.lastPathComponent, O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC,
+            parent.descriptor, url.lastPathComponent,
+            O_CREAT | O_RDWR | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC,
             S_IRUSR | S_IWUSR)
         guard descriptor >= 0 else { throw PackageDirectory.failure() }
         do { try PackageDirectory.validate(descriptor, directory: false, owned: true) } catch {
@@ -394,7 +395,7 @@ final class PackageDirectory {
     }
 
     func read(_ name: String) throws -> Data? {
-        let file = openat(descriptor, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        let file = openat(descriptor, name, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
         if file < 0, errno == ENOENT { return nil }
         guard file >= 0 else { throw Self.failure() }
         defer { Darwin.close(file) }
@@ -452,7 +453,8 @@ final class PackageDirectory {
                 else { throw MarketplaceError.invalidArchive }
                 try destination.copy(from: original)
             } else {
-                let input = openat(source.descriptor, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+                let input = openat(
+                    source.descriptor, name, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
                 guard input >= 0 else { throw Self.failure() }
                 defer { Darwin.close(input) }
                 try Self.validate(input, directory: false, owned: true)
