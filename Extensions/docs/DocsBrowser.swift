@@ -40,6 +40,7 @@ final class DocsBrowser {
     private var loadTask: Task<Void, Never>?
     private var askTask: Task<DocsPresentationAnswer, Never>?
     private var stopped = false
+    private var followWork: [UUID: Task<Void, Never>] = [:]
     private var cancelledWork: [UUID: Task<Void, Never>] = [:]
     private let defaults: UserDefaults
     private let remote: DocsUIBridge?
@@ -161,11 +162,17 @@ final class DocsBrowser {
     }
 
     func follow(_ link: DocsLink) {
+        guard !stopped else { return }
         switch link {
         case .page(let path, let anchor): open(DocsLocation(path: path, anchor: anchor))
         case .external(let url):
             if let remote {
-                Task { try? await remote.follow(url) }
+                let id = UUID()
+                followWork[id] = Task { [self] in
+                    defer { followWork[id] = nil }
+                    guard !Task.isCancelled else { return }
+                    try? await remote.follow(url)
+                }
             } else {
                 NSWorkspace.shared.open(url)
             }
@@ -273,7 +280,8 @@ final class DocsBrowser {
         return true
     }
 
-    func shutdown() {
+    func cancelPendingWork() {
+        guard !stopped else { return }
         stopped = true
         askSerial += 1
         filterGeneration &+= 1
@@ -283,6 +291,11 @@ final class DocsBrowser {
         askTask = nil
         filterTask = nil
         loadTask = nil
+        for task in followWork.values { task.cancel() }
+    }
+
+    func shutdown() {
+        cancelPendingWork()
         asking = false
         resultsVisible = false
         answer = nil
@@ -301,8 +314,9 @@ final class DocsBrowser {
     }
 
     func drain() async {
-        shutdown()
-        for task in Array(cancelledWork.values) { await task.value }
+        cancelPendingWork()
+        let pending = Array(cancelledWork.values) + Array(followWork.values)
+        for task in pending { await task.value }
     }
 
     private func show(_ target: DocsLocation, reveal: Bool = true) {
