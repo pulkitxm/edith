@@ -28,7 +28,9 @@ import {
 } from "../hosted-managed-views/package-preparation.mjs";
 import { verifiedCatalogPayload } from "../verify-extension-catalog.mjs";
 import {
+  absentExtensionsPathRoute,
   closedJSON,
+  currentExtensionsRuns,
   currentPackages,
   digest,
   downloadPublic,
@@ -40,6 +42,8 @@ import {
   request,
   successfulRun,
   toolchainProvenance,
+  unchangedCatalogPublication,
+  unchangedExtensionsRun,
 } from "./contract.mjs";
 import {
   admitEvidence,
@@ -522,15 +526,153 @@ export async function run() {
       envelopePin: signed.pin,
     };
   }
+  const reusedCatalogPublication = production.run.head_sha !== options.source;
+  let publicationDirectory = sourceDirectory;
+  let publicationDefinitions = definitions;
+  let publicationFingerprints = fingerprints;
+  let currentNoChange;
+  const currentNoChangeInventories = [];
+  if (reusedCatalogPublication) {
+    assert.match(production.run.head_sha, /^[a-f0-9]{40}$/);
+    command(
+      "git",
+      ["merge-base", "--is-ancestor", production.run.head_sha, options.source],
+      root,
+    );
+    publicationDirectory = join(work, "catalog-publication-source");
+    await privateDirectory(publicationDirectory);
+    command(
+      "git",
+      ["clone", "--shared", "--no-checkout", root, publicationDirectory],
+      root,
+    );
+    command(
+      "git",
+      ["checkout", "--detach", production.run.head_sha],
+      publicationDirectory,
+    );
+    publicationDefinitions = JSON.parse(
+      await readFile(
+        join(publicationDirectory, "Extensions/manifest.json"),
+        "utf8",
+      ),
+    );
+    publicationFingerprints = Object.fromEntries(
+      await Promise.all(
+        publicationDefinitions.map(async (definition) => [
+          definition.id,
+          await extensionFingerprint(
+            publicationDirectory,
+            definition,
+            publicationDefinitions,
+          ),
+        ]),
+      ),
+    );
+    const plan = {
+      include: await planUnpublishedExtensions(
+        sourceDirectory,
+        definitions,
+        catalog.packages,
+      ),
+    };
+    unchangedCatalogPublication({
+      catalog,
+      definitions,
+      fingerprints,
+      priorDefinitions: publicationDefinitions,
+      priorFingerprints: publicationFingerprints,
+      plan,
+    });
+    const runs = await currentExtensionsRuns(options.source, api);
+    const plans = [];
+    for (const run of runs) {
+      const value = await evidenceInventory(
+        run.id,
+        run.run_attempt,
+        authenticated,
+      );
+      assert.equal(value.run.id, run.id);
+      assert.equal(value.run.run_attempt, run.run_attempt);
+      const row = unchangedExtensionsRun({ ...value, source: options.source });
+      const outer = await download(
+        row,
+        `host-only-${run.id}-${run.run_attempt}-plan.zip`,
+      );
+      const directory = join(
+        work,
+        `host-only-${run.id}-${run.run_attempt}-plan`,
+      );
+      python(
+        "extract",
+        outer,
+        directory,
+        "plan.json",
+        "previous.json",
+        "previous-state.json",
+      );
+      assert.deepEqual(document(join(directory, "plan.json")), plan);
+      assert.deepEqual(document(join(directory, "previous.json")), catalog);
+      assert.deepEqual(document(join(directory, "previous-state.json")), {
+        draft: false,
+      });
+      currentNoChangeInventories.push(value);
+      plans.push({ runID: run.id, runAttempt: run.run_attempt, ...row });
+    }
+    let absentRoute;
+    if (!runs.length) {
+      const parents = command(
+        "git",
+        ["rev-list", "--parents", "-n", "1", options.source],
+        root,
+      )
+        .trim()
+        .split(" ");
+      assert.equal(parents.shift(), options.source);
+      const changedPaths = command(
+        "git",
+        [
+          "diff",
+          "--name-only",
+          "-z",
+          "--no-renames",
+          parents[0],
+          options.source,
+        ],
+        root,
+      ).split("\0");
+      assert.equal(changedPaths.pop(), "");
+      absentExtensionsPathRoute(
+        Bun.YAML.parse(
+          await readFile(
+            join(sourceDirectory, ".github/workflows/extensions.yml"),
+            "utf8",
+          ),
+        ),
+        parents,
+        changedPaths,
+      );
+      absentRoute = { parentCommit: parents[0], changedPaths };
+    }
+    currentNoChange = {
+      sourceCommit: options.source,
+      plan,
+      plans,
+      absentRoute,
+      currentNativeBuildClaimed: false,
+    };
+  }
   const currentProduction = await prepareProduction(
     production,
-    sourceDirectory,
-    definitions,
-    fingerprints,
+    publicationDirectory,
+    publicationDefinitions,
+    publicationFingerprints,
     "production",
   );
   const productionPlan = currentProduction.plan;
-  const changed = new Set(productionPlan.plannedIDs);
+  const changed = new Set(
+    reusedCatalogPublication ? [] : productionPlan.plannedIDs,
+  );
   const currentKey = `${production.run.id}:${production.run.run_attempt}`;
   const requiredRetained = [...lineages.entries()].filter(
     ([, row]) => `${row.runID}:${row.runAttempt}` !== currentKey,
@@ -636,7 +778,9 @@ export async function run() {
       frozenSHA: admission.frozenSHA,
       qualification:
         `${origin.runID}:${origin.runAttempt}` === currentKey
-          ? "current-source-build"
+          ? reusedCatalogPublication
+            ? "retained-catalog-publication"
+            : "current-source-build"
           : admission.qualification.originalPublicationOnlyFailure
             ? "composed-publication-only-retry"
             : "retained-unchanged-fingerprint",
@@ -954,7 +1098,7 @@ export async function run() {
   assert.equal(installer.sourceCommit, options.source);
   for (const value of [...productionByRun.values()]
     .map(({ value }) => value)
-    .concat(host)) {
+    .concat(host, currentNoChangeInventories)) {
     const latest = await api(
       `/actions/runs/${value.run.id}/attempts/${value.run.run_attempt}`,
     );
@@ -963,6 +1107,16 @@ export async function run() {
     assert.equal(latest.conclusion, value.run.conclusion);
     assert.equal(latest.run_attempt, value.run.run_attempt);
   }
+  if (reusedCatalogPublication)
+    assert.deepEqual(
+      (await currentExtensionsRuns(options.source, api)).map(
+        ({ id, run_attempt }) => ({ id, run_attempt }),
+      ),
+      currentNoChangeInventories.map(({ run }) => ({
+        id: run.id,
+        run_attempt: run.run_attempt,
+      })),
+    );
   assert.equal(
     (await api("/git/ref/heads/main")).object.sha,
     initialMain.object.sha,
@@ -975,14 +1129,20 @@ export async function run() {
   await record(join(output, "result.json"), {
     schema: 1,
     sourceCommit: options.source,
+    currentHostSource: options.source,
+    catalogPublicationSource: production.run.head_sha,
+    currentNoChange,
     workflowCommit: process.env.EXPECTED_SOURCE_SHA,
     tag: options.tag,
     qualification,
     packagesRun: options.packagesRun,
     hostRun: options.hostRun,
     productionPlan,
-    admissionMode:
-      changed.size === 39 ? "initial-full39" : "composed-selective",
+    admissionMode: reusedCatalogPublication
+      ? "host-only-reused-catalog"
+      : changed.size === 39
+        ? "initial-full39"
+        : "composed-selective",
     retainedPlans: [...productionByRun.values()]
       .filter((value) => value !== currentProduction)
       .map(({ source, plan, value }) => ({

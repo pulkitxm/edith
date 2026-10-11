@@ -310,6 +310,138 @@ export function ownedDraftResume(value) {
   return currentPackages(previous, definitions, fingerprints);
 }
 
+export function unchangedCatalogPublication({
+  catalog,
+  definitions,
+  fingerprints,
+  priorDefinitions,
+  priorFingerprints,
+  plan,
+}) {
+  validateCatalog(catalog);
+  assert.deepEqual(plan, { include: [] });
+  for (const entries of [definitions, priorDefinitions]) {
+    assert.equal(entries.length, 39);
+    assert.equal(new Set(entries.map(({ id }) => id)).size, 39);
+  }
+  assert.deepEqual(
+    Object.keys(fingerprints).sort(),
+    definitions.map(({ id }) => id).sort(),
+  );
+  assert.deepEqual(priorFingerprints, fingerprints);
+  assert.deepEqual(
+    currentPackages(catalog, priorDefinitions, priorFingerprints),
+    currentPackages(catalog, definitions, fingerprints),
+  );
+}
+
+export async function currentExtensionsRuns(source, api) {
+  assert.match(source, commit);
+  const runs = [];
+  let count;
+  for (let page = 1; page <= 10; page++) {
+    const result = await api(
+      `/actions/workflows/extensions.yml/runs?head_sha=${source}&per_page=100&page=${page}`,
+    );
+    assert(
+      Number.isSafeInteger(result?.total_count) &&
+        result.total_count >= 0 &&
+        result.total_count <= 1000,
+    );
+    count ??= result.total_count;
+    assert.equal(result.total_count, count);
+    assert(Array.isArray(result.workflow_runs));
+    assert(result.workflow_runs.length <= 100);
+    runs.push(...result.workflow_runs);
+    assert(runs.length <= count);
+    if (runs.length === count) {
+      assert.equal(new Set(runs.map(({ id }) => id)).size, count);
+      for (const run of runs) {
+        successfulRun(run, source, ".github/workflows/extensions.yml");
+        assert(["push", "workflow_dispatch"].includes(run.event));
+        assert.equal(run.head_branch, "main");
+      }
+      return runs;
+    }
+    assert.equal(result.workflow_runs.length, 100);
+  }
+  throw new Error("Current Extensions runs exceed pagination bound");
+}
+
+export function unchangedExtensionsRun({ run, jobs, artifacts, source }) {
+  successfulRun(run, source, ".github/workflows/extensions.yml");
+  assert(["push", "workflow_dispatch"].includes(run.event));
+  assert.equal(run.head_branch, "main");
+  const expected = ["plan", "frozen-host", "tests", "build", "publish"];
+  assert.equal(jobs.length, expected.length);
+  assert.equal(new Set(jobs.map(({ id }) => id)).size, expected.length);
+  assert.deepEqual(jobs.map(({ name }) => name).sort(), expected.sort());
+  for (const job of jobs) {
+    integer(job.id);
+    assert.equal(job.run_id, run.id);
+    assert.equal(job.status, "completed");
+    assert.equal(job.conclusion, job.name === "plan" ? "success" : "skipped");
+    if (job.name !== "plan") assert.deepEqual(job.steps, []);
+    else {
+      for (const step of job.steps) {
+        assert.equal(step.status, "completed");
+        assert(
+          step.conclusion === "success" ||
+            (run.event === "workflow_dispatch" &&
+              step.name === "Require production publication from main" &&
+              step.conclusion === "skipped"),
+        );
+      }
+      for (const name of [
+        "Check portable publication and selective planning",
+        "Plan against the exact PR base or last trusted catalog",
+      ]) {
+        const matching = job.steps.filter((step) => step.name === name);
+        assert.equal(matching.length, 1);
+        assert.equal(matching[0].conclusion, "success");
+      }
+    }
+  }
+  assert.deepEqual(
+    artifacts.map(({ name }) => name),
+    ["extension-plan"],
+  );
+  const row = artifact(artifacts, "extension-plan", run, source);
+  assert(row.artifactBytes <= 8 * 1024 ** 2);
+  return row;
+}
+
+export function absentExtensionsPathRoute(workflow, parents, changedPaths) {
+  assert.equal(parents.length, 1);
+  assert.match(parents[0], commit);
+  const push = workflow.on?.push;
+  assert.deepEqual(Object.keys(push).sort(), ["branches", "paths"]);
+  assert.deepEqual(push.branches, ["main"]);
+  assert(
+    Array.isArray(push.paths) &&
+      push.paths.length > 0 &&
+      push.paths.length <= 100,
+  );
+  for (const pattern of push.paths)
+    assert(
+      typeof pattern === "string" && /^[A-Za-z0-9._/*-]{1,256}$/.test(pattern),
+    );
+  assert(
+    Array.isArray(changedPaths) &&
+      changedPaths.length > 0 &&
+      changedPaths.length <= 100000,
+  );
+  assert.equal(new Set(changedPaths).size, changedPaths.length);
+  for (const path of changedPaths) {
+    assert(typeof path === "string" && path.length > 0 && path.length <= 4096);
+    assert(!path.startsWith("/") && !path.split("/").includes(".."));
+    assert(
+      !push.paths.some((pattern) => new Bun.Glob(pattern).match(path)),
+      `Current source path requires an Extensions run: ${path}`,
+    );
+  }
+}
+
 export function publicURL(value, initial = true) {
   const url = new URL(value);
   assert.equal(url.protocol, "https:");
