@@ -141,6 +141,20 @@ struct HostApplication: App {
                 },
                 originatingWindow: { [weak presenter] in
                     presenter?.window(for: $0) ?? ownedNotch?.window(for: $0)
+                },
+                openWorkspace: {
+                    guard let open = delegate.openMainWindow else {
+                        throw HostWindowNavigationError.unavailable
+                    }
+                    open()
+                },
+                showWindow: { window in
+                    delegate.showMainWindow(window)
+                    await Task.yield()
+                },
+                windowIsPresented: { window in
+                    window.isVisible && !window.isMiniaturized && window.isKeyWindow
+                        && NSApp.isActive
                 }
             )
             let slots = HostMusicSlots.live(marketplace: loaded)

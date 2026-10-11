@@ -37,8 +37,8 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
         try await notificationClick(request)
     }
 
-    func showMainWindow() {
-        if let window = mainWindow() {
+    func showMainWindow(_ ownedWindow: NSWindow? = nil) {
+        if let window = ownedWindow ?? mainWindow() {
             if window.isMiniaturized { window.deminiaturize(nil) }
             window.makeKeyAndOrderFront(nil)
         } else {

@@ -20,12 +20,12 @@ enum HostWindowNavigationError: Error, Equatable {
 enum HostWorkerNavigationRouting {
     static func validateApplied(
         extensionID: String, version: String, activeVersions: [String: String], current: Bool,
-        visible: Bool = true
+        windowPresented: Bool = true, visible: Bool = true
     ) throws {
         guard activeVersions[extensionID] == version else {
             throw HostWindowNavigationError.inactiveOwner
         }
-        guard current, visible else { throw HostWindowNavigationError.routeRejected }
+        guard current, windowPresented, visible else { throw HostWindowNavigationError.routeRejected }
     }
 
     static func activeVersions(

@@ -188,6 +188,23 @@ import Testing
         }
     }
 
+    @Test func appliedSelectionCannotAcknowledgeAnUnpresentedWindow() {
+        for id in owners {
+            #expect(throws: HostWindowNavigationError.routeRejected) {
+                try HostWorkerNavigationRouting.validateApplied(
+                    extensionID: id, version: "1.0.0", activeVersions: admitted(id),
+                    current: true, windowPresented: false)
+            }
+            for versions in [[id: "2.0.0"], admitted(id, pendingDisable: [id])] {
+                #expect(throws: HostWindowNavigationError.inactiveOwner) {
+                    try HostWorkerNavigationRouting.validateApplied(
+                        extensionID: id, version: "1.0.0", activeVersions: versions,
+                        current: true, windowPresented: true)
+                }
+            }
+        }
+    }
+
     private func admitted(
         _ id: String, installed: [String: ExtensionPackage]? = nil,
         state: HostActivationState = .active, versions: [String: String]? = nil,
