@@ -18,7 +18,8 @@ import Foundation
     }
     static func stopChatsAndWait() async {
         _ = stopChats()
-        while let (_, task) = chats.values.first { _ = await task.result }
+        let pending = Array(chats.values)
+        for (_, task) in pending { _ = await task.result }
     }
     static func stream(_ streams: ExtensionCLIStreams, operation: String, payload: Data) throws
         -> Data

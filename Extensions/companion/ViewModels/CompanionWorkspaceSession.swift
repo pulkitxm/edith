@@ -23,9 +23,34 @@ final class CompanionWorkspaceSession {
         backend = CompanionBackendModel(remote: remote)
     }
 
-    func shutdown() {
-        guard !isStopped else { return }
+    func cancelPendingCommands() {
         isStopped = true
+        preferences?.shutdown()
+        home.cancelPendingCommands()
+        mind.cancelPendingCommands()
+        desk.cancelPendingCommands()
+        settings.cancelPendingCommands()
+        library.cancelPendingCommands()
+        chat.cancelPendingCommands()
+        capture.cancelPendingCommands()
+        backend.cancelPendingCommands()
+    }
+
+    func cancelAndWait() async {
+        cancelPendingCommands()
+        await preferences?.stopAndWait()
+        await home.cancelAndWait()
+        await mind.cancelAndWait()
+        await desk.cancelAndWait()
+        await settings.cancelAndWait()
+        await library.cancelAndWait()
+        await chat.cancelAndWait()
+        await capture.cancelAndWait()
+        await backend.cancelAndWait()
+    }
+
+    func shutdown() {
+        cancelPendingCommands()
         preferences?.shutdown()
         home.loading.reset(); chat.loading.reset(); chat.messageLoad.reset()
         library.shutdown(); mind.loading.reset(); desk.loading.reset(); settings.loading.reset()
@@ -36,10 +61,6 @@ final class CompanionWorkspaceSession {
         privacy?.shutdown()
     }
 
-    deinit {
-        let chat = chat
-        Task { @MainActor in chat.stop() }
-    }
 }
 
 @MainActor

@@ -14,6 +14,7 @@ final class CompanionWorker {
     let monitor: CompanionMonitor
     let workspace: CompanionWorkspaceSession
     let transport: CompanionTransport
+    private let commandTasks = CompanionTaskOwner()
     private(set) var isStopped = false
     private let client: @MainActor () -> CompanionClient
 
@@ -45,7 +46,7 @@ final class CompanionWorker {
             SharedDefaults.store.set(
                 CompanionTab.library.rawValue, forKey: AppStorageKeys.Companion.tab)
             let library = workspace.library
-            Task { await library.select(id) }
+            commandTasks.launch { await library.select(id) }
         }
         ExtensionPresentation.showWindow()
     }
@@ -100,9 +101,24 @@ final class CompanionWorker {
         return result
     }
 
-    func shutdown() async {
-        guard !isStopped else { return }
+    func cancelPendingCommands() {
         isStopped = true
+        commandTasks.cancel()
+        workspace.cancelPendingCommands()
+        transport.close()
+        monitor.cancelPendingCommands()
+    }
+
+    func cancelAndWait() async {
+        cancelPendingCommands()
+        await commandTasks.drain()
+        await workspace.cancelAndWait()
+        await transport.closeAndWait()
+        await monitor.stop()
+    }
+
+    func shutdown() async {
+        await cancelAndWait()
         workspace.shutdown()
         if CompanionBackgroundOperation.monitor === monitor {
             CompanionBackgroundOperation.monitor = nil

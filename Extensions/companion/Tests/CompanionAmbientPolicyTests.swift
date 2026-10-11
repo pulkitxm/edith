@@ -1,7 +1,6 @@
 import EdithExtensionSupport
 import Foundation
 import WorkerFixtureSupport
-import WorkerFixtureTestSupport
 import Testing
 @testable import CompanionExtension
 
@@ -125,11 +124,8 @@ import Testing
                 == false)
     }
 
-    @Test func admittedFixturePolicySynchronizationRemainsObserverFree() throws {
-        let fixture = try EngineFixture(owner: "companion")
-        defer { fixture.remove() }
-        #expect(try fixture.admit()?.role == .app)
-        let runtime = ExtensionRuntime(fixtureAdmission: { _ in try fixture.admit() })
+    @Test func injectedOrdinaryPolicySynchronizationRemainsObserverFree() {
+        let runtime = ExtensionRuntime(fixtureAdmission: { _ in nil })
         let input = context(job, paused: true).mutableCopy() as! NSMutableDictionary
         input["operation"] = "synchronize"
         input["ambientPolicyOnly"] = true

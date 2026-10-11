@@ -5,6 +5,10 @@ import Observation
 @MainActor
 @Observable
 final class CompanionHomeModel: CompanionRefreshable {
+    private let commandTasks = CompanionTaskOwner()
+    func cancelPendingCommands() { commandTasks.cancel() }
+    func cancelAndWait() async { await commandTasks.drain() }
+
     private(set) var checks: [CompanionCheck] = []
     private(set) var status: CompanionStatus?
     let loading = ContentLoad()
@@ -33,6 +37,10 @@ final class CompanionHomeModel: CompanionRefreshable {
     }
 
     func refresh() async {
+        _ = try? await commandTasks.perform { [self] in await refreshWork() }
+    }
+
+    private func refreshWork() async {
         let client = client
         await loading.perform(operation: {
             async let liveness = client.health(timeout: 5)

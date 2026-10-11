@@ -6,6 +6,10 @@ import SwiftUI
 @MainActor
 @Observable
 final class CompanionMindModel: CompanionRefreshable {
+    private let commandTasks = CompanionTaskOwner()
+    func cancelPendingCommands() { commandTasks.cancel() }
+    func cancelAndWait() async { await commandTasks.drain() }
+
     private(set) var beliefs: [CompanionBelief] = []
     private(set) var claims: [CompanionClaim] = []
     private(set) var observations: [CompanionObservation] = []
@@ -23,6 +27,10 @@ final class CompanionMindModel: CompanionRefreshable {
     }
 
     func refresh() async {
+        _ = try? await commandTasks.perform { [self] in await refreshWork() }
+    }
+
+    private func refreshWork() async {
         let client = client
         await loading.perform(operation: {
             async let beliefs = client.beliefs(limit: 30)
@@ -45,6 +53,12 @@ final class CompanionMindModel: CompanionRefreshable {
     }
 
     func saveCore(section: String, content: String) async {
+        _ = try? await commandTasks.perform { [self] in
+            await saveCoreWork(section: section, content: content)
+        }
+    }
+
+    private func saveCoreWork(section: String, content: String) async {
         guard !savingCore else { return }
         savingCore = true
         defer { savingCore = false }
@@ -62,6 +76,10 @@ final class CompanionMindModel: CompanionRefreshable {
     }
 
     func runNightly() async {
+        _ = try? await commandTasks.perform { [self] in await runNightlyWork() }
+    }
+
+    private func runNightlyWork() async {
         guard !runningNightly else { return }
         runningNightly = true
         defer { runningNightly = false }
@@ -480,6 +498,10 @@ private struct MindDetailSheet: View {
     }
 
     private func loadRefs() async {
+        _ = try? await CompanionTransport.shared.producers.perform { await loadRefsWork() }
+    }
+
+    @MainActor private func loadRefsWork() async {
         var refs: [(String, String)] = []
         for id in contextIds {
             guard !Task.isCancelled else { return }

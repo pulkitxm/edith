@@ -21,6 +21,10 @@ final class ExtensionRuntime: NSObject {
     private var surface: CompanionSurface?
     private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
+    private var commandDrain: Task<Void, Never>?
+    private var resourceStop: Task<Void, Never>?
+    private var commandsSuspended = false
+    private var uiDrains: [UUID: Task<Void, Never>] = [:]
 
     init(
         settingsChanged: @escaping @MainActor () -> Void = { IPC.post(IPC.Name.settingsChanged) },
@@ -62,21 +66,96 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
+            await resourceStop?.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginCommandDrain() -> Task<Void, Never> {
+        let originalWorker = worker
+        let engine = uiEngine
+        let workspace = uiWorkspace
+        let bridge = CompanionTransport.shared.remoteBridge
+        let streams = cliStreams
+        commandsSuspended = true
+        _ = commands.suspend()
+        if let commandDrain { return commandDrain }
+        originalWorker?.cancelPendingCommands()
+        engine?.cancelPendingCommands()
+        workspace?.cancelPendingCommands()
+        bridge?.stop()
+        streams?.stop()
+        _ = CompanionCLIExecution.stopChats()
+        CompanionTransport.shared.close()
+        if let commandDrain { return commandDrain }
+        let task = Task { [self] in
+            await originalWorker?.monitor.cancelDelivery()
+            _ = await commands.suspendAndWait()
+            await streams?.stopAndWait()
+            await CompanionCLIExecution.stopChatsAndWait()
+            await engine?.cancelAndWait()
+            await originalWorker?.cancelAndWait()
+            await workspace?.cancelAndWait()
+            await bridge?.stopAndWait()
+            await CompanionTransport.shared.closeAndWait()
+            while let task = uiDrains.values.first { await task.value }
+        }
+        commandDrain = task
+        return task
+    }
+
+    private func retireUI() {
+        let workspace = uiWorkspace
+        let bridge = CompanionTransport.shared.remoteBridge
+        guard workspace != nil || bridge != nil else { return }
+        workspace?.cancelPendingCommands()
+        bridge?.stop()
+        let id = UUID()
+        uiDrains[id] = Task { [self, workspace, bridge] in
+            defer { uiDrains[id] = nil }
+            await workspace?.cancelAndWait()
+            await bridge?.stopAndWait()
+            workspace?.shutdown()
+        }
+        uiWorkspace = nil
+        CompanionTransport.shared.configureRemote(nil)
+        engineClient?.invalidate(); engineClient = nil
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        ambientPolicy.stop()
-        let streams = cliStreams; cliStreams = nil; streams?.stop()
-        _ = CompanionCLIExecution.stopChats()
-        commands.shutdown()
-        let engine = uiEngine; uiEngine = nil
-        let worker = worker
-        Task {
-            await engine?.shutdown()
-            await worker?.shutdown()
-            await streams?.stopAndWait()
-            await commands.shutdownAndWait()
-            completion()
+        let stop = beginResourceStop()
+        Task { [self] in
+            await stop.value
+            withExtendedLifetime(self) { completion() }
         }
+    }
+
+    private func beginResourceStop() -> Task<Void, Never> {
+        if let resourceStop { return resourceStop }
+        let owner = worker
+        let engine = uiEngine
+        let workspace = uiWorkspace
+        let drain = beginCommandDrain()
+        if let resourceStop { return resourceStop }
+        retireUI()
+        ambientPolicy.stop()
+        worker = nil; uiEngine = nil; surface = nil; cliStreams = nil
+        let task = Task { [self] in
+            await drain.value
+            await commands.shutdownAndWait()
+            await engine?.shutdown()
+            await owner?.shutdown()
+            workspace?.shutdown()
+            TextEditingCommands.shutdown()
+        }
+        resourceStop = task
+        return task
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
@@ -90,7 +169,8 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
-            guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
+            guard !commandsSuspended, uiDrains.count < 8, engineClient == nil,
+                let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "companion", let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
             engineClient = client
@@ -99,11 +179,10 @@ final class ExtensionRuntime: NSObject {
             uiWorkspace = CompanionWorkspaceSession(remote: bridge)
             TextEditingCommands.install()
         case "stopUI":
-            uiWorkspace?.shutdown(); uiWorkspace = nil
-            CompanionTransport.shared.configureRemote(nil)
-            engineClient?.invalidate(); engineClient = nil
+            retireUI()
             TextEditingCommands.shutdown()
         case "start":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             let fixture: Bool
             do { fixture = try fixtureAdmission(input) != nil } catch {
                 return ["ok": false] as NSDictionary
@@ -137,6 +216,7 @@ final class ExtensionRuntime: NSObject {
             worker.start()
             TextEditingCommands.install()
         case "view":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard let workspace = uiWorkspace else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost {
@@ -155,25 +235,14 @@ final class ExtensionRuntime: NSObject {
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             do { _ = try fixtureAdmission(input) } catch { return ["ok": false] as NSDictionary }
             do { try ambientPolicy.apply(context: input) } catch {
                 return ["ok": false] as NSDictionary
             }
             if input["ambientPolicyOnly"] as? Bool != true { settingsChanged() }
         case "stop":
-            ambientPolicy.stop()
-            _ = CompanionCLIExecution.stopChats()
-            let streams = cliStreams; cliStreams = nil; streams?.stop()
-            Task { await streams?.stopAndWait() }
-            commands.shutdown()
-            let engine = uiEngine; uiEngine = nil
-            let worker = worker
-            self.worker = nil
-            surface = nil
-            TextEditingCommands.shutdown()
-            Task {
-                await engine?.shutdown(); await worker?.shutdown()
-            }
+            _ = beginResourceStop()
         case "status": return ["ok": true, "running": worker?.isStopped == false] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }

@@ -94,6 +94,7 @@ struct CompanionChatBatch: Codable, Sendable {
 struct CompanionUIBridge: Sendable {
     typealias Invoke = @MainActor @Sendable (String, Data) async throws -> Data
     let invoke: Invoke
+    private let producers = CompanionTransportTaskOwner()
     init(client: ExtensionEngineClient) {
         invoke = { try await client.invoke($0, payload: $1) }
     }
@@ -116,7 +117,14 @@ struct CompanionUIBridge: Sendable {
             CompanionBackendState.self,
             from: await invoke("companion.ui.backend", JSONEncoder().encode(action)))
     }
+    func stop() { producers.cancel() }
+    func stopAndWait() async { await producers.drain() }
+
     func http(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        try await producers.perform { try await httpWork(request) }
+    }
+
+    private func httpWork(_ request: URLRequest) async throws -> (Data, URLResponse) {
         guard let url = request.url,
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
             let marker = components.path.range(of: "/v1/")
@@ -131,67 +139,61 @@ struct CompanionUIBridge: Sendable {
             timeout: request.timeoutInterval, body: request.httpBody ?? Data())
         let upload = try JSONDecoder().decode(
             CompanionJob.self, from: await invoke("companion.ui.upload", Data("{}".utf8)))
-        var canceled = true
-        defer {
-            if canceled {
-                Task { _ = try? await invoke("companion.ui.cancel", JSONEncoder().encode(upload)) }
-            }
-        }
-        let encoded = try JSONEncoder().encode(call)
-        guard encoded.count <= CompanionUIEngine.maximumTransferBytes else {
-            throw ExtensionPeerError.invalidRequest
-        }
-        var offset = 0
-        while offset < encoded.count {
-            try Task.checkCancellation()
-            let chunk = CompanionUploadChunk(
-                id: upload.id, offset: offset,
-                data: encoded.subdata(in: offset..<min(offset + 65_536, encoded.count)))
-            _ = try await invoke("companion.ui.uploadChunk", JSONEncoder().encode(chunk))
-            offset += chunk.data.count
-        }
-        _ = try await invoke("companion.ui.http", JSONEncoder().encode(upload))
-        var output = Data()
-        while true {
-            try Task.checkCancellation()
-            let value = try JSONDecoder().decode(
-                CompanionJobReply.self,
-                from: await invoke(
-                    "companion.ui.result",
-                    JSONEncoder().encode(CompanionJob(id: upload.id, offset: output.count))))
-            if let error = value.error { throw CompanionClientError.unreachable(error) }
-            output.append(value.data)
-            guard output.count <= CompanionUIEngine.maximumTransferBytes else {
+        do {
+            let encoded = try JSONEncoder().encode(call)
+            guard encoded.count <= CompanionUIEngine.maximumTransferBytes else {
                 throw ExtensionPeerError.invalidRequest
             }
-            if value.done {
-                guard let status = value.status,
-                    let response = HTTPURLResponse(
-                        url: url, statusCode: status, httpVersion: nil,
-                        headerFields: [
-                            "Content-Type": value.contentType ?? "application/octet-stream"
-                        ])
-                else { throw ExtensionPeerError.invalidRequest }
-                _ = try await invoke("companion.ui.cancel", JSONEncoder().encode(upload));
-                canceled = false
-                return (output, response)
+            var offset = 0
+            while offset < encoded.count {
+                try Task.checkCancellation()
+                let chunk = CompanionUploadChunk(
+                    id: upload.id, offset: offset,
+                    data: encoded.subdata(in: offset..<min(offset + 65_536, encoded.count)))
+                _ = try await invoke("companion.ui.uploadChunk", JSONEncoder().encode(chunk))
+                offset += chunk.data.count
             }
-            if value.data.isEmpty { try await Task.sleep(for: .milliseconds(150)) }
+            _ = try await invoke("companion.ui.http", JSONEncoder().encode(upload))
+            var output = Data()
+            while true {
+                try Task.checkCancellation()
+                let value = try JSONDecoder().decode(
+                    CompanionJobReply.self,
+                    from: await invoke(
+                        "companion.ui.result",
+                        JSONEncoder().encode(CompanionJob(id: upload.id, offset: output.count))))
+                if let error = value.error { throw CompanionClientError.unreachable(error) }
+                output.append(value.data)
+                guard output.count <= CompanionUIEngine.maximumTransferBytes else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                if value.done {
+                    guard let status = value.status,
+                        let response = HTTPURLResponse(
+                            url: url, statusCode: status, httpVersion: nil,
+                            headerFields: [
+                                "Content-Type": value.contentType ?? "application/octet-stream"
+                            ])
+                    else { throw ExtensionPeerError.invalidRequest }
+                    _ = try await invoke("companion.ui.cancel", JSONEncoder().encode(upload));
+                    return (output, response)
+                }
+                if value.data.isEmpty { try await Task.sleep(for: .milliseconds(150)) }
+            }
+        } catch {
+            let cleanup = Task {
+                _ = try? await invoke("companion.ui.cancel", JSONEncoder().encode(upload))
+            }
+            await cleanup.value
+            throw error
         }
     }
     func chat(message: String, conversationID: String?, persona: String?) -> AsyncThrowingStream<
         CompanionChatEvent, Error
     > {
         AsyncThrowingStream { continuation in
-            let task = Task {
+            let task = producers.launch {
                 var job: CompanionJob?
-                defer {
-                    if let job {
-                        Task {
-                            _ = try? await invoke("companion.ui.cancel", JSONEncoder().encode(job))
-                        }
-                    }
-                }
                 do {
                     let call = CompanionChatCall(
                         message: message, conversationID: conversationID, persona: persona)
@@ -205,12 +207,28 @@ struct CompanionUIBridge: Sendable {
                             from: await invoke("companion.ui.chatEvents", JSONEncoder().encode(id)))
                         for event in batch.events { continuation.yield(event) }
                         if let error = batch.error { throw CompanionClientError.unreachable(error) }
-                        if batch.done { continuation.finish(); return }
+                        if batch.done { break }
                         try await Task.sleep(for: .milliseconds(100))
                     }
-                    throw CancellationError()
-                } catch { continuation.finish(throwing: error) }
+                    if Task.isCancelled { throw CancellationError() }
+                    if let job {
+                        let cleanup = Task {
+                            _ = try? await invoke("companion.ui.cancel", JSONEncoder().encode(job))
+                        }
+                        await cleanup.value
+                    }
+                    continuation.finish()
+                } catch {
+                    if let job {
+                        let cleanup = Task {
+                            _ = try? await invoke("companion.ui.cancel", JSONEncoder().encode(job))
+                        }
+                        await cleanup.value
+                    }
+                    continuation.finish(throwing: error)
+                }
             }
+            guard let task else { continuation.finish(throwing: CancellationError()); return }
             continuation.onTermination = { _ in task.cancel() }
         }
     }
@@ -223,6 +241,7 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
     private let read: @Sendable (URLRequest) async throws -> (Data, URLResponse)
     private let endpoint: @MainActor () -> URL
     private var jobs: [UUID: Task<Void, Never>] = [:]
+    private let commandTasks = CompanionTaskOwner()
     private var uploads: [UUID: Data] = [:]
     private var replies: [UUID: CompanionHTTPResult] = [:]
     private var errors: [UUID: String] = [:]
@@ -313,7 +332,9 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
                 title: detail.title, contentType: type, data: data)
             NSWorkspace.shared.open(url)
         case "companion.ui.upload":
-            guard uploads.count + events.count < 8 else { throw ExtensionPeerError.unavailable }
+            guard uploads.count + events.count < 8, jobs.count < 8 else {
+                throw ExtensionPeerError.unavailable
+            }
             let id = UUID(); uploads[id] = Data();
             return try encode(CompanionJob(id: id, offset: 0))
         case "companion.ui.uploadChunk":
@@ -343,6 +364,7 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
             let read = read
             uploads[job.id] = Data()
             jobs[job.id] = Task { [weak self] in
+                defer { self?.jobs[job.id] = nil }
                 do {
                     let (data, response) = try await read(request)
                     try Task.checkCancellation()
@@ -358,7 +380,7 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
                     }
                 }
                 if let self, !self.stopped, self.uploads[job.id] != nil {
-                    self.finished.insert(job.id); self.jobs[job.id] = nil
+                    self.finished.insert(job.id)
                 }
             }
         case "companion.ui.result":
@@ -378,12 +400,15 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
             let job = try JSONDecoder().decode(CompanionJob.self, from: payload); cancel(job.id)
         case "companion.ui.chat":
             let call = try JSONDecoder().decode(CompanionChatCall.self, from: payload)
-            guard call.message.utf8.count <= 131_072, uploads.count + events.count < 8 else {
+            guard call.message.utf8.count <= 131_072, uploads.count + events.count < 8,
+                jobs.count < 8
+            else {
                 throw ExtensionPeerError.invalidRequest
             }
             let id = UUID(); events[id] = []
             let client = CompanionClient(baseURL: endpoint())
             jobs[id] = Task { [weak self] in
+                defer { self?.jobs[id] = nil }
                 do {
                     for try await event in client.chat(
                         message: call.message, conversationId: call.conversationID,
@@ -402,7 +427,7 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
                     }
                 }
                 if let self, !self.stopped, self.events[id] != nil {
-                    self.finished.insert(id); self.jobs[id] = nil
+                    self.finished.insert(id)
                 }
             }
             return try encode(CompanionJob(id: id, offset: 0))
@@ -435,7 +460,7 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
                         throw ExtensionPeerError.invalidRequest
                     }; model.selectedHostID = id
                 }
-                setupTask = Task { [weak self] in
+                setupTask = commandTasks.launch { [weak self] in
                     defer { self?.setupTask = nil }
                     if action.action == "probe" {
                         await model.probeHosts()
@@ -500,7 +525,7 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
                         throw ExtensionPeerError.invalidRequest
                     }
                 }
-                backendTask = Task { [weak self] in
+                backendTask = commandTasks.launch { [weak self] in
                     defer { self?.backendTask = nil }
                     switch action.action {
                     case "refresh": await model.refresh()
@@ -543,27 +568,40 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
         try JSONEncoder().encode(value)
     }
     private func cancel(_ id: UUID) {
-        jobs.removeValue(forKey: id)?.cancel(); uploads[id] = nil; replies[id] = nil
+        jobs[id]?.cancel(); uploads[id] = nil; replies[id] = nil
         errors[id] = nil; events[id] = nil; finished.remove(id)
     }
     func stopGenerations() -> Int {
         let ids = events.keys.filter { !finished.contains($0) }
         for id in ids {
-            jobs.removeValue(forKey: id)?.cancel(); events[id] = []; errors[id] = nil;
+            jobs[id]?.cancel(); events[id] = []; errors[id] = nil;
             finished.insert(id)
         }
         return ids.count
     }
-    func shutdown() async {
-        let active = Array(jobs.values) + [backendTask, setupTask].compactMap { $0 }
-        backendTask?.cancel(); setupTask?.cancel()
+    func cancelPendingCommands() {
         stopped = true
-        for id in Array(jobs.keys) + Array(uploads.keys) + Array(events.keys) { cancel(id) }
-        worker.workspace.capture.setCaptureActive(false)
-        for task in active { task.cancel(); await task.value }
-        backendTask = nil; setupTask = nil
-
+        backendTask?.cancel()
+        setupTask?.cancel()
+        commandTasks.cancel()
+        setupModel.shutdown()
+        for task in jobs.values { task.cancel() }
     }
+
+    func cancelAndWait() async {
+        cancelPendingCommands()
+        await commandTasks.drain()
+        await setupModel.cancelAndWait()
+        while let task = jobs.values.first { await task.value }
+    }
+
+    func shutdown() async {
+        await cancelAndWait()
+        for id in Array(uploads.keys) + Array(events.keys) { cancel(id) }
+        worker.workspace.capture.setCaptureActive(false)
+        backendTask = nil; setupTask = nil
+    }
+
 }
 
 struct CompanionSetupAction: Codable {
@@ -590,6 +628,7 @@ struct CompanionPreferenceChange: Codable { let key: String; let value: String }
 @MainActor @Observable final class CompanionUIPreferences {
     private(set) var loaded = false
     private(set) var error: String?
+    private let commandTasks = CompanionTaskOwner()
     private var task: Task<Void, Never>?
     private var observation: NSObjectProtocol?
     private var previous: [String: String] = [:]
@@ -606,13 +645,13 @@ struct CompanionPreferenceChange: Codable { let key: String; let value: String }
         self.bridge = bridge
         observation = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: SharedDefaults.store, queue: .main
-        ) { [weak self] _ in Task { @MainActor in self?.changed() } }
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.changed() } }
         refresh()
     }
     func refresh() {
         guard !stopped else { return }
         task?.cancel()
-        task = Task { [weak self] in
+        task = commandTasks.launch { [weak self] in
             guard let self else { return }
             do {
                 let values = try JSONDecoder().decode(
@@ -632,7 +671,7 @@ struct CompanionPreferenceChange: Codable { let key: String; let value: String }
         guard !changes.isEmpty else { return }
         previous = values
         task?.cancel()
-        task = Task {
+        task = commandTasks.launch { [self] in
             do {
                 for (key, value) in changes {
                     _ = try await bridge.invoke(
@@ -676,8 +715,13 @@ struct CompanionPreferenceChange: Codable { let key: String; let value: String }
             CompanionClient.invalidateEndpointCache()
         }
     }
+    func stopAndWait() async {
+        shutdown()
+        await commandTasks.drain()
+    }
+
     func shutdown() {
-        stopped = true; task?.cancel(); task = nil
+        stopped = true; commandTasks.cancel(); task?.cancel()
         if let observation { NotificationCenter.default.removeObserver(observation) };
         observation = nil
     }
