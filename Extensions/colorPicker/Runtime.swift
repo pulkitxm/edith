@@ -18,6 +18,7 @@ final class ExtensionRuntime: NSObject {
 
     private var fixture: WorkerFixtureAdmission?
     private var commandDrain: Task<Void, Never>?
+    private var commandsSuspended = false
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
 
@@ -114,6 +115,7 @@ final class ExtensionRuntime: NSObject {
     private func beginCommandDrain() -> Task<Void, Never> {
         let owner = service
         let ui = presentation
+        commandsSuspended = true
         _ = commands.suspend()
         if let commandDrain { return commandDrain }
         ui?.stop()
@@ -166,7 +168,7 @@ final class ExtensionRuntime: NSObject {
                 configuration.defaultsSuite
                     == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
-            guard commandDrain == nil, uiDrains.count < 8 else {
+            guard !commandsSuspended, uiDrains.count < 8 else {
                 return ["ok": false] as NSDictionary
             }
             retirePresentation()
@@ -179,6 +181,7 @@ final class ExtensionRuntime: NSObject {
             commands.shutdown()
             return ["ok": true] as NSDictionary
         case "start":
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             do {
                 fixture = try WorkerFixtureAdmission.current(
                     extensionID: "colorPicker", context: input,

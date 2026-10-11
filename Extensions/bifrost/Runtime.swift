@@ -16,6 +16,8 @@ final class ExtensionRuntime: NSObject {
     private var stopped = false
     private var activeCalls = 0
     private var commandDrain: Task<Void, Never>?
+    private var commandsSuspended = false
+    private var uiDrains: [UUID: Task<Void, Never>] = [:]
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -56,15 +58,20 @@ final class ExtensionRuntime: NSObject {
 
     private func beginCommandDrain() -> Task<Void, Never> {
         let owner = worker
+        let uiOwner = uiContext
         let streams = cliStreams
+        commandsSuspended = true
         _ = commands.suspend()
         if let commandDrain { return commandDrain }
         owner?.cancelPendingCommands()
+        uiOwner?.stop()
         streams?.stop()
         let task = Task { [self] in
             _ = await commands.suspendAndWait()
             await owner?.drain()
             await streams?.stopAndWait()
+            await uiOwner?.stopAndWait()
+            while let task = uiDrains.values.first { await task.value }
         }
         commandDrain = task
         return task
@@ -100,6 +107,19 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    private func retireUI() {
+        guard let owner = uiContext else { return }
+        owner.stop()
+        let id = UUID()
+        uiDrains[id] = Task { [self, owner] in
+            defer { uiDrains[id] = nil }
+            await owner.stopAndWait()
+            owner.shutdown()
+        }
+        uiContext = nil; BifrostUIContext.current = nil
+        engineClient?.invalidate(); engineClient = nil
+    }
+
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
         case "describe":
@@ -111,7 +131,9 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
-            guard commandDrain == nil else { return ["ok": false] as NSDictionary }
+            guard !commandsSuspended, uiDrains.count < 8 else {
+                return ["ok": false] as NSDictionary
+            }
             guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "bifrost", let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
@@ -120,11 +142,10 @@ final class ExtensionRuntime: NSObject {
             uiContext = context; BifrostUIContext.current = context
             TextEditingCommands.install()
         case "stopUI":
-            uiContext?.shutdown(); uiContext = nil; BifrostUIContext.current = nil
-            engineClient?.invalidate(); engineClient = nil
+            retireUI()
             TextEditingCommands.shutdown()
         case "start":
-            guard commandDrain == nil else { return ["ok": false] as NSDictionary }
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard !stopped, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
                 SurfaceHostContext.current != nil

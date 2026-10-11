@@ -16,6 +16,7 @@ final class ExtensionRuntime: NSObject {
     private var uiLocation: String?
     private var uiSection: String?
     private var commandDrain: Task<Void, Never>?
+    private var commandsSuspended = false
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
     private let cliStreams = try? ExtensionCLIStreams(owner: "appMaintenance")
@@ -64,16 +65,20 @@ final class ExtensionRuntime: NSObject {
     private func beginCommandDrain() -> Task<Void, Never> {
         let owner = model
         let uiOwner = uiModel
+        let settingsOwner = settingsModel
         let streams = cliStreams
+        commandsSuspended = true
         _ = commands.suspend()
         if let commandDrain { return commandDrain }
         owner?.cancelPendingCommands()
         uiOwner?.cancelPendingCommands()
+        settingsOwner?.stop()
         streams?.stop()
         let task = Task { [self] in
             _ = await commands.suspendAndWait()
             await owner?.cancelAndWait()
             await uiOwner?.cancelAndWait()
+            await settingsOwner?.stopAndWait()
             await streams?.stopAndWait()
             while let task = uiDrains.values.first { await task.value }
         }
@@ -106,7 +111,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard commandDrain == nil else { return ["ok": false] as NSDictionary }
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard !stopped, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -117,7 +122,9 @@ final class ExtensionRuntime: NSObject {
                 }
             }
         case "configureUI":
-            guard commandDrain == nil, uiDrains.count < 8 else { return ["ok": false] as NSDictionary }
+            guard !commandsSuspended, uiDrains.count < 8 else {
+                return ["ok": false] as NSDictionary
+            }
             guard let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "appMaintenance", !configuration.uiOnly,
                 let client = configuration.engineClient
@@ -172,7 +179,7 @@ final class ExtensionRuntime: NSObject {
         guard location != "settings" || (input["tile"] == nil && input["target"] == nil) else {
             return false
         }
-        guard commandDrain == nil, uiDrains.count < 8 else { return false }
+        guard !commandsSuspended, uiDrains.count < 8 else { return false }
         stopUI()
         uiClient = client
         uiLocation = location
@@ -187,16 +194,21 @@ final class ExtensionRuntime: NSObject {
 
     private func stopUI() {
         TextEditingCommands.shutdown()
-        settingsModel?.stop(); settingsModel = nil
-        uiLocation = nil; uiSection = nil
-        let model = uiModel; uiModel = nil
-        uiClient?.invalidate(); uiClient = nil
+        let model = uiModel
+        let settings = settingsModel
+        settings?.stop()
         model?.cancelPendingCommands()
-        let id = UUID()
-        uiDrains[id] = Task { [self] in
-            defer { uiDrains[id] = nil }
-            await model?.shutdown()
+        if model != nil || settings != nil {
+            let id = UUID()
+            uiDrains[id] = Task { [self, model, settings] in
+                defer { uiDrains[id] = nil }
+                await model?.shutdown()
+                await settings?.stopAndWait()
+            }
         }
+        uiModel = nil; settingsModel = nil
+        uiLocation = nil; uiSection = nil
+        uiClient?.invalidate(); uiClient = nil
     }
 }
 

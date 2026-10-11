@@ -105,7 +105,11 @@ final class CleanerModel {
 
     func refreshRemote() async {
         guard let task = track({ [self] in await refreshRemoteWork() }) else { return }
-        await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     private func refreshRemoteWork() async {

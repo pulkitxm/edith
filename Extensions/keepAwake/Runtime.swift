@@ -41,6 +41,7 @@ final class KeepAwakeRuntime: NSObject {
     private var presentation: ControlPresentation?
 
     private var commandDrain: Task<Void, Never>?
+    private var commandsSuspended = false
     private var presentationDrains: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
 
@@ -86,6 +87,7 @@ final class KeepAwakeRuntime: NSObject {
     private func beginCommandDrain() -> Task<Void, Never> {
         let owner = store
         let uiOwner = presentation
+        commandsSuspended = true
         _ = commands.suspend()
         if let commandDrain { return commandDrain }
         owner?.cancelPendingCommands()
@@ -137,7 +139,7 @@ final class KeepAwakeRuntime: NSObject {
                 "role": "helper",
             ] as NSDictionary
         case "configureUI":
-            guard commandDrain == nil, presentationDrains.count < 8 else {
+            guard !commandsSuspended, presentationDrains.count < 8 else {
                 return ["ok": false] as NSDictionary
             }
             guard let configuration = ExtensionUIConfiguration(context: input),
@@ -155,7 +157,7 @@ final class KeepAwakeRuntime: NSObject {
             commands.shutdown()
             return ["ok": true] as NSDictionary
         case "start":
-            guard commandDrain == nil else { return ["ok": false] as NSDictionary }
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
             else { return ["ok": false] as NSDictionary }
             do {

@@ -16,6 +16,7 @@ final class CalendarUIFacade {
     private let invalidate: () -> Void
     private let navigation: CalendarNavigationRequest?
     private var stopped = false
+    private let commandTasks = CalendarUITaskOwner()
     private var generation: UInt64 = 0
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var actions: [UUID: Task<Void, Never>] = [:]
@@ -35,14 +36,11 @@ final class CalendarUIFacade {
         self.navigation = navigation
     }
 
-    deinit {
-        refreshTask?.cancel()
-        for task in actions.values { task.cancel() }
-        let invalidate = invalidate
-        Task { @MainActor in invalidate() }
+    func observe() async {
+        _ = try? await commandTasks.perform { [self] in await observeWork() }
     }
 
-    func observe() async {
+    private func observeWork() async {
         await refreshAndWait()
         while !stopped && !Task.isCancelled {
             do { try await Task.sleep(for: .seconds(1)) } catch { return }
@@ -53,7 +51,7 @@ final class CalendarUIFacade {
     func refresh() {
         guard !stopped else { return }
         refreshTask?.cancel()
-        refreshTask = Task { [weak self] in await self?.refreshAndWait() }
+        refreshTask = commandTasks.launch { [weak self] in await self?.refreshAndWait() }
     }
 
     func refreshAndWait() async {
@@ -63,7 +61,8 @@ final class CalendarUIFacade {
     func loadMore() {
         guard !stopped, days < CalendarEventQuery.maximumDays else { return }
         refreshTask?.cancel()
-        refreshTask = Task { [weak self] in await self?.read("calendar.ui.loadMore") }
+        refreshTask = commandTasks.launch { [weak self] in await self?.read("calendar.ui.loadMore")
+        }
     }
 
     func perform(_ action: CalendarUIAction, eventID: String? = nil) {
@@ -94,6 +93,10 @@ final class CalendarUIFacade {
     }
 
     func openPageAndWait() async {
+        _ = try? await commandTasks.perform { [self] in await openPageWork() }
+    }
+
+    private func openPageWork() async {
         guard !stopped, !Task.isCancelled else { return }
         do {
             guard let navigation else { throw ExtensionPeerError.unavailable }
@@ -108,16 +111,25 @@ final class CalendarUIFacade {
     func suspend() {
         generation &+= 1
         refreshTask?.cancel()
-        refreshTask = nil
         for task in actions.values { task.cancel() }
-        actions.removeAll()
+        commandTasks.cancelPending()
+    }
+
+    func stop() {
+        stopped = true
+        suspend()
+        commandTasks.cancel()
+        invalidate()
+    }
+
+    func stopAndWait() async {
+        stop()
+        await commandTasks.drain()
+        while let task = actions.values.first { await task.value }
     }
 
     func shutdown() {
-        guard !stopped else { return }
-        stopped = true
-        suspend()
-        invalidate()
+        stop()
         events = []
         groupedDays = []
         authorized = false
@@ -125,6 +137,11 @@ final class CalendarUIFacade {
     }
 
     private func read(_ operation: String, payload: Data = Data("{}".utf8)) async {
+        _ = try? await commandTasks.perform { [self] in await readWork(operation, payload: payload)
+        }
+    }
+
+    private func readWork(_ operation: String, payload: Data) async {
         guard !stopped, !Task.isCancelled else { return }
         generation &+= 1
         let request = generation
@@ -154,5 +171,59 @@ final class CalendarUIFacade {
             guard !stopped, request == generation, !Task.isCancelled else { return }
             self.error = error.localizedDescription
         }
+    }
+}
+
+@MainActor
+final class CalendarUITaskOwner {
+    private struct Entry {
+        let task: Task<Void, Never>
+        let cancel: @Sendable () -> Void
+    }
+
+    private var entries: [UUID: Entry] = [:]
+    private(set) var closed = false
+
+    func launch(_ work: @escaping @MainActor () async -> Void) -> Task<Void, Never>? {
+        guard !closed, entries.count < 256 else { return nil }
+        let id = UUID()
+        let task = Task {
+            defer { entries[id] = nil }
+            await work()
+        }
+        entries[id] = Entry(task: task, cancel: { task.cancel() })
+        return task
+    }
+
+    func perform<Value: Sendable>(
+        _ work: @escaping @MainActor () async throws -> Value
+    ) async throws -> Value {
+        guard !closed, entries.count < 256 else { throw CancellationError() }
+        let id = UUID()
+        let task = Task { try await work() }
+        let joined = Task {
+            _ = await task.result
+            entries[id] = nil
+        }
+        entries[id] = Entry(task: joined, cancel: { task.cancel() })
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    func cancelPending() {
+        for entry in entries.values { entry.cancel() }
+    }
+
+    func cancel() {
+        closed = true
+        cancelPending()
+    }
+
+    func drain() async {
+        cancel()
+        while let entry = entries.values.first { await entry.task.value }
     }
 }

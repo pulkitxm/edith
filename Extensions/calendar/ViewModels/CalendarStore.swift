@@ -121,7 +121,7 @@ public final class CalendarStore: FeatureModule {
     }
 
     private func launch(_ work: @escaping @MainActor () async -> Void) -> Task<Void, Never>? {
-        guard !stopped else { return nil }
+        guard !stopped, ownedTasks.count < 64 else { return nil }
         let id = UUID()
         let task = Task { [weak self] in
             defer { self?.ownedTasks.removeValue(forKey: id) }

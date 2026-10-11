@@ -11,6 +11,7 @@ final class ExtensionRuntime: NSObject {
     private var uiModel: BlitzTreeModel?
     private var uiClient: ExtensionEngineClient?
     private var commandDrain: Task<Void, Never>?
+    private var commandsSuspended = false
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
 
@@ -49,6 +50,7 @@ final class ExtensionRuntime: NSObject {
     private func beginCommandDrain() -> Task<Void, Never> {
         let owner = model
         let uiOwner = uiModel
+        commandsSuspended = true
         _ = commands.suspend()
         if let commandDrain { return commandDrain }
         owner?.cancelPendingCommands()
@@ -88,13 +90,15 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard commandDrain == nil else { return ["ok": false] as NSDictionary }
+            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             if model == nil { model = BlitzTreeModel() }
         case "configureUI":
-            guard commandDrain == nil, uiDrains.count < 8 else { return ["ok": false] as NSDictionary }
+            guard !commandsSuspended, uiDrains.count < 8 else {
+                return ["ok": false] as NSDictionary
+            }
             guard let configuration = ExtensionUIConfiguration(context: input),
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
