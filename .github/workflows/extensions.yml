@@ -409,6 +409,7 @@ jobs:
       - name: Inspect release capabilities
         run: |
           pukbot capabilities --json
+          pukbot tag create --help
           pukbot release create --help
           pukbot release edit --help
           pukbot release upload-asset --help

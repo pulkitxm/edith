@@ -155,6 +155,7 @@ test("changed packages require successful builds before publication", () => {
   expect(publish.if).toContain("github.ref == 'refs/heads/main'");
   expect(publish.if).toContain("needs.plan.outputs.changed == 'true'");
   expect(text(publish)).toContain("pukbot capabilities --json");
+  expect(text(publish)).toContain("pukbot tag create --help");
   expect(text(publish)).toContain("extension-publish.mjs");
   expect(text(publish)).toContain("EXTENSION_CATALOG_PRIVATE_KEY");
 });
