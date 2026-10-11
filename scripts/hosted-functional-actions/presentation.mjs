@@ -46,7 +46,10 @@ export function validateInstalledPresentationRecipe(recipe, definition) {
   assert(["main", "settings"].includes(recipe.location));
   assert.equal(
     recipe.section,
-    recipe.owner === "notchShelf" || recipe.owner === "systemStats" && recipe.location === "settings" ? "extension" : recipe.owner,
+    recipe.owner === "notchShelf" ||
+      (recipe.owner === "systemStats" && recipe.location === "settings")
+      ? "extension"
+      : recipe.owner,
   );
   assert.equal(recipe.operation, definition.activation.operation);
   assert(
@@ -81,12 +84,24 @@ export function validateInstalledPresentationRecipe(recipe, definition) {
       const fields = ["kind", "label"];
       if (Object.hasOwn(step.scope, "anchor")) fields.push("anchor");
       exact(step.scope, fields);
-      assert(["window", "sheet", "menu", "row", "panel", "group", "button"].includes(step.scope.kind));
+      assert(
+        ["window", "sheet", "menu", "row", "panel", "group", "button"].includes(
+          step.scope.kind,
+        ),
+      );
       if (step.scope.label !== "") boundedText(step.scope.label, 512);
-      else assert(step.scope.anchor, "An unlabeled original scope requires a source anchor");
+      else
+        assert(
+          step.scope.anchor,
+          "An unlabeled original scope requires a source anchor",
+        );
       if (step.scope.anchor) {
         exact(step.scope.anchor, ["role", "label"]);
-        assert(["staticText", "button", "textField", "menuItem"].includes(step.scope.anchor.role));
+        assert(
+          ["staticText", "button", "textField", "menuItem"].includes(
+            step.scope.anchor.role,
+          ),
+        );
         boundedText(step.scope.anchor.label, 512);
       }
     }
@@ -94,7 +109,8 @@ export function validateInstalledPresentationRecipe(recipe, definition) {
       boundedText(step.ownedPath, 128);
       assert.match(step.ownedPath, /^[A-Za-z0-9_.-]+$/);
     }
-    if (step.label === "") assert(step.scope?.kind === "button" && step.scope.anchor);
+    if (step.label === "")
+      assert(step.scope?.kind === "button" && step.scope.anchor);
     else boundedText(step.label);
     assert(
       [
@@ -103,7 +119,13 @@ export function validateInstalledPresentationRecipe(recipe, definition) {
         "textField",
         "secureTextField",
         "popUpButton",
-        "menuItem", "row", "slider", "stepper", "column", "staticText", "textArea",
+        "menuItem",
+        "row",
+        "slider",
+        "stepper",
+        "column",
+        "staticText",
+        "textArea",
       ].includes(step.role),
     );
     if (step.action === "set-checkbox") {
@@ -130,7 +152,11 @@ export function validateInstalledPresentationRecipe(recipe, definition) {
     } else {
       assert.equal(step.action, "click");
       assert.equal(step.value, null);
-      assert(["button", "popUpButton", "menuItem", "row", "column"].includes(step.role));
+      assert(
+        ["button", "popUpButton", "menuItem", "row", "column"].includes(
+          step.role,
+        ),
+      );
     }
     assert(step.action === "choose-owned-path" || step.ownedPath === undefined);
   }
@@ -192,7 +218,8 @@ export function validateInstalledPresentationObservation(
     "windowTitle",
     "before",
     "after",
-    "steps", "stepInventories",
+    "steps",
+    "stepInventories",
     "mutation",
     "authoritative",
     "presentationClosed",
@@ -204,7 +231,10 @@ export function validateInstalledPresentationObservation(
   assert.equal(observed.capabilitySHA256, functionalDigest(admittedCapability));
   assert.equal(observed.recipeSHA256, functionalDigest(recipe));
   assert.match(observed.presentationID, uuid);
-  assert.equal(observed.presentationID, installedPresentationID(admittedCapability));
+  assert.equal(
+    observed.presentationID,
+    installedPresentationID(admittedCapability),
+  );
   assert.equal(
     observed.windowTitle,
     installedPresentationWindowTitle(admittedCapability),
@@ -331,22 +361,38 @@ export function installedPresentationID(capability) {
   bytes[6] = (bytes[6] & 15) | 64;
   bytes[8] = (bytes[8] & 63) | 128;
   const hex = bytes.toString("hex");
-  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join("-");
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20),
+  ].join("-");
 }
 
 export function heldInstalledPresentationSteps(recipe, definition, capability) {
   validateInstalledPresentationRecipe(recipe, definition);
   validateFunctionalCapability(capability, definition);
   return recipe.steps.map((step) => {
-    const scope = step.scope ?? { kind: "window", label: installedPresentationWindowTitle(capability) };
+    const scope = step.scope ?? {
+      kind: "window",
+      label: installedPresentationWindowTitle(capability),
+    };
     let value = step.value;
     if (step.action === "choose-owned-path") {
-      const path = capability.ownedPaths.find((entry) => entry.name === step.ownedPath);
+      const path = capability.ownedPaths.find(
+        (entry) => entry.name === step.ownedPath,
+      );
       assert(path, "Missing independently admitted named chooser capability");
       assert(path.path.startsWith(`${capability.fixtureRoot}/`));
       assert(["file", "directory"].includes(path.kind));
     }
-    return Object.freeze({ ...step, scope, ownedPath: step.ownedPath ?? null, value });
+    return Object.freeze({
+      ...step,
+      scope,
+      ownedPath: step.ownedPath ?? null,
+      value,
+    });
   });
 }
 
@@ -363,7 +409,11 @@ export function installedPresentationUITestSource(
 ) {
   validateInstalledPresentationRecipe(recipe, definition);
   validateFunctionalCapability(capability, definition);
-  const heldSteps = heldInstalledPresentationSteps(recipe, definition, capability);
+  const heldSteps = heldInstalledPresentationSteps(
+    recipe,
+    definition,
+    capability,
+  );
   const encoded = Buffer.from(JSON.stringify(heldSteps)).toString("base64");
   const identifier = JSON.stringify(capability.hostIdentifier);
   const title = JSON.stringify(installedPresentationWindowTitle(capability));
