@@ -59,16 +59,20 @@ final class MusicWorker {
         context: NSDictionary, roleBundle: Bundle,
         validateProduction: @escaping @MainActor () throws -> Void = {}
     ) throws {
+#if EDITH_FUNCTIONAL_FIXTURE
+        if let admitted = try WorkerFixtureEngineAdmission.current(
+            extensionID: "music", context: context, roleBundle: roleBundle)
+        {
+            let namespace = try admitted.withPlatformFixture(extensionID: "music", expectedRole: .app) { $0 }
+            try self.init(admission: { namespace })
+            try admitted.requireCurrent()
+            return
+        }
+#endif
+        let namespace = try WorkerFixtureAdmission.current(
+            extensionID: "music", context: context, roleBundle: roleBundle)
         try self.init(
-            admission: {
-                try Self.resolveFixture(
-                    admission: {
-                        try WorkerFixtureAdmission.current(
-                            extensionID: "music", context: context, roleBundle: roleBundle)
-                    },
-                    applicationIdentifier: ProcessInfo.processInfo.environment[
-                        "EDITH_APPLICATION_IDENTIFIER"])
-            },
+            admission: { namespace },
             makeLiveResources: {
                 try validateProduction()
                 return MusicWorkerResources.live()
@@ -288,6 +292,7 @@ final class MusicWorker {
     }
 
     func suspendCommands() {
+        tasks.shutdown()
         guard let resources else { return }
         resources.player.suspendCommands()
         resources.accounts.suspendCommands()
@@ -298,6 +303,8 @@ final class MusicWorker {
     }
 
     func suspendCommandsAndWait() async {
+        suspendCommands()
+        await tasks.shutdownAndWait()
         guard let resources else { return }
         await resources.player.suspendCommandsAndWait()
         await resources.accounts.suspendCommandsAndWait()
