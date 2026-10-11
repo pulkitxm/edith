@@ -25,6 +25,7 @@ import Observation
     private var invalidationDeadline: Task<Void, Never>?
     private var invalidationTask: Task<Void, Never>?
     private var invalidated = false
+    private var commandsSuspended = false
     private var versions: [String: UUID] = [:]
     var onState: (@MainActor (StudioUIState) -> Void)?
     var onFailure: (@MainActor (String) -> Void)?
@@ -183,7 +184,7 @@ import Observation
     func read<Value: Decodable>(_ operation: String, object: [String: Any] = [:]) async throws
         -> Value
     {
-        guard !isStopped else { throw ExtensionEngineError.unavailable }
+        guard !isStopped, !commandsSuspended else { throw ExtensionEngineError.unavailable }
         let payload = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         guard payload.count <= StudioCommands.maximumRequestBytes else {
             throw ExtensionEngineError.rejected
@@ -193,7 +194,7 @@ import Observation
         try Task.checkCancellation()
         let data = try await invoke(operation, payload)
         try Task.checkCancellation()
-        guard !isStopped, data.count <= ExtensionEngineWire.maximumPayloadBytes else {
+        guard !isStopped, !commandsSuspended, data.count <= ExtensionEngineWire.maximumPayloadBytes else {
             throw ExtensionEngineError.unavailable
         }
         if let failure = try? JSONDecoder().decode(StudioUIFailure.self, from: data) {
@@ -218,10 +219,10 @@ import Observation
         waiting.removeAll()
         for token in activeWork {
             if retainedWork.contains(token) {
-                cleanup("studio.ui.work.detach", object: ["token": token.uuidString])
+                queueCleanup("studio.ui.work.detach", object: ["token": token.uuidString])
             } else {
-                cleanup("studio.ui.work.cancel", object: ["token": token.uuidString])
-                cleanup("studio.ui.work.end", object: ["token": token.uuidString])
+                queueCleanup("studio.ui.work.cancel", object: ["token": token.uuidString])
+                queueCleanup("studio.ui.work.end", object: ["token": token.uuidString])
             }
         }
         if let cleanupTask {
@@ -239,9 +240,24 @@ import Observation
         }
     }
 
-    func suspendCommands() { stop() }
+    func suspendCommands() {
+        guard !commandsSuspended else { return }
+        commandsSuspended = true
+        owned.shutdown()
+        callbacks.shutdown()
+        exporter.suspendCommands()
+        cleanupTask?.cancel()
+        for (_, continuation) in waiting { continuation.resume(throwing: CancellationError()) }
+        waiting.removeAll()
+    }
 
-    func suspendCommandsAndWait() async { await stopAndWait() }
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        await exporter.suspendCommandsAndWait()
+        await owned.shutdownAndWait()
+        await callbacks.shutdownAndWait()
+        await cleanupOwned.waitForPendingWork()
+    }
 
     func stopAndWait() async {
         stop()
@@ -253,6 +269,11 @@ import Observation
     }
 
     func cleanup(_ operation: String, object: [String: Any]) {
+        guard !commandsSuspended else { return }
+        queueCleanup(operation, object: object)
+    }
+
+    private func queueCleanup(_ operation: String, object: [String: Any]) {
         guard !invalidated, cleanupQueue.count < 128,
             let payload = try? JSONSerialization.data(
                 withJSONObject: object, options: [.withoutEscapingSlashes]),
@@ -281,7 +302,7 @@ import Observation
 
     private func acquire() async throws {
         try Task.checkCancellation()
-        guard !isStopped else { throw ExtensionEngineError.unavailable }
+        guard !isStopped, !commandsSuspended else { throw ExtensionEngineError.unavailable }
         if activeRequests < 6 { activeRequests += 1; return }
         let id = UUID()
         try await withTaskCancellationHandler {
@@ -318,7 +339,7 @@ import Observation
     private func submit(
         _ key: String, work: @escaping @MainActor () async throws -> (@MainActor () -> Void)?
     ) {
-        guard !isStopped else { return }
+        guard !isStopped, !commandsSuspended else { return }
         let version = UUID()
         if let previous = versions[key] { tasks[previous]?.cancel(); tasks[previous] = nil }
         versions[key] = version

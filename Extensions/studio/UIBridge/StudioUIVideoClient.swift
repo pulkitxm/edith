@@ -9,6 +9,7 @@ import Foundation
     private var revision: String?
     private var created = false
     private var closed = false
+    private var commandsSuspended = false
     private var pending: StudioUIVideoProject?
     private var pendingOutput: URL?
     private var synchronizing: Task<Void, Never>?
@@ -30,6 +31,7 @@ import Foundation
     deinit { synchronizing?.cancel(); observing?.cancel(); action?.cancel() }
 
     func create() {
+        guard !commandsSuspended else { return }
         action?.cancel()
         action = owned.start { [weak self] in
             guard let self else { return }
@@ -45,6 +47,7 @@ import Foundation
     }
 
     func startProject(_ urls: [URL]) {
+        guard !commandsSuspended else { return }
         action?.cancel()
         action = owned.start { [weak self] in
             guard let self else { return }
@@ -60,6 +63,7 @@ import Foundation
     }
 
     func open(_ url: URL) {
+        guard !commandsSuspended else { return }
         action?.cancel()
         action = owned.start { [weak self] in
             guard let self else { return }
@@ -106,6 +110,7 @@ import Foundation
     }
 
     func attach(_ request: VideoEditorService.OpenRequest) async throws {
+        guard !commandsSuspended else { throw ExtensionEngineError.unavailable }
         let handle: StudioUIResource = try await facade.read(
             "studio.ui.video.attach", object: ["id": id.uuidString, "requestID": request.requestID])
         created = true
@@ -115,7 +120,7 @@ import Foundation
     }
 
     func mounted(_ request: VideoEditorService.OpenRequest) async throws {
-        guard created, !closed, revision == request.revision,
+        guard created, !closed, !commandsSuspended, revision == request.revision,
             (model?.remoteFrame != nil || model?.project?.clips.isEmpty == true)
         else {
             throw StudioUIOperationFailure(
@@ -127,7 +132,7 @@ import Foundation
     }
 
     func persist(_ project: VideoProject) {
-        guard created, !closed else { return }
+        guard created, !closed, !commandsSuspended else { return }
         do { pending = try StudioUIVideoProject(project); dirty = true } catch {
             fail(error); return
         }
@@ -159,11 +164,13 @@ import Foundation
     }
 
     func save(_ project: VideoProject, to url: URL) {
+        guard !commandsSuspended else { return }
         pendingOutput = url
         persist(project)
     }
 
     func importMedia(_ urls: [URL]) async {
+        guard !commandsSuspended else { return }
         do {
             if !created {
                 let handle: StudioUIResource = try await facade.read(
@@ -178,7 +185,7 @@ import Foundation
     }
 
     func send(_ operation: String, object: [String: Any] = [:]) {
-        guard created, !closed else { return }
+        guard created, !closed, !commandsSuspended else { return }
         frameGeneration += 1
         action?.cancel()
         action = owned.start { [weak self] in
@@ -193,6 +200,7 @@ import Foundation
     }
 
     func refresh(discard: Bool = false) {
+        guard !commandsSuspended else { return }
         if discard {
             pending = nil; dirty = false; conflicted = false; synchronizing?.cancel();
             synchronizing = nil
@@ -204,7 +212,7 @@ import Foundation
         to url: URL, gif: Bool, quality: VideoExportQuality, settings: VideoDeliverySettings,
         fps: Int, width: Int, loop: Bool, progress: @escaping @MainActor (Double) -> Void
     ) async throws -> VideoDeliveryReport? {
-        guard created, !closed else { throw ExtensionEngineError.unavailable }
+        guard created, !closed, !commandsSuspended else { throw ExtensionEngineError.unavailable }
         let object: [String: Any] = [
             "id": id.uuidString, "format": gif ? "gif" : "video", "output": url.path,
             "settings": try facade.object(settings), "quality": quality.rawValue, "fps": fps,
@@ -223,7 +231,7 @@ import Foundation
         to url: URL, settings: VideoAudioDeliverySettings,
         progress: @escaping @MainActor (Double) -> Void
     ) async throws -> VideoAudioDeliveryReport {
-        guard created, !closed else { throw ExtensionEngineError.unavailable }
+        guard created, !closed, !commandsSuspended else { throw ExtensionEngineError.unavailable }
         return try await facade.perform(
             "studio.ui.video.export",
             object: [
@@ -242,6 +250,19 @@ import Foundation
         }
     }
 
+    func suspendCommands() {
+        commandsSuspended = true
+        owned.shutdown()
+        synchronizing?.cancel(); observing?.cancel(); action?.cancel(); relinkPanel?.cancel(nil)
+    }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        await owned.shutdownAndWait()
+    }
+
+    func waitForPendingWork() async { await owned.waitForPendingWork() }
+
     func closeAndWait() async {
         close()
         await owned.shutdownAndWait()
@@ -250,7 +271,7 @@ import Foundation
     private func receive(_ handle: StudioUIResource, preserveProject: Bool) async throws {
         let value: StudioUIVideoState = try await facade.download(handle)
         try Task.checkCancellation()
-        guard !closed else { throw CancellationError() }
+        guard !closed, !commandsSuspended else { throw CancellationError() }
         if !conflicted { revision = value.revision }
         let bytes = try value.preview.map { try JSONEncoder().encode($0) }
         if bytes != previewBytes || value.project?.document != projectBytes {
@@ -260,7 +281,7 @@ import Foundation
     }
 
     private func frame() async throws {
-        guard let model, model.previewMetadata != nil, !closed else { return }
+        guard let model, model.previewMetadata != nil, !closed, !commandsSuspended else { return }
         let generation = frameGeneration
         let focus = model.editingZoomID != nil
         let handle: StudioUIResource = try await facade.read(
@@ -271,7 +292,7 @@ import Foundation
             ])
         let value: StudioUIVideoFrame = try await facade.download(handle)
         try Task.checkCancellation()
-        guard !closed, generation == frameGeneration else { return }
+        guard !closed, !commandsSuspended, generation == frameGeneration else { return }
         if focus {
             model.remoteFocusFrame = value.image?.image; model.remoteFocusReady = value.image != nil
         } else {

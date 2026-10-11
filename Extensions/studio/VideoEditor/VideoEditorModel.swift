@@ -1506,13 +1506,13 @@ final class VideoEditorModel {
     func waitForPendingWork() async {
         await work.waitForPendingWork()
         await audioTask?.value
-        await remoteClient?.closeAndWait()
+        await remoteClient?.waitForPendingWork()
     }
 
     func suspendCommands() {
         commandsSuspended = true
         work.shutdown()
-        remoteClient?.close()
+        remoteClient?.suspendCommands()
         player.pause(); focusPlayer.pause()
         if let observer { player.removeTimeObserver(observer) }
         observer = nil
@@ -1528,7 +1528,7 @@ final class VideoEditorModel {
         await work.shutdownAndWait()
         await audio?.value
         for task in synchronization { await task.value }
-        await client?.closeAndWait()
+        await client?.suspendCommandsAndWait()
         pendingSynchronization.removeAll()
     }
 
@@ -1536,6 +1536,7 @@ final class VideoEditorModel {
         suspendCommands()
         close()
         await suspendCommandsAndWait()
+        await remoteClient?.closeAndWait()
     }
 
 }
