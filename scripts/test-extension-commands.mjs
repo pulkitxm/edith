@@ -2,13 +2,18 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import {
   buildExtensionSupport,
   rewriteSupportImports,
 } from "./build-extension-support.mjs";
 import { buildExtensionUICarrier } from "./build-extension-ui-carrier.mjs";
 
+const harness = process.argv[2];
+assert(
+  harness && isAbsolute(harness),
+  "Pass the absolute HostCommandHarness path from ci-extension-commands",
+);
 const root = await mkdtemp(join(tmpdir(), "extension-command-fixture-"));
 try {
   const products = buildExtensionSupport(
@@ -108,11 +113,10 @@ try {
     hostABI: "edith-host-2",
     development: true,
   });
-  const output = execFileSync(
-    resolve("Packages/EdithHost/.build/debug/HostCommandHarness"),
-    [fixture, app, payload],
-    { encoding: "utf8", timeout: 120_000 },
-  );
+  const output = execFileSync(harness, [fixture, app, payload], {
+    encoding: "utf8",
+    timeout: 120_000,
+  });
   const results = output
     .trim()
     .split("\n")

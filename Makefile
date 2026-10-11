@@ -301,7 +301,12 @@ ci-extension-studio-native:
 	swift test --package-path Extensions/studio/NativeRuntime --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
 ci-extension-commands:
-	bun scripts/test-extension-commands.mjs
+	swift build --package-path Packages/EdithHost --build-system native --configuration debug --jobs $(EXTENSION_SWIFT_JOBS) --product HostCommandHarness -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+	@set -eu; \
+	  products="$$(swift build --package-path Packages/EdithHost --build-system native --configuration debug --show-bin-path)"; \
+	  test -n "$$products"; \
+	  test -x "$$products/HostCommandHarness"; \
+	  bun scripts/test-extension-commands.mjs "$$products/HostCommandHarness"
 
 .PHONY: ci-host-cli
 ci-host-cli:
