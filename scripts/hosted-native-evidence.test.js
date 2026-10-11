@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { generateKeyPairSync, sign } from "node:crypto";
+import { verifyOriginalNativeLineage } from "./extension-native-evidence.mjs";
 import {
   managedNativeBuildSteps,
   managedNativeTestSteps,
@@ -7,9 +8,13 @@ import {
 import { digest } from "./hosted-public-release/contract.mjs";
 import {
   admitEvidence,
+  admitOriginalEvidence,
+  closedAssetInventory,
   durableArtifact,
   nativeLineage,
+  publicationComposition,
   stagedEvidence,
+  verifiedComposition,
   verifiedEvidence,
   verifiedLineage,
 } from "./hosted-public-release/evidence.mjs";
@@ -64,7 +69,7 @@ function fixture() {
       : name.startsWith("build (")
         ? managedNativeBuildSteps
         : name === "publish"
-          ? ["Publish immutable extension releases and the signed catalog"]
+          ? ["Preserve immutable native evidence before publication"]
           : []
     ).map((name_, number) => ({
       name: name_,
@@ -107,19 +112,28 @@ function fixture() {
   };
 }
 function completed(value) {
+  const jobs = value.jobs.map((job) => ({
+    ...job,
+    status: "completed",
+    conclusion: "success",
+    steps: job.steps.map((step) => ({
+      ...step,
+      status: "completed",
+      conclusion: "success",
+    })),
+  }));
+  jobs
+    .find(({ name }) => name === "publish")
+    .steps.push({
+      name: "Publish immutable extension releases and the signed catalog",
+      number: 2,
+      status: "completed",
+      conclusion: "success",
+    });
   return {
     ...value,
     run: { ...value.run, status: "completed", conclusion: "success" },
-    jobs: value.jobs.map((job) => ({
-      ...job,
-      status: "completed",
-      conclusion: "success",
-      steps: job.steps.map((step) => ({
-        ...step,
-        status: "completed",
-        conclusion: "success",
-      })),
-    })),
+    jobs,
   };
 }
 
@@ -259,5 +273,314 @@ test("immutable retry lineage stays bound to old published bytes and original na
       bytes: bytes.length,
       sha256: digest(bytes),
     }),
+  ).toThrow();
+});
+
+test("explicit composed retry admits only publication-stage failure with exact old native identity", () => {
+  const payload = stagedEvidence(fixture());
+  const names = [
+    "Preserve immutable native evidence before publication",
+    "Publish immutable extension releases and the signed catalog",
+  ];
+  const failed = () => {
+    const value = completed(fixture());
+    value.run.conclusion = "failure";
+    value.jobs[4].conclusion = "failure";
+    value.jobs[4].steps[1].conclusion = "failure";
+    return value;
+  };
+  const qualification = admitOriginalEvidence(payload, failed(), names);
+  expect(qualification.originalWholeRunSucceeded).toBe(false);
+  expect(qualification.originalPublicationOnlyFailure).toBe(true);
+  for (const mutate of [
+    (value) => {
+      value.run.conclusion = "cancelled";
+    },
+    (value) => {
+      value.run.run_attempt = 2;
+    },
+    (value) => {
+      value.jobs[4].run_id = 102;
+    },
+    (value) => {
+      value.run = null;
+    },
+    (value) => {
+      value.jobs[0].conclusion = "failure";
+    },
+    (value) => {
+      value.jobs[1].conclusion = "failure";
+    },
+    (value) => {
+      value.jobs[2].steps[0].conclusion = "failure";
+    },
+    (value) => {
+      value.jobs[3].steps[0].conclusion = "failure";
+    },
+    (value) => {
+      value.jobs[4].conclusion = "timed_out";
+    },
+    (value) => {
+      value.jobs[4].steps[0].conclusion = "failure";
+    },
+    (value) => {
+      value.jobs[4].steps.push({
+        name: "Unknown publication operation",
+        number: 3,
+        status: "completed",
+        conclusion: "success",
+      });
+    },
+    (value) => {
+      value.jobs.pop();
+    },
+    (value) => {
+      value.source = "f".repeat(40);
+    },
+    (value) => {
+      value.fingerprints.owner0 = "f".repeat(64);
+    },
+    (value) => {
+      value.artifacts[2].digest = `sha256:${"f".repeat(64)}`;
+    },
+  ]) {
+    const value = failed();
+    mutate(value);
+    expect(() => admitOriginalEvidence(payload, value, names)).toThrow();
+  }
+});
+
+test("signed full publication composition keeps every old package origin separate from the current successful attempt", () => {
+  const value = fixture();
+  const rows = Object.keys(value.fingerprints).map((id) => ({
+    package: {
+      id,
+      sourceFingerprint: value.fingerprints[id],
+      sha256: "e".repeat(64),
+      version: "1.0.0",
+    },
+    lineageSHA256: "c".repeat(64),
+    lineageBytes: 200,
+    sourceCommit: "d".repeat(40),
+    runID: 100,
+    runAttempt: 2,
+    evidenceSHA256: "f".repeat(64),
+    evidenceBytes: 300,
+  }));
+  const payload = publicationComposition(
+    source,
+    101,
+    3,
+    rows,
+    value.fingerprints,
+  );
+  const admission = {
+    source,
+    runID: 101,
+    attempt: 3,
+    records: rows.map(({ package: record }) => record),
+    fingerprints: value.fingerprints,
+  };
+  expect(verifiedComposition(envelope(payload), publicKey, admission)).toEqual(
+    payload,
+  );
+  expect(payload.packages[0].runID).toBe(100);
+  expect(payload.publicationRunID).toBe(101);
+  for (const changed of [
+    { ...admission, source: "f".repeat(40) },
+    { ...admission, runID: 102 },
+    { ...admission, attempt: 4 },
+    { ...admission, records: admission.records.slice(1) },
+    {
+      ...admission,
+      fingerprints: { ...value.fingerprints, owner0: "f".repeat(64) },
+    },
+  ])
+    expect(() =>
+      verifiedComposition(envelope(payload), publicKey, changed),
+    ).toThrow();
+  const wrongArchive = structuredClone(admission);
+  wrongArchive.records[0].sha256 = "f".repeat(64);
+  expect(() =>
+    verifiedComposition(envelope(payload), publicKey, wrongArchive),
+  ).toThrow();
+  expect(() =>
+    publicationComposition(source, 101, 3, rows.slice(1), value.fingerprints),
+  ).toThrow();
+  const native = stagedEvidence(value);
+  const failedCurrent = completed(value);
+  failedCurrent.run.conclusion = "failure";
+  expect(() => admitEvidence(native, failedCurrent)).toThrow();
+});
+
+test("producer retries require the original immutable API attempt and closed public evidence inventory", async () => {
+  const payload = stagedEvidence(fixture());
+  const bytes = envelope(payload);
+  const record = {
+    id: "owner0",
+    sourceFingerprint: "b".repeat(64),
+    sha256: "e".repeat(64),
+    version: "1.0.0",
+  };
+  const origin = nativeLineage(record, payload, {
+    bytes: bytes.length,
+    sha256: digest(bytes),
+  });
+  const inventory = closedAssetInventory(payload, {
+    bytes: bytes.length,
+    sha256: digest(bytes),
+  });
+  const actualAssets = inventory.assets.map(
+    ({ name, bytes: size, sha256 }, index) => ({
+      id: 1000 + index,
+      name,
+      size,
+      digest: `sha256:${sha256}`,
+    }),
+  );
+  const make = () => {
+    const original = completed(fixture());
+    original.artifacts = [];
+    original.run.conclusion = "failure";
+    original.jobs[4].conclusion = "failure";
+    original.jobs[4].steps[1].conclusion = "failure";
+    const item = {
+      draft: false,
+      target_commitish: source,
+      assets: structuredClone(actualAssets),
+    };
+    const ref = { object: { type: "commit", sha: source } };
+    const responses = new Map([
+      ["/actions/runs/101/attempts/1", original.run],
+      [
+        "/actions/runs/101/attempts/1/jobs?per_page=100&page=1",
+        { total_count: 5, jobs: original.jobs },
+      ],
+      [
+        "/actions/runs/101/artifacts?per_page=100&page=1",
+        { total_count: 0, artifacts: [] },
+      ],
+    ]);
+    let ancestor = true;
+    const options = {
+      origin,
+      publicKey,
+      currentSource: "d".repeat(40),
+      currentFingerprints: fixture().fingerprints,
+      fetchAPI: async (url) => {
+        const path =
+          new URL(url).pathname.replace("/repos/pulkitxm/edith", "") +
+          new URL(url).search;
+        if (path.startsWith("/git/ref/tags/")) return Response.json(ref);
+        return responses.has(path)
+          ? Response.json(responses.get(path))
+          : new Response("", { status: 404 });
+      },
+      readRelease: () => item,
+      downloadAsset: async ({ expectedBytes, expectedSHA256 }) => {
+        expect(expectedBytes).toBe(bytes.length);
+        expect(expectedSHA256).toBe(digest(bytes));
+        return { data: bytes, size: bytes.length, sha256: digest(bytes) };
+      },
+      readSource: () =>
+        "jobs:\n  publish:\n    steps:\n      - name: Preserve immutable native evidence before publication\n        run: preserve\n      - name: Publish immutable extension releases and the signed catalog\n        run: publish\n",
+      requireAncestor: () => {
+        if (!ancestor) throw new Error("foreign source");
+      },
+    };
+    return {
+      options,
+      original,
+      item,
+      ref,
+      responses,
+      rejectAncestor: () => {
+        ancestor = false;
+      },
+    };
+  };
+  expect(
+    (await verifyOriginalNativeLineage(make().options))
+      .originalPublicationOnlyFailure,
+  ).toBe(true);
+  for (const mutate of [
+    (value) => value.responses.delete("/actions/runs/101/attempts/1"),
+    (value) => {
+      value.original.jobs[3].conclusion = "failure";
+    },
+    (value) => {
+      value.original.jobs[1].conclusion = "cancelled";
+    },
+    (value) => {
+      value.original.jobs[2].conclusion = "failure";
+    },
+    (value) => {
+      value.original.run.run_attempt = 2;
+    },
+    (value) => {
+      value.ref.object.type = "tag";
+    },
+    (value) => {
+      value.ref.object.sha = "f".repeat(40);
+    },
+    (value) => {
+      value.item.assets.push({
+        id: 2000,
+        name: "private-log.txt",
+        size: 10,
+        digest: `sha256:${"f".repeat(64)}`,
+      });
+    },
+    (value) => {
+      value.item.assets[0].digest = `sha256:${"f".repeat(64)}`;
+    },
+    (value) => {
+      value.options.currentFingerprints.owner0 = "f".repeat(64);
+    },
+    (value) => value.rejectAncestor(),
+  ]) {
+    const value = make();
+    mutate(value);
+    await expect(verifyOriginalNativeLineage(value.options)).rejects.toThrow();
+  }
+});
+
+test("closed evidence asset sizes include envelope and every preserved original archive", () => {
+  const payload = stagedEvidence(fixture());
+  const bytes = envelope(payload);
+  const inventory = closedAssetInventory(payload, {
+    bytes: bytes.length,
+    sha256: digest(bytes),
+  });
+  expect(inventory.originalArchiveBytes).toBe(111);
+  expect(inventory.totalEvidenceBytes).toBe(111 + bytes.length);
+  const actual = inventory.assets.map(({ name, bytes, sha256 }) => ({
+    name,
+    size: bytes,
+    digest: `sha256:${sha256}`,
+  }));
+  expect(
+    closedAssetInventory(
+      payload,
+      { bytes: bytes.length, sha256: digest(bytes) },
+      actual,
+    ),
+  ).toEqual(inventory);
+  expect(() =>
+    closedAssetInventory(
+      payload,
+      { bytes: bytes.length, sha256: digest(bytes) },
+      actual.slice(1),
+    ),
+  ).toThrow();
+  expect(() =>
+    closedAssetInventory(
+      payload,
+      { bytes: bytes.length, sha256: digest(bytes) },
+      [
+        ...actual,
+        { name: "private-log", size: 1, digest: `sha256:${"f".repeat(64)}` },
+      ],
+    ),
   ).toThrow();
 });

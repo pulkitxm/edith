@@ -20,6 +20,25 @@ const keys = (value, expected) => {
   assert(value && typeof value === "object" && !Array.isArray(value));
   assert.deepEqual(Object.keys(value).sort(), expected.sort());
 };
+export const preservationStep =
+  "Preserve immutable native evidence before publication";
+export const publicationStep =
+  "Publish immutable extension releases and the signed catalog";
+export function publisherStepNames(workflow) {
+  const steps = workflow.jobs.publish.steps;
+  return [
+    "Set up job",
+    "Complete job",
+    ...steps.map(
+      (step) =>
+        step.name ??
+        (step.uses ? `Run ${step.uses}` : `Run ${step.run.split("\n")[0]}`),
+    ),
+    ...steps
+      .filter((step) => step.uses)
+      .map((step) => `Post ${step.name ?? `Run ${step.uses}`}`),
+  ];
+}
 export const evidenceTag = (source, runID, attempt) => {
   assert.match(source, commit);
   integer(runID);
@@ -35,7 +54,7 @@ function requiredSteps(name) {
     : name.startsWith("build (")
       ? managedNativeBuildSteps
       : name === "publish"
-        ? ["Publish immutable extension releases and the signed catalog"]
+        ? [preservationStep]
         : [];
 }
 
@@ -303,6 +322,254 @@ export function verifiedLineage(bytes, publicKey, record) {
   return payload;
 }
 
+export function closedAssetInventory(payload, envelope, actual, composition) {
+  validateEvidence(payload);
+  integer(envelope.bytes, maximumEvidenceBytes);
+  assert.match(envelope.sha256, hash);
+  const assets = [
+    ...payload.artifacts.map(
+      ({ assetName, artifactBytes, artifactSHA256 }) => ({
+        name: assetName,
+        bytes: artifactBytes,
+        sha256: artifactSHA256,
+      }),
+    ),
+    {
+      name: "native-evidence.json",
+      bytes: envelope.bytes,
+      sha256: envelope.sha256,
+    },
+  ];
+  if (composition) {
+    integer(composition.bytes, maximumEvidenceBytes);
+    assert.match(composition.sha256, hash);
+    assets.push({ name: "publication-composition.json", ...composition });
+  }
+  if (actual) {
+    assert.deepEqual(
+      actual.map(({ name }) => name).sort(),
+      assets.map(({ name }) => name).sort(),
+    );
+    for (const expected of assets) {
+      const matches = actual.filter(({ name }) => name === expected.name);
+      assert.equal(matches.length, 1);
+      assert.equal(matches[0].size, expected.bytes);
+      assert.equal(matches[0].digest, `sha256:${expected.sha256}`);
+    }
+  }
+  const originalArchiveBytes = payload.artifacts.reduce(
+    (sum, row) => sum + row.artifactBytes,
+    0,
+  );
+  return {
+    assets,
+    envelopeBytes: envelope.bytes,
+    envelopeSHA256: envelope.sha256,
+    originalArchiveBytes,
+    compositionBytes: composition?.bytes ?? 0,
+    totalEvidenceBytes:
+      originalArchiveBytes + envelope.bytes + (composition?.bytes ?? 0),
+  };
+}
+
+export function publicationComposition(
+  source,
+  runID,
+  attempt,
+  packages,
+  fingerprints,
+) {
+  evidenceTag(source, runID, attempt);
+  assert.equal(packages.length, 39);
+  assert.equal(
+    new Set(packages.map(({ package: record }) => record.id)).size,
+    39,
+  );
+  assert.deepEqual(
+    packages.map(({ package: record }) => record.id).sort(),
+    Object.keys(fingerprints).sort(),
+  );
+  for (const row of packages) {
+    keys(row, [
+      "package",
+      "lineageSHA256",
+      "lineageBytes",
+      "sourceCommit",
+      "runID",
+      "runAttempt",
+      "evidenceSHA256",
+      "evidenceBytes",
+    ]);
+    assert.equal(row.package.sourceFingerprint, fingerprints[row.package.id]);
+    assert.match(row.lineageSHA256, hash);
+    integer(row.lineageBytes, 16 * 1024);
+    evidenceTag(row.sourceCommit, row.runID, row.runAttempt);
+    assert.match(row.evidenceSHA256, hash);
+    integer(row.evidenceBytes, maximumEvidenceBytes);
+  }
+  return {
+    schema: 1,
+    kind: "extension-publication-composition",
+    repository,
+    sourceCommit: source,
+    publicationRunID: runID,
+    publicationAttempt: attempt,
+    packages,
+  };
+}
+
+export function verifiedComposition(
+  bytes,
+  publicKey,
+  { source, runID, attempt, records, fingerprints },
+) {
+  const payload = verifiedEnvelope(bytes, publicKey);
+  keys(payload, [
+    "schema",
+    "kind",
+    "repository",
+    "sourceCommit",
+    "publicationRunID",
+    "publicationAttempt",
+    "packages",
+  ]);
+  assert.deepEqual(
+    payload,
+    publicationComposition(
+      source,
+      runID,
+      attempt,
+      payload.packages,
+      fingerprints,
+    ),
+  );
+  assert.equal(records.length, 39);
+  for (const row of payload.packages) {
+    const matches = records.filter(({ id }) => id === row.package.id);
+    assert.equal(matches.length, 1);
+    assert.deepEqual(row.package, matches[0]);
+  }
+  return payload;
+}
+
+export function admitOriginalEvidence(payload, value, publisherNames) {
+  if (value.run?.conclusion === "success")
+    return {
+      payload: admitEvidence(payload, value),
+      originalWholeRunSucceeded: true,
+      originalPublicationOnlyFailure: false,
+    };
+  const { run, jobs, artifacts, source, plannedIDs, fingerprints } = value;
+  assert(run);
+  assert.equal(run.repository?.full_name, repository);
+  assert.equal(run.path, ".github/workflows/extensions.yml");
+  assert.equal(run.head_sha, source);
+  assert.equal(run.head_branch, "main");
+  assert.equal(run.event, payload.event);
+  assert.equal(run.id, payload.runID);
+  assert.equal(run.run_attempt, payload.runAttempt);
+  assert.equal(run.status, "completed");
+  assert.equal(run.conclusion, "failure");
+  validateEvidence(payload);
+  assert.equal(payload.sourceCommit, source);
+  assert.deepEqual(payload.plannedIDs, plannedIDs);
+  assert.deepEqual(payload.fingerprints, fingerprints);
+  const publisher = jobs.filter(({ name }) => name === "publish");
+  assert.equal(publisher.length, 1);
+  assert.equal(publisher[0].run_id, run.id);
+  assert.equal(publisher[0].status, "completed");
+  assert.equal(publisher[0].conclusion, "failure");
+  const publication = publisher[0].steps.filter(
+    ({ name }) => name === publicationStep,
+  );
+  assert.equal(publication.length, 1);
+  assert.equal(publication[0].status, "completed");
+  assert.equal(publication[0].conclusion, "failure");
+  assert(
+    Array.isArray(publisherNames) &&
+      publisherNames.includes(preservationStep) &&
+      publisherNames.includes(publicationStep),
+  );
+  assert.equal(
+    new Set(publisher[0].steps.map(({ name }) => name)).size,
+    publisher[0].steps.length,
+  );
+  for (const step of publisher[0].steps) {
+    assert(
+      publisherNames.includes(step.name),
+      `Unknown publisher step ${step.name}`,
+    );
+    assert.equal(step.status, "completed");
+    assert.equal(
+      step.conclusion,
+      step.name === publicationStep ? "failure" : "success",
+    );
+  }
+  for (const name of publisherNames.filter(
+    (name) =>
+      name !== "Set up job" &&
+      name !== "Complete job" &&
+      !name.startsWith("Post "),
+  ))
+    assert(publisher[0].steps.some((step) => step.name === name));
+  const native = jobs.filter(({ name }) => name !== "publish");
+  const required = [
+    "plan",
+    "frozen-host",
+    "tests",
+    ...plannedIDs.map((id) => `build (${id})`),
+  ];
+  assert.equal(native.length, required.length);
+  assert.deepEqual(native.map(({ name }) => name).sort(), required.sort());
+  const identities = native.map((job) => {
+    integer(job.id);
+    assert.equal(job.run_id, run.id);
+    assert.equal(job.status, "completed");
+    assert.equal(job.conclusion, "success");
+    const steps = requiredSteps(job.name).map((name) => {
+      const matches = job.steps.filter((step) => step.name === name);
+      assert.equal(matches.length, 1);
+      assert.equal(matches[0].status, "completed");
+      assert.equal(matches[0].conclusion, "success");
+      return { name, number: matches[0].number };
+    });
+    return { id: job.id, name: job.name, steps };
+  });
+  const preserve = publisher[0].steps.find(
+    ({ name }) => name === preservationStep,
+  );
+  assert(
+    preserve &&
+      preserve.status === "completed" &&
+      preserve.conclusion === "success",
+  );
+  identities.push({
+    id: publisher[0].id,
+    name: "publish",
+    steps: [{ name: preservationStep, number: preserve.number }],
+  });
+  assert.deepEqual(
+    identities.sort((left, right) => left.name.localeCompare(right.name)),
+    payload.jobs,
+  );
+  for (const row of payload.artifacts) {
+    const actual = artifacts.filter(({ id }) => id === row.artifactID);
+    assert(actual.length <= 1);
+    if (actual.length) {
+      assert.equal(actual[0].name, row.name);
+      assert.equal(actual[0].size_in_bytes, row.artifactBytes);
+      assert.equal(actual[0].digest, `sha256:${row.artifactSHA256}`);
+      assert.equal(actual[0].workflow_run?.id, run.id);
+      assert.equal(actual[0].workflow_run?.head_sha, source);
+    }
+  }
+  return {
+    payload,
+    originalWholeRunSucceeded: false,
+    originalPublicationOnlyFailure: true,
+  };
+}
+
 export function admitEvidence(
   payload,
   { run, jobs, artifacts, source, plannedIDs, fingerprints },
@@ -317,6 +584,12 @@ export function admitEvidence(
   assert.deepEqual(payload.plannedIDs, plannedIDs);
   assert.deepEqual(payload.fingerprints, fingerprints);
   assert.deepEqual(payload.jobs, jobsIdentity(jobs, plannedIDs, run.id, false));
+  const published = jobs
+    .find(({ name }) => name === "publish")
+    .steps.filter(({ name }) => name === publicationStep);
+  assert.equal(published.length, 1);
+  assert.equal(published[0].status, "completed");
+  assert.equal(published[0].conclusion, "success");
   for (const row of payload.artifacts) {
     const matches = artifacts.filter(({ id }) => id === row.artifactID);
     assert(matches.length <= 1);

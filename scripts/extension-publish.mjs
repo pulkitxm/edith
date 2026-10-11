@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import {
+  chmod,
   copyFile,
   mkdtemp,
   readFile,
@@ -18,8 +19,12 @@ import {
 } from "./extension-catalog-pointer.mjs";
 import { extensionReleaseTag } from "./extension-release-plan.mjs";
 import {
+  publishExtensionAssets,
+  snapshotReleaseFile,
+  verifyImmutableReleaseAssets,
+} from "./immutable-release-assets.mjs";
+import {
   downloadReleaseAsset,
-  releaseAssetMatchesFile,
   releaseFileDigest,
 } from "./release-asset-read.mjs";
 import {
@@ -27,6 +32,9 @@ import {
   preflightReleaseAsset,
   uploadReleaseAsset,
 } from "./release-asset-upload.mjs";
+
+export { publishExtensionAssets } from "./immutable-release-assets.mjs";
+
 import { lookupRelease } from "./release-lookup.mjs";
 import {
   maximumCatalogPackages,
@@ -176,35 +184,6 @@ export async function preflightExtensionBuilds({
       });
 }
 
-export async function publishExtensionAssets({
-  repository,
-  item,
-  entry,
-  files,
-  matches = releaseAssetMatchesFile,
-  uploadAsset = upload,
-}) {
-  for (const [, name] of files) {
-    const existing = item.assets.filter((asset) => asset.name === name);
-    if (existing.length > 1)
-      throw new Error("Duplicate immutable release asset");
-    if (existing.length === 0 && item.draft !== true)
-      throw new Error(
-        "Published extension release is missing an immutable asset",
-      );
-  }
-  const missing = [];
-  for (const [file, name] of files) {
-    const existing = item.assets.find((asset) => asset.name === name);
-    if (existing) {
-      if (!(await matches({ repository, asset: existing, file })))
-        throw new Error("Immutable asset differs from build output");
-    } else missing.push([file, name]);
-  }
-  for (const [file, name] of missing)
-    await uploadAsset(repository, item.id, entry.tag, file, name);
-}
-
 export async function restorePublishedExtension({
   repository,
   record,
@@ -215,9 +194,14 @@ export async function restorePublishedExtension({
   checksumPath,
   recordPath,
   zip,
+  recordData,
   downloadAsset = downloadReleaseAsset,
 }) {
-  const { data } = await downloadAsset({ repository, asset: publishedRecord });
+  const data =
+    recordData ??
+    (await downloadAsset({ repository, asset: publishedRecord })).data;
+  if (!Buffer.isBuffer(data) || data.length > 1024 ** 2)
+    throw new Error("Invalid original extension record");
   const published = JSON.parse(data.toString("utf8"));
   validateExtensionReleaseIdentity({ repository, entry, record: published });
   if (
@@ -259,6 +243,46 @@ export async function restorePublishedExtension({
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
+}
+
+export async function restorePublishedNativeLineage({
+  repository,
+  record,
+  asset,
+  file,
+  publicKey,
+  downloadAsset = downloadReleaseAsset,
+}) {
+  if (!asset) throw new Error("Original immutable native evidence is missing");
+  const { data } = await downloadAsset({
+    repository,
+    asset,
+    maximumBytes: 16 * 1024,
+  });
+  const { verifiedLineage, verifiedEnvelope } = await import(
+    "./hosted-public-release/evidence.mjs"
+  );
+  const lineage = verifiedLineage(
+    data,
+    publicKey,
+    record ?? verifiedEnvelope(data, publicKey, 16 * 1024).package,
+  );
+  if (file) await writeFile(file, data);
+  return lineage;
+}
+
+function nativeEvidenceFetch(url, options = {}) {
+  if (new URL(url).origin !== "https://api.github.com")
+    throw new Error("Invalid native evidence API origin");
+  if (!process.env.GITHUB_TOKEN)
+    throw new Error("Missing native evidence read token");
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...options.headers,
+      Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+    },
+  });
 }
 
 export async function verifiedPublicationState({
@@ -417,6 +441,209 @@ export async function promoteExtensionCatalog({
   await updatePointer(current.release.id, JSON.stringify(pointer));
 }
 
+export async function publishNativeComposition({
+  repository,
+  directory,
+  target,
+  include,
+  publicKey,
+  next,
+  nativeEvidence,
+  verifyState,
+  verifyOriginal = async (value) => {
+    const { verifyOriginalNativeLineage } = await import(
+      "./extension-native-evidence.mjs"
+    );
+    return verifyOriginalNativeLineage(value);
+  },
+}) {
+  const { currentPackages, digest } = await import(
+    "./hosted-public-release/contract.mjs"
+  );
+  const {
+    closedAssetInventory,
+    publicationComposition,
+    verifiedComposition,
+    verifiedEvidence,
+    verifiedLineage,
+  } = await import("./hosted-public-release/evidence.mjs");
+  const evidencePayload = verifiedEvidence(
+    await readFile(resolve(directory, "native-evidence.json")),
+    publicKey,
+  );
+  const definitions = JSON.parse(
+    await readFile(resolve("Extensions/manifest.json"), "utf8"),
+  );
+  const current = currentPackages(
+    next,
+    definitions,
+    evidencePayload.fingerprints,
+  );
+  const origins = [];
+  const originalAdmissions = new Map();
+  for (const record of current) {
+    let bytes;
+    if (include.some(({ id }) => id === record.id))
+      bytes = await readFile(
+        resolve(directory, `${record.id}.native-evidence.json`),
+      );
+    else {
+      const tag = decodeURIComponent(
+        new URL(record.downloadURL).pathname.split("/").at(-2),
+      );
+      const item = release(repository, tag);
+      const assets =
+        item?.assets.filter(
+          ({ name }) => name === `${record.id}.native-evidence.json`,
+        ) ?? [];
+      if (assets.length !== 1)
+        throw new Error("Retained original native lineage is missing");
+      bytes = (
+        await downloadReleaseAsset({
+          repository,
+          asset: assets[0],
+          maximumBytes: 16 * 1024,
+        })
+      ).data;
+    }
+    const origin = verifiedLineage(bytes, publicKey, record);
+    if (
+      origin.sourceCommit !== target ||
+      origin.runID !== evidencePayload.runID ||
+      origin.runAttempt !== evidencePayload.runAttempt
+    ) {
+      const key = `${origin.runID}:${origin.runAttempt}:${origin.evidenceSHA256}:${origin.evidenceBytes}`;
+      if (!originalAdmissions.has(key))
+        originalAdmissions.set(
+          key,
+          await verifyOriginal({
+            origin,
+            publicKey,
+            currentSource: target,
+            currentFingerprints: evidencePayload.fingerprints,
+            fetchAPI: nativeEvidenceFetch,
+          }),
+        );
+      const original = originalAdmissions.get(key).payload;
+      if (
+        original.sourceCommit !== origin.sourceCommit ||
+        !original.plannedIDs.includes(record.id) ||
+        original.fingerprints[record.id] !== record.sourceFingerprint
+      )
+        throw new Error("Original native package identity differs");
+    }
+    origins.push({
+      package: record,
+      lineageSHA256: digest(bytes),
+      lineageBytes: bytes.length,
+      sourceCommit: origin.sourceCommit,
+      runID: origin.runID,
+      runAttempt: origin.runAttempt,
+      evidenceSHA256: origin.evidenceSHA256,
+      evidenceBytes: origin.evidenceBytes,
+    });
+  }
+  const compositionPayload = resolve(directory, "composition-payload.json");
+  const compositionPath = resolve(directory, "publication-composition.json");
+  await writeFile(
+    compositionPayload,
+    JSON.stringify(
+      publicationComposition(
+        target,
+        evidencePayload.runID,
+        evidencePayload.runAttempt,
+        origins,
+        evidencePayload.fingerprints,
+      ),
+    ),
+  );
+  execFileSync(
+    "swift",
+    [
+      "scripts/extension-catalog-sign.swift",
+      "sign",
+      compositionPayload,
+      compositionPath,
+    ],
+    { stdio: "inherit", timeout: 60000 },
+  );
+  const compositionBytes = await readFile(compositionPath);
+  verifiedComposition(compositionBytes, publicKey, {
+    source: target,
+    runID: evidencePayload.runID,
+    attempt: evidencePayload.runAttempt,
+    records: current,
+    fingerprints: evidencePayload.fingerprints,
+  });
+  const snapshotRoot = await mkdtemp(
+    resolve(tmpdir(), "extension-composition-"),
+  );
+  await chmod(snapshotRoot, 0o700);
+  try {
+    const snapshot = await snapshotReleaseFile(
+      compositionPath,
+      resolve(snapshotRoot, "publication-composition.json"),
+    );
+    await verifyState();
+    const evidenceRelease = release(repository, nativeEvidence.tag);
+    const existing = evidenceRelease.assets.filter(
+      ({ name }) => name === "publication-composition.json",
+    );
+    if (existing.length > 1)
+      throw new Error("Duplicate immutable publication composition");
+    const pin = { bytes: snapshot.bytes, sha256: snapshot.sha256 };
+    const envelopePin = {
+      bytes: nativeEvidence.envelopeBytes,
+      sha256: nativeEvidence.envelopeSHA256,
+    };
+    closedAssetInventory(
+      evidencePayload,
+      envelopePin,
+      evidenceRelease.assets,
+      existing.length ? pin : undefined,
+    );
+    if (!existing.length) {
+      preflightReleaseAsset({
+        repository,
+        file: snapshot.file,
+        name: "publication-composition.json",
+      });
+      await upload(
+        repository,
+        evidenceRelease.id,
+        nativeEvidence.tag,
+        snapshot.file,
+        "publication-composition.json",
+      );
+    }
+    const final = release(repository, nativeEvidence.tag);
+    if (!final || final.id !== evidenceRelease.id || final.draft)
+      throw new Error("Immutable evidence release changed");
+    const inventory = closedAssetInventory(
+      evidencePayload,
+      envelopePin,
+      final.assets,
+      pin,
+    );
+    const asset = final.assets.find(
+      ({ name }) => name === "publication-composition.json",
+    );
+    const result = await downloadReleaseAsset({
+      repository,
+      asset,
+      expectedBytes: pin.bytes,
+      expectedSHA256: pin.sha256,
+      collect: false,
+    });
+    if (result.sha256 !== pin.sha256)
+      throw new Error("Immutable publication composition differs");
+    Object.assign(nativeEvidence, inventory, { compositionSHA256: pin.sha256 });
+  } finally {
+    await rm(snapshotRoot, { recursive: true, force: true });
+  }
+  return nativeEvidence;
+}
+
 export async function publishExtensions({
   directory,
   repository,
@@ -424,6 +651,19 @@ export async function publishExtensions({
   ref,
   catalogTag,
   publicKey,
+  publishEvidence = async (value) => {
+    const { preparedNativeEvidence } = await import(
+      "./extension-native-evidence.mjs"
+    );
+    return preparedNativeEvidence(value);
+  },
+  publishComposition = publishNativeComposition,
+  verifyOriginal = async (value) => {
+    const { verifyOriginalNativeLineage } = await import(
+      "./extension-native-evidence.mjs"
+    );
+    return verifyOriginalNativeLineage(value);
+  },
 }) {
   if (!publicKey || !process.env.EXTENSION_CATALOG_PRIVATE_KEY)
     throw new Error(
@@ -474,7 +714,35 @@ export async function publishExtensions({
     return { published: [], revision: old.revision };
   }
   await preflightExtensionBuilds({ repository, directory, include });
+  const nativeEvidence = await publishEvidence({
+    directory,
+    target,
+    include,
+    publicKey,
+    publishFiles: publishExtensionAssets,
+    lookupRelease: release,
+    mutate,
+    publishDraft,
+  });
   const records = [];
+  const originalAdmissions = new Map();
+  const admitOriginal = async (value) => {
+    const { origin } = value;
+    const key = `${origin.sourceCommit}:${origin.runID}:${origin.runAttempt}:${origin.evidenceSHA256}:${origin.evidenceBytes}`;
+    if (!originalAdmissions.has(key))
+      originalAdmissions.set(
+        key,
+        await verifyOriginal({ ...value, fetchAPI: nativeEvidenceFetch }),
+      );
+    const admission = originalAdmissions.get(key);
+    if (
+      !admission.payload.plannedIDs.includes(origin.package.id) ||
+      admission.payload.fingerprints[origin.package.id] !==
+        origin.package.sourceFingerprint
+    )
+      throw new Error("Original native package identity differs");
+    return admission;
+  };
   for (const entry of include) {
     const recordPath = resolve(directory, `${entry.id}.json`);
     let record = await validatedExtensionBuild({
@@ -513,7 +781,28 @@ export async function publishExtensions({
     const publishedArchive = item.assets.find(
       (asset) => asset.name === `${entry.id}.zip`,
     );
-    if (publishedRecord && publishedArchive) {
+    if (publishedArchive) {
+      const lineageAsset = item.assets.find(
+        (asset) => asset.name === `${entry.id}.native-evidence.json`,
+      );
+      const original = await restorePublishedNativeLineage({
+        repository,
+        publicKey,
+        asset: lineageAsset,
+      });
+      validateExtensionReleaseIdentity({
+        repository,
+        entry,
+        record: original.package,
+      });
+      await admitOriginal({
+        origin: original,
+        publicKey,
+        currentSource: target,
+        currentFingerprints: Object.fromEntries(
+          include.map(({ id, fingerprint }) => [id, fingerprint]),
+        ),
+      });
       record = await restorePublishedExtension({
         repository,
         record,
@@ -524,18 +813,35 @@ export async function publishExtensions({
         checksumPath,
         recordPath,
         zip,
+        recordData: publishedRecord
+          ? undefined
+          : Buffer.from(JSON.stringify(original.package)),
+      });
+      await restorePublishedNativeLineage({
+        repository,
+        record,
+        publicKey,
+        asset: item.assets.find(
+          (asset) => asset.name === `${entry.id}.native-evidence.json`,
+        ),
+        file: resolve(directory, `${entry.id}.native-evidence.json`),
       });
     }
-    await publishExtensionAssets({
+    const publishedAssets = await publishExtensionAssets({
       repository,
       item,
       entry,
       files: [
+        [
+          resolve(directory, `${entry.id}.native-evidence.json`),
+          `${entry.id}.native-evidence.json`,
+        ],
         [zip, `${entry.id}.zip`],
         [recordPath, `${entry.id}.json`],
         [checksumPath, `${entry.id}.zip.sha256`],
       ],
     });
+    await verifyState();
     mutate(
       "release",
       "edit",
@@ -547,6 +853,10 @@ export async function publishExtensions({
       "--make-latest",
       "false",
     );
+    await verifyImmutableReleaseAssets({
+      repository,
+      receipt: publishedAssets,
+    });
     records.push(record);
   }
   const next = mergeExtensionCatalog(
@@ -554,6 +864,17 @@ export async function publishExtensions({
     records,
     Math.max(Date.now(), old.revision + 1),
   );
+  await publishComposition({
+    repository,
+    directory,
+    target,
+    include,
+    publicKey,
+    next,
+    nativeEvidence,
+    verifyState,
+    verifyOriginal: admitOriginal,
+  });
   const payload = resolve(directory, "payload.json");
   const envelope = resolve(directory, "catalog.json");
   await writeFile(payload, JSON.stringify(next));
@@ -641,6 +962,7 @@ export async function publishExtensions({
   return {
     published: records.map(({ id, version }) => ({ id, version })),
     revision: next.revision,
+    nativeEvidence,
   };
 }
 

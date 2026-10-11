@@ -16,6 +16,7 @@ import {
   parseCatalogPointer,
   verifyCatalogPointerData,
 } from "../extension-catalog-pointer.mjs";
+import { evidenceInventory } from "../extension-native-evidence.mjs";
 import {
   extensionFingerprint,
   planUnpublishedExtensions,
@@ -27,8 +28,6 @@ import {
 } from "../hosted-managed-views/package-preparation.mjs";
 import { verifiedCatalogPayload } from "../verify-extension-catalog.mjs";
 import {
-  artifact,
-  composeLineage,
   currentPackages,
   digest,
   downloadPublic,
@@ -39,6 +38,18 @@ import {
   request,
   successfulRun,
 } from "./contract.mjs";
+import {
+  admitEvidence,
+  admitOriginalEvidence,
+  closedAssetInventory,
+  durableArtifact,
+  evidenceTag,
+  publisherStepNames,
+  verifiedComposition,
+  verifiedEnvelope,
+  verifiedEvidence,
+  verifiedLineage,
+} from "./evidence.mjs";
 
 const script = fileURLToPath(import.meta.url);
 function command(file, args, cwd, timeout = 120000) {
@@ -213,16 +224,104 @@ export async function run() {
       ]),
     ),
   );
+  const catalogRelease = await api("/releases/tags/extension-catalog-v1");
+  assert.equal(catalogRelease.draft, false);
+  assert.equal(catalogRelease.tag_name, "extension-catalog-v1");
+  const pointer = parseCatalogPointer(catalogRelease.body);
+  const envelope = join(work, "catalog.json");
+  await publicAsset(
+    catalogRelease,
+    pointer.assetName,
+    pointer.bytes,
+    pointer.sha256,
+    envelope,
+  );
+  assert.equal(
+    catalogAssetURL(pointer),
+    `https://github.com/${repository}/releases/download/extension-catalog-v1/${pointer.assetName}`,
+  );
+  const envelopeBytes = verifyCatalogPointerData(
+    await readFile(envelope),
+    pointer,
+  );
+  const config = await readFile(
+    join(
+      sourceDirectory,
+      "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift",
+    ),
+    "utf8",
+  );
+  const keys = [
+    ...config.matchAll(
+      /publicKey\s*=\s*Data\(base64Encoded:\s*"([A-Za-z0-9+/=]+)"/g,
+    ),
+  ];
+  assert.equal(keys.length, 1);
+  const publicKey = keys[0][1];
+  const catalog = JSON.parse(verifiedCatalogPayload(envelopeBytes, publicKey));
+  assert.equal(catalog.revision, pointer.revision);
+  const current = currentPackages(catalog, definitions, fingerprints),
+    packages = [],
+    archives = {};
+  const lineages = new Map(),
+    nativeLinks = [];
+  async function signedAsset(item, name, fileName, maximum, expected) {
+    const assets = item.assets.filter((asset) => asset.name === name);
+    assert.equal(assets.length, 1);
+    const asset = assets[0];
+    assert(
+      Number.isSafeInteger(asset.size) &&
+        asset.size > 0 &&
+        asset.size <= maximum,
+    );
+    assert.match(asset.digest, /^sha256:[a-f0-9]{64}$/);
+    const pin = { bytes: asset.size, sha256: asset.digest.slice(7) };
+    if (expected) assert.deepEqual(pin, expected);
+    const path = join(work, fileName);
+    await publicAsset(item, name, pin.bytes, pin.sha256, path);
+    return { path, bytes: await readFile(path), pin };
+  }
+  for (const package_ of current) {
+    const tag = decodeURIComponent(
+      new URL(package_.downloadURL).pathname.split("/").at(-2),
+    );
+    const item = await api(`/releases/tags/${encodeURIComponent(tag)}`);
+    assert.equal(item.tag_name, tag);
+    assert.equal(item.draft, false);
+    const value = await signedAsset(
+      item,
+      `${package_.id}.native-evidence.json`,
+      `${package_.id}-lineage.json`,
+      16 * 1024,
+    );
+    const lineage = verifiedLineage(value.bytes, publicKey, package_);
+    lineages.set(package_.id, lineage);
+    nativeLinks.push({
+      id: package_.id,
+      runID: lineage.runID,
+      runAttempt: lineage.runAttempt,
+      sourceCommit: lineage.sourceCommit,
+      ...value.pin,
+    });
+  }
   const hostAdmission = hostRun({ ...host, source: options.source });
   const downloads = [];
   async function download(row, name) {
     const destination = join(work, name);
-    await downloadCIArtifact({
-      repository,
-      row,
-      destination,
-      fetch: authenticated,
-    });
+    if (row.durableURL)
+      await downloadPublic({
+        url: row.durableURL,
+        bytes: row.artifactBytes,
+        sha256: row.artifactSHA256,
+        destination,
+      });
+    else
+      await downloadCIArtifact({
+        repository,
+        row,
+        destination,
+        fetch: authenticated,
+      });
     downloads.push({ name, ...row });
     return destination;
   }
@@ -232,12 +331,70 @@ export async function run() {
     definitions,
     fingerprints,
     name,
+    origin,
   ) {
     const source = value.run.head_sha;
     assert.match(source, /^[a-f0-9]{40}$/);
-    successfulRun(value.run, source, ".github/workflows/extensions.yml");
+    if (!origin)
+      successfulRun(value.run, source, ".github/workflows/extensions.yml");
+    const tag = evidenceTag(source, value.run.id, value.run.run_attempt);
+    const item = await api(`/releases/tags/${encodeURIComponent(tag)}`);
+    assert.equal(item.tag_name, tag);
+    assert.equal(item.target_commitish, source);
+    assert.equal(item.draft, false);
+    const ref = await api(`/git/ref/tags/${encodeURIComponent(tag)}`);
+    assert.equal(ref.object.type, "commit");
+    assert.equal(ref.object.sha, source);
+    const signed = await signedAsset(
+      item,
+      "native-evidence.json",
+      `${name}-evidence.json`,
+      1024 ** 2,
+      origin
+        ? { bytes: origin.evidenceBytes, sha256: origin.evidenceSHA256 }
+        : undefined,
+    );
+    const payload = verifiedEvidence(signed.bytes, publicKey);
+    assert.equal(payload.sourceCommit, source);
+    assert.equal(payload.runID, value.run.id);
+    assert.equal(payload.runAttempt, value.run.run_attempt);
+    let composition;
+    const compositionAssets = item.assets.filter(
+      ({ name }) => name === "publication-composition.json",
+    );
+    assert(compositionAssets.length <= 1);
+    if (compositionAssets.length) {
+      const bytes = await signedAsset(
+        item,
+        "publication-composition.json",
+        `${name}-composition.json`,
+        1024 ** 2,
+      );
+      const raw = verifiedEnvelope(bytes.bytes, publicKey);
+      composition = {
+        payload: verifiedComposition(bytes.bytes, publicKey, {
+          source,
+          runID: value.run.id,
+          attempt: value.run.run_attempt,
+          records: raw.packages.map(({ package: record }) => record),
+          fingerprints,
+        }),
+        pin: bytes.pin,
+      };
+    }
+    if (!origin)
+      assert(
+        composition,
+        "Current successful publication composition is required",
+      );
+    const storage = closedAssetInventory(
+      payload,
+      signed.pin,
+      item.assets,
+      composition?.pin,
+    );
     const outer = await download(
-      artifact(value.artifacts, "extension-plan", value.run, source),
+      durableArtifact(payload, "extension-plan"),
       `${name}-plan.zip`,
     );
     const directory = join(work, `${name}-plan`);
@@ -257,19 +414,47 @@ export async function run() {
       previous.packages,
     );
     assert.deepEqual(actual, { include: expected });
-    const rows = productionRun({
+    const parameters = {
       ...value,
       source,
       definitions,
       fingerprints,
       plannedIDs: expected.map(({ id }) => id),
-    });
+    };
+    const qualification = origin
+      ? admitOriginalEvidence(
+          payload,
+          parameters,
+          publisherStepNames(
+            Bun.YAML.parse(
+              await readFile(
+                join(sourceDirectory, ".github/workflows/extensions.yml"),
+                "utf8",
+              ),
+            ),
+          ),
+        )
+      : {
+          payload: admitEvidence(payload, parameters),
+          originalWholeRunSucceeded: true,
+          originalPublicationOnlyFailure: false,
+        };
+    if (!origin)
+      productionRun({
+        ...parameters,
+        resolveArtifact: (name) => durableArtifact(payload, name),
+      });
+    const rows = payload.plannedIDs.map((id) => ({
+      extensionID: id,
+      sourceFingerprint: fingerprints[id],
+      ...durableArtifact(payload, `extension-${id}`),
+    }));
     const plan = {
       planSHA256: digest(await readFile(join(directory, "plan.json"))),
       plannedIDs: expected.map(({ id }) => id),
     };
     const releaseFrozen = await download(
-      artifact(value.artifacts, "frozen-extension-host", value.run, source),
+      durableArtifact(payload, "frozen-extension-host"),
       `${name}-frozen.zip`,
     );
     const frozenDirectory = join(work, `${name}-frozen`);
@@ -309,7 +494,19 @@ export async function run() {
       ["--verify", "--deep", "--strict", frozen.hostApp],
       root,
     );
-    return { value, source, plan, rows, frozen, frozenSHA, metadata };
+    return {
+      value,
+      source,
+      plan,
+      rows,
+      frozen,
+      frozenSHA,
+      metadata,
+      qualification,
+      composition,
+      storage,
+      envelopePin: signed.pin,
+    };
   }
   const currentProduction = await prepareProduction(
     production,
@@ -320,30 +517,41 @@ export async function run() {
   );
   const productionPlan = currentProduction.plan;
   const changed = new Set(productionPlan.plannedIDs);
-  const remaining = definitions
-    .map(({ id }) => id)
-    .filter((id) => !changed.has(id));
-  assert.deepEqual(Object.keys(options.retainedRuns).sort(), remaining.sort());
-  const productionByRun = new Map([[options.packagesRun, currentProduction]]);
-  for (const runID of new Set(Object.values(options.retainedRuns))) {
-    const value = await inventory(runID);
-    assert.equal(value.run.id, runID);
-    const source = value.run.head_sha;
-    assert.match(source, /^[a-f0-9]{40}$/);
-    assert.notEqual(source, options.source);
+  const currentKey = `${production.run.id}:${production.run.run_attempt}`;
+  const requiredRetained = [...lineages.entries()].filter(
+    ([, row]) => `${row.runID}:${row.runAttempt}` !== currentKey,
+  );
+  assert.deepEqual(
+    Object.keys(options.retainedRuns).sort(),
+    requiredRetained.map(([id]) => id).sort(),
+  );
+  for (const [id, row] of requiredRetained)
+    assert.equal(options.retainedRuns[id], row.runID);
+  const productionByRun = new Map([[currentKey, currentProduction]]);
+  for (const [id, origin] of requiredRetained) {
+    const key = `${origin.runID}:${origin.runAttempt}`;
+    if (productionByRun.has(key)) continue;
+    const value = await evidenceInventory(
+      origin.runID,
+      origin.runAttempt,
+      authenticated,
+    );
+    assert.equal(value.run.id, origin.runID);
+    assert.equal(value.run.run_attempt, origin.runAttempt);
+    assert.equal(value.run.head_sha, origin.sourceCommit);
     command(
       "git",
-      ["merge-base", "--is-ancestor", source, options.source],
+      ["merge-base", "--is-ancestor", origin.sourceCommit, options.source],
       root,
     );
-    const directory = join(work, `source-${runID}`);
+    const directory = join(work, `source-${origin.runID}-${origin.runAttempt}`);
     await privateDirectory(directory);
     command(
       "git",
       ["clone", "--shared", "--no-checkout", root, directory],
       root,
     );
-    command("git", ["checkout", "--detach", source], directory);
+    command("git", ["checkout", "--detach", origin.sourceCommit], directory);
     const priorDefinitions = JSON.parse(
       await readFile(join(directory, "Extensions/manifest.json"), "utf8"),
     );
@@ -356,31 +564,72 @@ export async function run() {
         ]),
       ),
     );
-    for (const [id, selectedRun] of Object.entries(options.retainedRuns)) {
-      if (selectedRun === runID)
-        assert.equal(
-          priorFingerprints[id],
-          fingerprints[id],
-          `Retained ${id} production source differs from its current fingerprint`,
-        );
-    }
+    assert.equal(priorFingerprints[id], fingerprints[id]);
     productionByRun.set(
-      runID,
+      key,
       await prepareProduction(
         value,
         directory,
         priorDefinitions,
         priorFingerprints,
-        `retained-${runID}`,
+        `retained-${origin.runID}-${origin.runAttempt}`,
+        origin,
       ),
     );
   }
-  const productionAdmission = composeLineage({
-    definitions,
-    fingerprints,
-    current: currentProduction,
-    retained: productionByRun,
-    requestedRuns: options.retainedRuns,
+  const currentComposition = currentProduction.composition.payload;
+  assert.deepEqual(
+    currentComposition.packages.map(({ package: record }) => record.id).sort(),
+    current.map(({ id }) => id).sort(),
+  );
+  const productionAdmission = current.map((record) => {
+    const origin = lineages.get(record.id);
+    const nativeLink = nativeLinks.find(({ id }) => id === record.id);
+    const composed = currentComposition.packages.find(
+      ({ package: row }) => row.id === record.id,
+    );
+    assert.deepEqual(composed, {
+      package: record,
+      lineageSHA256: nativeLink.sha256,
+      lineageBytes: nativeLink.bytes,
+      sourceCommit: origin.sourceCommit,
+      runID: origin.runID,
+      runAttempt: origin.runAttempt,
+      evidenceSHA256: origin.evidenceSHA256,
+      evidenceBytes: origin.evidenceBytes,
+    });
+    const admission = productionByRun.get(
+      `${origin.runID}:${origin.runAttempt}`,
+    );
+    assert.equal(admission.source, origin.sourceCommit);
+    assert.deepEqual(admission.envelopePin, {
+      bytes: origin.evidenceBytes,
+      sha256: origin.evidenceSHA256,
+    });
+    assert.equal(admission.metadata.sourceTreeDirty, false);
+    const rows = admission.rows.filter(
+      ({ extensionID }) => extensionID === record.id,
+    );
+    assert.equal(rows.length, 1);
+    const row = rows[0];
+    assert.equal(row.sourceFingerprint, fingerprints[record.id]);
+    return {
+      ...row,
+      sourceCommit: admission.source,
+      runID: origin.runID,
+      runAttempt: origin.runAttempt,
+      frozen: admission.frozen,
+      frozenSHA: admission.frozenSHA,
+      qualification:
+        `${origin.runID}:${origin.runAttempt}` === currentKey
+          ? "current-source-build"
+          : admission.qualification.originalPublicationOnlyFailure
+            ? "composed-publication-only-retry"
+            : "retained-unchanged-fingerprint",
+      originalWholeRunSucceeded:
+        admission.qualification.originalWholeRunSucceeded,
+      currentPlannedNativeValidated: changed.has(record.id),
+    };
   });
   const hostBytes = await download(hostAdmission.bytes, "host-bytes.zip"),
     hostProof = await download(hostAdmission.proof, "host-proof.zip");
@@ -445,45 +694,6 @@ export async function run() {
       appcast,
     ),
   ];
-  const catalogRelease = await api("/releases/tags/extension-catalog-v1");
-  assert.equal(catalogRelease.draft, false);
-  assert.equal(catalogRelease.tag_name, "extension-catalog-v1");
-  const pointer = parseCatalogPointer(catalogRelease.body);
-  const envelope = join(work, "catalog.json");
-  await publicAsset(
-    catalogRelease,
-    pointer.assetName,
-    pointer.bytes,
-    pointer.sha256,
-    envelope,
-  );
-  assert.equal(
-    catalogAssetURL(pointer),
-    `https://github.com/${repository}/releases/download/extension-catalog-v1/${pointer.assetName}`,
-  );
-  const envelopeBytes = verifyCatalogPointerData(
-    await readFile(envelope),
-    pointer,
-  );
-  const config = await readFile(
-    join(
-      sourceDirectory,
-      "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift",
-    ),
-    "utf8",
-  );
-  const keys = [
-    ...config.matchAll(
-      /publicKey\s*=\s*Data\(base64Encoded:\s*"([A-Za-z0-9+/=]+)"/g,
-    ),
-  ];
-  assert.equal(keys.length, 1);
-  const publicKey = keys[0][1];
-  const catalog = JSON.parse(verifiedCatalogPayload(envelopeBytes, publicKey));
-  assert.equal(catalog.revision, pointer.revision);
-  const current = currentPackages(catalog, definitions, fingerprints),
-    packages = [],
-    archives = {};
   for (const row of productionAdmission) {
     const definition = definitions.find(({ id }) => id === row.extensionID);
     const package_ = current.find(({ id }) => id === row.extensionID);
@@ -542,6 +752,9 @@ export async function run() {
       artifactID: row.artifactID,
       artifactRun: row.runID,
       artifactSourceCommit: row.sourceCommit,
+      artifactAttempt: row.runAttempt,
+      originalWholeRunSucceeded: row.originalWholeRunSucceeded,
+      currentPlannedNativeValidated: row.currentPlannedNativeValidated,
       sourceQualification: row.qualification,
       sealedHostProvenanceVerified: true,
       productionSignatureVerified: true,
@@ -684,8 +897,12 @@ export async function run() {
   for (const value of [...productionByRun.values()]
     .map(({ value }) => value)
     .concat(host)) {
-    const latest = await api(`/actions/runs/${value.run.id}`);
-    successfulRun(latest, value.run.head_sha, value.run.path);
+    const latest = await api(
+      `/actions/runs/${value.run.id}/attempts/${value.run.run_attempt}`,
+    );
+    assert.equal(latest.status, "completed");
+    assert.equal(latest.head_sha, value.run.head_sha);
+    assert.equal(latest.conclusion, value.run.conclusion);
     assert.equal(latest.run_attempt, value.run.run_attempt);
   }
   assert.equal(
@@ -715,6 +932,22 @@ export async function run() {
         runID: value.run.id,
         ...plan,
       })),
+    nativeLinks,
+    evidenceReleases: [...productionByRun.values()].map(
+      ({ source, value, storage, qualification }) => ({
+        sourceCommit: source,
+        runID: value.run.id,
+        runAttempt: value.run.run_attempt,
+        ...storage,
+        ...qualification,
+        payload: undefined,
+      }),
+    ),
+    evidenceReleaseBytes: [...productionByRun.values()].reduce(
+      (sum, { storage }) => sum + storage.totalEvidenceBytes,
+      0,
+    ),
+    nativeLinkBytes: nativeLinks.reduce((sum, { bytes }) => sum + bytes, 0),
     fingerprints,
     fingerprintSHA256: digest(Buffer.from(JSON.stringify(fingerprints))),
     artifacts: downloads,

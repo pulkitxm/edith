@@ -68,7 +68,6 @@ export function request(value) {
   for (const [id, runID] of Object.entries(result.retainedRuns)) {
     assert.match(id, /^[A-Za-z][A-Za-z0-9_-]{0,63}$/);
     integer(runID);
-    assert.notEqual(runID, result.packagesRun);
   }
   return result;
 }
@@ -147,6 +146,7 @@ export function productionRun({
   definitions,
   fingerprints,
   plannedIDs = definitions.map(({ id }) => id),
+  resolveArtifact = (name) => artifact(artifacts, name, run, source),
 }) {
   successfulRun(run, source, ".github/workflows/extensions.yml");
   assert(["push", "workflow_dispatch"].includes(run.event));
@@ -197,7 +197,7 @@ export function productionRun({
   return plannedIDs.map((id) => ({
     extensionID: id,
     sourceFingerprint: fingerprints[id],
-    ...artifact(artifacts, `extension-${id}`, run, source),
+    ...resolveArtifact(`extension-${id}`),
   }));
 }
 
@@ -382,50 +382,4 @@ export async function downloadPublic({
     if (file) await rm(destination, { force: true });
     throw error;
   }
-}
-
-export function composeLineage({
-  definitions,
-  fingerprints,
-  current,
-  retained,
-  requestedRuns,
-}) {
-  const changed = new Set(current.plan.plannedIDs);
-  assert.equal(changed.size, current.plan.plannedIDs.length);
-  const remaining = definitions
-    .map(({ id }) => id)
-    .filter((id) => !changed.has(id));
-  assert.deepEqual(Object.keys(requestedRuns).sort(), remaining.sort());
-  return definitions.map(({ id }) => {
-    const admission = changed.has(id)
-      ? current
-      : retained.get(requestedRuns[id]);
-    assert(admission, `Missing immutable production lineage for ${id}`);
-    assert.equal(admission.value.run.head_sha, admission.source);
-    assert.equal(
-      admission.value.run.id,
-      changed.has(id) ? current.value.run.id : requestedRuns[id],
-    );
-    assert.equal(admission.metadata.sourceCommit, admission.source);
-    assert.equal(admission.metadata.sourceTreeDirty, false);
-    const matches = admission.rows.filter((row) => row.extensionID === id);
-    assert.equal(
-      matches.length,
-      1,
-      `Require an actual successful planned build for ${id}`,
-    );
-    const row = matches[0];
-    assert.equal(row.sourceFingerprint, fingerprints[id]);
-    return {
-      ...row,
-      sourceCommit: admission.source,
-      runID: admission.value.run.id,
-      frozen: admission.frozen,
-      frozenSHA: admission.frozenSHA,
-      qualification: changed.has(id)
-        ? "current-source-build"
-        : "retained-unchanged-fingerprint",
-    };
-  });
 }

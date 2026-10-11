@@ -147,6 +147,47 @@ function publisherFixture(interrupt) {
     join(directory, "plan.json"),
     JSON.stringify({ include: [entry] }),
   );
+  const runner = join(directory, "publisher.mjs");
+  writeFileSync(
+    runner,
+    `
+import { readFileSync, writeFileSync } from "node:fs";
+import { sign } from "node:crypto";
+import { join } from "node:path";
+import { publishExtensions } from ${JSON.stringify(resolve("scripts/extension-publish.mjs"))};
+const directory = process.env.EXTENSION_OUTPUT;
+const result = await publishExtensions({
+  directory,
+  repository: process.env.GITHUB_REPOSITORY,
+  target: process.env.GITHUB_SHA,
+  ref: process.env.GITHUB_REF,
+  catalogTag: process.env.EXTENSION_CATALOG_TAG,
+  publicKey: process.env.EXTENSION_CATALOG_PUBLIC_KEY,
+  publishEvidence: async () => {
+    const packageRecord = JSON.parse(readFileSync(join(directory, "calendar.json")));
+    const sourceCommit = process.env.GITHUB_SHA;
+    const payload = Buffer.from(JSON.stringify({
+      schema: 1, kind: "extension-native-lineage", repository: process.env.GITHUB_REPOSITORY,
+      package: packageRecord, sourceCommit, runID: 101, runAttempt: 1,
+      evidenceTag: "extension-evidence/" + sourceCommit + "/101-1",
+      evidenceSHA256: "c".repeat(64), evidenceBytes: 200,
+    }));
+    writeFileSync(join(directory, "calendar.native-evidence.json"), JSON.stringify({
+      payload: payload.toString("base64"),
+      signature: sign(null, payload, process.env.FIXTURE_PRIVATE_KEY).toString("base64"),
+    }));
+    return { tag: "synthetic", originalArchiveBytes: 0, totalEvidenceBytes: 0 };
+  },
+  publishComposition: async ({ nativeEvidence }) => nativeEvidence,
+  verifyOriginal: async ({ origin }) => ({ payload: {
+    sourceCommit: origin.sourceCommit,
+    plannedIDs: [origin.package.id],
+    fingerprints: { [origin.package.id]: origin.package.sourceFingerprint },
+  } }),
+});
+process.stdout.write(JSON.stringify(result));
+`,
+  );
   const environment = {
     PATH: `${binary}:${process.env.PATH}`,
     HOME: directory,
@@ -174,7 +215,7 @@ function publisherFixture(interrupt) {
       writeFileSync(stateFile, JSON.stringify(current));
     },
     run: () =>
-      spawnSync(process.execPath, [resolve("scripts/extension-publish.mjs")], {
+      spawnSync(process.execPath, [runner], {
         env: environment,
         encoding: "utf8",
         timeout: 15_000,
@@ -183,35 +224,34 @@ function publisherFixture(interrupt) {
   };
 }
 
-test("an archive-only interruption rejects a byte-different rebuild until the original artifacts are recovered", () => {
+test("an archive-only retry recovers original immutable bytes and signed lineage after a different rebuild", () => {
   const fixture = publisherFixture("calendar.zip");
   try {
     expect(fixture.run().status).not.toBe(0);
     const partial = fixture.state();
     const originalAssets = structuredClone(partial.bytes);
     fixture.build(Buffer.from("byte-different rebuilt signed archive"));
-    const rejected = fixture.run();
-    expect(rejected.status).not.toBe(0);
-    expect(rejected.stderr).toContain(
-      "Immutable asset differs from build output",
-    );
-    expect(fixture.state().bytes).toEqual(originalAssets);
-    expect(fixture.state().uploads).toEqual(["calendar.zip"]);
-    expect(fixture.state().pointerEdits).toBe(0);
-    fixture.build(fixture.original);
     const resumed = fixture.run();
     expect(resumed.status).toBe(0);
+    expect(readFileSync(join(fixture.directory, "calendar.zip"))).toEqual(
+      fixture.original,
+    );
     const complete = fixture.state();
     expect(complete.duplicateUploads).toBe(0);
     expect(
       complete.uploads.filter((name) => name === "calendar.zip"),
+    ).toHaveLength(1);
+    expect(
+      complete.uploads.filter(
+        (name) => name === "calendar.native-evidence.json",
+      ),
     ).toHaveLength(1);
     for (const [id, bytes] of Object.entries(originalAssets))
       expect(complete.bytes[id]).toBe(bytes);
   } finally {
     fixture.close();
   }
-}, 45_000);
+}, 30_000);
 
 for (const interruption of [
   "calendar.json",
@@ -307,6 +347,7 @@ for (const interruption of [
       );
       expect(release.draft).toBe(false);
       expect(release.assets.map(({ name }) => name)).toEqual([
+        "calendar.native-evidence.json",
         "calendar.zip",
         "calendar.json",
         "calendar.zip.sha256",
