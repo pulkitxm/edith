@@ -151,8 +151,51 @@ export async function publishHostRelease({
       requireAssetSnapshot(directory, copies.original);
       requireAssetSnapshot(copies.directory, copies.snapshot);
     };
+    let tagIdentity;
+    const verifyTag = () => {
+      const read = (path) =>
+        JSON.parse(
+          execute("gh", ["api", `repos/${repository}/${path}`], {
+            encoding: "utf8",
+            timeout: 60_000,
+            killSignal: "SIGKILL",
+            maxBuffer: 1024 ** 2,
+          }),
+        );
+      const reference = read(`git/ref/tags/${tag}`);
+      if (
+        reference.ref !== `refs/tags/${tag}` ||
+        !/^[a-f0-9]{40}$/.test(reference.object?.sha) ||
+        !["commit", "tag"].includes(reference.object?.type)
+      )
+        throw new Error("Invalid host release tag reference");
+      let commit = reference.object.sha;
+      if (reference.object.type === "tag") {
+        const annotated = read(`git/tags/${reference.object.sha}`);
+        if (
+          annotated.sha !== reference.object.sha ||
+          annotated.tag !== tag ||
+          annotated.object?.type !== "commit"
+        )
+          throw new Error("Invalid annotated host release tag");
+        commit = annotated.object.sha;
+      }
+      const current = JSON.stringify([
+        reference.ref,
+        reference.object.type,
+        reference.object.sha,
+        commit,
+      ]);
+      if (
+        commit !== target ||
+        (tagIdentity !== undefined && tagIdentity !== current)
+      )
+        throw new Error("Host release tag source changed");
+      tagIdentity = current;
+    };
     const verifyInputs = async () => {
       await verifySource();
+      verifyTag();
       verifyFiles();
     };
     const readRelease = () => lookupRelease({ repository, tag, execute });
@@ -169,6 +212,7 @@ export async function publishHostRelease({
       return value;
     };
     const requireStable = (expected) => {
+      verifyTag();
       const current = requireIdentity(
         readRelease(),
         expected.draft,
@@ -198,6 +242,7 @@ export async function publishHostRelease({
         throw new Error(
           "App publication superseded: main moved after the release build",
         );
+      verifyTag();
     };
     await verifyInputs();
     let release = readRelease();

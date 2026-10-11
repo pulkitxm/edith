@@ -3,6 +3,7 @@ import {
   chmodSync,
   closeSync,
   constants,
+  fchmodSync,
   fstatSync,
   lstatSync,
   mkdtempSync,
@@ -55,7 +56,10 @@ function readAsset(file, maximum, destination) {
   try {
     if (identity(fstatSync(descriptor, { bigint: true })) !== identity(before))
       throw new Error("Host release assets changed after preflight");
-    if (destination) output = openSync(destination, "wx", 0o600);
+    if (destination) {
+      output = openSync(destination, "wx", 0o600);
+      fchmodSync(output, 0o600);
+    }
     const hash = createHash("sha256");
     const buffer = Buffer.alloc(1024 ** 2);
     let size = 0;

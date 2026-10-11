@@ -493,3 +493,151 @@ test("nonregular linked writable empty and oversized local assets fail without r
     }
   }
 });
+
+test("capacity fallback keeps copied bytes private and rechecks remote state before transport", async () => {
+  for (const publishDuringFallback of [false, true]) {
+    const value = fixture();
+    const fallbackFiles = [];
+    try {
+      const execute = (command, args, options) => {
+        if (
+          command === "pukbot" &&
+          args[1] === "upload-asset" &&
+          basename(args[3]) === "Edith.dmg"
+        ) {
+          if (!args.includes("--dry-run") && publishDuringFallback)
+            value.release.draft = false;
+          return JSON.stringify({
+            ok: false,
+            error: {
+              message: "release asset must be between 1 and 40000 bytes",
+            },
+          });
+        }
+        if (command === "gh" && args[0] === "release" && args[1] === "upload") {
+          if (args.includes("--help")) return "Usage: gh release upload";
+          expect(args).not.toContain("--clobber");
+          expect(value.release.draft).toBe(true);
+          const file = args[3];
+          fallbackFiles.push(file);
+          expect(basename(file)).toBe("Edith.dmg");
+          expect(statSync(file).mode & 0o777).toBe(0o600);
+          expect(statSync(dirname(file)).mode & 0o777).toBe(0o700);
+          value.release.assets.push(
+            value.asset("Edith.dmg", 99, readFileSync(file)),
+          );
+          return "";
+        }
+        return value.execute(command, args, options);
+      };
+      if (publishDuringFallback) {
+        await expect(
+          publish(value, { execute, matchesAsset: matcher(value) }),
+        ).rejects.toThrow("draft state changed");
+        expect(fallbackFiles).toEqual([]);
+        expect(value.release.assets).toEqual([]);
+        expect(promotions(value)).toEqual([]);
+      } else {
+        await publish(value, { execute, matchesAsset: matcher(value) });
+        expect(fallbackFiles).toHaveLength(1);
+        expect(existsSync(dirname(fallbackFiles[0]))).toBe(false);
+        expect(value.release.draft).toBe(false);
+      }
+    } finally {
+      value.clean();
+    }
+  }
+});
+
+test("remote tag commit and annotated tag source must bind the exact release target", async () => {
+  for (const mode of [
+    "commit",
+    "annotated",
+    "foreign",
+    "wrong-ref",
+    "nested-tag",
+    "annotated-move",
+    "commit-move",
+  ]) {
+    const value = fixture(true);
+    try {
+      fill(value);
+      if (["annotated", "nested-tag", "annotated-move"].includes(mode)) {
+        value.tagReference.object = { type: "tag", sha: "d".repeat(40) };
+        value.annotatedTags.set("d".repeat(40), {
+          sha: "d".repeat(40),
+          tag: "v1.2.3",
+          object: {
+            type: mode === "nested-tag" ? "tag" : "commit",
+            sha: "a".repeat(40),
+          },
+        });
+      }
+      if (mode === "foreign") value.tagReference.object.sha = "b".repeat(40);
+      if (mode === "wrong-ref") value.tagReference.ref = "refs/tags/v1.2.4";
+      const matchesAsset = matcher(value, [], (asset) => {
+        if (asset.name !== assetNames.at(-1)) return;
+        if (mode === "commit-move")
+          value.tagReference.object.sha = "b".repeat(40);
+        if (mode === "annotated-move") {
+          value.tagReference.object.sha = "e".repeat(40);
+          value.annotatedTags.set("e".repeat(40), {
+            sha: "e".repeat(40),
+            tag: "v1.2.3",
+            object: { type: "commit", sha: "a".repeat(40) },
+          });
+        }
+      });
+      if (["commit", "annotated"].includes(mode))
+        await publish(value, { matchesAsset });
+      else {
+        await expect(publish(value, { matchesAsset })).rejects.toThrow();
+        expect(writes(value)).toEqual([]);
+      }
+    } finally {
+      value.clean();
+    }
+  }
+});
+
+test("missing upload inventory and truncated or oversized remote bytes cannot promote", async () => {
+  for (const mode of ["missing", "truncated", "oversized", "size"]) {
+    const value = fixture();
+    try {
+      const execute = (command, args, options) => {
+        const result = value.execute(command, args, options);
+        if (
+          command === "pukbot" &&
+          args[1] === "upload-asset" &&
+          !args.includes("--dry-run")
+        ) {
+          const asset = value.release.assets.at(-1);
+          if (mode === "missing") value.release.assets.pop();
+          if (mode === "size") asset.size += 1;
+          if (mode === "truncated")
+            value.remoteBytes.set(
+              asset.id,
+              value.remoteBytes.get(asset.id).subarray(1),
+            );
+          if (mode === "oversized")
+            value.remoteBytes.set(
+              asset.id,
+              Buffer.concat([
+                value.remoteBytes.get(asset.id),
+                Buffer.from([0]),
+              ]),
+            );
+        }
+        return result;
+      };
+      await expect(
+        publish(value, { execute, matchesAsset: matcher(value) }),
+      ).rejects.toThrow();
+      expect(uploads(value)).toHaveLength(1);
+      expect(value.release.draft).toBe(true);
+      expect(promotions(value)).toEqual([]);
+    } finally {
+      value.clean();
+    }
+  }
+});

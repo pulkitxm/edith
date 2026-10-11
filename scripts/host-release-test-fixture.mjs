@@ -85,6 +85,11 @@ export function fixture(existing = false) {
   ])
     writeFileSync(join(directory, name), JSON.stringify(content));
   const calls = [];
+  const tagReference = {
+    ref: "refs/tags/v1.2.3",
+    object: { type: "commit", sha: "a".repeat(40) },
+  };
+  const annotatedTags = new Map();
   const remoteBytes = new Map();
   const asset = (name, id, bytes = readFileSync(join(directory, name))) => {
     remoteBytes.set(id, Buffer.from(bytes));
@@ -106,7 +111,17 @@ export function fixture(existing = false) {
         ref: "refs/heads/main",
         object: { type: "commit", sha: "a".repeat(40) },
       });
-    if (command === "gh" && args[1].includes("/tags/")) {
+    if (command === "gh" && args[1].endsWith("git/ref/tags/v1.2.3"))
+      return JSON.stringify(tagReference);
+    if (command === "gh" && args[1].includes("/git/tags/"))
+      return JSON.stringify(annotatedTags.get(args[1].split("/").at(-1)));
+    if (command === "gh" && /\/commits\/[a-f0-9]{40}$/.test(args[1]))
+      return JSON.stringify({
+        sha: args[1].split("/").at(-1),
+        parents: [{ sha: "c".repeat(40) }],
+        commit: { message: "Synthetic unrelated source change" },
+      });
+    if (command === "gh" && args[1].includes("/releases/tags/")) {
       if (release && !release.draft) return JSON.stringify(release);
       throw Object.assign(new Error("Missing release"), { stderr: "HTTP 404" });
     }
@@ -135,6 +150,8 @@ export function fixture(existing = false) {
       }
     }
     if (command === "pukbot" && args[1] === "edit") release.draft = false;
+    if (command === "gh" && args[0] === "api")
+      throw new Error("Unexpected synthetic API request");
     return "{}";
   };
   return {
@@ -145,6 +162,8 @@ export function fixture(existing = false) {
     calls,
     asset,
     remoteBytes,
+    tagReference,
+    annotatedTags,
     execute,
     matchesAsset: async ({ asset, file }) =>
       remoteBytes.get(asset.id).equals(readFileSync(file)),

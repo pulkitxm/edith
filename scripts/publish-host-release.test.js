@@ -227,6 +227,11 @@ test("publication accepts only the exact intentional release child of the built 
   const release = "b".repeat(40);
   try {
     const execute = (command, args, options) => {
+      if (command === "gh" && args[1].endsWith("git/ref/tags/v1.2.3"))
+        return JSON.stringify({
+          ref: "refs/tags/v1.2.3",
+          object: { type: "commit", sha: release },
+        });
       if (command === "gh" && args[1].endsWith("git/ref/heads/main"))
         return JSON.stringify({
           ref: "refs/heads/main",
