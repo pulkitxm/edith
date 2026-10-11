@@ -11,11 +11,15 @@ export function validateSparkleProcess(row, fixture) {
   assert(Number.isInteger(row.pid) && row.pid > 1);
   assert(birth(row.birth));
   assert.equal(row.uid, fixture.expectedUID);
-  assert.equal(
-    row.executable,
+  const expected =
     row.role === "host"
       ? `${fixture.directory}/Host.app/Contents/MacOS/Edith`
-      : fixture.ownedRolePaths[row.role],
+      : fixture.ownedRolePaths[row.role];
+  assert(
+    row.executable === expected ||
+      (row.role === "managedUI" &&
+        row.executable ===
+          expected.replace("/arm64/1.0.0/calendar/", "/arm64/1.1.0/calendar/")),
   );
   assert.equal(typeof row.running, "boolean");
   return Object.freeze({ ...row });
@@ -114,7 +118,7 @@ export async function retireSparkleProcesses(
   fixture,
   { observe, signal, pause },
 ) {
-  assert(Array.isArray(rows) && rows.length > 0 && rows.length <= 6);
+  assert(Array.isArray(rows) && rows.length > 0 && rows.length <= 12);
   const owned = rows.map((row) => validateSparkleProcess(row, fixture));
   const unique = new Set();
   for (const row of owned) {

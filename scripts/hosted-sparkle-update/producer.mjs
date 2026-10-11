@@ -211,7 +211,7 @@ export function createSparkleCapturedProcesses({
         assert(row.running);
         captured.set(identity(row), { ...row });
       }
-      assert(captured.size <= 6);
+      assert(captured.size <= 12);
       const payload = canonicalSparkleJSON({
         sourceCommit: fixture.sourceCommit,
         session: fixture.session,

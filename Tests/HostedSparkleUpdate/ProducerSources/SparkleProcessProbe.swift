@@ -43,7 +43,7 @@ struct SparkleProcessProbe {
         else { throw SparkleFixtureError.rejected }
         let request = try JSONDecoder().decode(Request.self, from: bytes)
         guard ["snapshot", "observe", "TERM", "KILL"].contains(request.operation),
-            request.observations.count <= 6
+            request.observations.count <= 12
         else { throw SparkleFixtureError.rejected }
         let root = URL(fileURLWithPath: request.directory)
         let rootPin = try PinnedInput(root, directory: true, maximum: 0)
@@ -158,7 +158,8 @@ struct SparkleProcessProbe {
                     as? [String: Any],
                 state["hostIdentifier"] as? String == fixture.identifier,
                 state["sourceCommit"] as? String == fixture.sourceCommit,
-                let rows = state["ownedProcesses"] as? [[String: Any]], rows.count <= 64
+                let rows = state["ownedProcesses"] as? [[String: Any]], rows.count <= 64,
+                let versions = state["versions"] as? [String: String]
             else { throw SparkleFixtureError.rejected }
             for role in ["engine", "managedUI"] {
                 let matches = rows.filter {
@@ -173,7 +174,9 @@ struct SparkleProcessProbe {
                     let expected = Observation(
                         role: role, pid: pid,
                         birth: generation.replacingOccurrences(of: ":", with: "."),
-                        uid: getuid(), executable: rolePath(role, fixture), running: true)
+                        uid: getuid(),
+                        executable: rolePath(
+                            role, fixture, version: versions["calendar"] ?? "1.0.0"), running: true)
                     try validate(expected, fixture: fixture)
                     let actual = try observe(expected)
                     if actual.running { result.append(actual) }
@@ -192,7 +195,10 @@ struct SparkleProcessProbe {
         var pids = [pid_t](repeating: 0, count: Int(count) + 256)
         let read = proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size))
         guard read > 0, read < pids.count else { throw SparkleFixtureError.rejected }
-        let paths = Set([rolePath("host", fixture), rolePath("managedUI", fixture)])
+        let paths = Set([
+            rolePath("host", fixture), rolePath("managedUI", fixture),
+            rolePath("managedUI", fixture, version: "1.1.0"),
+        ])
         for pid in pids.prefix(Int(read)) where pid > 1 && pid != getpid() && pid != getppid() {
             guard let current = try? info(pid), current.pbi_uid == getuid(),
                 let path = try? executable(pid), paths.contains(path)
@@ -211,18 +217,22 @@ struct SparkleProcessProbe {
         }
     }
 
-    static func rolePath(_ role: String, _ fixture: SparkleBootstrapDescriptor) -> String {
+    static func rolePath(
+        _ role: String, _ fixture: SparkleBootstrapDescriptor, version: String = "1.0.0"
+    ) -> String {
         if role == "host" || role == "engine" {
             return fixture.directory + "/Host.app/Contents/MacOS/Edith"
         }
         return fixture.directory + "/support/Edith Tests/remote-" + fixture.session
-            + "/Extensions/calendar/edith-host-2/arm64/1.0.0/calendar/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith"
+            + "/Extensions/calendar/edith-host-2/arm64/" + version
+            + "/calendar/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith"
     }
 
     static func validate(_ value: Observation, fixture: SparkleBootstrapDescriptor) throws {
         guard ["host", "engine", "managedUI"].contains(value.role), value.pid > 1,
             value.pid != getpid(), value.pid != getppid(), value.uid == getuid(),
-            value.executable == rolePath(value.role, fixture),
+            [rolePath(value.role, fixture), rolePath(value.role, fixture, version: "1.1.0")]
+                .contains(value.executable),
             value.birth.range(of: "^[0-9]+\\.[0-9]+$", options: .regularExpression) == value.birth
                 .startIndex..<value.birth.endIndex
         else { throw SparkleFixtureError.rejected }
@@ -328,7 +338,7 @@ struct SparkleProcessProbe {
         let ledger = try JSONDecoder().decode(Ledger.self, from: payload)
         guard try encoder.encode(ledger) == payload, ledger.sourceCommit == sourceCommit,
             ledger.session == fixture.session, ledger.producer == fixture.producer,
-            !ledger.observations.isEmpty, ledger.observations.count <= 6
+            !ledger.observations.isEmpty, ledger.observations.count <= 12
         else { throw SparkleFixtureError.rejected }
         try ledger.observations.forEach { try validate($0, fixture: fixture) }
         return ledger
