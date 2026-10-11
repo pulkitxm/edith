@@ -42,20 +42,34 @@ public actor UsageStatusLineCommands {
         try await Task.detached(priority: .utility) { try connection.suspendOwnedHook() }.value
     }
 
-    public func shutdown() async throws {
+    public func beginSuspension() {
         stopping = true
+        for operation in operations.values { operation.cancel() }
+    }
+
+    public func suspendAndWait() async {
+        beginSuspension()
         let pending = Array(operations.values)
-        for operation in pending { operation.cancel() }
         for operation in pending { _ = await operation.result }
+    }
+
+    public func shutdown() async throws {
+        await suspendAndWait()
         try await suspendOwnedHook()
     }
 
     public func resumeOwnedHook() async throws {
         guard !stopping else { throw ExtensionPeerError.unavailable }
         let connection = self.connection
-        let operation = Task.detached(priority: .utility) { try connection.resumeOwnedHook() }
+        let operation = Task.detached(priority: .utility) {
+            try connection.resumeOwnedHook()
+            return Data()
+        }
+        let id = UUID()
+        operations[id] = operation
+        defer { operations[id] = nil }
         try await withTaskCancellationHandler {
-            try await operation.value
+            _ = try await operation.value
         } onCancel: {
             operation.cancel()
         }

@@ -10,6 +10,7 @@ actor UsageReportCommands {
     private var exportID: UUID?
     private var exportExpiry: Task<Void, Never>?
     private var stopped = false
+    private var expiryTasks: [UUID: Task<Void, Never>] = [:]
 
     init(
         controller: UsageWorkerController, store: SurfaceUsageStore, directory: URL = Repo.dataDir,
@@ -20,7 +21,21 @@ actor UsageReportCommands {
             forgetMachine ?? { try UsageMachinesPeer.forget(machineID: $0, directory: directory) }
     }
 
-    func shutdown() { stopped = true; clearExport() }
+    func beginSuspension() {
+        stopped = true
+        for task in expiryTasks.values { task.cancel() }
+    }
+
+    func suspendAndWait() async {
+        beginSuspension()
+        let pending = Array(expiryTasks.values)
+        for task in pending { await task.value }
+    }
+
+    func shutdown() async {
+        await suspendAndWait()
+        clearExport()
+    }
 
     func execute(_ command: String, payload: Data) async throws -> Data {
         try Task.checkCancellation()
@@ -186,10 +201,15 @@ actor UsageReportCommands {
             else { throw ExtensionPeerError.unavailable }
             clearExport()
             exported = data; exportID = UUID()
-            exportExpiry = Task { [weak self] in
+            let token = UUID()
+            let export = exportID
+            exportExpiry = Task { [self] in
+                defer { expiryTasks[token] = nil }
                 do { try await Task.sleep(for: .seconds(60)) } catch { return }
-                await self?.clearExport()
+                guard !stopped, exportID == export else { return }
+                clearExport()
             }
+            expiryTasks[token] = exportExpiry
             return try encode([
                 "exportID": exportID!.uuidString, "byteCount": data.count,
                 "sha256": UsageMachinesPeer.hash(data),

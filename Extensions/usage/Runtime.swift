@@ -20,6 +20,8 @@ final class ExtensionRuntime: NSObject {
     private var machinesProjection: UsageMachinesProjection?
     private var alerts: UsageLimitAlerts?
     private var alertsTask: Task<Void, Never>?
+    private var alertTasks: [UUID: Task<Void, Never>] = [:]
+    private var draining = false
     private var backup: UsageBackupProvider?
     private var backupRestoreTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
@@ -106,16 +108,82 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        _ = commands.suspend()
+        draining = true
+        let controller = controller, uiCommands = uiCommands, projection = machinesProjection
+        let reports = reports, statusLine = statusLine, streams = cliStreams, backup = backup
+        let restore = backupRestoreTask, connection = statusLineConnectionTask
+        let alerts = Array(alertTasks.values)
+        controller?.beginShutdown()
+        uiCommands?.shutdown()
+        streams?.stop()
+        restore?.cancel()
+        backup?.beginSuspension()
+        connection?.cancel()
+        for task in alerts { task.cancel() }
+        Task {
+            [
+                self, controller, uiCommands, projection, reports, statusLine, streams, backup,
+                restore, connection, alerts
+            ] in
+            await projection?.beginSuspension()
+            await reports?.beginSuspension()
+            await statusLine?.beginSuspension()
+            await backup?.shutdown()
+            _ = await commands.suspendAndWait()
+            await controller?.suspendAndWait()
+            await uiCommands?.shutdownAndWait()
+            await projection?.suspendAndWait()
+            await reports?.suspendAndWait()
+            await statusLine?.suspendAndWait()
+            await streams?.stopAndWait()
+            await restore?.value
+            await connection?.value
+            for task in alerts { await task.value }
+            await withCheckedContinuation { continuation in
+                DispatchQueue.main.async { continuation.resume() }
+            }
+            completion()
+        }
+    }
+
     @objc(prepareDisableWithCompletion:)
     func prepareDisable(completion: @escaping (NSError?) -> Void) {
         uiPresentations.stop()
+        draining = true
+        controller?.beginShutdown()
+        uiCommands?.shutdown()
+        backupRestoreTask?.cancel()
+        backup?.beginSuspension()
+        for task in alertTasks.values { task.cancel() }
         UsageWorkerOperations.statusLineCommands = nil
         cliStreams?.stop()
         commands.shutdown()
         statusLineConnectionTask?.cancel()
+        let controller = controller, uiCommands = uiCommands, backup = backup
+        let projection = machinesProjection, reports = reports, statusLine = statusLine
+        let restore = backupRestoreTask, connection = statusLineConnectionTask
+        let alerts = Array(alertTasks.values)
         Task {
+            [
+                self, controller, uiCommands, backup, projection, reports, statusLine, restore,
+                connection, alerts
+            ] in
+            await projection?.beginSuspension()
+            await reports?.beginSuspension()
+            await statusLine?.beginSuspension()
+            await backup?.shutdown()
             await uiPresentations.stopAndWait()
             await commands.shutdownAndWait()
+            await controller?.suspendAndWait()
+            await uiCommands?.shutdownAndWait()
+            await projection?.suspendAndWait()
+            await reports?.suspendAndWait()
+            await restore?.value
+            await connection?.value
+            for task in alerts { await task.value }
             await cliStreams?.stopAndWait()
             await statusLineConnectionTask?.value
             do {
@@ -135,9 +203,13 @@ final class ExtensionRuntime: NSObject {
         uiCommands?.shutdown()
         let navigation = navigation; self.navigation = nil
         navigation?.invalidate()
+        draining = true
         controller?.beginShutdown()
+        let pendingAlerts = Array(alertTasks.values)
+        for task in pendingAlerts { task.cancel() }
         alertsTask?.cancel()
         backupRestoreTask?.cancel()
+        backup?.beginSuspension()
         for observer in observers { UsageEvents.stopObserving(observer) }
         observers = []
         usageStore?.shutdown()
@@ -160,7 +232,10 @@ final class ExtensionRuntime: NSObject {
         connectionTask?.cancel()
         recovering = false
         surface = nil; usageStore = nil
-        Task {
+        Task { [self] in
+            await projection?.beginSuspension()
+            await reports?.beginSuspension()
+            await statusLine?.beginSuspension()
             await uiPresentations.stopAndWait()
             await backup?.shutdown()
             await backupRestoreTask?.value
@@ -173,6 +248,7 @@ final class ExtensionRuntime: NSObject {
             try? await statusLine?.shutdown()
             await controller?.shutdown()
             await task?.value
+            for task in pendingAlerts { await task.value }
             await alerts?.shutdown()
             await reports?.shutdown()
             await projection?.shutdown()
@@ -301,9 +377,16 @@ final class ExtensionRuntime: NSObject {
                 _ = LimitNotifier.shared
                 observers.append(
                     UsageEvents.observe(UsageEvents.limitsUpdated) { [weak self] in
-                        guard let self, let snapshot = self.controller?.latestLimits else { return }
+                        guard let self, !self.draining, let snapshot = self.controller?.latestLimits
+                        else { return }
                         self.alertsTask?.cancel()
-                        self.alertsTask = Task { try? await alerts.evaluate(snapshot) }
+                        let id = UUID()
+                        let task = Task { [self] in
+                            defer { self.alertTasks[id] = nil }
+                            try? await alerts.evaluate(snapshot)
+                        }
+                        self.alertTasks[id] = task
+                        self.alertsTask = task
                     })
                 observers.append(
                     UsageEvents.observe(UserDefaults.didChangeNotification) { [weak self] in
