@@ -2,11 +2,16 @@ import AppKit
 import EdithExtensionSupport
 import Foundation
 
+@MainActor private final class LidAwakeWorkerAdmission {
+    var closed = false
+}
+
 @MainActor final class LidAwakeWorker {
     let engine: LidAwakeEngine
     let operations: LidAwakeOperationModel
     private var observer: NSObjectProtocol?
     private var stopped = false
+    private let admission = LidAwakeWorkerAdmission()
     private let recoveryOnly: Bool
     private let defaults: UserDefaults
     private let confirm: @MainActor () -> Bool
@@ -20,32 +25,48 @@ import Foundation
         self.defaults = defaults; self.confirm = confirm; self.recoveryOnly = recoveryOnly
         if !recoveryOnly { defaults.set(true, forKey: LidAwakeState.enabledKey) }
         let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+        let applySystemState: (@MainActor @Sendable (Bool) async -> LidAwakeOutcome)?
+        let systemStateReader: @Sendable () async throws -> Bool
+        if fixture {
+            applySystemState = { value in
+                defaults.set(value, forKey: LidAwakeState.activeKey)
+                return .applied
+            }
+            systemStateReader = { false }
+        } else {
+            applySystemState = nil
+            systemStateReader = { try await LidAwakeSystemStateReader.read() }
+        }
         let created =
             engine
             ?? LidAwakeEngine(
                 defaults: defaults,
                 readSystemState: { defaults.bool(forKey: LidAwakeState.activeKey) },
-                applySystemState: fixture
-                    ? { value in
-                        defaults.set(value, forKey: LidAwakeState.activeKey); return .applied
-                    } : nil, startServices: !fixture && !recoveryOnly, recoveryOnly: recoveryOnly,
-                systemStateReader: fixture
-                    ? { false } : { try await LidAwakeSystemStateReader.read() })
+                applySystemState: applySystemState,
+                startServices: !fixture && !recoveryOnly, recoveryOnly: recoveryOnly,
+                systemStateReader: systemStateReader)
         self.engine = created
+        let admission = admission
         operations = LidAwakeOperationModel { request in
-            try await Self.perform(request, engine: created, defaults: defaults)
+            try Task.checkCancellation()
+            guard !admission.closed else { throw ExtensionPeerError.unavailable }
+            return try await Self.perform(request, engine: created, defaults: defaults)
         }
         guard !recoveryOnly else { return }
         observer = NotificationCenter.default.addObserver(
             forName: Notification.Name("lidAwakeSettingsChanged"), object: nil, queue: .main
-        ) { _ in Task { @MainActor in created.syncSettings() } }
+        ) { _ in MainActor.assumeIsolated { created.syncSettings() } }
     }
 
     func perform(_ request: LidAwakeRequest, requiresConfirmation: Bool = false) async throws
         -> LidAwakeSnapshot
     {
-        guard !stopped, !recoveryOnly else { throw ExtensionPeerError.unavailable }
+        guard !stopped, !admission.closed, !recoveryOnly else {
+            throw ExtensionPeerError.unavailable
+        }
         if requiresConfirmation, !confirm() { throw CancellationError() }
+        try Task.checkCancellation()
+        guard !admission.closed else { throw ExtensionPeerError.unavailable }
         return try await Self.perform(request, engine: engine, defaults: defaults)
     }
 
@@ -72,9 +93,19 @@ import Foundation
     }
 
     func setSession(_ session: LidAwakeSession) throws {
-        guard !stopped, !recoveryOnly else { throw ExtensionPeerError.unavailable }
+        guard !stopped, !admission.closed, !recoveryOnly else {
+            throw ExtensionPeerError.unavailable
+        }
         defaults.set(session.rawValue, forKey: LidAwakeState.sessionKey)
         engine.syncSettings()
+    }
+
+    func beginCommandDrain() {
+        admission.closed = true
+        operations.cancel()
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+        observer = nil
+        engine.beginCommandDrain()
     }
 
     func prepareDisable() async throws { try await engine.prepareDisable() }
