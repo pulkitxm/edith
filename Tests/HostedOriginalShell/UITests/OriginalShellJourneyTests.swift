@@ -84,9 +84,9 @@ final class OriginalShellJourneyTests: XCTestCase {
                 .allElementsBoundByIndex.min {
                     $0.frame.height * $0.frame.width < $1.frame.height * $1.frame.width
                 }
-            try requireCheckboxState(checkbox, identifier: id, expected: 1)
+            try await requireCheckboxState(checkbox, identifier: id, expected: 1)
             checkbox.click()
-            try requireCheckboxState(checkbox, identifier: id, expected: 0)
+            try await requireCheckboxState(checkbox, identifier: id, expected: 0)
         }
         let install = application.buttons["workflow.install-selection"]
         let scroll = try XCTUnwrap(reviewScroll)
@@ -105,7 +105,7 @@ final class OriginalShellJourneyTests: XCTestCase {
         }
         try click(application.buttons["Go to Home"], in: application)
         try click(application.buttons["journey.navigation.calendar"], in: application)
-        try approveCalendarIfNeeded(application, identifier: fixture.identifier)
+        try await approveCalendarIfNeeded(application, identifier: fixture.identifier)
         XCTAssertTrue(
             application.staticTexts["Synthetic Calendar review"].waitForExistence(timeout: 45))
         try await waitState("calendar-native-view") {
@@ -171,7 +171,7 @@ final class OriginalShellJourneyTests: XCTestCase {
         }
         try await assertLayouts(home: home, notch: notch)
         try click(application.buttons["Open"], in: application)
-        try approveCalendarIfNeeded(application, identifier: fixture.identifier)
+        try await approveCalendarIfNeeded(application, identifier: fixture.identifier)
         XCTAssertTrue(
             application.staticTexts["Synthetic Calendar review"].waitForExistence(timeout: 45))
         try click(application.buttons["journey.navigation.extensions"], in: application)
@@ -216,14 +216,23 @@ final class OriginalShellJourneyTests: XCTestCase {
 
     private func requireCheckboxState(
         _ checkbox: XCUIElement, identifier: String, expected: Int
-    ) throws {
+    ) async throws {
         let value = checkbox.value
         selectionObservation = [
             "identifier": identifier, "expected": expected,
             "valueCategory": JourneyInteraction.checkboxValueCategory(value),
+            "frame": Self.frame(checkbox.frame), "enabled": checkbox.isEnabled,
+            "hittable": checkbox.isHittable,
         ]
-        let actual = try JourneyInteraction.checkboxState(value)
+        let actual = try await JourneyInteraction.waitForCheckboxState(expected) {
+            checkbox.value
+        }
         selectionObservation["actual"] = actual
+        if actual != expected {
+            startup["selectionObservation"] = selectionObservation
+            retainFailureDiagnostics()
+            try saveOutcome()
+        }
         XCTAssertEqual(actual, expected)
         guard actual == expected else { throw JourneyContractError.invalidMetadata }
     }
@@ -352,7 +361,8 @@ final class OriginalShellJourneyTests: XCTestCase {
         search.typeText("Calendar")
     }
 
-    private func approveCalendarIfNeeded(_ application: XCUIApplication, identifier: String) throws
+    private func approveCalendarIfNeeded(_ application: XCUIApplication, identifier: String)
+        async throws
     {
         XCTAssertTrue(
             wait(30) {
@@ -385,7 +395,7 @@ final class OriginalShellJourneyTests: XCTestCase {
         }
         XCTAssertTrue(control.isHittable)
         if try JourneyInteraction.checkboxState(control.value) == 0 { control.click() }
-        try requireCheckboxState(control, identifier: "calendar-permission", expected: 1)
+        try await requireCheckboxState(control, identifier: "calendar-permission", expected: 1)
         application.typeKey(.escape, modifierFlags: [])
         if application.buttons["Try again"].exists {
             try click(application.buttons["Try again"], in: application)
