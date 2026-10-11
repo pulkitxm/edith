@@ -14,6 +14,7 @@ import Foundation
     private var synchronizing: Task<Void, Never>?
     private var observing: Task<Void, Never>?
     private var action: Task<Void, Never>?
+    private nonisolated let owned = StudioTaskOwner()
     private var relinkPanel: NSOpenPanel?
     private var dirty = false
     private var conflicted = false
@@ -30,7 +31,7 @@ import Foundation
 
     func create() {
         action?.cancel()
-        action = Task { [weak self] in
+        action = owned.start { [weak self] in
             guard let self else { return }
             do {
                 let handle: StudioUIResource = try await facade.read(
@@ -45,7 +46,7 @@ import Foundation
 
     func startProject(_ urls: [URL]) {
         action?.cancel()
-        action = Task { [weak self] in
+        action = owned.start { [weak self] in
             guard let self else { return }
             do {
                 let handle: StudioUIResource = try await facade.read(
@@ -60,7 +61,7 @@ import Foundation
 
     func open(_ url: URL) {
         action?.cancel()
-        action = Task { [weak self] in
+        action = owned.start { [weak self] in
             guard let self else { return }
             do {
                 if created {
@@ -85,7 +86,7 @@ import Foundation
                             }
                         }
                     } onCancel: {
-                        Task { @MainActor in panel.cancel(nil) }
+                        self.owned.enqueue { panel.cancel(nil) }
                     }
                     relinkPanel = nil
                     try Task.checkCancellation()
@@ -131,7 +132,7 @@ import Foundation
             fail(error); return
         }
         guard synchronizing == nil, !conflicted else { return }
-        synchronizing = Task { [weak self] in
+        synchronizing = owned.start { [weak self] in
             guard let self else { return }
             defer { synchronizing = nil }
             do {
@@ -180,7 +181,7 @@ import Foundation
         guard created, !closed else { return }
         frameGeneration += 1
         action?.cancel()
-        action = Task { [weak self] in
+        action = owned.start { [weak self] in
             guard let self else { return }
             do {
                 var fields = object; fields["id"] = id.uuidString
@@ -233,11 +234,17 @@ import Foundation
 
     func close() {
         guard !closed else { return }; closed = true
+        owned.shutdown()
         synchronizing?.cancel(); observing?.cancel(); action?.cancel(); relinkPanel?.cancel(nil)
         synchronizing = nil; observing = nil; action = nil
         if created {
             facade.cleanup("studio.ui.video.close", object: ["id": id.uuidString])
         }
+    }
+
+    func closeAndWait() async {
+        close()
+        await owned.shutdownAndWait()
     }
 
     private func receive(_ handle: StudioUIResource, preserveProject: Bool) async throws {
@@ -277,7 +284,7 @@ import Foundation
 
     private func observe() {
         guard observing == nil else { return }
-        observing = Task { [weak self] in
+        observing = owned.start { [weak self] in
             guard let self else { return }
             var refreshed = ContinuousClock.now
             while !Task.isCancelled, !closed {

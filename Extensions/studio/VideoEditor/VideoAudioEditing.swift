@@ -185,7 +185,7 @@ extension VideoEditorModel {
             return
         }
         audioStatus = "Detaching source audio…"
-        audioTask = Task {
+        audioTask = startWork { [self] in
             defer { audioTask = nil; audioStatus = nil }
             do {
                 let tracks = try await AVURLAsset(url: asset.audioURL).loadTracks(

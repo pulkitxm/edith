@@ -12,6 +12,9 @@ import Observation
     private let presentationID: UUID?
     private let invalidate: @MainActor () -> Void
     private var tasks: [UUID: Task<Void, Never>] = [:]
+    private let owned = StudioTaskOwner()
+    private let cleanupOwned = StudioTaskOwner()
+    private nonisolated let callbacks = StudioTaskOwner()
     var activeWork: Set<UUID> = []
     var retainedWork: Set<UUID> = []
     let exporter = VideoExporter()
@@ -206,6 +209,8 @@ import Observation
         guard !isStopped else { return }
         isStopped = true
         exporter.cancel()
+        owned.shutdown()
+        callbacks.shutdown()
         for task in tasks.values { task.cancel() }
         tasks.removeAll()
         versions.removeAll()
@@ -220,11 +225,11 @@ import Observation
             }
         }
         if let cleanupTask {
-            invalidationTask = Task { [weak self] in
+            invalidationTask = cleanupOwned.start { [weak self] in
                 await cleanupTask.value
                 self?.finishInvalidation()
             }
-            invalidationDeadline = Task { [weak self] in
+            invalidationDeadline = cleanupOwned.start { [weak self] in
                 do { try await Task.sleep(for: .seconds(1)) } catch { return }
                 self?.cleanupTask?.cancel()
                 self?.finishInvalidation()
@@ -232,6 +237,19 @@ import Observation
         } else {
             finishInvalidation()
         }
+    }
+
+    func suspendCommands() { stop() }
+
+    func suspendCommandsAndWait() async { await stopAndWait() }
+
+    func stopAndWait() async {
+        stop()
+        await exporter.waitForPendingWork()
+        await owned.shutdownAndWait()
+        await callbacks.shutdownAndWait()
+        await cleanupOwned.waitForPendingWork()
+        await cleanupOwned.shutdownAndWait()
     }
 
     func cleanup(_ operation: String, object: [String: Any]) {
@@ -242,7 +260,7 @@ import Observation
         else { return }
         cleanupQueue.append((operation, payload))
         guard cleanupTask == nil else { return }
-        cleanupTask = Task { [weak self] in
+        cleanupTask = cleanupOwned.start { [weak self] in
             guard let self else { return }
             defer { self.cleanupTask = nil }
             while !self.cleanupQueue.isEmpty, !Task.isCancelled, !self.invalidated {
@@ -272,7 +290,7 @@ import Observation
                 if Task.isCancelled { cancelWaiting(id) }
             }
         } onCancel: {
-            Task { @MainActor [weak self] in self?.cancelWaiting(id) }
+            callbacks.enqueue { [weak self] in self?.cancelWaiting(id) }
         }
     }
 
@@ -304,7 +322,7 @@ import Observation
         let version = UUID()
         if let previous = versions[key] { tasks[previous]?.cancel(); tasks[previous] = nil }
         versions[key] = version
-        tasks[version] = Task { [weak self] in
+        tasks[version] = owned.start { [weak self] in
             defer {
                 self?.tasks[version] = nil
                 if self?.versions[key] == version { self?.versions[key] = nil }

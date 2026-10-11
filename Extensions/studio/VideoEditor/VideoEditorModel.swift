@@ -39,12 +39,13 @@ final class VideoEditorModel {
     var project: VideoProject? {
         didSet {
             reconcileCaptionDrafts()
-            if !isClosed { liveSync?.watch(project?.fileURL) }
+            if !isClosed, !commandsSuspended { liveSync?.watch(project?.fileURL) }
         }
     }
     var externalSyncMessage: String?
     private var liveSync: VideoEditorLiveSync?
     private var isClosed = false
+    private var commandsSuspended = false
     var captionDrafts: [String: VideoCaptionDraft] = [:]
     var selectedClipID: String?
     var selection: VideoSelection?
@@ -161,7 +162,7 @@ final class VideoEditorModel {
             forInterval: CMTime(seconds: 1.0 / 30, preferredTimescale: 600), queue: .main
         ) { [weak self] time in
             MainActor.assumeIsolated {
-                guard let self, time.seconds.isFinite, self.playerSeeker?.isSeeking != true else {
+                guard let self, !self.commandsSuspended, time.seconds.isFinite, self.playerSeeker?.isSeeking != true else {
                     return
                 }
                 self.playhead = time.seconds
@@ -1505,21 +1506,29 @@ final class VideoEditorModel {
     func waitForPendingWork() async {
         await work.waitForPendingWork()
         await audioTask?.value
+        await remoteClient?.closeAndWait()
     }
 
     func suspendCommands() {
+        commandsSuspended = true
         work.shutdown()
+        remoteClient?.close()
+        player.pause(); focusPlayer.pause()
+        if let observer { player.removeTimeObserver(observer) }
+        observer = nil
         audioTask?.cancel()
-        if let tasks = liveSync?.stop() { pendingSynchronization.append(contentsOf: tasks) }
+        if let tasks = liveSync?.suspendCommands() { pendingSynchronization.append(contentsOf: tasks) }
     }
 
     func suspendCommandsAndWait() async {
         suspendCommands()
         let synchronization = pendingSynchronization
         let audio = audioTask
+        let client = remoteClient
         await work.shutdownAndWait()
         await audio?.value
         for task in synchronization { await task.value }
+        await client?.closeAndWait()
         pendingSynchronization.removeAll()
     }
 

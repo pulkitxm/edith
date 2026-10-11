@@ -848,6 +848,7 @@ final class StudioModel {
     }
 
     func suspendCommands() {
+        facade?.suspendCommands()
         work.shutdown()
         for job in jobs + Array(retiredJobs.values) { job.cancel(); job.preview.suspendCommands() }
         for editor in Array(imageEditors.values) + Array(retiredImages.values) { editor.suspendCommands() }
@@ -861,6 +862,7 @@ final class StudioModel {
         await drainEditors()
         let owned = jobs + Array(retiredJobs.values)
         for job in owned { await job.stopAndWait() }
+        await facade?.suspendCommandsAndWait()
         await StudioRecentWriter.shared.drain()
     }
 
@@ -871,6 +873,7 @@ final class StudioModel {
         await drainEditors()
         let owned = jobs + Array(retiredJobs.values)
         for job in owned { await job.stopAndWait() }
+        await facade?.stopAndWait()
         await StudioRecentWriter.shared.drain()
         retiredImages.removeAll(); retiredPDFs.removeAll(); retiredVideos.removeAll(); retiredJobs.removeAll()
     }

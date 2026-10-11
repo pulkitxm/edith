@@ -1,4 +1,5 @@
 import AppKit
+import Foundation
 import Observation
 import UserNotifications
 
@@ -37,6 +38,8 @@ final class VideoExporter {
 
     private(set) var job: Job?
     private var task: Task<Void, Never>?
+    private let owned = StudioTaskOwner()
+    private var suspended = false
     private var remoteToken: UUID?
     var remoteCancel: ((UUID) -> Void)?
     var remoteClear: ((UUID) -> Void)?
@@ -50,26 +53,47 @@ final class VideoExporter {
     var isExporting: Bool { job?.phase == .exporting }
 
     func start(to destination: URL, work: @escaping Work) {
-        guard !isExporting else { return }
+        guard !suspended, !isExporting else { return }
         task?.cancel(); remoteToken = nil
         let started = Job(destination: destination)
         job = started
-        task = Task { [weak self] in
-            guard let self else { return }
+        let updates = AsyncStream.makeStream(of: Double.self, bufferingPolicy: .bufferingNewest(1))
+        task = owned.start { [weak self] in
+            guard let self else { updates.continuation.finish(); return }
+            async let progressUpdates: Void = Self.consumeProgress(updates.stream, exporter: self, id: started.id)
             let outcome: Phase?
             do {
-                try await work { [weak self] value in
-                    Task { @MainActor in self?.report(value, for: started.id) }
-                }
+                try await work { updates.continuation.yield($0) }
                 outcome = .finished
             } catch is CancellationError {
                 outcome = nil
             } catch {
                 outcome = Task.isCancelled ? nil : .failed(error.localizedDescription)
             }
+            updates.continuation.finish()
+            await progressUpdates
             await finish(started.id, outcome)
         }
     }
+
+    private static func consumeProgress(
+        _ updates: AsyncStream<Double>, exporter: VideoExporter, id: UUID
+    ) async {
+        for await value in updates { exporter.report(value, for: id) }
+    }
+
+    func suspendCommands() {
+        suspended = true
+        owned.shutdown()
+        task?.cancel()
+    }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        await owned.shutdownAndWait()
+    }
+
+    func waitForPendingWork() async { await owned.waitForPendingWork() }
 
     func cancel() {
         if let task { task.cancel() } else if let remoteToken { remoteCancel?(remoteToken) }
