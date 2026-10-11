@@ -60,6 +60,27 @@ class FrozenHostArtifactTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     module.unpack_frozen_host(self.archive([extra]), output)
 
+    def test_release_tree_selection_preserves_default_and_rejects_unknown_tree(self):
+        release = [
+            ('local/extension-release-host/Edith.app/Contents/MacOS/Edith', b'signed-synthetic-code', None),
+            ('local/extension-release-host/Edith.app/Contents/Info.plist', b'signed-synthetic-plist', None),
+            ('local/extension-release-host/build-metadata.json', b'{"signature":"synthetic"}', None),
+        ]
+        artifact = self.archive(release)
+        module.unpack_frozen_host(artifact, self.output)
+        self.assertEqual((self.output / 'Edith.app/Contents/MacOS/Edith').read_bytes(), b'synthetic-code')
+        signed = self.root / 'signed'
+        signed.mkdir(mode=0o700)
+        module.unpack_frozen_host(artifact, signed, 'extension-release-host')
+        self.assertEqual((signed / 'Edith.app/Contents/MacOS/Edith').read_bytes(), b'signed-synthetic-code')
+        for tree in ['../extension-release-host', 'extension-tools', '', 'local/extension-release-host']:
+            with self.assertRaises(ValueError):
+                module.unpack_frozen_host(artifact, self.root / 'missing', tree)
+        unsafe = self.root / 'unsafe'
+        unsafe.mkdir(mode=0o700)
+        with self.assertRaises(ValueError):
+            module.unpack_frozen_host(self.archive(release + [('local/extension-release-host/../foreign', b'x', None)]), unsafe, 'extension-release-host')
+
     def test_outer_asset_name_output_mode_and_symlink_do_not_gain_access(self):
         with self.assertRaises(ValueError):
             module.unpack_frozen_host(self.archive(outer='other.tar.gz'), self.output)
