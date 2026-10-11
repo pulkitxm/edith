@@ -343,6 +343,36 @@ import Testing
         #expect(fixture.removedAssociations.count == 2)
     }
 
+    @Test func terminalReuseValidatesTheFreshOriginInsteadOfTheCompletedOrigin() async throws {
+        let fixture = TerminalWindowFixture()
+        defer { fixture.clean() }
+        let first = UUID(), second = UUID()
+        fixture.origins = [first]
+        let service = fixture.service()
+        try await service.open(fixture.request(presentationID: first))
+        fixture.origins = [second]
+        try await service.open(fixture.request(presentationID: second))
+        #expect(fixture.created.count == 1 && fixture.loaded.count == 1)
+        await #expect(throws: HostWorkerError.rejected) {
+            try await service.open(fixture.request(presentationID: first))
+        }
+        try await service.stop()
+    }
+
+    @Test func terminalFinalAdmissionRejectsAConnectedControllerThatFailedDuringReadiness()
+        async throws
+    {
+        let fixture = TerminalWindowFixture()
+        defer { fixture.clean() }
+        fixture.healthy = false
+        let service = fixture.service()
+        await #expect(throws: HostWorkerError.rejected) {
+            try await service.open(fixture.request())
+        }
+        #expect(service.pendingCount == 0 && fixture.released.count == 1)
+        try await service.stop()
+    }
+
     @Test(arguments: ["replace", "owner", "cancel", "hidden"])
     func terminalReadinessRacesReleaseTheExactPresentation(change: String) async throws {
         let fixture = TerminalWindowFixture()
@@ -423,6 +453,8 @@ import Testing
         let owner = TestWindowHost.window(contentRect: .zero)
         var ownerToken = UUID()
         var available = true
+        var healthy = true
+        var origins = Set<UUID>()
         var presented = true
         var releaseFails = false
         var created: [NSWindow] = []
@@ -433,12 +465,13 @@ import Testing
         var presentations = 0
         var loadGate: DeliveryGate?
         var readyGate: DeliveryGate?
-        func request() throws -> HostWorkerNavigationRequest {
+        func request(presentationID: UUID? = nil) throws -> HostWorkerNavigationRequest {
             let identity = try HostIdentity(
                 identifier: "com.pulkit.edith.tests.original-terminal",
                 supportDirectory: URL(fileURLWithPath: "/synthetic/support"))
             return .init(
-                configuration: .init(identity: identity, extensionID: "terminal", version: "1.0.0"))
+                configuration: .init(identity: identity, extensionID: "terminal", version: "1.0.0"),
+                presentationID: presentationID, location: presentationID == nil ? nil : "home")
         }
         func service() -> HostTerminalWindows {
             let windows = HostSectionWindows(
@@ -453,18 +486,27 @@ import Testing
             ) { _ in AnyView(EmptyView()) }
             return HostTerminalWindows(
                 windows: windows,
-                owner: { [self] _ in
+                owner: { [self] request in
                     let token = ownerToken
                     return .init(
                         token: token, window: owner,
                         validate: { [self] in
+                            guard ownerToken == token, available,
+                                request.presentationID.map(origins.contains) ?? true
+                            else {
+                                throw HostWorkerError.rejected
+                            }
+                        },
+                        validateRetained: { [self] in
                             guard ownerToken == token, available else {
                                 throw HostWorkerError.rejected
                             }
                         })
                 },
                 validateOrigin: { [self] request in
-                    guard available, request.version == "1.0.0" else {
+                    guard available, request.version == "1.0.0",
+                        request.presentationID.map(origins.contains) ?? true
+                    else {
                         throw HostWorkerError.rejected
                     }
                 },
@@ -487,7 +529,10 @@ import Testing
                     #expect(workspace === owner)
                     let token = UUID(); associations.append(token); return token
                 }, removeAssociation: { [self] in removedAssociations.append($0) },
-                presented: { [self] _ in presented })
+                presented: { [self] _ in presented },
+                healthy: { [self] _, _, _ in
+                    guard healthy else { throw HostWorkerError.rejected }
+                })
         }
         func clean() { for window in created { window.close() }; owner.close() }
     }

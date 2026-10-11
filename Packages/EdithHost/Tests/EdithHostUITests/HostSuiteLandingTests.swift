@@ -54,10 +54,9 @@ import Testing
         HostExtensionActions.open(
             try entry("database"), active: false, openPage: { pages.append($0) },
             showDetails: { details.append($0.id) })
-        #expect(pages == ["homebrew", "emoji"])
-        #expect(details == ["database"])
-        #expect(HostNavigationCatalog.route(extensionID: "emoji")?.page == "settings")
-        #expect(HostNavigationCatalog.route(extensionID: "emoji")?.section == "emoji")
+        #expect(pages == ["homebrew"])
+        #expect(details == ["emoji", "database"])
+        #expect(HostNavigationCatalog.route(extensionID: "emoji") == nil)
     }
 
     @Test func settingsAdmissionMatchesExplicitPreferencesAndActiveOnlyContracts() {

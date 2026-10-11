@@ -7,6 +7,15 @@ struct HostWorkspaceNavigationOwner {
     let token: UUID
     let window: NSWindow
     let validate: @MainActor () throws -> Void
+    let validateRetained: @MainActor () throws -> Void
+
+    init(
+        token: UUID, window: NSWindow, validate: @escaping @MainActor () throws -> Void,
+        validateRetained: (@MainActor () throws -> Void)? = nil
+    ) {
+        self.token = token; self.window = window; self.validate = validate
+        self.validateRetained = validateRetained ?? validate
+    }
 }
 
 @MainActor
@@ -223,18 +232,23 @@ final class HostWindowNavigation {
         guard let (token, registration) = chosen, let window = registration.window else {
             throw HostWindowNavigationError.unavailable
         }
-        let validate: @MainActor () throws -> Void = { [weak self] in
+        let validateRetained: @MainActor () throws -> Void = { [weak self] in
             guard let self else { throw HostWindowNavigationError.unavailable }
             try Task.checkCancellation()
             try HostWorkerNavigationRouting.validateApplied(
                 extensionID: extensionID, version: version, activeVersions: self.activeVersions(),
-                current: self.currentOrigin(
-                    presentationID, window: origin, relationship: relationship)
-                    && self.registrations[token] === registration
+                current: self.registrations[token] === registration
                     && registration.window === window)
         }
+        let validate: @MainActor () throws -> Void = { [weak self] in
+            try validateRetained()
+            guard let self,
+                self.currentOrigin(presentationID, window: origin, relationship: relationship)
+            else { throw HostWindowNavigationError.unavailable }
+        }
         try validate()
-        return HostWorkspaceNavigationOwner(token: token, window: window, validate: validate)
+        return HostWorkspaceNavigationOwner(
+            token: token, window: window, validate: validate, validateRetained: validateRetained)
     }
 
     private func currentOrigin(_ id: UUID?, window: NSWindow?, relationship: WindowRelationship?)

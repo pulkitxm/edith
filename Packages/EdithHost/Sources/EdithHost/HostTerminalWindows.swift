@@ -11,6 +11,7 @@ final class HostTerminalWindows {
     private let validateOrigin: @MainActor (HostWorkerNavigationRequest) throws -> Void
     private let load: @MainActor (HostExtensionContentRequest) async throws -> NSViewController
     private let ready: @MainActor (NSViewController, NSWindow) async throws -> Void
+    private let healthy: @MainActor (NSViewController, NSWindow, UUID) throws -> Void
     private let release: @MainActor (UUID) async throws -> Void
     private let associate: @MainActor (NSWindow, NSWindow) throws -> UUID
     private let removeAssociation: @MainActor (UUID) -> Void
@@ -38,12 +39,14 @@ final class HostTerminalWindows {
         release: @escaping @MainActor (UUID) async throws -> Void,
         associate: @escaping @MainActor (NSWindow, NSWindow) throws -> UUID,
         removeAssociation: @escaping @MainActor (UUID) -> Void,
-        presented: @escaping @MainActor (NSWindow) -> Bool
+        presented: @escaping @MainActor (NSWindow) -> Bool,
+        healthy: @escaping @MainActor (NSViewController, NSWindow, UUID) throws -> Void = { _, _, _ in }
     ) {
         self.windows = windows; self.owner = owner; self.validateOrigin = validateOrigin
         self.load = load; self.ready = ready; self.release = release
         self.associate = associate; self.removeAssociation = removeAssociation
         self.presented = presented
+        self.healthy = healthy
     }
 
     convenience init(
@@ -82,7 +85,15 @@ final class HostTerminalWindows {
                 return try navigation.associate(window: window, with: workspace)
             },
             removeAssociation: { [weak navigation] in navigation?.removeAssociation($0) },
-            presented: { $0.isVisible && !$0.isMiniaturized && $0.isKeyWindow && NSApp.isActive })
+            presented: { $0.isVisible && !$0.isMiniaturized && $0.isKeyWindow && NSApp.isActive },
+            healthy: { [weak presenter] controller, window, id in
+                guard let remote = controller as? HostRemoteViewController,
+                    remote.request.extensionID == "terminal", remote.request.location == "main",
+                    remote.request.presentationID == id,
+                    presenter?.owns(remote, presentationID: id) == true
+                else { throw HostWorkerError.rejected }
+                try remote.validateConnected(window: window)
+            })
         consumeKey = { [weak presenter] event in
             presenter?.consumeTerminalTabKey(
                 characters: event.charactersIgnoringModifiers, modifiers: event.modifierFlags,
@@ -112,7 +123,7 @@ final class HostTerminalWindows {
             $0.owner.token == workspace.token && $0.version == request.version
                 && closures[$0.id] == nil
         }), let window = entry.window, let controller = entry.controller {
-            try entry.owner.validate()
+            try entry.owner.validateRetained()
             guard windows.contains(window) else { throw HostWorkerError.rejected }
             windows.focusTerminalOwned(id: entry.id)
             try await ready(controller, window)
@@ -168,12 +179,14 @@ final class HostTerminalWindows {
         try Task.checkCancellation()
         try validateOrigin(request)
         try workspace.validate()
-        try entry.owner.validate()
+        try entry.owner.validateRetained()
         guard !stopping, entries[entry.id] === entry, closures[entry.id] == nil,
             entry.version == request.version, entry.window === window,
+            entry.controller === controller, entry.owner.token == workspace.token,
             windows.contains(window), controller.isViewLoaded, controller.view.window === window,
             presented(window)
         else { throw HostWorkerError.rejected }
+        try healthy(controller, window, entry.id)
     }
 
     func stop() async throws {
