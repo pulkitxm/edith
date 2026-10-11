@@ -12,7 +12,7 @@ import WorkerFixtureTestSupport
         return try EngineFixture(owner: owner)
     }
 
-    @Test func colorSamplingAndCopyStayInOwnedSink() throws {
+    @Test func syntheticModelSamplingAndCopyStayInOwnedSink() throws {
         let value = try fixture("colorPicker"); defer { value.remove() }
         let admission = try #require(try value.admit())
         let engine = ColorPickerStore(fixture: admission)
@@ -32,6 +32,19 @@ import WorkerFixtureTestSupport
         #expect(!engine.writeFixtureCopy("stopped"))
         #expect(engine.fixtureCopies.count == 128)
         #expect(engine.systemResourceCount == 0)
+    }
+
+    @Test func unsignedFunctionalIntentRejectsOriginalRuntimeStart() {
+        let runtime = ExtensionRuntime()
+        let context: NSDictionary = [
+            "operation": "start",
+            "hostedFunctionalFixture": ["descriptorPath": "/synthetic/unsigned.json"],
+            "defaultsSuite": "com.pulkit.edith.tests.synthetic",
+        ]
+        #expect((runtime.execute(context) as? NSDictionary)?["ok"] as? Bool == false)
+        #expect(
+            (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
+                == false)
     }
 
 }
