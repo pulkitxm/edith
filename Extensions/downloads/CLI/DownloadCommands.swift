@@ -3,7 +3,7 @@ import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 
-@MainActor struct DownloadCommand: AsyncParsableCommand {
+struct DownloadCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "download",
         abstract: "Download videos, images and social posts with yt-dlp and gallery-dl.",
@@ -81,7 +81,7 @@ import Foundation
     }
 }
 
-@MainActor struct DownloadListCommand: AsyncParsableCommand {
+struct DownloadListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls", abstract: "List the download queue, newest first.",
         discussion: """
@@ -101,7 +101,7 @@ import Foundation
     @Option(help: "Show at most this many. Pass 0 for all of them.")
     var limit: Int = 25
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let limit = try ArgumentChecks.nonNegative(self.limit, "--limit")
             let records = await DownloadsCLIEnvironment.worker.snapshot().records
@@ -136,7 +136,7 @@ import Foundation
     }
 }
 
-@MainActor struct DownloadStatusCommand: AsyncParsableCommand {
+struct DownloadStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "status", abstract: "Summarize every download lifecycle state.",
         discussion: """
@@ -150,7 +150,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let status = DownloadQueueSnapshot(
                 records: await DownloadsCLIEnvironment.worker.snapshot().records)
@@ -173,7 +173,7 @@ import Foundation
     }
 }
 
-@MainActor struct DownloadAddCommand: AsyncParsableCommand {
+struct DownloadAddCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "add", abstract: "Queue one or more URLs.",
         discussion: """
@@ -202,7 +202,7 @@ import Foundation
     @Argument(help: "The URLs to download.")
     var urls: [String]
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             guard let wanted = DownloadKind(rawValue: kind) else {
                 throw CLIFailure.notFound(
@@ -241,7 +241,7 @@ import Foundation
     }
 }
 
-@MainActor struct DownloadRetryCommand: AsyncParsableCommand {
+struct DownloadRetryCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "retry", abstract: "Queue a failed download again.",
         discussion: """
@@ -261,7 +261,7 @@ import Foundation
     @Argument(help: "The download number, counting from 1.")
     var index: Int?
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let changed: Int
             if all {
@@ -295,7 +295,7 @@ import Foundation
     }
 }
 
-@MainActor struct DownloadRemoveCommand: AsyncParsableCommand {
+struct DownloadRemoveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "rm", abstract: "Take one entry out of the queue.",
         discussion: """
@@ -315,7 +315,7 @@ import Foundation
     @Argument(help: "The download number, counting from 1.")
     var index: Int
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let record = try DownloadBridge.record(at: index)
             guard yes else {
@@ -351,7 +351,7 @@ import Foundation
     }
 }
 
-@MainActor struct DownloadClearCommand: AsyncParsableCommand {
+struct DownloadClearCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "clear", abstract: "Forget everything that has finished.",
         discussion: """
@@ -368,7 +368,7 @@ import Foundation
     @Flag(help: "Actually clear the records. Without this, show a preview.")
     var yes = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let records = DownloadBridge.records()
             let candidates = records.filter(\.isFinished)
@@ -399,7 +399,7 @@ import Foundation
     }
 }
 
-@MainActor struct DownloadOpenCommand: AsyncParsableCommand {
+struct DownloadOpenCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "open", abstract: "Open the completed files for one download.",
         discussion: """
@@ -416,12 +416,12 @@ import Foundation
     @Argument(help: "The download number, counting from 1.")
     var index: Int
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await DownloadResultCommand.run(.open, index: index, json: json)
     }
 }
 
-@MainActor struct DownloadRevealCommand: AsyncParsableCommand {
+struct DownloadRevealCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "reveal", abstract: "Reveal the completed files for one download.",
         discussion: """
@@ -438,7 +438,7 @@ import Foundation
     @Argument(help: "The download number, counting from 1.")
     var index: Int
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await DownloadResultCommand.run(.reveal, index: index, json: json)
     }
 }
@@ -477,7 +477,7 @@ import Foundation
     }
 }
 
-@MainActor struct DownloadToolCommand: AsyncParsableCommand {
+struct DownloadToolCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "tool",
         abstract: "Report or update the yt-dlp that does the work.",
@@ -495,7 +495,7 @@ import Foundation
     @Flag(help: "Update it rather than just reporting the version.")
     var update = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let executable = CLIToolEnvironment.executable(named: "yt-dlp")
             guard update else {
@@ -541,7 +541,7 @@ import Foundation
     }
 }
 
-@MainActor struct DownloadCancelCommand: AsyncParsableCommand {
+struct DownloadCancelCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "cancel",
         abstract: "Stop active downloads and keep them available to retry.",
@@ -559,7 +559,7 @@ import Foundation
     @Argument(help: "The download number, counting from 1. Omit it to cancel all.")
     var index: Int?
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let targets: [(Int, DownloadRecord)]
             let result: DownloadMutationResult
