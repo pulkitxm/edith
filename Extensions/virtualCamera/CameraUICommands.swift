@@ -27,6 +27,7 @@ struct CameraUIThumbnail: Codable { let mode: String; let id: UInt32 }
     private var lease: Task<Void, Never>?
     private var previewVisible = false
     private var stopped = false
+    private var leases: [UUID: Task<Void, Never>] = [:]
     private let context = CIContext()
     init(engine: VirtualCameraEngine, model: VirtualCameraPageModel, defaults: UserDefaults) {
         self.engine = engine; self.model = model; self.defaults = defaults
@@ -130,14 +131,25 @@ struct CameraUIThumbnail: Codable { let mode: String; let id: UInt32 }
     private func renewLease() {
         if !previewVisible { previewVisible = true; model.appear() }
         lease?.cancel()
-        lease = Task { [weak self] in
+        let id = UUID()
+        lease = Task { [self] in
+            defer { leases[id] = nil }
             do { try await Task.sleep(for: .seconds(5)) } catch { return }
-            guard let self else { return }
+            guard !stopped, !Task.isCancelled else { return }
             model.disappear(); previewVisible = false
         }
+        leases[id] = lease
     }
+    func beginSuspension() {
+        stopped = true
+        for task in leases.values { task.cancel() }
+    }
+
     func shutdown() async {
-        stopped = true; lease?.cancel(); lease = nil
+        beginSuspension()
+        let pending = Array(leases.values)
+        for task in pending { await task.value }
+        lease = nil
         if previewVisible { model.disappear(); previewVisible = false }
         await sources.shutdown()
     }
