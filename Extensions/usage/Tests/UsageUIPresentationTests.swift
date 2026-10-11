@@ -197,73 +197,156 @@ import Vision
         let oldZoom = UIScale.current
         defer { UIScale.apply(oldZoom) }
         let tile = SurfaceTile(.usage)
-        let route = try #require(UsageUISceneRoute(context: context("notch", tile)))
-        let scene = UsageUIPresentation(id: UUID(), route: route, client: nil)
-        defer { scene.shutdown() }
-        let snapshot = SurfaceUsageSnapshot(
-            document: try JSONDecoder().decode(
-                SurfaceUsageDocument.self, from: Data(CLIUsageTests.document.utf8)), tile: tile)
         let limitsTile = SurfaceTile(.limits)
-        let limits = UsageCompactLimitsSnapshot.project(
-            LimitsTopicSnapshot(
-                refreshedAt: Date(),
-                providers: [
-                    .init(
-                        provider: .claude,
-                        session: .init(percent: 25, resetsAt: Date().addingTimeInterval(3600)),
-                        week: nil)
-                ], failure: nil), tile: limitsTile)
-        for width in [300.0, 640.0] {
-            for zoom in [1.0, 1.5] {
-                UIScale.apply(zoom)
-                for scheme in [ColorScheme.light, .dark] {
-                    let views: [(AnyView, String)] = [
-                        (
-                            AnyView(
-                                UsageHomeUsageCard(tile: tile, snapshot: snapshot, scene: scene)),
-                            "Today"
-                        ),
-                        (
-                            AnyView(
-                                UsageHomeLimitsCard(
-                                    tile: limitsTile, scene: scene, snapshot: limits)), "Providers"
-                        ),
+        let scene = try renderScene(tile)
+        defer { scene.shutdown() }
+        let limitsScene = try renderScene(limitsTile)
+        defer { limitsScene.shutdown() }
+        do {
+            let usageClient = try #require(scene.client)
+            let limitsClient = try #require(limitsScene.client)
+            #expect(scene.presenter.active && limitsScene.presenter.active)
+            try await usageClient.refreshState()
+            try await limitsClient.refreshState()
+            try #require(!scene.presenter.active && !limitsScene.presenter.hides("Usage"))
+            let now = Date()
+            let document = try JSONSerialization.data(withJSONObject: [
+                "defaultSources": ["sample"],
+                "sourceMeta": ["sample": ["label": "Sample provider"]],
+                "daily": [
+                    [
+                        "period": CalendarDay.stamp(now),
+                        "bySource": [
+                            "sample": [
+                                [
+                                    "modelName": "Sample model", "inputTokens": 120,
+                                    "outputTokens": 30,
+                                    "cost": 2.5,
+                                ]
+                            ]
+                        ],
                     ]
-                    for (view, heading) in views {
-                        let host = NSHostingView(
-                            rootView: view.environment(\.automaticViewActionsEnabled, false)
-                                .environment(\.compactLayout, width < 500).environment(
-                                    \.colorScheme, scheme
-                                ).transaction { $0.animation = nil }.frame(
-                                    width: width, height: 500
-                                ).background(UsageExtension.DashSkin.paper(scheme == .dark)))
-                        host.sizingOptions = []
-                        host.frame = CGRect(x: 0, y: 0, width: width, height: 500)
-                        host.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
-                        host.wantsLayer = true
-                        #expect(host.window == nil)
-                        for _ in 0..<3 {
-                            host.layoutSubtreeIfNeeded();
-                            try await Task.sleep(for: .milliseconds(20))
+                ],
+            ])
+            let snapshot = SurfaceUsageSnapshot(
+                document: try JSONDecoder().decode(SurfaceUsageDocument.self, from: document),
+                tile: tile, now: now)
+            try #require(snapshot.today.tokens == 150 && snapshot.providers.count == 1)
+            let limits = UsageCompactLimitsSnapshot.project(
+                LimitsTopicSnapshot(
+                    refreshedAt: now,
+                    providers: [
+                        .init(
+                            provider: .claude,
+                            session: .init(percent: 25, resetsAt: now.addingTimeInterval(3600)),
+                            week: nil)
+                    ], failure: nil), tile: limitsTile, now: now)
+            for width in [300.0, 640.0] {
+                for zoom in [1.0, 1.5] {
+                    UIScale.apply(zoom)
+                    for scheme in [ColorScheme.light, .dark] {
+                        let views: [(AnyView, String, [String], UsageUIPresentation)] = [
+                            (
+                                AnyView(
+                                    UsageHomeUsageCard(tile: tile, snapshot: snapshot, scene: scene)
+                                ),
+                                "usage", ["Today", "$2.50", "150 tokens"], scene
+                            ),
+                            (
+                                AnyView(
+                                    UsageHomeLimitsCard(
+                                        tile: limitsTile, scene: limitsScene, snapshot: limits)),
+                                "limits", ["Providers", "75%", "25% used"], limitsScene
+                            ),
+                        ]
+                        for (view, interior, labels, owner) in views {
+                            let caseName =
+                                "notch-\(interior)-\(Int(width))-\(scheme == .dark ? "dark" : "light")-\(zoom)"
+                            let height = 500.0
+                            let host = NSHostingView(
+                                rootView: AnyView(
+                                    view.environment(\.usageUIClient, owner.client)
+                                        .environment(\.automaticViewActionsEnabled, false)
+                                        .environment(\.compactLayout, width < 500)
+                                        .environment(\.colorScheme, scheme)
+                                        .transaction { $0.animation = nil }
+                                        .frame(width: width, height: height, alignment: .topLeading)
+                                        .background(UsageExtension.DashSkin.paper(scheme == .dark)))
+                            )
+                            host.sizingOptions = []
+                            host.frame = CGRect(x: 0, y: 0, width: width, height: height)
+                            host.appearance = NSAppearance(
+                                named: scheme == .dark ? .darkAqua : .aqua)
+                            host.wantsLayer = true
+                            defer { host.rootView = AnyView(EmptyView()) }
+                            #expect(host.window == nil, Comment(rawValue: caseName))
+                            let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+                            var recognized: [String] = []
+                            var png = Data()
+                            repeat {
+                                await Task.yield()
+                                host.layoutSubtreeIfNeeded()
+                                let bitmap = try #require(
+                                    host.bitmapImageRepForCachingDisplay(in: host.bounds),
+                                    Comment(rawValue: caseName))
+                                host.cacheDisplay(in: host.bounds, to: bitmap)
+                                let image = try #require(
+                                    bitmap.cgImage, Comment(rawValue: caseName))
+                                png = try #require(
+                                    bitmap.representation(using: .png, properties: [:]))
+                                let request = VNRecognizeTextRequest()
+                                request.recognitionLevel = .accurate
+                                request.recognitionLanguages = ["en-US"]
+                                request.usesLanguageCorrection = false
+                                request.customWords = labels
+                                try VNImageRequestHandler(cgImage: image).perform([request])
+                                recognized = (request.results ?? []).compactMap {
+                                    $0.topCandidates(1).first?.string
+                                }
+                            } while !labels.allSatisfy({ label in
+                                recognized.contains { $0.localizedCaseInsensitiveContains(label) }
+                            }) && ContinuousClock.now < deadline
+                            #expect(png.count > 1_000, Comment(rawValue: caseName))
+                            for label in labels {
+                                #expect(
+                                    recognized.contains {
+                                        $0.localizedCaseInsensitiveContains(label)
+                                    },
+                                    Comment(
+                                        rawValue:
+                                            "\(caseName) missing \(label); recognized=\(recognized)"
+                                    ))
+                            }
+                            #expect(UIScale.current == zoom, Comment(rawValue: caseName))
+                            #expect(
+                                host.window == nil && !owner.stopping, Comment(rawValue: caseName))
                         }
-                        let bitmap = try #require(
-                            host.bitmapImageRepForCachingDisplay(in: host.bounds))
-                        host.cacheDisplay(in: host.bounds, to: bitmap)
-                        let image = try #require(bitmap.cgImage)
-                        let request = VNRecognizeTextRequest()
-                        request.recognitionLevel = .accurate
-                        try VNImageRequestHandler(cgImage: image).perform([request])
-                        #expect(
-                            request.results?.contains(where: {
-                                $0.topCandidates(1).first?.string.localizedCaseInsensitiveContains(
-                                    heading) == true
-                            }) == true)
-                        #expect(host.window == nil)
                     }
                 }
             }
+        } catch {
+            await scene.shutdownAndWait(); await limitsScene.shutdownAndWait()
+            throw error
         }
-        await scene.shutdownAndWait()
+        await scene.shutdownAndWait(); await limitsScene.shutdownAndWait()
+        #expect(scene.drained && limitsScene.drained)
+        #expect(scene.client?.stopped == true && limitsScene.client?.stopped == true)
+        #expect(scene.presenter.active && scene.presenter.usage && scene.presenter.money)
+        #expect(limitsScene.presenter.hides("Usage"))
+    }
+
+    private func renderScene(_ tile: SurfaceTile) throws -> UsageUIPresentation {
+        let route = try #require(UsageUISceneRoute(context: context("notch", tile)))
+        let client = UsageUIClient { operation, _ in
+            switch operation {
+            case "usage.ui.presentation":
+                return try JSONEncoder().encode(["active": "0", "blurMoney": "0", "blurUsage": "0"])
+            case "usage.status":
+                return Data(#"{"refreshing":false}"#.utf8)
+            default: throw ExtensionPeerError.invalidRequest
+            }
+        }
+        return UsageUIPresentation(id: UUID(), route: route, client: client)
     }
 
     @Test func compactNavigationUsesExactOwningPresentationAndUnavailableHostFailsClosed()
