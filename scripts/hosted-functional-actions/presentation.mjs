@@ -515,10 +515,10 @@ final class HostedFunctionalInstalledUITests: XCTestCase {
             case "secureTextField": type = .secureTextField
             case "popUpButton": type = .popUpButton
             case "menuItem": type = .menuItem
-            case "row": type = .row
+            case "row": type = .tableRow
             case "slider": type = .slider
             case "stepper": type = .stepper
-            case "column": type = .column
+            case "column": type = .tableColumn
             case "staticText": type = .staticText
             case "textArea": type = .textView
             default: XCTFail("Unsupported original control"); return
@@ -528,7 +528,7 @@ final class HostedFunctionalInstalledUITests: XCTestCase {
             case "window": scopes = windows
             case "sheet": scopes = window.sheets
             case "menu": scopes = application.menus
-            case "row": scopes = window.descendants(matching: .row)
+            case "row": scopes = window.descendants(matching: .tableRow)
             case "panel": scopes = application.windows
             case "group": scopes = window.descendants(matching: .group)
             case "button": scopes = window.buttons
@@ -613,7 +613,7 @@ final class HostedFunctionalInstalledUITests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(abs(original - width), 1)
                 let start = control.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0)).withOffset(CGVector(dx: -1, dy: 4))
                 let end = start.withOffset(CGVector(dx: width - original, dy: 0))
-                start.clickAndDrag(to: end)
+                start.click(forDuration: 0.1, thenDragTo: end)
                 XCTAssertTrue(wait(15) { abs(control.frame.width - width) <= 2 })
             case ("show-menu", .null): control.rightClick()
             case ("increment", .null): control.buttons["Increment"].click()

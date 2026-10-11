@@ -7,13 +7,36 @@ import Foundation
 @available(macOS 26.0, *)
 @MainActor
 enum FunctionalSyntheticMedia {
-    struct Decoded: Equatable {
+    struct ExactTime: Encodable, Equatable {
+        let value: String
+        let timescale: Int32
+
+        init(_ time: CMTime) throws {
+            guard time.isNumeric, time.epoch == 0, time.timescale > 0 else {
+                throw FunctionalFailure.invalid("numeric zero-epoch media time") }
+            value = String(time.value)
+            timescale = time.timescale
+        }
+
+        private var time: CMTime { CMTime(value: Int64(value)!, timescale: timescale) }
+
+        static func == (left: Self, right: Self) -> Bool { left.time == right.time }
+    }
+
+    struct Decoded {
         let frames: Int
         let durationMicroseconds: Int64
         let sampleMicroseconds: [Int64]
+        let durationTime: ExactTime
+        let sampleTimes: [ExactTime]
         let pixelSHA256: String
         let encodedSHA256: String
         let encodedBytes: Int
+
+        func matchesDecodedContent(_ other: Self) -> Bool {
+            frames == other.frames && durationTime == other.durationTime
+                && sampleTimes == other.sampleTimes && pixelSHA256 == other.pixelSHA256
+        }
     }
 
     private final class Completion: @unchecked Sendable {
@@ -137,7 +160,7 @@ enum FunctionalSyntheticMedia {
         let tracks = try await asset.loadTracks(withMediaType: .video)
         let audio = try await asset.loadTracks(withMediaType: .audio)
         let duration = try await asset.load(.duration)
-        guard tracks.count == 1, audio.isEmpty, duration.isNumeric, duration.seconds.isFinite,
+        guard tracks.count == 1, audio.isEmpty, duration.isNumeric, duration.epoch == 0, duration.seconds.isFinite,
             duration.seconds > 0, duration.seconds <= 5,
             abs(duration.seconds - seconds) <= 1.0 / 30,
             try await tracks[0].load(.naturalSize) == CGSize(width: 64, height: 64)
@@ -153,16 +176,20 @@ enum FunctionalSyntheticMedia {
         let deadline = ContinuousClock.now.advanced(by: .seconds(30))
         var count = 0
         var samples: [Int64] = []
+        var sampleTimes: [ExactTime] = []
+        var lastTimestamp: CMTime?
         var digest = SHA256()
         while let readySample = try await provider.next() {
             try Task.checkCancellation()
             let timestamp = readySample.presentationTimeStamp
             guard ContinuousClock.now < deadline, count < frames,
-                timestamp.isNumeric, timestamp.seconds.isFinite, timestamp.seconds >= 0,
+                timestamp.isNumeric, timestamp.epoch == 0, timestamp.seconds.isFinite, timestamp >= .zero,
                 timestamp < duration, timestamp.seconds <= 5
             else { throw FunctionalFailure.invalid("synthetic sample timestamp") }
             let microseconds = Int64((timestamp.seconds * 1_000_000).rounded())
-            guard samples.last.map({ microseconds > $0 }) ?? true else { throw FunctionalFailure.invalid("synthetic sample order") }
+            guard lastTimestamp.map({ timestamp > $0 }) ?? true else { throw FunctionalFailure.invalid("synthetic sample order") }
+            lastTimestamp = timestamp
+            sampleTimes.append(try ExactTime(timestamp))
             let frameBytes: Data = try readySample.withUnsafeSampleBuffer { sample in
                 guard let image = CMSampleBufferGetImageBuffer(sample),
                     CVPixelBufferGetWidth(image) == 64, CVPixelBufferGetHeight(image) == 64,
@@ -185,7 +212,7 @@ enum FunctionalSyntheticMedia {
             throw FunctionalFailure.invalid("synthetic decode completion or source drift") }
         try root.requireCurrent()
         return Decoded(frames: count, durationMicroseconds: Int64((duration.seconds * 1_000_000).rounded()),
-            sampleMicroseconds: samples, pixelSHA256: digest.finalize().map { String(format: "%02x", $0) }.joined(),
+            sampleMicroseconds: samples, durationTime: try ExactTime(duration), sampleTimes: sampleTimes, pixelSHA256: digest.finalize().map { String(format: "%02x", $0) }.joined(),
             encodedSHA256: FunctionalBytes.digest(bytes), encodedBytes: bytes.count)
     }
 
