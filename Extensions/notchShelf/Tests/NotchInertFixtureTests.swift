@@ -148,6 +148,33 @@ import WorkerFixtureSupport
         #expect(probe.dependencies == 0)
     }
 
+    @Test func originalRuntimeRejectsFunctionalContextBeforeDependencies() async throws {
+        for operation in ["start", "configureUI"] {
+            let probe = InertConstructionProbe()
+            let runtime = ExtensionRuntime(
+                contextSource: {
+                    probe.dependencies += 1; return nil
+                },
+                connectedDisplays: {
+                    probe.dependencies += 1; return [:]
+                },
+                createController: { _, _ in
+                    probe.dependencies += 1
+                    preconditionFailure("Rejected context constructed a controller")
+                })
+            #expect(
+                !ok(
+                    runtime.execute([
+                        "operation": operation, "defaultsSuite": "synthetic-unavailable-suite",
+                        "hostedFunctionalFixture": false,
+                    ])))
+            #expect(probe.dependencies == 0)
+            #expect(try state(runtime)["startRequested"] as? Bool == false)
+            await stop(runtime)
+            #expect(probe.dependencies == 0)
+        }
+    }
+
     @Test func currentAdmissionRejectsTestIntentBeforeContextResolution() async throws {
         let probe = InertConstructionProbe()
         let runtime = ExtensionRuntime(contextSource: {
@@ -221,7 +248,8 @@ import WorkerFixtureSupport
     func runtime(
         _ admission: @escaping @MainActor (NSDictionary) throws -> WorkerFixtureEngineAdmission?
     ) -> ExtensionRuntime {
-        ExtensionRuntime(
+        #if EDITH_FUNCTIONAL_FIXTURE
+        return ExtensionRuntime(
             fixtureAdmission: admission,
             contextSource: {
                 self.dependencies += 1
@@ -235,6 +263,24 @@ import WorkerFixtureSupport
                 self.dependencies += 1
                 preconditionFailure("Inert Runtime constructed a controller")
             })
+        #else
+        return ExtensionRuntime(
+            validateOrdinaryContext: { context in
+                guard try admission(context) == nil else { throw WorkerFixtureError.invalid }
+            },
+            contextSource: {
+                self.dependencies += 1
+                return nil
+            },
+            connectedDisplays: {
+                self.dependencies += 1
+                return [:]
+            },
+            createController: { _, _ in
+                self.dependencies += 1
+                preconditionFailure("Inert Runtime constructed a controller")
+            })
+        #endif
     }
 }
 

@@ -40,6 +40,36 @@ import WorkerFixtureTestSupport
 
     }
 
+    @MainActor private func makeRuntime(
+        _ input: Input, defaults: @escaping (String) -> UserDefaults?
+    ) -> ExtensionRuntime {
+        #if EDITH_FUNCTIONAL_FIXTURE
+        return ExtensionRuntime(admitFixture: input.admit, fixtureDefaults: defaults)
+        #else
+        return ExtensionRuntime(validateOrdinaryContext: { context in
+            guard try input.admit(context) == nil else { throw WorkerFixtureError.invalid }
+        })
+        #endif
+    }
+
+    @MainActor @Test func originalRuntimeRejectsFunctionalContextBeforeModelConstruction() async {
+        for operation in ["start", "configureUI"] {
+            let runtime = ExtensionRuntime()
+            let reply =
+                runtime.execute([
+                    "operation": operation, "defaultsSuite": "synthetic-unavailable-suite",
+                    "hostedFunctionalFixture": false,
+                ]) as? NSDictionary
+            #expect(reply?["ok"] as? Bool == false)
+            #expect(
+                (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
+                    == false)
+            await withCheckedContinuation { continuation in
+                runtime.prepareToStop { continuation.resume() }
+            }
+        }
+    }
+
     @Test func signedAgentBytesAdmitOnlyMaintainedUniqueIdentifiers() throws {
         let agents = try PluginsFixtureTools.admittedAgents(
             Data("{\"agentIDs\":[\"cursor\",\"amp\"]}".utf8))
@@ -155,8 +185,7 @@ import WorkerFixtureTestSupport
             try await model.documents.load(EdithSkillLibrary.skills[0])
         }
         await model.shutdown()
-        let runtime = ExtensionRuntime(
-            admitFixture: input.admit, fixtureDefaults: { _ in defaults })
+        let runtime = makeRuntime(input, defaults: { _ in defaults })
         #expect((runtime.execute(input.context) as? NSDictionary)?["ok"] as? Bool == false)
         #expect(
             (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
@@ -210,9 +239,9 @@ import WorkerFixtureTestSupport
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o644], ofItemAtPath: input.marker.path)
         }
-        let runtime = ExtensionRuntime(
-            admitFixture: input.admit,
-            fixtureDefaults: { _ in
+        let runtime = makeRuntime(
+            input,
+            defaults: { _ in
                 Issue.record("Invalid admission reached defaults construction"); return nil
             })
         #expect((runtime.execute(input.context) as? NSDictionary)?["ok"] as? Bool == false)
@@ -246,9 +275,9 @@ import WorkerFixtureTestSupport
         let fixture = try EngineFixture(owner: "plugins")
         defer { fixture.remove() }
         let input = try Input(fixture)
-        let runtime = ExtensionRuntime(
-            admitFixture: input.admit,
-            fixtureDefaults: { _ in
+        let runtime = makeRuntime(
+            input,
+            defaults: { _ in
                 Issue.record("Unsigned marker reached preferences construction")
                 return nil
             })

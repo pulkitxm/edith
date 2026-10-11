@@ -11,11 +11,14 @@ import SwiftUI
 
 @MainActor @objc(EdithPluginsExtensionRuntime)
 final class ExtensionRuntime: NSObject {
+    #if EDITH_FUNCTIONAL_FIXTURE
     private var fixture: WorkerFixtureEngineAdmission?
     private var fixtureContext: NSDictionary?
     private var fixturePolicy: PluginsFixturePolicy?
+    #endif
     private var fixtureTerminated = false
     private var fixtureRejected = false
+    #if EDITH_FUNCTIONAL_FIXTURE
     private let admitFixture: (NSDictionary) throws -> WorkerFixtureEngineAdmission?
     private let fixtureDefaults: (String) -> UserDefaults?
 
@@ -36,10 +39,34 @@ final class ExtensionRuntime: NSObject {
         super.init()
     }
 
+    #endif
+    #if !EDITH_FUNCTIONAL_FIXTURE
+    private let validateOrdinaryContext: (NSDictionary) throws -> Void
+
+    override convenience init() { self.init(validateOrdinaryContext: Self.validateOrdinaryContext) }
+
+    init(validateOrdinaryContext: @escaping (NSDictionary) throws -> Void) {
+        self.validateOrdinaryContext = validateOrdinaryContext
+        super.init()
+    }
+
+    private static func validateOrdinaryContext(_ context: NSDictionary) throws {
+        guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+            context["hostedFunctionalFixture"] == nil,
+            try WorkerFixtureAdmission.current(
+                extensionID: "plugins", context: context,
+                roleBundle: Bundle(for: ExtensionRuntime.self)) == nil
+        else { throw WorkerFixtureError.invalid }
+    }
+    #endif
+    private var fixtureActive = false
+
     private var model: SkillsModel?
     private var uiModel: SkillsModel?
     private var engineClient: ExtensionEngineClient?
+    #if EDITH_FUNCTIONAL_FIXTURE
     private var uiAdmission: WorkerFixtureUIAdmission?
+    #endif
     private var uiGeneration: UUID?
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private var stopping = false
@@ -52,6 +79,7 @@ final class ExtensionRuntime: NSObject {
             guard let self, let model = self.model, !model.isStopped else {
                 throw ExtensionPeerError.unavailable
             }
+            #if EDITH_FUNCTIONAL_FIXTURE
             if self.fixture != nil {
                 guard let policy = self.fixturePolicy else { throw ExtensionPeerError.unavailable }
                 do {
@@ -84,6 +112,7 @@ final class ExtensionRuntime: NSObject {
                     throw ExtensionPeerError.invalidRequest
                 }
             }
+            #endif
             if command.hasPrefix("plugins.cli.") {
                 if self.cliStreams == nil {
                     self.cliStreams = try ExtensionCLIStreams(owner: "plugins")
@@ -108,8 +137,10 @@ final class ExtensionRuntime: NSObject {
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         stopping = true
+        #if EDITH_FUNCTIONAL_FIXTURE
         fixturePolicy?.stop()
-        if fixture != nil { fixtureTerminated = true }
+        #endif
+        if fixtureActive { fixtureTerminated = true }
         stopUI()
         let streams = cliStreams; cliStreams = nil; streams?.stop()
         let stoppingModel = model; model = nil; surface = nil
@@ -126,7 +157,10 @@ final class ExtensionRuntime: NSObject {
 
     private func stopUI() {
         let hadUI = engineClient != nil || uiModel != nil
-        uiGeneration = nil; uiAdmission = nil
+        uiGeneration = nil
+        #if EDITH_FUNCTIONAL_FIXTURE
+        uiAdmission = nil
+        #endif
         engineClient?.invalidate(); engineClient = nil
         let stoppingModel = uiModel; uiModel = nil
         stoppingModel?.stop()
@@ -140,6 +174,7 @@ final class ExtensionRuntime: NSObject {
         if hadUI { TextEditingCommands.shutdown() }
     }
 
+    #if EDITH_FUNCTIONAL_FIXTURE
     private func requireCurrentFixture() throws {
         guard !fixtureTerminated, !fixtureRejected, !stopping, let fixture
         else { throw WorkerFixtureError.invalid }
@@ -167,6 +202,7 @@ final class ExtensionRuntime: NSObject {
         return response
     }
 
+    #endif
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
         case "describe":
@@ -178,9 +214,10 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
-            guard !stopping, !fixtureRejected, fixture == nil, engineClient == nil else {
+            guard !stopping, !fixtureRejected, !fixtureActive, engineClient == nil else {
                 return ["ok": false] as NSDictionary
             }
+            #if EDITH_FUNCTIONAL_FIXTURE
             let admission: WorkerFixtureUIAdmission?
             do {
                 admission = try WorkerFixtureUIAdmission.current(
@@ -188,10 +225,16 @@ final class ExtensionRuntime: NSObject {
                     roleBundle: Bundle(for: ExtensionRuntime.self))
                 try admission?.requireCurrent()
             } catch { return ["ok": false] as NSDictionary }
+            #else
+            do { try validateOrdinaryContext(input) } catch {
+                fixtureRejected = true; return ["ok": false] as NSDictionary
+            }
+            #endif
             guard let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "plugins", let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
             let generation = UUID()
+            #if EDITH_FUNCTIONAL_FIXTURE
             if let admission {
                 guard let suite = input["defaultsSuite"] as? String,
                     let defaults = fixtureDefaults(suite)
@@ -211,7 +254,14 @@ final class ExtensionRuntime: NSObject {
                 guard DocumentRenderer.isAvailable else { return ["ok": false] as NSDictionary }
                 uiModel = SkillsModel(remote: PluginsUIBridge(client: client))
             }
-            engineClient = client; uiGeneration = generation; uiAdmission = admission
+            #else
+            guard DocumentRenderer.isAvailable else { return ["ok": false] as NSDictionary }
+            uiModel = SkillsModel(remote: PluginsUIBridge(client: client))
+            #endif
+            engineClient = client; uiGeneration = generation
+            #if EDITH_FUNCTIONAL_FIXTURE
+            uiAdmission = admission
+            #endif
             TextEditingCommands.install()
         case "stopUI": stopUI()
         case "start":
@@ -221,6 +271,7 @@ final class ExtensionRuntime: NSObject {
             guard let suite = input["defaultsSuite"] as? String
             else { return ["ok": false] as NSDictionary }
             do {
+                #if EDITH_FUNCTIONAL_FIXTURE
                 let admission = try admitFixture(input)
                 if let fixture {
                     guard let admission, admission.descriptor == fixture.descriptor,
@@ -244,6 +295,7 @@ final class ExtensionRuntime: NSObject {
                         let agents = try PluginsFixtureTools.admittedAgents(
                             admission.readInput(named: "agents"))
                         fixture = admission
+                        fixtureActive = true
                         fixtureContext = input.copy() as? NSDictionary
                         fixturePolicy = try PluginsFixturePolicy(
                             validateSurface: PluginsSurface.validate,
@@ -267,32 +319,48 @@ final class ExtensionRuntime: NSObject {
                         model = SkillsModel()
                     }
                 }
+                #else
+                try validateOrdinaryContext(input)
+                guard suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                else { return ["ok": false] as NSDictionary }
+                if model == nil {
+                    guard DocumentRenderer.isAvailable else { return ["ok": false] as NSDictionary }
+                    model = SkillsModel()
+                }
+                #endif
             } catch {
                 fixtureRejected = true
+                #if EDITH_FUNCTIONAL_FIXTURE
                 fixturePolicy?.stop()
+                #endif
                 return ["ok": false] as NSDictionary
             }
             if let model, surface == nil {
                 surface =
-                    fixture == nil
+                    !fixtureActive
                     ? PluginsSurface(model: model)
                     : PluginsSurface(model: model, hidden: { false })
             }
-            if fixture == nil { TextEditingCommands.install() }
+            if !fixtureActive { TextEditingCommands.install() }
         case "view":
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
+            #if EDITH_FUNCTIONAL_FIXTURE
             do { try uiAdmission?.requireCurrent() } catch { return ["ok": false] as NSDictionary }
+            #endif
             return NSHostingController(rootView: ExtensionPageHost { PluginsPage(model: model) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
-            let ordinaryModel = fixture == nil && model != nil
+            let ordinaryModel = !fixtureActive && model != nil
             prepareToStop(completion: {})
             if ordinaryModel {
                 SkillBrand.shutdown()
                 TextEditingCommands.shutdown()
             }
+            #if EDITH_FUNCTIONAL_FIXTURE
             fixture = nil
+            #endif
+            fixtureActive = false
         case "status": return ["ok": true, "running": model != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }

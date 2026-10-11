@@ -41,19 +41,6 @@ struct PluginsFixtureTools: Sendable {
         }
     }
 
-    static func admittedAgents(_ data: Data) throws -> [SkillAgent] {
-        let fields = try WorkerFixtureJSON.object(data, maximumBytes: 8192)
-        guard Set(fields.keys) == ["agentIDs"], let identifiers = fields["agentIDs"] as? [String],
-            !identifiers.isEmpty, identifiers.count <= SkillAgentCatalog.agents.count,
-            Set(identifiers).count == identifiers.count,
-            identifiers.allSatisfy({ identifier in
-                SkillAgentCatalog.agents.contains { $0.id == identifier }
-            })
-        else { throw WorkerFixtureError.invalid }
-        return SkillAgentCatalog.agents.filter { identifiers.contains($0.id) }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-    }
-
     @MainActor static func makeAdmittedModel(
         defaults: UserDefaults, dataDirectory: URL, agents: [SkillAgent],
         remote: PluginsUIBridge? = nil

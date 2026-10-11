@@ -1,4 +1,7 @@
 import CoreFoundation
+#if !FUNCTIONAL_FIXTURE_CHECKS
+import EdithExtensionSupport
+#endif
 import Foundation
 import WorkerFixtureSupport
 
@@ -81,3 +84,41 @@ enum PluginsFixturePolicyError: Error { case invalid, unavailable }
         }
     }
 }
+
+#if !FUNCTIONAL_FIXTURE_CHECKS
+extension PluginsSurface {
+    static func validate(_ command: String, payload: Data) throws {
+        let fields = try WorkerFixtureJSON.object(payload, maximumBytes: 131_072)
+        let snapshot = try request(command, payload: payload)
+        let expected: Data
+        if command == "surface.snapshot" {
+            expected = try JSONEncoder().encode(snapshot)
+        } else {
+            expected = try JSONEncoder().encode(
+                SurfaceActionRequest(snapshot: snapshot, actionID: "refreshAgents"))
+        }
+        let encoded = try WorkerFixtureJSON.object(expected, maximumBytes: 131_072)
+        guard
+            NSDictionary(dictionary: fields).isEqual(to: encoded)
+        else { throw ExtensionPeerError.invalidRequest }
+    }
+
+}
+
+extension PluginsFixtureTools {
+    static func admittedAgents(_ data: Data) throws -> [SkillAgent] {
+        let fields = try WorkerFixtureJSON.object(data, maximumBytes: 8192)
+        guard Set(fields.keys) == ["agentIDs"], let identifiers = fields["agentIDs"] as? [String],
+            !identifiers.isEmpty, identifiers.count <= SkillAgentCatalog.agents.count,
+            Set(identifiers).count == identifiers.count,
+            identifiers.allSatisfy({ identifier in
+                SkillAgentCatalog.agents.contains { $0.id == identifier }
+            })
+        else { throw WorkerFixtureError.invalid }
+        return SkillAgentCatalog.agents.filter { identifiers.contains($0.id) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+}
+
+#endif

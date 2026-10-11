@@ -121,12 +121,21 @@ import Testing
         let fixture = try NotchPanelFixture()
         defer { fixture.clean() }
         var ownersCreated = 0
+        #if EDITH_FUNCTIONAL_FIXTURE
         let runtime = ExtensionRuntime(
             fixtureAdmission: { _ in nil },
             contextSource: { fixture.context }, connectedDisplays: { [:] },
             createController: { _, _ in
                 ownersCreated += 1; fatalError("No owner is allowed")
             })
+        #else
+        let runtime = ExtensionRuntime(
+            validateOrdinaryContext: { _ in },
+            contextSource: { fixture.context }, connectedDisplays: { [:] },
+            createController: { _, _ in
+                ownersCreated += 1; fatalError("No owner is allowed")
+            })
+        #endif
         func invoke<T: Encodable>(_ operation: String, _ input: T) async throws -> Data {
             let payload = try JSONEncoder().encode(input)
             return try await withCheckedThrowingContinuation { continuation in
