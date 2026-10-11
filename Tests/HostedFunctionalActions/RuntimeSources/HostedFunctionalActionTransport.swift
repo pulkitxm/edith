@@ -35,6 +35,8 @@ final class HostedFunctionalActionTransport: NSObject {
     private var stopped = false
     private var started = 0
     private var activationID: UUID?
+    private var baselineTask: Task<Data?, Error>?
+    private var validations: [UUID: Task<Void, Error>] = [:]
     private var baselineCaptureStarted = false
     private var baselineCaptured = false
     private var persistentBaseline: Data?
@@ -123,7 +125,20 @@ final class HostedFunctionalActionTransport: NSObject {
 
     func requireCurrent() async throws {
         guard !stopped else { throw HostedFunctionalActionError.invalid }
-        try await verifyCurrent()
+        guard validations.count < 8 else { throw HostedFunctionalActionError.invalid }
+        let id = UUID()
+        let task = Task { [self] in
+            try requireRunning()
+            try await verifyCurrent()
+            try requireRunning()
+        }
+        validations[id] = task
+        defer { validations[id] = nil }
+        try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
         try requireRunning()
     }
 
@@ -135,6 +150,18 @@ final class HostedFunctionalActionTransport: NSObject {
         if baselineCaptured { return persistentBaseline }
         guard !baselineCaptureStarted else { throw HostedFunctionalActionError.invalid }
         baselineCaptureStarted = true
+        let task = Task { [self] in try await captureBaseline() }
+        baselineTask = task
+        defer { baselineTask = nil }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func captureBaseline() async throws -> Data? {
+        try requireRunning()
         try await verifyCurrent()
         try requireRunning()
         let value = try await readPersistentBeforeConstruction()
@@ -156,12 +183,19 @@ final class HostedFunctionalActionTransport: NSObject {
         activationID = nil
         let pending = Array(calls.values)
         let callbacks = Array(bridges.values)
+        let checks = Array(validations.values)
+        let baseline = baselineTask
+        baseline?.cancel()
+        checks.forEach { $0.cancel() }
         pending.forEach { $0.cancel() }
         callbacks.forEach { $0.cancel() }
+        _ = await baseline?.result
+        for task in checks { _ = await task.result }
         for task in pending { _ = await task.result }
         for task in callbacks { await task.value }
         calls.removeAll()
         bridges.removeAll()
+        validations.removeAll()
     }
 
     @objc(invoke:completion:)
@@ -286,8 +320,14 @@ enum HostedFunctionalActionNativeDriver {
         else {
             throw HostedFunctionalActionError.invalid
         }
-        try await transport.requireCurrent()
-        let before = try await transport.capturePersistentBeforeConstruction()
+        let before: Data?
+        do {
+            try await transport.requireCurrent()
+            before = try await transport.capturePersistentBeforeConstruction()
+        } catch {
+            await transport.shutdown()
+            throw error
+        }
         let action: Case
         do { action = try makeCase() } catch { await transport.shutdown(); throw error }
         do {

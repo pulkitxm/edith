@@ -65,6 +65,8 @@ export async function runFunctionalTransportContract(root, output) {
   const binary = join(output, "transport-contract");
   await run("xcrun", [
     "swiftc",
+    "-j",
+    "1",
     "-swift-version",
     "6",
     "-parse-as-library",

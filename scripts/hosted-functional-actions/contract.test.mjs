@@ -11,8 +11,8 @@ import {
   validateFunctionalActionProof,
   validateFunctionalCapability,
   validateFunctionalCaseDefinition,
-  validateFunctionalRequest,
   validateFunctionalMutationJournal,
+  validateFunctionalRequest,
   verifyFunctionalEnvelope,
 } from "./contract.mjs";
 import {
@@ -290,12 +290,30 @@ function fixture() {
   };
   return { observed, proof };
 }
+function presentations(
+  owner = definition.owner,
+  caseSHA256 = functionalDigest(definition),
+) {
+  return {
+    sourceCommit,
+    session,
+    owner,
+    caseSHA256,
+    presentations: {
+      initial: "12345678-1234-4123-8123-123456789b00",
+      updated: "12345678-1234-4123-8123-123456789b01",
+      reinstalled: "12345678-1234-4123-8123-123456789b02",
+    },
+  };
+}
 function validate(f) {
   return validateFunctionalActionProof(
     f.proof,
     definition,
     seal(f.observed),
     issuer,
+    undefined,
+    presentations(),
   );
 }
 
@@ -669,6 +687,7 @@ test("public pair qualification requires separate admitted production receipt, n
       seal(f.observed),
       issuer,
       admitted,
+      presentations(),
     ).publicUpdateValidated,
     true,
   );
@@ -679,6 +698,7 @@ test("public pair qualification requires separate admitted production receipt, n
       seal(f.observed),
       issuer,
       { ...admitted, receiptSHA256: digest("5") },
+      presentations(),
     ),
   );
 });
@@ -940,8 +960,41 @@ test("empty mutation payload is admitted only for the exact Terminal open object
         def,
         issuer,
         selected,
+        presentations().presentations[cap.phase],
       );
     if (value === "{}") call();
     else assert.throws(call);
   }
+});
+
+test("a signed journal from another presentation cannot qualify the admitted controller scope", () => {
+  const f = fixture();
+  assert.equal(validate(f).functionalActionsValidated, true);
+  for (const stage of f.observed.stages) {
+    const journal = JSON.parse(stage.mutationJournal.payload);
+    journal.presentationID = "12345678-1234-4123-8123-123456789fff";
+    stage.mutationJournal = seal(journal);
+  }
+  assert.throws(() => validate(f));
+  const original = fixture();
+  assert.throws(() =>
+    validateFunctionalActionProof(
+      original.proof,
+      definition,
+      seal(original.observed),
+      issuer,
+    ),
+  );
+  const changed = presentations();
+  changed.owner = "studio";
+  assert.throws(() =>
+    validateFunctionalActionProof(
+      original.proof,
+      definition,
+      seal(original.observed),
+      issuer,
+      undefined,
+      changed,
+    ),
+  );
 });

@@ -373,7 +373,9 @@ export function validateFunctionalMutationJournal(
   definition,
   issuer,
   stage,
+  admittedPresentationID,
 ) {
+  assert.match(admittedPresentationID, uuid);
   const journal = verifyFunctionalEnvelope(envelope, issuer);
   keys(journal, [
     "schema",
@@ -392,7 +394,7 @@ export function validateFunctionalMutationJournal(
   for (const field of ["sourceCommit", "session", "owner", "phase"])
     assert.equal(journal[field], capability[field]);
   assert.equal(journal.capabilitySHA256, functionalDigest(capability));
-  assert.match(journal.presentationID, uuid);
+  assert.equal(journal.presentationID, admittedPresentationID);
   const baseline = journal.baseline;
   keys(baseline, [
     "reader",
@@ -534,6 +536,7 @@ export function validateFunctionalActionProof(
   signedObservation,
   compiledIssuerPublicKeyDER,
   admittedPublicPair,
+  admittedPresentations,
 ) {
   validateFunctionalCaseDefinition(definition);
   const observed = verifyFunctionalEnvelope(
@@ -571,6 +574,22 @@ export function validateFunctionalActionProof(
   assert.equal(proof.schema, 1);
   for (const key of ["sourceCommit", "session", "owner", "caseSHA256"])
     assert.equal(proof[key], observed[key]);
+  keys(admittedPresentations, [
+    "sourceCommit",
+    "session",
+    "owner",
+    "caseSHA256",
+    "presentations",
+  ]);
+  for (const field of ["sourceCommit", "session", "owner", "caseSHA256"])
+    assert.equal(admittedPresentations[field], observed[field]);
+  keys(admittedPresentations.presentations, phases);
+  for (const presentation of Object.values(admittedPresentations.presentations))
+    assert.match(presentation, uuid);
+  assert.equal(
+    new Set(Object.values(admittedPresentations.presentations)).size,
+    3,
+  );
   assert.equal(observed.stages.length, 3);
   assert.equal(proof.stages.length, 3);
   const requests = new Set(),
@@ -669,6 +688,7 @@ export function validateFunctionalActionProof(
       definition,
       compiledIssuerPublicKeyDER,
       stage,
+      admittedPresentations.presentations[capability.phase],
     );
     positiveSequence(stage.activation.sequence);
     keys(stage.acknowledgement, [

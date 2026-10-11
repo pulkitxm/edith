@@ -194,6 +194,92 @@ import Foundation
         } catch {}
         precondition(events == ["baseline", "observed", "constructor"])
         print("PASS independently supplied persistence read precedes construction and IPC")
+        for stage in ["reader", "observer", "verifier"] {
+            var suspended: CheckedContinuation<Void, Never>?
+            var cancelled = false
+            var observed = false
+            let capturing = try HostedFunctionalActionTransport(
+                context: context, presentationID: UUID(),
+                verifyCurrent: {
+                    if stage == "verifier" {
+                        await withCheckedContinuation { suspended = $0 }
+                        cancelled = Task.isCancelled
+                    }
+                }, observe: { _ in }, validatePayload: { _, _ in },
+                observeBeforeSend: { _ in },
+                observePersistentBefore: { _ in
+                    if stage == "observer" {
+                        await withCheckedContinuation { suspended = $0 }
+                        cancelled = Task.isCancelled
+                    }
+                    observed = true
+                },
+                readPersistentBeforeConstruction: {
+                    if stage == "reader" {
+                        await withCheckedContinuation { suspended = $0 }
+                        cancelled = Task.isCancelled
+                    }
+                    return Data("synthetic baseline".utf8)
+                })
+            let capture = Task { @MainActor in
+                try await capturing.capturePersistentBeforeConstruction()
+            }
+            while suspended == nil { await Task.yield() }
+            var drained = false
+            let stop = Task { @MainActor in
+                await capturing.shutdown(); drained = true
+            }
+            for _ in 0..<20 { await Task.yield() }
+            precondition(!drained)
+            suspended?.resume(); suspended = nil
+            await stop.value
+            guard case .failure = await capture.result else { fatalError("late baseline success") }
+            precondition(cancelled)
+            if stage != "observer" { precondition(!observed) }
+            print("PASS shutdown cancels and joins suspended baseline \(stage)")
+        }
+        var verification: CheckedContinuation<Void, Never>?
+        var verificationCancelled = false
+        let checking = try HostedFunctionalActionTransport(
+            context: context, presentationID: UUID(),
+            verifyCurrent: {
+                await withCheckedContinuation { verification = $0 }
+                verificationCancelled = Task.isCancelled
+            }, observe: { _ in }, validatePayload: { _, _ in }, observeBeforeSend: { _ in },
+            observePersistentBefore: { _ in }, readPersistentBeforeConstruction: { nil })
+        let check = Task { @MainActor in try await checking.requireCurrent() }
+        while verification == nil { await Task.yield() }
+        var checkedDrain = false
+        let checkStop = Task { @MainActor in
+            await checking.shutdown(); checkedDrain = true
+        }
+        for _ in 0..<20 { await Task.yield() }
+        precondition(!checkedDrain)
+        verification?.resume(); verification = nil
+        await checkStop.value
+        guard case .failure = await check.result else { fatalError("late verifier success") }
+        precondition(verificationCancelled)
+        print("PASS shutdown joins independently requested currentness verification")
+        let failedBaseline = try HostedFunctionalActionTransport(
+            context: context, presentationID: UUID(), verifyCurrent: {}, observe: { _ in },
+            validatePayload: { _, _ in }, observeBeforeSend: { _ in },
+            observePersistentBefore: { _ in },
+            readPersistentBeforeConstruction: { throw HostedFunctionalActionError.invalid })
+        var constructed = false
+        do {
+            _ = try await HostedFunctionalActionNativeDriver.run(
+                context: context, transport: failedBaseline,
+                makeCase: {
+                    constructed = true; return InertCase()
+                })
+            fatalError("failed baseline accepted")
+        } catch {}
+        precondition(!constructed)
+        do {
+            _ = try failedBaseline.makeEngineClient();
+            fatalError("failed driver transport remained open")
+        } catch {}
+        print("PASS driver shuts down after baseline failure before construction")
         let fifth = try await transport()
         let request = ExtensionEngineRequest(
             presentationID: fifth.presentationID, operation: "keepAwake.ui.update")
