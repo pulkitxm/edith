@@ -98,6 +98,15 @@ export function journeyEnvelope(packages, revision) {
   };
 }
 
+export async function copyJourneyApplication(source, destination, copy = cp) {
+  await copy(source, destination, {
+    recursive: true,
+    force: false,
+    errorOnExist: true,
+    verbatimSymlinks: true,
+  });
+}
+
 export async function prepareJourney({
   root,
   directory,
@@ -173,11 +182,7 @@ export async function prepareJourney({
   await chmod(directory, 0o700);
   assert.equal(await realpath(directory), directory);
   const app = join(directory, "Host.app");
-  await cp(frozenHost, app, {
-    recursive: true,
-    force: false,
-    errorOnExist: true,
-  });
+  await copyJourneyApplication(frozenHost, app);
   const appInfo = info(join(app, "Contents/Info.plist"));
   plist(join(app, "Contents/Info.plist"), {
     ...appInfo,
@@ -199,7 +204,7 @@ export async function prepareJourney({
   };
   const replacement = join(directory, "replacement/Host.payload");
   await mkdir(dirname(replacement), { recursive: true, mode: 0o700 });
-  await cp(app, replacement, { recursive: true });
+  await copyJourneyApplication(app, replacement);
   plist(join(replacement, "Contents/Info.plist"), {
     ...info(join(replacement, "Contents/Info.plist")),
     CFBundleShortVersionString: "2.0.0",
