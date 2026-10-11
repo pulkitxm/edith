@@ -74,5 +74,5 @@ final class HerdrActionCase: HostedFunctionalActionCase {
         try await readAuthoritativeState(context: context)
     }
 
-    func shutdownPresentation() async { model.shutdown() }
+    func shutdownPresentation() async { await model.stopAndWait() }
 }
