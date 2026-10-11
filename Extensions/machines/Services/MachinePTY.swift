@@ -7,6 +7,7 @@ final class MachinePTY {
     static let maximumInputBytes = 16_384
     private let descriptor: Int32
     private let pid: pid_t
+    private let identity: ExtensionProcessIdentity?
     private var closed = false
     private var closing: Task<Void, Never>?
     private var pendingInput = Data()
@@ -30,6 +31,7 @@ final class MachinePTY {
         let spawned = try Self.spawn(launch, columns: columns, rows: rows)
         descriptor = spawned.master
         pid = spawned.pid
+        identity = ExtensionProcessIdentity.read(spawned.pid)
         _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
         _ = fcntl(descriptor, F_SETFL, O_NONBLOCK)
         do {
@@ -82,15 +84,20 @@ final class MachinePTY {
         pendingInput.removeAll()
         output.removeAll()
         reap()
-        guard exitCode == nil else { ExtensionCommandOwnership.release(pid); return }
-        _ = kill(-pid, SIGHUP)
-        _ = kill(pid, SIGHUP)
-        _ = kill(-pid, SIGKILL)
-        _ = kill(pid, SIGKILL)
+        let members = identity?.isAlive == true ? sessionMembers() : []
+        for member in members where member.isAlive { _ = kill(member.pid, SIGHUP) }
+        if identity?.isAlive == true, getpgid(pid) == pid { _ = kill(-pid, SIGHUP) }
+        if identity?.isAlive == true { _ = kill(pid, SIGHUP) }
+        for member in members where member.isAlive { _ = kill(member.pid, SIGKILL) }
+        if identity?.isAlive == true, getpgid(pid) == pid { _ = kill(-pid, SIGKILL) }
+        if identity?.isAlive == true { _ = kill(pid, SIGKILL) }
         let identifier = pid
         closing = Task.detached {
             var status: Int32 = 0
             while waitpid(identifier, &status, 0) < 0 && errno == EINTR {}
+            while members.contains(where: { $0.isAlive }) {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
             ExtensionCommandOwnership.release(identifier)
         }
     }
@@ -144,14 +151,31 @@ final class MachinePTY {
 
     private func reap() {
         guard exitCode == nil else { return }
-        var status: Int32 = 0
-        var result: pid_t
-        repeat { result = waitpid(pid, &status, WNOHANG) } while result < 0 && errno == EINTR
-        if result == pid {
-            let signal = status & 0x7f
-            exitCode = signal == 0 ? (status >> 8) & 0xff : 128 + signal
+        var information = siginfo_t()
+        var result: Int32
+        repeat {
+            result = waitid(P_PID, id_t(pid), &information, WEXITED | WNOHANG | WNOWAIT)
+        } while result < 0 && errno == EINTR
+        if result == 0, information.si_pid == pid {
+            exitCode =
+                information.si_code == CLD_EXITED
+                ? information.si_status : 128 + information.si_status
         } else if result < 0 && errno == ECHILD {
             exitCode = 255
+        }
+    }
+
+    private func sessionMembers() -> [ExtensionProcessIdentity] {
+        var identifiers = [pid_t](repeating: 0, count: 65_536)
+        let count = identifiers.withUnsafeMutableBytes {
+            proc_listallpids($0.baseAddress, Int32($0.count))
+        }
+        guard count > 0, count <= identifiers.count else { return [] }
+        return identifiers.prefix(Int(count)).compactMap { candidate in
+            guard candidate > 1, candidate != pid, getsid(candidate) == pid,
+                let identity = ExtensionProcessIdentity.read(candidate)
+            else { return nil }
+            return identity
         }
     }
 

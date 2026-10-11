@@ -7,6 +7,7 @@ final class OwnedTerminalPTY {
     static let maximumInputBytes = 16_384
     private let descriptor: Int32
     private let pid: pid_t
+    private let identity: ExtensionProcessIdentity?
     private var closed = false
     private var pendingInput = Data()
     private var output = Data()
@@ -29,6 +30,7 @@ final class OwnedTerminalPTY {
         let spawned = try Self.spawn(launch, columns: columns, rows: rows)
         descriptor = spawned.master
         pid = spawned.pid
+        identity = ExtensionProcessIdentity.read(spawned.pid)
         _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
         _ = fcntl(descriptor, F_SETFL, O_NONBLOCK)
         do {
@@ -83,16 +85,17 @@ final class OwnedTerminalPTY {
         pendingInput.removeAll()
         output.removeAll()
         observeExit()
-        let members = sessionMembers()
+        let members = identity?.isAlive == true ? sessionMembers() : []
         for member in members where member.isAlive { _ = kill(member.pid, SIGHUP) }
-        _ = kill(-pid, SIGHUP)
-        _ = kill(pid, SIGHUP)
+        if identity?.isAlive == true, getpgid(pid) == pid { _ = kill(-pid, SIGHUP) }
+        if identity?.isAlive == true { _ = kill(pid, SIGHUP) }
         for member in members where member.isAlive { _ = kill(member.pid, SIGKILL) }
-        _ = kill(-pid, SIGKILL)
-        _ = kill(pid, SIGKILL)
-        ExtensionCommandOwnership.release(pid)
+        if identity?.isAlive == true, getpgid(pid) == pid { _ = kill(-pid, SIGKILL) }
+        if identity?.isAlive == true { _ = kill(pid, SIGKILL) }
         var status: Int32 = 0
         while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
+        while members.contains(where: { $0.isAlive }) { usleep(10_000) }
+        ExtensionCommandOwnership.release(pid)
     }
 
     private func poll(after cursor: UInt64) throws {
