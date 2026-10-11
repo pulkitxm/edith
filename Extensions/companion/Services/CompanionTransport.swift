@@ -31,6 +31,7 @@ final class CompanionTransport: @unchecked Sendable {
                 let retirement = CompanionSessionRetirement()
                 let session = URLSession(
                     configuration: configuration, delegate: retirement, delegateQueue: nil)
+                retirement.retain(session)
                 currentRetirement = retirement
                 current = session
                 return session
@@ -82,19 +83,45 @@ final class CompanionTransport: @unchecked Sendable {
 private final class CompanionSessionRetirement: NSObject, URLSessionDelegate, @unchecked Sendable {
     private let finished: AsyncStream<Void>.Continuation
     private let returned: Task<Void, Never>
+    private let ownership: CompanionSessionOwnership
 
     override init() {
         let response = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
         finished = response.continuation
-        returned = Task { for await _ in response.stream {} }
+        let ownership = CompanionSessionOwnership()
+        self.ownership = ownership
+        returned = Task {
+            for await _ in response.stream {}
+            await ownership.waitAndRelease()
+        }
         super.init()
     }
+
+    func retain(_ session: URLSession) { ownership.retain(session) }
 
     func urlSession(_ session: URLSession, didBecomeInvalidWithError error: Error?) {
         finished.finish()
     }
 
     func wait() async { await returned.value }
+}
+
+private final class CompanionSessionOwnership: @unchecked Sendable {
+    private let lock = NSLock()
+    private var session: URLSession?
+
+    func retain(_ original: URLSession) { lock.withLock { session = original } }
+
+    func waitAndRelease() async {
+        guard let original = lock.withLock({ session }) else { return }
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                original.delegateQueue.waitUntilAllOperationsAreFinished()
+                continuation.resume()
+            }
+        }
+        lock.withLock { session = nil }
+    }
 }
 
 final class CompanionTransportTaskOwner: @unchecked Sendable {
