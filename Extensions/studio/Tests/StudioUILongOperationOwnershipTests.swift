@@ -32,6 +32,7 @@ import Testing
         #expect(!joined && !joinedAgain && !returned)
         continuation?.resume()
         continuation = nil
+        try await wait { joined && joinedAgain }
         await first.value
         await second.value
         #expect(joined && joinedAgain && returned)
@@ -40,7 +41,7 @@ import Testing
         let count = observations.count
         for _ in 0..<30 { await Task.yield() }
         #expect(observations.count == count)
-        await work.stopAndWait()
+        try await stop(work)
     }
 
     @Test func structuredProgressPreservesCompletedResult() async throws {
@@ -63,7 +64,14 @@ import Testing
             from: work.invoke("studio.ui.work.read", payload: handle))
         #expect(final.progress == 1)
         #expect(final.result == Data("{\"result\":1}".utf8))
-        await work.stopAndWait()
+        try await stop(work)
+    }
+
+    private func stop(_ work: StudioUILongOperations) async throws {
+        var joined = false
+        let task = Task { await work.stopAndWait(); joined = true }
+        try await wait { joined }
+        await task.value
     }
 
     private func wait(_ condition: () -> Bool) async throws {
