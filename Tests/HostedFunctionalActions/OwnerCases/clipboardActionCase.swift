@@ -88,7 +88,7 @@ final class ClipboardActionCase: HostedFunctionalActionCase {
     }
 
     func shutdownPresentation() async {
-        presentation.stop()
+        await presentation.stopAndWait()
         await model.shutdown()
     }
 }
