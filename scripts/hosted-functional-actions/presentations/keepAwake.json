@@ -21,7 +21,7 @@
   "sources": [
     {
       "path": "Extensions/keepAwake/Runtime.swift",
-      "sha256": "b00cc9599bc1179b44478e56877cc7e28ab30006e8478141481333836a615407"
+      "sha256": "339eef12101fe94907551438d7e1200a945cb1e9b0a325ae52f006fe534ea75f"
     },
     {
       "path": "Extensions/keepAwake/Views/KeepAwakeSettings.swift",
