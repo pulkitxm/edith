@@ -10,6 +10,7 @@ public enum MarketplaceError: Error, Equatable, LocalizedError, Sendable {
     case checksumMismatch
     case packageNotInstalled
     case packageBusy
+    case packageCleanupPending
     case invalidBundle
     case dependencyInUse
 
@@ -22,6 +23,8 @@ public enum MarketplaceError: Error, Equatable, LocalizedError, Sendable {
         case .invalidArchive: "The extension package could not be installed safely."
         case .checksumMismatch: "The extension download did not match its published checksum."
         case .packageNotInstalled: "Download this extension before enabling it."
+        case .packageCleanupPending:
+            "Package files are awaiting cleanup. Try again."
         case .packageBusy: "An operation is already running for this extension."
         case .invalidBundle: "The extension bundle could not be loaded."
         case .dependencyInUse:

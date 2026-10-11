@@ -4,6 +4,7 @@ import Foundation
 
 public struct ExtensionPackageStore: Sendable {
     public let root: URL
+    var deletionCheckpoint: @Sendable (PackageDeletionCheckpoint) throws -> Void = { _ in }
 
     public init(root: URL) {
         self.root = root
@@ -101,6 +102,11 @@ public struct ExtensionPackageStore: Sendable {
         let operation = try PackageFileLock(
             url: root.appendingPathComponent(".operation.lock"), exclusive: true)
         defer { operation.close() }
+        return try removeLocked(id: id)
+    }
+
+    private func removeLocked(id: String) throws -> Bool {
+        try recoverDeletions()
         let packages = try installedPackages()
         guard !packages.contains(where: { $0.id != id && $0.dependencies.contains(id) }) else {
             throw MarketplaceError.dependencyInUse
@@ -110,11 +116,87 @@ public struct ExtensionPackageStore: Sendable {
             try PackageFileLock(url: leaseURL(for: package), exclusive: true)
         }
         defer { leases.forEach { $0.close() } }
-        let authority = try PackageDirectory(root, create: true)
-        for package in removed { try authority.remove(package) }
-        try saveSelections(selections().filter { $0.id != id })
-        try commit(packages.filter { $0.id != id })
+        try delete(removed, retaining: packages.filter { $0.id != id })
         return !removed.isEmpty
+    }
+
+    public func recoverPackageDeletions() throws {
+        let operation = try PackageFileLock(
+            url: root.appendingPathComponent(".operation.lock"), exclusive: true)
+        defer { operation.close() }
+        try recoverDeletions()
+    }
+
+    private func deletionIntent() throws -> [PackageDeletionLocation] {
+        guard
+            let data = try PackageDirectory(root, create: true).read(
+                "package-deletions.json", singleLink: true)
+        else { return [] }
+        let locations: [PackageDeletionLocation]
+        do {
+            locations = try JSONDecoder().decode([PackageDeletionLocation].self, from: data)
+        } catch { throw MarketplaceError.invalidCatalog }
+        guard locations.allSatisfy(\.valid),
+            locations == Array(Set(locations)).sorted(by: { $0.path < $1.path }),
+            try deletionData(locations) == data
+        else { throw MarketplaceError.invalidCatalog }
+        return locations
+    }
+
+    private func deletionData(_ locations: [PackageDeletionLocation]) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(locations)
+    }
+
+    private func delete(_ packages: [ExtensionPackage], retaining retained: [ExtensionPackage])
+        throws
+    {
+        guard !packages.isEmpty else { return }
+        let authority = try PackageDirectory(root, create: true)
+        for package in packages { _ = try authority.contains(package) }
+        let locations = Array(Set(packages.map(PackageDeletionLocation.init)))
+            .sorted { $0.path < $1.path }
+        try authority.write(deletionData(locations), name: "package-deletions.json")
+        try deletionCheckpoint(.intentWritten)
+        try commit(retained)
+        do {
+            try deletionCheckpoint(.installedWritten)
+            try finishDeletions(locations, installed: retained, authority: authority)
+        } catch { throw MarketplaceError.packageCleanupPending }
+    }
+
+    private func recoverDeletions() throws {
+        let locations = try deletionIntent()
+        guard !locations.isEmpty else { return }
+        let installed = try installedPackages()
+        let current = Set(installed.map(PackageDeletionLocation.init))
+        let absent = locations.filter { !current.contains($0) }
+        let leases: [PackageFileLock]
+        do {
+            leases = try absent.map {
+                try PackageFileLock(url: $0.leaseURL(root: root), exclusive: true)
+            }
+        } catch { throw MarketplaceError.packageCleanupPending }
+        defer { leases.forEach { $0.close() } }
+        do {
+            try finishDeletions(
+                absent, installed: installed, authority: PackageDirectory(root, create: true))
+        } catch { throw MarketplaceError.packageCleanupPending }
+    }
+
+    private func finishDeletions(
+        _ locations: [PackageDeletionLocation], installed: [ExtensionPackage],
+        authority: PackageDirectory
+    ) throws {
+        try saveSelections(selections().filter { installed.contains($0) })
+        try deletionCheckpoint(.selectionsWritten)
+        for location in locations {
+            try location.remove(in: authority)
+            try deletionCheckpoint(.payloadRemoved(location.path))
+        }
+        try deletionCheckpoint(.beforeIntentRemoval)
+        try authority.removeFile("package-deletions.json")
     }
 
     public func pendingRemovals() throws -> Set<String> {
@@ -128,21 +210,28 @@ public struct ExtensionPackageStore: Sendable {
     }
 
     public func requestRemoval(id: String) throws -> Bool {
+        guard ExtensionPackage.validComponent(id) else { throw MarketplaceError.invalidCatalog }
+        let operation = try PackageFileLock(
+            url: root.appendingPathComponent(".operation.lock"), exclusive: true)
+        defer { operation.close() }
         do {
-            _ = try remove(id: id)
+            _ = try removeLocked(id: id)
             try updatePendingRemoval(id: id, pending: false)
             return true
         } catch MarketplaceError.packageBusy {
-            guard ExtensionPackage.validComponent(id) else { throw MarketplaceError.invalidCatalog }
             try updatePendingRemoval(id: id, pending: true)
             return false
         }
     }
 
     public func completePendingRemovals() throws {
+        let operation = try PackageFileLock(
+            url: root.appendingPathComponent(".operation.lock"), exclusive: true)
+        defer { operation.close() }
+        try recoverDeletions()
         for id in try pendingRemovals().sorted() {
             do {
-                _ = try remove(id: id)
+                _ = try removeLocked(id: id)
                 try updatePendingRemoval(id: id, pending: false)
             } catch MarketplaceError.packageBusy {
                 continue
@@ -150,13 +239,19 @@ public struct ExtensionPackageStore: Sendable {
         }
     }
 
+    func cancelPendingRemovals(ids: Set<String>) throws {
+        let pending = try pendingRemovals()
+        guard !pending.isDisjoint(with: ids) else { return }
+        try savePendingRemovals(pending.subtracting(ids))
+    }
+
     private func updatePendingRemoval(id: String, pending: Bool) throws {
-        let file = root.appendingPathComponent("pending-removals.json")
-        let operation = try PackageFileLock(
-            url: file.appendingPathExtension("lock"), exclusive: true)
-        defer { operation.close() }
         var ids = try pendingRemovals()
         if pending { ids.insert(id) } else { ids.remove(id) }
+        try savePendingRemovals(ids)
+    }
+
+    private func savePendingRemovals(_ ids: Set<String>) throws {
         try PackageDirectory(root, create: true).write(
             JSONEncoder().encode(ids.sorted()), name: "pending-removals.json")
     }
@@ -178,10 +273,14 @@ public struct ExtensionPackageStore: Sendable {
         let operation = try PackageFileLock(
             url: root.appendingPathComponent(".operation.lock"), exclusive: true)
         defer { operation.close() }
+        try recoverDeletions()
         let packages = try installedPackages()
         let selected = try selections()
         let groups = Dictionary(grouping: packages) { "\($0.id)/\($0.architecture)" }
         var retained = packages
+        var removed: [ExtensionPackage] = []
+        var leases: [PackageFileLock] = []
+        defer { leases.forEach { $0.close() } }
         for group in groups.values {
             let ordered = group.sorted {
                 $0.version.compare($1.version, options: .numeric) == .orderedDescending
@@ -197,13 +296,12 @@ public struct ExtensionPackageStore: Sendable {
                 do {
                     lease = try PackageFileLock(url: leaseURL(for: package), exclusive: true)
                 } catch MarketplaceError.packageBusy { continue }
-                defer { lease.close() }
-                try PackageDirectory(root, create: true).remove(package)
+                leases.append(lease)
+                removed.append(package)
                 retained.removeAll { $0 == package }
             }
         }
-        try commit(retained)
-        try saveSelections(selected.filter { retained.contains($0) })
+        try delete(removed, retaining: retained)
     }
 
     public func diskBytes() -> Int64 {
@@ -221,6 +319,45 @@ public struct ExtensionPackageStore: Sendable {
         }
         return bytes
     }
+}
+
+enum PackageDeletionCheckpoint: Equatable, Sendable {
+    case intentWritten
+    case installedWritten
+    case selectionsWritten
+    case payloadRemoved(String)
+    case beforeIntentRemoval
+}
+
+private struct PackageDeletionLocation: Codable, Hashable {
+    let id: String
+    let hostABI: String
+    let architecture: String
+    let version: String
+
+    init(_ package: ExtensionPackage) {
+        id = package.id
+        hostABI = package.hostABI
+        architecture = package.architecture
+        version = package.version
+    }
+
+    var valid: Bool {
+        [id, hostABI, version].allSatisfy(ExtensionPackage.validComponent)
+            && ["arm64", "x86_64"].contains(architecture)
+    }
+
+    var path: String { "\(id)/\(hostABI)/\(architecture)/\(version)" }
+
+    func leaseURL(root: URL) -> URL {
+        root.appendingPathComponent(".leases").appendingPathComponent(
+            "\(id)-\(hostABI)-\(architecture)-\(version).lock")
+    }
+
+    func remove(in authority: PackageDirectory) throws {
+        try authority.child(id)?.child(hostABI)?.child(architecture)?.removeTree(version)
+    }
+
 }
 
 public final class PackageFileLock: @unchecked Sendable {
@@ -253,6 +390,36 @@ public final class PackageFileLock: @unchecked Sendable {
     }
 
     deinit { close() }
+}
+
+final class PackageInstallation {
+    private let parent: PackageDirectory
+    private let version: String
+    private let backup: String?
+    private var finished = false
+
+    init(parent: PackageDirectory, version: String, backup: String?) {
+        self.parent = parent
+        self.version = version
+        self.backup = backup
+    }
+
+    func commit() throws {
+        guard !finished else { return }
+        if let backup { try parent.removeTree(backup) }
+        finished = true
+    }
+
+    func rollback() throws {
+        guard !finished else { return }
+        try parent.removeTree(version)
+        if let backup {
+            guard renameat(parent.descriptor, backup, parent.descriptor, version) == 0 else {
+                throw PackageDirectory.failure()
+            }
+        }
+        finished = true
+    }
 }
 
 final class PackageDirectory {
@@ -396,13 +563,34 @@ final class PackageDirectory {
         guard unlinkat(descriptor, name, AT_REMOVEDIR) == 0 else { throw Self.failure() }
     }
 
-    func read(_ name: String) throws -> Data? {
+    func read(_ name: String, singleLink: Bool = false) throws -> Data? {
         let file = openat(descriptor, name, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
         if file < 0, errno == ENOENT { return nil }
         guard file >= 0 else { throw Self.failure() }
         defer { Darwin.close(file) }
         try Self.validate(file, directory: false, owned: true)
+        if singleLink {
+            var info = stat()
+            guard fstat(file, &info) == 0 else { throw Self.failure() }
+            guard info.st_nlink == 1 else { throw MarketplaceError.invalidArchive }
+        }
         return try FileHandle(fileDescriptor: file, closeOnDealloc: false).readToEnd() ?? Data()
+    }
+
+    func removeFile(_ name: String) throws {
+        let file = openat(descriptor, name, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
+        if file < 0, errno == ENOENT { return }
+        guard file >= 0 else { throw Self.failure() }
+        defer { Darwin.close(file) }
+        try Self.validate(file, directory: false, owned: true)
+        var opened = stat()
+        var current = stat()
+        guard fstat(file, &opened) == 0,
+            fstatat(descriptor, name, &current, AT_SYMLINK_NOFOLLOW) == 0,
+            opened.st_dev == current.st_dev, opened.st_ino == current.st_ino,
+            opened.st_nlink == 1
+        else { throw MarketplaceError.invalidArchive }
+        guard unlinkat(descriptor, name, 0) == 0 else { throw Self.failure() }
     }
 
     func write(_ data: Data, name: String) throws {
@@ -419,7 +607,12 @@ final class PackageDirectory {
         guard renameat(descriptor, temporary, descriptor, name) == 0 else { throw Self.failure() }
     }
 
-    func install(_ package: ExtensionPackage, from source: URL) throws {
+    func install(
+        _ package: ExtensionPackage, from source: URL,
+        rename: (Int32, String, Int32, String) -> Int32 = {
+            renameat($0, $1, $2, $3)
+        }
+    ) throws -> PackageInstallation {
         guard let parent = try parent(package, create: true) else {
             throw MarketplaceError.invalidArchive
         }
@@ -429,10 +622,29 @@ final class PackageDirectory {
         }
         defer { try? parent.removeTree(temporary) }
         try destination.copy(from: PackageDirectory(source, create: false))
-        try parent.removeTree(package.version)
-        guard renameat(parent.descriptor, temporary, parent.descriptor, package.version) == 0 else {
-            throw Self.failure()
+        let backup =
+            try parent.child(package.version) == nil
+            ? nil : ".backup-\(UUID().uuidString)"
+        if let backup {
+            guard rename(parent.descriptor, package.version, parent.descriptor, backup) == 0 else {
+                throw Self.failure()
+            }
         }
+        do {
+            guard rename(parent.descriptor, temporary, parent.descriptor, package.version) == 0
+            else {
+                throw Self.failure()
+            }
+        } catch {
+            if let backup {
+                guard renameat(parent.descriptor, backup, parent.descriptor, package.version) == 0
+                else {
+                    throw Self.failure()
+                }
+            }
+            throw error
+        }
+        return PackageInstallation(parent: parent, version: package.version, backup: backup)
     }
 
     private func copy(from source: PackageDirectory) throws {
