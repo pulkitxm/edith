@@ -207,6 +207,15 @@ final class AppMaintenanceModel {
     }
 
     func refreshRemote() async {
+        guard let task = track({ [self] in await refreshRemoteWork() }) else { return }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func refreshRemoteWork() async {
         guard let engineClient, !stopped, !suspending else { return }
         let revision = remoteRevision
         do {

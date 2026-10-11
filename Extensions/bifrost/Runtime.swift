@@ -15,6 +15,7 @@ final class ExtensionRuntime: NSObject {
     private var cliStreams: ExtensionCLIStreams?
     private var stopped = false
     private var activeCalls = 0
+    private var commandDrain: Task<Void, Never>?
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -44,10 +45,38 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginCommandDrain() -> Task<Void, Never> {
+        let owner = worker
+        let streams = cliStreams
+        _ = commands.suspend()
+        if let commandDrain { return commandDrain }
+        owner?.cancelPendingCommands()
+        streams?.stop()
+        let task = Task { [self] in
+            _ = await commands.suspendAndWait()
+            await owner?.drain()
+            await streams?.stopAndWait()
+        }
+        commandDrain = task
+        return task
+    }
+
     @objc(prepareDisableWithCompletion:)
     func prepareDisable(completion: @escaping (NSError?) -> Void) {
-        Task {
-            do { try await worker?.prepareDisable(); completion(nil) } catch {
+        let drain = beginCommandDrain()
+        let owner = worker
+        Task { [self] in
+            await drain.value
+            do { try await owner?.prepareDisable(); completion(nil) } catch {
                 completion(error as NSError)
             }
         }
@@ -55,12 +84,14 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
         stopped = true
         let streams = cliStreams; cliStreams = nil; streams?.stop()
         commands.shutdown()
         let stopping = worker
         stopping?.shutdown()
-        Task {
+        Task { [self] in
+            await drain.value
             await stopping?.drain()
             while activeCalls > 0 { await Task.yield() }
             await streams?.stopAndWait()
@@ -80,6 +111,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
+            guard commandDrain == nil else { return ["ok": false] as NSDictionary }
             guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "bifrost", let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
@@ -92,6 +124,7 @@ final class ExtensionRuntime: NSObject {
             engineClient?.invalidate(); engineClient = nil
             TextEditingCommands.shutdown()
         case "start":
+            guard commandDrain == nil else { return ["ok": false] as NSDictionary }
             guard !stopped, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
                 SurfaceHostContext.current != nil

@@ -11,6 +11,8 @@ final class ExtensionRuntime: NSObject {
     private var model: CleanerModel?
     private var uiModel: CleanerModel?
     private var uiClient: ExtensionEngineClient?
+    private var commandDrain: Task<Void, Never>?
+    private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
     private let cliStreams = try? ExtensionCLIStreams(owner: "cleaner")
 
@@ -45,13 +47,45 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginCommandDrain() -> Task<Void, Never> {
+        let owner = model
+        let uiOwner = uiModel
+        let streams = cliStreams
+        _ = commands.suspend()
+        if let commandDrain { return commandDrain }
+        owner?.cancelPendingCommands()
+        uiOwner?.cancelPendingCommands()
+        streams?.stop()
+        let task = Task { [self] in
+            _ = await commands.suspendAndWait()
+            await owner?.cancelAndWait()
+            await uiOwner?.cancelAndWait()
+            await streams?.stopAndWait()
+            while let task = uiDrains.values.first { await task.value }
+        }
+        commandDrain = task
+        return task
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        model?.stopBackgroundEstimates()
-        Task {
+        let drain = beginCommandDrain()
+        let owner = model
+        stopUI()
+        Task { [self] in
+            await drain.value
             await commands.shutdownAndWait()
-            await cliStreams?.stopAndWait()
-            await model?.shutdown()
+            await owner?.shutdown()
+            while let task = uiDrains.values.first { await task.value }
             completion()
         }
     }
@@ -67,6 +101,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
+            guard commandDrain == nil else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -77,6 +112,7 @@ final class ExtensionRuntime: NSObject {
                 }
             }
         case "configureUI":
+            guard commandDrain == nil, uiDrains.count < 8 else { return ["ok": false] as NSDictionary }
             guard let configuration = ExtensionUIConfiguration(context: input),
                 let client = configuration.engineClient,
                 let defaults = UserDefaults(suiteName: configuration.defaultsSuite)
@@ -104,7 +140,12 @@ final class ExtensionRuntime: NSObject {
     private func stopUI() {
         let model = uiModel; uiModel = nil
         uiClient?.invalidate(); uiClient = nil
-        Task { await model?.shutdown() }
+        model?.cancelPendingCommands()
+        let id = UUID()
+        uiDrains[id] = Task { [self] in
+            defer { uiDrains[id] = nil }
+            await model?.shutdown()
+        }
     }
 }
 

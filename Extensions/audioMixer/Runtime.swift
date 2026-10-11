@@ -11,6 +11,8 @@ final class ExtensionRuntime: NSObject {
     private var uiClient: ExtensionEngineClient?
     private var engine: AnyObject?
     private var surface: AnyObject?
+    private var commandDrain: Task<Void, Never>?
+    private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -73,6 +75,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
+            guard commandDrain == nil else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
                 SurfaceHostContext.current != nil
@@ -83,6 +86,7 @@ final class ExtensionRuntime: NSObject {
                 surface = AudioMixerSurface(engine: mixer)
             }
         case "configureUI":
+            guard commandDrain == nil, uiDrains.count < 8 else { return ["ok": false] as NSDictionary }
             guard let configuration = ExtensionUIConfiguration(context: input),
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
@@ -118,15 +122,57 @@ final class ExtensionRuntime: NSObject {
     }
 
     private func stopUI() {
-        if #available(macOS 14.4, *) { (uiModel as? AudioMixerRemoteModel)?.stop() }
+        if #available(macOS 14.4, *), let owner = uiModel as? AudioMixerRemoteModel {
+            owner.stop()
+            let id = UUID()
+            uiDrains[id] = Task { [self] in
+                defer { uiDrains[id] = nil }
+                await owner.stopAndWait()
+            }
+        }
         uiModel = nil; uiClient?.invalidate(); uiClient = nil
+    }
+
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
+    private func beginCommandDrain() -> Task<Void, Never> {
+        let owner = engine
+        let uiOwner = uiModel
+        _ = commands.suspend()
+        if let commandDrain { return commandDrain }
+        if #available(macOS 14.4, *) {
+            (owner as? MixerEngine)?.cancelPendingCommands()
+            (uiOwner as? AudioMixerRemoteModel)?.stop()
+        }
+        let task = Task { [self] in
+            _ = await commands.suspendAndWait()
+            if #available(macOS 14.4, *) {
+                await (owner as? MixerEngine)?.cancelAndWait()
+                await (uiOwner as? AudioMixerRemoteModel)?.stopAndWait()
+            }
+            while let task = uiDrains.values.first { await task.value }
+        }
+        commandDrain = task
+        return task
     }
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        Task {
+        let drain = beginCommandDrain()
+        let owner = engine
+        stopUI()
+        Task { [self] in
+            await drain.value
             await commands.shutdownAndWait()
-            if #available(macOS 14.4, *) { (engine as? MixerEngine)?.shutdown() }
+            if #available(macOS 14.4, *) { await (owner as? MixerEngine)?.shutdownAndWait() }
+            while let task = uiDrains.values.first { await task.value }
             completion()
         }
     }

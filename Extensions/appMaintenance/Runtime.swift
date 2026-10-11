@@ -62,13 +62,13 @@ final class ExtensionRuntime: NSObject {
     }
 
     private func beginCommandDrain() -> Task<Void, Never> {
-        _ = commands.suspend()
-        if let commandDrain { return commandDrain }
         let owner = model
         let uiOwner = uiModel
+        let streams = cliStreams
+        _ = commands.suspend()
+        if let commandDrain { return commandDrain }
         owner?.cancelPendingCommands()
         uiOwner?.cancelPendingCommands()
-        let streams = cliStreams
         streams?.stop()
         let task = Task { [self] in
             _ = await commands.suspendAndWait()
@@ -106,6 +106,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
+            guard commandDrain == nil else { return ["ok": false] as NSDictionary }
             guard !stopped, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -116,6 +117,7 @@ final class ExtensionRuntime: NSObject {
                 }
             }
         case "configureUI":
+            guard commandDrain == nil, uiDrains.count < 8 else { return ["ok": false] as NSDictionary }
             guard let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "appMaintenance", !configuration.uiOnly,
                 let client = configuration.engineClient
@@ -170,6 +172,7 @@ final class ExtensionRuntime: NSObject {
         guard location != "settings" || (input["tile"] == nil && input["target"] == nil) else {
             return false
         }
+        guard commandDrain == nil, uiDrains.count < 8 else { return false }
         stopUI()
         uiClient = client
         uiLocation = location

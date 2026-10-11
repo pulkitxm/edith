@@ -32,7 +32,9 @@ final class BifrostStore: FeatureModule {
     private var actionTasks: [UUID: Task<Void, Never>] = [:]
     private var observers: [NSObjectProtocol] = []
     private var isShutDown = false
-    private var drainingTasks: [Task<Void, Never>] = []
+    private var suspending = false
+    private var modeEpoch = UUID()
+    private var ownedTasks: [UUID: Task<Void, Never>] = [:]
     private let store: UserDefaults
     private let indexStore: BifrostIndexStore
     private let rateStore: BifrostRateStore
@@ -88,40 +90,50 @@ final class BifrostStore: FeatureModule {
         guard startServices else { return }
         observers = [
             BifrostIPC.observe(BifrostIPC.Name.settingsChanged) { [weak self] in
-                Task { @MainActor in self?.adoptSettings() }
+                MainActor.assumeIsolated { self?.adoptSettings() }
             },
             BifrostIPC.observe(BifrostIPC.Name.requestBifrostReindex) { [weak self] in
-                Task { @MainActor in self?.reindex() }
+                MainActor.assumeIsolated { self?.reindex() }
             },
         ]
         if applications.isEmpty { reindex() }
         refreshRates()
     }
 
-    func shutdown() {
-        guard !isShutDown else { return }
-        isShutDown = true
-        drainingTasks =
-            [indexTask, sourcesTask, ratesTask, modeTask].compactMap { $0 }
-            + Array(actionTasks.values)
-        indexTask?.cancel()
-        indexTask = nil
-        sourcesTask?.cancel()
-        sourcesTask = nil
-        ratesTask?.cancel()
-        ratesTask = nil
-        modeTask?.cancel()
-        modeTask = nil
-        actionTasks.values.forEach { $0.cancel() }; actionTasks.removeAll()
+    private func track(
+        priority: TaskPriority = .userInitiated,
+        _ work: @escaping @Sendable () async -> Void
+    ) -> Task<Void, Never>? {
+        guard !suspending, !isShutDown, ownedTasks.count < 64 else { return nil }
+        let id = UUID()
+        let task = Task.detached(priority: priority) { [self] in
+            await work()
+            await retireTask(id)
+        }
+        ownedTasks[id] = task
+        return task
+    }
+
+    private func retireTask(_ id: UUID) { ownedTasks[id] = nil }
+
+    func cancelPendingCommands() {
+        suspending = true
+        modeEpoch = UUID()
+        for task in ownedTasks.values { task.cancel() }
+        for task in actionTasks.values { task.cancel() }
         for observer in observers { BifrostIPC.stopObserving(observer) }
         observers = []
     }
 
+    func shutdown() {
+        cancelPendingCommands()
+        isShutDown = true
+    }
+
     func drain() async {
-        shutdown()
-        let active = drainingTasks
-        for task in active { await task.value }
-        drainingTasks.removeAll()
+        cancelPendingCommands()
+        while let task = ownedTasks.values.first { await task.value }
+        while let task = actionTasks.values.first { await task.value }
     }
 
     var resultLimit: Int { BifrostSummary.resultLimit(store: store) }
@@ -174,8 +186,10 @@ final class BifrostStore: FeatureModule {
     }
 
     func loadMode(query: String, now: Date = Date()) {
-        guard mode != .launcher else { return }
+        guard !suspending, !isShutDown, mode != .launcher else { return }
         modeTask?.cancel()
+        let epoch = UUID()
+        modeEpoch = epoch
         isLoadingMode = true
         let mode = mode
         let scope = scope
@@ -183,28 +197,30 @@ final class BifrostStore: FeatureModule {
         case .launcher:
             return
         case .clipboard:
-            modeTask = Task.detached(priority: .userInitiated) { [weak self] in
+            modeTask = track(priority: .userInitiated) { [weak self] in
                 let entries = (try? await BifrostPeers.clipboardEntries()) ?? []
                 guard !Task.isCancelled else { return }
                 let results = BifrostClipboardFeed.results(
                     entries: entries, query: query, scope: scope.id, now: now)
-                await self?.publish(results, for: mode)
+                await self?.publish(results, for: mode, epoch: epoch)
             }
         case .files:
             let plan = BifrostSearchPlan(
                 query: query, root: scope.path, target: target, kind: searchKind,
                 machine: scope.machine)
-            modeTask = Task.detached(priority: .userInitiated) { [weak self] in
+            modeTask = track(priority: .userInitiated) { [weak self] in
                 let files = await BifrostFileSearch.search(plan: plan)
                 guard !Task.isCancelled else { return }
                 let results = BifrostFileSearch.results(files: files, now: now, query: query)
-                await self?.publish(results, for: mode)
+                await self?.publish(results, for: mode, epoch: epoch)
             }
         }
     }
 
-    private func publish(_ results: [BifrostResult], for mode: BifrostMode) {
-        guard !isShutDown, self.mode == mode else { return }
+    private func publish(_ results: [BifrostResult], for mode: BifrostMode, epoch: UUID) {
+        guard !suspending, !isShutDown, !suspending, modeEpoch == epoch, self.mode == mode else {
+            return
+        }
         modeResults = results
         isLoadingMode = false
         modeTask = nil
@@ -212,11 +228,11 @@ final class BifrostStore: FeatureModule {
     }
 
     func refreshRates(now: Date = Date()) {
-        guard !isShutDown, ratesTask == nil else { return }
+        guard !suspending, !isShutDown, ratesTask == nil else { return }
         if let rates, rates.isFresh(now: now) { return }
         let fetchRates = fetchRates
         let rateStore = rateStore
-        ratesTask = Task.detached(priority: .utility) { [weak self] in
+        ratesTask = track(priority: .utility) { [weak self] in
             let fetched = await fetchRates()
             guard !Task.isCancelled else {
                 await self?.finishRates(nil)
@@ -228,6 +244,7 @@ final class BifrostStore: FeatureModule {
     }
 
     private func ownAction(_ operation: @escaping @MainActor () async -> Void) {
+        guard !suspending, !isShutDown, actionTasks.count < 64 else { return }
         let token = UUID()
         actionTasks[token] = Task { [weak self] in
             await operation()
@@ -243,7 +260,7 @@ final class BifrostStore: FeatureModule {
 
     private func finishRates(_ fetched: BifrostRates?) {
         ratesTask = nil
-        guard !isShutDown, let fetched else { return }
+        guard !suspending, !isShutDown, let fetched else { return }
         rates = fetched
         revision += 1
     }
@@ -302,12 +319,12 @@ final class BifrostStore: FeatureModule {
     }
 
     func reindex() {
-        guard !isShutDown, !isIndexing else { return }
+        guard !suspending, !isShutDown, !isIndexing else { return }
         isIndexing = true
         indexTask?.cancel()
         let scan = scan
         let indexStore = indexStore
-        indexTask = Task.detached(priority: .utility) { [weak self] in
+        indexTask = track(priority: .utility) { [weak self] in
             let scanned = scan()
             guard !Task.isCancelled else {
                 await self?.finishIndexing(nil)
@@ -322,7 +339,7 @@ final class BifrostStore: FeatureModule {
     private func finishIndexing(_ index: BifrostIndex?) {
         isIndexing = false
         indexTask = nil
-        guard !isShutDown, let index else { return }
+        guard !suspending, !isShutDown, let index else { return }
         applications = index.applications
         indexedAt = index.generatedAt
         store.set(index.generatedAt.timeIntervalSince1970, forKey: AppStorageKeys.Bifrost.indexedAt)
@@ -341,6 +358,7 @@ final class BifrostStore: FeatureModule {
     }
 
     private func adoptSettings() {
+        guard !suspending, !isShutDown else { return }
         ledger = BifrostUsageLedger.load(from: store, key: AppStorageKeys.Bifrost.usage)
         commands = BifrostCommandCatalog.available(in: store)
         rebuildEntries()
@@ -348,7 +366,7 @@ final class BifrostStore: FeatureModule {
     }
 
     func refreshDynamicSources() {
-        guard !isShutDown else { return }
+        guard !suspending, !isShutDown else { return }
         let sources = BifrostSource.enabled(in: store)
         runningApplications =
             sources.contains(.runningApplications) ? BifrostRunningApps.applications() : []
@@ -360,7 +378,7 @@ final class BifrostStore: FeatureModule {
         }
         let hasShortcuts = !shortcutNames.isEmpty
         sourcesTask?.cancel()
-        sourcesTask = Task { [weak self] in
+        sourcesTask = track { [weak self] in
             let machines = (try? await BifrostRemoteSearch.machines()) ?? []
             var windows: [BifrostWindowHandle] = []
             if wantsWindows {
@@ -379,7 +397,7 @@ final class BifrostStore: FeatureModule {
     }
 
     private func adoptDynamicSources(windows: [BifrostWindowHandle], shortcuts: [String]) {
-        guard !isShutDown else { return }
+        guard !suspending, !isShutDown else { return }
         openWindows = windows
         if !shortcuts.isEmpty { shortcutNames = shortcuts }
         rebuildEntries()
