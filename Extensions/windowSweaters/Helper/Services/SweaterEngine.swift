@@ -41,15 +41,27 @@ final class SweaterEngine: FeatureModule {
         reconciler.start()
     }
 
-    func shutdown() {
+    func suspendWork() {
         reconciler?.stop()
-        reconciler = nil
+        tracker?.suspendWork()
+    }
+
+    func suspendAndWait() async {
+        suspendWork()
+        let reconciler = reconciler
+        let tracker = tracker
+        await reconciler?.stopAndWait()
+        await tracker?.suspendAndWait()
+    }
+
+    func shutdown() {
+        suspendWork()
         tracker?.shutDown()
-        tracker = nil
         renderer.flushCache()
     }
 
     func applySettings() {
+        guard tracker == nil || reconciler != nil else { return }
         if fixture != nil { current = SweaterState.settings(); return }
         guard let tracker else { return }
         let updated = SweaterState.settings()

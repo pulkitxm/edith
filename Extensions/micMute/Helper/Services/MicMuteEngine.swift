@@ -14,6 +14,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
     private(set) var muted = false
 
     private var stopped = false
+    private var draining = false
     private let panel = StatusItemPanel()
     private let muting: MicrophoneMuteSession
     private let fixture: WorkerFixtureAdmission?
@@ -58,28 +59,49 @@ final class MicMuteEngine: NSObject, FeatureModule {
         panel.close()
         HotKeyRegistrar.clear(HotKeyCatalog.micMute)
         apply(false)
-        if let listener = deviceListListener {
-            var address = Self.deviceListAddress
-            AudioObjectRemovePropertyListenerBlock(
-                AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, listener)
-            deviceListListener = nil
-        }
+        removeDeviceListener()
         if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
         statusItem = nil
     }
 
+    func suspendWork() {
+        draining = true
+        HotKeyRegistrar.clear(HotKeyCatalog.micMute)
+        removeDeviceListener()
+    }
+
+    func suspendAndWait() async {
+        suspendWork()
+        while deviceListListener != nil {
+            try? await Task.sleep(for: .milliseconds(10))
+            removeDeviceListener()
+        }
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+
+    private func removeDeviceListener() {
+        if let listener = deviceListListener {
+            var address = Self.deviceListAddress
+            let result = AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, listener)
+            if result == noErr { deviceListListener = nil }
+        }
+    }
+
     func toggle() { setMuted(!muted) }
 
-    func retry() { if !stopped { apply(muted) } }
+    func retry() { if !stopped, !draining { apply(muted) } }
 
     func syncSettings() {
-        guard fixture == nil else { return }
+        guard !stopped, !draining, fixture == nil else { return }
         HotKeyRegistrar.install(HotKeyCatalog.micMute) { [weak self] in self?.toggle() }
         updateStatusItemPresence()
     }
 
     func setMuted(_ on: Bool) {
-        guard !stopped, on != muted else { return }
+        guard !stopped, !draining, on != muted else { return }
         muted = on
         SharedDefaults.store.set(on, forKey: AppStorageKeys.Mic.muted)
         apply(on)
@@ -90,7 +112,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
     }
 
     func updateStatusItemPresence() {
-        guard fixture == nil else { return }
+        guard !stopped, !draining, fixture == nil else { return }
         let wanted =
             SharedDefaults.store.object(forKey: AppStorageKeys.Mic.muteInMenuBar) as? Bool ?? true
         if wanted, statusItem == nil {
@@ -144,8 +166,8 @@ final class MicMuteEngine: NSObject, FeatureModule {
     private func observeDeviceList() {
         var address = Self.deviceListAddress
         let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            Task { @MainActor in
-                guard let self, !self.stopped, self.muted else { return }
+            MainActor.assumeIsolated {
+                guard let self, !self.stopped, !self.draining, self.muted else { return }
                 self.apply(true)
             }
         }

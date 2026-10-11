@@ -42,6 +42,7 @@ final class PresenterDetector: FeatureModule {
     private let defaults: UserDefaults
     private let monitoring: Bool
     private var stopped = false
+    private let scanCallbacks = DispatchGroup()
 
     private var gateApps: Set<String>
     private var launchObserver: NSObjectProtocol?
@@ -133,6 +134,24 @@ final class PresenterDetector: FeatureModule {
     }
 
     func shutdown() {
+        suspendWork()
+        publish(active: false, reason: nil)
+    }
+
+    func suspendAndWait() async {
+        suspendWork()
+        await withCheckedContinuation { continuation in
+            scanCallbacks.notify(queue: scanQueue) { continuation.resume() }
+        }
+        await withCheckedContinuation { continuation in
+            scanQueue.async {
+                DispatchQueue.main.async { continuation.resume() }
+            }
+        }
+        await scanner.jev.shutdownAndWait()
+    }
+
+    func suspendWork() {
         guard !stopped else { return }
         stopped = true
         scanner.jev.shutdown()
@@ -152,7 +171,6 @@ final class PresenterDetector: FeatureModule {
         windowScanTimer = nil
         sessionTimer?.invalidate()
         sessionTimer = nil
-        publish(active: false, reason: nil)
     }
 
     func pauseUntilShareEnds() {
@@ -216,9 +234,12 @@ final class PresenterDetector: FeatureModule {
         let timer = DispatchSource.makeTimerSource(queue: scanQueue)
         timer.schedule(deadline: .now(), repeating: 3, leeway: .seconds(1))
         let scanner = scanner
+        let callbacks = scanCallbacks
+        callbacks.enter()
+        timer.setCancelHandler { callbacks.leave() }
         timer.setEventHandler { [weak self] in
             let outcome = scanner.scan()
-            Task { @MainActor in self?.applyScan(outcome) }
+            DispatchQueue.main.async { self?.applyScan(outcome) }
         }
         timer.resume()
         windowScanTimer = timer
@@ -237,7 +258,7 @@ final class PresenterDetector: FeatureModule {
         }
         guard monitoring, sessionTimer == nil else { return }
         sessionTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tickSession() }
+            MainActor.assumeIsolated { self?.tickSession() }
         }
         sessionTimer?.tolerance = 5
         tickSession()

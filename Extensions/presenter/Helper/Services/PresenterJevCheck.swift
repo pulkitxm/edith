@@ -57,10 +57,15 @@ final class PresenterJevCheck: @unchecked Sendable {
     func shutdown() {
         let task = lock.withLock {
             stopped = true
-            defer { inFlight = nil; answer = nil }
+            defer { answer = nil }
             return inFlight
         }
         task?.cancel()
+    }
+
+    func shutdownAndWait() async {
+        shutdown()
+        await settle()
     }
 
     func settle() async {
@@ -76,13 +81,13 @@ final class PresenterJevCheck: @unchecked Sendable {
     }
 
     private func ask(_ decider: PresenterDeciding, fingerprint: String, app: String) async {
+        defer { lock.withLock { inFlight = nil } }
         let probability = try? await decider.probability(windows: fingerprint)
         let reason =
             (probability ?? 0) >= Self.threshold ? "Jev: screen sharing in \(app)" : nil
         lock.withLock {
             guard !stopped, !Task.isCancelled else { return }
             answer = (fingerprint, reason)
-            inFlight = nil
         }
     }
 }

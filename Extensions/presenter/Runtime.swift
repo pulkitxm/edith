@@ -116,10 +116,26 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        _ = commands.suspend()
+        let service = service
+        service?.suspendWork()
+        Task { [self, service] in
+            _ = await commands.suspendAndWait()
+            await service?.suspendAndWait()
+            completion()
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        Task {
+        let service = service
+        service?.suspendWork()
+        commands.shutdown()
+        Task { [self, service] in
             await commands.shutdownAndWait()
+            await service?.suspendAndWait()
             _ = execute(["operation": "stop"])
             completion()
         }

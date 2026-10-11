@@ -17,12 +17,23 @@ final class SweaterWindowTracker {
     private let ownPID = getpid()
     private var settingsProvider: () -> SweaterRuntimeSettings
     private var orderCheckPending = false
+    private var stopped = false
+    private var tasks: [UUID: Task<Void, Never>] = [:]
+    private var callbacks: SweaterCallbackOwner?
     private var focusGeneration: UInt64 = 0
     private var focusDeadline: Double = 0
     private var resizeFollowUps: [SkyLight.WindowID: UInt64] = [:]
     private var resizeFollowUpCounter: UInt64 = 0
 
-    nonisolated(unsafe) static weak var active: SweaterWindowTracker?
+    private nonisolated static let callbackLock = NSLock()
+    private nonisolated(unsafe) static var activeCallbacks: SweaterCallbackOwner?
+
+    nonisolated static func forward(kind: Int, event: UInt32, window: UInt32 = 0, space: UInt64 = 0)
+    {
+        callbackLock.withLock {
+            activeCallbacks?.submit(kind: kind, event: event, window: window, space: space)
+        }
+    }
 
     var onActivity: (() -> Void)?
 
@@ -31,13 +42,48 @@ final class SweaterWindowTracker {
     init(settings: @escaping () -> SweaterRuntimeSettings) {
         connection = SweaterWindowServer.mainConnection
         settingsProvider = settings
-        Self.active = self
+        let callbacks = SweaterCallbackOwner { [weak self] kind, event, window, space in
+            guard let self, !self.stopped else { return }
+            switch kind {
+            case 0: self.handleSpawn(event: event, payload: .init(space: space, window: window))
+            case 1: self.handleModify(event: event, window: window)
+            default: self.handleSimple(event: event)
+            }
+        }
+        self.callbacks = callbacks
+        Self.callbackLock.withLock { Self.activeCallbacks = callbacks }
         registerEvents()
     }
 
+    func suspendWork() {
+        stopped = true
+        callbacks?.close()
+        Self.callbackLock.withLock {
+            if Self.activeCallbacks === callbacks { Self.activeCallbacks = nil }
+        }
+        onActivity = nil
+        for task in tasks.values { task.cancel() }
+    }
+
+    func suspendAndWait() async {
+        suspendWork()
+        let pending = Array(tasks.values)
+        for task in pending { await task.value }
+        await callbacks?.wait()
+    }
+
     func shutDown() {
+        suspendWork()
         removeAll()
-        if Self.active === self { Self.active = nil }
+    }
+
+    private func launch(_ operation: @escaping @MainActor () async -> Void) {
+        guard !stopped else { return }
+        let id = UUID()
+        tasks[id] = Task { [self] in
+            defer { tasks[id] = nil }
+            await operation()
+        }
     }
 
     private func registerEvents() {
@@ -173,9 +219,10 @@ final class SweaterWindowTracker {
         resizeFollowUpCounter += 1
         let token = resizeFollowUpCounter
         resizeFollowUps[window] = token
-        Task { @MainActor [weak self] in
+        launch { [weak self] in
             try? await Task.sleep(for: .milliseconds(32))
-            guard let self, self.resizeFollowUps[window] == token else { return }
+            guard let self, !self.stopped, !Task.isCancelled, self.resizeFollowUps[window] == token
+            else { return }
             self.resizeFollowUps.removeValue(forKey: window)
             self.borders[window]?.updateGeometry(settings: self.settings)
         }
@@ -193,26 +240,28 @@ final class SweaterWindowTracker {
     }
 
     func scheduleOrderCheck() {
-        guard !orderCheckPending else { return }
+        guard !stopped, !orderCheckPending else { return }
         orderCheckPending = true
-        Task { @MainActor [weak self] in
+        launch { [weak self] in
             try? await Task.sleep(for: .milliseconds(30))
-            guard let self else { return }
+            guard let self, !self.stopped, !Task.isCancelled else { return }
             self.orderCheckPending = false
             self.reorderAll()
         }
     }
 
     func scheduleFocusCheck(afterMilliseconds delay: Int) {
+        guard !stopped else { return }
         let now = CFAbsoluteTimeGetCurrent()
         let deadline = now + Double(delay) / 1000
         if focusDeadline != 0, focusDeadline <= deadline { return }
         focusDeadline = deadline
         focusGeneration += 1
         let generation = focusGeneration
-        Task { @MainActor [weak self] in
+        launch { [weak self] in
             try? await Task.sleep(for: .milliseconds(delay))
-            guard let self, self.focusGeneration == generation else { return }
+            guard let self, !self.stopped, !Task.isCancelled, self.focusGeneration == generation
+            else { return }
             self.focusDeadline = 0
             self.determineAndFocusActiveWindow()
         }
@@ -340,9 +389,8 @@ private let sweaterSpawnHandler:
         event, data, length, _ in
         guard let data, length >= MemoryLayout<SweaterSpawnPayload>.size else { return }
         let payload = data.loadUnaligned(as: SweaterSpawnPayload.self)
-        Task { @MainActor in
-            SweaterWindowTracker.active?.handleSpawn(event: event, payload: payload)
-        }
+        SweaterWindowTracker.forward(
+            kind: 0, event: event, window: payload.window, space: payload.space)
     }
 
 private let sweaterModifyHandler:
@@ -351,21 +399,18 @@ private let sweaterModifyHandler:
         guard let data, length >= MemoryLayout<UInt32>.size else { return }
         let window = data.loadUnaligned(as: UInt32.self)
         guard window != 0 else { return }
-        Task { @MainActor in
-            SweaterWindowTracker.active?.handleModify(event: event, window: window)
-        }
+        SweaterWindowTracker.forward(kind: 1, event: event, window: window)
     }
 
 private let sweaterSimpleHandler:
     @convention(c) (UInt32, UnsafeMutableRawPointer?, Int, UnsafeMutableRawPointer?) -> Void = {
         event, _, _, _ in
-        Task { @MainActor in
-            SweaterWindowTracker.active?.handleSimple(event: event)
-        }
+        SweaterWindowTracker.forward(kind: 2, event: event)
     }
 
 extension SweaterWindowTracker {
     func handleSpawn(event: UInt32, payload: SweaterSpawnPayload) {
+        guard !stopped else { return }
         onActivity?()
         let window = payload.window
         let space = payload.space
@@ -388,6 +433,7 @@ extension SweaterWindowTracker {
     }
 
     func handleModify(event: UInt32, window: SkyLight.WindowID) {
+        guard !stopped else { return }
         onActivity?()
         if borders[window] == nil {
             if event == SweaterEvent.windowMove || event == SweaterEvent.windowResize { return }
@@ -419,15 +465,47 @@ extension SweaterWindowTracker {
     }
 
     func handleSimple(event: UInt32) {
+        guard !stopped else { return }
         onActivity?()
         if event == SweaterEvent.spaceChange {
-            Task { @MainActor [weak self] in
+            launch { [weak self] in
                 try? await Task.sleep(for: .milliseconds(20))
-                self?.drawBordersOnCurrentSpaces()
+                guard let self, !self.stopped, !Task.isCancelled else { return }
+                self.drawBordersOnCurrentSpaces()
             }
         } else {
             scheduleFocusCheck(afterMilliseconds: 50)
             scheduleOrderCheck()
+        }
+    }
+}
+
+private final class SweaterCallbackOwner: @unchecked Sendable {
+    private let lock = NSLock()
+    private let pending = DispatchGroup()
+    private var closed = false
+    private let handler: @MainActor @Sendable (Int, UInt32, UInt32, UInt64) -> Void
+
+    init(handler: @escaping @MainActor @Sendable (Int, UInt32, UInt32, UInt64) -> Void) {
+        self.handler = handler
+    }
+
+    func submit(kind: Int, event: UInt32, window: UInt32, space: UInt64) {
+        lock.withLock {
+            guard !closed else { return }
+            pending.enter()
+            DispatchQueue.main.async { [self] in
+                defer { pending.leave() }
+                handler(kind, event, window, space)
+            }
+        }
+    }
+
+    func close() { lock.withLock { closed = true } }
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            pending.notify(queue: .global(qos: .utility)) { continuation.resume() }
         }
     }
 }

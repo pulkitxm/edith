@@ -88,6 +88,7 @@ final class SweaterReconciler {
 
     private unowned let tracker: SweaterWindowTracker
     private var task: Task<Void, Never>?
+    private var stopped = false
     private var idleWait: Task<Void, Never>?
     private var hotUntil = 0.0
     private var previous: [SkyLight.WindowID: SweaterObservedWindow] = [:]
@@ -100,12 +101,13 @@ final class SweaterReconciler {
     }
 
     func wake() {
+        guard !stopped else { return }
         hotUntil = CFAbsoluteTimeGetCurrent() + Self.settleInterval
         idleWait?.cancel()
     }
 
     func start() {
-        guard task == nil else { return }
+        guard !stopped, task == nil else { return }
         hotUntil = CFAbsoluteTimeGetCurrent() + Self.settleInterval
         task = Task { @MainActor [weak self] in
             while !Task.isCancelled {
@@ -144,13 +146,22 @@ final class SweaterReconciler {
     }
 
     func stop() {
+        stopped = true
         task?.cancel()
-        task = nil
         idleWait?.cancel()
-        idleWait = nil
         previous.removeAll()
         liveWindows.removeAll()
         liveWindowsExpiry = 0
+    }
+
+    func stopAndWait() async {
+        stop()
+        let task = task
+        let idleWait = idleWait
+        await task?.value
+        await idleWait?.value
+        self.task = nil
+        self.idleWait = nil
     }
 
     private func windowExists(_ window: SkyLight.WindowID) -> Bool {
