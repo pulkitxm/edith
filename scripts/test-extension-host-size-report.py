@@ -238,7 +238,7 @@ class HostSizeReportTests(unittest.TestCase):
         (self.packages / "sample.json").write_text(json.dumps({"id": "sample", "sourceFingerprint": "older-build"}))
         for fingerprints in [{}, {"sample": "current-build"}]:
             with self.assertRaisesRegex(ValueError, "Rebuild sample"):
-                self.interim_report({}, Path("missing-app"), self.packages,
+                self.interim_report({}, self.app, self.packages,
                     [{"id": "sample", "contractVersion": 1}], [{"id": "sample"}], fingerprints)
 
     def final_fixture(self):
@@ -548,6 +548,33 @@ class HostSizeReportTests(unittest.TestCase):
                 self.executable.write_bytes(b"changed during measurement")
             return result
         with patch.object(report, "verify_package_host", side_effect=inspect), self.assertRaisesRegex(ValueError, "changed during"):
+            report.build_report(self.baseline, self.app, self.packages, definitions, index, fingerprints, host,
+                expected_source_commit=source["sourceCommit"], source_state=source)
+
+    def test_final_rejects_metadata_changed_before_the_first_package_snapshot(self):
+        index, definitions, fingerprints, source, host = self.final_fixture()
+        snapshot = report.TreeSnapshot
+        def capture(directory):
+            if Path(directory) == self.packages:
+                path = self.packages / "sample0.json"
+                metadata = json.loads(path.read_text())
+                metadata["sourceFingerprint"] = "e" * 64
+                path.write_text(json.dumps(metadata))
+            return snapshot(directory)
+        with patch.object(report, "TreeSnapshot", side_effect=capture), self.assertRaisesRegex(ValueError, "Rebuild sample0"):
+            report.build_report(self.baseline, self.app, self.packages, definitions, index, fingerprints, host,
+                expected_source_commit=source["sourceCommit"], source_state=source)
+
+    def test_final_rejects_host_info_changed_after_its_last_read(self):
+        index, definitions, fingerprints, source, host = self.final_fixture()
+        read = report.read_bytes
+        info = self.app / "Contents/Info.plist"
+        def inspect(path):
+            data = read(path)
+            if Path(path) == info:
+                info.write_bytes(data + b"changed after final read")
+            return data
+        with patch.object(report, "read_bytes", side_effect=inspect), self.assertRaisesRegex(ValueError, "changed during measurement"):
             report.build_report(self.baseline, self.app, self.packages, definitions, index, fingerprints, host,
                 expected_source_commit=source["sourceCommit"], source_state=source)
 
