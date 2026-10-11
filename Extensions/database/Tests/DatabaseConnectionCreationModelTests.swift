@@ -253,6 +253,217 @@ struct DatabaseConnectionCreationModelTests {
             try await store.read(reference)
         }
     }
+
+    @Test("Closing creator admission rejects new work synchronously")
+    func closedAdmission() async throws {
+        let sender = DatabaseConnectionCreationSender(testSucceeds: true)
+        let model = DatabaseConnectionCreationModel(
+            sender: sender, secretStore: try InMemoryDatabaseSecretStore())
+        model.displayName = "Synthetic database"
+        model.username = "synthetic"
+        model.cancelPendingCommands()
+
+        model.selectEnvironment(.production)
+        model.updateConnectionURL("postgresql://synthetic@127.0.0.1/example")
+        await model.testConnection()
+        let saved = await model.saveConnection()
+        let combined = await model.testAndSaveConnection(applyPendingURL: true)
+        await model.cancelAndWait()
+
+        #expect(!model.canTest)
+        #expect(!model.canApplyConnectionURL)
+        #expect(!model.canSave)
+        #expect(saved == nil)
+        #expect(combined == nil)
+        #expect(model.phase == .editing)
+        #expect(model.environmentKind == .development)
+        #expect(model.connectionURL.isEmpty)
+        #expect((await sender.recordedRequests()).isEmpty)
+        #expect(model.isDrained)
+    }
+
+    @Test("Drain joins secret storage and deletion after cancellation")
+    func secretSynchronizationDrain() async throws {
+        let storing = DatabaseCreationOwnershipGate()
+        let deleting = DatabaseCreationOwnershipGate()
+        let store = DatabaseCreationOwnershipStore(storing: storing, deleting: deleting)
+        let sender = DatabaseConnectionCreationSender(testSucceeds: true)
+        let model = DatabaseConnectionCreationModel(sender: sender, secretStore: store)
+        model.displayName = "Synthetic database"
+        model.username = "synthetic"
+        model.password = "synthetic credential"
+        let testing = Task { await model.testConnection() }
+        await storing.waitUntilEntered()
+        model.cancelPendingCommands()
+        let draining = Task { await model.cancelAndWait() }
+        let secondDrain = Task { await model.discardUnsavedCredential() }
+        await storing.waitUntilCancelled()
+
+        #expect(!model.isDrained)
+        #expect((await sender.recordedRequests()).isEmpty)
+        #expect(await store.deleteCount() == 0)
+        await storing.release()
+        await deleting.waitUntilEntered()
+
+        #expect(!model.isDrained)
+        #expect(await store.deleteCount() == 1)
+        #expect((await sender.recordedRequests()).isEmpty)
+        await deleting.release()
+        await testing.value
+        await draining.value
+        await secondDrain.value
+
+        #expect(model.isDrained)
+        #expect(model.phase == .editing)
+        #expect(await store.deleteCount() == 1)
+        #expect(await store.valueCount() == 0)
+    }
+
+    @Test("Drain retains a noncooperative test until its real response")
+    func testResponseDrain() async throws {
+        let gate = DatabaseCreationOwnershipGate()
+        let store = DatabaseCreationOwnershipStore()
+        let sender = DatabaseCreationOwnershipSender(testing: gate)
+        let model = DatabaseConnectionCreationModel(sender: sender, secretStore: store)
+        model.displayName = "Synthetic database"
+        model.username = "synthetic"
+        model.password = "synthetic credential"
+        let testing = Task { await model.testConnection() }
+        await gate.waitUntilEntered()
+        model.cancelPendingCommands()
+        let draining = Task { await model.cancelAndWait() }
+        await gate.waitUntilCancelled()
+
+        #expect(!model.isDrained)
+        #expect(await store.valueCount() == 1)
+        #expect(await store.deleteCount() == 0)
+        await model.testConnection()
+        #expect((await sender.recordedRequests()).count == 1)
+        await gate.release()
+        await testing.value
+        await draining.value
+
+        #expect(model.phase == .editing)
+        #expect(model.isDrained)
+        #expect(await store.valueCount() == 0)
+        #expect(await store.deleteCount() == 1)
+    }
+
+    @Test("A committed save survives cancellation and repeated cleanup")
+    func successfulSaveAfterCancellation() async throws {
+        let gate = DatabaseCreationOwnershipGate()
+        let store = DatabaseCreationOwnershipStore()
+        let sender = DatabaseCreationOwnershipSender(saving: gate)
+        let model = DatabaseConnectionCreationModel(sender: sender, secretStore: store)
+        model.displayName = "Synthetic production database"
+        model.username = "synthetic"
+        model.password = "synthetic credential"
+        model.selectEnvironment(.production)
+        await model.testConnection()
+        #expect(model.canSave)
+        let saving = Task { await model.saveConnection() }
+        await gate.waitUntilEntered()
+        model.cancelPendingCommands()
+        let draining = Task { await model.cancelAndWait() }
+        let cleanup = Task { await model.discardUnsavedCredential() }
+        await gate.waitUntilCancelled()
+
+        #expect(!model.isDrained)
+        #expect(model.phase == .saving)
+        #expect(await store.deleteCount() == 0)
+        await gate.release()
+        let saved = try #require(await saving.value)
+        await draining.value
+        await cleanup.value
+        await model.discardUnsavedCredential()
+        model.invalidateTest()
+        model.selectEnvironment(.development)
+        await model.testConnection()
+
+        #expect(model.isDrained)
+        #expect(model.phase == .saved)
+        #expect(model.savedConnection == saved)
+        #expect(saved.environment.kind == .production)
+        #expect(saved.environment.protection == .confirmationRequired)
+        #expect(saved.readOnlyPolicy == .required)
+        #expect(saved.productionPolicy == .prohibitMutations)
+        #expect(model.environmentKind == .production)
+        #expect((await sender.recordedRequests()).count == 2)
+        let reference = try #require(saved.authentication.secretReferences.first)
+        #expect(try await store.read(reference) == Data("synthetic credential".utf8))
+        #expect(await store.deleteCount() == 0)
+    }
+
+    @Test("An unsuccessful save is joined before temporary credential cleanup")
+    func unsuccessfulSaveDrain() async throws {
+        let gate = DatabaseCreationOwnershipGate()
+        let store = DatabaseCreationOwnershipStore()
+        let sender = DatabaseCreationOwnershipSender(saving: gate, saveSucceeds: false)
+        let model = DatabaseConnectionCreationModel(sender: sender, secretStore: store)
+        model.displayName = "Synthetic database"
+        model.username = "synthetic"
+        model.password = "synthetic credential"
+        await model.testConnection()
+        let saving = Task { await model.saveConnection() }
+        await gate.waitUntilEntered()
+        let draining = Task { await model.cancelAndWait() }
+        await gate.waitUntilCancelled()
+
+        #expect(!model.isDrained)
+        #expect(await store.deleteCount() == 0)
+        await gate.release()
+        #expect(await saving.value == nil)
+        await draining.value
+
+        #expect(model.isDrained)
+        #expect(model.savedConnection == nil)
+        #expect(await store.valueCount() == 0)
+        #expect(await store.deleteCount() == 1)
+        guard case .failed = model.phase else {
+            Issue.record("Expected the actual failed save result.")
+            return
+        }
+    }
+
+    @Test("Page session retains replaced creators and closes later creators")
+    func sessionCreatorOwnership() async throws {
+        let gate = DatabaseCreationOwnershipGate()
+        let store = DatabaseCreationOwnershipStore()
+        let sender = DatabaseCreationOwnershipSender(saving: gate)
+        let session = DatabasePageSession(
+            sender: sender, repair: {}, prepare: { _ in }, secretStore: store)
+        weak var retained: DatabaseConnectionCreationModel?
+        var creator: DatabaseConnectionCreationModel? = session.connectionCreation()
+        retained = creator
+        creator?.displayName = "Synthetic database"
+        creator?.username = "synthetic"
+        creator?.password = "synthetic credential"
+        await creator?.testConnection()
+        let saving = Task { [model = try #require(creator)] in await model.saveConnection() }
+        await gate.waitUntilEntered()
+        creator = nil
+        let replacement = session.connectionCreation()
+        session.cancelPendingCommands()
+        let draining = Task { await session.cancelAndWait() }
+        await gate.waitUntilCancelled()
+        let late = session.connectionCreation()
+        await late.testConnection()
+
+        #expect(retained != nil)
+        #expect(!replacement.canTest)
+        #expect(!late.canTest)
+        #expect((await sender.recordedRequests()).count == 2)
+        #expect(await store.deleteCount() == 0)
+        await gate.release()
+        let saved = try #require(await saving.value)
+        await draining.value
+
+        let reference = try #require(saved.authentication.secretReferences.first)
+        #expect(try await store.read(reference) == Data("synthetic credential".utf8))
+        #expect(await store.deleteCount() == 0)
+        #expect(replacement.isDrained)
+    }
+
 }
 
 private actor DatabaseConnectionCreationSender: DatabaseBrokerCommandSending {
@@ -309,4 +520,131 @@ private actor DatabaseConnectionCreationSender: DatabaseBrokerCommandSending {
     func recordedRequests() -> [DatabaseBrokerCommandRequest] {
         requests
     }
+}
+
+private actor DatabaseCreationOwnershipGate {
+    private var entered = false
+    private var cancelled = false
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var enteredWaiters: [CheckedContinuation<Void, Never>] = []
+    private var cancelledWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func hold() async {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                self.continuation = continuation
+                entered = true
+                for waiter in enteredWaiters { waiter.resume() }
+                enteredWaiters.removeAll()
+            }
+        } onCancel: {
+            Task { await self.recordCancellation() }
+        }
+    }
+
+    func waitUntilEntered() async {
+        if entered { return }
+        await withCheckedContinuation { enteredWaiters.append($0) }
+    }
+
+    func waitUntilCancelled() async {
+        if cancelled { return }
+        await withCheckedContinuation { cancelledWaiters.append($0) }
+    }
+
+    func release() {
+        continuation?.resume()
+        continuation = nil
+    }
+
+    private func recordCancellation() {
+        cancelled = true
+        for waiter in cancelledWaiters { waiter.resume() }
+        cancelledWaiters.removeAll()
+    }
+}
+
+private actor DatabaseCreationOwnershipSender: DatabaseBrokerCommandSending {
+    private let responder = DatabaseConnectionCreationSender(testSucceeds: true)
+    private let testing: DatabaseCreationOwnershipGate?
+    private let saving: DatabaseCreationOwnershipGate?
+    private let saveSucceeds: Bool
+    private var requests: [DatabaseBrokerCommandRequest] = []
+
+    init(
+        testing: DatabaseCreationOwnershipGate? = nil,
+        saving: DatabaseCreationOwnershipGate? = nil,
+        saveSucceeds: Bool = true
+    ) {
+        self.testing = testing
+        self.saving = saving
+        self.saveSucceeds = saveSucceeds
+    }
+
+    func send(_ request: DatabaseBrokerCommandRequest) async throws -> DatabaseBrokerCommandResponse
+    {
+        requests.append(request)
+        switch request {
+        case .connectionTest:
+            await testing?.hold()
+        case .connectionSave:
+            await saving?.hold()
+            if !saveSucceeds {
+                return .connectionSave(
+                    .failure(
+                        DatabaseErrorEnvelope(
+                            category: .authenticationFailed, message: "Synthetic save failed."),
+                        metadata: DatabaseResultMetadata(
+                            completeness: DatabaseResultCompleteness(state: .complete))))
+            }
+        default:
+            throw DatabaseBrokerCommandClientError.invalidRequest
+        }
+        return try await responder.send(request)
+    }
+
+    func recordedRequests() -> [DatabaseBrokerCommandRequest] { requests }
+}
+
+private actor DatabaseCreationOwnershipStore: DatabaseSecretStore {
+    private let storing: DatabaseCreationOwnershipGate?
+    private let deleting: DatabaseCreationOwnershipGate?
+    private var values: [DatabaseSecretReference: Data] = [:]
+    private var deletions = 0
+
+    init(
+        storing: DatabaseCreationOwnershipGate? = nil,
+        deleting: DatabaseCreationOwnershipGate? = nil
+    ) {
+        self.storing = storing
+        self.deleting = deleting
+    }
+
+    func store(_ secret: Data, for reference: DatabaseSecretReference) async {
+        await storing?.hold()
+        values[reference] = secret
+    }
+
+    func storeIfAbsent(_ secret: Data, for reference: DatabaseSecretReference) async -> Data {
+        if let value = values[reference] { return value }
+        await store(secret, for: reference)
+        return secret
+    }
+
+    func read(_ reference: DatabaseSecretReference) throws -> Data {
+        guard let value = values[reference] else {
+            throw DatabaseSecretStoreError.notFound(reference)
+        }
+        return value
+    }
+
+    func delete(_ reference: DatabaseSecretReference) async {
+        deletions += 1
+        await deleting?.hold()
+        values[reference] = nil
+    }
+
+    func contains(_ reference: DatabaseSecretReference) -> Bool { values[reference] != nil }
+    func deleteCount() -> Int { deletions }
+    func valueCount() -> Int { values.count }
 }

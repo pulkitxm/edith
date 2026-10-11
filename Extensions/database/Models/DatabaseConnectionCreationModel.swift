@@ -38,6 +38,8 @@ final class DatabaseConnectionCreationModel: Identifiable {
     var environmentProtection = DatabaseEnvironmentProtection.confirmationRequired
     var readOnlyPolicy = DatabaseReadOnlyPolicy.disabled
     var productionPolicy = DatabaseProductionPolicy.requireMutationPreview
+    private(set) var savedConnection: DatabaseConnectionDefinition?
+    private(set) var isDrained = false
     private(set) var phase = DatabaseConnectionCreationPhase.editing
     private(set) var urlImportPhase = DatabaseConnectionURLImportPhase.editing
 
@@ -50,6 +52,9 @@ final class DatabaseConnectionCreationModel: Identifiable {
     private var testedPassword: String?
     private var storedSecret = false
     private var didSave = false
+    private let commandTasks = DatabaseTaskOwner()
+    private var operationInProgress = false
+    private var cleanupTask: Task<Void, Never>?
 
     init(
         sender: any DatabaseBrokerCommandSending = DatabaseWorkerClient(),
@@ -91,17 +96,19 @@ final class DatabaseConnectionCreationModel: Identifiable {
     }
 
     var canTest: Bool {
-        phase != .testing && phase != .saving
+        !commandTasks.closed && !didSave && !operationInProgress
+            && phase != .testing && phase != .saving
     }
 
     var canApplyConnectionURL: Bool {
-        !connectionURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        canTest && !connectionURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && phase != .testing
             && phase != .saving
     }
 
     var canSave: Bool {
-        guard case .tested = phase,
+        guard !commandTasks.closed, !didSave, !operationInProgress,
+            case .tested = phase,
             let testedDraft,
             let draft = try? makeDraft()
         else { return false }
@@ -109,6 +116,7 @@ final class DatabaseConnectionCreationModel: Identifiable {
     }
 
     func selectProduct(_ nextProduct: DatabaseProduct) {
+        guard canTest else { return }
         product = nextProduct
         port = String(DatabaseConnectionDraft.defaultPort(for: nextProduct))
         if nextProduct == .sqlite {
@@ -128,12 +136,14 @@ final class DatabaseConnectionCreationModel: Identifiable {
     }
 
     func updateConnectionURL(_ value: String) {
+        guard canTest else { return }
         connectionURL = value
         urlImportPhase = .editing
         invalidateTest()
     }
 
     func applyConnectionURL() {
+        guard canTest else { return }
         do {
             let parsed = try DatabaseConnectionURLParser.parse(
                 connectionURL,
@@ -159,6 +169,7 @@ final class DatabaseConnectionCreationModel: Identifiable {
     }
 
     func selectEnvironment(_ environment: DatabaseEnvironmentKind) {
+        guard canTest else { return }
         environmentKind = environment
         environmentLabel = environment.title
         if environment == .production {
@@ -174,6 +185,7 @@ final class DatabaseConnectionCreationModel: Identifiable {
     }
 
     func testAndSaveConnection(applyPendingURL: Bool) async -> DatabaseConnectionDefinition? {
+        guard canTest else { return nil }
         if applyPendingURL, canApplyConnectionURL {
             applyConnectionURL()
             if case .failed = urlImportPhase { return nil }
@@ -186,6 +198,7 @@ final class DatabaseConnectionCreationModel: Identifiable {
     }
 
     func chooseSQLiteFile() {
+        guard canTest else { return }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
@@ -200,10 +213,21 @@ final class DatabaseConnectionCreationModel: Identifiable {
     }
 
     func testConnection() async {
+        guard canTest else { return }
+        operationInProgress = true
+        defer { operationInProgress = false }
+        _ = try? await commandTasks.perform {
+            await self.performTestConnection()
+        }
+    }
+
+    private func performTestConnection() async {
         phase = .testing
         do {
             let draft = try makeDraft()
+            let testedPassword = password
             try await synchronizeSecret(for: draft)
+            try Task.checkCancellation()
             let definition = try draft.definition(createdAt: currentDate())
             let response = try await sender.send(
                 .connectionTest(DatabaseConnectionTestRequest(connection: definition)))
@@ -216,7 +240,7 @@ final class DatabaseConnectionCreationModel: Identifiable {
                     response.connectionTestResult?.error?.message)
             }
             testedDraft = draft
-            testedPassword = password
+            self.testedPassword = testedPassword
             let version = payload.productIdentity.version.map { " \($0.string)" } ?? ""
             phase = .tested(
                 "Connected to \(payload.productIdentity.product.displayName)\(version) in \(payload.latencyMilliseconds) ms."
@@ -235,12 +259,22 @@ final class DatabaseConnectionCreationModel: Identifiable {
     }
 
     func saveConnection() async -> DatabaseConnectionDefinition? {
+        guard !commandTasks.closed, !didSave, !operationInProgress else { return nil }
         guard canSave else {
             phase = .failed("Test the current connection details before saving.")
             return nil
         }
+        operationInProgress = true
+        defer { operationInProgress = false }
+        return try? await commandTasks.perform {
+            await self.performSaveConnection()
+        }
+    }
+
+    private func performSaveConnection() async -> DatabaseConnectionDefinition? {
         phase = .saving
         do {
+            try Task.checkCancellation()
             let draft = try makeDraft()
             let definition = try draft.definition(createdAt: currentDate())
             let response = try await sender.send(
@@ -253,6 +287,7 @@ final class DatabaseConnectionCreationModel: Identifiable {
                     response.connectionSaveResult?.error?.message)
             }
             didSave = true
+            savedConnection = payload.connection
             phase = .saved
             return payload.connection
         } catch {
@@ -262,6 +297,7 @@ final class DatabaseConnectionCreationModel: Identifiable {
     }
 
     func invalidateTest() {
+        guard !commandTasks.closed, !didSave else { return }
         if case .testing = phase { return }
         if case .saving = phase { return }
         testedDraft = nil
@@ -269,9 +305,24 @@ final class DatabaseConnectionCreationModel: Identifiable {
         phase = .editing
     }
 
+    func cancelPendingCommands() {
+        commandTasks.cancel()
+    }
+
+    func cancelAndWait() async {
+        cancelPendingCommands()
+        if cleanupTask == nil {
+            cleanupTask = Task {
+                await commandTasks.drain()
+                if !didSave { await discardSecret() }
+                isDrained = true
+            }
+        }
+        await cleanupTask?.value
+    }
+
     func discardUnsavedCredential() async {
-        guard !didSave else { return }
-        await discardSecret()
+        await cancelAndWait()
     }
 
     private func makeDraft() throws -> DatabaseConnectionDraft {
@@ -307,7 +358,7 @@ final class DatabaseConnectionCreationModel: Identifiable {
     }
 
     private func discardSecret() async {
-        guard storedSecret else { return }
+        guard storedSecret, !didSave else { return }
         try? await secretStore.delete(reference)
         storedSecret = false
     }

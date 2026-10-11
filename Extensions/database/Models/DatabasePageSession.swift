@@ -12,6 +12,8 @@ final class DatabasePageSession {
     let tables: DatabaseTableTabsModel
     let objects: DatabaseObjectExplorerModel
     let workspace: DatabaseWorkspaceModel
+    @ObservationIgnored private var creations: [UUID: DatabaseConnectionCreationModel] = [:]
+    @ObservationIgnored private var closed = false
     @ObservationIgnored private let makeCreation: @MainActor () -> DatabaseConnectionCreationModel
 
     init(
@@ -37,8 +39,19 @@ final class DatabasePageSession {
         makeCreation = { DatabaseConnectionCreationModel(sender: sender, secretStore: secretStore) }
     }
 
-    func connectionCreation() -> DatabaseConnectionCreationModel { makeCreation() }
+    func connectionCreation() -> DatabaseConnectionCreationModel {
+        creations = creations.filter { !$0.value.isDrained }
+        let creation = makeCreation()
+        guard !closed, creations.count < 256 else {
+            creation.cancelPendingCommands()
+            return creation
+        }
+        creations[creation.id] = creation
+        return creation
+    }
     func cancelPendingCommands() {
+        closed = true
+        for creation in creations.values { creation.cancelPendingCommands() }
         objects.cancelPendingCommands()
         tables.cancelPendingCommands()
         workspace.cancelPendingCommands()
@@ -49,6 +62,8 @@ final class DatabasePageSession {
 
     func cancelAndWait() async {
         cancelPendingCommands()
+        for creation in creations.values { await creation.cancelAndWait() }
+        creations.removeAll()
         await objects.cancelAndWait()
         await tables.cancelAndWait()
         await workspace.cancelAndWait()
