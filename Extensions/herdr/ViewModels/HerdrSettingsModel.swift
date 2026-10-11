@@ -17,7 +17,25 @@ import Observation
         self.init { operation, payload in try await client.invoke(operation, payload: payload) }
     }
 
-    func read() async { await perform("herdr.settings.read", payload: Data("{}".utf8)) }
+    func read() async {
+        guard !stopped else { return }
+        let task = work ?? start("herdr.settings.read", payload: Data("{}".utf8))
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func start(_ operation: String, payload: Data) -> Task<Void, Never> {
+        loading = true
+        let task = Task { [self] in
+            defer { work = nil }
+            await perform(operation, payload: payload)
+        }
+        work = task
+        return task
+    }
 
     func update(_ change: (inout HerdrAttentionSettings) -> Void) {
         guard !stopped, !loading else { return }
@@ -25,8 +43,8 @@ import Observation
         change(&next)
         next.stuckMinutes = min(120, max(2, next.stuckMinutes))
         guard let data = try? AgentPayload.encode(next) else { return }
-        work?.cancel()
-        work = Task { await perform("herdr.settings.save", payload: data) }
+        guard work == nil else { return }
+        _ = start("herdr.settings.save", payload: data)
     }
 
     private func perform(_ operation: String, payload: Data) async {
@@ -52,11 +70,15 @@ import Observation
         }
     }
 
+    func stopAndWait() async {
+        shutdown()
+        await work?.value
+    }
+
     func shutdown() {
         stopped = true
         generation += 1
         work?.cancel()
-        work = nil
         loading = false
     }
 }
