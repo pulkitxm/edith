@@ -119,6 +119,7 @@ public actor DownloadWorker {
     private var flights: [UUID: Flight] = [:]
     private var retiredFlights: [UUID: Task<Void, Never>] = [:]
     private var stopTask: Task<Void, Never>?
+    private var drainTask: Task<Void, Never>?
     private var started = false
     private var stopping = false
     private let generation = UUID()
@@ -203,15 +204,28 @@ public actor DownloadWorker {
         for task in estimates.values { task.cancel() }
     }
 
+    public func cancelPendingWorkAndWait() async {
+        cancelPendingWork()
+        if let drainTask { await drainTask.value; return }
+        let task = Task { await finishDrain() }
+        drainTask = task
+        await task.value
+    }
+
     public func stop() async {
         cancelPendingWork()
         if let stopTask { await stopTask.value; return }
-        let task = Task { await finishStop() }
+        let task = Task {
+            await cancelPendingWorkAndWait()
+            schedulerLease = nil
+            for continuation in subscribers.values { continuation.finish() }
+            subscribers.removeAll()
+        }
         stopTask = task
         await task.value
     }
 
-    private func finishStop() async {
+    private func finishDrain() async {
         let observation = observationTask
         let running = Array(flights.keys)
         for id in running { interrupt(id, reason: "Downloads stopped.") }
@@ -229,14 +243,11 @@ public actor DownloadWorker {
         for task in tasks { await task.value }
         for task in retired { await task.value }
         for task in Array(retiredFlights.values) { await task.value }
-        schedulerLease = nil
         for task in progressTasks { await task.value }
         for task in estimates { _ = await task.result }
         self.estimates.removeAll()
         notify()
         await publicationTask?.value
-        for continuation in subscribers.values { continuation.finish() }
-        subscribers.removeAll()
     }
 
     public func snapshot() -> DownloadWorkerSnapshot {

@@ -64,6 +64,22 @@ final class DownloadsWorker {
         downloader.cancelPendingWork()
         await queue.cancelPendingWork()
     }
+    private var drainTask: Task<Void, Never>?
+    func drain() async {
+        await cancelPendingWork()
+        if let drainTask { await drainTask.value; return }
+        let startup = startup
+        let downloader = downloader
+        let queue = queue
+        let task = Task { [startup, downloader, queue] in
+            await startup?.value
+            await downloader.drain()
+            await DownloadsTools.shared.shutdown()
+            await queue.cancelPendingWorkAndWait()
+        }
+        drainTask = task
+        await task.value
+    }
     private var shutdownTask: Task<Void, Never>?
     func shutdown() async {
         await cancelPendingWork()
@@ -73,11 +89,9 @@ final class DownloadsWorker {
         await task.value
     }
     private func finishShutdown() async {
-        startup?.cancel()
-        await startup?.value
+        await drain()
         startup = nil
         await downloader.shutdown()
-        await DownloadsTools.shared.shutdown()
         await queue.stop()
     }
 }

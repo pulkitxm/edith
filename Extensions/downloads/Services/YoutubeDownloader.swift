@@ -592,12 +592,16 @@ public final class YoutubeDownloader {
         for task in pending { task.cancel() }
     }
 
-    public func shutdown() async {
+    func drain() async {
         cancelPendingWork()
         let pending =
             [streamTask, availabilityTask, updateTask].compactMap { $0 }
             + Array(mutationTasks.values)
         for task in pending { await task.value }
+    }
+
+    public func shutdown() async {
+        await drain()
         streamTask = nil; availabilityTask = nil; updateTask = nil
         mutationTasks.removeAll()
         isRunning = false

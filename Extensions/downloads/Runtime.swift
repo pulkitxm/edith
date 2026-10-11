@@ -64,10 +64,10 @@ final class ExtensionRuntime: NSObject {
             let retired = Array(uiRetirements.values)
             suspension = Task { [self, worker, model, streams] in
                 await worker?.cancelPendingWork()
-                await commands.suspendAndWait()
-                await worker?.shutdown()
-                await model?.shutdown()
                 await model?.tools.shutdown()
+                await commands.suspendAndWait()
+                await worker?.drain()
+                await model?.drain()
                 await streams?.stopAndWait()
                 for task in retired { await task.value }
             }
