@@ -54,7 +54,7 @@ function setup() {
   };
   fixture.ownedRolePaths = {
     engine: `${fixture.directory}/Host.app/Contents/MacOS/Edith`,
-    managedUI: `${fixture.directory}/support/Edith Tests/remote-${fixture.session}/Extensions/calendar/v1/UI.app/Contents/PlugIns/UI.appex/Contents/MacOS/Edith`,
+    managedUI: `${fixture.directory}/support/Edith Tests/remote-${fixture.session}/Extensions/calendar/edith-host-2/arm64/1.0.0/calendar/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith`,
   };
   const environment = {
     GITHUB_ACTIONS: "true",
@@ -253,4 +253,26 @@ test("same-source full updates retain executable code but replace signed metadat
       fixture,
     ),
   ).toThrow();
+});
+
+test("only the retained exact Calendar ABI architecture version and worker path is admitted", () => {
+  const { fixture, environment } = setup();
+  for (const path of [
+    fixture.ownedRolePaths.managedUI.replace("edith-host-2", "edith-host-1"),
+    fixture.ownedRolePaths.managedUI.replace("arm64", "x86_64"),
+    fixture.ownedRolePaths.managedUI.replace("1.0.0", "1.1.0"),
+    `${fixture.ownedRolePaths.managedUI}\n`,
+    `${fixture.ownedRolePaths.managedUI}${String.fromCharCode(0)}`,
+  ]) {
+    expect(() =>
+      validateSparkleFixture(
+        {
+          ...fixture,
+          ownedRolePaths: { ...fixture.ownedRolePaths, managedUI: path },
+        },
+        environment,
+        "/Users/fixture",
+      ),
+    ).toThrow();
+  }
 });

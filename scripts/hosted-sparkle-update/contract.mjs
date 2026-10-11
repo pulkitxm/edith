@@ -88,16 +88,9 @@ export function validateSparkleFixture(value, environment, accountHome) {
     value.ownedRolePaths.engine,
     `${value.directory}/Host.app/Contents/MacOS/Edith`,
   );
-  assert(
-    value.ownedRolePaths.managedUI.startsWith(
-      `${value.directory}/support/Edith Tests/remote-${value.session}/Extensions/calendar/`,
-    ),
-  );
-  assert(value.ownedRolePaths.managedUI.endsWith("/Contents/MacOS/Edith"));
-  assert(
-    !value.ownedRolePaths.managedUI
-      .split("/")
-      .some((part) => part === "." || part === ".."),
+  assert.equal(
+    value.ownedRolePaths.managedUI,
+    `${value.directory}/support/Edith Tests/remote-${value.session}/Extensions/calendar/edith-host-2/arm64/1.0.0/calendar/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith`,
   );
   assert(
     /^\/[A-Za-z0-9._ /-]+$/.test(value.producer.executable) &&
