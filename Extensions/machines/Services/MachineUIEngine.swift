@@ -43,7 +43,8 @@ import Foundation
         var fileRequest: MachineFileRequest?
     }
     private var jobs: [UUID: Job] = [:]
-    private var retired: [Task<Void, Never>] = []
+    private var retired: [UUID: Task<Void, Never>] = [:]
+    private var shutdownTask: Task<Void, Never>?
     private var reaper: Task<Void, Never>?
 
     init(
@@ -94,19 +95,35 @@ import Foundation
         self.terminal = terminal
     }
 
-    func stop() {
+    func cancelPendingWork() {
         stopped = true
-        reaper?.cancel(); reaper = nil
-        for job in jobs.values { job.task.cancel(); retired.append(job.task) }
+        reaper?.cancel()
+        for (id, job) in jobs { retire(job.task, id: id) }
         jobs = [:]
+    }
+
+    func stop() {
+        cancelPendingWork()
         for id in Array(presentations.keys) { release(id) }
+    }
+
+    func drain() async {
+        cancelPendingWork()
+        if let shutdownTask { await shutdownTask.value; return }
+        let running = reaper
+        let retained = Array(retired.values)
+        let task = Task {
+            await running?.value
+            for task in retained { await task.value }
+        }
+        shutdownTask = task
+        await task.value
+        reaper = nil
     }
 
     func shutdown() async {
         stop()
-        let retained = retired
-        retired = []
-        for task in retained { await task.value }
+        await drain()
     }
 
     private func begin(_ value: MachineUIJobInput) throws -> UUID {
@@ -177,9 +194,7 @@ import Foundation
                     }
                     .map(\.key)
                     for id in expired { cancelJob(id) }
-                    let completed = retired
-                    retired = []
-                    for task in completed { await task.value }
+                    for task in Array(retired.values) { await task.value }
                 }
             }
         }
@@ -225,10 +240,18 @@ import Foundation
         }
     }
 
+    private func retire(_ task: Task<Void, Never>, id: UUID) {
+        guard retired[id] == nil else { return }
+        task.cancel()
+        retired[id] = Task { [self, task] in
+            await task.value
+            retired[id] = nil
+        }
+    }
+
     private func cancelJob(_ id: UUID) {
         guard let job = jobs.removeValue(forKey: id) else { return }
-        job.task.cancel()
-        retired.append(job.task)
+        retire(job.task, id: id)
     }
 
     func execute(_ operation: String, payload: Data) async throws -> Data {

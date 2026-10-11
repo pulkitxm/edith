@@ -8,6 +8,9 @@ import Foundation
     private var stopped = false
     private var tasks: [UUID: Task<Void, Never>] = [:]
     private var polling: Task<Void, Never>?
+    private var requests: [UUID: Task<Data, Error>] = [:]
+    private var operations: [UUID: Task<Void, Never>] = [:]
+    private var operationCancellation: [UUID: @MainActor () -> Void] = [:]
     var receive: (MachineUIState) -> Void = { _ in }
     var failure: (String) -> Void = { _ in }
 
@@ -30,15 +33,60 @@ import Foundation
         }
     }
 
-    public func shutdown() {
+    func cancelPendingWork() {
         guard !stopped else { return }
         stopped = true
-        terminalUI.invalidate()
         generation += 1
-        polling?.cancel(); polling = nil
+        polling?.cancel()
         for task in tasks.values { task.cancel() }
-        tasks = [:]
+        for task in requests.values { task.cancel() }
+        for cancel in operationCancellation.values { cancel() }
+    }
+
+    func drain() async {
+        cancelPendingWork()
+        let queued = Array(tasks.values)
+        let running = Array(operations.values)
+        let pending = Array(requests.values)
+        await polling?.value
+        for task in queued { await task.value }
+        for task in running { await task.value }
+        for task in pending { _ = await task.result }
+    }
+
+    public func shutdown() {
+        cancelPendingWork()
+        terminalUI.invalidate()
         client.invalidate()
+    }
+
+    private func owned<Value>(_ work: @escaping @MainActor () async throws -> Value) async throws
+        -> Value
+    {
+        guard !stopped else { throw MachineUIError.unavailable }
+        let id = UUID()
+        let task = Task { try await work() }
+        operationCancellation[id] = { task.cancel() }
+        operations[id] = Task { [self, task] in
+            _ = await task.result
+            operationCancellation[id] = nil
+            operations[id] = nil
+        }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func cleanup<Request: Encodable>(_ operation: String, value: Request) async {
+        let id = UUID()
+        let task = Task { [self] in
+            let _: Bool? = try? await request(operation, value: value, draining: true)
+        }
+        tasks[id] = task
+        await task.value
+        tasks[id] = nil
     }
 
     func refresh() async throws {
@@ -72,6 +120,15 @@ import Foundation
 
     func materialize(entry: RemoteFileEntry, machineID: UUID, maximumBytes: Int64) async throws
         -> URL
+    {
+        try await owned { [self] in
+            try await materializeOwned(
+                entry: entry, machineID: machineID, maximumBytes: maximumBytes)
+        }
+    }
+
+    private func materializeOwned(entry: RemoteFileEntry, machineID: UUID, maximumBytes: Int64)
+        async throws -> URL
     {
         let handle: MachinePreviewHandle = try await job(
             "machines.ui.preview",
@@ -111,7 +168,7 @@ import Foundation
         } catch {
             try? output.close()
             try? FileManager.default.removeItem(at: directory)
-            let _: Bool? = try? await request(
+            await cleanup(
                 "machines.ui.preview",
                 value: MachinePreviewRequest(operation: .close, machineID: machineID, id: handle.id)
             )
@@ -120,6 +177,14 @@ import Foundation
     }
 
     func materializeDirectory(entry: RemoteFileEntry, machineID: UUID) async throws -> URL {
+        try await owned { [self] in
+            try await materializeDirectoryOwned(entry: entry, machineID: machineID)
+        }
+    }
+
+    private func materializeDirectoryOwned(entry: RemoteFileEntry, machineID: UUID) async throws
+        -> URL
+    {
         let handle: MachineDirectoryExportHandle = try await job(
             "machines.ui.export",
             value: MachineDirectoryExportRequest(
@@ -189,10 +254,7 @@ import Foundation
             return root.appendingPathComponent(handle.name)
         } catch {
             try? FileManager.default.removeItem(at: root)
-            let cleanup = Task {
-                let _: Bool? = try? await self.request("machines.ui.export", value: close)
-            }
-            await cleanup.value
+            await cleanup("machines.ui.export", value: close)
             throw error
         }
     }
@@ -292,14 +354,23 @@ import Foundation
     }
 
     private func job<Request: Encodable, Reply: Decodable>(
-        _ operation: String, value: Request, progress: (FileOperationProgress?) -> Void = { _ in }
+        _ operation: String, value: Request,
+        progress: @escaping (FileOperationProgress?) -> Void = { _ in }
+    ) async throws -> Reply {
+        try await owned { [self] in
+            try await jobOwned(operation, value: value, progress: progress)
+        }
+    }
+
+    private func jobOwned<Request: Encodable, Reply: Decodable>(
+        _ operation: String, value: Request, progress: @escaping (FileOperationProgress?) -> Void
     ) async throws -> Reply {
         let id: UUID = try await request(
             "machines.ui.begin",
             value: MachineUIJobInput(
                 presentationID: client.presentationID, operation: operation,
                 payload: JSONEncoder().encode(value)))
-        return try await withTaskCancellationHandler {
+        do {
             while true {
                 try Task.checkCancellation()
                 let state: MachineUIJobState = try await request(
@@ -318,22 +389,31 @@ import Foundation
                 }
                 try await Task.sleep(for: .milliseconds(200))
             }
-        } onCancel: {
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                let _: Bool? = try? await request("machines.ui.cancel", value: id)
-            }
+        } catch {
+            if Task.isCancelled { await cleanup("machines.ui.cancel", value: id) }
+            throw error
         }
     }
 
     private func request<Request: Encodable, Reply: Decodable>(
-        _ operation: String, value: Request
+        _ operation: String, value: Request, draining: Bool = false
     ) async throws -> Reply {
-        guard !stopped else { throw MachineUIError.unavailable }
+        guard !stopped || draining else { throw MachineUIError.unavailable }
         let generation = generation
-        let bytes = try await client.invoke(operation, payload: JSONEncoder().encode(value))
+        let payload = try JSONEncoder().encode(value)
+        let id = UUID()
+        let task = Task { [client] in try await client.invoke(operation, payload: payload) }
+        requests[id] = task
+        defer { requests[id] = nil }
+        let bytes = try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
         try Task.checkCancellation()
-        guard !stopped, generation == self.generation else { throw MachineUIError.stale }
+        guard draining || (!stopped && generation == self.generation) else {
+            throw MachineUIError.stale
+        }
         let reply = try JSONDecoder().decode(MachineUIReply.self, from: bytes)
         if let error = reply.error { throw MachineUIFailure(message: error) }
         guard let value = reply.value, value.count <= 6_291_456 else {

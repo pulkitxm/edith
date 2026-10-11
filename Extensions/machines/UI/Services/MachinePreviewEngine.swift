@@ -88,9 +88,18 @@ import Foundation
         }
     }
 
-    func shutdown() {
+    func cancelPendingWork() {
         stopped = true
-        reaper?.cancel(); reaper = nil
+        reaper?.cancel()
+    }
+
+    func drain() async {
+        cancelPendingWork()
+        await reaper?.value
+    }
+
+    func shutdown() {
+        cancelPendingWork()
         for preview in previews.values { try? preview.file.close() }
         previews = [:]
     }

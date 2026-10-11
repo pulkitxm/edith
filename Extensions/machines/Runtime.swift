@@ -28,6 +28,9 @@ final class ExtensionRuntime: NSObject {
     ])
     private var health: MachineHealthLifecycle?
     private let commands = ExtensionCommandRegistry()
+    private var suspended = false
+    private var suspension: Task<Void, Never>?
+    private var uiRetirements: [UUID: Task<Void, Never>] = [:]
 
     init(
         fixtureAdmission: @escaping (NSDictionary) throws -> WorkerFixtureAdmission? = {
@@ -95,14 +98,76 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        commands.suspend()
+        suspended = true
+        let facade = uiClient
+        facade?.cancelPendingWork()
+        let cli = cli
+        let terminals = terminalEngine
+        let ui = uiEngine
+        let previews = previewEngine
+        let exports = directoryExport
+        let logs = logEngine
+        let files = filesEngine
+        let peer = peer
+        cli?.cancelPendingWork()
+        terminals?.cancelPendingWork()
+        ui?.cancelPendingWork()
+        previews?.cancelPendingWork()
+        exports?.cancelPendingWork()
+        logs?.cancelPendingWork()
+        files?.shutdown()
+        peer?.shutdown()
+        if suspension == nil {
+            let retired = Array(uiRetirements.values)
+            suspension = Task {
+                [self, facade, cli, terminals, ui, previews, exports, logs, files, peer] in
+                await commands.suspendAndWait()
+                await facade?.drain()
+                for task in retired { await task.value }
+                await cli?.drain()
+                await terminals?.drain()
+                await ui?.drain()
+                await previews?.drain()
+                await exports?.drain()
+                await logs?.drain()
+                await files?.shutdownAndWait()
+                await peer?.shutdownAndWait()
+            }
+        }
+        let pending = suspension
+        Task { [self] in
+            await pending?.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        suspendCommands(completion: {})
         commands.shutdown()
         running = false
-        Task {
+        Task { [self] in
+            await suspension?.value
             await shutdown()
+            retireUI()
+            for task in Array(uiRetirements.values) { await task.value }
             completion()
         }
+    }
+
+    private func retireUI() {
+        guard let facade = uiClient else { return }
+        facade.cancelPendingWork()
+        let id = UUID()
+        uiRetirements[id] = Task { [self, facade] in
+            await facade.drain()
+            facade.shutdown()
+            uiRetirements[id] = nil
+        }
+        uiClient = nil
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
@@ -116,6 +181,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
+            guard !suspended, uiRetirements.isEmpty else { return ["ok": false] as NSDictionary }
             guard uiClient == nil, !running,
                 let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "machines", let client = configuration.engineClient
@@ -150,11 +216,12 @@ final class ExtensionRuntime: NSObject {
             ] as NSDictionary
         case "stopUI":
             WorkspaceModel.shared.stopPaneActions()
-            uiClient?.shutdown(); uiClient = nil
+            retireUI()
             FinderUndoBridge.shutdown()
             PaneViewStore.shared.shutdown()
             return ["ok": true] as NSDictionary
         case "start":
+            guard !suspended else { return ["ok": false] as NSDictionary }
             let fixture: Bool
             do { fixture = try fixtureAdmission(input) != nil } catch {
                 return ["ok": false] as NSDictionary
@@ -374,9 +441,7 @@ final class ExtensionRuntime: NSObject {
             }
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
-            commands.shutdown()
-            running = false
-            Task { await shutdown() }
+            prepareToStop(completion: {})
         case "status": return ["ok": true, "running": running] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
@@ -388,7 +453,9 @@ final class ExtensionRuntime: NSObject {
         windowNavigation?.invalidate(); windowNavigation = nil
         await uiEngine?.shutdown(); uiEngine = nil
         await filesEngine?.shutdownAndWait(); filesEngine = nil
+        await previewEngine?.drain()
         previewEngine?.shutdown(); previewEngine = nil
+        await directoryExport?.drain()
         directoryExport?.shutdown(); directoryExport = nil
         await logEngine?.shutdown(); logEngine = nil
         await terminalEngine?.shutdown(); terminalEngine = nil

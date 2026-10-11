@@ -84,7 +84,7 @@ final class MachinePTY {
         pendingInput.removeAll()
         output.removeAll()
         reap()
-        let members = identity?.isAlive == true ? sessionMembers() : []
+        let members = identity?.isAlive == true ? (Self.sessionMembers(pid) ?? []) : []
         for member in members where member.isAlive { _ = kill(member.pid, SIGHUP) }
         if identity?.isAlive == true, getpgid(pid) == pid { _ = kill(-pid, SIGHUP) }
         if identity?.isAlive == true { _ = kill(pid, SIGHUP) }
@@ -92,10 +92,21 @@ final class MachinePTY {
         if identity?.isAlive == true, getpgid(pid) == pid { _ = kill(-pid, SIGKILL) }
         if identity?.isAlive == true { _ = kill(pid, SIGKILL) }
         let identifier = pid
+        let identity = identity
         closing = Task.detached {
+            while identity?.isAlive == true {
+                guard let remaining = Self.sessionMembers(identifier) else {
+                    try? await Task.sleep(for: .milliseconds(10))
+                    continue
+                }
+                guard !remaining.isEmpty else { break }
+                for member in remaining where member.isAlive { _ = kill(member.pid, SIGKILL) }
+                try? await Task.sleep(for: .milliseconds(10))
+            }
             var status: Int32 = 0
-            while waitpid(identifier, &status, 0) < 0 && errno == EINTR {}
-            while members.contains(where: { $0.isAlive }) {
+            while true {
+                if waitpid(identifier, &status, 0) == identifier { break }
+                if errno == ECHILD, identity?.isAlive != true { break }
                 try? await Task.sleep(for: .milliseconds(10))
             }
             ExtensionCommandOwnership.release(identifier)
@@ -165,18 +176,19 @@ final class MachinePTY {
         }
     }
 
-    private func sessionMembers() -> [ExtensionProcessIdentity] {
+    private static func sessionMembers(_ pid: pid_t) -> [ExtensionProcessIdentity]? {
         var identifiers = [pid_t](repeating: 0, count: 65_536)
         let count = identifiers.withUnsafeMutableBytes {
             proc_listallpids($0.baseAddress, Int32($0.count))
         }
-        guard count > 0, count <= identifiers.count else { return [] }
-        return identifiers.prefix(Int(count)).compactMap { candidate in
-            guard candidate > 1, candidate != pid, getsid(candidate) == pid,
-                let identity = ExtensionProcessIdentity.read(candidate)
-            else { return nil }
-            return identity
+        guard count > 0, count < identifiers.count else { return nil }
+        var members: [ExtensionProcessIdentity] = []
+        for candidate in identifiers.prefix(Int(count)) {
+            guard candidate > 1, candidate != pid, getsid(candidate) == pid else { continue }
+            guard let identity = ExtensionProcessIdentity.read(candidate) else { return nil }
+            members.append(identity)
         }
+        return members
     }
 
     private static func error() -> POSIXError {

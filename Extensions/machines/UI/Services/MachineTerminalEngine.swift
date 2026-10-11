@@ -30,7 +30,8 @@ import GhosttyTerminal
         @MainActor (Machine, [String], [String]) throws -> MachinePTYLaunch
     private var cliPTYs: [UUID: MachinePTY] = [:]
     private var terminals: [UUID: Terminal] = [:]
-    private var retired: [MachinePTY] = []
+    private var retired: [UUID: Task<Void, Never>] = [:]
+    private var drainTask: Task<Void, Never>?
     private var reaper: Task<Void, Never>?
     private var stopped = false
 
@@ -375,14 +376,13 @@ import GhosttyTerminal
                 for (handle, terminal) in terminals
                 where terminal.touched.duration(to: .now) > .seconds(10) {
                     drops.close(handle)
-                    terminal.pty.close(); retired.append(terminal.pty);
+                    retire(terminal.pty)
                     terminals.removeValue(forKey: handle)
                 }
                 registrations = registrations.filter {
                     $0.value.touched.duration(to: .now) <= .seconds(10)
                 }
-                let children = retired; retired = []
-                for pty in children { await pty.closeAndWait() }
+                for task in Array(retired.values) { await task.value }
             }
         }
     }
@@ -391,19 +391,47 @@ import GhosttyTerminal
         for id in terminals.keys.filter({ terminals[$0]?.presentationID == presentation }) {
             if let terminal = terminals.removeValue(forKey: id) {
                 drops.close(id)
-                terminal.pty.close(); retired.append(terminal.pty)
+                retire(terminal.pty)
             }
         }
         registrations = registrations.filter { $0.value.presentationID != presentation }
     }
 
-    func shutdown() async {
+    private func retire(_ pty: MachinePTY) {
+        pty.close()
+        let id = UUID()
+        retired[id] = Task { [self, pty] in
+            await pty.closeAndWait()
+            retired[id] = nil
+        }
+    }
+
+    func cancelPendingWork() {
         stopped = true
         drops.shutdown()
-        reaper?.cancel(); reaper = nil
-        let children = terminals.values.map(\.pty) + retired + Array(cliPTYs.values)
-        terminals = [:]; retired = []; cliPTYs = [:]; registrations = [:]
-        for pty in children { pty.close() }
-        for pty in children { await pty.closeAndWait() }
+        reaper?.cancel()
+        for terminal in terminals.values { terminal.pty.close() }
+        for pty in cliPTYs.values { pty.close() }
+    }
+
+    func drain() async {
+        cancelPendingWork()
+        if let drainTask { await drainTask.value; return }
+        let running = reaper
+        let children = terminals.values.map(\.pty) + Array(cliPTYs.values)
+        let retired = Array(retired.values)
+        let task = Task {
+            await running?.value
+            for pty in children { await pty.closeAndWait() }
+            for task in retired { await task.value }
+        }
+        drainTask = task
+        await task.value
+    }
+
+    func shutdown() async {
+        await drain()
+        reaper = nil
+        terminals = [:]; cliPTYs = [:]; registrations = [:]
     }
 }
