@@ -18,7 +18,6 @@ import {
 } from "../extension-catalog-pointer.mjs";
 import {
   extensionFingerprint,
-  planPullRequestExtensions,
   planUnpublishedExtensions,
 } from "../extension-release-plan.mjs";
 import { managedAuthenticatedFetch } from "../hosted-managed-views/execution-contract.mjs";
@@ -29,6 +28,7 @@ import {
 import { verifiedCatalogPayload } from "../verify-extension-catalog.mjs";
 import {
   artifact,
+  composeLineage,
   currentPackages,
   digest,
   downloadPublic,
@@ -213,12 +213,6 @@ export async function run() {
       ]),
     ),
   );
-  const productionAdmission = productionRun({
-    ...production,
-    source: options.source,
-    definitions,
-    fingerprints,
-  });
   const hostAdmission = hostRun({ ...host, source: options.source });
   const downloads = [];
   async function download(row, name) {
@@ -232,89 +226,162 @@ export async function run() {
     downloads.push({ name, ...row });
     return destination;
   }
-  async function plan(value, name) {
+  async function prepareProduction(
+    value,
+    sourceDirectory,
+    definitions,
+    fingerprints,
+    name,
+  ) {
+    const source = value.run.head_sha;
+    assert.match(source, /^[a-f0-9]{40}$/);
+    successfulRun(value.run, source, ".github/workflows/extensions.yml");
     const outer = await download(
-      artifact(value.artifacts, "extension-plan", value.run, options.source),
-      `${name}.zip`,
+      artifact(value.artifacts, "extension-plan", value.run, source),
+      `${name}-plan.zip`,
     );
-    const names =
-      value.run.event === "pull_request"
-        ? ["plan.json"]
-        : ["plan.json", "previous.json", "previous-state.json"];
-    const directory = join(work, name);
-    python("extract", outer, directory, ...names);
+    const directory = join(work, `${name}-plan`);
+    python(
+      "extract",
+      outer,
+      directory,
+      "plan.json",
+      "previous.json",
+      "previous-state.json",
+    );
     const actual = document(join(directory, "plan.json"));
-    let expected;
-    if (value.run.event === "pull_request") {
-      const pull = await api("/pulls/1014");
-      assert.equal(pull.head.sha, options.source);
-      assert.equal(pull.base.repo.full_name, repository);
-      assert.equal(value.run.pull_requests.length, 1);
-      assert.equal(value.run.pull_requests[0].number, 1014);
-      assert.equal(value.run.pull_requests[0].base.sha, pull.base.sha);
-      expected = await planPullRequestExtensions(
-        sourceDirectory,
-        definitions,
-        pull.base.sha,
-      );
-    } else {
-      const previous = document(join(directory, "previous.json"));
-      expected = await planUnpublishedExtensions(
-        sourceDirectory,
-        definitions,
-        previous.packages,
-      );
-    }
-    assert.equal(actual.include.length, 39);
+    const previous = document(join(directory, "previous.json"));
+    const expected = await planUnpublishedExtensions(
+      sourceDirectory,
+      definitions,
+      previous.packages,
+    );
     assert.deepEqual(actual, { include: expected });
-    return {
+    const rows = productionRun({
+      ...value,
+      source,
+      definitions,
+      fingerprints,
+      plannedIDs: expected.map(({ id }) => id),
+    });
+    const plan = {
       planSHA256: digest(await readFile(join(directory, "plan.json"))),
-      owners: 39,
+      plannedIDs: expected.map(({ id }) => id),
     };
-  }
-  const productionPlan = await plan(production, "production-plan");
-  const releaseFrozen = await download(
-    artifact(
-      production.artifacts,
-      "frozen-extension-host",
-      production.run,
-      options.source,
-    ),
-    "production-frozen.zip",
-  );
-  const frozenDirectory = join(work, "production-frozen");
-  await privateDirectory(frozenDirectory);
-  const frozen = JSON.parse(
+    const releaseFrozen = await download(
+      artifact(value.artifacts, "frozen-extension-host", value.run, source),
+      `${name}-frozen.zip`,
+    );
+    const frozenDirectory = join(work, `${name}-frozen`);
+    await privateDirectory(frozenDirectory);
+    const frozen = JSON.parse(
+      command(
+        "python3",
+        [
+          "-B",
+          join(root, "scripts/hosted-managed-views/frozen-host-artifact.py"),
+          releaseFrozen,
+          frozenDirectory,
+          "--tree",
+          "extension-release-host",
+        ],
+        root,
+      ),
+    );
+    await chmod(frozen.hostBuildMetadata, 0o600);
+    const metadata = document(frozen.hostBuildMetadata);
+    assert.equal(metadata.sourceCommit, source);
+    assert.equal(metadata.sourceTreeDirty, false);
+    for (const [key, value] of Object.entries({
+      configuration: "Release",
+      optimization: "Osize",
+      linkTimeOptimization: "full",
+      architecture: "arm64",
+    }))
+      assert.equal(metadata[key], value);
+    assert.notEqual(metadata.signature, "ad-hoc");
+    const frozenSHA = digest(
+      await readFile(join(frozen.hostApp, "Contents/MacOS/Edith")),
+    );
+    assert.equal(metadata.hostExecutableSHA256, frozenSHA);
     command(
-      "python3",
-      [
-        "-B",
-        join(root, "scripts/hosted-managed-views/frozen-host-artifact.py"),
-        releaseFrozen,
-        frozenDirectory,
-        "--tree",
-        "extension-release-host",
-      ],
+      "codesign",
+      ["--verify", "--deep", "--strict", frozen.hostApp],
       root,
-    ),
+    );
+    return { value, source, plan, rows, frozen, frozenSHA, metadata };
+  }
+  const currentProduction = await prepareProduction(
+    production,
+    sourceDirectory,
+    definitions,
+    fingerprints,
+    "production",
   );
-  await chmod(frozen.hostBuildMetadata, 0o600);
-  const frozenMetadata = document(frozen.hostBuildMetadata);
-  assert.equal(frozenMetadata.sourceCommit, options.source);
-  assert.equal(frozenMetadata.sourceTreeDirty, false);
-  for (const [key, value] of Object.entries({
-    configuration: "Release",
-    optimization: "Osize",
-    linkTimeOptimization: "full",
-    architecture: "arm64",
-  }))
-    assert.equal(frozenMetadata[key], value);
-  assert.notEqual(frozenMetadata.signature, "ad-hoc");
-  const frozenSHA = digest(
-    await readFile(join(frozen.hostApp, "Contents/MacOS/Edith")),
-  );
-  assert.equal(frozenMetadata.hostExecutableSHA256, frozenSHA);
-  command("codesign", ["--verify", "--deep", "--strict", frozen.hostApp], root);
+  const productionPlan = currentProduction.plan;
+  const changed = new Set(productionPlan.plannedIDs);
+  const remaining = definitions
+    .map(({ id }) => id)
+    .filter((id) => !changed.has(id));
+  assert.deepEqual(Object.keys(options.retainedRuns).sort(), remaining.sort());
+  const productionByRun = new Map([[options.packagesRun, currentProduction]]);
+  for (const runID of new Set(Object.values(options.retainedRuns))) {
+    const value = await inventory(runID);
+    assert.equal(value.run.id, runID);
+    const source = value.run.head_sha;
+    assert.match(source, /^[a-f0-9]{40}$/);
+    assert.notEqual(source, options.source);
+    command(
+      "git",
+      ["merge-base", "--is-ancestor", source, options.source],
+      root,
+    );
+    const directory = join(work, `source-${runID}`);
+    await privateDirectory(directory);
+    command(
+      "git",
+      ["clone", "--shared", "--no-checkout", root, directory],
+      root,
+    );
+    command("git", ["checkout", "--detach", source], directory);
+    const priorDefinitions = JSON.parse(
+      await readFile(join(directory, "Extensions/manifest.json"), "utf8"),
+    );
+    assert.equal(priorDefinitions.length, 39);
+    const priorFingerprints = Object.fromEntries(
+      await Promise.all(
+        priorDefinitions.map(async (definition) => [
+          definition.id,
+          await extensionFingerprint(directory, definition, priorDefinitions),
+        ]),
+      ),
+    );
+    for (const [id, selectedRun] of Object.entries(options.retainedRuns)) {
+      if (selectedRun === runID)
+        assert.equal(
+          priorFingerprints[id],
+          fingerprints[id],
+          `Retained ${id} production source differs from its current fingerprint`,
+        );
+    }
+    productionByRun.set(
+      runID,
+      await prepareProduction(
+        value,
+        directory,
+        priorDefinitions,
+        priorFingerprints,
+        `retained-${runID}`,
+      ),
+    );
+  }
+  const productionAdmission = composeLineage({
+    definitions,
+    fingerprints,
+    current: currentProduction,
+    retained: productionByRun,
+    requestedRuns: options.retainedRuns,
+  });
   const hostBytes = await download(hostAdmission.bytes, "host-bytes.zip"),
     hostProof = await download(hostAdmission.proof, "host-proof.zip");
   python(
@@ -432,16 +499,22 @@ export async function run() {
           join(root, "scripts/hosted-managed-views/verify-package.py"),
           outer,
           directory,
-          frozen.hostApp,
-          options.source,
+          row.frozen.hostApp,
+          row.sourceCommit,
           row.sourceFingerprint,
-          frozenSHA,
+          row.frozenSHA,
         ],
         root,
         300000,
       ),
     );
-    validatePackageReceipt(receipt, row, definition, options.source, frozenSHA);
+    validatePackageReceipt(
+      receipt,
+      row,
+      definition,
+      row.sourceCommit,
+      row.frozenSHA,
+    );
     const metadataPath = join(directory, `package/${row.extensionID}.json`);
     await chmod(metadataPath, 0o600);
     const metadata = document(metadataPath);
@@ -467,6 +540,9 @@ export async function run() {
       version: package_.version,
       sourceFingerprint: row.sourceFingerprint,
       artifactID: row.artifactID,
+      artifactRun: row.runID,
+      artifactSourceCommit: row.sourceCommit,
+      sourceQualification: row.qualification,
       sealedHostProvenanceVerified: true,
       productionSignatureVerified: true,
     });
@@ -496,6 +572,11 @@ export async function run() {
     );
     const previous = alternatives.at(-1);
     assert.notEqual(previous.sha256, package_.sha256);
+    const previousTag = `extensions/${previous.id}/${previous.version}-${previous.sourceFingerprint.slice(0, 20)}`;
+    assert.equal(
+      previous.downloadURL,
+      `https://github.com/pulkitxm/edith/releases/download/${encodeURIComponent(previousTag)}/${previous.id}.zip`,
+    );
     const path = join(work, `${package_.id}-previous.zip`);
     await downloadPublic({
       url: previous.downloadURL,
@@ -517,6 +598,7 @@ export async function run() {
   const mount = join(work, "dmg-mount");
   await privateDirectory(mount);
   let hostStatic;
+  let attached = false;
   try {
     command(
       "hdiutil",
@@ -531,6 +613,7 @@ export async function run() {
       ],
       root,
     );
+    attached = true;
     const hostRequest = join(work, "host-request.json");
     await record(hostRequest, {
       source: options.source,
@@ -543,7 +626,7 @@ export async function run() {
     });
     hostStatic = python("host", root, hostRequest);
   } finally {
-    command("hdiutil", ["detach", mount], root);
+    if (attached) command("hdiutil", ["detach", mount], root);
   }
   const harnessRequest = join(work, "installer-request.json");
   await record(harnessRequest, {
@@ -598,9 +681,11 @@ export async function run() {
   assert.equal(installer.installationVerified, true);
   assert.equal(installer.owners, 39);
   assert.equal(installer.sourceCommit, options.source);
-  for (const value of [production, host]) {
+  for (const value of [...productionByRun.values()]
+    .map(({ value }) => value)
+    .concat(host)) {
     const latest = await api(`/actions/runs/${value.run.id}`);
-    successfulRun(latest, options.source, value.run.path);
+    successfulRun(latest, value.run.head_sha, value.run.path);
     assert.equal(latest.run_attempt, value.run.run_attempt);
   }
   assert.equal(
@@ -621,6 +706,15 @@ export async function run() {
     packagesRun: options.packagesRun,
     hostRun: options.hostRun,
     productionPlan,
+    admissionMode:
+      changed.size === 39 ? "initial-full39" : "composed-selective",
+    retainedPlans: [...productionByRun.values()]
+      .filter((value) => value !== currentProduction)
+      .map(({ source, plan, value }) => ({
+        sourceCommit: source,
+        runID: value.run.id,
+        ...plan,
+      })),
     fingerprints,
     fingerprintSHA256: digest(Buffer.from(JSON.stringify(fingerprints))),
     artifacts: downloads,

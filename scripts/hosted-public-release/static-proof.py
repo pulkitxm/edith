@@ -85,22 +85,6 @@ def archive_metrics(path, identifier, expected_bytes, expected_sha256):
     return {'id': identifier, 'downloadBytes': value['bytes'], 'sha256': value['sha256'], 'installedBytes': total, 'members': len(entries), 'zipCRCVerified': True, 'codeExecuted': False}
 
 
-def plan_archive(path, expected_path):
-    expected = document(expected_path)
-    require(set(expected) == {'include'} and isinstance(expected['include'], list) and len(expected['include']) == 39 and len({row['id'] for row in expected['include']}) == 39, 'Expected source plan must contain exactly39 owners')
-    with regular_file(path, 4*1024**2) as stream, zipfile.ZipFile(stream) as archive:
-        entries = archive.infolist()
-        names = {entry.filename for entry in entries}
-        require(0 < len(entries) <= 3 and len(names) == len(entries) and names <= {'plan.json','previous.json','previous-state.json'} and 'plan.json' in names, 'Invalid plan artifact inventory')
-        for entry in entries:
-            require(stat.S_IFMT(entry.external_attr >> 16) in (0,stat.S_IFREG) and not entry.flag_bits & 1 and 0 < entry.file_size <= 1024**2, 'Invalid plan artifact member')
-        require(archive.testzip() is None, 'Plan artifact CRC differs')
-        data = archive.read('plan.json')
-        actual = json.loads(data, object_pairs_hook=unique_object, parse_constant=lambda _: require(False,'Invalid plan constant'))
-        require(actual == expected, 'Actual CI plan differs from exact source39 plan')
-    return {'owners':39,'planSHA256':hashlib.sha256(data).hexdigest(),'zipCRCVerified':True}
-
-
 def version_child(original, changed, parents, source, version, build, dmg_sha256):
     require(parents == [source], 'Release stamp requires exactly one built-source parent')
     require(0 < len(changed) <= 3 and set(changed) <= {'Resources/Info.plist', 'Resources/HelperInfo.plist', 'Casks/edith.rb'}, 'Unexpected release-stamp tree changes')
@@ -159,19 +143,6 @@ def host_proof(value, source, version, build, index_sha256, sparkle_key, team, c
     require(file_hash(dmg) == {'bytes':value['dmgBytes'],'sha256':value['dmgSHA256']} and file_hash(appcast,1024**2)['sha256'] == value['appcastSHA256'], 'Host release artifact bytes differ')
     require(value['dmgURL'] == f'https://github.com/pulkitxm/edith/releases/download/v{version}/Edith.dmg', 'Host public DMG URL differs')
     return value
-
-
-def parse_appcast(source_root, path, url, version, build, dmg_bytes):
-    spec = importlib.util.spec_from_file_location('source_host_proof', Path(source_root)/'scripts/host_release_proof.py')
-    module = importlib.util.module_from_spec(spec)
-    import sys
-    sys.path.insert(0, str(Path(source_root)/'scripts'))
-    spec.loader.exec_module(module)
-    with regular_file(path, 1024**2) as stream:
-        data = stream.read(1024**2+1)
-        require(len(data) <= 1024**2, 'Appcast grew beyond bound')
-        signed = module.appcast_enclosure(data,url,version,build,dmg_bytes)
-    return {'edSignature':signed,'appcastSHA256':hashlib.sha256(data).hexdigest(),'signatureVerified':False}
 
 
 def extract_artifact(path, output, names):

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, realpath, rm } from "node:fs/promises";
 import { resolve } from "node:path";
+import { parseExpression } from "@babel/parser";
 import {
   managedNativeBuildSteps,
   managedNativeTestSteps,
@@ -18,16 +19,27 @@ const integer = (value, maximum = Number.MAX_SAFE_INTEGER) =>
   assert(Number.isSafeInteger(value) && value > 0 && value <= maximum);
 
 export function request(value) {
-  assert(typeof value === "string" && Buffer.byteLength(value) <= 2048);
-  const keys = [
-    ...value.matchAll(/"(source|packagesRun|hostRun|tag|updateIDs)"\s*:/g),
-  ].map((match) => match[1]);
-  assert.equal(keys.length, 5);
-  assert.equal(new Set(keys).size, 5);
+  assert(typeof value === "string" && Buffer.byteLength(value) <= 4096);
   const result = JSON.parse(value);
+  const tree = parseExpression(value);
+  function unique(node) {
+    if (node.type === "ObjectExpression") {
+      const keys = node.properties.map((property) => property.key.value);
+      assert.equal(
+        new Set(keys).size,
+        keys.length,
+        "Duplicate decoded request key",
+      );
+      for (const property of node.properties) unique(property.value);
+    } else if (node.type === "ArrayExpression") {
+      for (const entry of node.elements) unique(entry);
+    }
+  }
+  unique(tree);
   assert.deepEqual(Object.keys(result).sort(), [
     "hostRun",
     "packagesRun",
+    "retainedRuns",
     "source",
     "tag",
     "updateIDs",
@@ -42,6 +54,17 @@ export function request(value) {
   assert.equal(new Set(result.updateIDs).size, result.updateIDs.length);
   for (const id of result.updateIDs)
     assert.match(id, /^[A-Za-z][A-Za-z0-9_-]{0,63}$/);
+  assert(
+    result.retainedRuns &&
+      typeof result.retainedRuns === "object" &&
+      !Array.isArray(result.retainedRuns),
+  );
+  assert(Object.keys(result.retainedRuns).length <= 39);
+  for (const [id, runID] of Object.entries(result.retainedRuns)) {
+    assert.match(id, /^[A-Za-z][A-Za-z0-9_-]{0,63}$/);
+    integer(runID);
+    assert.notEqual(runID, result.packagesRun);
+  }
   return result;
 }
 
@@ -118,6 +141,7 @@ export function productionRun({
   source,
   definitions,
   fingerprints,
+  plannedIDs = definitions.map(({ id }) => id),
 }) {
   successfulRun(run, source, ".github/workflows/extensions.yml");
   assert(["push", "workflow_dispatch"].includes(run.event));
@@ -128,15 +152,22 @@ export function productionRun({
     Object.keys(fingerprints).sort(),
     definitions.map(({ id }) => id).sort(),
   );
+  assert(plannedIDs.length > 0 && plannedIDs.length <= 39);
+  assert.equal(new Set(plannedIDs).size, plannedIDs.length);
+  assert(
+    plannedIDs.every((id) =>
+      definitions.some((definition) => definition.id === id),
+    ),
+  );
   const expected = [
     "plan",
     "frozen-host",
     "tests",
     "publish",
-    ...definitions.map(({ id }) => `build (${id})`),
+    ...plannedIDs.map((id) => `build (${id})`),
   ];
-  assert.equal(jobs.length, 43);
-  assert.equal(new Set(jobs.map(({ id }) => id)).size, 43);
+  assert.equal(jobs.length, plannedIDs.length + 4);
+  assert.equal(new Set(jobs.map(({ id }) => id)).size, plannedIDs.length + 4);
   assert.deepEqual(jobs.map(({ name }) => name).sort(), expected.sort());
   for (const job of jobs) {
     integer(job.id);
@@ -158,7 +189,7 @@ export function productionRun({
       assert.equal(matching[0].conclusion, "success");
     }
   }
-  return definitions.map(({ id }) => ({
+  return plannedIDs.map((id) => ({
     extensionID: id,
     sourceFingerprint: fingerprints[id],
     ...artifact(artifacts, `extension-${id}`, run, source),
@@ -346,4 +377,50 @@ export async function downloadPublic({
     if (file) await rm(destination, { force: true });
     throw error;
   }
+}
+
+export function composeLineage({
+  definitions,
+  fingerprints,
+  current,
+  retained,
+  requestedRuns,
+}) {
+  const changed = new Set(current.plan.plannedIDs);
+  assert.equal(changed.size, current.plan.plannedIDs.length);
+  const remaining = definitions
+    .map(({ id }) => id)
+    .filter((id) => !changed.has(id));
+  assert.deepEqual(Object.keys(requestedRuns).sort(), remaining.sort());
+  return definitions.map(({ id }) => {
+    const admission = changed.has(id)
+      ? current
+      : retained.get(requestedRuns[id]);
+    assert(admission, `Missing immutable production lineage for ${id}`);
+    assert.equal(admission.value.run.head_sha, admission.source);
+    assert.equal(
+      admission.value.run.id,
+      changed.has(id) ? current.value.run.id : requestedRuns[id],
+    );
+    assert.equal(admission.metadata.sourceCommit, admission.source);
+    assert.equal(admission.metadata.sourceTreeDirty, false);
+    const matches = admission.rows.filter((row) => row.extensionID === id);
+    assert.equal(
+      matches.length,
+      1,
+      `Require an actual successful planned build for ${id}`,
+    );
+    const row = matches[0];
+    assert.equal(row.sourceFingerprint, fingerprints[id]);
+    return {
+      ...row,
+      sourceCommit: admission.source,
+      runID: admission.value.run.id,
+      frozen: admission.frozen,
+      frozenSHA: admission.frozenSHA,
+      qualification: changed.has(id)
+        ? "current-source-build"
+        : "retained-unchanged-fingerprint",
+    };
+  });
 }

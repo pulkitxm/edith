@@ -26,7 +26,8 @@ private func requirePublic(_ condition: Bool) throws {
 
 private func privatePublicData(_ path: String, maximum: Int) throws -> Data {
     let url = URL(fileURLWithPath: path)
-    try requirePublic(url.standardizedFileURL.path == path && url.resolvingSymlinksInPath().path == path)
+    try requirePublic(
+        url.standardizedFileURL.path == path && url.resolvingSymlinksInPath().path == path)
     let descriptor = open(path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
     try requirePublic(descriptor >= 0)
     defer { Darwin.close(descriptor) }
@@ -81,7 +82,10 @@ extension MarketplaceHarness {
         try requirePublic(
             attributes[.ownerAccountID] as? UInt32 == getuid()
                 && attributes[.posixPermissions] as? Int == 0o700)
-        for key in ["HOME", "CFFIXED_USER_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "TMPDIR"] {
+        for key in [
+            "HOME", "CFFIXED_USER_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME",
+            "TMPDIR",
+        ] {
             guard let value = environment[key] else { throw PublicInstallerFailure.rejected }
             try requirePublic(URL(fileURLWithPath: value).deletingLastPathComponent() == authority)
         }
@@ -99,8 +103,10 @@ extension MarketplaceHarness {
             "Core/Commands/Tasks/00000000-0000-0000-0000-000000000001.json": Data(
                 #"{"title":"synthetic retained task","state":"completed"}"#.utf8),
             "Core/agent.json": Data(#"{"events":[{"message":"synthetic retained event"}]}"#.utf8),
-            "Core/schedules.json": Data(#"{"schedules":[{"task":"synthetic","enabled":false}]}"#.utf8),
-            "machines/companion-config.json": Data(#"{"provider":"synthetic","enabled":true}"#.utf8),
+            "Core/schedules.json": Data(
+                #"{"schedules":[{"task":"synthetic","enabled":false}]}"#.utf8),
+            "machines/companion-config.json": Data(
+                #"{"provider":"synthetic","enabled":true}"#.utf8),
             "provider-hook-ownership.json": Data(#"{"provider":"synthetic","owned":false}"#.utf8),
         ]
         for (name, bytes) in seeds {
@@ -113,7 +119,8 @@ extension MarketplaceHarness {
         func preserve() throws {
             for (name, expected) in seeds {
                 let actual = try Data(contentsOf: dataRoot.appendingPathComponent(name))
-                try requirePublic(actual == expected && SHA256.hash(data: actual) == SHA256.hash(data: expected))
+                try requirePublic(
+                    actual == expected && SHA256.hash(data: actual) == SHA256.hash(data: expected))
             }
             preservationChecks += 1
         }
@@ -123,18 +130,28 @@ extension MarketplaceHarness {
         }
         let catalog = try JSONDecoder().decode(SignedExtensionCatalog.self, from: envelope)
             .verified(publicKey: key, repository: MarketplaceConfiguration.repository)
-        try requirePublic(request.current.count == 39 && request.previous.count == request.updateIDs.count)
+        try requirePublic(
+            request.current.count == 39 && request.previous.count == request.updateIDs.count)
         try requirePublic(Set(request.current.map(\.id)).count == 39)
-        try requirePublic(Set(request.previous.map(\.id)) == Set(request.updateIDs) && Set(request.updateIDs).isSubset(of: Set(request.current.map(\.id))))
+        try requirePublic(
+            Set(request.previous.map(\.id)) == Set(request.updateIDs)
+                && Set(request.updateIDs).isSubset(of: Set(request.current.map(\.id))))
         try requirePublic(request.current.allSatisfy({ catalog.packages.contains($0) }))
         try requirePublic(request.previous.allSatisfy({ catalog.packages.contains($0) }))
+        for current in request.current {
+            let plan = try catalog.installationPlan(
+                for: current.id, hostABI: current.hostABI, architecture: current.architecture,
+                systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion))
+            try requirePublic(plan.contains(current))
+        }
         for previous in request.previous {
             guard let current = request.current.first(where: { $0.id == previous.id }) else {
                 throw PublicInstallerFailure.rejected
             }
             try requirePublic(
                 previous.hostABI == current.hostABI && previous.architecture == current.architecture
-                    && previous.version.compare(current.version, options: .numeric) == .orderedAscending
+                    && previous.version.compare(current.version, options: .numeric)
+                        == .orderedAscending
                     && previous.sha256 != current.sha256)
         }
         let installer = ExtensionPackageInstaller(
@@ -145,7 +162,8 @@ extension MarketplaceHarness {
                 }
                 let bytes = try privatePublicData(path, maximum: 512 * 1024 * 1024)
                 try requirePublic(bytes.count == expectedBytes)
-                let copy = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+                let copy = FileManager.default.temporaryDirectory.appendingPathComponent(
+                    UUID().uuidString)
                 try bytes.write(to: copy, options: .withoutOverwriting)
                 return copy
             },
@@ -154,61 +172,100 @@ extension MarketplaceHarness {
                     ExtensionPayloadManifest.self,
                     from: Data(contentsOf: directory.appendingPathComponent("package.json")))
                 let carrier = try ExtensionUICarrier(
-                    payload: directory, manifest: manifest, expectedHostIdentifier: "com.pulkit.edith")
+                    payload: directory, manifest: manifest,
+                    expectedHostIdentifier: "com.pulkit.edith")
                 try carrier.verify(teamIdentifier: request.teamIdentifier)
                 for role in ExtensionBundleRuntime.Role.allCases {
-                    let bundle = carrier.payloadDirectory.appendingPathComponent("\(role.rawValue).bundle")
+                    let bundle = carrier.payloadDirectory.appendingPathComponent(
+                        "\(role.rawValue).bundle")
                     if FileManager.default.fileExists(atPath: bundle.path) {
-                        try ExtensionCodeSignature.verify(bundle, teamIdentifier: request.teamIdentifier)
+                        try ExtensionCodeSignature.verify(
+                            bundle, teamIdentifier: request.teamIdentifier)
                     }
                 }
                 let camera = directory.appendingPathComponent("CameraCarrier.app")
                 if FileManager.default.fileExists(atPath: camera.path) {
-                    try ExtensionCodeSignature.verify(camera, teamIdentifier: request.teamIdentifier)
+                    try ExtensionCodeSignature.verify(
+                        camera, teamIdentifier: request.teamIdentifier)
                 }
             })
-        _ = try await installer.install(request.previous, repository: MarketplaceConfiguration.repository)
+        _ = try await installer.install(
+            request.previous, repository: MarketplaceConfiguration.repository)
         for package in request.previous { try store.select(package) }
+        let updateLeases = try request.previous.map { try store.lease($0) }
+        defer { updateLeases.forEach { $0.close() } }
         try preserve()
-        _ = try await installer.install(request.current, repository: MarketplaceConfiguration.repository)
+        _ = try await installer.install(
+            request.current, repository: MarketplaceConfiguration.repository)
         try preserve()
+        for package in request.previous {
+            try requirePublic(
+                FileManager.default.fileExists(atPath: store.directory(for: package).path))
+        }
+        updateLeases.forEach { $0.close() }
         for package in request.current {
             try store.select(package)
-            try requirePublic(try store.installedPackage(
-                id: package.id, hostABI: package.hostABI, architecture: package.architecture) == package)
+            try requirePublic(
+                try store.installedPackage(
+                    id: package.id, hostABI: package.hostABI, architecture: package.architecture)
+                    == package)
         }
         try preserve()
         let cache = root.appendingPathComponent("catalog-cache.json")
         let client = ExtensionCatalogClient(
-            url: URL(string: "https://github.com/pulkitxm/edith/releases/download/extension-catalog-v1/catalog.json")!,
+            url: URL(
+                string:
+                    "https://github.com/pulkitxm/edith/releases/download/extension-catalog-v1/catalog.json"
+            )!,
             publicKey: key, repository: MarketplaceConfiguration.repository, cache: cache,
             fetch: { _ in envelope })
         let online = try await client.refresh()
         try requirePublic(!online.offline && online.catalog == catalog)
         let offline = ExtensionCatalogClient(
-            url: URL(string: "https://github.com/pulkitxm/edith/releases/download/extension-catalog-v1/catalog.json")!,
+            url: URL(
+                string:
+                    "https://github.com/pulkitxm/edith/releases/download/extension-catalog-v1/catalog.json"
+            )!,
             publicKey: key, repository: MarketplaceConfiguration.repository, cache: cache,
             fetch: { _ in throw MarketplaceError.downloadFailed })
         let cached = try await offline.refresh()
         try requirePublic(cached.offline && cached.catalog == catalog)
-        _ = try await installer.install(request.current, repository: MarketplaceConfiguration.repository)
+        _ = try await installer.install(
+            request.current, repository: MarketplaceConfiguration.repository)
         try preserve()
+        let installed = try store.installedPackages()
         var remaining = Set(request.current.map(\.id))
         while !remaining.isEmpty {
-            guard let id = remaining.sorted().first(where: { id in
-                !request.current.contains { remaining.contains($0.id) && $0.dependencies.contains(id) }
-            }), let package = request.current.first(where: { $0.id == id }) else {
+            guard
+                let id = remaining.sorted().first(where: { id in
+                    !installed.contains {
+                        remaining.contains($0.id) && $0.dependencies.contains(id)
+                    }
+                }), let package = request.current.first(where: { $0.id == id })
+            else {
                 throw MarketplaceError.invalidCatalog
             }
+            let installedState = try Data(
+                contentsOf: packageRoot.appendingPathComponent("installed.json"))
+            let selectedState = try Data(
+                contentsOf: packageRoot.appendingPathComponent("selected-packages.json"))
             let lease = try store.lease(package)
             defer { lease.close() }
             try requirePublic(try store.requestRemoval(id: id) == false)
             try requirePublic(try store.pendingRemovals().contains(id))
             try store.completePendingRemovals()
-            try requirePublic(FileManager.default.fileExists(atPath: store.directory(for: package).path))
+            try requirePublic(
+                FileManager.default.fileExists(atPath: store.directory(for: package).path))
+            try requirePublic(
+                try Data(contentsOf: packageRoot.appendingPathComponent("installed.json"))
+                    == installedState)
+            try requirePublic(
+                try Data(contentsOf: packageRoot.appendingPathComponent("selected-packages.json"))
+                    == selectedState)
             lease.close()
             try store.completePendingRemovals()
-            try requirePublic(!FileManager.default.fileExists(atPath: store.directory(for: package).path))
+            try requirePublic(
+                !FileManager.default.fileExists(atPath: store.directory(for: package).path))
             try requirePublic(try store.installedPackages().allSatisfy({ $0.id != id }))
             try requirePublic(try !store.pendingRemovals().contains(id))
             try preserve()
@@ -216,18 +273,23 @@ extension MarketplaceHarness {
         }
         try requirePublic(try store.installedPackages().isEmpty)
         for package in request.previous {
-            try requirePublic(!FileManager.default.fileExists(atPath: store.directory(for: package).path))
+            try requirePublic(
+                !FileManager.default.fileExists(atPath: store.directory(for: package).path))
         }
         try preserve()
         let result: [String: Any] = [
             "schema": 1, "sourceCommit": request.sourceCommit, "owners": 39,
-            "installationVerified": true, "publicVersionUpdateVerified": !request.updateIDs.isEmpty, "updatedIDs": request.updateIDs,
+            "installationVerified": true, "publicVersionUpdateVerified": !request.updateIDs.isEmpty,
+            "updatedIDs": request.updateIDs,
             "offlineCatalogAndSelectionVerified": true, "removalVerified": true,
             "busyRemovalAndLeaseDrainVerified": true, "persistentSyntheticDataPreserved": true,
             "preservationChecks": preservationChecks, "productionSignaturesVerified": true,
             "storeSelectionVerified": true, "workerEnableDisableExecuted": false,
             "workerProcessesStarted": 0, "featureCodeExecuted": false,
         ]
-        print(String(decoding: try JSONSerialization.data(withJSONObject: result, options: .sortedKeys), as: UTF8.self))
+        print(
+            String(
+                decoding: try JSONSerialization.data(withJSONObject: result, options: .sortedKeys),
+                as: UTF8.self))
     }
 }

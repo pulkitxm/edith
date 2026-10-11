@@ -63,6 +63,28 @@ class StaticProofTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             proof.document(self.file('document',b'{"schema":1,"schema":1}'))
 
+    def test_escaped_duplicate_document_key_is_rejected(self):
+        with self.assertRaises(ValueError):
+            proof.document(self.file('document', b'{"schema":1,"\\u0073chema":2}'))
+
+    def test_ci_artifact_extraction_is_closed_crc_checked_and_private(self):
+        outer = self.file('outer.zip', b'placeholder')
+        with zipfile.ZipFile(outer, 'w') as archive:
+            archive.writestr('host-release-proof.json', b'{"schema":1}')
+            archive.writestr('build-metadata.json', b'{"source":"synthetic"}')
+        destination = self.root / 'extracted'
+        receipt = proof.extract_artifact(outer, destination, ['host-release-proof.json', 'build-metadata.json'])
+        self.assertTrue(receipt['zipCRCVerified'])
+        self.assertEqual(proof.document(destination / 'host-release-proof.json'), {'schema': 1})
+        self.assertEqual((destination / 'build-metadata.json').stat().st_mode & 0o777, 0o600)
+        with self.assertRaises(ValueError):
+            proof.extract_artifact(outer, self.root / 'missing', ['host-release-proof.json'])
+        with zipfile.ZipFile(outer, 'w') as archive:
+            archive.writestr('../foreign', b'synthetic')
+        with self.assertRaises(ValueError):
+            proof.extract_artifact(outer, self.root / 'traversal', ['../foreign'])
+        self.assertFalse((self.root / 'foreign').exists())
+
     def original(self):
         value = plistlib.dumps({'CFBundleShortVersionString':'1.0.0','CFBundleVersion':'1','CFBundleIdentifier':'fixture'})
         return {'Resources/Info.plist':value,'Resources/HelperInfo.plist':value,'Casks/edith.rb':b'cask "edith" do\n  version "1.0.0"\n  sha256 "old"\nend\n'}
@@ -115,18 +137,6 @@ class StaticProofTests(unittest.TestCase):
                 result=proof.archive_metrics(archive,'fixture',len(data),hashlib.sha256(data).hexdigest())
                 self.assertEqual(result['installedBytes'],2)
                 self.assertFalse(result['codeExecuted'])
-
-    def test_actual_plan_requires_exact39_rows(self):
-        value={'include':[{'id':f'owner{index}','fingerprint':'a'*64} for index in range(39)]}
-        expected=self.file('expected.json',json.dumps(value).encode())
-        archive=self.root/'plan.zip'
-        for count in [39,38]:
-            with zipfile.ZipFile(archive,'w') as target:target.writestr('plan.json',json.dumps({'include':value['include'][:count]}))
-            archive.chmod(0o600)
-            if count==39:self.assertEqual(proof.plan_archive(archive,expected)['owners'],39)
-            else:
-                with self.assertRaises(ValueError):proof.plan_archive(archive,expected)
-
 
     def test_raw_tag_object_and_current_main(self):
         source = '1'*40

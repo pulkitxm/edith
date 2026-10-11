@@ -8,6 +8,7 @@ import {
 } from "./hosted-managed-views/native-ci-contract.mjs";
 import {
   artifact,
+  composeLineage,
   digest,
   downloadPublic,
   hosted,
@@ -111,8 +112,14 @@ describe("Public release admission", () => {
       hostRun: 3,
       tag: "v1.2.3",
       updateIDs: [],
+      retainedRuns: {},
     };
     expect(request(JSON.stringify(value))).toEqual(value);
+    const duplicate = JSON.stringify(value).replace(
+      '"source":',
+      `"\\u0073ource":"${"d".repeat(40)}","source":`,
+    );
+    expect(() => request(duplicate)).toThrow();
     for (const change of [
       { extra: true },
       { source: "main" },
@@ -263,4 +270,110 @@ describe("Public release admission", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+});
+
+test("selective publication composes unchanged actual lineage with all39 source fingerprints", () => {
+  const full = fixture(true);
+  const prior = {
+    value: full,
+    source,
+    plan: { plannedIDs: definitions.map(({ id }) => id) },
+    rows: productionRun(full),
+    metadata: { sourceCommit: source, sourceTreeDirty: false },
+    frozen: { hostApp: "synthetic" },
+    frozenSHA: "c".repeat(64),
+  };
+  const changed = fixture(true);
+  changed.run.id = 72;
+  changed.run.head_sha = "d".repeat(40);
+  changed.source = changed.run.head_sha;
+  changed.jobs = changed.jobs
+    .filter(
+      ({ name }) => !name.startsWith("build (") || name === "build (owner0)",
+    )
+    .map((job) => ({ ...job, run_id: 72 }));
+  changed.artifacts = changed.artifacts
+    .filter(({ name }) => name === "extension-owner0")
+    .map((asset) => ({
+      ...asset,
+      workflow_run: { id: 72, head_sha: changed.source },
+    }));
+  const current = {
+    value: changed,
+    source: changed.source,
+    plan: { plannedIDs: ["owner0"] },
+    rows: productionRun({ ...changed, plannedIDs: ["owner0"] }),
+    metadata: { sourceCommit: changed.source, sourceTreeDirty: false },
+    frozen: { hostApp: "synthetic" },
+    frozenSHA: "e".repeat(64),
+  };
+  const requestedRuns = Object.fromEntries(
+    definitions.filter(({ id }) => id !== "owner0").map(({ id }) => [id, 71]),
+  );
+  const input = {
+    definitions,
+    fingerprints,
+    current,
+    retained: new Map([[71, prior]]),
+    requestedRuns,
+  };
+  const result = composeLineage(input);
+  expect(result).toHaveLength(39);
+  expect(
+    result.find(({ extensionID }) => extensionID === "owner0").sourceCommit,
+  ).toBe(changed.source);
+  expect(
+    result.find(({ extensionID }) => extensionID === "owner1").qualification,
+  ).toBe("retained-unchanged-fingerprint");
+  expect(() =>
+    composeLineage({
+      ...input,
+      requestedRuns: { ...requestedRuns, owner0: 71 },
+    }),
+  ).toThrow();
+  expect(() => composeLineage({ ...input, retained: new Map() })).toThrow();
+  expect(() =>
+    composeLineage({
+      ...input,
+      retained: new Map([
+        [
+          71,
+          { ...prior, metadata: { ...prior.metadata, sourceTreeDirty: true } },
+        ],
+      ]),
+    }),
+  ).toThrow();
+  expect(() =>
+    composeLineage({
+      ...input,
+      retained: new Map([
+        [
+          71,
+          {
+            ...prior,
+            rows: prior.rows.filter(
+              ({ extensionID }) => extensionID !== "owner1",
+            ),
+          },
+        ],
+      ]),
+    }),
+  ).toThrow();
+  expect(() =>
+    composeLineage({
+      ...input,
+      fingerprints: { ...fingerprints, owner1: "f".repeat(64) },
+    }),
+  ).toThrow();
+  for (const conclusion of ["failure", "skipped", "cancelled"]) {
+    expect(() =>
+      productionRun({
+        ...changed,
+        plannedIDs: ["owner0"],
+        jobs: changed.jobs.map((job) =>
+          job.name === "build (owner0)" ? { ...job, conclusion } : job,
+        ),
+      }),
+    ).toThrow();
+  }
 });
