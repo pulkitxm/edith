@@ -194,7 +194,8 @@ final class HostWindowNavigation {
     }
 
     func workspaceOwner(
-        extensionID: String, version: String, presentationID: UUID? = nil, location: String? = nil
+        extensionID: String, version: String, presentationID: UUID? = nil, location: String? = nil,
+        sourceWindow: NSWindow? = nil
     ) async throws -> HostWorkspaceNavigationOwner {
         try Task.checkCancellation()
         try HostWorkerNavigationRouting.validateApplied(
@@ -204,7 +205,10 @@ final class HostWindowNavigation {
             throw HostWindowNavigationError.invalidDestination
         }
         registrations = registrations.filter { $0.value.window != nil }
-        let origin = presentationID.flatMap(originatingWindow)
+        guard sourceWindow == nil || presentationID == nil else {
+            throw HostWindowNavigationError.invalidDestination
+        }
+        let origin = sourceWindow ?? presentationID.flatMap(originatingWindow)
         guard presentationID == nil || origin != nil else {
             throw HostWindowNavigationError.unavailable
         }
@@ -251,7 +255,8 @@ final class HostWindowNavigation {
         let validate: @MainActor () throws -> Void = { [weak self] in
             try validateRetained()
             guard let self,
-                self.currentOrigin(presentationID, window: origin, relationship: relationship)
+                self.currentOrigin(presentationID, window: origin, relationship: relationship),
+                sourceWindow == nil || sourceWindow.flatMap(self.owningWorkspace) === window
             else { throw HostWindowNavigationError.unavailable }
         }
         try validate()

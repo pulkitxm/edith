@@ -7,6 +7,54 @@ import Testing
 
 @MainActor @Suite(.serialized)
 struct HostNotchStartupTests {
+    @Test func compactTerminalOpenAwaitsTheOwnedServiceAndKeepsTheAssociatedWorkspace()
+        async throws
+    {
+        let main = window("EdithMainWindow"), other = window("EdithMainWindow")
+        let panel = window("EdithNotchPanel")
+        defer { main.close(); other.close(); panel.close() }
+        let suite = "notch-terminal-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let fixture = Lifecycle(providerID: "terminal")
+        fixture.panel = panel
+        let navigation = HostWindowNavigation(
+            defaults: defaults, activeVersions: { ["terminal": "1.0.0"] })
+        let first = navigation.register(window: main, apply: { _ in }, selected: { "home" })
+        let second = navigation.register(window: other, apply: { _ in }, selected: { "home" })
+        var failDelivery = true, deliveries = 0
+        let startup = HostNotchStartup(
+            navigation: navigation,
+            openTerminal: { request in
+                try request.validate()
+                #expect(request.window === panel && request.version == "1.0.0")
+                let owner = try await navigation.workspaceOwner(
+                    extensionID: "terminal", version: request.version, sourceWindow: request.window)
+                #expect(owner.window === main && owner.token == first)
+                deliveries += 1
+                if failDelivery { throw HostWorkerError.rejected }
+                await Task.yield()
+                try request.validate()
+                try owner.validate()
+            }
+        ) {
+            fixture.context = $0; return fixture
+        }
+        await startup.settled()
+        let association = try navigation.associate(window: panel, with: main)
+        await #expect(throws: HostWorkerError.rejected) {
+            try await fixture.context!.navigate(fixture.origin, "terminal", "1.0.0")
+        }
+        #expect(deliveries == 1 && fixture.collapseCalls == 0)
+        failDelivery = false
+        try await fixture.context!.navigate(fixture.origin, "terminal", "1.0.0")
+        try await fixture.context!.postNavigation(fixture.origin, "terminal", "1.0.0")
+        #expect(deliveries == 2 && fixture.collapseCalls == 1)
+        navigation.removeAssociation(association)
+        navigation.unregister(second); navigation.unregister(first)
+        try await startup.stop()
+    }
+
     @Test func exactRegistrationsNotifyWithoutOrderingAnyWindow() {
         let first = window("EdithMainWindow")
         let second = window("EdithMainWindow")
@@ -344,13 +392,19 @@ struct HostNotchStartupTests {
     var collapseCalls = 0
     var collapsed: (HostNotchNavigationTicket) async throws -> Void = { _ in }
     var panel: NSWindow?
-    let origin = HostNotchCompactOrigin(
-        identity: .init(ownershipID: UUID(), generation: UUID()), displayID: 1,
-        panelPresentationID: UUID(), cardPresentationID: UUID(), tile: .init(.ability("calendar")))
+    let providerID: String
+    let origin: HostNotchCompactOrigin
+    init(providerID: String = "calendar") {
+        self.providerID = providerID
+        origin = .init(
+            identity: .init(ownershipID: UUID(), generation: UUID()), displayID: 1,
+            panelPresentationID: UUID(), cardPresentationID: UUID(),
+            tile: .init(.ability(providerID)))
+    }
     func navigationTicket(presentationID: UUID, providerID: String, version: String)
         -> HostNotchNavigationTicket?
     {
-        guard admitted, presentationID == origin.cardPresentationID, providerID == "calendar",
+        guard admitted, presentationID == origin.cardPresentationID, providerID == self.providerID,
             version == "1.0.0"
         else { return nil }
         return .init(
@@ -375,6 +429,6 @@ struct HostNotchStartupTests {
         presentationID == origin.cardPresentationID ? panel : nil
     }
     func compactVersions(_ value: HostNotchCompactOrigin) -> [String: String]? {
-        admitted && value == origin ? ["calendar": "1.0.0"] : nil
+        admitted && value == origin ? [providerID: "1.0.0"] : nil
     }
 }

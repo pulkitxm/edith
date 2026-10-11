@@ -84,7 +84,8 @@ struct HostExtensionContent: View {
             id: Request(
                 version: marketplace.installed[extensionID]?.version, active: active,
                 location: location,
-                section: section, surface: surface, retry: retry, deliveryID: navigation?.delivery.id),
+                section: section, surface: surface, retry: retry,
+                deliveryID: navigation?.delivery.id),
             active: eligible && presenter != nil, cancel: clear
         ) {
             guard let presenter else { return }
@@ -125,9 +126,12 @@ struct HostExtensionContent: View {
                             guard let remote, presentationID == token, controller === loaded,
                                 remote.request.presentationID == token,
                                 remote.request.extensionID == extensionID,
-                                remote.request.location == location, remote.request.section == section,
-                                marketplace.installed[extensionID]?.version == navigation.delivery.version,
-                                marketplace.sessions.versions[extensionID] == navigation.delivery.version,
+                                remote.request.location == location,
+                                remote.request.section == section,
+                                marketplace.installed[extensionID]?.version
+                                    == navigation.delivery.version,
+                                marketplace.sessions.versions[extensionID]
+                                    == navigation.delivery.version,
                                 marketplace.surfaceAvailability.activeIDs.contains(extensionID),
                                 !marketplace.pendingRemovalIDs.contains(extensionID),
                                 !marketplace.sessions.pendingDisableIDs.contains(extensionID),
@@ -135,7 +139,7 @@ struct HostExtensionContent: View {
                                 owner.owns(remote, presentationID: token)
                             else { throw HostWorkerError.rejected }
                             try navigation.validate(window: window)
-                            try remote.validateConnected(window: window)
+                            try owner.validateConnected(remote, window: window)
                         })
                 }
             } catch {

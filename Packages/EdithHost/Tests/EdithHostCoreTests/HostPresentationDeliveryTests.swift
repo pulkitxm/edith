@@ -7,15 +7,19 @@ import Testing
     @Test func selectionCannotAcknowledgeAndReceiptRechecksItsLiveOwner() async throws {
         let receipt = HostPresentationDelivery(extensionID: "emoji", version: "1.0.0")
         #expect(throws: HostPresentationDeliveryError.unavailable) { try receipt.validate() }
-        var current = true
+        let owner = Owner()
         try receipt.receive(
             presentationID: receipt.id, extensionID: "emoji", version: "1.0.0",
             validate: {
-                guard current else { throw HostPresentationDeliveryError.rejected }
+                guard owner.current else { throw HostPresentationDeliveryError.rejected }
             })
         try await receipt.wait()
-        current = false
+        owner.current = false
         #expect(throws: HostPresentationDeliveryError.rejected) { try receipt.validate() }
+    }
+
+    @MainActor private final class Owner {
+        var current = true
     }
 
     @Test func failedDismissedForeignAndReplacedPresentationsNeverAcknowledge() async throws {
@@ -29,7 +33,9 @@ import Testing
                     presentationID: id, extensionID: owner, version: version, validate: {})
             }
             receipt.reject()
-            await #expect(throws: HostPresentationDeliveryError.rejected) { try await receipt.wait() }
+            await #expect(throws: HostPresentationDeliveryError.rejected) {
+                try await receipt.wait()
+            }
         }
         let dismissed = HostPresentationDelivery(extensionID: "emoji", version: "1.0.0")
         try dismissed.receive(

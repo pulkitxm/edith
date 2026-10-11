@@ -44,7 +44,9 @@ struct HostApplication: App {
                             coreOnline: coreServices?.online ?? false,
                             coreSummary: coreServices?.activityLabel ?? "Starting",
                             sectionWindows: sectionWindows, windowNavigation: windowNavigation,
-                            musicSlots: musicSlots)
+                            musicSlots: musicSlots
+                        )
+                        .environment(\.hostTerminalWindows, terminalWindows)
                     } else if startupError {
                         ContentUnavailableView(
                             "Edith could not start", systemImage: "exclamationmark.triangle")
@@ -165,7 +167,7 @@ struct HostApplication: App {
             let ownedHerdr = HostHerdrWindows(
                 manager: manager, presenter: presenter, navigation: navigation)
             let ownedTerminal = HostTerminalWindows(
-                manager: manager, presenter: presenter, navigation: navigation)
+                manager: manager, presenter: presenter, navigation: navigation, identity: identity)
             let interactions = HostHerdrInteractions(
                 marketplace: loaded, manager: manager, presenter: presenter,
                 navigation: navigation, windows: ownedHerdr)
@@ -176,7 +178,13 @@ struct HostApplication: App {
                 return try await interactions.chooseFolder(request)
             }
             let notch = HostNotchStartup(
-                marketplace: loaded, manager: manager, navigation: navigation)
+                marketplace: loaded, manager: manager, navigation: navigation,
+                openTerminal: { [weak ownedTerminal] request in
+                    guard let ownedTerminal else { throw HostWorkerError.rejected }
+                    try await ownedTerminal.openSurface(
+                        version: request.version, window: request.window, validate: request.validate
+                    )
+                })
             ownedNotch = notch
             notchStartup = notch
             loaded.sessions.didRequestNavigation = {

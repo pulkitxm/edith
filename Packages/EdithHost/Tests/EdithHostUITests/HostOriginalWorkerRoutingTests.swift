@@ -252,6 +252,29 @@ import Testing
         #expect(fixture.selected == "calendar" && secondSelected == "home")
     }
 
+    @Test func hostSurfaceDeliveryKeepsItsSourceWorkspaceAndRechecksTheAssociation() async throws {
+        let fixture = WindowFixture()
+        defer { fixture.clean() }
+        fixture.versions["terminal"] = "1.0.0"
+        let other = TestWindowHost.window(contentRect: .zero)
+        let panel = TestWindowHost.window(contentRect: .zero)
+        other.identifier = .init("EdithMainWindow")
+        defer { other.close(); panel.close() }
+        let navigation = HostWindowNavigation(
+            defaults: fixture.defaults, activeVersions: { fixture.versions })
+        let token = fixture.register(navigation)
+        _ = navigation.register(window: other, apply: { _ in }, selected: { "home" })
+        let association = try navigation.associate(window: panel, with: fixture.window)
+        let owner = try await navigation.workspaceOwner(
+            extensionID: "terminal", version: "1.0.0", sourceWindow: panel)
+        #expect(owner.window === fixture.window && owner.token == token)
+        navigation.removeAssociation(association)
+        #expect(throws: HostWindowNavigationError.unavailable) { try owner.validate() }
+        try owner.validateRetained()
+        navigation.unregister(token)
+        #expect(throws: HostWindowNavigationError.routeRejected) { try owner.validateRetained() }
+    }
+
     @Test func missingWorkspaceOpensWaitsForRegistrationThenShowsBeforeAcknowledgment() async throws
     {
         let fixture = WindowFixture()

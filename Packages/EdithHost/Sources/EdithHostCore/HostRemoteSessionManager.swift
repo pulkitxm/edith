@@ -195,6 +195,16 @@ public final class HostRemoteSessionManager {
         return handle
     }
 
+    public func validatePresented(_ request: HostExtensionContentRequest) throws {
+        guard let handle = presentations[request.presentationID], handle.request == request else {
+            throw HostWorkerError.rejected
+        }
+        try validateNavigationOrigin(
+            HostWorkerNavigationRequest(
+                configuration: handle.configuration.worker, presentationID: request.presentationID,
+                location: request.location))
+    }
+
     public func validateNavigationOrigin(_ request: HostWorkerNavigationRequest) throws {
         let id = request.extensionID
         guard marketplace.sessions.activeIDs.contains(id),

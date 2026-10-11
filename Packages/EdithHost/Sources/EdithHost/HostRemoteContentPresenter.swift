@@ -84,6 +84,14 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
         closing[presentationID] == nil && controllers[presentationID] === controller
     }
 
+    func validateConnected(_ controller: HostRemoteViewController, window: NSWindow) throws {
+        guard owns(controller, presentationID: controller.request.presentationID) else {
+            throw HostWorkerError.rejected
+        }
+        try manager.validatePresented(controller.request)
+        try controller.validateConnected(window: window)
+    }
+
     func consumeTerminalZoom(
         _ command: WindowKeyCommand, window: NSWindow?, fallback: @escaping @MainActor () -> Void
     ) -> Bool {

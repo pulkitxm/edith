@@ -153,7 +153,8 @@ struct HostWorkspace: View {
                             else { throw HostWindowNavigationError.unavailable }
                             requestedSettings?.delivery.reject()
                             requestedSettings = .init(
-                                delivery: HostPresentationDelivery(extensionID: id, version: version),
+                                delivery: HostPresentationDelivery(
+                                    extensionID: id, version: version),
                                 window: workspaceWindow)
                         }
                         if let section = route.section {
