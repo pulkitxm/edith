@@ -235,7 +235,7 @@ final class ExtensionRuntime: NSObject {
                 if model == nil {
                     if let admission {
                         guard let identifier = input["hostIdentifier"] as? String,
-                            suite == identifier + ".extension.plugins.worker",
+                            suite == identifier + ".extensions.plugins",
                             admission.descriptor.inputs.count == 1,
                             admission.descriptor.inputs[0].name == "agents",
                             admission.descriptor.inputs[0].maximumBytes <= 8192,

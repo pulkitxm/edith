@@ -462,7 +462,7 @@ final class ExtensionRuntime: NSObject {
                         fixtureContext = input.copy() as? NSDictionary
                         fixturePreferences = try NotchFixturePreferences(
                             suite: suite,
-                            expectedSuite: identifier + ".extension.notchShelf.worker",
+                            expectedSuite: identifier + ".extensions.notchShelf",
                             schema: NotchSettingsSchema.defaults,
                             isString: NotchSettingsSchema.isString,
                             accepts: NotchSettingsSchema.accepts,

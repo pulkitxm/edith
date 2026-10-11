@@ -19,7 +19,7 @@ enum NotchFixturePreferencesError: Error { case invalid, unavailable }
     ) throws {
         try requireCurrent()
         let prefix = "com.pulkit.edith.tests.worker-"
-        let suffix = ".extension.notchShelf.worker"
+        let suffix = ".extensions.notchShelf"
         guard suite == expectedSuite, suite.hasPrefix(prefix), suite.hasSuffix(suffix),
             UUID(uuidString: String(suite.dropFirst(prefix.count).dropLast(suffix.count))) != nil,
             !schema.isEmpty, schema.allSatisfy({ accepts($0.key, $0.value) }),
