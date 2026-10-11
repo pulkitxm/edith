@@ -67,7 +67,12 @@ final class HostRemoteEngineOwner {
             request.operation, payload: request.payload, timeout: request.timeout,
             token: request.token)
         try Task.checkCancellation()
-        try validate()
+        let id = configuration.package.id
+        guard pending.contains(request.token), !configuration.uiOnly,
+            marketplace.installed[id] == configuration.package,
+            marketplace.sessions.versions[id] == configuration.package.version,
+            marketplace.sessions.processIdentifiers[id] == process.pid, process.isRunning
+        else { throw HostWorkerError.rejected }
         guard result.count <= ExtensionEngineWire.maximumPayloadBytes,
             (try? JSONSerialization.jsonObject(with: result, options: .fragmentsAllowed)) != nil
         else { throw HostWorkerError.invalidResponse }

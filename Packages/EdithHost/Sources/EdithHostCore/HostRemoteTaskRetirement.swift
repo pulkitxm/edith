@@ -45,6 +45,14 @@ final class HostRemoteInvocationRetirement {
         for item in work.values { item.task.cancel() }
     }
 
+    func joinCurrent(excluding token: UUID? = nil) async {
+        let snapshot = work.filter { $0.key != token }
+        for (key, item) in snapshot {
+            await item.task.value
+            finish(key, identity: item.identity)
+        }
+    }
+
     func cancelAndJoin(excluding token: UUID? = nil) async {
         let snapshot = work.filter { $0.key != token }
         for item in snapshot.values { item.task.cancel() }
@@ -87,6 +95,15 @@ final class HostRemoteCallbackRetirement: @unchecked Sendable {
     }
 
     func close() { lock.withLock { closed = true } }
+
+    @discardableResult
+    func resume() -> Bool {
+        lock.withLock {
+            guard closed, pending == 0 else { return false }
+            closed = false
+            return true
+        }
+    }
 
     func closeAndWait() async {
         await withCheckedContinuation { continuation in

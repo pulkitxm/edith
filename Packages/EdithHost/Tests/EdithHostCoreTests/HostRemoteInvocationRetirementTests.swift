@@ -106,4 +106,36 @@ import Testing
         #expect(ownership.count == 0)
     }
 
+    @Test func naturalJoinRetainsAcceptedOwnerWithoutCancellation() async throws {
+        let ownership = HostRemoteInvocationRetirement()
+        var gate: CheckedContinuation<Void, Never>?
+        var returned = false
+        var cancelled = false
+        var joined = false
+        let actual = Task {
+            await withCheckedContinuation { gate = $0 }
+            cancelled = Task.isCancelled
+            returned = true
+        }
+        ownership.retain(actual, token: UUID())
+        defer { gate?.resume() }
+        let ready = ContinuousClock.now + .seconds(2)
+        while gate == nil, ContinuousClock.now < ready { await Task.yield() }
+        try #require(gate != nil)
+        let drain = Task {
+            await ownership.joinCurrent(); joined = true
+        }
+        for _ in 0..<100 { await Task.yield() }
+        #expect(!joined && !returned && !actual.isCancelled)
+        gate?.resume()
+        gate = nil
+        let finished = ContinuousClock.now + .seconds(2)
+        while !joined, ContinuousClock.now < finished { await Task.yield() }
+        try #require(joined && returned)
+        await actual.value
+        await drain.value
+        #expect(!cancelled)
+        #expect(ownership.count == 0)
+    }
+
 }

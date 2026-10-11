@@ -379,14 +379,18 @@ final class HostRemoteApplication {
         let presentations = slots.compactMap { $0.request?.presentationID }
         slots.forEach { $0.beginClosing() }
         return try stopPreparation.begin(token: token) { [self] in
-            await endpoint.prepareToStop(excluding: token)
-            for slot in slots { await slot.prepareToStop() }
-            for runtime in retainedRuntimes { try await runtime.suspendRemoteUICommandsAll() }
+            await endpoint.joinAdmittedWork(excluding: token)
+            for slot in slots { await slot.joinAdmittedWork() }
             for runtime in retainedRuntimes {
                 for presentationID in presentations {
                     try await runtime.preparePresentationToClose(
                         id: extensionID, presentationID: presentationID)
                 }
+            }
+            for runtime in retainedRuntimes { try await runtime.suspendRemoteUICommandsAll() }
+            await endpoint.prepareToStop(excluding: token)
+            for slot in slots { await slot.prepareToStop() }
+            for runtime in retainedRuntimes {
                 try await runtime.prepareRemoteUIToStopAll()
                 let response = try runtime.response(id: extensionID, operation: "stopUI")
                 guard response["ok"] as? Bool == true else { throw HostWorkerError.rejected }
@@ -401,6 +405,8 @@ final class HostRemoteApplication {
                     token: token, configuration: configuration,
                     roles: retainedRuntimes.map { $0.role.rawValue }, presentations: presentations))
             #endif
+            await endpoint.closeControlCallbacks()
+            for slot in slots { await slot.closeControlCallbacks() }
             slots.forEach { $0.release(reset: false) }
             presentationRuntimes.removeAll()
             terminalRenderer = HostRemoteTerminalRenderer()
@@ -502,6 +508,13 @@ private final class HostRemoteSceneSlot {
         closing = true
         endpoint?.closeMutationAdmission()
     }
+
+    func joinAdmittedWork() async {
+        beginClosing()
+        await endpoint?.joinAdmittedWork()
+    }
+
+    func closeControlCallbacks() async { await endpoint?.closeControlCallbacks() }
 
     func prepareToStop() async {
         beginClosing()

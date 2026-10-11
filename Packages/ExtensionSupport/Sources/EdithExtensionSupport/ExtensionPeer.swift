@@ -613,6 +613,17 @@ public final class ExtensionPeerServer {
         for token in Array(jobs.keys) { close(token) }
     }
 
+    public func closeMutationAdmission() { draining = true }
+
+    public func joinAdmittedRequests() async {
+        draining = true
+        let snapshot = executing
+        for (token, task) in snapshot {
+            await task.value
+            executing[token] = nil
+        }
+    }
+
     public func cancelAndJoinRequests() async {
         draining = true
         let snapshot = executing

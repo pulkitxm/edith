@@ -231,8 +231,8 @@ public final class HostExtensionSessions {
                 workers[id] = nil
                 pendingRecoveryIDs.insert(id)
             }
-            if let worker = workers[id] { try await worker.prepareStop(reason: reason) }
             try await willDisable(id)
+            if let worker = workers[id] { try await worker.prepareStop(reason: reason) }
             if workers[id] == nil, pendingDisableIDs.contains(id) || pendingRecoveryIDs.contains(id)
             {
                 guard let package = packages[id] else { throw HostWorkerError.rejected }

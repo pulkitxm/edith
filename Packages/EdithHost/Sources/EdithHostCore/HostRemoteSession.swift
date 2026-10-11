@@ -471,8 +471,6 @@ public final class HostRemoteSession {
                 _ = try? await launching?.value
             },
             joinConfiguration: { _ = try? await configuring?.value })
-        handles.values.forEach { $0.detach() }
-        handles.removeAll()
         #if EDITH_FUNCTIONAL_FIXTURE
         if channel == nil, let prepared = fixturePreparedChannel {
             channel = prepared
@@ -503,9 +501,6 @@ public final class HostRemoteSession {
                 "Native cleanup could not be confirmed. Retry recovery before releasing this extension."
             )
         }
-        #if EDITH_FUNCTIONAL_FIXTURE
-        let fixtureReceiverCount = retiringChannels.count + (channel == nil ? 0 : 1)
-        #endif
         if let channel {
             let request = HostRemoteCommand(operation: "stop")
             #if EDITH_FUNCTIONAL_FIXTURE
@@ -523,6 +518,13 @@ public final class HostRemoteSession {
                 stopFailure = error
                 throw error
             }
+        }
+        handles.values.forEach { $0.detach() }
+        handles.removeAll()
+        #if EDITH_FUNCTIONAL_FIXTURE
+        let fixtureReceiverCount = retiringChannels.count + (channel == nil ? 0 : 1)
+        #endif
+        if let channel {
             channel.didInvalidate = nil
             await channel.invalidateAndWait()
         }
@@ -627,9 +629,9 @@ public final class HostRemoteSession {
                 do {
                     let result = try await self.executeEngine(request)
                     try Task.checkCancellation()
-                    guard !handle.closed, !self.stopping, !self.stopped,
+                    guard !handle.closed, !self.stopped,
                         self.handles[handle.presentationID] === handle,
-                        self.engineIdentity?.isRunning == true
+                        self.peer?.isRunning == true, self.engineIdentity?.isRunning == true
                     else { throw HostWorkerError.rejected }
                     outcome = .success(result)
                 } catch { outcome = .failure(error) }
