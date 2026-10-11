@@ -22,6 +22,8 @@ struct NotchBrowserDownloadDescriptor: Codable, Sendable {
     private let completed: (URL) -> Void
     private let now: () -> Date
     private var expiryTask: Task<Void, Never>?
+    private var timerTasks: [UUID: Task<Void, Never>] = [:]
+    private var stopped = false
     init(
         destination: @escaping () -> URL = {
             FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
@@ -40,6 +42,7 @@ struct NotchBrowserDownloadDescriptor: Codable, Sendable {
         self.completed = completed
     }
     func start(_ name: String, owner: UUID) throws -> NotchBrowserDownloadDescriptor {
+        guard !stopped else { throw ExtensionPeerError.unavailable }
         expire()
         guard downloads.count < 8, !name.isEmpty, name != ".", name != "..",
             name.utf8.count <= 1024, !name.utf8.contains(0)
@@ -113,15 +116,35 @@ struct NotchBrowserDownloadDescriptor: Codable, Sendable {
     }
     private func scheduleExpiry() {
         expiryTask?.cancel(); expiryTask = nil
-        guard let deadline = downloads.values.map(\.expiry).min() else { return }
+        guard !stopped, let deadline = downloads.values.map(\.expiry).min() else { return }
         let delay = max(0.01, deadline.timeIntervalSince(now()))
-        expiryTask = Task { [weak self] in
+        expiryTask = startTimer { [weak self] in
             do { try await Task.sleep(for: .seconds(delay)) } catch { return }
             self?.expire()
         }
     }
     func stop() {
+        stopped = true
+        for task in timerTasks.values { task.cancel() }
         for id in Array(downloads.keys) { cancel(id: id) }
         expiryTask?.cancel(); expiryTask = nil
     }
+    func stopAndWait() async {
+        stop()
+        for task in Array(timerTasks.values) { await task.value }
+    }
+
+    private func startTimer(_ operation: @escaping @MainActor () async -> Void) -> Task<
+        Void, Never
+    >? {
+        guard !stopped else { return nil }
+        let token = UUID()
+        let task = Task { [weak self] in
+            defer { self?.timerTasks[token] = nil }
+            await operation()
+        }
+        timerTasks[token] = task
+        return task
+    }
+
 }

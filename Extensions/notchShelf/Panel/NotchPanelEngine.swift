@@ -22,6 +22,7 @@ import Foundation
     private var pointers: [UInt32: NotchPanelPointer] = [:]
     private var waiter: (UUID, CheckedContinuation<NotchPanelBatch, Error>)?
     private var waitTimer: Task<Void, Never>?
+    private var timerTasks: [UUID: Task<Void, Never>] = [:]
     private var stopped = false
     weak var controller: NotchShelfController?
     private let context: SurfaceHostContext
@@ -110,7 +111,7 @@ import Foundation
             try await withCheckedThrowingContinuation { continuation in
                 if Task.isCancelled { continuation.resume(throwing: CancellationError()); return }
                 waiter = (id, continuation)
-                waitTimer = Task { [weak self] in
+                waitTimer = startTimer { [weak self] in
                     do { try await Task.sleep(for: .seconds(request.timeout)) } catch { return }
                     guard let self, let waiter, waiter.0 == id else { return }
                     self.waiter = nil; waitTimer = nil
@@ -211,10 +212,21 @@ import Foundation
         stop()
     }
 
-    func stop() {
+    func beginSuspension() {
+        guard !stopped else { return }
         stopped = true
-        cameraEngine?.shutdown()
+        for task in timerTasks.values { task.cancel() }
         if let waiter { cancelWait(waiter.0) }
+    }
+
+    func suspendAndWait() async {
+        beginSuspension()
+        for task in Array(timerTasks.values) { await task.value }
+    }
+
+    func stop() {
+        beginSuspension()
+        cameraEngine?.shutdown()
         slots = [:]; heights = [:]; failures = [:]; pointers = [:]
         transferTimer?.cancel(); transferTimer = nil
         transfer = nil
@@ -225,6 +237,25 @@ import Foundation
         transferCompletions = []; promiseCompletions = []
         controller?.onPanelStateChanged = nil
         for display in displays.values { invalidate(display.presentationID) }
+    }
+
+    func stopAndWait() async {
+        stop()
+        await suspendAndWait()
+        await cameraEngine?.shutdownAndWait()
+    }
+
+    private func startTimer(_ operation: @escaping @MainActor () async -> Void) -> Task<
+        Void, Never
+    >? {
+        guard !stopped else { return nil }
+        let token = UUID()
+        let task = Task { [weak self] in
+            defer { self?.timerTasks[token] = nil }
+            await operation()
+        }
+        timerTasks[token] = task
+        return task
     }
 
     func batch() throws -> NotchPanelBatch {
@@ -359,7 +390,7 @@ import Foundation
             controller.store.retainActionSelection(selection.snapshot)
         else { throw ShelfActionSelectionError.busy }
         transfer = (descriptor, staged)
-        transferTimer = Task { [weak self] in
+        transferTimer = startTimer { [weak self] in
             do { try await Task.sleep(for: .seconds(60)) } catch { return }
             guard let self, transfer?.0.id == descriptor.id else { return }
             cancelTransfer(descriptor.id, error: "The native file action timed out.")

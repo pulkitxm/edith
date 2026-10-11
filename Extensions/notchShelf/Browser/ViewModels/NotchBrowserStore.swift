@@ -62,6 +62,7 @@ final class NotchBrowserStore {
     @ObservationIgnored private var faviconTasks: [BrowserTab.ID: Task<Void, Never>] = [:]
     @ObservationIgnored private var syncTask: Task<Void, Never>?
     @ObservationIgnored private var toastTask: Task<Void, Never>?
+    @ObservationIgnored private var timerTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var resizeStart:
         (size: CGSize, pointer: CGPoint, edge: NotchBrowserResizeEdge)?
     @ObservationIgnored private var menuObservers: [NSObjectProtocol] = []
@@ -141,8 +142,10 @@ final class NotchBrowserStore {
         let syncing = syncTask
         let delivering = Array(deliveries.values)
         let favicons = Array(faviconTasks.values)
+        let timers = Array(timerTasks.values)
         syncTask?.cancel()
         toastTask?.cancel()
+        for task in timers { task.cancel() }
         delivering.forEach { $0.cancel() }
         revokePresentation()
         faviconSession.invalidateAndCancel()
@@ -151,7 +154,7 @@ final class NotchBrowserStore {
         remote?.stop()
         teardown = Task {
             await syncing?.value
-            for task in delivering + favicons { await task.value }
+            for task in delivering + favicons + timers { await task.value }
             await drainStores()
             await remote?.stopAndWait()
             deliveries = [:]; faviconTasks = [:]; faviconCache = [:]
@@ -853,11 +856,24 @@ final class NotchBrowserStore {
         showToast("Download failed")
     }
 
+    private func startTimer(_ operation: @escaping @MainActor () async -> Void) -> Task<
+        Void, Never
+    >? {
+        guard !stopped else { return nil }
+        let token = UUID()
+        let task = Task { [weak self] in
+            defer { self?.timerTasks[token] = nil }
+            await operation()
+        }
+        timerTasks[token] = task
+        return task
+    }
+
     func showToast(_ message: String) {
         guard !stopped else { return }
         toast = message
         toastTask?.cancel()
-        toastTask = Task { [weak self] in
+        toastTask = startTimer { [weak self] in
             try? await Task.sleep(for: .seconds(2.5))
             guard !Task.isCancelled else { return }
             self?.toast = nil

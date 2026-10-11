@@ -434,7 +434,7 @@
       "sources": [
         {
           "path": "Extensions/notchShelf/Runtime.swift",
-          "sha256": "5392b5ea2be7cabf9d6d1fb7ddc17c9171ab238716311c771130bbb701eb2490"
+          "sha256": "0955ab41513d11b2590597a78dc24ccd07d2b92b0f5534557287ecb51bd63c6e"
         },
         {
           "path": "Extensions/notchShelf/Settings/NotchSettingsModel.swift",
