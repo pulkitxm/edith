@@ -85,6 +85,19 @@ final class ExtensionRuntime: NSObject {
         uiClient = nil
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let commands = commands
+        let operations = operations
+        commands.suspend()
+        operations?.shutdown()
+        Task { [commands, operations] in
+            await operations?.cancelPendingWorkAndWait()
+            await commands.suspendAndWait()
+            completion()
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         stopUI()
