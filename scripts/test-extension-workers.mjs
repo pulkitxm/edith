@@ -83,6 +83,16 @@ export const supportedFixtureWorkers = new Set([
 
 export function validateWorkerFixtureSelection(definitions, requested) {
   const workers = definitions.filter((entry) => entry.contractVersion === 1);
+  assert.equal(
+    workers.length,
+    supportedFixtureWorkers.size,
+    "Worker manifest inventory startup rejected",
+  );
+  assert.deepEqual(
+    new Set(workers.map(({ id }) => id)),
+    supportedFixtureWorkers,
+    "Worker manifest inventory startup rejected",
+  );
   const selected =
     requested.length === 0
       ? workers

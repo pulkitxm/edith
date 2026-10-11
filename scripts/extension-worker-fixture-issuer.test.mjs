@@ -581,3 +581,31 @@ test("privileged lifecycle rejects every dropped observation and shipping execut
       );
   }
 });
+
+test("full worker inventory rejects unselected foreign, missing and duplicate owners before selection", () => {
+  const requested = ["music"];
+  const tampered = [
+    [...definitions, { id: "futureWorker", contractVersion: 1 }],
+    definitions.filter(({ id }) => id !== "usage"),
+    definitions.map((entry) =>
+      entry.id === "usage" ? { ...entry, id: "futureWorker" } : entry,
+    ),
+    definitions.map((entry) =>
+      entry.id === "usage" ? { ...entry, id: "music" } : entry,
+    ),
+    definitions.map((entry) =>
+      entry.id === "usage" ? { ...entry, contractVersion: 2 } : entry,
+    ),
+    [...definitions, definitions.find(({ id }) => id === "usage")],
+  ];
+  for (const manifest of tampered)
+    for (const selection of [[], requested])
+      assert.throws(
+        () => validateWorkerFixtureSelection(manifest, selection),
+        /startup rejected/,
+      );
+  assert.deepEqual(
+    validateWorkerFixtureSelection([...definitions].reverse(), requested),
+    [definitions.find(({ id }) => id === "music")],
+  );
+});
