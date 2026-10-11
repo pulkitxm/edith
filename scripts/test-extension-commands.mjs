@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import {
@@ -8,13 +8,19 @@ import {
   rewriteSupportImports,
 } from "./build-extension-support.mjs";
 import { buildExtensionUICarrier } from "./build-extension-ui-carrier.mjs";
+import {
+  workerFixtureEnvironment,
+  workerFixtureHome,
+} from "./test-extension-workers.mjs";
 
 const harness = process.argv[2];
 assert(
   harness && isAbsolute(harness),
   "Pass the absolute HostCommandHarness path from ci-extension-commands",
 );
-const root = await mkdtemp(join(tmpdir(), "extension-command-fixture-"));
+const root = await realpath(
+  await mkdtemp(join(tmpdir(), "extension-command-fixture-")),
+);
 try {
   const products = buildExtensionSupport(
     process.cwd(),
@@ -89,9 +95,12 @@ try {
     stdio: "inherit",
   });
   const fixture = join(root, "host");
-  await mkdir(fixture);
+  await mkdir(fixture, { mode: 0o700 });
+  const home = workerFixtureHome(fixture, "keepAwake");
+  await mkdir(home, { mode: 0o700 });
+  await mkdir(join(home, "tmp"), { mode: 0o700 });
   const app = join(fixture, "Fixture.app");
-  const identifier = `com.pulkit.edith.tests.command-${crypto.randomUUID()}`;
+  const identifier = `com.pulkit.edith.tests.worker-${crypto.randomUUID()}`;
   await cp(resolve("local/minimal-host/Edith.app"), app, { recursive: true });
   execFileSync("python3", [
     "-c",
@@ -117,6 +126,7 @@ try {
   const output = execFileSync(harness, [fixture, app, payload], {
     encoding: "utf8",
     timeout: 120_000,
+    env: workerFixtureEnvironment(home, identifier),
   });
   const results = output
     .trim()

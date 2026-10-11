@@ -176,7 +176,10 @@ struct WorkerLifecycleFixtureTests {
             let selectedData = base.appendingPathComponent("Data").appendingPathComponent(id)
             let admittedRole =
                 WorkerLifecycleFixture.inertIDs.contains(id)
-                    && !["music", "plugins", "studio"].contains(id) ? "helper" : "app"
+                    && ![
+                        "music", "plugins", "studio", "usage", "herdr", "machines",
+                        "attention", "companion", "codeStats",
+                    ].contains(id) ? "helper" : "app"
             let role = base.appendingPathComponent(
                 "Extensions/" + id + "/1/arm64/1.1.0/" + id
                     + "/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/"

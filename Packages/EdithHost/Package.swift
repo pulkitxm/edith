@@ -42,11 +42,36 @@ let package = Package(
                     ["-Xlinker", "-no_exported_symbols", "-Xlinker", "-dead_strip"],
                     .when(configuration: .release)),
             ]),
+        .target(
+            name: "WorkerLifecycleFixtureSupport", path: "Tests/LifecycleHarness",
+            exclude: [
+                "AgentActivityFixture.swift",
+                "AudioMixerFixture.swift",
+                "CalendarFixture.swift",
+                "CameraFixture.swift",
+                "CodeStatsFixture.swift",
+                "CompanionFixture.swift",
+                "DatabaseFixture.swift",
+                "Harness.swift",
+                "HerdrFixture.swift",
+                "MachinesFixture.swift",
+                "NotchFixture.swift",
+                "QuinjetFixture.swift",
+                "QuinjetLifecycleFixture.swift",
+                "StudioFixture.swift",
+                "SystemFixture.swift",
+                "TerminalLifecycleFixture.swift",
+                "UsageFixture.swift",
+                "UsageLauncherFixture.swift",
+            ],
+            sources: ["WorkerLifecycleFixture.swift"]),
         .executableTarget(
-            name: "HostLifecycleHarness", dependencies: ["EdithHostCore"],
-            path: "Tests/LifecycleHarness"),
+            name: "HostLifecycleHarness",
+            dependencies: ["EdithHostCore", "WorkerLifecycleFixtureSupport"],
+            path: "Tests/LifecycleHarness", exclude: ["WorkerLifecycleFixture.swift"]),
         .executableTarget(
-            name: "HostCommandHarness", dependencies: ["EdithHostCore"],
+            name: "HostCommandHarness",
+            dependencies: ["EdithHostCore", "WorkerLifecycleFixtureSupport"],
             path: "Tests/CommandHarness"),
         .executableTarget(
             name: "HostNativeTaskHarness", dependencies: ["EdithHostCore"],
@@ -54,7 +79,10 @@ let package = Package(
         .testTarget(
             name: "EdithHostCoreTests", dependencies: ["EdithHostCore"],
             resources: [.copy("Fixtures")]),
-        .testTarget(name: "EdithHostUITests", dependencies: ["EdithHost"]),
-        .testTarget(name: "HostLifecycleHarnessTests", dependencies: ["HostLifecycleHarness"]),
+        .testTarget(
+            name: "EdithHostUITests", dependencies: ["EdithHost", "WorkerLifecycleFixtureSupport"]),
+        .testTarget(
+            name: "HostLifecycleHarnessTests",
+            dependencies: ["HostLifecycleHarness", "WorkerLifecycleFixtureSupport"]),
     ]
 )

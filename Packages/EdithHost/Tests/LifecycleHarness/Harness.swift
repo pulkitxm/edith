@@ -6,6 +6,7 @@ import EdithHostCore
 import EdithExtensionSupport
 import ExtensionMarketplace
 import Foundation
+import WorkerLifecycleFixtureSupport
 
 @main
 struct HostLifecycleHarness {
@@ -125,7 +126,7 @@ struct HostLifecycleHarness {
             terminalDefaults?.set(fixture.path, forKey: "terminalCustomFolder")
             terminalDefaults?.set(false, forKey: "terminalConfirmClose")
         }
-        if extensionID == "usage" { try prepareUsageFixture() }
+        if extensionID == "usage" { try prepareUsageFixture(workerFixture) }
         if extensionID == "codeStats" { try CodeStatsFixture.seed() }
         if extensionID == "herdr" {
             try HerdrFixture.prepare(); try AgentActivityFixture.seed(identity: identity)
@@ -268,7 +269,7 @@ struct HostLifecycleHarness {
             } else if extensionID == "codeStats" {
                 try await CodeStatsFixture.verify(endpoint, initialize: true)
             } else if extensionID == "usage" {
-                try await verifyUsage(endpoint, restored: false)
+                try await verifyUsage(endpoint, restored: false, fixture: workerFixture)
             } else if extensionID == "latex" {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: true)
             } else if let companionServer {
@@ -344,7 +345,7 @@ struct HostLifecycleHarness {
             } else if extensionID == "codeStats" {
                 try await CodeStatsFixture.verify(endpoint, initialize: false)
             } else if extensionID == "usage" {
-                try await verifyUsage(endpoint, restored: true)
+                try await verifyUsage(endpoint, restored: true, fixture: workerFixture)
             } else if extensionID == "latex" {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: false)
             } else if let companionServer {
@@ -388,7 +389,7 @@ struct HostLifecycleHarness {
             await sessions.shutdown()
             try removeWorkerFixtures()
             if extensionID == "herdr" { try AgentActivityFixture.verifyHooks(active: false) }
-            if extensionID == "usage" { try verifyUsageStoppedHook() }
+            if extensionID == "usage" { try verifyUsageStoppedHook(workerFixture) }
             guard kill(newPID, 0) == -1, sessions.enabledIDs.contains(first.id) else {
                 throw HostWorkerError.rejected
             }
@@ -455,7 +456,7 @@ struct HostLifecycleHarness {
             } else if extensionID == "codeStats" {
                 try await CodeStatsFixture.verify(endpoint, initialize: false)
             } else if extensionID == "usage" {
-                try await verifyUsage(endpoint, restored: true)
+                try await verifyUsage(endpoint, restored: true, fixture: workerFixture)
             } else if extensionID == "latex" {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: false)
             } else if let companionServer {
@@ -509,11 +510,13 @@ struct HostLifecycleHarness {
                 }
             }
             stage = "disable"
-            if extensionID == "usage" { try await verifyUsageDisableFailure(sessions: sessions) }
+            if extensionID == "usage" {
+                try await verifyUsageDisableFailure(sessions: sessions, fixture: workerFixture)
+            }
             try await sessions.disable(id: first.id)
             try removeWorkerFixtures()
             if extensionID == "herdr" { try AgentActivityFixture.verifyHooks(active: false) }
-            if extensionID == "usage" { try verifyUsageStoppedHook() }
+            if extensionID == "usage" { try verifyUsageStoppedHook(workerFixture) }
             guard surfaces.context.activeIDs.isEmpty,
                 surfaces.layouts.home == savedSurface,
                 sessions.processIdentifiers.isEmpty, sessions.enabledIDs.isEmpty
@@ -532,7 +535,7 @@ struct HostLifecycleHarness {
             try await requireExited(cameraChildren)
             if extensionID == "usage" {
                 try await sessions.enable(second)
-                try await verifyUsageHook(endpoint, restored: true)
+                try await verifyUsageHook(endpoint, restored: true, fixture: workerFixture)
                 guard let crashedPID = sessions.processIdentifiers["usage"],
                     kill(crashedPID, SIGKILL) == 0
                 else { throw HostWorkerError.invalidResponse }
@@ -555,7 +558,7 @@ struct HostLifecycleHarness {
                 sessions.states[extensionID] == .disabled, surfaces.context.activeIDs.isEmpty,
                 surfaces.layouts.home == savedSurface
             else { throw HostWorkerError.invalidResponse }
-            if extensionID == "usage" { try verifyUsageStoppedHook() }
+            if extensionID == "usage" { try verifyUsageStoppedHook(workerFixture) }
             stage = "manual enable after pending disable recovery"
             try await sessions.enable(second)
             guard sessions.activeIDs == [extensionID], sessions.pendingDisableIDs.isEmpty,
@@ -563,11 +566,13 @@ struct HostLifecycleHarness {
             else { throw HostWorkerError.invalidResponse }
             try await verifySurfaceContext(
                 endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
-            if extensionID == "usage" { try await verifyUsageHook(endpoint, restored: true) }
+            if extensionID == "usage" {
+                try await verifyUsageHook(endpoint, restored: true, fixture: workerFixture)
+            }
             if extensionID == "calendar" { try await verifyCalendar(endpoint) }
             try await sessions.disable(id: extensionID)
             try removeWorkerFixtures()
-            if extensionID == "usage" { try verifyUsageStoppedHook() }
+            if extensionID == "usage" { try verifyUsageStoppedHook(workerFixture) }
             guard sessions.processIdentifiers.isEmpty, sessions.pendingDisableIDs.isEmpty,
                 sessions.enabledIDs.isEmpty, surfaces.context.activeIDs.isEmpty
             else { throw HostWorkerError.invalidResponse }

@@ -13,7 +13,7 @@ let package = Package(
             name: "VirtualCameraExtension",
             dependencies: [
                 .product(name: "EdithExtensionCommands", package: "ExtensionSupport")
-            ], path: ".", exclude: ["Tests", "Provider", "Carrier", "Privileged", "NativeRuntime"],
+            ], path: ".", exclude: ["Tests", "Carrier", "Privileged", "NativeRuntime"],
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(

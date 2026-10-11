@@ -31,10 +31,14 @@ private final class CameraControlProbe: CameraCarrierControlling {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "camera-client-" + UUID().uuidString)
         let mode: String
+        let startupDelay: Double
         var preparations = 0
+        var launches = 0
+        private(set) var preparationDuration: Duration?
         private(set) var process: Process?
-        init(mode: String = "normal") throws {
+        init(mode: String = "normal", startupDelay: Double = 0) throws {
             self.mode = mode
+            self.startupDelay = startupDelay
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
             try Data(Self.server.utf8).write(to: root.appendingPathComponent("carrier.py"))
         }
@@ -60,25 +64,57 @@ private final class CameraControlProbe: CameraCarrierControlling {
             CameraCarrierClient(
                 timeout: timeout,
                 prepare: { [self] in
-                    preparations += 1; return root
-                },
-                launch: { [self] _ in
-                    let process = Process();
+                    preparations += 1
+                    let started = ContinuousClock.now
+                    let process = Process()
                     process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
                     process.arguments = [
                         root.appendingPathComponent("carrier.py").path, mode,
-                        root.appendingPathComponent("exited").path,
+                        root.appendingPathComponent("exited").path, String(startupDelay),
                     ]
-                    process.standardInput = Pipe(); process.standardOutput = Pipe();
+                    process.standardInput = Pipe(); process.standardOutput = Pipe()
                     process.standardError = FileHandle.nullDevice
-                    try process.run(); self.process = process; return process
+                    try process.run()
+                    self.process = process
+                    try await waitUntilReady(until: started.advanced(by: .seconds(10)))
+                    preparationDuration = started.duration(to: ContinuousClock.now)
+                    return root
+                },
+                launch: { [self] url in
+                    launches += 1
+                    guard url == root, let process, process.isRunning,
+                        FileManager.default.fileExists(
+                            atPath: root.appendingPathComponent("ready").path)
+                    else { throw CocoaError(.executableLoad) }
+                    return process
                 })
+        }
+        func waitUntilReady(
+            until deadline: ContinuousClock.Instant = ContinuousClock.now.advanced(by: .seconds(10))
+        ) async throws {
+            while true {
+                try Task.checkCancellation()
+                if let process {
+                    guard process.isRunning else { throw CocoaError(.executableLoad) }
+                    if FileManager.default.fileExists(
+                        atPath: root.appendingPathComponent("ready").path)
+                    {
+                        return
+                    }
+                }
+                guard ContinuousClock.now < deadline else {
+                    throw CocoaError(.executableRuntimeMismatch)
+                }
+                try await Task.sleep(for: .milliseconds(10))
+            }
         }
         static let server = """
             import json,pathlib,sys,time
             mode=sys.argv[1]
             root=pathlib.Path(sys.argv[2]).parent
+            time.sleep(float(sys.argv[3]))
             active=False
+            (root/'ready').write_text('ready')
             for line in sys.stdin:
                 request=json.loads(line)
                 operation=request['operation']
@@ -121,7 +157,23 @@ private final class CameraControlProbe: CameraCarrierControlling {
         try await client.activate()
         try await client.prepareDisable(providerVisible: true)
         #expect(fixture.preparations == 1)
+        #expect(fixture.launches == 1)
         #expect(client.currentStatus?.ownsProvider == false)
+        #expect(fixture.drained)
+    }
+
+    @Test func delayedFixtureStartupCompletesBeforeTheUnchangedRequestDeadlineBegins() async throws
+    {
+        let fixture = try Fixture(startupDelay: 2.1)
+        let client = fixture.client(timeout: .seconds(2))
+        try await client.activate()
+        #expect(fixture.preparationDuration.map { $0 >= .milliseconds(2100) } == true)
+        #expect(fixture.preparations == 1)
+        #expect(fixture.launches == 1)
+        #expect(client.currentStatus?.phase == "active")
+        try await client.prepareDisable(providerVisible: true)
+        #expect(fixture.preparations == 1)
+        #expect(fixture.launches == 1)
         #expect(fixture.drained)
     }
 
@@ -129,6 +181,7 @@ private final class CameraControlProbe: CameraCarrierControlling {
         let fixture = try Fixture(mode: "cancel")
         let client = fixture.client()
         let activation = Task { try await client.activate() }
+        try await fixture.waitUntilReady()
         try await wait { fixture.admitted }
         #expect(client.currentStatus == nil)
         activation.cancel()
@@ -148,16 +201,19 @@ private final class CameraControlProbe: CameraCarrierControlling {
         activation.cancel()
         await #expect(throws: CancellationError.self) { try await activation.value }
         #expect(fixture.preparations == 0)
+        #expect(fixture.launches == 0)
         #expect(fixture.process == nil)
         #expect(client.currentStatus == nil)
         try await client.prepareDisable(providerVisible: false)
         #expect(fixture.preparations == 0)
+        #expect(fixture.launches == 0)
     }
 
     @Test func cancellationDuringReplyPublicationCannotReturnSuccess() async throws {
         let fixture = try Fixture(mode: "cancel")
         let client = fixture.client()
         let activation = Task { try await client.activate() }
+        try await fixture.waitUntilReady()
         try await wait { fixture.admitted }
         client.changed = { status in
             if status.phase == "active" { activation.cancel() }

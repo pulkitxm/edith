@@ -3,6 +3,7 @@ import EdithHostCore
 import Foundation
 import Testing
 @testable import HostLifecycleHarness
+@testable import WorkerLifecycleFixtureSupport
 
 @MainActor @Suite struct NotchLifecycleContractTests {
     @Test func metadataAndExplicitDeclinesNeverRequestAController() async throws {
