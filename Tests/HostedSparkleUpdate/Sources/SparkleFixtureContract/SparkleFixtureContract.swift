@@ -95,6 +95,12 @@ public struct SparkleBootstrapDescriptor: Codable, Equatable, Sendable {
         URL(string: "http://127.0.0.1:\(port)/\(session)/appcast.xml")!
     }
 
+    public func validateExistingEnvironment(_ environment: [String: String]) throws {
+        for (key, value) in environment where key.hasPrefix("EDITH_") {
+            guard applicationEnvironment[key] == value else { throw SparkleFixtureError.rejected }
+        }
+    }
+
     private static func matches(_ value: String, pattern: String) -> Bool {
         value.range(of: pattern, options: .regularExpression) == value.startIndex..<value.endIndex
     }

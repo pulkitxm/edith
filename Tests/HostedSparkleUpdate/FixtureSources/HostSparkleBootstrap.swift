@@ -46,6 +46,7 @@ import Security
             sourceCommit: sourceCommit, accountHome: accountHome, currentUID: getuid(),
             bundleIdentifier: identifier, bundlePath: Bundle.main.bundleURL.path,
             executablePath: executable.path, version: version, observedProducer: first)
+        try value.validateExistingEnvironment(ProcessInfo.processInfo.environment)
         for path in [
             value.directory, value.directory + "/synthetic-data",
             value.directory + "/synthetic-data/.config",

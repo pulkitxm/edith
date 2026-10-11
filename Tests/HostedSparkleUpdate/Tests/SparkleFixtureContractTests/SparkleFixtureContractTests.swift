@@ -144,3 +144,23 @@ private func envelope(_ descriptor: SparkleBootstrapDescriptor, key: Curve25519.
         }
     }
 }
+
+@Test func nativeRelaunchMayOmitFixtureEnvironmentButCannotCarryForeignRoleOrStateInputs() throws {
+    let descriptor = fixture()
+    try descriptor.validateExistingEnvironment([:])
+    try descriptor.validateExistingEnvironment(descriptor.applicationEnvironment)
+    for key in [
+        "EDITH_EXTENSION_ID", "EDITH_EXTENSION_DATA_ROOT", "EDITH_EXTENSION_STATE_ROOT",
+        "EDITH_SURFACE_DEFAULTS_SUITE", "EDITH_EXTENSION_NATIVE_TOKEN", "EDITH_CLI",
+        "EDITH_EXTENSION_WORKER", "EDITH_REMOTE_FIXTURE_NEGATIVE",
+    ] {
+        #expect(throws: SparkleFixtureError.self) {
+            try descriptor.validateExistingEnvironment([key: "1"])
+        }
+    }
+    for key in descriptor.applicationEnvironment.keys where key.hasPrefix("EDITH_") {
+        #expect(throws: SparkleFixtureError.self) {
+            try descriptor.validateExistingEnvironment([key: "foreign"])
+        }
+    }
+}
