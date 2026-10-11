@@ -40,7 +40,7 @@ private actor CommandCleanupGate {
         registry.cancel(token.uuidString)
         #expect(callbackReturned)
         let suspension = Task { await registry.suspendAndWait() }
-        await Task.yield()
+        while registry.pendingJoins == 0 { await Task.yield() }
         #expect(joined == 0)
         owner?.resume()
         let suspended = await suspension.value

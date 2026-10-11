@@ -10,7 +10,7 @@ import Foundation
 final class HostWorkerApplication {
     #if EDITH_FUNCTIONAL_FIXTURE
     static var fixtureAdmitBeforeConstruction:
-        ((HostWorkerConfiguration, NSDictionary, [URL]) throws -> NSDictionary)?
+        ((HostWorkerConfiguration, NSDictionary, [URL]) throws -> [HostFixtureRoleAdmission])?
     static var fixtureObserveCommandRetirement: ((UUID) throws -> Void)?
     #endif
     private let control: HostWorkerControl
@@ -277,7 +277,10 @@ final class HostWorkerApplication {
                 guard let key = key as? String else { throw HostWorkerError.rejected }
                 values[key] = value
             }
-            var context = values as NSDictionary
+            let context = values as NSDictionary
+            #if EDITH_FUNCTIONAL_FIXTURE
+            var fixtureAdmissions: [String: HostFixtureRoleAdmission] = [:]
+            #endif
             let environment = ProcessInfo.processInfo.environment
             let fixtureIntent = HostWorkerStartAdmission.hasFixtureIntent(
                 identifier: identity.identifier, environment: environment)
@@ -317,18 +320,18 @@ final class HostWorkerApplication {
                     guard fixtureIntent, let admit = Self.fixtureAdmitBeforeConstruction else {
                         throw HostWorkerError.rejected
                     }
-                    let additions = try admit(next, context, fixtureRoles.map(\.directory))
-                    guard
-                        Set(additions.allKeys.compactMap { $0 as? String })
-                            == ["hostedFunctionalFixture"], additions.count == 1,
-                        let marker = additions["hostedFunctionalFixture"] as? [String: String],
-                        Set(marker.keys) == [
+                    let admissions = try admit(next, context, fixtureRoles.map(\.directory))
+                    try HostFixtureRoleAdmission.validate(
+                        admissions, available: fixtureRoles.map(\.directory),
+                        markerKeys: [
                             "sourceCommit", "session", "phase", "descriptorPath",
                             "capabilitySHA256", "requestGeneration",
-                        ], marker.values.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 4096 })
-                    else { throw HostWorkerError.rejected }
-                    values["hostedFunctionalFixture"] = marker
-                    context = values as NSDictionary
+                        ])
+                    for admission in admissions {
+                        fixtureAdmissions[
+                            admission.roleDirectory.deletingPathExtension().lastPathComponent] =
+                            admission
+                    }
                     #endif
                     if fixtureIntent {
                         try HostWorkerStartAdmission.admitFixture(
@@ -341,7 +344,11 @@ final class HostWorkerApplication {
                             defaultsSuite: identity.extensionDefaultsSuite(package.id),
                             roles: fixtureRoles, environment: environment)
                     }
+                    #if EDITH_FUNCTIONAL_FIXTURE
+                    return roles.filter { fixtureAdmissions[$0.rawValue] != nil }
+                    #else
                     return roles
+                    #endif
                 },
                 appearance: {
                     configuration = next
@@ -351,14 +358,32 @@ final class HostWorkerApplication {
                         try JSONEncoder().encode(next).base64EncodedString(), 1)
                     setenv("EDITH_EXTENSION_NATIVE_PARENT", String(getpid()), 1)
                     setenv("EDITH_EXTENSION_NATIVE_TOKEN", nativeAdmission.token, 1)
+                    #if EDITH_FUNCTIONAL_FIXTURE
+                    for admission in fixtureAdmissions.values { try admission.requireCurrent() }
+                    #endif
                     try applyAppearance(next)
                 },
                 start: { role in
+                    #if EDITH_FUNCTIONAL_FIXTURE
+                    guard let admission = fixtureAdmissions[role.rawValue] else {
+                        throw HostWorkerError.rejected
+                    }
+                    try admission.withCurrent {
+                        var roleValues = values
+                        roleValues["hostedFunctionalFixture"] = admission.contextMarker
+                        let runtime = ExtensionBundleRuntime(
+                            store: store, role: role, hostABI: HostContract.compatibility,
+                            packageVersion: next.version, verify: verify)
+                        runtimes.append(runtime)
+                        try runtime.start(id: package.id, context: roleValues as NSDictionary)
+                    }
+                    #else
                     let runtime = ExtensionBundleRuntime(
                         store: store, role: role, hostABI: HostContract.compatibility,
                         packageVersion: next.version, verify: verify)
                     runtimes.append(runtime)
                     try runtime.start(id: package.id, context: context)
+                    #endif
                 })
             if next.recoveryOnly { return }
             let endpoint = try ExtensionPeerEndpoint(

@@ -14,7 +14,7 @@ final class HostRemoteApplication {
     static var fixtureAdmitBeforeConstruction:
         (
             (HostRemoteConfiguration, HostRemotePresentation, NSDictionary, [URL]) throws ->
-                NSDictionary
+                [HostFixtureRoleAdmission]
         )?
     #endif
     static let shared: HostRemoteApplication = {
@@ -208,7 +208,7 @@ final class HostRemoteApplication {
             input["target"] = surface.target.rawValue
         }
         #if EDITH_FUNCTIONAL_FIXTURE
-        guard !configuration.uiOnly, let admit = Self.fixtureAdmitBeforeConstruction else {
+        guard let admit = Self.fixtureAdmitBeforeConstruction else {
             throw HostWorkerError.rejected
         }
         input["dataDirectory"] = try configuration.worker.identity().extensionDirectory(extensionID)
@@ -218,16 +218,41 @@ final class HostRemoteApplication {
                 "\($0.rawValue).bundle")
         }.filter { FileManager.default.fileExists(atPath: $0.path) }
         guard !roles.isEmpty else { throw HostWorkerError.rejected }
-        let additions = try admit(configuration, presentation, input, roles)
-        guard additions.count == 1,
-            Set(additions.allKeys.compactMap { $0 as? String }) == ["hostedFunctionalFixture"],
-            let marker = additions["hostedFunctionalFixture"] as? [String: String],
-            Set(marker.keys) == [
+        let admissionContext = input.mutableCopy() as! NSMutableDictionary
+        admissionContext["operation"] = "configureUI"
+        let admissions = try admit(configuration, presentation, admissionContext, roles)
+        try HostFixtureRoleAdmission.validate(
+            admissions, available: roles,
+            markerKeys: [
                 "sourceCommit", "session", "phase", "descriptorPath", "capabilitySHA256",
-            ], marker.values.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 4096 })
-        else { throw HostWorkerError.rejected }
-        input["hostedFunctionalFixture"] = marker
-        #endif
+            ])
+        var selectedRuntimes: [(ExtensionBundleRuntime, HostFixtureRoleAdmission)] = []
+        let team = ExtensionCodeSignature.teamIdentifier()
+        let development = try configuration.worker.identity().development
+        for admission in admissions {
+            guard
+                let role = ExtensionBundleRuntime.Role(
+                    rawValue: admission.roleDirectory.deletingPathExtension().lastPathComponent)
+            else { throw HostWorkerError.rejected }
+            let runtime = try admission.withCurrent {
+                if let retained = runtimes.first(where: { $0.role == role }) { return retained }
+                let created = try ExtensionBundleRuntime(
+                    readOnlyPackage: configuration.package, directory: payload, role: role,
+                    hostABI: HostContract.compatibility,
+                    verify: { url in
+                        if development {
+                            try ExtensionCodeSignature.verifyDevelopment(url)
+                        } else {
+                            guard let team else { throw MarketplaceError.invalidSignature }
+                            try ExtensionCodeSignature.verify(url, teamIdentifier: team)
+                        }
+                    })
+                runtimes.append(created)
+                return created
+            }
+            selectedRuntimes.append((runtime, admission))
+        }
+        #else
         if runtimes.isEmpty {
             let team = ExtensionCodeSignature.teamIdentifier()
             let development = try configuration.worker.identity().development
@@ -249,6 +274,28 @@ final class HostRemoteApplication {
                         }))
             }
         }
+        #endif
+        #if EDITH_FUNCTIONAL_FIXTURE
+        for (runtime, admission) in selectedRuntimes {
+            input["hostedFunctionalFixture"] = admission.contextMarker
+            let result = try admission.withCurrent {
+                let response = try runtime.response(
+                    id: extensionID, operation: "configureUI", context: input)
+                guard response["ok"] as? Bool == true else {
+                    return nil as ExtensionBundlePresentation?
+                }
+                return try runtime.presentation(
+                    id: extensionID, context: input, compact: presentation.compact,
+                    visible: presentation.visible, width: presentation.availableWidth,
+                    intrinsic: !["main", "settings", "music.detail"].contains(
+                        presentation.request.location))
+            }
+            if let result {
+                presentationRuntimes[presentation.request.presentationID] = runtime
+                return result
+            }
+        }
+        #else
         for runtime in runtimes {
             let response = try runtime.response(
                 id: extensionID, operation: "configureUI", context: input)
@@ -263,6 +310,7 @@ final class HostRemoteApplication {
                 return result
             }
         }
+        #endif
         throw HostWorkerError.rejected
     }
 

@@ -6,6 +6,7 @@ public final class ExtensionCommandRegistry {
     public static let ownerJoinedNotification = Notification.Name(
         "edith.extension.command.owner-joined")
     private var witnessedRetirements = Set<UUID>()
+    private(set) var pendingJoins = 0
     #endif
     public typealias Completion = (NSData?, NSString?) -> Void
     public typealias Execute = @MainActor @Sendable (String, Data) async throws -> Data
@@ -98,6 +99,10 @@ public final class ExtensionCommandRegistry {
 
     private func joinRetired() async {
         let pending = Array(retired)
+        #if EDITH_FUNCTIONAL_FIXTURE
+        pendingJoins += pending.count
+        defer { pendingJoins -= pending.count }
+        #endif
         for (token, task) in pending {
             await task.value
             #if EDITH_FUNCTIONAL_FIXTURE
