@@ -234,7 +234,7 @@ test("shared workflow and build inputs exercise all lanes without duplicate targ
     { lane: "host-runtime", targets: "ci-host ci-marketplace-runtime" },
     {
       lane: "feature-models",
-      targets: "ci-extension-support ci-extension-docs",
+      targets: "ci-extension-support",
     },
     { lane: "native-music", targets: "ci-music-native" },
   ];
@@ -251,9 +251,14 @@ test("shared workflow and build inputs exercise all lanes without duplicate targ
       standaloneOwners,
     );
   }
-  expect(planSwiftTests([], { all: true, extensions: [] }).include).toEqual(
-    expected,
-  );
+  expect(planSwiftTests([], { all: true, extensions: [] }).include).toEqual([
+    expected[0],
+    {
+      lane: "feature-models",
+      targets: "ci-extension-support ci-extension-docs",
+    },
+    expected[2],
+  ]);
   const lanes = planSwiftTests([
     "Packages/ExtensionSupport/Package.swift",
     "Extensions/docs/Runtime.swift",
@@ -263,6 +268,92 @@ test("shared workflow and build inputs exercise all lanes without duplicate targ
   expect(lanes.slice(2).map((lane) => lane.extension)).toEqual(
     standaloneOwners,
   );
+});
+
+test("full verification preserves every declared check exactly once", () => {
+  const expectedTargets = [
+    ...new Set([
+      "ci-host",
+      "ci-marketplace-runtime",
+      "ci-extension-support",
+      "ci-extension-docs",
+      "ci-music-native",
+      ...definitions.flatMap((definition) => definition.testTargets ?? []),
+    ]),
+  ].sort();
+  for (const [paths, options] of [
+    [[], { all: true }],
+    [[".github/workflows/ci.yml"], {}],
+    [[".github/actions/cache-host/action.yml"], {}],
+    [["Makefile"], {}],
+  ]) {
+    const lanes = planSwiftTests(paths, options).include;
+    expect(
+      lanes.filter((lane) => lane.extension).map((lane) => lane.extension),
+    ).toEqual(standaloneOwners);
+    expect(lanes.flatMap((lane) => lane.targets.split(" ")).sort()).toEqual(
+      expectedTargets,
+    );
+    expect(lanes.every((lane) => lane.targets.length > 0)).toBe(true);
+  }
+});
+
+test("Docs changes retain both actual packages in one owning lane", () => {
+  for (const path of [
+    "Extensions/docs/Runtime.swift",
+    "Extensions/docs/Tests/DocsTests.swift",
+    "Packages/EdithDocsWorker/Sources/EdithDocsWorker/DocsWorker.swift",
+    "Packages/EdithDocsWorker/Tests/EdithDocsWorkerTests/DocsTests.swift",
+  ]) {
+    expect(planSwiftTests([path]).include).toEqual([
+      {
+        lane: "extension-docs",
+        extension: "docs",
+        targets: "ci-extension-docs ci-extension-docs-native",
+        ghostty: false,
+      },
+    ]);
+  }
+  const mixed = planSwiftTests([
+    "Extensions/docs/Runtime.swift",
+    "Packages/EdithHost/Tests/EdithHostCoreTests/HostWorkerTests.swift",
+    "Packages/ExtensionSupport/Tests/UITests/DeliveryTests.swift",
+  ]).include;
+  expect(mixed.map((lane) => lane.lane)).toEqual([
+    "host-runtime",
+    "feature-models",
+    "extension-docs",
+  ]);
+  expect(mixed.flatMap((lane) => lane.targets.split(" "))).toEqual([
+    "ci-host",
+    "ci-marketplace-runtime",
+    "ci-extension-support",
+    "ci-extension-docs",
+    "ci-extension-docs-native",
+  ]);
+});
+
+test("shared Docs checks remain when no selected owner runs them", () => {
+  const withoutDocs = definitions.filter(({ id }) => id !== "docs");
+  expect(
+    planSwiftTests(["Extensions/docs/Runtime.swift"], {
+      extensions: withoutDocs,
+    }).include,
+  ).toEqual([{ lane: "feature-models", targets: "ci-extension-docs" }]);
+  const docs = definitions.find(({ id }) => id === "docs");
+  expect(
+    planSwiftTests(["Extensions/docs/Runtime.swift"], {
+      extensions: [{ ...docs, testTargets: ["ci-extension-docs-native"] }],
+    }).include,
+  ).toEqual([
+    { lane: "feature-models", targets: "ci-extension-docs" },
+    {
+      lane: "extension-docs",
+      extension: "docs",
+      targets: "ci-extension-docs-native",
+      ghostty: false,
+    },
+  ]);
 });
 
 test("the actual planner consumes changed paths and rejects unknown options", () => {

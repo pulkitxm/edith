@@ -50,9 +50,6 @@ export function planSwiftTests(
   ) {
     targets.push("ci-extension-docs");
   }
-  if (targets.length > 0) {
-    include.push({ lane: "feature-models", targets: targets.join(" ") });
-  }
   if (matches(/^Extensions\/music\/Native\//)) {
     include.push({ lane: "native-music", targets: "ci-music-native" });
   }
@@ -95,9 +92,18 @@ export function planSwiftTests(
       ghostty: definition.nativeProduct === "GhosttyTerminal",
     });
   }
-  const featureModels = include.find((lane) => lane.lane === "feature-models");
-  if (featureModels) featureModels.targets = targets.join(" ");
-  else if (targets.length > 0)
+  const docsTarget = targets.indexOf("ci-extension-docs");
+  if (
+    docsTarget >= 0 &&
+    include.some(
+      (lane) =>
+        lane.extension === "docs" &&
+        lane.targets.split(" ").includes("ci-extension-docs"),
+    )
+  ) {
+    targets.splice(docsTarget, 1);
+  }
+  if (targets.length > 0)
     include.splice(include[0]?.lane === "host-runtime" ? 1 : 0, 0, {
       lane: "feature-models",
       targets: targets.join(" "),
