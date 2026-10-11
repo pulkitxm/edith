@@ -113,8 +113,12 @@ public final class ExtensionBundleRuntime {
     }
 
     public func suspendCommandsAll() async throws {
+        try await suspendCommands(includeInactive: false)
+    }
+
+    private func suspendCommands(includeInactive: Bool) async throws {
         let selector = NSSelectorFromString("suspendCommandsWithCompletion:")
-        for instance in loaded.values where instance.active {
+        for instance in loaded.values where instance.active || includeInactive {
             guard instance.object.responds(to: NSSelectorFromString("invoke:completion:")) else {
                 continue
             }
@@ -159,10 +163,25 @@ public final class ExtensionBundleRuntime {
         }
     }
 
+    public func suspendRemoteUICommandsAll() async throws {
+        guard readOnlyPackage != nil else { throw MarketplaceError.invalidBundle }
+        try await suspendCommands(includeInactive: true)
+    }
+
+    public func prepareRemoteUIToStopAll() async throws {
+        guard readOnlyPackage != nil else { throw MarketplaceError.invalidBundle }
+        try await suspendCommands(includeInactive: true)
+        try await prepareToStop(includeInactive: true)
+    }
+
     public func prepareToStopAll() async throws {
+        try await prepareToStop(includeInactive: false)
+    }
+
+    private func prepareToStop(includeInactive: Bool) async throws {
         let selector = NSSelectorFromString("prepareToStopWithCompletion:")
         for instance in loaded.values
-        where instance.active && instance.object.responds(to: selector) {
+        where (instance.active || includeInactive) && instance.object.responds(to: selector) {
             let completion = BundleCommandCompletion()
             _ = try await withCheckedThrowingContinuation { continuation in
                 guard completion.begin(continuation) else { return }
