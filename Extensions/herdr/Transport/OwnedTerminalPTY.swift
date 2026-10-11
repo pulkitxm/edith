@@ -92,7 +92,8 @@ final class OwnedTerminalPTY {
         for member in members where member.isAlive { _ = kill(member.pid, SIGKILL) }
         if identity?.isAlive == true, getpgid(pid) == pid { _ = kill(-pid, SIGKILL) }
         if identity?.isAlive == true { _ = kill(pid, SIGKILL) }
-        while identity?.isAlive == true {
+        while true {
+            guard identity?.isAlive == true else { usleep(10_000); continue }
             guard let remaining = Self.sessionMembers(pid) else { usleep(10_000); continue }
             guard !remaining.isEmpty else { break }
             for member in remaining where member.isAlive { _ = kill(member.pid, SIGKILL) }

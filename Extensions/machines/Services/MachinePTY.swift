@@ -94,7 +94,11 @@ final class MachinePTY {
         let identifier = pid
         let identity = identity
         closing = Task.detached {
-            while identity?.isAlive == true {
+            while true {
+                guard identity?.isAlive == true else {
+                    try? await Task.sleep(for: .milliseconds(10))
+                    continue
+                }
                 guard let remaining = Self.sessionMembers(identifier) else {
                     try? await Task.sleep(for: .milliseconds(10))
                     continue
