@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import {
   mkdir,
   mkdtemp,
@@ -9,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { hostABI, writeHostABI } from "./extension-host-abi.mjs";
 
 async function fixture(run) {
@@ -187,3 +189,89 @@ test("worker ABI preparation replaces an obsolete worker compatibility version",
     );
   });
 });
+
+test.each(["legacy source", "worker source", "worker manifest"])(
+  "ABI preflight rejects stale %s without changing tracked inputs",
+  async (stale) => {
+    await fixture(async ({ root, configuration, manifest }) => {
+      await writeFile(
+        configuration,
+        'public static let hostABI = "stale"\npublic static let workerHostABI = "edith-host-2"\n',
+      );
+      await writeFile(
+        manifest,
+        JSON.stringify([
+          { id: "isolated", contractVersion: 1, hostABI: "edith-host-2" },
+          { id: "legacy", hostABI: "stale" },
+        ]),
+      );
+      await writeHostABI(root);
+      if (stale === "legacy source")
+        await writeFile(
+          join(root, "Packages/Edith/Sources/EdithKit/Changed.swift"),
+          "changed legacy interface",
+        );
+      else if (stale === "worker source")
+        await writeFile(
+          configuration,
+          (await readFile(configuration, "utf8")).replace(
+            "edith-host-2",
+            "edith-host-1",
+          ),
+        );
+      else
+        await writeFile(
+          manifest,
+          (await readFile(manifest, "utf8")).replace(
+            "edith-host-2",
+            "edith-host-1",
+          ),
+        );
+      const files = [configuration, manifest];
+      const before = await Promise.all(files.map((path) => readFile(path)));
+      const timestamps = await Promise.all(files.map((path) => stat(path)));
+      const check = () =>
+        spawnSync(
+          process.execPath,
+          [
+            fileURLToPath(new URL("./extension-host-abi.mjs", import.meta.url)),
+            "--check",
+            root,
+          ],
+          { cwd: root, encoding: "utf8", timeout: 10000, maxBuffer: 1048576 },
+        );
+      const rejected = check();
+      expect(rejected.error).toBeUndefined();
+      expect(rejected.status).toBe(1);
+      expect(rejected.stderr).toContain("Host contract changed");
+      for (let index = 0; index < files.length; index++) {
+        expect(await readFile(files[index])).toEqual(before[index]);
+        expect((await stat(files[index])).mtimeMs).toBe(
+          timestamps[index].mtimeMs,
+        );
+      }
+      const abi = await writeHostABI(root);
+      const prepared = await Promise.all(files.map((path) => readFile(path)));
+      const preparedTimes = await Promise.all(files.map((path) => stat(path)));
+      for (let repeat = 0; repeat < 2; repeat++) {
+        const accepted = check();
+        expect(accepted.error).toBeUndefined();
+        expect(accepted.status).toBe(0);
+        expect(accepted.stdout.trim()).toBe(abi);
+        expect(await writeHostABI(root)).toBe(abi);
+        for (let index = 0; index < files.length; index++) {
+          expect(await readFile(files[index])).toEqual(prepared[index]);
+          expect((await stat(files[index])).mtimeMs).toBe(
+            preparedTimes[index].mtimeMs,
+          );
+        }
+      }
+      expect(await readFile(configuration, "utf8")).toContain(
+        'workerHostABI = "edith-host-2"',
+      );
+      expect(JSON.parse(await readFile(manifest, "utf8"))[0].hostABI).toBe(
+        "edith-host-2",
+      );
+    });
+  },
+);
