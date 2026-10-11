@@ -27,20 +27,42 @@ final class HerdrActionCase: HostedFunctionalActionCase {
 
     func activateOriginalControl(context: HostedFunctionalActionContext) async throws {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
+        let baseline = try await readState(context: context, minutes: 17)
         await model.read()
         guard model.error == nil, !model.loading, !model.settings.monitoring,
-            !model.settings.stuck, !model.settings.openDiff
+            !model.settings.stuck, !model.settings.openDiff, model.settings.stuckMinutes == 17
         else { throw HostedFunctionalActionError.invalid }
+        try await save(minutes: 18)
+        let changed = try await readState(context: context, minutes: 18)
+        guard changed != baseline else { throw HostedFunctionalActionError.invalid }
+        try await save(minutes: 17)
+        guard try await readState(context: context, minutes: 17) == baseline else {
+            throw HostedFunctionalActionError.invalid
+        }
+    }
+
+    private func save(minutes: Int) async throws {
         let count = transport.originalInvocationCount
-        model.update { $0.stuckMinutes = 17 }
+        model.update { $0.stuckMinutes = minutes }
         try await transport.waitForOriginalInvocation(Self.activationOperation, after: count)
+        let deadline = ContinuousClock.now + .seconds(10)
+        while model.loading, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        guard !model.loading, model.error == nil, model.settings.stuckMinutes == minutes else {
+            throw HostedFunctionalActionError.invalid
+        }
     }
 
     func readAuthoritativeState(context: HostedFunctionalActionContext) async throws -> Data {
+        try await readState(context: context, minutes: 17)
+    }
+
+    private func readState(context: HostedFunctionalActionContext, minutes: Int) async throws -> Data {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
         let bytes = try await transport.readAuthoritative("herdr.settings.read")
         let value = try AgentPayload.decode(HerdrAttentionSettings.self, from: bytes)
-        guard value.stuckMinutes == 17, !value.monitoring, !value.stuck, !value.openDiff else {
+        guard value.stuckMinutes == minutes, !value.monitoring, !value.stuck, !value.openDiff else {
             throw HostedFunctionalActionError.invalid
         }
         let encoder = JSONEncoder()

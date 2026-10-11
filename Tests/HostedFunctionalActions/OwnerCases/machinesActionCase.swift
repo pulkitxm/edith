@@ -28,24 +28,38 @@ final class MachinesActionCase: HostedFunctionalActionCase {
 
     func activateOriginalControl(context: HostedFunctionalActionContext) async throws {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
+        let baseline = try await readState(context: context, name: "Synthetic retained machine")
         let snapshot = try JSONDecoder().decode(
             MachineUIState.self, from: await transport.readAuthoritative("machines.ui.state"))
         guard snapshot.machines.count == 1, var machine = snapshot.machines.first,
             machine.id == Self.machineID, machine.host == "127.0.0.1", !machine.sshClipboardEnabled
         else { throw HostedFunctionalActionError.invalid }
         model.applyUIState(snapshot)
-        machine.name = "Synthetic retained machine"
-        let count = transport.originalInvocationCount
+        machine.name = "Synthetic temporary machine"
+        var count = transport.originalInvocationCount
         model.update(machine)
         try await transport.waitForOriginalInvocation(Self.activationOperation, after: count)
+        let changed = try await readState(context: context, name: "Synthetic temporary machine")
+        guard changed != baseline else { throw HostedFunctionalActionError.invalid }
+        machine.name = "Synthetic retained machine"
+        count = transport.originalInvocationCount
+        model.update(machine)
+        try await transport.waitForOriginalInvocation(Self.activationOperation, after: count)
+        guard try await readState(context: context, name: "Synthetic retained machine") == baseline else {
+            throw HostedFunctionalActionError.invalid
+        }
     }
 
     func readAuthoritativeState(context: HostedFunctionalActionContext) async throws -> Data {
+        try await readState(context: context, name: "Synthetic retained machine")
+    }
+
+    private func readState(context: HostedFunctionalActionContext, name: String) async throws -> Data {
         guard context == transport.context else { throw HostedFunctionalActionError.invalid }
         let snapshot = try JSONDecoder().decode(
             MachineUIState.self, from: await transport.readAuthoritative("machines.ui.state"))
         guard snapshot.machines.count == 1, let machine = snapshot.machines.first,
-            machine.id == Self.machineID, machine.name == "Synthetic retained machine",
+            machine.id == Self.machineID, machine.name == name,
             machine.host == "127.0.0.1", !machine.sshClipboardEnabled
         else { throw HostedFunctionalActionError.invalid }
         let encoder = JSONEncoder()
