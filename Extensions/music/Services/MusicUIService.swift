@@ -14,6 +14,7 @@ import WebKit
     private var events: [MusicUIEvent] = []
     private var sequence = 0
     private var video: MusicVideoPlayback?
+    private nonisolated let tasks = MusicTaskOwner()
     private var videoDeadline: Task<Void, Never>?
     private var videoActivity = Date()
     private var resumeAudio = false
@@ -347,7 +348,7 @@ import WebKit
             let response = await withTaskCancellationHandler {
                 await panel.begin()
             } onCancel: {
-                Task { @MainActor in panel.cancel(nil) }
+                tasks.enqueue { panel.cancel(nil) }
             }
             try Task.checkCancellation()
             guard !stopped else { throw ExtensionPeerError.unavailable }
@@ -435,11 +436,22 @@ import WebKit
         }
     }
 
-    func drain() async { await browser.drain() }
+    func suspendCommands() {
+        tasks.shutdown()
+        browser.revoke()
+        libraryPanel?.cancel(nil)
+        downloads?.stop()
+    }
+
+    func drain() async {
+        await browser.drain()
+        await tasks.shutdownAndWait()
+    }
 
     func stop() {
         guard !stopped else { return }
         stopped = true
+        tasks.shutdown()
         MusicHostNavigation.reset()
         browser.stop()
         libraryPanel?.cancel(nil); libraryPanel = nil
@@ -494,7 +506,7 @@ import WebKit
         video = next; worker.videoPresentation = next
         worker.player.presentationDidChange()
         videoActivity = Date()
-        videoDeadline = Task { [weak self] in
+        videoDeadline = tasks.start { [weak self] in
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .seconds(5)) } catch { return }
                 guard let self, !self.stopped, self.video?.lease.id == next.lease.id else { return }

@@ -25,6 +25,7 @@ final class MusicSpotifySession {
     private var elapsedBase = 0.0
     private var updatedAt = Date()
     private var process: MusicNativePlayer?
+    private nonisolated let tasks = MusicTaskOwner()
     private var authorizationDeadline: Task<Void, Never>?
     private var buffer = Data()
     private(set) var generation = 0
@@ -65,12 +66,12 @@ final class MusicSpotifySession {
             process = try MusicNativePlayer(
                 libraryURL: libraryURL, service: service, name: "Edith", resume: !authorize,
                 receive: { [weak self] data in
-                    Task { @MainActor in self?.receive(data, generation: token) }
+                    self?.tasks.enqueue { [weak self] in self?.receive(data, generation: token) }
                 },
                 onExit: { [weak self] in
-                    Task { @MainActor in self?.terminated(generation: token) }
+                    self?.tasks.enqueue { [weak self] in self?.terminated(generation: token) }
                 })
-            authorizationDeadline = Task { [weak self] in
+            authorizationDeadline = tasks.start { [weak self] in
                 do { try await Task.sleep(for: .seconds(600)) } catch { return }
                 guard let self, self.generation == token, self.connecting else { return }
                 self.error = "Spotify sign-in timed out. Connect again to retry."
@@ -164,7 +165,7 @@ final class MusicSpotifySession {
         else { return }
         let token = generation
         process.send(data + Data([10])) { [weak self] in
-            Task { @MainActor in
+            self?.tasks.enqueue { [weak self] in
                 guard let self, self.generation == token else { return }
                 self.error = "The Spotify player stopped responding. Reconnect to continue."
             }
@@ -183,6 +184,15 @@ final class MusicSpotifySession {
         guard value.isFinite else { return }
         volume = min(1, max(0, value))
         send(["action": "volume", "value": volume])
+    }
+
+    func suspendCommands() { tasks.shutdown() }
+
+    func suspendCommandsAndWait() async { await tasks.shutdownAndWait() }
+
+    func stopAndWait() async {
+        stop()
+        await tasks.shutdownAndWait()
     }
 
     func stop() {
@@ -315,6 +325,15 @@ final class MusicAccounts: NSObject, WKNavigationDelegate, WKUIDelegate {
     func activate() {
         if selected == .spotify { spotify.connect(authorize: false) }
         if selected == .youtubeMusic, youtubeConnected { loadYoutube() }
+    }
+
+    func suspendCommands() { spotify.suspendCommands() }
+
+    func suspendCommandsAndWait() async { await spotify.suspendCommandsAndWait() }
+
+    func shutdownAndWait() async {
+        shutdown()
+        await spotify.stopAndWait()
     }
 
     func shutdown() {

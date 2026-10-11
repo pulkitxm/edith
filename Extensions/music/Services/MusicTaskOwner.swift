@@ -1,31 +1,56 @@
 import Foundation
 
-@MainActor
-final class MusicTaskOwner {
-    private var tasks: [UUID: Task<Void, Never>] = [:]
-    private var stopped = false
+final class MusicTaskOwner: Sendable {
+    private final class State: @unchecked Sendable {
+        let lock = NSLock()
+        var tasks: [UUID: Task<Void, Never>] = [:]
+        var stopped = false
+
+        func remove(_ id: UUID) { lock.withLock { _ = tasks.removeValue(forKey: id) } }
+        func snapshot() -> [Task<Void, Never>] { lock.withLock { Array(tasks.values) } }
+        func close() -> [Task<Void, Never>] {
+            lock.withLock {
+                stopped = true
+                return Array(tasks.values)
+            }
+        }
+    }
+    private let state = State()
+
     @discardableResult
     func start(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never>? {
-        guard !stopped else { return nil }
-        let id = UUID()
-        let task = Task { [weak self] in
-            defer { self?.tasks.removeValue(forKey: id) }
-            guard !Task.isCancelled else { return }
-            await operation()
+        enqueue(operation)
+    }
+
+    @discardableResult
+    func enqueue(_ operation: @escaping @MainActor () async -> Void)
+        -> Task<Void, Never>?
+    {
+        state.lock.withLock {
+            guard !state.stopped else { return nil }
+            let id = UUID()
+            let task = Task { @MainActor [state] in
+                defer { state.remove(id) }
+                guard !Task.isCancelled else { return }
+                await operation()
+            }
+            state.tasks[id] = task
+            return task
         }
-        tasks[id] = task
-        return task
     }
-    func shutdown() {
-        stopped = true
-        for task in tasks.values { task.cancel() }
+
+    @MainActor func shutdown() {
+        let owned = state.close()
+        for task in owned { task.cancel() }
     }
-    func shutdownAndWait() async {
+
+    @MainActor func shutdownAndWait() async {
         shutdown()
-        let owned = Array(tasks.values)
+        let owned = state.snapshot()
         for task in owned { await task.value }
     }
-    nonisolated static func detached<Value: Sendable>(
+
+    static func detached<Value: Sendable>(
         _ operation: @escaping @Sendable () async -> Value
     ) async -> Value {
         let task = Task.detached(operation: operation)

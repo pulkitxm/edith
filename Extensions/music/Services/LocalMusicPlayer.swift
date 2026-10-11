@@ -7,7 +7,7 @@ import MediaPlayer
 @MainActor
 @Observable
 final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
-    @ObservationIgnored private let tasks = MusicTaskOwner()
+    @ObservationIgnored private nonisolated let tasks = MusicTaskOwner()
     @ObservationIgnored private var stopped = false
     @ObservationIgnored var presentationTransport: ((MusicTransportRequest) -> Bool)?
     @ObservationIgnored var presentationSnapshot: (() -> PlayerSnapshot?)?
@@ -284,7 +284,7 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         startLevelTimer()
         guard saveTimer == nil else { return }
         saveTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.persistPlayback() }
+            self?.tasks.enqueue { [weak self] in self?.persistPlayback() }
         }
         saveTimer?.tolerance = 5
     }
@@ -360,7 +360,7 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             (center.previousTrackCommand, .previous),
         ] {
             let target = command.addTarget { [weak self] _ in
-                Task { @MainActor in self?.perform(request) }
+                self?.tasks.enqueue { [weak self] in self?.perform(request) }
                 return .success
             }
             remoteTargets.append((command, target))
@@ -598,6 +598,15 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         broadcastState()
     }
 
+    func suspendCommands() { tasks.shutdown() }
+
+    func suspendCommandsAndWait() async { await tasks.shutdownAndWait() }
+
+    func shutdownAndWait() async {
+        shutdown()
+        await tasks.shutdownAndWait()
+    }
+
     func shutdown() {
         guard !stopped else { return }
         tasks.shutdown()
@@ -714,7 +723,7 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
     }
 
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        Task { @MainActor in
+        tasks.enqueue {
             if self.isLooping, let current = self.current {
                 self.play(current)
             } else {

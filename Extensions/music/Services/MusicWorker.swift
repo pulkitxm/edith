@@ -287,10 +287,29 @@ final class MusicWorker {
         }
     }
 
+    func suspendCommands() {
+        guard let resources else { return }
+        resources.player.suspendCommands()
+        resources.accounts.suspendCommands()
+        MusicTools.shared.suspendCommands()
+    }
+
+    func suspendCommandsAndWait() async {
+        guard let resources else { return }
+        await resources.player.suspendCommandsAndWait()
+        await resources.accounts.suspendCommandsAndWait()
+        await MusicTools.shared.suspendCommandsAndWait()
+    }
+
     func shutdown() async {
         stop()
         await tasks.shutdownAndWait()
-        if !isInertFixture { await DownloadWorker.shared.stop() }
+        if let resources {
+            await resources.player.shutdownAndWait()
+            await resources.accounts.shutdownAndWait()
+            await MusicTools.shared.shutdownAndWait()
+            await DownloadWorker.shared.stop()
+        }
     }
 
     func stop() {

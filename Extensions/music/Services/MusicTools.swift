@@ -47,5 +47,14 @@ final class MusicTools {
         }
     }
 
+    func suspendCommands() { tasks.shutdown() }
+
+    func suspendCommandsAndWait() async { await tasks.shutdownAndWait() }
+
     func shutdown() { tasks.shutdown(); installing = nil }
+
+    func shutdownAndWait() async {
+        shutdown()
+        await tasks.shutdownAndWait()
+    }
 }
