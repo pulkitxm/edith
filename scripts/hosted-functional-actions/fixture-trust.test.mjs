@@ -49,7 +49,7 @@ function policyFixture() {
   const policies = functionalActionOwners.map((owner) => ({
     owner,
     primaryRole: helpers.has(owner) ? "helper" : "app",
-    operations: [owner + ".probe"],
+    operations: [`${owner}.probe`],
     presentations: [
       {
         location: ["notchShelf", "systemStats"].includes(owner)
@@ -197,7 +197,7 @@ test("descriptor selected keys, source changes, duplicate fields and foreign pat
     assert.throws(() => generate(f));
   }
   const f = fixture();
-  f.bytes = Buffer.from('{"schema":1,' + f.bytes.toString().slice(1));
+  f.bytes = Buffer.from(`{"schema":1,${f.bytes.toString().slice(1)}`);
   f.admitted.artifactSHA256 = createHash("sha256")
     .update(f.bytes)
     .digest("hex");

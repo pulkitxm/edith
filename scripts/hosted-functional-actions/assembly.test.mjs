@@ -76,7 +76,7 @@ test("assembly is restricted to a private copied native test target and never ov
     assembleFunctionalCaseSources({
       root,
       owner: "keepAwake",
-      targetDirectory: root + "Extensions/keepAwake/Tests",
+      targetDirectory: `${root}Extensions/keepAwake/Tests`,
     }),
   );
   await assert.rejects(

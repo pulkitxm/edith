@@ -396,7 +396,7 @@ test("capabilities close source session owner UID generation operations and priv
       c.home = "/Users/actual";
     },
     (c) => {
-      c.dataDirectory = root + "/../data";
+      c.dataDirectory = `${root}/../data`;
     },
     (c) => {
       c.fixtureRoot += "/extra";
@@ -414,7 +414,7 @@ test("capabilities close source session owner UID generation operations and priv
       c.operations.push("system.arbitrary");
     },
     (c) => {
-      c.ownedPaths[0].path = root + "-outside/data";
+      c.ownedPaths[0].path = `${root}-outside/data`;
     },
     (c) => {
       c.version = "1.1.0";
