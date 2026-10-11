@@ -179,11 +179,9 @@ public final class HostRemoteSession {
 
     private func recordNativePeer(_ peer: HostRemoteProcessIdentity) throws {
         guard self.peer == nil || self.peer == peer else { throw HostWorkerError.rejected }
+        guard peer.isRunning else { throw HostWorkerError.rejected }
+        try nativeProcesses.captureAuthenticatedWorker(pid: peer.pid, generation: peer.generation)
         self.peer = peer
-        guard peer.isRunning, let birth = ExtensionProcessIdentity.read(peer.pid) else {
-            throw HostWorkerError.rejected
-        }
-        try nativeProcesses.captureWorker(birth)
         if nativeRefresh == nil {
             nativeRefresh = Task { [weak self] in
                 while !Task.isCancelled {

@@ -4,6 +4,27 @@ import Testing
 @testable import EdithHostCore
 
 @MainActor @Suite struct HostWorkerPreparationTests {
+    @Test func synchronousReservationIsJoinedBeforeReplyTaskStarts() async throws {
+        let preparation = HostWorkerPreparation()
+        var waiter: CheckedContinuation<Void, Never>?
+        let cleanup = try preparation.begin {
+            await withCheckedContinuation { waiter = $0 }
+        }
+        #expect(preparation.isClosed)
+        var joined = false
+        let stop = Task {
+            try await preparation.join(); joined = true
+        }
+        while waiter == nil { await Task.yield() }
+        await Task.yield()
+        #expect(!joined)
+        waiter?.resume()
+        try await stop.value
+        try await cleanup.value.get()
+        #expect(joined)
+        #expect(preparation.isPrepared)
+    }
+
     @Test func concurrentPreparationAndShutdownJoinSingleCleanup() async throws {
         let preparation = HostWorkerPreparation()
         var continuation: CheckedContinuation<Void, Never>?

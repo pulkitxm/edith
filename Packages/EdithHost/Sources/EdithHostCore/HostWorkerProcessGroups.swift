@@ -53,6 +53,16 @@ struct HostWorkerProcessGroups {
         self.descendants = descendants
     }
 
+    mutating func captureAuthenticatedWorker(pid: Int32, generation: String) throws {
+        let fields = generation.split(separator: ":", omittingEmptySubsequences: false)
+        guard fields.count == 2, let seconds = UInt64(fields[0]),
+            let microseconds = UInt64(fields[1]), microseconds < 1_000_000,
+            generation == "\(seconds):\(microseconds)",
+            let birth = read(pid), birth.generation == "\(seconds).\(microseconds)"
+        else { throw HostWorkerError.invalidResponse }
+        try captureWorker(birth)
+    }
+
     mutating func captureWorker(_ identity: ExtensionProcessIdentity) throws {
         guard read(identity.pid) == identity else { throw HostWorkerError.invalidResponse }
         worker = Ownership(leader: identity, witnesses: [identity] + descendants(identity.pid))
@@ -121,15 +131,14 @@ struct HostWorkerProcessGroups {
 
     private func terminate(_ ownership: Ownership, owner: Int32) {
         let leader = ownership.leader
+        if ownership.witnesses.contains(where: {
+            read($0.pid) == $0 && group($0.pid) == leader.pid
+        }) {
+            signal(-leader.pid)
+        }
         for witness in ownership.witnesses where read(witness.pid) == witness {
             signal(witness.pid)
         }
-        guard
-            ownership.witnesses.contains(where: {
-                read($0.pid) == $0 && group($0.pid) == leader.pid
-            })
-        else { return }
-        signal(-leader.pid)
     }
 
     private static func processIDs(_ type: UInt32, _ value: UInt32) -> [Int32] {

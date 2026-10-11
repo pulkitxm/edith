@@ -137,14 +137,16 @@ final class HostWorkerApplication {
     }
 
     private func prepareDisable(_ request: HostWorkerRequest) {
-        preparation.closeAdmission()
         navigation?.cancelPending()
+        let cleanup = Result {
+            try preparation.begin(token: request.token) {
+                for runtime in self.runtimes { try await runtime.suspendCommandsAll() }
+                for runtime in self.runtimes { try await runtime.prepareDisableAll() }
+            }
+        }
         Task { [self] in
             do {
-                try await preparation.prepare(token: request.token) {
-                    for runtime in self.runtimes { try await runtime.suspendCommandsAll() }
-                    for runtime in self.runtimes { try await runtime.prepareDisableAll() }
-                }
+                try await cleanup.get().value.get()
                 try control.send(
                     HostWorkerResponse(
                         token: request.token, ok: true, version: configuration?.version))
@@ -168,31 +170,33 @@ final class HostWorkerApplication {
             try? control.send(HostWorkerResponse(token: request.token, ok: false))
             return
         }
-        preparation.closeAdmission()
         navigation?.cancelPending()
         peerServer?.shutdown()
         peerServer = nil
+        let cleanup = Result {
+            try preparation.begin(token: request.token, operation: "applicationQuit") {
+                for runtime in self.runtimes { try await runtime.suspendCommandsAll() }
+                guard let host = ExtensionProcessIdentity.read(getppid()) else {
+                    throw HostWorkerError.rejected
+                }
+                let response = try engine.response(
+                    id: configuration.extensionID, operation: "prepareApplicationQuit",
+                    context: [
+                        "reason": HostWorkerStopReason.applicationQuit.rawValue,
+                        "hostPID": host.pid, "hostGeneration": host.generation,
+                    ])
+                guard response["ok"] as? Bool == true else { throw HostWorkerError.rejected }
+                for runtime in self.runtimes where runtime !== engine {
+                    try await runtime.prepareDisableAll()
+                }
+                try await engine.prepareToStopAll()
+                guard !self.stopping, host.isAlive else { throw HostWorkerError.rejected }
+                self.preparedApplicationQuit = true
+            }
+        }
         Task { [self] in
             do {
-                try await preparation.prepare(token: request.token, operation: "applicationQuit") {
-                    for runtime in self.runtimes { try await runtime.suspendCommandsAll() }
-                    guard let host = ExtensionProcessIdentity.read(getppid()) else {
-                        throw HostWorkerError.rejected
-                    }
-                    let response = try engine.response(
-                        id: configuration.extensionID, operation: "prepareApplicationQuit",
-                        context: [
-                            "reason": HostWorkerStopReason.applicationQuit.rawValue,
-                            "hostPID": host.pid, "hostGeneration": host.generation,
-                        ])
-                    guard response["ok"] as? Bool == true else { throw HostWorkerError.rejected }
-                    for runtime in self.runtimes where runtime !== engine {
-                        try await runtime.prepareDisableAll()
-                    }
-                    try await engine.prepareToStopAll()
-                    guard !self.stopping, host.isAlive else { throw HostWorkerError.rejected }
-                    self.preparedApplicationQuit = true
-                }
+                try await cleanup.get().value.get()
                 try control.send(
                     HostWorkerResponse(
                         token: request.token, ok: true, version: configuration.version))

@@ -488,10 +488,10 @@ public final class HostWorker {
 
     private func terminate() {
         cancelNavigation()
+        terminateGroup()
         if process.isRunning, let workerIdentity, workerIdentity.isAlive {
             kill(workerIdentity.pid, SIGKILL)
         }
-        terminateGroup()
     }
 
     private func terminateGroup() {

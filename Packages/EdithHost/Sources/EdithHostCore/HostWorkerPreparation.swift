@@ -7,27 +7,23 @@ public final class HostWorkerPreparation {
     public private(set) var isPrepared = false
     private var task: Task<Result<Void, Error>, Never>?
     private var running = false
-    private var generation = 0
     private var operation: String?
-    private var outcomes: [UUID: Result<Void, Error>] = [:]
+    private var requests: [UUID: Task<Result<Void, Error>, Never>] = [:]
     private var outcomeOperations: [UUID: String] = [:]
 
     public init() {}
 
-    public func closeAdmission() { isClosed = true }
-
-    public func prepare(
+    public func begin(
         token: UUID = UUID(), operation: String = "disable",
         _ action: @escaping @MainActor () async throws -> Void
-    ) async throws {
+    ) throws -> Task<Result<Void, Error>, Never> {
         isClosed = true
         guard operation == "disable" || operation == "applicationQuit" else {
             throw Failure.mismatchedOperation
         }
-        if let outcome = outcomes[token] {
+        if let request = requests[token] {
             guard outcomeOperations[token] == operation else { throw Failure.mismatchedOperation }
-            try outcome.get()
-            return
+            return request
         }
         let recoveringQuit =
             self.operation == "applicationQuit" && operation == "disable"
@@ -35,31 +31,34 @@ public final class HostWorkerPreparation {
         guard self.operation == nil || self.operation == operation || recoveringQuit else {
             throw Failure.mismatchedOperation
         }
+        guard requests.count < 64 else { throw Failure.exhaustedRetries }
         self.operation = operation
-        if isPrepared { return }
-        guard outcomes.count < 64 else { throw Failure.exhaustedRetries }
-        let selectedGeneration: Int
         let selected: Task<Result<Void, Error>, Never>
-        if running, let task {
-            selectedGeneration = generation
+        if isPrepared {
+            selected = Task { .success(()) }
+        } else if running, let task {
             selected = task
         } else {
             running = true
-            generation += 1
-            selectedGeneration = generation
             selected = Task {
-                do { try await action(); return .success(()) } catch { return .failure(error) }
+                let result: Result<Void, Error>
+                do { try await action(); result = .success(()) } catch { result = .failure(error) }
+                self.running = false
+                if case .success = result { self.isPrepared = true }
+                return result
             }
             task = selected
         }
-        let result = await selected.value
-        outcomes[token] = result
+        requests[token] = selected
         outcomeOperations[token] = operation
-        if generation == selectedGeneration {
-            running = false
-            if case .success = result { isPrepared = true }
-        }
-        try result.get()
+        return selected
+    }
+
+    public func prepare(
+        token: UUID = UUID(), operation: String = "disable",
+        _ action: @escaping @MainActor () async throws -> Void
+    ) async throws {
+        try await begin(token: token, operation: operation, action).value.get()
     }
 
     public func join() async throws {

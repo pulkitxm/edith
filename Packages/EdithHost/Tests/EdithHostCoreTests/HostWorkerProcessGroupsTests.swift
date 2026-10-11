@@ -10,6 +10,7 @@ import Testing
         var identities: [Int32: ExtensionProcessIdentity] = [:]
         var groups: [Int32: Int32] = [:]
         var signals: [Int32] = []
+        var onSignal: ((Int32) -> Void)?
         var owned = Set<Int32>()
         var unreadable = Set<Int32>()
 
@@ -21,7 +22,9 @@ import Testing
                 members: { group in
                     self.identities.values.filter { self.groups[$0.pid] == group }
                 },
-                signal: { self.signals.append($0) },
+                signal: {
+                    self.signals.append($0); self.onSignal?($0)
+                },
                 descendant: { self.owned.contains($0) && $1 == 42 },
                 descendants: { _ in [] },
                 exists: { self.identities[$0] != nil || self.unreadable.contains($0) })
@@ -36,6 +39,58 @@ import Testing
             groups[pid] = group ?? pid
             owned.insert(pid)
         }
+    }
+
+    @Test func groupSignalPrecedesImmediateWitnessExitAndReachesLateChild() throws {
+        let kernel = Kernel()
+        try kernel.add(1234, generation: "1.0")
+        var tracker = kernel.tracker()
+        try tracker.register(.init(pid: 1234, generation: "1.0", registered: true), owner: 42)
+        try kernel.add(1235, generation: "1.1", group: 1234)
+        kernel.onSignal = { pid in
+            if pid == -1234 {
+                kernel.identities.removeAll()
+            } else {
+                kernel.identities[pid] = nil
+            }
+        }
+        tracker.terminate(owner: 42)
+        #expect(kernel.signals.first == -1234)
+        #expect(kernel.identities.isEmpty)
+        tracker.refresh(owner: 42)
+        #expect(tracker.isEmpty)
+    }
+
+    @Test func authenticatedBirthCannotCaptureReusedPID() throws {
+        let kernel = Kernel()
+        try kernel.add(1234, generation: "2.0")
+        var tracker = kernel.tracker()
+        #expect(throws: HostWorkerError.invalidResponse) {
+            try tracker.captureAuthenticatedWorker(pid: 1234, generation: "1:0")
+        }
+        tracker.terminate(owner: 1234)
+        #expect(kernel.signals.isEmpty)
+        #expect(tracker.isEmpty)
+    }
+
+    @Test func birthIsRecheckedBeforeAuthenticatedCapture() throws {
+        let kernel = Kernel()
+        try kernel.add(1234, generation: "1.0")
+        var reads = 0
+        var tracker = HostWorkerProcessGroups(
+            read: { pid in
+                reads += 1
+                if reads == 2 { try? kernel.add(pid, generation: "2.0") }
+                return kernel.identities[pid]
+            }, group: { kernel.groups[$0] ?? -1 }, members: { _ in [] },
+            signal: { kernel.signals.append($0) }, descendant: { _, _ in false },
+            descendants: { _ in [] }, exists: { kernel.identities[$0] != nil })
+        #expect(throws: HostWorkerError.invalidResponse) {
+            try tracker.captureAuthenticatedWorker(pid: 1234, generation: "1:0")
+        }
+        tracker.terminate(owner: 1234)
+        #expect(kernel.signals.isEmpty)
+        #expect(tracker.isEmpty)
     }
 
     @Test func forgedGenerationsNeverSignalTheLiveProcess() throws {
@@ -84,7 +139,7 @@ import Testing
             try tracker.register(
                 HostWorkerProcessGroup(pid: 1236, generation: "3.0", registered: true), owner: 42)
         }
-        #expect(kernel.signals == [1236, -1236])
+        #expect(kernel.signals == [-1236, 1236])
         tracker.terminate(owner: 42)
         #expect(Set(kernel.signals) == [1236, -1236, 1235, -1235])
         #expect(!tracker.isEmpty)
