@@ -19,6 +19,7 @@ final class ExtensionRuntime: NSObject {
     private let commands = ExtensionCommandRegistry()
     private var suspended = false
     private var suspension: Task<Void, Never>?
+    private var retiredPresentations: [UUID: Task<Void, Never>] = [:]
     private var retiredServices: [UUID: Task<Void, Never>] = [:]
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -71,12 +72,17 @@ final class ExtensionRuntime: NSObject {
         commands.suspend()
         suspended = true
         let service = service
+        let presentation = presentation
+        presentation?.stop()
         service?.shutdown()
         if suspension == nil {
+            let presentations = Array(retiredPresentations.values)
             let retired = Array(retiredServices.values)
-            suspension = Task { [self, service] in
+            suspension = Task { [self, service, presentation] in
                 await commands.suspendAndWait()
                 await service?.shutdownAndWait()
+                await presentation?.stopAndWait()
+                for task in presentations { await task.value }
                 for task in retired { await task.value }
             }
         }
@@ -93,9 +99,21 @@ final class ExtensionRuntime: NSObject {
             Task { [self] in
                 await commands.shutdownAndWait()
                 _ = execute(["operation": "stop"])
+                for task in Array(retiredPresentations.values) { await task.value }
                 completion()
             }
         }
+    }
+
+    private func retirePresentation() {
+        guard let presentation else { return }
+        presentation.stop()
+        let id = UUID()
+        retiredPresentations[id] = Task { [self, presentation] in
+            await presentation.stopAndWait()
+            retiredPresentations[id] = nil
+        }
+        self.presentation = nil
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
@@ -109,22 +127,23 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
-            guard let configuration = ExtensionUIConfiguration(context: input),
+            guard !suspended, retiredPresentations.isEmpty,
+                let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "keystrokeHighlight",
                 configuration.defaultsSuite
                     == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
-            presentation?.stop()
+            retirePresentation()
             presentation = ControlPresentation(client: configuration.engineClient)
             return ["ok": true] as NSDictionary
         case "stopUI":
-            presentation?.stop()
-            presentation = nil
+            retirePresentation()
             return ["ok": true] as NSDictionary
         case "prepareToStop":
             commands.shutdown()
             return ["ok": true] as NSDictionary
         case "start":
+            guard !suspended else { return ["ok": false] as NSDictionary }
             do {
                 fixture = try WorkerFixtureAdmission.current(
                     extensionID: "keystrokeHighlight", context: input,
@@ -169,8 +188,7 @@ final class ExtensionRuntime: NSObject {
         case "synchronize": synchronize()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
-            presentation?.stop()
-            presentation = nil
+            retirePresentation()
             commands.shutdown()
             retireService()
             IPC.stopObserving(observer)
