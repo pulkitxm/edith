@@ -601,7 +601,9 @@ final class QuinjetPageModel {
     func performSessionOperation(
         _ request: QuinjetSessionRequest
     ) async throws -> QuinjetSessionResult {
-        guard !stopped, !draining else { throw ExtensionPeerError.unavailable }
+        guard !stopped, !draining, sessionActions.count < 8 else {
+            throw ExtensionPeerError.unavailable
+        }
         try Task.checkCancellation()
         let identifier = UUID()
         let task = Task { [self] in try await performSessionOperationOwned(request) }
@@ -675,7 +677,7 @@ final class QuinjetPageModel {
     }
 
     private func performFolderAction(_ operation: @escaping @MainActor () async -> Void) async {
-        guard !stopped, !draining, !Task.isCancelled else { return }
+        guard !stopped, !draining, !Task.isCancelled, folderActions.count < 8 else { return }
         let identifier = UUID()
         let task = Task { await operation() }
         folderActions[identifier] = task
