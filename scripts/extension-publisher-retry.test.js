@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 import { catalogPointer } from "./extension-catalog-pointer.mjs";
 import { extensionChecksum } from "./extension-publish.mjs";
 import { extensionReleaseTag } from "./extension-release-plan.mjs";
-import { managedNativeTestSteps } from "./hosted-managed-views/native-ci-contract.mjs";
+import { shippingNativeTestSteps } from "./hosted-managed-views/native-ci-contract.mjs";
 import {
   closedAssetInventory,
   stagedEvidence,
@@ -23,7 +23,7 @@ const repository = "pulkitxm/edith";
 const target = "a".repeat(40);
 const catalogTag = "extension-catalog-v1";
 const entry = {
-  id: "calendar",
+  id: "keepAwake",
   version: "1.0.0",
   fingerprint: "b".repeat(64),
 };
@@ -131,16 +131,16 @@ function publisherFixture(interrupt) {
     downloadBytes: bytes.length,
     installedBytes: 100,
     dependencies: [],
-    downloadURL: `https://github.com/${repository}/releases/download/${encodeURIComponent(entry.tag)}/calendar.zip`,
+    downloadURL: `https://github.com/${repository}/releases/download/${encodeURIComponent(entry.tag)}/keepAwake.zip`,
   });
   const build = (bytes) => {
-    writeFileSync(join(directory, "calendar.zip"), bytes);
+    writeFileSync(join(directory, "keepAwake.zip"), bytes);
     writeFileSync(
-      join(directory, "calendar.json"),
+      join(directory, "keepAwake.json"),
       JSON.stringify(record(bytes)),
     );
     writeFileSync(
-      join(directory, "calendar.zip.sha256"),
+      join(directory, "keepAwake.zip.sha256"),
       extensionChecksum(record(bytes)),
     );
   };
@@ -171,7 +171,7 @@ const result = await publishExtensions({
   publicKey: process.env.EXTENSION_CATALOG_PUBLIC_KEY,
   publishEvidence: async () => {
     if (process.env.FIXTURE_EMPTY_RESUME) return JSON.parse(readFileSync(join(directory, "native-evidence-preparation.json")));
-    const packageRecord = JSON.parse(readFileSync(join(directory, "calendar.json")));
+    const packageRecord = JSON.parse(readFileSync(join(directory, "keepAwake.json")));
     const sourceCommit = process.env.GITHUB_SHA;
     const payload = Buffer.from(JSON.stringify({
       schema: 1, kind: "extension-native-lineage", repository: process.env.GITHUB_REPOSITORY,
@@ -179,7 +179,7 @@ const result = await publishExtensions({
       evidenceTag: "extension-evidence/" + sourceCommit + "/101-1",
       evidenceSHA256: "c".repeat(64), evidenceBytes: 200,
     }));
-    writeFileSync(join(directory, "calendar.native-evidence.json"), JSON.stringify({
+    writeFileSync(join(directory, "keepAwake.native-evidence.json"), JSON.stringify({
       payload: payload.toString("base64"),
       signature: sign(null, payload, process.env.FIXTURE_PRIVATE_KEY).toString("base64"),
     }));
@@ -281,7 +281,7 @@ process.stdout.write(JSON.stringify(result));
                 ? "skipped"
                 : "success",
           steps: (name === "tests"
-            ? managedNativeTestSteps
+            ? shippingNativeTestSteps
             : name === "publish"
               ? ["Preserve immutable native evidence before publication"]
               : []
@@ -422,7 +422,7 @@ process.stdout.write(JSON.stringify(result));
 }
 
 test("an archive-only retry recovers original immutable bytes and signed lineage after a different rebuild", () => {
-  const fixture = publisherFixture("calendar.zip");
+  const fixture = publisherFixture("keepAwake.zip");
   try {
     expect(fixture.run().status).not.toBe(0);
     const partial = fixture.state();
@@ -430,17 +430,17 @@ test("an archive-only retry recovers original immutable bytes and signed lineage
     fixture.build(Buffer.from("byte-different rebuilt signed archive"));
     const resumed = fixture.run();
     expect(resumed.status).toBe(0);
-    expect(readFileSync(join(fixture.directory, "calendar.zip"))).toEqual(
+    expect(readFileSync(join(fixture.directory, "keepAwake.zip"))).toEqual(
       fixture.original,
     );
     const complete = fixture.state();
     expect(complete.duplicateUploads).toBe(0);
     expect(
-      complete.uploads.filter((name) => name === "calendar.zip"),
+      complete.uploads.filter((name) => name === "keepAwake.zip"),
     ).toHaveLength(1);
     expect(
       complete.uploads.filter(
-        (name) => name === "calendar.native-evidence.json",
+        (name) => name === "keepAwake.native-evidence.json",
       ),
     ).toHaveLength(1);
     for (const [id, bytes] of Object.entries(originalAssets))
@@ -451,8 +451,8 @@ test("an archive-only retry recovers original immutable bytes and signed lineage
 }, 30_000);
 
 for (const interruption of [
-  "calendar.json",
-  "calendar.zip.sha256",
+  "keepAwake.json",
+  "keepAwake.zip.sha256",
   "catalog",
 ]) {
   test(`a rebuilt retry restores verified original artifacts after ${interruption}`, () => {
@@ -463,19 +463,19 @@ for (const interruption of [
       fixture.build(Buffer.from("byte-different rebuilt signed archive"));
       const resumed = fixture.run();
       expect(resumed.status).toBe(0);
-      expect(readFileSync(join(fixture.directory, "calendar.zip"))).toEqual(
+      expect(readFileSync(join(fixture.directory, "keepAwake.zip"))).toEqual(
         fixture.original,
       );
       expect(
-        JSON.parse(readFileSync(join(fixture.directory, "calendar.json"))),
+        JSON.parse(readFileSync(join(fixture.directory, "keepAwake.json"))),
       ).toEqual(fixture.record(fixture.original));
       expect(
-        readFileSync(join(fixture.directory, "calendar.zip.sha256"), "utf8"),
+        readFileSync(join(fixture.directory, "keepAwake.zip.sha256"), "utf8"),
       ).toBe(extensionChecksum(fixture.record(fixture.original)));
       const complete = fixture.state();
       expect(complete.duplicateUploads).toBe(0);
       expect(
-        complete.uploads.filter((name) => name === "calendar.zip"),
+        complete.uploads.filter((name) => name === "keepAwake.zip"),
       ).toHaveLength(1);
       for (const [id, bytes] of Object.entries(originalAssets))
         expect(complete.bytes[id]).toBe(bytes);
@@ -486,13 +486,13 @@ for (const interruption of [
 }
 
 test("recovery rejects tampered original bytes before replacing local artifacts or promoting the catalog", () => {
-  const fixture = publisherFixture("calendar.json");
+  const fixture = publisherFixture("keepAwake.json");
   try {
     expect(fixture.run().status).not.toBe(0);
     fixture.updateState((state) => {
       const archive = state.releases
         .flatMap((item) => item.assets)
-        .find((asset) => asset.name === "calendar.zip");
+        .find((asset) => asset.name === "keepAwake.zip");
       const changed = Buffer.from(state.bytes[archive.id], "base64");
       changed[0] ^= 1;
       state.bytes[archive.id] = changed.toString("base64");
@@ -503,7 +503,7 @@ test("recovery rejects tampered original bytes before replacing local artifacts 
     const rejected = fixture.run();
     expect(rejected.status).not.toBe(0);
     expect(rejected.stderr).toContain("Release asset checksum mismatch");
-    expect(readFileSync(join(fixture.directory, "calendar.zip"))).toEqual(
+    expect(readFileSync(join(fixture.directory, "keepAwake.zip"))).toEqual(
       rebuilt,
     );
     expect(fixture.state().bytes).toEqual(before.bytes);
@@ -515,9 +515,9 @@ test("recovery rejects tampered original bytes before replacing local artifacts 
 }, 30_000);
 
 for (const interruption of [
-  "calendar.zip",
-  "calendar.json",
-  "calendar.zip.sha256",
+  "keepAwake.zip",
+  "keepAwake.json",
+  "keepAwake.zip.sha256",
   "catalog",
 ]) {
   test(`the full nonempty publisher resumes identical artifacts after ${interruption} response loss`, () => {
@@ -533,7 +533,7 @@ for (const interruption of [
       const retry = fixture.run();
       expect(retry.status).toBe(0);
       const result = JSON.parse(retry.stdout);
-      expect(result.published).toEqual([{ id: "calendar", version: "1.0.0" }]);
+      expect(result.published).toEqual([{ id: "keepAwake", version: "1.0.0" }]);
       const final = fixture.state();
       expect(final.duplicateUploads).toBe(0);
       expect(final.pointerEdits).toBe(1);
@@ -544,10 +544,10 @@ for (const interruption of [
       );
       expect(release.draft).toBe(false);
       expect(release.assets.map(({ name }) => name)).toEqual([
-        "calendar.native-evidence.json",
-        "calendar.zip",
-        "calendar.json",
-        "calendar.zip.sha256",
+        "keepAwake.native-evidence.json",
+        "keepAwake.zip",
+        "keepAwake.json",
+        "keepAwake.zip.sha256",
       ]);
       const catalog = final.releases.find(
         (item) => item.tag_name === catalogTag,
