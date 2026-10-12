@@ -131,12 +131,24 @@ private actor HerdrAccountLaunchRecorder {
     }
 
     @Test func retainedLaunchTransmitsAccountIdentityWithoutCredentials() async throws {
+        let defaults = HerdrUIDefaults()
+        let worker = HerdrWorker(
+            store: HerdrStore(defaults: defaults, machinesProvider: { [] }),
+            defaults: defaults, automaticActions: false)
+        let response: Data
+        do {
+            response = try await worker.execute("herdr.ui.read", payload: Data("{}".utf8))
+        } catch {
+            await worker.shutdown()
+            throw error
+        }
+        await worker.shutdown()
         var operation: String?
         var object: [String: Any]?
         let client = HerdrUIClient { command, payload in
             operation = command
             object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
-            return Data("{}".utf8)
+            return response
         }
         let store = HerdrStore(uiClient: client)
         let id = UUID().uuidString
