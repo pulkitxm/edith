@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 
@@ -5,12 +6,7 @@ import Testing
 
 struct HostStoragePackageScopesTests {
     @Test func roleAndCameraCopiesAreIncludedExactlyOnce() throws {
-        let root = URL(
-            fileURLWithPath: ProcessInfo.processInfo.environment["TMPDIR"] ?? NSTemporaryDirectory()
-        )
-        .resolvingSymlinksInPath()
-        .appendingPathComponent("synthetic-package-scopes-" + UUID().uuidString)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let root = try syntheticRoot()
         defer { try? FileManager.default.removeItem(at: root) }
         let layout = HostStoragePackageScopes(
             key: "fixture", directory: root, extensionID: "virtualCamera",
@@ -34,6 +30,7 @@ struct HostStoragePackageScopesTests {
             try Data(repeating: 65, count: (index + 1) * 100).write(to: file)
         }
         let measurement = try HostStorageAccounting.scan(scopes: layout.scopes)
+        expectReadable(measurement, root: root)
         let executables = layout.executableScopeIDs.reduce(Int64(0)) {
             $0 + (measurement.bytes[$1]?.logical ?? 0)
         }
@@ -65,6 +62,7 @@ struct HostStoragePackageScopesTests {
                 "usage": ["usage"], "music": ["music-history"], "downloads": ["downloads-history"],
             ])
         let measurement = try HostStorageAccounting.scan(scopes: layout.scopes)
+        expectReadable(measurement, root: root)
         #expect(layout.ownedIDs["music"] == [])
         #expect(layout.ownedIDs["downloads"] == [])
         #expect(layout.sharedIDs["music"] == layout.sharedIDs["downloads"])
@@ -115,6 +113,7 @@ struct HostStoragePackageScopesTests {
             }
         }
         let before = try HostStorageAccounting.scan(scopes: scopes)
+        expectReadable(before, root: root)
         let packageBytes = packageIDs.reduce(Int64(0)) { $0 + (before.bytes[$1]?.logical ?? 0) }
         #expect(packageBytes == 40_000)
         #expect(before.bytes["cache"]?.logical == 1407)
@@ -126,6 +125,7 @@ struct HostStoragePackageScopesTests {
             !removeURLs.contains { scope.root == $0 || scope.root.path.hasPrefix($0.path + "/") }
         }
         let after = try HostStorageAccounting.scan(scopes: remainingScopes)
+        expectReadable(after, root: root)
         #expect(before.total.logical - after.total.logical == 2000)
         #expect(after.bytes["data"] == before.bytes["data"])
         #expect(after.bytes["cache"]?.logical == before.bytes["cache"]?.logical)
@@ -137,14 +137,48 @@ struct HostStoragePackageScopesTests {
             try Data(contentsOf: root.appendingPathComponent("Data/shared-history")).count == 702)
     }
 
-    private func syntheticRoot() throws -> URL {
-        let root = URL(
-            fileURLWithPath: ProcessInfo.processInfo.environment["TMPDIR"] ?? NSTemporaryDirectory()
-        )
-        .resolvingSymlinksInPath()
-        .appendingPathComponent("synthetic-storage-" + UUID().uuidString)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        return root
+    @Test func ownedSymlinkTemporaryDirectoryProducesCanonicalReadableRoot() throws {
+        let parent = try syntheticRoot()
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let target = parent.appendingPathComponent("actual-temp")
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+        let alias = parent.appendingPathComponent("linked-temp")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: target)
+        let root = try syntheticRoot(temporaryDirectory: alias)
+        #expect(root.deletingLastPathComponent().path == target.path)
+        #expect(!root.path.hasPrefix(alias.path + "/"))
+        _ = try write(root, "owned-record", count: 321)
+        let measurement = try HostStorageAccounting.scan(scopes: [.init(id: "owned", root: root)])
+        expectReadable(measurement, root: root)
+        #expect(measurement.bytes["owned"]?.logical == 321)
+        #expect(measurement.total.complete)
+    }
+
+    private func syntheticRoot(temporaryDirectory: URL? = nil) throws -> URL {
+        let temporaryDirectory =
+            temporaryDirectory
+            ?? URL(
+                fileURLWithPath: ProcessInfo.processInfo.environment["TMPDIR"]
+                    ?? NSTemporaryDirectory())
+        let root = temporaryDirectory.appendingPathComponent(
+            "synthetic-storage-" + UUID().uuidString)
+        try FileManager.default.createDirectory(
+            at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        guard let canonical = root.path.withCString({ realpath($0, nil) }) else {
+            let error = POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            try? FileManager.default.removeItem(at: root)
+            throw error
+        }
+        defer { free(canonical) }
+        return URL(fileURLWithPath: String(cString: canonical), isDirectory: true)
+    }
+
+    private func expectReadable(_ measurement: HostStorageMeasurement, root: URL) {
+        let diagnostic = Comment(
+            rawValue: "owned root: \(root.path); storage issues: \(measurement.issues)")
+        #expect(measurement.issues.isEmpty, diagnostic)
+        #expect(measurement.total.exists, diagnostic)
+        #expect(measurement.total.allocated > 0, diagnostic)
     }
 
     private func write(_ root: URL, _ path: String, count: Int) throws -> URL {

@@ -227,12 +227,15 @@ public final class HostExtensionSessions {
         ambientPolicyCoordinator.release(owner: id)
         ambientPolicyCoordinator.invalidate()
         do {
-            if let worker = workers[id], worker.isStopped, worker.requiresRecovery {
+            if let worker = workers[id], worker.isStopped,
+                worker.requiresRecovery || pendingDisableIDs.contains(id)
+                    || pendingRecoveryIDs.contains(id)
+            {
                 workers[id] = nil
                 pendingRecoveryIDs.insert(id)
             }
-            if let worker = workers[id] { try await worker.prepareStop(reason: reason) }
             try await willDisable(id)
+            if let worker = workers[id] { try await worker.prepareStop(reason: reason) }
             if workers[id] == nil, pendingDisableIDs.contains(id) || pendingRecoveryIDs.contains(id)
             {
                 guard let package = packages[id] else { throw HostWorkerError.rejected }

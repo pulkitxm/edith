@@ -111,15 +111,21 @@ final class HostRemoteEngineReceiver: NSObject, HostRemoteEvents, @unchecked Sen
     }
     private let receiveEvent: @MainActor (HostRemoteEvent) -> Void
     private let execute: Execute
+    private let admit: @MainActor @Sendable (ExtensionEngineRequest) -> Bool
     private let callbacks = HostRemoteCallbackRetirement()
     @MainActor private var peer: HostRemoteProcessIdentity?
     @MainActor private var pending: [UUID: Pending] = [:]
     @MainActor private var invalidated = false
     @MainActor private let ownership = HostRemoteInvocationRetirement()
 
-    init(receive: @escaping @MainActor (HostRemoteEvent) -> Void, execute: @escaping Execute) {
+    init(
+        receive: @escaping @MainActor (HostRemoteEvent) -> Void,
+        admit: @escaping @MainActor @Sendable (ExtensionEngineRequest) -> Bool = { _ in true },
+        execute: @escaping Execute
+    ) {
         receiveEvent = receive
         self.execute = execute
+        self.admit = admit
     }
 
     @MainActor func authenticate(_ peer: HostRemoteProcessIdentity) { self.peer = peer }
@@ -142,7 +148,7 @@ final class HostRemoteEngineReceiver: NSObject, HostRemoteEvents, @unchecked Sen
                     ExtensionEngineRequest.self, from: data)
             else { completion.rejectMalformed(); return }
             guard !invalidated, let peer, peer.isRunning, (try? request.validate()) != nil,
-                ownership.accepts(request.token), pending[request.token] == nil
+                ownership.accepts(request.token), pending[request.token] == nil, admit(request)
             else { completion.finish(token: request.token, ok: false); return }
             #if EDITH_FUNCTIONAL_FIXTURE
             guard let observe = HostRemoteSession.fixtureObserveNativeReply,
@@ -153,7 +159,13 @@ final class HostRemoteEngineReceiver: NSObject, HostRemoteEvents, @unchecked Sen
             #endif
             let execution = Task { @MainActor [self] in
                 do {
-                    let payload = try await execute(request)
+                    try Task.checkCancellation()
+                    guard !invalidated, self.peer == peer, peer.isRunning,
+                        let admission = ownership.admission(for: request.token)
+                    else { throw HostWorkerError.rejected }
+                    let payload = try await HostRemoteInvocationAdmission.$current.withValue(
+                        admission
+                    ) { try await execute(request) }
                     try Task.checkCancellation()
                     guard !invalidated, self.peer == peer, peer.isRunning,
                         payload.count <= ExtensionEngineWire.maximumPayloadBytes,

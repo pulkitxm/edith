@@ -73,7 +73,6 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
         let receiver = Exchange(
             connection: connection, peer: peer, execute: execute, didDisconnect: didDisconnect,
             admit: { [weak self] command in self?.admit(command) == true },
-            mayExecute: { [weak self] command in self?.mayExecute(command) == true },
             stopReturned: { [weak self] token in self?.releaseStop(token) })
         let accepted = lock.withLock {
             guard !invalidated, connections.contains(where: { $0 === connection }),
@@ -97,6 +96,7 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
     }
 
     @MainActor public func invokeEngine(_ request: ExtensionEngineRequest) async throws -> Data {
+        try request.validate()
         guard !lock.withLock({ invalidated || draining }), engineInvocations.accepts(request.token)
         else { throw HostWorkerError.rejected }
         let bytes = await withTaskCancellationHandler {
@@ -117,23 +117,24 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
     ) {
         guard !lock.withLock({ invalidated || draining }), engineInvocations.accepts(request.token)
         else { completion(Data()); return }
+        let receivers = lock.withLock { self.receivers }
+        let authenticated = receivers.filter { $0.isAuthenticated }
+        guard authenticated.count == 1, let selected = authenticated.first else {
+            completion(Data()); return
+        }
         let task = Task { @MainActor [self] in
             let outcome: Result<Data, any Error>
             do {
                 try Task.checkCancellation()
-                guard !lock.withLock({ invalidated || draining }) else {
-                    throw HostWorkerError.exited
+                guard !lock.withLock({ invalidated }), selected.isAuthenticated,
+                    let admission = engineInvocations.admission(for: request.token)
+                else { throw HostWorkerError.exited }
+                let payload = try await HostRemoteInvocationAdmission.$current.withValue(admission)
+                {
+                    try await selected.engineCalls.request(request)
                 }
-                let receivers = lock.withLock { self.receivers }
-                var selected: Exchange?
-                for receiver in receivers where receiver.isAuthenticated {
-                    guard selected == nil else { throw HostWorkerError.rejected }
-                    selected = receiver
-                }
-                guard let selected else { throw HostWorkerError.rejected }
-                let payload = try await selected.engineCalls.request(request)
                 try Task.checkCancellation()
-                guard !lock.withLock({ invalidated || draining }) else {
+                guard !lock.withLock({ invalidated }), selected.isAuthenticated else {
                     throw HostWorkerError.exited
                 }
                 outcome = .success(payload)
@@ -155,6 +156,21 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
 
     public func closeMutationAdmission() { lock.withLock { draining = true } }
 
+    @MainActor public func joinAdmittedWork(excluding token: UUID? = nil) async {
+        let receivers = lock.withLock {
+            draining = true
+            return self.receivers
+        }
+        for receiver in receivers { await receiver.joinControlOwners(excluding: token) }
+        await engineInvocations.joinCurrent()
+        await engineCallbacks.joinCurrent()
+    }
+
+    @MainActor public func closeControlCallbacks() async {
+        let receivers = lock.withLock { self.receivers }
+        for receiver in receivers { await receiver.closeControlCallbacks() }
+    }
+
     @MainActor public func prepareToStop(excluding token: UUID? = nil) async {
         let receivers = lock.withLock {
             draining = true
@@ -175,13 +191,6 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
                 return true
             }
             return !draining
-        }
-    }
-
-    private func mayExecute(_ command: HostRemoteCommand) -> Bool {
-        lock.withLock {
-            !invalidated
-                && (!draining || (command.operation == "stop" && activeStop == command.token))
         }
     }
 
@@ -243,8 +252,8 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
         private let execute: Execute
         private let didDisconnect: @MainActor @Sendable () -> Void
         private let callbacks = HostRemoteCallbackRetirement()
+        private let markers = HostRemoteCallbackRetirement()
         private let admit: @Sendable (HostRemoteCommand) -> Bool
-        private let mayExecute: @Sendable (HostRemoteCommand) -> Bool
         private let stopReturned: @Sendable (UUID) -> Void
         @MainActor private let ownership = HostRemoteInvocationRetirement()
         @MainActor private var authenticated = false
@@ -261,7 +270,6 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
             connection: NSXPCConnection, peer: HostRemoteKernelIdentity, execute: @escaping Execute,
             didDisconnect: @escaping @MainActor @Sendable () -> Void,
             admit: @escaping @Sendable (HostRemoteCommand) -> Bool,
-            mayExecute: @escaping @Sendable (HostRemoteCommand) -> Bool,
             stopReturned: @escaping @Sendable (UUID) -> Void
         ) {
             self.connection = connection
@@ -269,7 +277,6 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
             self.execute = execute
             self.didDisconnect = didDisconnect
             self.admit = admit
-            self.mayExecute = mayExecute
             self.stopReturned = stopReturned
         }
 
@@ -304,10 +311,12 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
                 let actual = Task { @MainActor [self] in
                     do {
                         try Task.checkCancellation()
-                        guard mayExecute(command), (try? peer.verify(connection)) != nil else {
-                            throw HostWorkerError.exited
-                        }
-                        let bytes = try await execute(command)
+                        guard !invalidated, isAuthenticated,
+                            let admission = ownership.admission(for: command.token)
+                        else { throw HostWorkerError.exited }
+                        let bytes = try await HostRemoteInvocationAdmission.$current.withValue(
+                            admission
+                        ) { try await execute(command) }
                         try Task.checkCancellation()
                         guard !invalidated, (try? peer.verify(connection)) != nil else {
                             throw HostWorkerError.exited
@@ -317,13 +326,23 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
                 }
                 ownership.retain(actual, token: command.token)
                 if command.operation == "stop" {
-                    Task { [stopReturned] in
+                    markers.schedule { [self] in
                         await actual.value
                         stopReturned(command.token)
+                        if !invalidated { callbacks.resume() }
                     }
                 }
             }
             if accepted == nil { reply(Data()) }
+        }
+
+        @MainActor func joinControlOwners(excluding token: UUID?) async {
+            await callbacks.joinCurrent()
+            await ownership.joinCurrent(excluding: token)
+        }
+
+        @MainActor func closeControlCallbacks() async {
+            await callbacks.closeAndWait()
         }
 
         @MainActor func prepareToStop(excluding token: UUID?) async {
@@ -345,6 +364,7 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
             invalidate()
             await callbacks.closeAndWait()
             await ownership.closeAndWait()
+            await markers.closeAndWait()
             await engineCalls.invalidateAndWait()
         }
     }

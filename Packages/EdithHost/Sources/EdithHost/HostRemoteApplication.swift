@@ -142,12 +142,14 @@ final class HostRemoteApplication {
     }
 
     private func execute(_ command: HostRemoteCommand) async throws -> Data {
+        guard let admission = HostRemoteInvocationAdmission.current,
+            admission.authorizes(command.token)
+        else { throw HostWorkerError.exited }
         if command.operation == "stop" {
             try await beginShutdown(token: command.token).value.get()
             scheduleExit()
             return Data()
         }
-        guard !stopping else { throw HostWorkerError.exited }
         switch command.operation {
         case "configure":
             guard configuration == nil else { throw HostWorkerError.rejected }
@@ -159,7 +161,9 @@ final class HostRemoteApplication {
             guard let admit = Self.fixtureAdmitConfiguration else { throw HostWorkerError.rejected }
             try await admit(next)
             try Task.checkCancellation()
-            guard !stopping, configuration == nil else { throw HostWorkerError.rejected }
+            guard admission.authorizes(command.token), configuration == nil else {
+                throw HostWorkerError.rejected
+            }
             #endif
             let suite = Bundle.main.bundleIdentifier!
             setenv("EDITH_APPLICATION_IDENTIFIER", hostIdentifier, 1)
@@ -219,7 +223,9 @@ final class HostRemoteApplication {
     private func controller(
         presentation: HostRemotePresentation
     ) throws -> ExtensionBundlePresentation {
-        guard let configuration, !stopping else { throw HostWorkerError.rejected }
+        guard let configuration,
+            !stopping || HostRemoteInvocationAdmission.current?.isCurrent == true
+        else { throw HostWorkerError.rejected }
         try presentation.validate(session: configuration.session, extensionID: extensionID)
         let input = NSMutableDictionary(dictionary: [
             "remoteUI": true, "uiOnly": configuration.uiOnly,
@@ -358,7 +364,8 @@ final class HostRemoteApplication {
     }
 
     private func terminal(_ request: HostTerminalUIRequest) throws -> Data {
-        guard !stopping, let configuration, !configuration.uiOnly,
+        guard HostRemoteInvocationAdmission.current?.isCurrent == true,
+            let configuration, !configuration.uiOnly,
             request.request.extensionID == extensionID,
             HostTerminalUIRequest.accepts(request.request),
             slots.contains(where: { $0.request == request.request }),
@@ -375,18 +382,22 @@ final class HostRemoteApplication {
     private func beginShutdown(token: UUID = UUID()) throws -> Task<Result<Void, Error>, Never> {
         stopping = true
         endpoint.closeMutationAdmission()
-        let retainedRuntimes = runtimes
-        let presentations = slots.compactMap { $0.request?.presentationID }
         slots.forEach { $0.beginClosing() }
         return try stopPreparation.begin(token: token) { [self] in
-            await endpoint.prepareToStop(excluding: token)
-            for slot in slots { await slot.prepareToStop() }
-            for runtime in retainedRuntimes { try await runtime.suspendRemoteUICommandsAll() }
+            await endpoint.joinAdmittedWork(excluding: token)
+            for slot in slots { await slot.joinAdmittedWork() }
+            let retainedRuntimes = runtimes
+            let presentations = slots.compactMap { $0.request?.presentationID }
             for runtime in retainedRuntimes {
                 for presentationID in presentations {
                     try await runtime.preparePresentationToClose(
                         id: extensionID, presentationID: presentationID)
                 }
+            }
+            for runtime in retainedRuntimes { try await runtime.suspendRemoteUICommandsAll() }
+            await endpoint.prepareToStop(excluding: token)
+            for slot in slots { await slot.prepareToStop() }
+            for runtime in retainedRuntimes {
                 try await runtime.prepareRemoteUIToStopAll()
                 let response = try runtime.response(id: extensionID, operation: "stopUI")
                 guard response["ok"] as? Bool == true else { throw HostWorkerError.rejected }
@@ -401,6 +412,8 @@ final class HostRemoteApplication {
                     token: token, configuration: configuration,
                     roles: retainedRuntimes.map { $0.role.rawValue }, presentations: presentations))
             #endif
+            await endpoint.closeControlCallbacks()
+            for slot in slots { await slot.closeControlCallbacks() }
             slots.forEach { $0.release(reset: false) }
             presentationRuntimes.removeAll()
             terminalRenderer = HostRemoteTerminalRenderer()
@@ -450,7 +463,6 @@ private final class HostRemoteSceneSlot {
     weak var container: HostRemoteSceneController?
     private let present: (HostRemotePresentation) throws -> ExtensionBundlePresentation
     private let terminal: (HostTerminalUIRequest) throws -> Data
-    private var closing = false
     private let disconnected: @MainActor () -> Void
     private let executable: URL
     private let requirement: String
@@ -495,13 +507,18 @@ private final class HostRemoteSceneSlot {
         guard self.request == nil, endpoint != nil else { throw HostWorkerError.rejected }
         self.request = request
         self.session = session
-        closing = false
     }
 
     func beginClosing() {
-        closing = true
         endpoint?.closeMutationAdmission()
     }
+
+    func joinAdmittedWork() async {
+        beginClosing()
+        await endpoint?.joinAdmittedWork()
+    }
+
+    func closeControlCallbacks() async { await endpoint?.closeControlCallbacks() }
 
     func prepareToStop() async {
         beginClosing()
@@ -516,15 +533,18 @@ private final class HostRemoteSceneSlot {
     }
 
     private func execute(_ command: HostRemoteCommand) throws -> Data {
+        guard HostRemoteInvocationAdmission.current?.authorizes(command.token) == true else {
+            throw HostWorkerError.exited
+        }
         if HostTerminalUIRequest.Operation(rawValue: command.operation) != nil {
-            guard !closing, let request, let session, presentation != nil, content != nil else {
+            guard let request, let session, presentation != nil, content != nil else {
                 throw HostWorkerError.rejected
             }
             let input = try HostTerminalUIRequest.decode(
                 command.payload, session: session, request: request, operation: command.operation)
             return try terminal(input)
         }
-        guard !closing, ["present", "update"].contains(command.operation), let request, let session
+        guard ["present", "update"].contains(command.operation), let request, let session
         else {
             throw HostWorkerError.rejected
         }

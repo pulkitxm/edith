@@ -106,4 +106,78 @@ import Testing
         #expect(ownership.count == 0)
     }
 
+    @Test func naturalJoinRetainsAcceptedOwnerWithoutCancellation() async throws {
+        let ownership = HostRemoteInvocationRetirement()
+        var gate: CheckedContinuation<Void, Never>?
+        var returned = false
+        var cancelled = false
+        var joined = false
+        let actual = Task {
+            await withCheckedContinuation { gate = $0 }
+            cancelled = Task.isCancelled
+            returned = true
+        }
+        ownership.retain(actual, token: UUID())
+        defer { gate?.resume() }
+        let ready = ContinuousClock.now + .seconds(2)
+        while gate == nil, ContinuousClock.now < ready { await Task.yield() }
+        try #require(gate != nil)
+        let drain = Task {
+            await ownership.joinCurrent(); joined = true
+        }
+        for _ in 0..<100 { await Task.yield() }
+        #expect(!joined && !returned && !actual.isCancelled)
+        gate?.resume()
+        gate = nil
+        let finished = ContinuousClock.now + .seconds(2)
+        while !joined, ContinuousClock.now < finished { await Task.yield() }
+        try #require(joined && returned)
+        await actual.value
+        await drain.value
+        #expect(!cancelled)
+        #expect(ownership.count == 0)
+    }
+
+    @Test func queuedAcceptedOwnerKeepsCapabilityAfterAdmissionCloses() async throws {
+        let ownership = HostRemoteInvocationRetirement()
+        let token = UUID()
+        var executed = false
+        var captured: HostRemoteInvocationAdmission?
+        let actual = Task { @MainActor in
+            guard let admission = ownership.admission(for: token) else { return }
+            captured = admission
+            HostRemoteInvocationAdmission.$current.withValue(admission) {
+                #expect(HostRemoteInvocationAdmission.current?.authorizes(token) == true)
+                #expect(HostRemoteInvocationAdmission.current?.authorizes(UUID()) == false)
+                #expect(!ownership.accepts(UUID()))
+                #expect(!Task.isCancelled)
+                executed = true
+            }
+        }
+        ownership.retain(actual, token: token)
+        ownership.closeAdmission()
+        #expect(!executed)
+        #expect(!ownership.accepts(UUID()))
+        await ownership.joinCurrent()
+        #expect(executed)
+        #expect(captured?.isCurrent == false)
+        #expect(HostRemoteInvocationAdmission.current == nil)
+        #expect(!ownership.accepts(UUID()))
+    }
+
+    @Test func retiredCapabilityCannotAuthorizeReusedToken() async throws {
+        let ownership = HostRemoteInvocationRetirement()
+        let token = UUID()
+        ownership.retain(Task {}, token: token)
+        let old = try #require(ownership.admission(for: token))
+        #expect(old.authorizes(token))
+        await ownership.joinCurrent()
+        ownership.retain(Task {}, token: token)
+        let current = try #require(ownership.admission(for: token))
+        #expect(!old.authorizes(token))
+        #expect(current.authorizes(token))
+        await ownership.joinCurrent()
+        #expect(!current.authorizes(token))
+    }
+
 }

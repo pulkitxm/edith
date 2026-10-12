@@ -213,18 +213,8 @@ private final class CoreOwnerFixture: @unchecked Sendable {
                 try HostCLIJSON.object(["operation": .string(name), "payload": payload]).encoded()
                 + Data([10])
             try input.fileHandleForWriting.write(contentsOf: data)
-            var result = Data()
-            let deadline = ContinuousClock.now.advanced(by: .seconds(5))
-            while ContinuousClock.now < deadline {
-                var event = pollfd(
-                    fd: output.fileHandleForReading.fileDescriptor, events: Int16(POLLIN),
-                    revents: 0)
-                if poll(&event, 1, 50) == 0 { continue }
-                guard let byte = try output.fileHandleForReading.read(upToCount: 1), !byte.isEmpty
-                else { throw HostCLIError.unavailable }
-                if byte == Data([10]) { break }
-                result += byte
-            }
+            var result = try CoreOwnerFrameReader.read(
+                from: output.fileHandleForReading.fileDescriptor, operation: operation)
             if forgeValue && ["run", "cancel"].contains(name) {
                 result = try HostCLIJSON.object([
                     "owner": .string("herdr"), "job": .string("usage.refresh"),
@@ -238,10 +228,187 @@ private final class CoreOwnerFixture: @unchecked Sendable {
 
     func stop() {
         try? input.fileHandleForWriting.close()
-        let deadline = Date().addingTimeInterval(2)
-        while process.isRunning && Date() < deadline { usleep(10000) }
-        if process.isRunning { process.terminate(); process.waitUntilExit() }
+        waitForExit(duration: .seconds(2))
+        if process.isRunning {
+            process.terminate()
+            waitForExit(duration: .seconds(2))
+        }
+        if process.isRunning {
+            _ = kill(process.processIdentifier, SIGKILL)
+            waitForExit(duration: .seconds(2))
+        }
+        guard !process.isRunning else {
+            Issue.record("Owned fixture did not exit after bounded cleanup.")
+            return
+        }
+        process.waitUntilExit()
         try? output.fileHandleForReading.close()
         try? FileManager.default.removeItem(at: root)
+    }
+
+    private func waitForExit(duration: Duration) {
+        let deadline = ContinuousClock.now.advanced(by: duration)
+        while process.isRunning && ContinuousClock.now < deadline { usleep(10000) }
+    }
+}
+
+private struct CoreOwnerFrameFailure: Error, Equatable, CustomStringConvertible {
+    enum Reason: String {
+        case deadlineExceeded
+        case endOfFile
+        case emptyFrame
+        case frameTooLarge
+        case pollFailed
+        case invalidDescriptor
+        case readFailed
+    }
+
+    let reason: Reason
+    let operation: String
+    let byteCount: Int
+    var systemError: Int32? = nil
+
+    var description: String {
+        "Owned fixture frame \(reason.rawValue): operation=\(operation), bytes=\(byteCount), errno=\(systemError.map(String.init) ?? "none")"
+    }
+}
+
+private enum CoreOwnerFrameReader {
+    static func read(
+        from descriptor: Int32, operation: String, maximumBytes: Int = 1_048_576,
+        duration: Duration = .seconds(5)
+    ) throws -> Data {
+        var result = Data()
+        let deadline = ContinuousClock.now.advanced(by: duration)
+        func failure(_ reason: CoreOwnerFrameFailure.Reason, systemError: Int32? = nil)
+            -> CoreOwnerFrameFailure
+        {
+            CoreOwnerFrameFailure(
+                reason: reason, operation: operation, byteCount: result.count,
+                systemError: systemError)
+        }
+        while ContinuousClock.now < deadline {
+            var event = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+            let ready = poll(&event, 1, 50)
+            if ready < 0 {
+                if errno == EINTR { continue }
+                throw failure(.pollFailed, systemError: errno)
+            }
+            if ready == 0 { continue }
+            if event.revents & Int16(POLLNVAL) != 0 { throw failure(.invalidDescriptor) }
+            if event.revents & Int16(POLLERR) != 0 { throw failure(.pollFailed) }
+            guard event.revents & Int16(POLLIN | POLLHUP) != 0 else { continue }
+            var byte: UInt8 = 0
+            let count = Darwin.read(descriptor, &byte, 1)
+            if count < 0 {
+                if errno == EINTR { continue }
+                throw failure(.readFailed, systemError: errno)
+            }
+            guard count == 1 else { throw failure(.endOfFile) }
+            if byte == 10 {
+                guard !result.isEmpty else { throw failure(.emptyFrame) }
+                return result
+            }
+            guard result.count < maximumBytes else { throw failure(.frameTooLarge) }
+            result.append(byte)
+        }
+        throw failure(.deadlineExceeded)
+    }
+}
+
+@Suite struct HostCoreOwnerFrameTests {
+    @Test func fragmentedFrameWaitsForNewlineAndPreservesNextFrame() throws {
+        let pipe = Pipe()
+        defer {
+            try? pipe.fileHandleForReading.close()
+            try? pipe.fileHandleForWriting.close()
+        }
+        try pipe.fileHandleForWriting.write(contentsOf: Data("{\"owner\": ".utf8))
+        let writer = pipe.fileHandleForWriting
+        let completion = DispatchGroup()
+        completion.enter()
+        DispatchQueue.global().async {
+            defer { completion.leave() }
+            usleep(20000)
+            try? writer.write(contentsOf: Data("\"usage\"}\n{\"next\":true}\n".utf8))
+        }
+        let first = try CoreOwnerFrameReader.read(
+            from: pipe.fileHandleForReading.fileDescriptor, operation: "fragmented")
+        #expect(first == Data("{\"owner\": \"usage\"}".utf8))
+        let second = try CoreOwnerFrameReader.read(
+            from: pipe.fileHandleForReading.fileDescriptor, operation: "next")
+        #expect(second == Data("{\"next\":true}".utf8))
+        #expect(completion.wait(timeout: .now() + 1) == .success)
+    }
+
+    @Test func eofWithoutCompletedFrameReportsOperationAndBufferedBytes() throws {
+        for partial in [Data(), Data("{\"owner\":".utf8)] {
+            let pipe = Pipe()
+            defer { try? pipe.fileHandleForReading.close() }
+            try pipe.fileHandleForWriting.write(contentsOf: partial)
+            try pipe.fileHandleForWriting.close()
+            #expect(
+                throws: CoreOwnerFrameFailure(
+                    reason: .endOfFile, operation: "eof", byteCount: partial.count)
+            ) {
+                try CoreOwnerFrameReader.read(
+                    from: pipe.fileHandleForReading.fileDescriptor, operation: "eof")
+            }
+        }
+    }
+
+    @Test func frameCapRejectsOversizeBeforeReturningPartialJSON() throws {
+        let pipe = Pipe()
+        defer {
+            try? pipe.fileHandleForReading.close()
+            try? pipe.fileHandleForWriting.close()
+        }
+        try pipe.fileHandleForWriting.write(contentsOf: Data("12345\n".utf8))
+        #expect(
+            throws: CoreOwnerFrameFailure(
+                reason: .frameTooLarge, operation: "oversize", byteCount: 4)
+        ) {
+            try CoreOwnerFrameReader.read(
+                from: pipe.fileHandleForReading.fileDescriptor, operation: "oversize",
+                maximumBytes: 4)
+        }
+    }
+
+    @Test func deadlineWithPartialFrameReportsOperationAndBufferedBytes() throws {
+        let pipe = Pipe()
+        defer {
+            try? pipe.fileHandleForReading.close()
+            try? pipe.fileHandleForWriting.close()
+        }
+        try pipe.fileHandleForWriting.write(contentsOf: Data("{}".utf8))
+        #expect(
+            throws: CoreOwnerFrameFailure(
+                reason: .deadlineExceeded, operation: "deadline", byteCount: 2)
+        ) {
+            try CoreOwnerFrameReader.read(
+                from: pipe.fileHandleForReading.fileDescriptor, operation: "deadline",
+                duration: .milliseconds(100))
+        }
+    }
+
+    @Test func invalidDescriptorAndEmptyFrameHaveNamedFailures() throws {
+        #expect(
+            throws: CoreOwnerFrameFailure(
+                reason: .invalidDescriptor, operation: "invalid", byteCount: 0)
+        ) {
+            try CoreOwnerFrameReader.read(from: Int32.max, operation: "invalid")
+        }
+        let empty = Pipe()
+        defer {
+            try? empty.fileHandleForReading.close()
+            try? empty.fileHandleForWriting.close()
+        }
+        try empty.fileHandleForWriting.write(contentsOf: Data([10]))
+        #expect(
+            throws: CoreOwnerFrameFailure(reason: .emptyFrame, operation: "empty", byteCount: 0)
+        ) {
+            try CoreOwnerFrameReader.read(
+                from: empty.fileHandleForReading.fileDescriptor, operation: "empty")
+        }
     }
 }

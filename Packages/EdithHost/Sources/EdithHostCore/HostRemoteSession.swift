@@ -58,6 +58,7 @@ public final class HostRemoteSession {
     private static var retained: [UUID: HostRemoteSession] = [:]
     private let executable: URL
     private let executeEngine: HostRemoteEngineReceiver.Execute
+    private let admitEngine: @MainActor @Sendable (ExtensionEngineRequest) -> Bool
     private let receive: @MainActor (HostRemoteEvent) -> Void
     private var configuring: Task<Void, any Error>?
     private var activationExpiry: Task<Void, Never>?
@@ -80,6 +81,7 @@ public final class HostRemoteSession {
     private var stopping = false
     private var stopRequested = false
     private var stopFailure: Error?
+    private var stopAcknowledged = false
     #if EDITH_FUNCTIONAL_FIXTURE
     private var fixtureStopRequest: HostRemoteCommand?
     private var fixtureStopReply: HostRemoteReply?
@@ -95,6 +97,7 @@ public final class HostRemoteSession {
     private init(
         identity: AppExtensionIdentity, configuration: HostRemoteConfiguration,
         executable: URL, lease: PackageFileLock, engineIdentity: HostRemoteKernelIdentity?,
+        admitEngine: @escaping @MainActor @Sendable (ExtensionEngineRequest) -> Bool,
         executeEngine: @escaping HostRemoteEngineReceiver.Execute,
         receive: @escaping @MainActor (HostRemoteEvent) -> Void
     ) {
@@ -104,6 +107,7 @@ public final class HostRemoteSession {
         self.lease = lease
         self.engineIdentity = engineIdentity
         self.executeEngine = executeEngine
+        self.admitEngine = admitEngine
         self.receive = receive
     }
 
@@ -112,6 +116,8 @@ public final class HostRemoteSession {
         store: ExtensionPackageStore,
         receive: @escaping @MainActor (HostRemoteEvent) -> Void = { _ in },
         engineIdentity: HostRemoteKernelIdentity? = nil,
+        admitEngine: @escaping @MainActor @Sendable (ExtensionEngineRequest) -> Bool = { _ in true
+        },
         executeEngine:
             @escaping @MainActor @Sendable (ExtensionEngineRequest) async throws -> Data = {
                 _ in throw HostWorkerError.rejected
@@ -156,7 +162,8 @@ public final class HostRemoteSession {
         let session = HostRemoteSession(
             identity: identity, configuration: configuration,
             executable: carrier.worker.appendingPathComponent("Contents/MacOS/Edith"), lease: lease,
-            engineIdentity: engineIdentity, executeEngine: executeEngine, receive: receive)
+            engineIdentity: engineIdentity, admitEngine: admitEngine,
+            executeEngine: executeEngine, receive: receive)
         retained[configuration.session] = session
         session.activationExpiry = Task { [weak session] in
             do { try await Task.sleep(for: .seconds(20)) } catch { return }
@@ -293,12 +300,18 @@ public final class HostRemoteSession {
             let channel = try await HostRemoteChannel.connect(
                 through: bootstrap, executable: executable,
                 rejectedPeer: { [weak self] peer in self?.rejectedPeer = peer })
-            defer { retireChannel(channel) }
-            guard let peer = channel.peer else { throw HostWorkerError.rejected }
-            try recordNativePeer(peer)
-            unresolvedLaunch = false
+            do {
+                guard let peer = channel.peer, self.channel == nil else {
+                    throw HostWorkerError.rejected
+                }
+                try recordNativePeer(peer)
+                self.channel = channel
+                unresolvedLaunch = false
+            } catch {
+                await channel.invalidateAndWait()
+                throw error
+            }
         } catch {}
-        invalidateProcess(process, site: "unconfigured-retirement")
     }
 
     private func invalidateProcess(_ process: AppExtensionProcess, site: String) {
@@ -461,22 +474,39 @@ public final class HostRemoteSession {
                 #if EDITH_FUNCTIONAL_FIXTURE
                 _ = try? await preparingPeer?.value
                 #endif
-                if let launching, let process = try? await launching.value, allowEscalation {
-                    invalidateProcess(process, site: "joined-launch")
-                }
+                _ = try? await launching?.value
             },
             joinConfiguration: { _ = try? await configuring?.value })
-        handles.values.forEach { $0.detach() }
-        handles.removeAll()
         #if EDITH_FUNCTIONAL_FIXTURE
         if channel == nil, let prepared = fixturePreparedChannel {
             channel = prepared
             fixturePreparedChannel = nil
         }
         #endif
-        #if EDITH_FUNCTIONAL_FIXTURE
-        let fixtureReceiverCount = retiringChannels.count + (channel == nil ? 0 : 1)
-        #endif
+        if channel == nil, !stopAcknowledged, let process,
+            peer == nil || peer?.isRunning == true
+        {
+            let bootstrap = try process.makeXPCConnection()
+            self.bootstrap = bootstrap
+            let recovered = try await HostRemoteChannel.connect(
+                through: bootstrap, executable: executable, expectedPeer: peer,
+                rejectedPeer: { [weak self] candidate in self?.rejectedPeer = candidate },
+                receive: receive)
+            do {
+                guard let recoveredPeer = recovered.peer else { throw HostWorkerError.rejected }
+                try recordNativePeer(recoveredPeer)
+                channel = recovered
+                unresolvedLaunch = false
+            } catch {
+                await recovered.invalidateAndWait()
+                throw error
+            }
+        }
+        guard peer == nil || stopAcknowledged || channel != nil else {
+            throw HostWorkerError.disableRejected(
+                "Native cleanup could not be confirmed. Retry recovery before releasing this extension."
+            )
+        }
         if let channel {
             let request = HostRemoteCommand(operation: "stop")
             #if EDITH_FUNCTIONAL_FIXTURE
@@ -488,11 +518,19 @@ public final class HostRemoteSession {
                 #if EDITH_FUNCTIONAL_FIXTURE
                 fixtureStopReply = reply
                 #endif
+                stopAcknowledged = true
                 stopFailure = nil
             } catch {
                 stopFailure = error
                 throw error
             }
+        }
+        handles.values.forEach { $0.detach() }
+        handles.removeAll()
+        #if EDITH_FUNCTIONAL_FIXTURE
+        let fixtureReceiverCount = retiringChannels.count + (channel == nil ? 0 : 1)
+        #endif
+        if let channel {
             channel.didInvalidate = nil
             await channel.invalidateAndWait()
         }
@@ -577,8 +615,17 @@ public final class HostRemoteSession {
                 guard event.presentationID == handle.presentationID else { return }
                 receive(event)
             },
+            admitEngine: { [weak self, weak handle] request in
+                guard let self, let handle, !self.stopping, !self.stopped, !handle.closed,
+                    !self.configuration.uiOnly, self.handles[handle.presentationID] === handle,
+                    request.presentationID == handle.presentationID, handle.isReserved,
+                    self.peer?.isRunning == true, self.engineIdentity?.isRunning == true
+                else { return false }
+                return self.admitEngine(request)
+            },
             executeEngine: { [weak self, weak handle] request in
-                guard let self, let handle, !handle.closed, !self.stopping, !self.stopped,
+                guard let self, let handle, !handle.closed, !self.stopped,
+                    HostRemoteInvocationAdmission.current?.authorizes(request.token) == true,
                     !self.configuration.uiOnly, self.handles[handle.presentationID] === handle,
                     request.presentationID == handle.presentationID, handle.isReserved,
                     self.engineIdentity?.isRunning == true
@@ -597,9 +644,9 @@ public final class HostRemoteSession {
                 do {
                     let result = try await self.executeEngine(request)
                     try Task.checkCancellation()
-                    guard !handle.closed, !self.stopping, !self.stopped,
+                    guard !handle.closed, !self.stopped,
                         self.handles[handle.presentationID] === handle,
-                        self.engineIdentity?.isRunning == true
+                        self.peer?.isRunning == true, self.engineIdentity?.isRunning == true
                     else { throw HostWorkerError.rejected }
                     outcome = .success(result)
                 } catch { outcome = .failure(error) }

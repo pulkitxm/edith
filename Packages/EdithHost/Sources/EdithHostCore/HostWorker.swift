@@ -97,6 +97,7 @@ public final class HostWorker {
     public func start(recoveryOnly: Bool = false) async throws {
         guard !launched else { throw HostWorkerError.rejected }
         configuration.recoveryOnly = recoveryOnly
+        requiresRecovery = recoveryOnly
         var environment = process.environment ?? ProcessInfo.processInfo.environment
         environment["EDITH_EXTENSION_RECOVERY_ONLY"] = recoveryOnly ? "1" : nil
         process.environment = environment

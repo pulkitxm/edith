@@ -14,6 +14,21 @@ enum HostRemoteTaskRetirement {
 }
 
 @MainActor
+public final class HostRemoteInvocationAdmission {
+    @TaskLocal public static var current: HostRemoteInvocationAdmission?
+    private let token: UUID
+    private let validate: @MainActor () -> Bool
+
+    init(token: UUID, validate: @escaping @MainActor () -> Bool) {
+        self.token = token
+        self.validate = validate
+    }
+
+    public var isCurrent: Bool { validate() }
+    public func authorizes(_ token: UUID) -> Bool { self.token == token && isCurrent }
+}
+
+@MainActor
 final class HostRemoteInvocationRetirement {
     private struct Work {
         let identity: UUID
@@ -38,11 +53,29 @@ final class HostRemoteInvocationRetirement {
         }
     }
 
+    func admission(for token: UUID) -> HostRemoteInvocationAdmission? {
+        guard let item = work[token] else { return nil }
+        let identity = item.identity
+        return HostRemoteInvocationAdmission(token: token) { [weak self] in
+            self?.work[token]?.identity == identity
+        }
+    }
+
+    func closeAdmission() { closed = true }
+
     func cancel(_ token: UUID) { work[token]?.task.cancel() }
 
     func close() {
         closed = true
         for item in work.values { item.task.cancel() }
+    }
+
+    func joinCurrent(excluding token: UUID? = nil) async {
+        let snapshot = work.filter { $0.key != token }
+        for (key, item) in snapshot {
+            await item.task.value
+            finish(key, identity: item.identity)
+        }
     }
 
     func cancelAndJoin(excluding token: UUID? = nil) async {
@@ -87,6 +120,15 @@ final class HostRemoteCallbackRetirement: @unchecked Sendable {
     }
 
     func close() { lock.withLock { closed = true } }
+
+    @discardableResult
+    func resume() -> Bool {
+        lock.withLock {
+            guard closed, pending == 0 else { return false }
+            closed = false
+            return true
+        }
+    }
 
     func closeAndWait() async {
         await withCheckedContinuation { continuation in

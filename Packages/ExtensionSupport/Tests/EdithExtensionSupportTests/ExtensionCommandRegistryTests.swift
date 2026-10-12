@@ -213,4 +213,70 @@ private actor CommandCleanupGate {
         #expect(!registry.resume(final))
     }
 
+    @Test func naturalAdmissionJoinPreservesActualOwnerResultWithoutCancellation() async throws {
+        let registry = ExtensionCommandRegistry()
+        var gate: CheckedContinuation<Void, Never>?
+        var wasCancelled = false
+        var result: Data?
+        var joined = false
+        let token = UUID().uuidString
+        registry.invoke(
+            ["token": token, "command": "fixture", "payload": Data()] as NSDictionary,
+            completion: { data, error in
+                result = data as Data?; #expect(error == nil)
+            }
+        ) { _, _ in
+            await withCheckedContinuation { gate = $0 }
+            wasCancelled = Task.isCancelled
+            return Data("owned-result".utf8)
+        }
+        defer { gate?.resume() }
+        let ready = ContinuousClock.now + .seconds(2)
+        while gate == nil, ContinuousClock.now < ready { await Task.yield() }
+        try #require(gate != nil)
+        let suspension = registry.closeAdmission()
+        let drain = Task {
+            await registry.closeAdmissionAndWait(); joined = true
+        }
+        for _ in 0..<100 { await Task.yield() }
+        #expect(!joined && result == nil)
+        #expect(!registry.resume(suspension))
+        var rejected = false
+        registry.invoke(
+            ["token": UUID().uuidString, "command": "fixture", "payload": Data()] as NSDictionary,
+            completion: { data, error in rejected = data == nil && error != nil }
+        ) { _, _ in
+            Issue.record("Closed admission executed new work"); return Data()
+        }
+        #expect(rejected)
+        gate?.resume()
+        gate = nil
+        let finished = ContinuousClock.now + .seconds(2)
+        while !joined, ContinuousClock.now < finished { await Task.yield() }
+        try #require(joined)
+        await drain.value
+        #expect(!wasCancelled)
+        #expect(result == Data("owned-result".utf8))
+        #expect(registry.resume(suspension))
+    }
+
+    @Test func callerCompletionCannotResumeBeforeActualRegistryTaskReturn() async throws {
+        let registry = ExtensionCommandRegistry()
+        var suspension: UUID?
+        var completed = false
+        var resumedEarly = false
+        registry.invoke(
+            ["token": UUID().uuidString, "command": "fixture", "payload": Data()] as NSDictionary,
+            completion: { _, _ in
+                if let suspension { resumedEarly = registry.resume(suspension) }
+                completed = true
+            }
+        ) { _, _ in Data("owned-result".utf8) }
+        suspension = registry.closeAdmission()
+        await registry.closeAdmissionAndWait()
+        #expect(completed)
+        #expect(!resumedEarly)
+        #expect(registry.resume(try #require(suspension)))
+    }
+
 }
