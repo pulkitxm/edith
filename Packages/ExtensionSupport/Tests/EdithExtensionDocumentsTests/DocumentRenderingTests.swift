@@ -21,7 +21,7 @@ import Testing
         #expect(
             await renderer.highlight(
                 text: String(repeating: "a", count: 400_000), language: "swift", dark: true) == nil)
-        #expect(await SyntaxHighlighting.languageName(for: "md") == "markdown")
+        #expect(SyntaxHighlighting.languageName(for: "md") == "markdown")
     }
 
     @Test func textZoomScalesFontWithoutChangingSource() {

@@ -147,7 +147,7 @@ import Testing
         #expect(first?.interval(for: "usage.refresh") == nil)
         #expect(second.interval(for: "usage.refresh") == 900)
         #expect(!second.pauseAmbientOnBattery)
-        weak var retired = first
+        weak let retired = first
         first = nil
         #expect(retired == nil)
         center.post(name: .NSProcessInfoPowerStateDidChange, object: nil)
@@ -219,7 +219,7 @@ import Testing
             notificationCenter: NotificationCenter(),
             observeBatteryChanges: { _ in { cancellations += 1 } })
         try policy?.start {}
-        weak var retired = policy
+        weak let retired = policy
         policy = nil
         #expect(retired == nil)
         for _ in 0..<100 where cancellations == 0 { await Task.yield() }
