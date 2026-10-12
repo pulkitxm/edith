@@ -40,7 +40,9 @@ struct HerdrNewAgentPopup: View {
             field
             if model.selectedKind == "Claude Code" || model.space != nil {
                 ClaudeAccountLaunchPicker(
-                    accounts: store.claudeAccounts, selection: $model.selectedAccountID
+                    accounts: store.claudeAccounts,
+                    machine: model.selectedHost.flatMap { store.machine(for: $0) },
+                    selection: $model.selectedAccountID
                 )
                 .disabled(model.launching)
                 .padding(UIScale.pt(12))

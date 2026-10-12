@@ -3,8 +3,35 @@ import Foundation
 import LocalAuthentication
 import Security
 
-enum ClaudeSavedLogin {
-    static func token(
+public enum ClaudeSavedLogin {
+    static func scopedToken(account: ClaudeAccount, directory: URL) async -> String? {
+        let folder = directory.appendingPathComponent(account.id.uuidString).path
+        if let local = token(environment: [
+            "CLAUDE_CONFIG_DIR": folder, "CLAUDE_SECURESTORAGE_CONFIG_DIR": folder,
+        ]) {
+            return local
+        }
+        for machine in MachineRegistry.machines() {
+            let connection = SSHConnection(
+                machine: machine, controlSocketMode: .shared, connectTimeout: 3)
+            guard (try? await connection.connect()) != nil,
+                await connection.remotePlatform != .windows
+            else { continue }
+            guard
+                let result = try? await connection.run(
+                    "head -c 65537 \"$HOME/.local/share/edith/accounts/\(account.id.uuidString)/.credentials.json\"",
+                    timeout: 5), result.succeeded
+            else { continue }
+            if let remote = token(
+                environment: ["CLAUDE_CONFIG_DIR": "/account"], readFile: { _ in result.stdout })
+            {
+                return remote
+            }
+        }
+        return nil
+    }
+
+    public static func token(
         environment: [String: String] = UserShellEnvironment.userEnvironment(),
         now: Date = Date(),
         readFile: (URL) -> Data? = { url in

@@ -40,6 +40,37 @@ import Observation
         } catch { self.error = error.localizedDescription }
     }
 
+    func importCurrentCLIAccount(on machine: Machine? = nil) async -> ClaudeAccount? {
+        guard ready, !saving else { return nil }
+        saving = true
+        defer { saving = false }
+        do {
+            let account: ClaudeAccount
+            if let machine {
+                account = try await ClaudeAccount.currentCLIAccount(on: machine)
+            } else {
+                UserShellEnvironment.shared.enable()
+                await UserShellEnvironment.shared.refreshIfEnabled()
+                let environment = UserShellEnvironment.userEnvironment()
+                account = try await Task.detached {
+                    try ClaudeAccount.currentCLIAccount(
+                        environment: environment,
+                        savedLogin: ClaudeSavedLogin.token(environment: environment))
+                }.value
+            }
+            var next = state
+            next.accounts.append(account)
+            next.defaultID = account.id
+            try await persist(next)
+            try? UsageAgentOperations.requestLimitsRefresh()
+            error = nil
+            return account
+        } catch {
+            self.error = error.localizedDescription
+            return nil
+        }
+    }
+
     func persist(_ next: ClaudeAccountsState) async throws {
         try await storage.save(next)
         state = next

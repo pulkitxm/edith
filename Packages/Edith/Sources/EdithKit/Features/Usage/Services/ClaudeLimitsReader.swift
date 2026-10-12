@@ -66,12 +66,14 @@ public enum ClaudeLimitsReader {
         case .oauthToken:
             token = try validatedToken(account.credential)
         case .browserLogin:
-            let folder = directory.appendingPathComponent(account.id.uuidString).path
             guard
-                let saved = ClaudeSavedLogin.token(environment: [
-                    "CLAUDE_CONFIG_DIR": folder, "CLAUDE_SECURESTORAGE_CONFIG_DIR": folder,
-                ])
-            else { throw Failure.missingToken }
+                let saved = await ClaudeSavedLogin.scopedToken(
+                    account: account, directory: directory)
+            else {
+                throw ClaudeAccountError.rejected(
+                    "Launch a session with this account and complete Claude's login to show its limits."
+                )
+            }
             token = saved
         }
         return try await fetch(token: token) { request in

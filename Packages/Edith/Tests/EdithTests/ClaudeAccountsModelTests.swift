@@ -45,7 +45,10 @@ import Testing
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: "/bin/sh")
                 process.arguments = [launcher.path]
-                process.environment = ["PATH": "/usr/bin:/bin", "ANTHROPIC_API_KEY": "wrong"]
+                process.environment = [
+                    "PATH": "/usr/bin:/bin", "SHELL": "/bin/sh", "HOME": root.path,
+                    "ANTHROPIC_API_KEY": "wrong",
+                ]
                 let output = Pipe()
                 process.standardOutput = output
                 try process.run()
@@ -99,6 +102,44 @@ import Testing
                 newSpaceLabel: "Synthetic", accountID: personal.id.uuidString)
         }
         #expect(await launches.paneCount == before)
+    }
+
+    @Test func namedAccountsReachTheSelectedRemoteMachineWithLaunchOptions() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = scratchDefaults()
+        HerdrLaunchSettings.setCommand("cc", for: "Claude Code", in: defaults)
+        HerdrLaunchSettings.setOptions(
+            .init(model: "synthetic-model"), for: "Claude Code", in: defaults)
+        let machine = Machine(name: "Synthetic Remote", host: "synthetic.invalid")
+        let capture = AccountLaunchCapture()
+        let store = HerdrStore(
+            defaults: defaults, liveWatcher: { _ in },
+            newAgentPaneCreator: { _, selected, _, _ in
+                #expect(selected?.id == machine.id)
+                return HerdrCreatedPane(
+                    workspaceID: "synthetic", tabID: "synthetic", paneID: "remote-pane")
+            },
+            remoteAccountAgentStarter: { account, command, arguments, pane, selected in
+                #expect(selected.id == machine.id)
+                #expect(command == "cc")
+                #expect(arguments.contains("synthetic-model"))
+                await capture.record(pane, account.credential)
+            }, machinesProvider: { [machine] })
+        store.claudeAccounts = ClaudeAccountsModel(directory: root)
+        let account = ClaudeAccount(name: "Company", credential: "synthetic-remote-token")
+        try await store.claudeAccounts.persist(.init(accounts: [account], defaultID: account.id))
+        let host = HerdrHostSnapshot(
+            id: machine.id.uuidString, name: machine.name, isLocal: false,
+            herdrPresent: true, reachable: true, agents: [])
+        try await store.launchNewAgent(
+            kind: "Claude Code", host: host, existingSpace: nil, newSpaceLabel: "Synthetic")
+        for _ in 0..<100 {
+            if await capture.outputs.count == 1 { break }
+            await Task.yield()
+        }
+        #expect(await capture.outputs.count == 1)
+        #expect(store.accountSessions.values.contains(account.id.uuidString))
     }
 
     @Test func reusedPaneStopsBelongingToThePreviousAccount() throws {

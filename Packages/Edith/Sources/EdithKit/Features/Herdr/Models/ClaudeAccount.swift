@@ -31,6 +31,55 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
         self.credential = credential
     }
 
+    public static func currentCLIAccount(
+        environment: [String: String], savedLogin: String? = nil
+    ) throws -> ClaudeAccount {
+        if let token = environment["CLAUDE_CODE_OAUTH_TOKEN"], !token.isEmpty {
+            return ClaudeAccount(name: "Current CLI account", credential: token)
+        }
+        if let key = environment["ANTHROPIC_API_KEY"], !key.isEmpty {
+            return ClaudeAccount(
+                name: "Current CLI account", authentication: .apiKey, credential: key)
+        }
+        if let savedLogin, !savedLogin.isEmpty {
+            return ClaudeAccount(name: "Current CLI account", credential: savedLogin)
+        }
+        throw ClaudeAccountError.rejected(
+            "No current Claude credentials were found. Sign in with the CLI or add a token manually."
+        )
+    }
+
+    public static func currentCLIAccount(on machine: Machine) async throws -> ClaudeAccount {
+        let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
+        try await connection.connect()
+        guard await connection.remotePlatform != .windows else {
+            throw ClaudeAccountError.rejected(
+                "CLI account import requires a POSIX shell on this machine.")
+        }
+        let result = try await connection.run("\"${SHELL:-/bin/sh}\" -lic env", timeout: 15)
+        guard result.succeeded else { throw HerdrCommandError.commandFailed(result.stderrText) }
+        let environment = Dictionary(
+            result.stdoutText.split(separator: "\n").compactMap { line -> (String, String)? in
+                let parts = line.split(
+                    separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+                guard parts.count == 2 else { return nil }
+                return (String(parts[0]), String(parts[1]))
+            }, uniquingKeysWith: { _, last in last })
+        if environment["CLAUDE_CODE_OAUTH_TOKEN"]?.isEmpty == false
+            || environment["ANTHROPIC_API_KEY"]?.isEmpty == false
+        {
+            return try currentCLIAccount(environment: environment)
+        }
+        let saved = try await connection.run(
+            "head -c 65537 \"$HOME/.claude/.credentials.json\"", timeout: 5)
+        let login =
+            saved.succeeded
+            ? ClaudeSavedLogin.token(
+                environment: ["CLAUDE_CONFIG_DIR": "/account"], readFile: { _ in saved.stdout })
+            : nil
+        return try currentCLIAccount(environment: environment, savedLogin: login)
+    }
+
     public func validate() throws {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             name.utf8.count <= 128, credential.utf8.count <= 8192,

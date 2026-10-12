@@ -47,12 +47,14 @@ import Testing
         defer { try? FileManager.default.removeItem(at: root) }
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try Data(
-            "export CLAUDE_CODE_OAUTH_TOKEN=wrong-startup-token\nalias cc='/usr/bin/env'\n".utf8
+            "export CLAUDE_CODE_OAUTH_TOKEN=wrong-startup-token\nalias cc='IS_DEMO=1 /usr/bin/env'\n"
+                .utf8
         ).write(to: root.appendingPathComponent(".zshrc"))
         let account = ClaudeAccount(name: "Work", credential: "synthetic-selected-token")
         let file = try account.launcher(command: "cc", arguments: [], directory: root)
         let environment = try run(file, shell: "/bin/zsh", startupDirectory: root)
         #expect(environment["CLAUDE_CODE_OAUTH_TOKEN"] == account.credential)
+        #expect(environment["IS_DEMO"] == "1")
         #expect(environment["CLAUDE_CONFIG_DIR"] == file.deletingLastPathComponent().path)
         #expect(!FileManager.default.fileExists(atPath: file.path))
         let login = ClaudeAccount(name: "Other", authentication: .browserLogin)
@@ -60,6 +62,23 @@ import Testing
         #expect(
             try run(second, shell: "/bin/zsh", startupDirectory: root)["CLAUDE_CODE_OAUTH_TOKEN"]
                 == nil)
+    }
+
+    @Test func currentCLIImportChoosesOAuthThenAPIKeyThenSavedLogin() throws {
+        let token = try ClaudeAccount.currentCLIAccount(environment: [
+            "CLAUDE_CODE_OAUTH_TOKEN": "synthetic-token", "ANTHROPIC_API_KEY": "synthetic-key",
+        ])
+        #expect(token.authentication == .oauthToken)
+        #expect(token.credential == "synthetic-token")
+        let key = try ClaudeAccount.currentCLIAccount(environment: [
+            "ANTHROPIC_API_KEY": "synthetic-key"
+        ])
+        #expect(key.authentication == .apiKey)
+        #expect(key.credential == "synthetic-key")
+        #expect(
+            try ClaudeAccount.currentCLIAccount(environment: [:], savedLogin: "synthetic-login")
+                .credential == "synthetic-login")
+        #expect(throws: (any Error).self) { try ClaudeAccount.currentCLIAccount(environment: [:]) }
     }
 
     @Test func invalidAndIncompleteAccountsCannotLaunch() throws {

@@ -14,6 +14,44 @@ public enum HerdrLaunchOperations {
                 session: HerdrTerminalSpace.defaultSession), timeout: 15, on: nil)
     }
 
+    public static func launchRemoteAccount(
+        account: ClaudeAccount, command: String, arguments: [String], pane: String,
+        on machine: Machine
+    ) async throws {
+        let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
+        try await connection.connect()
+        guard await connection.remotePlatform != .windows else {
+            throw ClaudeAccountError.rejected(
+                "Account launches require a POSIX shell on this machine.")
+        }
+        let prepared = try await connection.run(
+            "umask 077; folder=\"$HOME/.local/share/edith/accounts/\(account.id.uuidString)\"; mkdir -p \"$folder\" && chmod 700 \"$folder\" && printf '%s' \"$folder\"",
+            timeout: 15)
+        guard prepared.succeeded, prepared.stdoutText.hasPrefix("/"),
+            !prepared.stdoutText.contains("\n")
+        else { throw HerdrCommandError.commandFailed(prepared.stderrText) }
+        let path = prepared.stdoutText + "/launch-" + UUID().uuidString + ".sh"
+        let script = try account.launchScript(
+            command: command, arguments: arguments, configurationPath: prepared.stdoutText,
+            launcherPath: path)
+        do {
+            let uploaded = try await connection.run(
+                "umask 077; cat > " + ShellQuote.quote(path) + " && chmod 700 "
+                    + ShellQuote.quote(path),
+                stdin: script, timeout: 15)
+            guard uploaded.succeeded else {
+                throw HerdrCommandError.commandFailed(uploaded.stderrText)
+            }
+            _ = try await HerdrCommand.run(
+                HerdrSessionCommand.scoped(
+                    HerdrPaneRunCommand.arguments(pane: pane, command: ShellQuote.quote(path)),
+                    session: HerdrTerminalSpace.defaultSession), timeout: 15, on: machine)
+        } catch {
+            _ = try? await connection.run("rm -f -- " + ShellQuote.quote(path), timeout: 5)
+            throw error
+        }
+    }
+
     private static let defaultTimeout: TimeInterval = 15
     private static let agentStartTimeoutMS = 30_000
 

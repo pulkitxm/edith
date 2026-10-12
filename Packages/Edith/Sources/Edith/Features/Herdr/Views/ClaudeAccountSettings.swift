@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ClaudeAccountSettings: View {
     let accounts: ClaudeAccountsModel
+    var machine: Machine? = nil
     @State private var draft: ClaudeAccount?
     @State private var defaultID: UUID?
 
@@ -29,6 +30,17 @@ struct ClaudeAccountSettings: View {
                     }
                     Button("Add account") { draft = ClaudeAccount(name: "New account") }
                 }
+                Button("Add current CLI account") {
+                    Task {
+                        if let account = await accounts.importCurrentCLIAccount(on: machine) {
+                            draft = account
+                            defaultID = account.id
+                        }
+                    }
+                }
+                .help(
+                    "Copy the current CLI credentials into a named account and use it for new sessions."
+                )
                 if draft != nil {
                     Text("Account name").font(.edithText(.caption))
                     TextField("Account name", text: binding(\.name))
@@ -48,7 +60,7 @@ struct ClaudeAccountSettings: View {
                             .accessibilityLabel("Full credential")
                         if draft?.authentication == .oauthToken {
                             Text(
-                                "Generate a token for the desired account with claude setup-token."
+                                "Generate a token with claude setup-token. Tokens without profile access can launch sessions but cannot show subscription limits."
                             )
                             .font(.edithText(.caption)).foregroundStyle(.secondary)
                         }
@@ -114,6 +126,7 @@ struct ClaudeAccountSettings: View {
             ? "" : draft.credential.trimmingCharacters(in: .whitespacesAndNewlines)
         self.draft = draft
         var next = accounts.state
+        if next.accounts.isEmpty { next.defaultID = draft.id }
         if let index = next.accounts.firstIndex(where: { $0.id == draft.id }) {
             next.accounts[index] = draft
         } else {
@@ -136,6 +149,7 @@ struct ClaudeAccountSettings: View {
 
 struct ClaudeAccountLaunchPicker: View {
     let accounts: ClaudeAccountsModel
+    var machine: Machine? = nil
     @Binding var selection: String
     @State private var editing = false
 
@@ -158,7 +172,7 @@ struct ClaudeAccountLaunchPicker: View {
         .pageTask { await accounts.read() }
         .edithSheet(isPresented: $editing) {
             VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                ClaudeAccountSettings(accounts: accounts)
+                ClaudeAccountSettings(accounts: accounts, machine: machine)
                 Button("Done") { editing = false }
             }
             .padding(UIScale.pt(18))
