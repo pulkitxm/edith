@@ -95,7 +95,7 @@ class KeepAwakeFocusedTargetsTests(unittest.TestCase):
         self.assertIn('test "$$RUNNER_ENVIRONMENT" = github-hosted', command)
         self.assertIn('test "$$RUNNER_OS" = macOS', command)
         self.assertIn('mktemp -d "$${TMPDIR:-/tmp}/edith-keep-awake-tests.XXXXXX"', command)
-        self.assertIn("trap 'rm -rf \"$$fixture\"' EXIT", command)
+        self.assertIn("trap 'status=$$?; if python3 -B scripts/cleanup-keep-awake-fixture.py \"$$fixture\" && rm -rf \"$$fixture\"", command)
         for key in ["HOME", "CFFIXED_USER_HOME", "TMPDIR", "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "EDITH_EXTENSION_FIXTURE_HOME", "EDITH_EXTENSION_DATA_ROOT"]:
             self.assertIn(key + '=\"$$fixture', command)
         self.assertIn('EDITH_SHARED_DEFAULTS_SUITE="edith.keepAwake.tests.$$(basename "$$fixture")"', command)
@@ -103,9 +103,25 @@ class KeepAwakeFocusedTargetsTests(unittest.TestCase):
         self.assertIn("swift test --package-path Extensions/keepAwake --build-system native --no-parallel --jobs 1 -Xswiftc -j1", command)
         self.assertEqual(command.count("/usr/bin/time -p"), 2)
 
+    def cleanup_spy(self, root, status=0):
+        scripts = root / "scripts"
+        scripts.mkdir()
+        spy = scripts / "cleanup-keep-awake-fixture.py"
+        spy.write_text("""import json, os, pathlib, stat, sys
+assert len(sys.argv) == 2
+path = pathlib.Path(sys.argv[1])
+info = path.lstat()
+assert str(path.resolve()) == sys.argv[1]
+assert path.name.startswith('edith-keep-awake-tests.')
+assert stat.S_ISDIR(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o700
+assert info.st_uid == os.getuid()
+pathlib.Path('cleanup-spy.json').write_text(json.dumps({'fixture': sys.argv[1]}))
+sys.exit(""" + str(status) + ")\n")
+
     def check_fixture_paths(self, trailing, alias):
         with tempfile.TemporaryDirectory(prefix="keep-awake-shell-") as temporary:
             root = pathlib.Path(temporary).resolve()
+            self.cleanup_spy(root)
             storage = root / "storage"
             storage.mkdir(mode=0o700)
             supplied = storage
@@ -125,7 +141,7 @@ print(json.dumps([{'path': raw, 'canonical': str(path.resolve()),
 """
             shell = setup + shlex.quote(sys.executable) + " -B -c " + shlex.quote(probe) + ' "$fixture"'
             result = subprocess.run(["/bin/sh", "-c", shell], check=True, text=True,
-                                    capture_output=True, timeout=10,
+                                    capture_output=True, timeout=10, cwd=root,
                                     env={"PATH": "/usr/bin:/bin", "HOME": str(root),
                                          "TMPDIR": str(supplied) + ("/" if trailing else ""),
                                          "PYTHONDONTWRITEBYTECODE": "1"})
@@ -139,6 +155,7 @@ print(json.dumps([{'path': raw, 'canonical': str(path.resolve()),
                 self.assertEqual(entry["mode"], 0o700)
                 self.assertEqual(entry["uid"], os.getuid())
                 self.assertTrue(pathlib.Path(entry["path"]).is_relative_to(storage))
+            self.assertEqual(json.loads((root / "cleanup-spy.json").read_text())["fixture"], str(fixture))
             self.assertFalse(fixture.exists())
             self.assertEqual(list(storage.iterdir()), [])
 
@@ -151,6 +168,33 @@ print(json.dumps([{'path': raw, 'canonical': str(path.resolve()),
         for trailing in [False, True]:
             with self.subTest(trailing=trailing):
                 self.check_fixture_paths(trailing, True)
+
+    def test_exit_trap_preserves_test_failure_and_rejects_cleanup_failure(self):
+        for original, cleanup, expected in [(0, 0, 0), (0, 23, 23), (17, 0, 17), (17, 23, 17)]:
+            with self.subTest(original=original, cleanup=cleanup):
+                with tempfile.TemporaryDirectory(prefix="keep-awake-trap-") as temporary:
+                    root = pathlib.Path(temporary).resolve()
+                    self.cleanup_spy(root, cleanup)
+                    storage = root / "storage"
+                    storage.mkdir(mode=0o700)
+                    command = recipe("ci-extension-keep-awake").splitlines()[2]
+                    setup = command.removeprefix("\t@").split("env -u ", 1)[0].replace("$$", "$")
+                    self.assertNotIn("swift", setup)
+                    self.assertNotIn("make ", setup)
+                    shell = setup + "exit " + str(original)
+                    syntax = subprocess.run(["/bin/sh", "-n", "-c", shell], capture_output=True, timeout=10)
+                    self.assertEqual(syntax.returncode, 0, syntax.stderr)
+                    result = subprocess.run(["/bin/sh", "-c", shell], capture_output=True, timeout=10,
+                                            cwd=root, env={"PATH": "/usr/bin:/bin", "HOME": str(root),
+                                                          "TMPDIR": str(storage) + "/",
+                                                          "PYTHONDONTWRITEBYTECODE": "1"})
+                    self.assertEqual(result.returncode, expected, result.stderr)
+                    record = json.loads((root / "cleanup-spy.json").read_text())
+                    fixture = pathlib.Path(record["fixture"])
+                    self.assertEqual(fixture.parent, storage)
+                    self.assertEqual(fixture.exists(), cleanup != 0)
+                    if cleanup != 0:
+                        self.assertTrue((fixture / "tmp").is_dir())
 
     def test_package_retains_original_production_builder_and_only_keep_awake(self):
         self.assertEqual(recipe("package-extension-keep-awake").strip(), "/usr/bin/time -p bun scripts/build-extension-package.mjs keepAwake")
