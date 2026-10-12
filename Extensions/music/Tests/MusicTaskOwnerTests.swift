@@ -23,6 +23,48 @@ extension MusicExtensionTests {
             owner.shutdown()
         }
 
+        @Test func shutdownWaitsForCancelledWorkAndRejectsItsSuccessor() async throws {
+            let owner = MusicTaskOwner()
+            let gate = MusicTaskGate()
+            var successor = false
+            owner.start {
+                await gate.hold()
+                owner.start { successor = true }
+            }
+            defer {
+                gate.release()
+                owner.shutdown()
+            }
+            do {
+                try await eventually { gate.entered }
+                var draining = false
+                var joined = false
+                let drain = Task {
+                    draining = true
+                    await owner.shutdownAndWait()
+                    joined = true
+                }
+                do {
+                    try await eventually { draining }
+                    #expect(!gate.returned && !joined)
+                    gate.release()
+                    await drain.value
+                    #expect(gate.returned && gate.cancelled && joined)
+                    #expect(!successor)
+                    await owner.shutdownAndWait()
+                } catch {
+                    gate.release()
+                    owner.shutdown()
+                    await drain.value
+                    throw error
+                }
+            } catch {
+                gate.release()
+                await owner.shutdownAndWait()
+                throw error
+            }
+        }
+
         private func eventually(_ predicate: () -> Bool) async throws {
             for _ in 0..<100 {
                 if predicate() { return }
@@ -44,4 +86,28 @@ private final class State: @unchecked Sendable {
     func begin() { lock.withLock { began = true } }
     func cancel() { lock.withLock { didCancel = true } }
     func fail() { lock.withLock { didFail = true } }
+}
+
+@MainActor private final class MusicTaskGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var released = false
+    private(set) var entered = false
+    private(set) var returned = false
+    private(set) var cancelled = false
+
+    func hold() async {
+        entered = true
+        if !released {
+            await withCheckedContinuation { continuation = $0 }
+        }
+        cancelled = Task.isCancelled
+        returned = true
+    }
+
+    func release() {
+        released = true
+        let pending = continuation
+        continuation = nil
+        pending?.resume()
+    }
 }

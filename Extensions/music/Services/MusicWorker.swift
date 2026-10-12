@@ -63,7 +63,16 @@ final class MusicWorker {
             admission: {
                 try Self.resolveFixture(
                     admission: {
-                        try WorkerFixtureAdmission.current(
+                        #if EDITH_FUNCTIONAL_FIXTURE
+                        if let fixture = try WorkerFixtureEngineAdmission.current(
+                            extensionID: "music", context: context, roleBundle: roleBundle)
+                        {
+                            return try fixture.withPlatformFixture(
+                                extensionID: "music", expectedRole: .app
+                            ) { $0 }
+                        }
+                        #endif
+                        return try WorkerFixtureAdmission.current(
                             extensionID: "music", context: context, roleBundle: roleBundle)
                     },
                     applicationIdentifier: ProcessInfo.processInfo.environment[
@@ -289,6 +298,7 @@ final class MusicWorker {
 
     func shutdown() async {
         stop()
+        await tasks.shutdownAndWait()
         if !isInertFixture { await DownloadWorker.shared.stop() }
     }
 

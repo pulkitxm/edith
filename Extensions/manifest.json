@@ -1087,6 +1087,7 @@
         "Extensions/music/Services/MusicTaskOwner.swift",
         "Extensions/music/Services/MusicTools.swift",
         "Extensions/music/Services/MusicTransportOperations.swift",
+        "Extensions/music/Services/MusicUIPreferenceEngine.swift",
         "Extensions/music/Services/MusicUIService.swift",
         "Extensions/music/Services/MusicVideoPlayback.swift",
         "Extensions/music/Services/MusicWorker.swift",
