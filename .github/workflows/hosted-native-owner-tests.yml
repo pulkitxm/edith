@@ -16,6 +16,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 45
     env:
+      PYTHONDONTWRITEBYTECODE: "1"
       EXPECTED_SOURCE_SHA: "${{ inputs.expected_sha }}"
       NATIVE_TEST_OWNER: "${{ inputs.owner }}"
       EDITH_HOSTED_NATIVE_OWNER_TESTS: "1"

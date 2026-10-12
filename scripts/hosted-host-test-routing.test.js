@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const ci = await readFile(".github/workflows/ci.yml", "utf8");
 const diagnostic = await readFile(
@@ -265,4 +267,41 @@ test("original journey remains callable at reviewed final refs without changing 
     'test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"',
   ])
     expect(workflow).toContain(guard);
+});
+
+test("hosted Python verification preserves tracked source admission for signed Marketplace fixtures", async () => {
+  const job = Bun.YAML.parse(diagnostic).jobs["serial-core-and-ui"];
+  expect(job.env.PYTHONDONTWRITEBYTECODE).toBe("1");
+  const directory = await mkdtemp(join(tmpdir(), "hosted-python-fixture-"));
+  try {
+    await writeFile(join(directory, "synthetic_fixture.py"), "value = 7\n");
+    expect(
+      execFileSync(
+        "python3",
+        ["-c", "import synthetic_fixture; print(synthetic_fixture.value)"],
+        {
+          cwd: directory,
+          env: {
+            ...process.env,
+            PYTHONDONTWRITEBYTECODE: job.env.PYTHONDONTWRITEBYTECODE,
+          },
+          encoding: "utf8",
+          timeout: 10000,
+        },
+      ),
+    ).toBe("7\n");
+    expect(await readdir(directory)).toEqual(["synthetic_fixture.py"]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+  expect(job.steps.filter((step) => step.run).map((step) => step.run)).toEqual([
+    "python3 -m unittest discover -s scripts/hosted-host-tests -p 'test_*.py'",
+    "python3 scripts/hosted-host-tests/watchdog.py",
+    "make ci-marketplace-runtime-diagnostics",
+  ]);
+  const builder = await readFile("scripts/build-minimal-host.mjs", "utf8");
+  expect(builder).toContain("requireTrackedHostSource();");
+  expect(builder).toContain(
+    "Untracked source inputs cannot qualify a host build",
+  );
 });
