@@ -515,6 +515,13 @@ ci-companion-migrate:
 	@test -n "$$DATABASE_URL" || { echo "set DATABASE_URL to a pgvector database (start one with ac)" >&2; exit 1; }
 	cd apps/companion && cargo +stable run --locked -- --migrate-only
 
+.PHONY: ci-extension-database-mutation ci-extension-database-executor
+ci-extension-database-mutation:
+	env -u EDITH_DATABASE_POSTGRESQL_HOST swift test --package-path Extensions/database/DatabaseEngine --no-parallel --jobs 1 --filter mutationPreviewNormalizesWithoutExecuting
+
+ci-extension-database-executor:
+	env -u EDITH_DATABASE_POSTGRESQL_HOST swift test --package-path Extensions/database/DatabaseEngine --no-parallel --jobs 1 --filter DatabaseExecutorTests
+
 .PHONY: ci-extension-database
 ci-extension-database:
 	swift format lint --strict --recursive Extensions/database

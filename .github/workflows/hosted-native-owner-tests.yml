@@ -12,7 +12,7 @@ permissions:
   contents: read
 jobs:
   original-tests:
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'pulkitxm/edith' && github.repository_id == '1289153439' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.expected_sha == github.sha && (inputs.owner == 'attention' || inputs.owner == 'terminal' || inputs.owner == 'timeLapse' || inputs.owner == 'studio' || inputs.owner == 'machines' || inputs.owner == 'virtualCamera' || inputs.owner == 'feature-models')
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'pulkitxm/edith' && github.repository_id == '1289153439' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.expected_sha == github.sha && (inputs.owner == 'attention' || inputs.owner == 'terminal' || inputs.owner == 'timeLapse' || inputs.owner == 'studio' || inputs.owner == 'machines' || inputs.owner == 'virtualCamera' || inputs.owner == 'feature-models' || inputs.owner == 'database-mutation' || inputs.owner == 'database-executor')
     runs-on: macos-26
     timeout-minutes: 45
     env:

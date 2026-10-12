@@ -46,6 +46,8 @@ const owners = [
   "machines",
   "virtualCamera",
   "feature-models",
+  "database-mutation",
+  "database-executor",
 ];
 
 test("original native admission, target selection, timeout and owned retirement pure contracts pass", () => {

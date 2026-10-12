@@ -12,7 +12,7 @@ on:
         required: false
         default: ""
       hosted_native_owner:
-        description: "attention, terminal, timeLapse, studio, machines, virtualCamera or feature-models."
+        description: "attention, terminal, timeLapse, studio, machines, virtualCamera, feature-models, database-mutation or database-executor."
         type: string
         required: false
         default: ""
@@ -87,7 +87,7 @@ permissions:
 
 jobs:
   hosted-native-owner-tests:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_native_owner_tests_sha != '' && inputs.hosted_native_owner_tests_sha == github.sha && (inputs.hosted_native_owner == 'attention' || inputs.hosted_native_owner == 'terminal' || inputs.hosted_native_owner == 'timeLapse' || inputs.hosted_native_owner == 'studio' || inputs.hosted_native_owner == 'machines' || inputs.hosted_native_owner == 'virtualCamera' || inputs.hosted_native_owner == 'feature-models') && !inputs.hosted_native_compile_sha && !inputs.hosted_host_tests_sha && !inputs.hosted_shell_journey_sha && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.hosted_sparkle_update_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && github.repository_id == '1289153439' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main')
+    if: github.event_name == 'workflow_dispatch' && inputs.hosted_native_owner_tests_sha != '' && inputs.hosted_native_owner_tests_sha == github.sha && (inputs.hosted_native_owner == 'attention' || inputs.hosted_native_owner == 'terminal' || inputs.hosted_native_owner == 'timeLapse' || inputs.hosted_native_owner == 'studio' || inputs.hosted_native_owner == 'machines' || inputs.hosted_native_owner == 'virtualCamera' || inputs.hosted_native_owner == 'feature-models' || inputs.hosted_native_owner == 'database-mutation' || inputs.hosted_native_owner == 'database-executor') && !inputs.hosted_native_compile_sha && !inputs.hosted_host_tests_sha && !inputs.hosted_shell_journey_sha && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.hosted_sparkle_update_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && github.repository_id == '1289153439' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main')
     uses: ./.github/workflows/hosted-native-owner-tests.yml
     with:
       expected_sha: ${{ inputs.hosted_native_owner_tests_sha }}
