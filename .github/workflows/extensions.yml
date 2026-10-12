@@ -173,6 +173,9 @@ jobs:
       - run: |
           mkdir -p Packages/ExtensionMarketplace/.build/debug
           cp local/extension-tools/MarketplaceHarness Packages/ExtensionMarketplace/.build/debug/MarketplaceHarness
+      - name: Verify bounded peer failure diagnostics
+        if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
+        run: make ci-extension-keep-awake-peer-diagnostics
       - name: Exercise original Keep Awake controls and native lifecycle
         if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
         env:

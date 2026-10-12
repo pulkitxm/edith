@@ -7,25 +7,53 @@ struct ExtensionPeerRegistration: Codable {
     let physicalName: String
     let process: ExtensionProcessIdentity
 
-    static func read(at url: URL, logicalName: String, requiresLiveProcess: Bool = true) -> Self? {
+    static func read(
+        at url: URL, logicalName: String, requiresLiveProcess: Bool = true,
+        reportFailures: Bool = false
+    ) -> Self? {
         let descriptor = open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
-        guard descriptor >= 0 else { return nil }
+        guard descriptor >= 0 else {
+            if reportFailures {
+                ExtensionPeerFailureDiagnostics.report(.registrationOpen, errorNumber: errno)
+            }
+            return nil
+        }
         var attributes = stat()
         guard fstat(descriptor, &attributes) == 0, attributes.st_mode & S_IFMT == S_IFREG,
             attributes.st_size >= 0, attributes.st_size <= 4_096
-        else { close(descriptor); return nil }
+        else {
+            if reportFailures { ExtensionPeerFailureDiagnostics.report(.registrationMetadata) }
+            close(descriptor)
+            return nil
+        }
         let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         defer { try? handle.close() }
-        guard let data = try? handle.read(upToCount: 4_097), data.count <= 4_096,
-            let registration = try? JSONDecoder().decode(Self.self, from: data),
-            registration.logicalName == logicalName,
-            registration.physicalName.hasPrefix("edith.extension.worker.\(getuid())."),
+        guard let data = try? handle.read(upToCount: 4_097), data.count <= 4_096 else {
+            if reportFailures { ExtensionPeerFailureDiagnostics.report(.registrationRead) }
+            return nil
+        }
+        guard let registration = try? JSONDecoder().decode(Self.self, from: data) else {
+            if reportFailures { ExtensionPeerFailureDiagnostics.report(.registrationDecode) }
+            return nil
+        }
+        guard registration.logicalName == logicalName else {
+            if reportFailures { ExtensionPeerFailureDiagnostics.report(.registrationLogicalName) }
+            return nil
+        }
+        guard registration.physicalName.hasPrefix("edith.extension.worker.\(getuid())."),
             registration.physicalName.utf8.count < 128,
             registration.physicalName.utf8.allSatisfy({
                 (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0)
                     || [45, 46].contains($0)
-            }), !requiresLiveProcess || registration.process.isAlive
-        else { return nil }
+            })
+        else {
+            if reportFailures { ExtensionPeerFailureDiagnostics.report(.registrationPhysicalName) }
+            return nil
+        }
+        guard !requiresLiveProcess || registration.process.isAlive else {
+            if reportFailures { ExtensionPeerFailureDiagnostics.report(.registrationProcess) }
+            return nil
+        }
         return registration
     }
 }
