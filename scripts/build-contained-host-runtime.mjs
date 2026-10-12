@@ -25,7 +25,7 @@ export async function requireRegularTree(directory) {
       await requireRegularTree(join(directory, child));
 }
 
-function sign(path, identity, development, entitlements) {
+function sign(path, identity, development, entitlements, environment) {
   const options = development ? [] : ["--options", "runtime", "--timestamp"];
   execFileSync(
     "codesign",
@@ -37,29 +37,31 @@ function sign(path, identity, development, entitlements) {
       ...(entitlements ? ["--entitlements", entitlements] : []),
       path,
     ],
-    { stdio: "inherit" },
+    { stdio: "inherit", env: environment },
   );
 }
 
-async function signRuntimeTree(directory, identity, development) {
+async function signRuntimeTree(directory, identity, development, environment) {
   for (const item of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, item.name);
-    if (item.isDirectory()) await signRuntimeTree(path, identity, development);
+    if (item.isDirectory())
+      await signRuntimeTree(path, identity, development, environment);
     else if (
-      execFileSync("file", ["-b", path], { encoding: "utf8" }).includes(
-        "Mach-O",
-      )
+      execFileSync("file", ["-b", path], {
+        encoding: "utf8",
+        env: environment,
+      }).includes("Mach-O")
     )
-      sign(path, identity, development);
+      sign(path, identity, development, undefined, environment);
   }
   if (["framework", "app", "xpc"].includes(directory.split(".").at(-1)))
-    sign(directory, identity, development);
+    sign(directory, identity, development, undefined, environment);
 }
 
 export async function copyContainedHostRuntime(
   hostApp,
   contents,
-  { identity, development },
+  { identity, development, environment = process.env },
 ) {
   const source = resolve(hostApp, "Contents/MacOS/Edith");
   const destination = resolve(contents, "MacOS/Edith");
@@ -86,6 +88,7 @@ export async function copyContainedHostRuntime(
   );
   const dependencies = execFileSync("otool", ["-L", source], {
     encoding: "utf8",
+    env: environment,
   })
     .split("\n")
     .slice(1)
@@ -107,7 +110,7 @@ export async function copyContainedHostRuntime(
       copied.add(name);
       const origin = resolve(hostApp, "Contents/Frameworks", name);
       const target = resolve(frameworks, name);
-      execFileSync("/bin/cp", ["-RL", origin, target]);
+      execFileSync("/bin/cp", ["-RL", origin, target], { env: environment });
       if (name.endsWith(".framework")) {
         await rm(join(target, "Versions"), {
           recursive: true,
@@ -122,6 +125,7 @@ export async function copyContainedHostRuntime(
         name.endsWith(".framework") ? target : frameworks,
         identity,
         development,
+        environment,
       );
     }
     await lstat(resolve(frameworks, path));

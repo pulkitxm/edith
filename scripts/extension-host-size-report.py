@@ -159,9 +159,9 @@ def read_archive_document(zipped, name, parser):
     return parser(zipped.read(name))
 
 
-def verify_package_host(packages, metadata, definition, app, expected_commit, host_hash, unsigned_hash):
+def verify_package_host(packages, metadata, definition, app, expected_commit, host_hash, unsigned_hash, *, carrier_input_provider=None):
     identifier = metadata["id"]
-    carrier_source = carrier_input()
+    carrier_source = carrier_input() if carrier_input_provider is None else carrier_input_provider()
     if carrier_source["sourceCommit"] != expected_commit or digest_file(carrier_source["path"]) != carrier_source["sha256"]:
         raise ValueError("Carrier input differs from the frozen source")
     carrier_code = executable_identity(carrier_source["path"])

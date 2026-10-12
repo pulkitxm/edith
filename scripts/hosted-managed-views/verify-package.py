@@ -57,7 +57,7 @@ def extract_regular(archive, target, *, expected_root=None, maximum_bytes=8 * 10
     return total
 
 
-def verify_package(artifact, directory, host, source_commit, fingerprint, host_hash):
+def verify_package(artifact, directory, host, source_commit, fingerprint, host_hash, *, carrier_input_provider=None):
     directory, host = Path(directory), Path(host)
     definition = json.loads((directory / 'definition.json').read_text())
     identifier = definition['id']
@@ -93,7 +93,7 @@ def verify_package(artifact, directory, host, source_commit, fingerprint, host_h
     if report.digest_file(host / 'Contents/MacOS/Edith') != host_hash:
         raise ValueError('Frozen host digest differs')
     code_identity = executable_identity(host / 'Contents/MacOS/Edith')
-    host_proof = report.verify_package_host(packages, metadata, definition, host, source_commit, host_hash, code_identity['normalizedUnsignedSHA256'])
+    host_proof = report.verify_package_host(packages, metadata, definition, host, source_commit, host_hash, code_identity['normalizedUnsignedSHA256'], carrier_input_provider=carrier_input_provider)
     carrier = expanded / identifier / 'ExtensionCarrier.app'
     subprocess.run(['codesign', '--verify', '--deep', '--strict', str(carrier)], check=True, capture_output=True, timeout=60)
     payload = carrier / 'Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload' / identifier

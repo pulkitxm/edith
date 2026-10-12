@@ -11,7 +11,10 @@ import {
   functionalFixtureRolePolicySource,
 } from "./fixture-trust.mjs";
 import { functionalActionOwners } from "./owners.mjs";
-import { functionalPairBuildPlan } from "./prepare-owner.mjs";
+import {
+  functionalPairBuildPlan,
+  functionalPairPlanForBuilder,
+} from "./prepare-owner.mjs";
 
 const sourceCommit = "a".repeat(40);
 const session = "12345678-1234-4123-8123-123456789abc";
@@ -24,6 +27,7 @@ const pinPaths = [
   "Extensions/manifest.json",
   "scripts/build-extension-package.mjs",
   "scripts/hosted-managed-views/verify-package.py",
+  "scripts/hosted-functional-actions/verify-role-package.py",
   "scripts/hosted-functional-actions/prepare-owner.mjs",
   "scripts/hosted-functional-actions/fixture-trust.mjs",
   "scripts/hosted-functional-actions/producer-project.mjs",
@@ -768,3 +772,10 @@ function activeJobFixture() {
   };
   return { value, environment };
 }
+
+test("pair plan identity cannot be copied into a compiler admission", () => {
+  const plan = functionalPairBuildPlan(fixture());
+  assert.equal(functionalPairPlanForBuilder(plan), plan);
+  assert.throws(() => functionalPairPlanForBuilder(structuredClone(plan)));
+  assert.throws(() => functionalPairPlanForBuilder({ ...plan }));
+});

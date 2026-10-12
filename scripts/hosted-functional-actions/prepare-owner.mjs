@@ -20,6 +20,8 @@ import {
 import { functionalActionOwners } from "./owners.mjs";
 import { admitFunctionalRunner } from "./producer-project.mjs";
 
+const pairPlans = new WeakSet();
+
 const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const exact = (value, fields) => {
   assert(value && Object.getPrototypeOf(value) === Object.prototype);
@@ -95,6 +97,7 @@ export function functionalPairBuildPlan({
     "Extensions/manifest.json",
     "scripts/build-extension-package.mjs",
     "scripts/hosted-managed-views/verify-package.py",
+    "scripts/hosted-functional-actions/verify-role-package.py",
     "scripts/hosted-functional-actions/prepare-owner.mjs",
     "scripts/hosted-functional-actions/fixture-trust.mjs",
     "scripts/hosted-functional-actions/producer-project.mjs",
@@ -124,7 +127,7 @@ export function functionalPairBuildPlan({
       `Policy case source changed: ${entry.owner}`,
     );
   const versions = ["1.0.0", "1.1.0"];
-  return Object.freeze({
+  const plan = Object.freeze({
     owner,
     sourceCommit: sourcePins.sourceCommit,
     pairScope: "synthetic-development",
@@ -153,6 +156,13 @@ export function functionalPairBuildPlan({
       sourcePins.files.map((entry) => Object.freeze({ ...entry })),
     ),
   });
+  pairPlans.add(plan);
+  return plan;
+}
+
+export function functionalPairPlanForBuilder(plan) {
+  assert(pairPlans.has(plan), "Expected admitted functional pair plan");
+  return plan;
 }
 
 async function requirePrivateDirectory(path) {
@@ -216,9 +226,8 @@ export async function prepareFunctionalOwnerPair({
     sourcePins,
     environment,
   });
-  const { functionalCompilationForBuilder } = await import(
-    "./functional-build.mjs"
-  );
+  const { functionalCompilationForBuilder, createFunctionalRoleBuild } =
+    await import("./functional-build.mjs");
   const compiled = await functionalCompilationForBuilder(compilation);
   assert.equal(compiled.sourceCommit, plan.sourceCommit);
   assert.equal(compiled.root, plan.root);
@@ -323,12 +332,23 @@ export async function prepareFunctionalOwnerPair({
       step.sourceRoot,
       buildEnvironment,
     );
-    run(
-      "bun",
-      ["scripts/build-extension-package.mjs", owner],
-      step.sourceRoot,
-      buildEnvironment,
+    const functionalRoleBuild = await createFunctionalRoleBuild({
+      compilation,
+      plan,
+      version: step.version,
+    });
+    const { buildExtensionPackage } = await import(
+      "../build-extension-package.mjs"
     );
+    await buildExtensionPackage({
+      root: step.sourceRoot,
+      id: owner,
+      version: step.version,
+      output: step.output,
+      containedHostApp: plan.host.path,
+      environment: buildEnvironment,
+      functionalRoleBuild,
+    });
     await functionalCompilationForBuilder(compilation);
     await verifyPins(step.sourceRoot, plan, true);
     const metadata = JSON.parse(
@@ -365,11 +385,24 @@ export async function prepareFunctionalOwnerPair({
       repository,
       environment,
     );
+    const { functionalRoleVerificationInput } = await import(
+      "./functional-build.mjs"
+    );
+    const verificationInput = await functionalRoleVerificationInput(
+      functionalRoleBuild,
+      {
+        root: step.sourceRoot,
+        id: owner,
+        version: step.version,
+        output: step.output,
+        hostApp: plan.host.path,
+      },
+    );
     const receipt = JSON.parse(
       run(
         "python3",
         [
-          "scripts/hosted-managed-views/verify-package.py",
+          "scripts/hosted-functional-actions/verify-role-package.py",
           artifact,
           verification,
           plan.host.path,
@@ -378,7 +411,8 @@ export async function prepareFunctionalOwnerPair({
           plan.host.executableSHA256,
         ],
         repository,
-        environment,
+        buildEnvironment,
+        Buffer.from(functionalCanonicalJSON(verificationInput)),
       ).toString("utf8"),
     );
     assert.equal(receipt.extensionID, owner);
