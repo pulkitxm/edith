@@ -22,7 +22,6 @@ jobs:
       && github.event.pull_request.head.ref == 'feat/extension-marketplace'
       && github.event.pull_request.base.ref == 'main'
       && (github.actor_id == '65671483' || github.actor_id == '320458784')
-      && (github.triggering_actor == 'pulkitxm' || github.triggering_actor == 'pukbot[bot]')
     runs-on: macos-26
     timeout-minutes: 360
     defaults:
