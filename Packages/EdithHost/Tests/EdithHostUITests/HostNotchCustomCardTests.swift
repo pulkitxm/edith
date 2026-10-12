@@ -410,8 +410,12 @@ private actor CustomCardGate {
 }
 
 @MainActor @Suite(.serialized) struct HostAccessibilityFixtureTests {
-    @Test(arguments: [[false, false], [false, true], [true, false], [true, true]])
-    func snapshotsBothAttributesBeforeMutationAndRestoresExactValues(originals: [Bool]) throws {
+    @Test(
+        arguments: [
+            [false, false], [false, true], [true, false], [true, true],
+            [nil, nil], [nil, false], [nil, true], [false, nil], [true, nil],
+        ] as [[Bool?]])
+    func snapshotsBothAttributesBeforeMutationAndRestoresExactValues(originals: [Bool?]) throws {
         let memory = MemoryAccess(originals: originals)
         let fixture = try HostAccessibilityFixture(access: memory.access)
         #expect(
@@ -424,6 +428,16 @@ private actor CustomCardGate {
         let count = memory.operations.count
         #expect(fixture.restore().isEmpty)
         #expect(memory.operations.count == count)
+    }
+
+    @Test func restoresOriginalObjectWithoutReplacingItsIdentity() throws {
+        let memory = MemoryAccess(originals: [nil, false])
+        let original = NSMutableString(string: "synthetic attribute value")
+        memory.values[HostAccessibilityFixture.attributes[0]] = original
+        let fixture = try HostAccessibilityFixture(access: memory.access)
+        #expect(fixture.restore().isEmpty)
+        #expect(memory.values[HostAccessibilityFixture.attributes[0]] === original)
+        #expect(Array(memory.writes.suffix(2)) == HostAccessibilityFixture.attributes.reversed())
     }
 
     @Test(arguments: [1, 2])
@@ -520,6 +534,41 @@ private actor CustomCardGate {
         #expect(memory.writes.count == 5)
     }
 
+    @Test func failedRestorationReadbackRetriesOnlyTheUnverifiedNilSnapshot() throws {
+        let memory = MemoryAccess(originals: [false, nil])
+        let fixture = try HostAccessibilityFixture(access: memory.access)
+        memory.failedCopies = [5]
+        let failures = fixture.restore()
+        #expect(failures.count == 1 && failures.first as? InjectedFailure == .copy(5))
+        #expect(memory.matchesOriginals)
+        #expect(Array(memory.writes.suffix(2)) == HostAccessibilityFixture.attributes.reversed())
+        #expect(fixture.restore().isEmpty && memory.matchesOriginals)
+        #expect(
+            memory.writes.count == 5 && memory.writes.last == HostAccessibilityFixture.attributes[1]
+        )
+        #expect(fixture.restore().isEmpty && memory.writes.count == 5)
+    }
+
+    @Test func nilRestorationMismatchIsReportedWithoutReplacingNilWithFalse() throws {
+        let memory = MemoryAccess(originals: [nil, nil])
+        let fixture = try HostAccessibilityFixture(access: memory.access)
+        memory.ignoredSets = [3]
+        let failures = fixture.restore()
+        #expect(failures.count == 1)
+        guard
+            case .mismatch(let operation, let attribute) = failures.first
+                as? HostAccessibilityFixture.Failure
+        else {
+            Issue.record("Expected the nil restore mismatch error")
+            return
+        }
+        #expect(operation == "restore" && attribute == HostAccessibilityFixture.attributes[1])
+        #expect(memory.values[HostAccessibilityFixture.attributes[0]] == nil)
+        #expect(CFEqual(memory.values[HostAccessibilityFixture.attributes[1]], kCFBooleanTrue))
+        #expect(fixture.restore().isEmpty && memory.matchesOriginals)
+        #expect(memory.values.isEmpty && memory.writes.count == 5)
+    }
+
     @Test func activationFailureIncludesRollbackFailureWithoutSkippingOtherRestorations() throws {
         let memory = MemoryAccess()
         memory.failedAfterMutation = [2]
@@ -566,16 +615,22 @@ private actor CustomCardGate {
         private var copies = 0
         private var sets = 0
 
-        init(originals: [Bool] = [false, false]) {
-            values = Dictionary(
-                uniqueKeysWithValues: zip(
-                    HostAccessibilityFixture.attributes,
-                    originals.map { $0 ? kCFBooleanTrue! : kCFBooleanFalse! }))
+        init(originals: [Bool?] = [false, false]) {
+            values = [:]
+            for (attribute, value) in zip(HostAccessibilityFixture.attributes, originals) {
+                if let value { values[attribute] = value ? kCFBooleanTrue : kCFBooleanFalse }
+            }
             self.originals = values
         }
 
         var matchesOriginals: Bool {
-            originals.allSatisfy { CFEqual(values[$0.key], $0.value) }
+            HostAccessibilityFixture.attributes.allSatisfy {
+                switch (values[$0], originals[$0]) {
+                case (nil, nil): return true
+                case (let value?, let original?): return CFEqual(value, original)
+                default: return false
+                }
+            }
         }
 
         var access: HostAccessibilityFixture.Access {
@@ -586,7 +641,7 @@ private actor CustomCardGate {
                     if self.failedCopies.contains(self.copies) {
                         throw InjectedFailure.copy(self.copies)
                     }
-                    return try #require(self.values[attribute])
+                    return self.values[attribute]
                 },
                 set: { attribute, value in
                     self.sets += 1
