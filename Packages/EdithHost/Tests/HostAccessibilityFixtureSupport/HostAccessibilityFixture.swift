@@ -17,9 +17,12 @@ import Foundation
 
     public enum Failure: Error, CustomStringConvertible {
         case mismatch(operation: String, attribute: String)
+        case notSettable(attribute: String)
 
         public var description: String {
             switch self {
+            case .notSettable(let attribute):
+                return "Accessibility activation attribute is not settable: \(attribute)"
             case .mismatch(let operation, let attribute):
                 return "Accessibility \(operation) readback differs for \(attribute)"
             }
@@ -36,14 +39,17 @@ import Foundation
         }
     }
 
-    public static let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"]
-
     private let access: Access
     private var pending: [(attribute: String, value: CFTypeRef?)] = []
 
     public static func enable() throws -> HostAccessibilityFixture {
         let application: NSApplication = NSApplication.shared
+        let attribute = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+        guard application.accessibilityIsAttributeSettable(attribute) else {
+            throw Failure.notSettable(attribute: attribute.rawValue)
+        }
         return try HostAccessibilityFixture(
+            attributes: [attribute.rawValue],
             access: Access(
                 copy: { attribute in
                     application.accessibilityAttributeValue(
@@ -55,9 +61,9 @@ import Foundation
                 }))
     }
 
-    public init(access: Access) throws {
+    public init(attributes: [String], access: Access) throws {
         self.access = access
-        let originals = try Self.attributes.map { (attribute: $0, value: try access.copy($0)) }
+        let originals = try attributes.map { (attribute: $0, value: try access.copy($0)) }
         do {
             for original in originals {
                 pending.append(original)

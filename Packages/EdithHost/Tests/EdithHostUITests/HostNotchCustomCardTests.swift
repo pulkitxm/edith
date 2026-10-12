@@ -410,6 +410,8 @@ private actor CustomCardGate {
 }
 
 @MainActor @Suite(.serialized) struct HostAccessibilityFixtureTests {
+    private static let attributes = ["synthetic-first", "synthetic-second"]
+
     @Test(
         arguments: [
             [false, false], [false, true], [true, false], [true, true],
@@ -417,14 +419,15 @@ private actor CustomCardGate {
         ] as [[Bool?]])
     func snapshotsBothAttributesBeforeMutationAndRestoresExactValues(originals: [Bool?]) throws {
         let memory = MemoryAccess(originals: originals)
-        let fixture = try HostAccessibilityFixture(access: memory.access)
+        let fixture = try HostAccessibilityFixture(
+            attributes: Self.attributes, access: memory.access)
         #expect(
             Array(memory.operations.prefix(2))
-                == HostAccessibilityFixture.attributes.map { "copy:" + $0 })
+                == Self.attributes.map { "copy:" + $0 })
         #expect(memory.values.values.allSatisfy { CFEqual($0, kCFBooleanTrue) })
         #expect(fixture.restore().isEmpty)
         #expect(memory.matchesOriginals)
-        #expect(Array(memory.writes.suffix(2)) == HostAccessibilityFixture.attributes.reversed())
+        #expect(Array(memory.writes.suffix(2)) == Self.attributes.reversed())
         let count = memory.operations.count
         #expect(fixture.restore().isEmpty)
         #expect(memory.operations.count == count)
@@ -433,11 +436,12 @@ private actor CustomCardGate {
     @Test func restoresOriginalObjectWithoutReplacingItsIdentity() throws {
         let memory = MemoryAccess(originals: [nil, false])
         let original = NSMutableString(string: "synthetic attribute value")
-        memory.values[HostAccessibilityFixture.attributes[0]] = original
-        let fixture = try HostAccessibilityFixture(access: memory.access)
+        memory.values[Self.attributes[0]] = original
+        let fixture = try HostAccessibilityFixture(
+            attributes: Self.attributes, access: memory.access)
         #expect(fixture.restore().isEmpty)
-        #expect(memory.values[HostAccessibilityFixture.attributes[0]] === original)
-        #expect(Array(memory.writes.suffix(2)) == HostAccessibilityFixture.attributes.reversed())
+        #expect(memory.values[Self.attributes[0]] === original)
+        #expect(Array(memory.writes.suffix(2)) == Self.attributes.reversed())
     }
 
     @Test(arguments: [1, 2])
@@ -445,7 +449,7 @@ private actor CustomCardGate {
         let memory = MemoryAccess()
         memory.failedCopies = [copy]
         #expect(throws: InjectedFailure.copy(copy)) {
-            try HostAccessibilityFixture(access: memory.access)
+            try HostAccessibilityFixture(attributes: Self.attributes, access: memory.access)
         }
         #expect(memory.writes.isEmpty && memory.matchesOriginals)
     }
@@ -455,7 +459,7 @@ private actor CustomCardGate {
         let memory = MemoryAccess()
         memory.failedAfterMutation = [set]
         do {
-            _ = try HostAccessibilityFixture(access: memory.access)
+            _ = try HostAccessibilityFixture(attributes: Self.attributes, access: memory.access)
             Issue.record("Expected the injected set failure")
         } catch let error as HostAccessibilityFixture.ActivationFailure {
             #expect(error.primary as? InjectedFailure == .set(set))
@@ -464,14 +468,14 @@ private actor CustomCardGate {
         #expect(memory.matchesOriginals)
         #expect(
             Array(memory.writes.suffix(set))
-                == Array(HostAccessibilityFixture.attributes.prefix(set).reversed()))
+                == Array(Self.attributes.prefix(set).reversed()))
     }
 
     @Test func successfulSetWithWrongReadbackFailsAndRollsBack() throws {
         let memory = MemoryAccess()
         memory.ignoredSets = [1]
         do {
-            _ = try HostAccessibilityFixture(access: memory.access)
+            _ = try HostAccessibilityFixture(attributes: Self.attributes, access: memory.access)
             Issue.record("Expected a failed enable readback")
         } catch let error as HostAccessibilityFixture.ActivationFailure {
             guard
@@ -481,7 +485,7 @@ private actor CustomCardGate {
                 Issue.record("Expected the enable mismatch error")
                 return
             }
-            #expect(operation == "enable" && attribute == HostAccessibilityFixture.attributes[0])
+            #expect(operation == "enable" && attribute == Self.attributes[0])
             #expect(error.restoration.isEmpty)
         }
         #expect(memory.matchesOriginals)
@@ -491,7 +495,7 @@ private actor CustomCardGate {
         let memory = MemoryAccess()
         memory.failedCopies = [3]
         do {
-            _ = try HostAccessibilityFixture(access: memory.access)
+            _ = try HostAccessibilityFixture(attributes: Self.attributes, access: memory.access)
             Issue.record("Expected the injected copy failure")
         } catch let error as HostAccessibilityFixture.ActivationFailure {
             #expect(error.primary as? InjectedFailure == .copy(3))
@@ -502,23 +506,25 @@ private actor CustomCardGate {
 
     @Test func restorationContinuesAfterFailureAndRetriesOnlyUnrestoredValues() throws {
         let memory = MemoryAccess()
-        let fixture = try HostAccessibilityFixture(access: memory.access)
+        let fixture = try HostAccessibilityFixture(
+            attributes: Self.attributes, access: memory.access)
         memory.failedSets = [3]
         let failures = fixture.restore()
         #expect(failures.count == 1 && failures.first as? InjectedFailure == .set(3))
-        #expect(CFEqual(memory.values[HostAccessibilityFixture.attributes[0]], kCFBooleanFalse))
-        #expect(CFEqual(memory.values[HostAccessibilityFixture.attributes[1]], kCFBooleanTrue))
+        #expect(CFEqual(memory.values[Self.attributes[0]], kCFBooleanFalse))
+        #expect(CFEqual(memory.values[Self.attributes[1]], kCFBooleanTrue))
         #expect(memory.writes.count == 4)
         #expect(fixture.restore().isEmpty && memory.matchesOriginals)
         #expect(
-            memory.writes.count == 5 && memory.writes.last == HostAccessibilityFixture.attributes[1]
+            memory.writes.count == 5 && memory.writes.last == Self.attributes[1]
         )
         #expect(fixture.restore().isEmpty && memory.writes.count == 5)
     }
 
     @Test func restorationReadbackMismatchIsReportedAndRetainedForRetry() throws {
         let memory = MemoryAccess()
-        let fixture = try HostAccessibilityFixture(access: memory.access)
+        let fixture = try HostAccessibilityFixture(
+            attributes: Self.attributes, access: memory.access)
         memory.ignoredSets = [3]
         let failures = fixture.restore()
         #expect(failures.count == 1)
@@ -529,29 +535,31 @@ private actor CustomCardGate {
             Issue.record("Expected the restore mismatch error")
             return
         }
-        #expect(operation == "restore" && attribute == HostAccessibilityFixture.attributes[1])
+        #expect(operation == "restore" && attribute == Self.attributes[1])
         #expect(fixture.restore().isEmpty && memory.matchesOriginals)
         #expect(memory.writes.count == 5)
     }
 
     @Test func failedRestorationReadbackRetriesOnlyTheUnverifiedNilSnapshot() throws {
         let memory = MemoryAccess(originals: [false, nil])
-        let fixture = try HostAccessibilityFixture(access: memory.access)
+        let fixture = try HostAccessibilityFixture(
+            attributes: Self.attributes, access: memory.access)
         memory.failedCopies = [5]
         let failures = fixture.restore()
         #expect(failures.count == 1 && failures.first as? InjectedFailure == .copy(5))
         #expect(memory.matchesOriginals)
-        #expect(Array(memory.writes.suffix(2)) == HostAccessibilityFixture.attributes.reversed())
+        #expect(Array(memory.writes.suffix(2)) == Self.attributes.reversed())
         #expect(fixture.restore().isEmpty && memory.matchesOriginals)
         #expect(
-            memory.writes.count == 5 && memory.writes.last == HostAccessibilityFixture.attributes[1]
+            memory.writes.count == 5 && memory.writes.last == Self.attributes[1]
         )
         #expect(fixture.restore().isEmpty && memory.writes.count == 5)
     }
 
     @Test func nilRestorationMismatchIsReportedWithoutReplacingNilWithFalse() throws {
         let memory = MemoryAccess(originals: [nil, nil])
-        let fixture = try HostAccessibilityFixture(access: memory.access)
+        let fixture = try HostAccessibilityFixture(
+            attributes: Self.attributes, access: memory.access)
         memory.ignoredSets = [3]
         let failures = fixture.restore()
         #expect(failures.count == 1)
@@ -562,9 +570,9 @@ private actor CustomCardGate {
             Issue.record("Expected the nil restore mismatch error")
             return
         }
-        #expect(operation == "restore" && attribute == HostAccessibilityFixture.attributes[1])
-        #expect(memory.values[HostAccessibilityFixture.attributes[0]] == nil)
-        #expect(CFEqual(memory.values[HostAccessibilityFixture.attributes[1]], kCFBooleanTrue))
+        #expect(operation == "restore" && attribute == Self.attributes[1])
+        #expect(memory.values[Self.attributes[0]] == nil)
+        #expect(CFEqual(memory.values[Self.attributes[1]], kCFBooleanTrue))
         #expect(fixture.restore().isEmpty && memory.matchesOriginals)
         #expect(memory.values.isEmpty && memory.writes.count == 5)
     }
@@ -574,7 +582,7 @@ private actor CustomCardGate {
         memory.failedAfterMutation = [2]
         memory.failedSets = [3]
         do {
-            _ = try HostAccessibilityFixture(access: memory.access)
+            _ = try HostAccessibilityFixture(attributes: Self.attributes, access: memory.access)
             Issue.record("Expected activation and rollback failures")
         } catch let error as HostAccessibilityFixture.ActivationFailure {
             #expect(error.primary as? InjectedFailure == .set(2))
@@ -583,14 +591,15 @@ private actor CustomCardGate {
                     && error.restoration.first as? InjectedFailure == .set(3))
         }
         #expect(memory.writes.count == 4)
-        #expect(CFEqual(memory.values[HostAccessibilityFixture.attributes[0]], kCFBooleanFalse))
-        #expect(CFEqual(memory.values[HostAccessibilityFixture.attributes[1]], kCFBooleanTrue))
+        #expect(CFEqual(memory.values[Self.attributes[0]], kCFBooleanFalse))
+        #expect(CFEqual(memory.values[Self.attributes[1]], kCFBooleanTrue))
     }
 
     @Test func throwingBodyStillRestoresItsOwnedFixture() throws {
         let memory = MemoryAccess()
         #expect(throws: InjectedFailure.body) {
-            let fixture = try HostAccessibilityFixture(access: memory.access)
+            let fixture = try HostAccessibilityFixture(
+                attributes: Self.attributes, access: memory.access)
             defer { #expect(fixture.restore().isEmpty) }
             throw InjectedFailure.body
         }
@@ -617,14 +626,14 @@ private actor CustomCardGate {
 
         init(originals: [Bool?] = [false, false]) {
             values = [:]
-            for (attribute, value) in zip(HostAccessibilityFixture.attributes, originals) {
+            for (attribute, value) in zip(HostAccessibilityFixtureTests.attributes, originals) {
                 if let value { values[attribute] = value ? kCFBooleanTrue : kCFBooleanFalse }
             }
             self.originals = values
         }
 
         var matchesOriginals: Bool {
-            HostAccessibilityFixture.attributes.allSatisfy {
+            HostAccessibilityFixtureTests.attributes.allSatisfy {
                 switch (values[$0], originals[$0]) {
                 case (nil, nil): return true
                 case (let value?, let original?): return CFEqual(value, original)
