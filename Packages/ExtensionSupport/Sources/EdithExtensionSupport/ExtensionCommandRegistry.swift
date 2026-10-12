@@ -5,6 +5,10 @@ public final class ExtensionCommandRegistry {
     #if EDITH_FUNCTIONAL_FIXTURE
     public static let ownerJoinedNotification = Notification.Name(
         "edith.extension.command.owner-joined")
+    public static let commandCancelledNotification = Notification.Name(
+        "edith.extension.command.cancelled")
+    public static let retirementStartedNotification = Notification.Name(
+        "edith.extension.command.retirement-started")
     private var witnessedRetirements = Set<UUID>()
     private(set) var pendingJoins = 0
     #endif
@@ -61,6 +65,11 @@ public final class ExtensionCommandRegistry {
             let command = commands.removeValue(forKey: token)
         else { return }
         retired[token] = command.task
+        #if EDITH_FUNCTIONAL_FIXTURE
+        NotificationCenter.default.post(
+            name: Self.commandCancelledNotification, object: self,
+            userInfo: ["token": token.uuidString])
+        #endif
         command.task.cancel()
         command.completion(nil, "The extension command was cancelled.")
     }
@@ -117,6 +126,11 @@ public final class ExtensionCommandRegistry {
         commands.removeAll()
         for (token, command) in pending {
             retired[token] = command.task
+            #if EDITH_FUNCTIONAL_FIXTURE
+            NotificationCenter.default.post(
+                name: Self.commandCancelledNotification, object: self,
+                userInfo: ["token": token.uuidString])
+            #endif
             command.task.cancel()
             command.completion(nil, message)
         }
@@ -125,6 +139,9 @@ public final class ExtensionCommandRegistry {
     private func joinRunning() async {
         let pending = Array(running)
         #if EDITH_FUNCTIONAL_FIXTURE
+        NotificationCenter.default.post(
+            name: Self.retirementStartedNotification, object: self,
+            userInfo: ["tokens": pending.map { $0.key.uuidString }])
         pendingJoins += pending.count
         defer { pendingJoins -= pending.count }
         #endif

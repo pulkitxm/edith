@@ -101,7 +101,9 @@ struct HostRemoteChannelTests {
         try await wait { state.disconnected == 1 }
         #expect(state.completed == 0)
         let request = ExtensionEngineRequest(presentationID: UUID(), operation: "sample.read")
-        await #expect(throws: ExtensionEngineError.rejected) { try await server.invokeEngine(request) }
+        await #expect(throws: ExtensionEngineError.rejected) {
+            try await server.invokeEngine(request)
+        }
         #expect(state.completed == 0)
         let accepted = NSXPCConnection(listenerEndpoint: bootstrap.listener.endpoint)
         defer { accepted.invalidate() }

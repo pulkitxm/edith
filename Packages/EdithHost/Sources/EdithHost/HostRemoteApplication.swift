@@ -19,7 +19,11 @@ final class HostRemoteApplication {
     }
     static var fixtureObserveStopPreparation: ((FixtureStopPreparation) throws -> Void)?
     static var fixtureObserveCommandRetirement: ((UUID) throws -> Void)?
+    static var fixtureObserveCommandCancellation: ((UUID) throws -> Void)?
+    static var fixtureObserveCommandRetirementStarted: (([UUID]) throws -> Void)?
     private var fixtureRetirementObserver: NSObjectProtocol?
+    private var fixtureCancellationObserver: NSObjectProtocol?
+    private var fixtureRetirementStartedObserver: NSObjectProtocol?
     private var fixtureRetirementFailure: Error?
     static var fixtureAdmitConfiguration: ((HostRemoteConfiguration) async throws -> Void)?
     static var fixtureAdmitBeforeConstruction:
@@ -92,6 +96,45 @@ final class HostRemoteApplication {
                     self.shutdown()
                 }
             }
+        }
+        if Self.fixtureObserveCommandCancellation != nil {
+            fixtureCancellationObserver =
+                NotificationCenter.default.addObserver(
+                    forName: ExtensionCommandRegistry.commandCancelledNotification, object: nil,
+                    queue: nil
+                ) { [weak self] notification in
+                    let token = (notification.userInfo?["token"] as? String).flatMap(
+                        UUID.init(uuidString:))
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        do {
+                            guard let token, let observe = Self.fixtureObserveCommandCancellation
+                            else {
+                                throw HostWorkerError.rejected
+                            }
+                            try observe(token)
+                        } catch { self.fixtureRetirementFailure = error; self.shutdown() }
+                    }
+                }
+        }
+        if Self.fixtureObserveCommandRetirementStarted != nil {
+            fixtureRetirementStartedObserver =
+                NotificationCenter.default.addObserver(
+                    forName: ExtensionCommandRegistry.retirementStartedNotification, object: nil,
+                    queue: nil
+                ) { [weak self] notification in
+                    let values = notification.userInfo?["tokens"] as? [String]
+                    let tokens = values?.compactMap(UUID.init(uuidString:))
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        do {
+                            guard let values, let tokens, values.count == tokens.count,
+                                let observe = Self.fixtureObserveCommandRetirementStarted
+                            else { throw HostWorkerError.rejected }
+                            try observe(tokens)
+                        } catch { self.fixtureRetirementFailure = error; self.shutdown() }
+                    }
+                }
         }
         #endif
         let hostExecutable = URL(fileURLWithPath: executable)

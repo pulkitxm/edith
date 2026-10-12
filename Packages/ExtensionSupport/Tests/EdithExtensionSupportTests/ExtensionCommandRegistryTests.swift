@@ -14,6 +14,138 @@ private actor CommandCleanupGate {
 
 @MainActor @Suite struct ExtensionCommandRegistryTests {
     #if EDITH_FUNCTIONAL_FIXTURE
+    @Test(arguments: [false, true])
+    func cancellationAndRetirementStartObserveActualPendingOwner(cancelAll: Bool) async throws {
+        let registry = ExtensionCommandRegistry()
+        let token = UUID()
+        var owner: CheckedContinuation<Void, Never>?
+        var completed = 0
+        var events: [String] = []
+        var wasCancelled = false
+        let cancelObserver = NotificationCenter.default.addObserver(
+            forName: ExtensionCommandRegistry.commandCancelledNotification, object: registry,
+            queue: nil
+        ) { notification in
+            MainActor.assumeIsolated {
+                #expect(notification.userInfo?["token"] as? String == token.uuidString)
+                #expect(completed == 0)
+                events.append("cancelled")
+            }
+        }
+        let startObserver = NotificationCenter.default.addObserver(
+            forName: ExtensionCommandRegistry.retirementStartedNotification, object: registry,
+            queue: nil
+        ) { notification in
+            MainActor.assumeIsolated {
+                #expect(notification.userInfo?["tokens"] as? [String] == [token.uuidString])
+                #expect(completed == 1)
+                #expect(owner != nil)
+                events.append("started")
+            }
+        }
+        let joinedObserver = NotificationCenter.default.addObserver(
+            forName: ExtensionCommandRegistry.ownerJoinedNotification, object: registry, queue: nil
+        ) { notification in
+            MainActor.assumeIsolated {
+                #expect(notification.userInfo?["token"] as? String == token.uuidString)
+                #expect(owner == nil)
+                events.append("joined")
+            }
+        }
+        defer {
+            for observer in [cancelObserver, startObserver, joinedObserver] {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            owner?.resume()
+        }
+        registry.invoke(
+            ["token": token.uuidString, "command": "synthetic.hold", "payload": Data()],
+            completion: { _, message in
+                #expect(message != nil)
+                completed += 1
+            },
+            execute: { _, _ in
+                await withCheckedContinuation { owner = $0 }
+                wasCancelled = Task.isCancelled
+                return Data()
+            })
+        let entered = ContinuousClock.now + .seconds(2)
+        while owner == nil, ContinuousClock.now < entered { await Task.yield() }
+        try #require(owner != nil)
+        if cancelAll {
+            registry.shutdown()
+        } else {
+            registry.cancel(token.uuidString)
+        }
+        registry.cancel(token.uuidString)
+        #expect(completed == 1)
+        #expect(events == ["cancelled"])
+        let join = Task { await registry.shutdownAndWait() }
+        let started = ContinuousClock.now + .seconds(2)
+        while registry.pendingJoins == 0, ContinuousClock.now < started { await Task.yield() }
+        try #require(registry.pendingJoins == 1)
+        #expect(events == ["cancelled", "started"])
+        owner?.resume()
+        owner = nil
+        await join.value
+        #expect(wasCancelled)
+        #expect(completed == 1)
+        #expect(events == ["cancelled", "started", "joined"])
+    }
+
+    @Test func naturalJoinStartsWithoutInventingCancellation() async throws {
+        let registry = ExtensionCommandRegistry()
+        let token = UUID()
+        var owner: CheckedContinuation<Void, Never>?
+        var started = false
+        var cancelled = false
+        var result: Data?
+        let cancelObserver = NotificationCenter.default.addObserver(
+            forName: ExtensionCommandRegistry.commandCancelledNotification, object: registry,
+            queue: nil
+        ) { _ in MainActor.assumeIsolated { cancelled = true } }
+        let startObserver = NotificationCenter.default.addObserver(
+            forName: ExtensionCommandRegistry.retirementStartedNotification, object: registry,
+            queue: nil
+        ) { notification in
+            MainActor.assumeIsolated {
+                #expect(notification.userInfo?["tokens"] as? [String] == [token.uuidString])
+                #expect(owner != nil && result == nil)
+                started = true
+            }
+        }
+        defer {
+            NotificationCenter.default.removeObserver(cancelObserver)
+            NotificationCenter.default.removeObserver(startObserver)
+            owner?.resume()
+        }
+        registry.invoke(
+            ["token": token.uuidString, "command": "synthetic.hold", "payload": Data()],
+            completion: { bytes, message in
+                #expect(message == nil)
+                result = bytes as Data?
+            },
+            execute: { _, _ in
+                await withCheckedContinuation { owner = $0 }
+                #expect(!Task.isCancelled)
+                return Data("original-result".utf8)
+            })
+        let entered = ContinuousClock.now + .seconds(2)
+        while owner == nil, ContinuousClock.now < entered { await Task.yield() }
+        try #require(owner != nil)
+        let join = Task { await registry.closeAdmissionAndWait() }
+        let deadline = ContinuousClock.now + .seconds(2)
+        while !started, ContinuousClock.now < deadline { await Task.yield() }
+        try #require(started)
+        #expect(!cancelled)
+        owner?.resume()
+        owner = nil
+        let suspension = await join.value
+        #expect(result == Data("original-result".utf8))
+        #expect(!cancelled)
+        #expect(registry.resume(suspension))
+    }
+
     @Test func retirementEventWaitsForActualOwnerTaskAfterCallerCancellation() async throws {
         let registry = ExtensionCommandRegistry()
         let token = UUID()

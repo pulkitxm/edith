@@ -20,13 +20,15 @@ def generation(pid):
 
 mode = sys.argv[1]
 os.setpgid(0, 0)
+registration = None
 if mode in ["child", "child-group", "child-reserved", "child-group-crash", "child-group-ignore-stop"]:
     if mode == "child-reserved":
         child = subprocess.Popen([sys.executable, "-c", "import os,time;time.sleep(0.25);os.setpgid(0,0);time.sleep(30)"])
     else:
         child = subprocess.Popen(["/bin/sleep", "30"], start_new_session=mode != "child")
     if mode != "child":
-        print(json.dumps({"kind": "processGroup", "pid": child.pid, "generation": generation(child.pid), "registered": True}), flush=True)
+        registration = {"kind": "processGroup", "pid": child.pid, "generation": generation(child.pid), "registered": True}
+        print(json.dumps(registration), flush=True)
     with open(sys.argv[2], "w") as stream:
         stream.write(str(child.pid))
 prepare_count = 0
@@ -42,8 +44,27 @@ def navigate():
     print(json.dumps(event), flush=True)
     return event
 
-for line in sys.stdin:
-    request = json.loads(line)
+def requests():
+    global registration
+    pending = []
+    for line in sys.stdin:
+        request = json.loads(line)
+        if request.get("kind") == "processGroup":
+            if registration is None or request != registration:
+                raise RuntimeError("Invalid registration acknowledgment")
+            registration = None
+            for queued in pending:
+                yield queued
+            pending.clear()
+        elif registration is not None:
+            pending.append(request)
+        else:
+            yield request
+    if registration is not None:
+        raise RuntimeError("Missing registration acknowledgment")
+
+
+for request in requests():
     operation = request["operation"]
     if operation == "navigationReply":
         if mode == "folder-choice":

@@ -243,8 +243,27 @@ struct HostWorkerProcessGroups {
     }
 
     private static func descendants(_ owner: Int32) -> [ExtensionProcessIdentity] {
-        ((try? processIDs(UInt32(PROC_ALL_PIDS), 0)) ?? []).filter {
-            ExtensionNativeTask.isDescendant($0, of: owner)
-        }.compactMap { ExtensionProcessIdentity.read($0) }
+        guard let root = ExtensionProcessIdentity.read(owner) else { return [] }
+        var parents = [root]
+        var observed = Set([owner])
+        var children: [ExtensionProcessIdentity] = []
+        for _ in 0..<16 {
+            var next: [ExtensionProcessIdentity] = []
+            for parent in parents where parent.isAlive {
+                let pids = (try? processIDs(UInt32(PROC_PPID_ONLY), UInt32(parent.pid))) ?? []
+                for pid in pids where !observed.contains(pid) {
+                    guard parent.isAlive, let child = ExtensionProcessIdentity.read(pid),
+                        ExtensionNativeTask.isDescendant(pid, of: parent.pid), parent.isAlive,
+                        child.isAlive
+                    else { continue }
+                    observed.insert(pid)
+                    children.append(child)
+                    next.append(child)
+                }
+            }
+            guard !next.isEmpty else { break }
+            parents = next
+        }
+        return children
     }
 }

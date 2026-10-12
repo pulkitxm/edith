@@ -511,6 +511,13 @@ public final class HostWorker {
         }
         if resource.registered {
             try ownedProcessGroups.register(resource, owner: process.processIdentifier)
+            guard let workerIdentity, workerIdentity.isAlive,
+                let identity = ExtensionProcessIdentity.read(resource.pid),
+                identity.generation == resource.generation,
+                ExtensionNativeTask.isDescendant(resource.pid, of: workerIdentity.pid),
+                workerIdentity.isAlive, identity.isAlive
+            else { throw HostWorkerError.invalidResponse }
+            try input.fileHandleForWriting.write(contentsOf: HostWorkerFrames.encode(resource))
         } else {
             ownedProcessGroups.release(resource, owner: process.processIdentifier)
         }

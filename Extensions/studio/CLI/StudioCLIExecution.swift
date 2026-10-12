@@ -12,7 +12,9 @@ enum StudioCLIContext {
 }
 
 @MainActor enum StudioCLIEnvironment {
-    nonisolated static var defaults: UserDefaults { StudioCLIContext.scopedDefaults?.store ?? SharedDefaults.store }
+    nonisolated static var defaults: UserDefaults {
+        StudioCLIContext.scopedDefaults?.store ?? SharedDefaults.store
+    }
     nonisolated static var workingDirectory: URL {
         URL(
             fileURLWithPath: ExtensionCLIContext.request?.workingDirectory ?? "/", isDirectory: true

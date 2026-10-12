@@ -12,9 +12,10 @@ final class HostWorkerApplication {
     static var fixtureAdmitBeforeConstruction:
         ((HostWorkerConfiguration, NSDictionary, [URL]) throws -> [HostFixtureRoleAdmission])?
     static var fixtureObserveCommandRetirement: ((UUID) throws -> Void)?
+    static var fixtureObserveCommandCancellation: ((UUID) throws -> Void)?
+    static var fixtureObserveCommandRetirementStarted: (([UUID]) throws -> Void)?
     #endif
     private let control: HostWorkerControl
-    private var frames = HostWorkerFrames()
     private var runtimes: [ExtensionBundleRuntime] = []
     private var configuration: HostWorkerConfiguration?
     private var navigation: HostWorkerNavigationClient?
@@ -53,6 +54,45 @@ final class HostWorkerApplication {
                     do { try observe(token) } catch { self.shutdown() }
                 }
             })
+        if Self.fixtureObserveCommandCancellation != nil {
+            resourceObservers.append(
+                NotificationCenter.default.addObserver(
+                    forName: ExtensionCommandRegistry.commandCancelledNotification, object: nil,
+                    queue: nil
+                ) { [weak self] notification in
+                    let token = (notification.userInfo?["token"] as? String).flatMap(
+                        UUID.init(uuidString:))
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        do {
+                            guard let token, let observe = Self.fixtureObserveCommandCancellation
+                            else {
+                                throw HostWorkerError.rejected
+                            }
+                            try observe(token)
+                        } catch { self.shutdown() }
+                    }
+                })
+        }
+        if Self.fixtureObserveCommandRetirementStarted != nil {
+            resourceObservers.append(
+                NotificationCenter.default.addObserver(
+                    forName: ExtensionCommandRegistry.retirementStartedNotification, object: nil,
+                    queue: nil
+                ) { [weak self] notification in
+                    let values = notification.userInfo?["tokens"] as? [String]
+                    let tokens = values?.compactMap(UUID.init(uuidString:))
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        do {
+                            guard let values, let tokens, values.count == tokens.count,
+                                let observe = Self.fixtureObserveCommandRetirementStarted
+                            else { throw HostWorkerError.rejected }
+                            try observe(tokens)
+                        } catch { self.shutdown() }
+                    }
+                })
+        }
         #endif
         for (name, registered) in [
             (ExtensionCommandOwnership.registerNotification, true),
@@ -74,9 +114,13 @@ final class HostWorkerApplication {
                             accept?(false)
                             return
                         }
-                        try control.send(
-                            HostWorkerProcessGroup(
-                                pid: pid, generation: identity.generation, registered: registered))
+                        let resource = HostWorkerProcessGroup(
+                            pid: pid, generation: identity.generation, registered: registered)
+                        if registered {
+                            try control.register(resource)
+                        } else {
+                            try control.send(resource)
+                        }
                         accept?(true)
                     } catch { accept?(false) }
                 })
@@ -93,18 +137,21 @@ final class HostWorkerApplication {
         }
         parentWatcher = watcher
         watcher.resume()
-        FileHandle.standardInput.readabilityHandler = { [weak self] handle in
-            let bytes = handle.availableData
-            Task { @MainActor [weak self] in self?.receive(bytes) }
+        FileHandle.standardInput.readabilityHandler = { [weak self, control] handle in
+            do {
+                let requests = try control.receive(handle.availableData)
+                Task { @MainActor [weak self] in self?.receive(requests) }
+            } catch {
+                Task { @MainActor [weak self] in self?.shutdown() }
+            }
         }
         NSApplication.shared.run()
     }
 
-    private func receive(_ bytes: Data) {
+    private func receive(_ requests: [Data]) {
         guard !stopping else { return }
-        guard !bytes.isEmpty else { shutdown(); return }
         do {
-            for frame in try frames.append(bytes) {
+            for frame in requests {
                 let request = try JSONDecoder().decode(HostWorkerRequest.self, from: frame)
                 if request.operation == "navigationReply" {
                     guard let reply = request.navigation, reply.token == request.token,
