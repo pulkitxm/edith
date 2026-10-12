@@ -4,7 +4,7 @@ import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 
-@MainActor struct DocsCommandGroup: AsyncParsableCommand {
+struct DocsCommandGroup: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "docs",
         abstract: "Read the ed reference and ask which command handles a request.",
@@ -33,7 +33,7 @@ import Foundation
     }
 }
 
-@MainActor struct DocsListCommand: AsyncParsableCommand {
+struct DocsListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls", abstract: "List the documentation pages, optionally for one group.",
         discussion: """
@@ -51,7 +51,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let library = try DocsCLI.library()
             let pages = library.pages(inGroup: group)
@@ -81,7 +81,7 @@ import Foundation
     }
 }
 
-@MainActor struct DocsShowCommand: AsyncParsableCommand {
+struct DocsShowCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "show",
         abstract: "Print one page, found by its path or by a command it documents.",
@@ -99,7 +99,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let query = target.joined(separator: " ")
             guard !query.isEmpty else {
@@ -132,7 +132,7 @@ import Foundation
     }
 }
 
-@MainActor struct DocsAskCommand: AsyncParsableCommand {
+struct DocsAskCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ask",
         abstract: "Rank the commands that handle a plain-language request.",
@@ -151,7 +151,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let text = request.joined(separator: " ").trimmingCharacters(in: .whitespaces)
             guard !text.isEmpty else {

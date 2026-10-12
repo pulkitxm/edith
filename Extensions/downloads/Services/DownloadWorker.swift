@@ -71,21 +71,49 @@ private struct DownloadSchedulerActivity: Codable {
     }
 }
 
+private final class DownloadSubscribers: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuations: [UUID: AsyncStream<DownloadWorkerSnapshot>.Continuation] = [:]
+    private var closed = false
+
+    var values: [AsyncStream<DownloadWorkerSnapshot>.Continuation] {
+        lock.withLock { Array(continuations.values) }
+    }
+
+    func add(_ id: UUID, _ continuation: AsyncStream<DownloadWorkerSnapshot>.Continuation) -> Bool {
+        lock.withLock {
+            guard !closed else { return false }
+            continuations[id] = continuation
+            return true
+        }
+    }
+
+    func remove(_ id: UUID) { lock.withLock { continuations[id] = nil } }
+    func closeAdmission() { lock.withLock { closed = true } }
+
+    func finish() {
+        let retained = lock.withLock {
+            closed = true
+            let retained = Array(continuations.values)
+            continuations.removeAll()
+            return retained
+        }
+        for continuation in retained { continuation.finish() }
+    }
+}
+
 public actor DownloadWorker {
     public static let shared = DownloadWorker()
-    private var subscribers: [UUID: AsyncStream<DownloadWorkerSnapshot>.Continuation] = [:]
+    private let subscribers = DownloadSubscribers()
     public func values() throws -> AsyncStream<DownloadWorkerSnapshot> {
         try start()
         let id = UUID()
         return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
-            subscribers[id] = continuation
+            guard subscribers.add(id, continuation) else { continuation.finish(); return }
+            continuation.onTermination = { [subscribers] _ in subscribers.remove(id) }
             continuation.yield(snapshot())
-            continuation.onTermination = { [weak self] _ in
-                Task { await self?.removeSubscriber(id) }
-            }
         }
     }
-    private func removeSubscriber(_ id: UUID) { subscribers.removeValue(forKey: id) }
 
     public typealias RunCommand =
         @Sendable (CLICommandRequest, @escaping @Sendable (String) -> Void) async throws ->
@@ -107,6 +135,7 @@ public actor DownloadWorker {
     private var activityReadError: String?
     private var activityPersistenceError: String?
     private struct Flight {
+        var token: UUID
         var task: Task<Void, Never>
         var progress: Task<Void, Never>?
         var output: DownloadWorkerOutput
@@ -116,6 +145,9 @@ public actor DownloadWorker {
     static let maximumConcurrent = 3
     private var logs: [String: String] = [:]
     private var flights: [UUID: Flight] = [:]
+    private var retiredFlights: [UUID: Task<Void, Never>] = [:]
+    private var stopTask: Task<Void, Never>?
+    private var drainTask: Task<Void, Never>?
     private var started = false
     private var stopping = false
     private let generation = UUID()
@@ -188,13 +220,44 @@ public actor DownloadWorker {
         notify()
     }
 
-    public func stop() async {
+    public func cancelPendingWork() {
         stopping = true
+        subscribers.closeAdmission()
         started = false
         observationTask?.cancel()
-        observationTask = nil
+        for flight in flights.values {
+            flight.task.cancel()
+            flight.progress?.cancel()
+        }
+        for task in retiredFlights.values { task.cancel() }
+        for task in estimates.values { task.cancel() }
+    }
+
+    public func cancelPendingWorkAndWait() async {
+        cancelPendingWork()
+        if let drainTask { await drainTask.value; return }
+        let task = Task { await finishDrain() }
+        drainTask = task
+        await task.value
+    }
+
+    public func stop() async {
+        cancelPendingWork()
+        if let stopTask { await stopTask.value; return }
+        let task = Task {
+            await cancelPendingWorkAndWait()
+            schedulerLease = nil
+            subscribers.finish()
+        }
+        stopTask = task
+        await task.value
+    }
+
+    private func finishDrain() async {
+        let observation = observationTask
         let running = Array(flights.keys)
         for id in running { interrupt(id, reason: "Downloads stopped.") }
+        let retired = Array(retiredFlights.values)
         let tasks = flights.values.map(\.task)
         let progressTasks = flights.values.compactMap(\.progress)
         let estimates = Array(self.estimates.values)
@@ -203,15 +266,16 @@ public actor DownloadWorker {
             flight.task.cancel()
             flight.progress?.cancel()
         }
+        await observation?.value
+        observationTask = nil
         for task in tasks { await task.value }
-        schedulerLease = nil
+        for task in retired { await task.value }
+        for task in Array(retiredFlights.values) { await task.value }
         for task in progressTasks { await task.value }
         for task in estimates { _ = await task.result }
         self.estimates.removeAll()
         notify()
         await publicationTask?.value
-        for continuation in subscribers.values { continuation.finish() }
-        subscribers.removeAll()
     }
 
     public func snapshot() -> DownloadWorkerSnapshot {
@@ -400,7 +464,8 @@ public actor DownloadWorker {
 
     private func startOne() -> Bool {
         guard started, !stopping, let lease = schedulerLease,
-            flights.count < Self.maximumConcurrent, isEnabled(), let executable = executable()
+            flights.count + retiredFlights.count < Self.maximumConcurrent, isEnabled(),
+            let executable = executable()
         else { return false }
         var selected: DownloadRecord?
         do {
@@ -465,7 +530,7 @@ public actor DownloadWorker {
             }
         }
         flights[record.id] = Flight(
-            task: task, progress: progress, output: buffer, publishedRevision: 0)
+            token: UUID(), task: task, progress: progress, output: buffer, publishedRevision: 0)
         notify()
         return true
     }
@@ -511,6 +576,12 @@ public actor DownloadWorker {
     private func finish(_ id: UUID, result: Result<CLICommandResult, Error>) async {
         guard let flight = flights.removeValue(forKey: id) else { return }
         flight.progress?.cancel()
+        retiredFlights[flight.token] = Task { [self, flight] in
+            await flight.task.value
+            await flight.progress?.value
+            retiredFlights[flight.token] = nil
+            startNext()
+        }
         logs[id.uuidString] = flight.output.snapshot.0
         var succeeded = false
         try? update { records in

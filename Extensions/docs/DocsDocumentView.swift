@@ -237,7 +237,10 @@ final class DocsCodeHighlight: @unchecked Sendable {
     private var cache: [Key: Entry] = [:]
 
     init(render: (@Sendable (String, String, Bool) async -> AttributedString?)? = nil) {
-        self.render = render ?? Self.syntax
+        self.render =
+            render ?? { text, language, dark in
+                await Self.syntax(text: text, language: language, dark: dark)
+            }
     }
 
     func highlight(text: String, language: String, dark: Bool) async -> AttributedString? {
@@ -280,12 +283,53 @@ final class DocsCodeHighlight: @unchecked Sendable {
     }
 }
 
+@MainActor enum DocsCopyResetWork {
+    private static var tasks: [UUID: Task<Void, Never>] = [:]
+    private static var deadlines: [UUID: ContinuousClock.Instant] = [:]
+    private static var stopped = false
+
+    static func schedule(_ id: UUID, reset: @escaping @MainActor () -> Void) -> Bool {
+        guard !stopped, tasks[id]?.isCancelled != true,
+            tasks[id] != nil || tasks.count < 512
+        else { return false }
+        deadlines[id] = .now + .seconds(1.4)
+        guard tasks[id] == nil else { return true }
+        tasks[id] = Task {
+            defer { tasks[id] = nil; deadlines[id] = nil }
+            while let deadline = deadlines[id] {
+                do { try await Task.sleep(until: deadline, clock: .continuous) } catch { return }
+                guard !stopped, !Task.isCancelled, let current = deadlines[id] else { return }
+                if ContinuousClock.now >= current { reset(); return }
+            }
+        }
+        return true
+    }
+
+    static func cancel(_ id: UUID) { tasks[id]?.cancel() }
+
+    static func beginSuspension() {
+        stopped = true
+        for task in tasks.values { task.cancel() }
+    }
+
+    static func drain() async {
+        let pending = Array(tasks.values)
+        for task in pending { await task.value }
+    }
+
+    static func enable() {
+        guard tasks.isEmpty else { return }
+        stopped = false
+    }
+}
+
 private struct DocsCodeBlock: View {
     let language: String?
     let text: String
     let dark: Bool
     @State private var highlighted: AttributedString?
     @State private var copied = false
+    @State private var copyResetID = UUID()
 
     private var highlightLanguage: String? { DocsTypography.language(language, text: text) }
 
@@ -325,6 +369,9 @@ private struct DocsCodeBlock: View {
         .overlay(
             RoundedRectangle(cornerRadius: UIScale.pt(9)).strokeBorder(DashSkin.line(dark))
         )
+        .onDisappear {
+            DocsCopyResetWork.cancel(copyResetID); copied = false
+        }
         .pageTask(id: "\(dark)-\(highlightLanguage ?? "")-\(text.hashValue)") {
             guard let language = highlightLanguage else { return }
             highlighted = await DocsCodeHighlight.shared.highlight(
@@ -333,13 +380,10 @@ private struct DocsCodeBlock: View {
     }
 
     private func copy() {
+        guard DocsCopyResetWork.schedule(copyResetID, reset: { copied = false }) else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         copied = true
-        Task {
-            try? await Task.sleep(for: .seconds(1.4))
-            copied = false
-        }
     }
 }
 

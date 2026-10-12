@@ -15,7 +15,7 @@ enum LaTeXCLIEnvironment {
     }
 }
 
-@MainActor struct LaTeXCommand: AsyncParsableCommand {
+struct LaTeXCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "latex",
         abstract: "Edit LaTeX projects, compile PDFs, and review repository changes.",
@@ -32,12 +32,12 @@ enum LaTeXCLIEnvironment {
         ], defaultSubcommand: LaTeXListCommand.self)
 }
 
-@MainActor struct LaTeXTargetOptions: ParsableArguments {
+struct LaTeXTargetOptions: ParsableArguments {
     @Argument(help: "Project UUID from ed latex ls.") var project: String
     @Flag(name: .long, help: "Emit one JSON document on stdout.") var json = false
 }
 
-@MainActor struct LaTeXSaveOptions: ParsableArguments {
+struct LaTeXSaveOptions: ParsableArguments {
     @OptionGroup var target: LaTeXTargetOptions
     @Option(
         name: .long, help: "Revision returned by ed latex read, required to prevent overwrites.")
@@ -175,14 +175,14 @@ struct LaTeXTextEdit: Decodable {
     }
 }
 
-@MainActor struct LaTeXListCommand: AsyncParsableCommand {
+struct LaTeXListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls", abstract: "List source files and repositories in the LaTeX library.",
         discussion:
             "Reads project pointers without fetching source or changing files. Example: ed latex ls --json"
     )
     @Flag(name: .long, help: "Emit project pointers as JSON.") var json = false
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let projects = try LaTeXCLIEnvironment.store.load()
             if json {
@@ -199,7 +199,7 @@ struct LaTeXTextEdit: Decodable {
     }
 }
 
-@MainActor struct LaTeXAddCommand: AsyncParsableCommand {
+struct LaTeXAddCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "add",
         abstract: "Register a local source or a GitHub source in the project library.",
@@ -220,7 +220,7 @@ struct LaTeXTextEdit: Decodable {
         help: "tectonic or pdfLatex, defaults to tectonic on disk and pdfLatex on GitHub.")
     var compiler: String?
     @Flag(name: .long, help: "Emit the registered project as JSON.") var json = false
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             guard (file != nil) != (repo != nil), repo == nil ? source == nil : source != nil,
                 file == nil || branch.isEmpty
@@ -259,7 +259,7 @@ struct LaTeXTextEdit: Decodable {
     }
 }
 
-@MainActor struct LaTeXReadCommand: AsyncParsableCommand {
+struct LaTeXReadCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "read",
         abstract: "Read the complete source and its revision for a checked edit.",
@@ -267,7 +267,7 @@ struct LaTeXTextEdit: Decodable {
             "Reads UTF-8 source from disk or GitHub without changing it. JSON includes the revision needed by write and edit. Example: ed latex read PROJECT --json"
     )
     @OptionGroup var options: LaTeXTargetOptions
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let project = try await LaTeXCLI.current(options.project)
             let source = try await LaTeXCLI.source(project)
@@ -285,7 +285,7 @@ struct LaTeXTextEdit: Decodable {
     }
 }
 
-@MainActor struct LaTeXWriteCommand: AsyncParsableCommand {
+struct LaTeXWriteCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "write",
         abstract: "Replace a project's source from stdin and compile the saved revision.",
@@ -295,7 +295,7 @@ struct LaTeXTextEdit: Decodable {
             Example: ed latex write PROJECT --revision REVISION --yes --json < main.tex
             """)
     @OptionGroup var options: LaTeXSaveOptions
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let project = try await LaTeXCLI.current(options.target.project)
             let source = try await LaTeXCLI.checkedSource(project, revision: options.revision)
@@ -305,7 +305,7 @@ struct LaTeXTextEdit: Decodable {
     }
 }
 
-@MainActor struct LaTeXEditCommand: AsyncParsableCommand {
+struct LaTeXEditCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "edit", abstract: "Apply checked literal replacements to a LaTeX source.",
         discussion: """
@@ -315,7 +315,7 @@ struct LaTeXTextEdit: Decodable {
             Example: ed latex edit PROJECT --revision REVISION --yes --json < edits.json
             """)
     @OptionGroup var options: LaTeXSaveOptions
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let project = try await LaTeXCLI.current(options.target.project)
             let source = try await LaTeXCLI.checkedSource(project, revision: options.revision)
@@ -327,14 +327,14 @@ struct LaTeXTextEdit: Decodable {
     }
 }
 
-@MainActor struct LaTeXCompileCommand: AsyncParsableCommand {
+struct LaTeXCompileCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "compile", abstract: "Rebuild a saved project's PDF locally or on GitHub.",
         discussion:
             "Reads the saved revision and writes a PDF beside a disk source, or reruns the repository's PDF workflow through Pukbot and returns its URL and build status. Source files do not change. Example: ed latex compile PROJECT --json"
     )
     @OptionGroup var options: LaTeXTargetOptions
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let project = try await LaTeXCLI.current(options.project)
             if project.location == .github {
@@ -361,7 +361,7 @@ struct LaTeXTextEdit: Decodable {
     }
 }
 
-@MainActor struct LaTeXReviewCommand: AsyncParsableCommand {
+struct LaTeXReviewCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "review",
         abstract: "Read the pull request, patch, and checks for native Quinjet review.",
@@ -369,7 +369,7 @@ struct LaTeXTextEdit: Decodable {
             "Reads GitHub data for native Quinjet review without changing GitHub or cloning. Example: ed latex review PROJECT --json"
     )
     @OptionGroup var options: LaTeXTargetOptions
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let result = try await LaTeXCLIEnvironment.service.review(
                 LaTeXCLI.project(options.project))
@@ -398,7 +398,7 @@ struct LaTeXTextEdit: Decodable {
     }
 }
 
-@MainActor struct LaTeXPreviewCommand: AsyncParsableCommand {
+struct LaTeXPreviewCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "preview",
         abstract: "Read the current compiled PDF without storing repository artifacts.",
@@ -407,7 +407,7 @@ struct LaTeXTextEdit: Decodable {
     )
     @OptionGroup var options: LaTeXTargetOptions
     @Flag(name: .long, help: "Include base64 PDF bytes in JSON, requires --json.") var data = false
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             guard !data || options.json else { throw CLIFailure.usage("--data requires --json") }
             let project = try await LaTeXCLI.current(options.project)
@@ -437,7 +437,7 @@ struct LaTeXTextEdit: Decodable {
     }
 }
 
-@MainActor struct LaTeXMergeCommand: AsyncParsableCommand {
+struct LaTeXMergeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "merge", abstract: "Squash merge the current pull request through Pukbot.",
         discussion:
@@ -446,7 +446,7 @@ struct LaTeXTextEdit: Decodable {
     @OptionGroup var options: LaTeXTargetOptions
     @Flag(name: .long, help: "Merge when required checks pass.") var auto = false
     @Flag(name: .long, help: "Apply the merge plan on GitHub.") var yes = false
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let project = try LaTeXCLI.project(options.project)
             guard project.location == .github, let number = project.pullRequest else {
@@ -464,7 +464,7 @@ struct LaTeXTextEdit: Decodable {
     }
 }
 
-@MainActor struct LaTeXRemoveCommand: AsyncParsableCommand {
+struct LaTeXRemoveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "remove", abstract: "Remove a project pointer from the LaTeX library.",
         discussion:
@@ -472,7 +472,7 @@ struct LaTeXTextEdit: Decodable {
     )
     @OptionGroup var options: LaTeXTargetOptions
     @Flag(name: .long, help: "Remove the library entry after reviewing the plan.") var yes = false
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let project = try LaTeXCLI.project(options.project)
             let plan = CLIDestructivePlan(

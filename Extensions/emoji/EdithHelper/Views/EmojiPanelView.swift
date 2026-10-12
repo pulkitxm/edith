@@ -29,15 +29,16 @@ struct EmojiPanelView: View {
     static let resultsSectionID = "results"
 
     init(
-        store: EmojiStore, onDismiss: @escaping () -> Void,
+        store: EmojiStore, model: EmojiPanelModel? = nil, onDismiss: @escaping () -> Void,
         onCellAppear: @escaping (EmojiPanelCell.ID) -> Void = { _ in }
     ) {
         self.store = store
         self.onDismiss = onDismiss
         self.onCellAppear = onCellAppear
         _model = State(
-            initialValue: EmojiPanelModel(
-                catalog: store.catalog, frequent: store.frequent, search: store.search))
+            initialValue: model
+                ?? EmojiPanelModel(
+                    catalog: store.catalog, frequent: store.frequent, search: store.search))
     }
 
     static func sections(catalog: EmojiCatalog, frequent: [Emoji], query: String) -> [EmojiSection]
@@ -310,7 +311,7 @@ struct EmojiPanelView: View {
 
     private func resetForShow() {
         model.reset(frequent: store.frequent)
-        DispatchQueue.main.async { searchFocused = true }
+        model.scheduleFocus { searchFocused = true }
     }
 
     private func handleArrow(_ press: KeyPress) -> KeyPress.Result {
@@ -343,13 +344,7 @@ struct EmojiPanelView: View {
     }
 
     private func activate(_ emoji: Emoji?, copyOnly: Bool, tone: EmojiSkinTone? = nil) {
-        guard let emoji else { return }
-        onDismiss()
-        if copyOnly {
-            store.copy(emoji, tone: tone)
-        } else {
-            store.insert(emoji, tone: tone)
-        }
+        model.activate(emoji, copyOnly: copyOnly, tone: tone, store: store, onDismiss: onDismiss)
     }
 
     private func openPreferences() {

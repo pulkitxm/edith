@@ -54,12 +54,21 @@ import Observation
             }
         }
     }
-    func stop() {
-        guard !stopped else { return }
+    func beginCommandDrain() {
         stopped = true
-        operations.cancel()
-        client.invalidate()
+        operations.beginCommandDrain()
         for task in tasks.values { task.cancel() }
-        tasks.removeAll()
+    }
+
+    func stop() {
+        beginCommandDrain()
+        client.invalidate()
+    }
+
+    func stopAndWait() async {
+        stop()
+        let pending = Array(tasks.values)
+        for task in pending { await task.value }
+        await operations.cancelPendingWorkAndWait()
     }
 }

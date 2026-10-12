@@ -14,6 +14,10 @@ final class ExtensionRuntime: NSObject {
     private let commands = ExtensionCommandRegistry()
     private var applicationQuit: LidAwakeApplicationQuitContext?
     private var stopPrepared = false
+    private var suspended = false
+    private var suspension: Task<Void, Never>?
+    private var stopTask: Task<Void, Never>?
+    private var uiRetirements: [UUID: Task<Void, Never>] = [:]
 
     override init() { super.init() }
     init(worker: LidAwakeWorker) { self.worker = worker; super.init() }
@@ -32,12 +36,41 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        commands.suspend()
+        suspended = true
+        let worker = worker
+        let model = uiModel
+        worker?.beginCommandDrain()
+        model?.beginCommandDrain()
+        if suspension == nil {
+            let retired = Array(uiRetirements.values)
+            suspension = Task { [self, worker, model] in
+                await worker?.cancelPendingWorkAndWait()
+                await model?.stopAndWait()
+                await commands.suspendAndWait()
+                for task in retired { await task.value }
+            }
+        }
+        let pending = suspension
+        Task { [self] in
+            await pending?.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
     @objc(prepareDisableWithCompletion:)
     func prepareDisable(completion: @escaping (NSError?) -> Void) {
-        Task {
+        suspendCommands(completion: {})
+        let worker = worker
+        let pending = suspension
+        Task { [self, worker] in
+            await pending?.value
             do { try await worker?.prepareDisable(); completion(nil) } catch {
                 completion(error as NSError)
             }
+            withExtendedLifetime(self) {}
         }
     }
 
@@ -52,6 +85,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
+            guard !suspended else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
                 SurfaceHostContext.current != nil
@@ -61,11 +95,12 @@ final class ExtensionRuntime: NSObject {
                 surface = LidAwakeSurface(worker: created)
             }
         case "prepareApplicationQuit":
-            guard worker != nil, !stopPrepared, applicationQuit == nil,
+            guard worker != nil, !stopPrepared, stopTask == nil, applicationQuit == nil,
                 let context = LidAwakeApplicationQuitContext(input: input)
             else { return ["ok": false] as NSDictionary }
             applicationQuit = context
         case "configureUI":
+            guard !suspended, uiRetirements.isEmpty else { return ["ok": false] as NSDictionary }
             guard let configuration = ExtensionUIConfiguration(context: input),
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
@@ -78,39 +113,65 @@ final class ExtensionRuntime: NSObject {
         case "synchronize": worker?.engine.syncSettings()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
-            commands.shutdown(); worker?.shutdown(); worker = nil; surface = nil
+            prepareToStop(completion: {})
         case "status": return ["ok": true, "running": worker != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
     }
     private func stopUI() {
-        uiModel?.stop(); uiModel = nil
-        uiClient?.invalidate(); uiClient = nil
+        let model = uiModel
+        model?.stop()
+        if let model {
+            let id = UUID()
+            uiRetirements[id] = Task { [self, model] in
+                await model.stopAndWait()
+                uiRetirements[id] = nil
+            }
+        }
+        uiModel = nil
+        uiClient?.invalidate()
+        uiClient = nil
     }
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        guard !stopPrepared else { completion(); return }
-        Task {
-            await commands.shutdownAndWait()
-            var quitPrepared = false
-            if let applicationQuit {
-                do {
-                    try await worker?.prepareApplicationQuit(applicationQuit); quitPrepared = true
-                } catch { quitPrepared = false }
-            }
-            if !quitPrepared {
-                while true {
-                    do { try await worker?.prepareDisable(); break } catch {
-                        try? await Task.sleep(for: .milliseconds(100))
-                    }
+        suspendCommands(completion: {})
+        commands.shutdown()
+        if stopTask == nil {
+            let worker = worker
+            let applicationQuit = applicationQuit
+            let pending = suspension
+            stopTask = Task { [self, worker] in
+                await pending?.value
+                await commands.shutdownAndWait()
+                var quitPrepared = false
+                if let applicationQuit {
+                    do {
+                        try await worker?.prepareApplicationQuit(applicationQuit)
+                        quitPrepared = true
+                    } catch { quitPrepared = false }
                 }
-                await worker?.prepareToStop()
+                if !quitPrepared {
+                    while true {
+                        do { try await worker?.prepareDisable(); break } catch {
+                            try? await Task.sleep(for: .milliseconds(100))
+                        }
+                    }
+                    await worker?.prepareToStop()
+                }
+                stopUI()
+                for task in Array(uiRetirements.values) { await task.value }
+                self.applicationQuit = nil
+                self.worker = nil
+                surface = nil
+                stopPrepared = true
             }
-            applicationQuit = nil
-            stopPrepared = true
-            completion()
+        }
+        let pending = stopTask
+        Task { [self] in
+            await pending?.value
+            withExtendedLifetime(self) { completion() }
         }
     }
 }

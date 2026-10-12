@@ -178,9 +178,18 @@ import Foundation
         try? FileManager.default.removeItem(at: export.root)
     }
 
-    func shutdown() {
+    func cancelPendingWork() {
         stopped = true
-        reaper?.cancel(); reaper = nil
+        reaper?.cancel()
+    }
+
+    func drain() async {
+        cancelPendingWork()
+        await reaper?.value
+    }
+
+    func shutdown() {
+        cancelPendingWork()
         for id in Array(exports.keys) { close(id) }
     }
 }

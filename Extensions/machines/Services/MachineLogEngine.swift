@@ -57,7 +57,8 @@ private final class MachineLogBuffer: @unchecked Sendable {
     private let containers: @MainActor (MachineSession) -> [DockerContainer]
     private let process: @MainActor (MachineSession, DockerContainer) throws -> Process
     private var logs: [UUID: Log] = [:]
-    private var retired: [SSHLineStream] = []
+    private var retired: [UUID: Task<Void, Never>] = [:]
+    private var draining: Task<Void, Never>?
     private var reaper: Task<Void, Never>?
     private var stopped = false
 
@@ -88,7 +89,7 @@ private final class MachineLogBuffer: @unchecked Sendable {
         guard !stopped else { throw MachineUIError.unavailable }
         switch request.operation {
         case .start:
-            guard logs.count < 8 else { throw MachineUIError.unavailable }
+            guard logs.count + retired.count < 8 else { throw MachineUIError.unavailable }
             let session = try session(request.machineID)
             guard let container = containers(session).first(where: { $0.id == request.containerID })
             else { throw MachineUIError.invalidRequest }
@@ -137,8 +138,12 @@ private final class MachineLogBuffer: @unchecked Sendable {
     private func retire(_ id: UUID) {
         guard let log = logs.removeValue(forKey: id) else { return }
         log.stream.cancel()
-        log.owner.release(log.stream)
-        retired.append(log.stream)
+        retired[id] = Task { [self, log] in
+            _ = await log.stream.waitForExit()
+            await log.stream.waitForProcessExit()
+            log.owner.release(log.stream)
+            retired[id] = nil
+        }
     }
 
     private func startReaper() {
@@ -156,15 +161,30 @@ private final class MachineLogBuffer: @unchecked Sendable {
     }
 
     private func drainRetired() async {
-        let streams = retired
-        retired = []
-        for stream in streams { await stream.waitForProcessExit() }
+        for task in Array(retired.values) { await task.value }
+    }
+
+    func cancelPendingWork() {
+        stopped = true
+        reaper?.cancel()
+        for id in Array(logs.keys) { retire(id) }
+    }
+
+    func drain() async {
+        cancelPendingWork()
+        if let draining { await draining.value; return }
+        let running = reaper
+        let retained = Array(retired.values)
+        let task = Task {
+            await running?.value
+            for task in retained { await task.value }
+        }
+        draining = task
+        await task.value
     }
 
     func shutdown() async {
-        stopped = true
-        reaper?.cancel(); reaper = nil
-        for id in Array(logs.keys) { retire(id) }
-        await drainRetired()
+        await drain()
+        reaper = nil
     }
 }

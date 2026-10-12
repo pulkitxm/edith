@@ -32,7 +32,15 @@ final class EmojiPanel: NSObject, NSWindowDelegate {
     private var panel: NSPanel?
     private var hosting: NSHostingView<AnyView>?
     private var showTask: Task<Void, Never>?
+    private var model: EmojiPanelModel?
+    private var retiredModels: [UUID: Task<Void, Never>] = [:]
     private var showGeneration = 0
+    private var stopped = false
+    private var pendingShow: (PopupPosition, NSSize, Int)?
+    private var showToken: UUID?
+    private var positionJoin: Task<Void, Never>?
+    private var callbackWork: [UUID: Task<Void, Never>] = [:]
+    private var callbackKinds = Set<String>()
 
     var isVisible: Bool { panel?.isVisible ?? false }
 
@@ -45,7 +53,7 @@ final class EmojiPanel: NSObject, NSWindowDelegate {
     }
 
     func show() {
-        guard store != nil, let panel else { return }
+        guard !stopped, store != nil, let panel else { return }
         NotificationCenter.default.post(name: Self.willShow, object: nil)
         panel.setContentSize(NSSize(width: Self.width, height: Self.height))
         let position = PopupPosition.stored(forKey: AppStorageKeys.Emoji.popupAt)
@@ -53,16 +61,41 @@ final class EmojiPanel: NSObject, NSWindowDelegate {
         showGeneration += 1
         let generation = showGeneration
         showTask?.cancel()
-        showTask = Task.detached { [weak self] in
-            let origin = await position.origin(
-                size: size, statusItemFrame: nil, anchors: .emoji)
-            guard !Task.isCancelled else { return }
-            await self?.finishShow(origin: origin, generation: generation)
+        pendingShow = (position, size, generation)
+        startShow()
+    }
+
+    private func startShow() {
+        guard !stopped, showTask == nil, let (position, size, generation) = pendingShow else {
+            return
+        }
+        pendingShow = nil
+        let token = UUID()
+        showToken = token
+        let task = Task.detached { [self] in
+            let origin = await position.origin(size: size, statusItemFrame: nil, anchors: .emoji)
+            let cancelled = Task.isCancelled
+            await finishPosition(
+                origin: origin, generation: generation, token: token, cancelled: cancelled)
+        }
+        showTask = task
+        positionJoin = Task { [self, task] in
+            await task.value
+            guard showToken == token else { return }
+            showTask = nil
+            showToken = nil
+            positionJoin = nil
+            startShow()
         }
     }
 
+    private func finishPosition(origin: NSPoint, generation: Int, token: UUID, cancelled: Bool) {
+        guard showToken == token else { return }
+        if !cancelled { finishShow(origin: origin, generation: generation) }
+    }
+
     private func finishShow(origin: NSPoint, generation: Int) {
-        guard generation == showGeneration, let panel else { return }
+        guard !stopped, generation == showGeneration, let panel else { return }
         panel.setFrameOrigin(origin)
         panel.orderFrontRegardless()
         panel.makeKey()
@@ -71,19 +104,59 @@ final class EmojiPanel: NSObject, NSWindowDelegate {
     func hide() {
         showGeneration += 1
         showTask?.cancel()
-        showTask = nil
+        pendingShow = nil
         panel?.orderOut(nil)
         NotificationCenter.default.post(name: Self.didHide, object: nil)
     }
 
+    private func startCallback(_ kind: String, _ operation: @escaping @MainActor () -> Void) {
+        guard !stopped, callbackKinds.insert(kind).inserted else { return }
+        let id = UUID()
+        callbackWork[id] = Task { [self] in
+            defer { callbackWork[id] = nil; callbackKinds.remove(kind) }
+            guard !stopped, !Task.isCancelled else { return }
+            operation()
+        }
+    }
+
+    func cancelPendingWork() {
+        stopped = true
+        hide()
+        model?.stop()
+        for task in callbackWork.values { task.cancel() }
+    }
+
+    func drain() async {
+        cancelPendingWork()
+        let model = model
+        let pending = Array(callbackWork.values) + Array(retiredModels.values)
+        await showTask?.value
+        await positionJoin?.value
+        await model?.stopAndWait()
+        for task in pending { await task.value }
+    }
+
     private func mountRootView() {
+        if let model {
+            model.stop()
+            let id = UUID()
+            retiredModels[id] = Task { [self, model] in
+                await model.stopAndWait()
+                retiredModels[id] = nil
+            }
+            self.model = nil
+        }
         guard let store else {
             hosting?.rootView = AnyView(EmptyView())
             return
         }
+        guard !stopped else { return }
         if panel == nil { makePanel() }
+        let model = EmojiPanelModel(
+            catalog: store.catalog, frequent: store.frequent, search: store.search)
+        self.model = model
         hosting?.rootView = AnyView(
-            EmojiPanelView(store: store, onDismiss: { [weak self] in self?.hide() }))
+            EmojiPanelView(store: store, model: model, onDismiss: { [weak self] in self?.hide() }))
         hosting?.layoutSubtreeIfNeeded()
     }
 
@@ -129,16 +202,20 @@ final class EmojiPanel: NSObject, NSWindowDelegate {
     }
 
     nonisolated func windowDidResignKey(_ notification: Notification) {
-        Task { @MainActor in EmojiPanel.shared.hide() }
+        MainActor.assumeIsolated {
+            startCallback("hide") { [self] in hide() }
+        }
     }
 
     nonisolated func windowDidMove(_ notification: Notification) {
-        Task { @MainActor in
-            guard let panel = EmojiPanel.shared.panel, panel.isVisible,
-                NSEvent.pressedMouseButtons & 1 == 1
-            else { return }
-            PopupPosition.saveLastPosition(
-                frame: panel.frame, screen: panel.screen, anchors: .emoji)
+        MainActor.assumeIsolated {
+            startCallback("move") { [self] in
+                guard let panel = panel, panel.isVisible,
+                    NSEvent.pressedMouseButtons & 1 == 1
+                else { return }
+                PopupPosition.saveLastPosition(
+                    frame: panel.frame, screen: panel.screen, anchors: .emoji)
+            }
         }
     }
 }

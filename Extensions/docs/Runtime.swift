@@ -13,6 +13,9 @@ final class ExtensionRuntime: NSObject {
     private var cliStreams: ExtensionCLIStreams?
     private var stopped = false
     private var activeCalls = 0
+    private var suspended = false
+    private var suspension: Task<Void, Never>?
+    private var uiRetirements: [UUID: Task<Void, Never>] = [:]
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -41,18 +44,51 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        commands.suspend()
+        suspended = true
+        DocsCopyResetWork.beginSuspension()
+        let browser = browser
+        let uiBrowser = uiBrowser
+        let streams = cliStreams
+        browser?.cancelPendingWork()
+        uiBrowser?.cancelPendingWork()
+        streams?.stop()
+        if suspension == nil {
+            let retired = Array(uiRetirements.values)
+            suspension = Task { [self, browser, uiBrowser, streams] in
+                await commands.suspendAndWait()
+                await DocsCopyResetWork.drain()
+                await browser?.drain()
+                await uiBrowser?.drain()
+                await streams?.stopAndWait()
+                for task in retired { await task.value }
+            }
+        }
+        let pending = suspension
+        Task { [self] in
+            await pending?.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        suspendCommands(completion: {})
         stopped = true
         let streams = cliStreams; cliStreams = nil; streams?.stop()
         commands.shutdown()
         let browser = browser
-        browser?.shutdown()
-        Task {
+        browser?.cancelPendingWork()
+        Task { [self, browser, streams] in
+            await suspension?.value
             await browser?.drain()
             while activeCalls > 0 { await Task.yield() }
             await streams?.stopAndWait()
             await commands.shutdownAndWait()
+            browser?.shutdown()
+            for task in Array(uiRetirements.values) { await task.value }
             completion()
         }
     }
@@ -68,15 +104,29 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
+            guard !suspended, uiRetirements.isEmpty else { return ["ok": false] as NSDictionary }
             guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "docs", let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
             engineClient = client
+            DocsCopyResetWork.enable()
             uiBrowser = DocsBrowser(remote: DocsUIBridge(client: client))
         case "stopUI":
-            uiBrowser?.shutdown(); uiBrowser = nil
+            DocsCopyResetWork.beginSuspension()
+            if let browser = uiBrowser {
+                browser.cancelPendingWork()
+                let id = UUID()
+                uiRetirements[id] = Task { [self, browser] in
+                    await browser.drain()
+                    await DocsCopyResetWork.drain()
+                    browser.shutdown()
+                    uiRetirements[id] = nil
+                }
+            }
+            uiBrowser = nil
             engineClient?.invalidate(); engineClient = nil
         case "start":
+            guard !suspended else { return ["ok": false] as NSDictionary }
             guard !stopped, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }

@@ -7,7 +7,9 @@ final class OwnedTerminalPTY {
     static let maximumInputBytes = 16_384
     private let descriptor: Int32
     private let pid: pid_t
+    private let identity: ExtensionProcessIdentity
     private var closed = false
+    private var closing: Task<Void, Never>?
     private var pendingInput = Data()
     private var output = Data()
     private(set) var offset: UInt64 = 0
@@ -21,23 +23,55 @@ final class OwnedTerminalPTY {
         let echo: Bool
     }
 
-    init(launch: OwnedTerminalLaunch, columns: UInt16 = 80, rows: UInt16 = 24) throws {
+    @MainActor init(
+        launch: OwnedTerminalLaunch, columns: UInt16 = 80, rows: UInt16 = 24,
+        admission: () throws -> Void
+    ) async throws {
         guard columns > 0, rows > 0, launch.executable.hasPrefix("/"),
             !([launch.executable, launch.currentDirectory] + launch.arguments + launch.environment)
                 .contains(where: { $0.utf8.contains(0) })
         else { throw POSIXError(.EINVAL) }
+        try Task.checkCancellation()
         let spawned = try Self.spawn(launch, columns: columns, rows: rows)
-        descriptor = spawned.master
-        pid = spawned.pid
-        _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
-        _ = fcntl(descriptor, F_SETFL, O_NONBLOCK)
-        do {
-            try ExtensionCommandOwnership.register(pid)
-        } catch {
-            close()
+        do { try await Self.awaitReady(spawned.ready) } catch {
+            await Self.discard(spawned)
             throw error
         }
-        if let command = launch.startupCommand { try send(Data((command + "\n").utf8)) }
+        guard let originalIdentity = ExtensionProcessIdentity.read(spawned.pid) else {
+            await Self.discard(spawned)
+            throw POSIXError(.ESRCH)
+        }
+        var registered = false
+        do {
+            guard fcntl(spawned.master, F_SETFD, FD_CLOEXEC) == 0,
+                fcntl(spawned.master, F_SETFL, O_NONBLOCK) == 0
+            else { throw Self.error() }
+            try Task.checkCancellation()
+            try admission()
+            try ExtensionCommandOwnership.register(spawned.pid)
+            registered = true
+            try Task.checkCancellation()
+            var admission: UInt8 = 1
+            var count: Int
+            repeat {
+                count = Darwin.write(spawned.gate, &admission, 1)
+            } while count < 0 && errno == EINTR
+            guard count == 1 else { throw Self.error() }
+        } catch {
+            await Self.discard(spawned)
+            if registered { ExtensionCommandOwnership.release(spawned.pid) }
+            throw error
+        }
+        Darwin.close(spawned.gate)
+        descriptor = spawned.master
+        pid = spawned.pid
+        identity = originalIdentity
+        do {
+            if let command = launch.startupCommand { try send(Data((command + "\n").utf8)) }
+        } catch {
+            await closeAndWait()
+            throw error
+        }
     }
 
     deinit { close() }
@@ -82,17 +116,57 @@ final class OwnedTerminalPTY {
         Darwin.close(descriptor)
         pendingInput.removeAll()
         output.removeAll()
-        observeExit()
-        let members = sessionMembers()
-        for member in members where member.isAlive { _ = kill(member.pid, SIGHUP) }
-        _ = kill(-pid, SIGHUP)
-        _ = kill(pid, SIGHUP)
-        for member in members where member.isAlive { _ = kill(member.pid, SIGKILL) }
-        _ = kill(-pid, SIGKILL)
-        _ = kill(pid, SIGKILL)
-        ExtensionCommandOwnership.release(pid)
-        var status: Int32 = 0
-        while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
+        let identifier = pid
+        let identity = identity
+        closing = Task.detached {
+            let members = identity.isAlive ? (Self.sessionMembers(identifier) ?? []) : []
+            for member in members where member.isAlive { _ = kill(member.pid, SIGHUP) }
+            if identity.isAlive, getpgid(identifier) == identifier {
+                _ = kill(-identifier, SIGHUP)
+            }
+            if identity.isAlive { _ = kill(identifier, SIGHUP) }
+            for member in members where member.isAlive { _ = kill(member.pid, SIGKILL) }
+            if identity.isAlive, getpgid(identifier) == identifier {
+                _ = kill(-identifier, SIGKILL)
+            }
+            if identity.isAlive { _ = kill(identifier, SIGKILL) }
+            while true {
+                if identity.isAlive, getpgid(identifier) == identifier {
+                    _ = kill(-identifier, SIGKILL)
+                }
+                if identity.isAlive { _ = kill(identifier, SIGKILL) }
+                var information = siginfo_t()
+                var observed: Int32
+                repeat {
+                    observed = waitid(
+                        P_PID, id_t(identifier), &information, WEXITED | WNOHANG | WNOWAIT)
+                } while observed < 0 && errno == EINTR
+                let leaderReturned = observed == 0 && information.si_pid == identifier
+                guard identity.isAlive || leaderReturned else {
+                    try? await Task.sleep(for: .milliseconds(10))
+                    continue
+                }
+                guard let remaining = Self.sessionMembers(identifier) else {
+                    try? await Task.sleep(for: .milliseconds(10))
+                    continue
+                }
+                if remaining.isEmpty, leaderReturned { break }
+                for member in remaining where member.isAlive { _ = kill(member.pid, SIGKILL) }
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+            var status: Int32 = 0
+            while true {
+                if waitpid(identifier, &status, 0) == identifier { break }
+                if errno == ECHILD, !identity.isAlive { break }
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+            ExtensionCommandOwnership.release(identifier)
+        }
+    }
+
+    func closeAndWait() async {
+        close()
+        await closing?.value
     }
 
     private func poll(after cursor: UInt64) throws {
@@ -159,18 +233,47 @@ final class OwnedTerminalPTY {
         }
     }
 
-    private func sessionMembers() -> [ExtensionProcessIdentity] {
+    private static func sessionMembers(_ pid: pid_t) -> [ExtensionProcessIdentity]? {
         var identifiers = [pid_t](repeating: 0, count: 65_536)
         let count = identifiers.withUnsafeMutableBytes {
             proc_listallpids($0.baseAddress, Int32($0.count))
         }
-        guard count > 0, count <= identifiers.count else { return [] }
-        return identifiers.prefix(Int(count)).compactMap { candidate in
-            guard candidate > 1, candidate != pid, getsid(candidate) == pid,
-                let identity = ExtensionProcessIdentity.read(candidate)
-            else { return nil }
-            return identity
+        guard count > 0, count < identifiers.count else { return nil }
+        var members: [ExtensionProcessIdentity] = []
+        for candidate in identifiers.prefix(Int(count)) {
+            guard candidate > 1, candidate != pid, getsid(candidate) == pid else { continue }
+            guard let identity = ExtensionProcessIdentity.read(candidate) else { return nil }
+            members.append(identity)
         }
+        return members
+    }
+
+    private static func awaitReady(_ descriptor: Int32) async throws {
+        let readiness = Task.detached {
+            defer { Darwin.close(descriptor) }
+            var ready: UInt8 = 0
+            var count: Int
+            repeat { count = Darwin.read(descriptor, &ready, 1) } while count < 0 && errno == EINTR
+            guard count == 1, ready == 1 else { throw POSIXError(.EIO) }
+        }
+        try await readiness.value
+    }
+
+    private static func discard(_ spawned: (pid: pid_t, master: Int32, gate: Int32, ready: Int32))
+        async
+    {
+        Darwin.close(spawned.gate)
+        Darwin.close(spawned.master)
+        let identifier = spawned.pid
+        let cleanup = Task.detached {
+            var status: Int32 = 0
+            while true {
+                if waitpid(identifier, &status, 0) == identifier { return }
+                if errno == ECHILD { return }
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        await cleanup.value
     }
 
     private static func error() -> POSIXError {
@@ -178,13 +281,37 @@ final class OwnedTerminalPTY {
     }
 
     private static func spawn(_ launch: OwnedTerminalLaunch, columns: UInt16, rows: UInt16) throws
-        -> (pid: pid_t, master: Int32)
+        -> (pid: pid_t, master: Int32, gate: Int32, ready: Int32)
     {
         let argv = ([launch.executable] + launch.arguments).map { strdup($0) }
         let env = launch.environment.map { strdup($0) }
         defer { for pointer in argv + env { free(pointer) } }
         guard argv.allSatisfy({ $0 != nil }), env.allSatisfy({ $0 != nil }) else {
             throw POSIXError(.ENOMEM)
+        }
+        var gate = [Int32](repeating: -1, count: 2)
+        guard pipe(&gate) == 0 else { throw error() }
+        guard fcntl(gate[0], F_SETFD, FD_CLOEXEC) == 0,
+            fcntl(gate[1], F_SETFD, FD_CLOEXEC) == 0,
+            fcntl(gate[1], F_SETNOSIGPIPE, 1) == 0
+        else {
+            let failure = error()
+            Darwin.close(gate[0]); Darwin.close(gate[1])
+            throw failure
+        }
+        var ready = [Int32](repeating: -1, count: 2)
+        guard pipe(&ready) == 0 else {
+            let failure = error()
+            Darwin.close(gate[0]); Darwin.close(gate[1])
+            throw failure
+        }
+        guard fcntl(ready[0], F_SETFD, FD_CLOEXEC) == 0,
+            fcntl(ready[1], F_SETFD, FD_CLOEXEC) == 0,
+            fcntl(ready[1], F_SETNOSIGPIPE, 1) == 0
+        else {
+            let failure = error()
+            for descriptor in gate + ready { Darwin.close(descriptor) }
+            throw failure
         }
         var arguments = argv + [nil]
         var variables = env + [nil]
@@ -222,6 +349,22 @@ final class OwnedTerminalPTY {
                             sigaction(SIGQUIT, &action, nil)
                             sigaction(SIGPIPE, &action, nil)
                             sigaction(SIGTERM, &action, nil)
+                            Darwin.close(ready[0])
+                            var readiness: UInt8 = 1
+                            var written: Int
+                            repeat {
+                                written = Darwin.write(ready[1], &readiness, 1)
+                            } while written < 0 && errno == EINTR
+                            Darwin.close(ready[1])
+                            guard written == 1 else { _exit(126) }
+                            Darwin.close(gate[1])
+                            var admission: UInt8 = 0
+                            var count: Int
+                            repeat {
+                                count = Darwin.read(gate[0], &admission, 1)
+                            } while count < 0 && errno == EINTR
+                            Darwin.close(gate[0])
+                            guard count == 1, admission == 1 else { _exit(126) }
                             var descriptor: Int32 = 3
                             while descriptor < maximumDescriptor {
                                 Darwin.close(descriptor)
@@ -236,7 +379,14 @@ final class OwnedTerminalPTY {
                 }
             }
         }
-        guard pid > 0 else { throw error() }
-        return (pid, master)
+        Darwin.close(gate[0])
+        Darwin.close(ready[1])
+        guard pid > 0 else {
+            let failure = error()
+            Darwin.close(gate[1]); Darwin.close(ready[0])
+            if master >= 0 { Darwin.close(master) }
+            throw failure
+        }
+        return (pid, master, gate[1], ready[0])
     }
 }

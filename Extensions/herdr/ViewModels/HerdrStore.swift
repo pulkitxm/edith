@@ -111,7 +111,12 @@ final class HerdrStore {
     private var adoptingUI = false
     private var uiMutation: Task<Void, Never>?
     private var uiPoll: Task<Void, Never>?
+    private var uiRetirements: [UUID: Task<Void, Never>] = [:]
+    private var uiRequests: [UUID: Task<Data, Error>] = [:]
+    private var terminalRequests: [UUID: Task<Void, Error>] = [:]
+    private var workSuspended = false
     private var uiDirty = false
+    private var wantsUIWatch = false
     private(set) var uiError: String?
     func configureRenderingOnly() {
         HerdrIPC.stopObserving(machinesObserver)
@@ -568,13 +573,15 @@ final class HerdrStore {
     var openIDs: Set<String> { Set(sessions.map(\.id)) }
 
     func watch() async {
+        guard !workSuspended else { return }
         if let uiClient {
-            guard uiPoll == nil else { return }
+            wantsUIWatch = true
+            guard uiPoll == nil, uiRetirements.isEmpty else { return }
             uiPoll = Task { [weak self] in
                 while !Task.isCancelled {
                     guard let self else { return }
                     do {
-                        let data = try await uiClient.perform("herdr.ui.read")
+                        let data = try await self.requestUI("herdr.ui.read")
                         if !self.uiDirty, self.uiMutation == nil,
                             let state = try uiClient.state(data)
                         {
@@ -598,7 +605,7 @@ final class HerdrStore {
         watchTask?.cancel()
         watchTask = HerdrWorkOwnership.start { [weak self] in
             await liveWatcher { hosts in
-                Task { @MainActor in
+                HerdrWorkOwnership.enqueue {
                     guard !Task.isCancelled else { return }
                     guard let self, self.watchGeneration == generation, self.watchTask != nil else {
                         return
@@ -615,6 +622,10 @@ final class HerdrStore {
     }
 
     func stopRendering() {
+        workSuspended = true
+        for task in terminalRequests.values { task.cancel() }
+        for tab in sessions + Array(detachedTabs.values) { tab.quinjet.cancelPendingWork() }
+        for task in uiRequests.values { task.cancel() }
         terminalUI?.invalidate()
         guard let uiClient else { return }
         uiClient.stop()
@@ -627,7 +638,56 @@ final class HerdrStore {
         for model in uiSpaces.values { model.uiChanged = nil; model.stopAll() }
     }
 
+    func performTerminalWork(_ operation: @escaping @MainActor () async throws -> Void)
+        async throws
+    {
+        guard !workSuspended else { throw CancellationError() }
+        let id = UUID()
+        let task = Task {
+            try Task.checkCancellation()
+            try await operation()
+        }
+        terminalRequests[id] = task
+        defer { terminalRequests[id] = nil }
+        try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    func cancelPendingWork() {
+        workSuspended = true
+        for task in terminalRequests.values { task.cancel() }
+        for tab in sessions + Array(detachedTabs.values) { tab.quinjet.cancelPendingWork() }
+        if uiClient != nil { stopRendering() }
+        stopWatching()
+        uiMutation?.cancel()
+        for task in agentStartupTasks.values { task.cancel() }
+    }
+
+    func drain() async {
+        cancelPendingWork()
+        let holders = terminalHolders
+        let polling = Array(uiRetirements.values)
+        let requests = Array(uiRequests.values)
+        let terminals = Array(terminalRequests.values)
+        let diffs = (sessions + Array(detachedTabs.values)).map(\.quinjet)
+        let spaces = Array(uiSpaceTasks.values)
+        let presentations = Array(uiPresentationTasks.values)
+        await uiMutation?.value
+        for task in polling { await task.value }
+        for task in requests { _ = await task.result }
+        for task in terminals { _ = await task.result }
+        for session in diffs { await session.cancelPendingWorkAndWait() }
+        for task in spaces { await task.value }
+        for task in presentations { await task.value }
+        for holder in holders { await holder.stopRenderingAndWait() }
+        await HerdrWorkOwnership.shutdown()
+    }
+
     func shutdown() async {
+        await drain()
         if uiClient != nil {
             stopRendering()
             await terminalPanels.shutdownRendering()
@@ -648,11 +708,11 @@ final class HerdrStore {
         HerdrIPC.stopObserving(machinesObserver)
         machinesObserver = nil
         for tab in sessions + Array(detachedTabs.values) {
-            tab.holder.stop()
-            tab.quinjet.stop()
+            await tab.holder.stopAndWait()
+            await tab.quinjet.stopAndWait()
         }
         for terminal in terminalPanels.terminals.values {
-            terminal.holder.stop()
+            await terminal.holder.stopAndWait()
             await terminal.scroll.shutdownAndWait()
         }
         await watcher?.value
@@ -670,8 +730,17 @@ final class HerdrStore {
     }
 
     func stopWatching() {
-        uiPoll?.cancel()
-        uiPoll = nil
+        wantsUIWatch = false
+        if let task = uiPoll {
+            task.cancel()
+            let id = UUID()
+            uiRetirements[id] = Task { [self, task] in
+                await task.value
+                uiRetirements[id] = nil
+                if wantsUIWatch, !workSuspended { await watch() }
+            }
+            uiPoll = nil
+        }
         watchGeneration += 1
         watchTask?.cancel()
         watchTask = nil
@@ -688,6 +757,7 @@ final class HerdrStore {
     }
 
     func refresh() async {
+        guard !workSuspended else { return }
         if uiClient != nil {
             try? await performUI("herdr.ui.refresh")
             return
@@ -703,6 +773,7 @@ final class HerdrStore {
     private(set) var settling = false
 
     func settle(_ snapshots: [HerdrHostSnapshot]) {
+        guard !workSuspended else { return }
         pendingHosts = snapshots
         guard settleTask == nil else { return }
         if !settling { flush() }
@@ -2433,7 +2504,7 @@ final class HerdrStore {
     }
 
     private func scheduleSpaceChange(_ id: String) {
-        guard let client = uiClient, !adoptingUI else { return }
+        guard !workSuspended, let client = uiClient, !adoptingUI else { return }
         uiSpaceDirty.insert(id)
         guard uiSpaceTasks[id] == nil else { return }
         uiSpaceTasks[id] = Task { [weak self] in
@@ -2448,7 +2519,7 @@ final class HerdrStore {
                     let payload = try JSONEncoder().encode(
                         HerdrUISpaceMutation(
                             baseline: baseline, space: model.uiState(token: baseline.token)))
-                    let data = try await client.perform("herdr.ui.space.layout", payload: payload)
+                    let data = try await self.requestUI("herdr.ui.space.layout", payload: payload)
                     guard let state = try client.state(data),
                         let next = state.spaces.first(where: { $0.id == id })
                     else { throw ExtensionPeerError.unavailable }
@@ -2460,7 +2531,8 @@ final class HerdrStore {
     }
 
     func requestPresentation(kind: String, id: String, agents: [String]? = nil) {
-        guard let client = uiClient, let origin = uiPresentationID, uiPresentationTasks.count < 8
+        guard !workSuspended, uiClient != nil, let origin = uiPresentationID,
+            uiPresentationTasks.count < 8
         else { return }
         let taskID = UUID()
         uiPresentationTasks[taskID] = Task { [weak self] in
@@ -2470,7 +2542,7 @@ final class HerdrStore {
                 await self.uiMutation?.value
                 var object: [String: Any] = ["kind": kind, "id": id]
                 if let agents { object["agentIDs"] = agents }
-                let data = try await client.perform("herdr.ui.present", object: object)
+                let data = try await self.requestUI("herdr.ui.present", object: object)
                 let reply = try JSONDecoder().decode(HerdrUIPresentation.self, from: data)
                 guard reply.owner == "herdr", reply.version == 1, reply.target == id,
                     reply.location == "herdr." + kind
@@ -2480,7 +2552,7 @@ final class HerdrStore {
                 try reply.validate()
                 let opened = try JSONDecoder().decode(
                     HerdrUIPresentation.self,
-                    from: await client.perform(
+                    from: await self.requestUI(
                         "herdr.ui.presentation.open",
                         object: [
                             "presentationID": origin.uuidString, "token": reply.token.uuidString,
@@ -2494,7 +2566,7 @@ final class HerdrStore {
     }
 
     private func dispatchPresentation(_ operation: String, object: [String: Any]) {
-        guard uiClient != nil, uiPresentationTasks.count < 8 else { return }
+        guard !workSuspended, uiClient != nil, uiPresentationTasks.count < 8 else { return }
         let taskID = UUID()
         uiPresentationTasks[taskID] = Task { [weak self] in
             defer { self?.uiPresentationTasks[taskID] = nil }
@@ -2510,7 +2582,7 @@ final class HerdrStore {
                 $0.location == "herdr." + kind && $0.target == id
             })
         else { return }
-        guard uiPresentationTasks.count < 8 else { return }
+        guard !workSuspended, uiPresentationTasks.count < 8 else { return }
         let taskID = UUID()
         uiPresentationTasks[taskID] = Task { [weak self] in
             defer { self?.uiPresentationTasks[taskID] = nil }
@@ -2521,15 +2593,32 @@ final class HerdrStore {
         }
     }
 
+    private func requestUI(_ operation: String, object: [String: Any] = [:]) async throws -> Data {
+        try await requestUI(operation, payload: JSONSerialization.data(withJSONObject: object))
+    }
+
+    private func requestUI(_ operation: String, payload: Data) async throws -> Data {
+        guard !workSuspended, let uiClient else { throw ExtensionPeerError.unavailable }
+        let id = UUID()
+        let task = Task { try await uiClient.perform(operation, payload: payload) }
+        uiRequests[id] = task
+        defer { uiRequests[id] = nil }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
     func performUI(_ operation: String, object: [String: Any] = [:]) async throws {
         guard let uiClient else { throw ExtensionPeerError.unavailable }
         if operation != "herdr.ui.read" { await uiMutation?.value }
-        let data = try await uiClient.perform(operation, object: object)
+        let data = try await self.requestUI(operation, object: object)
         if let state = try uiClient.state(data) { adoptUI(state) }
     }
 
     private func scheduleUIChange() {
-        guard uiClient != nil, !adoptingUI else { return }
+        guard !workSuspended, uiClient != nil, !adoptingUI else { return }
         uiDirty = true
         guard uiMutation == nil else { return }
         uiMutation = Task { [weak self] in
@@ -2542,7 +2631,7 @@ final class HerdrStore {
                     let layout = try JSONEncoder().encode(
                         HerdrUILayoutMutation(baseline: self.uiBaseline, layout: self.uiLayout))
                     let preferences = self.uiPreferences
-                    let layoutReply = try await client.perform("herdr.ui.layout", payload: layout)
+                    let layoutReply = try await self.requestUI("herdr.ui.layout", payload: layout)
                     guard let layoutState = try client.state(layoutReply) else {
                         throw ExtensionPeerError.unavailable
                     }
@@ -2550,7 +2639,7 @@ final class HerdrStore {
                     let payload = try JSONEncoder().encode(
                         HerdrUIPreferencesMutation(
                             baseline: layoutState.preferences, preferences: preferences))
-                    let data = try await client.perform("herdr.ui.preferences", payload: payload)
+                    let data = try await self.requestUI("herdr.ui.preferences", payload: payload)
                     if !self.uiDirty, let state = try client.state(data) { self.adoptUI(state) }
                 } catch is CancellationError { return } catch {
                     self.uiError = error.localizedDescription
@@ -2563,7 +2652,7 @@ final class HerdrStore {
         if let uiClient {
             return try JSONDecoder().decode(
                 [HerdrWorkspaceSummary].self,
-                from: await uiClient.perform("herdr.ui.workspaces", object: ["machineID": host.id]))
+                from: await self.requestUI("herdr.ui.workspaces", object: ["machineID": host.id]))
         }
         return try await HerdrLaunchOperations.listWorkspaces(on: machine(for: host))
     }
@@ -2572,7 +2661,7 @@ final class HerdrStore {
         guard let uiClient else { return HerdrSearchModel(usage: usage) }
         return HerdrSearchModel(
             searcher: { request in
-                let data = try await uiClient.perform(
+                let data = try await self.requestUI(
                     "herdr.ui.search",
                     object: [
                         "query": request.query, "machineID": request.machineID,
@@ -2581,7 +2670,7 @@ final class HerdrStore {
                 return try JSONDecoder().decode(AgentSearchReply.self, from: data)
             }, decider: { nil }, usage: usage,
             ranker: { query, candidates in
-                let data = try await uiClient.perform(
+                let data = try await self.requestUI(
                     "herdr.ui.rank", object: ["query": query, "agentIDs": candidates.map(\.id)])
                 return try JSONDecoder().decode([String]?.self, from: data)
             })

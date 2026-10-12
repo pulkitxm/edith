@@ -21,6 +21,9 @@ final class ExtensionRuntime: NSObject {
     private var surface: HerdrSurface?
     private var startup: Task<Void, Never>?
     private let commands = ExtensionCommandRegistry()
+    private var suspended = false
+    private var suspension: Task<Void, Never>?
+    private var uiRetirements: [UUID: Task<Void, Never>] = [:]
     private let fixtureAdmission: @MainActor (NSDictionary) throws -> WorkerFixtureAdmission?
     private let workerFactory: @MainActor (NSDictionary, WorkerFixtureAdmission?) -> HerdrWorker
     private var fixture: WorkerFixtureAdmission?
@@ -78,14 +81,56 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        commands.suspend()
+        suspended = true
+        let worker = worker
+        let startup = startup
+        let store = uiStore
+        let activity = uiActivity
+        let sessionSettings = sessionSettingsModel
+        let settings = settingsModel
+        store?.cancelPendingWork()
+        activity?.beginCommandDrain()
+        sessionSettings?.shutdown()
+        settings?.shutdown()
+        startup?.cancel()
+        worker?.requestWorkCancellation()
+        if suspension == nil {
+            let retired = Array(uiRetirements.values)
+            suspension = Task {
+                [self, worker, startup, store, activity, sessionSettings, settings] in
+                await startup?.value
+                await worker?.cancelPendingWork()
+                await commands.suspendAndWait()
+                await store?.drain()
+                await sessionSettings?.stopAndWait()
+                await settings?.stopAndWait()
+                await activity?.cancelPendingWorkAndWait()
+                for task in retired { await task.value }
+            }
+        }
+        let pending = suspension
+        Task { [self] in
+            await pending?.value
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
     @objc(prepareDisableWithCompletion:)
     func prepareDisable(completion: @escaping (NSError?) -> Void) {
+        suspendCommands(completion: {})
         startup?.cancel()
         commands.shutdown()
-        Task {
+        let worker = worker
+        let startup = startup
+        worker?.requestWorkCancellation()
+        Task { [self, worker, startup] in
+            await suspension?.value
+            await startup?.value
             await worker?.cancelPendingWork()
             await commands.shutdownAndWait()
-            await startup?.value
             do { try await worker?.prepareDisable(); completion(nil) } catch {
                 completion(error as NSError)
             }
@@ -94,17 +139,24 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        suspendCommands(completion: {})
         startup?.cancel()
         commands.shutdown()
-        Task {
+        let worker = worker
+        let startup = startup
+        worker?.requestWorkCancellation()
+        Task { [self, worker, startup] in
+            await suspension?.value
+            await startup?.value
             await worker?.cancelPendingWork()
             await commands.shutdownAndWait()
-            await startup?.value
             await worker?.shutdown()
-            worker = nil
+            stopUI()
+            for task in Array(uiRetirements.values) { await task.value }
+            self.worker = nil
             fixture = nil
             surface = nil
-            startup = nil
+            self.startup = nil
             completion()
         }
     }
@@ -120,6 +172,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
+            guard !suspended, uiRetirements.isEmpty else { return ["ok": false] as NSDictionary }
             guard worker == nil, let location = input["location"] as? String,
                 ["main", "settings", "herdr.agent", "herdr.agent.controls", "herdr.space"].contains(
                     location),
@@ -217,6 +270,7 @@ final class ExtensionRuntime: NSObject {
             return binding.execute(input)
         case "stopUI": stopUI()
         case "start":
+            guard !suspended else { return ["ok": false] as NSDictionary }
             guard uiLocation == nil, Bundle.main.bundleURL.pathExtension != "appex" else {
                 return ["ok": false] as NSDictionary
             }
@@ -263,6 +317,7 @@ final class ExtensionRuntime: NSObject {
             } catch { return ["ok": false] as NSDictionary }
         case "status": return ["ok": true, "running": worker?.isStopped == false] as NSDictionary
         case "stop":
+            suspendCommands(completion: {})
             commands.shutdown()
             startup?.cancel()
         default: return ["ok": false] as NSDictionary
@@ -270,23 +325,30 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
     private func stopUI() {
-        sessionSettingsModel?.shutdown()
+        let sessionSettings = sessionSettingsModel
+        let settings = settingsModel
+        sessionSettings?.shutdown()
+        settings?.shutdown()
         sessionSettingsModel = nil
-        settingsModel?.shutdown()
         settingsModel = nil
         let store = uiStore
         let activity = uiActivity
         store?.stopRendering()
-        activity?.cancelFolderChoice()
+        activity?.beginCommandDrain()
         uiClient?.invalidate()
         uiClient = nil
         uiStore = nil
         uiActivity = nil
         uiController = nil
         uiLocation = nil
-        if store != nil || activity != nil {
-            Task {
-                await store?.shutdown(); await activity?.shutdown()
+        if store != nil || activity != nil || sessionSettings != nil || settings != nil {
+            let id = UUID()
+            uiRetirements[id] = Task { [self, store, activity, sessionSettings, settings] in
+                await store?.shutdown()
+                await activity?.shutdown()
+                await sessionSettings?.stopAndWait()
+                await settings?.stopAndWait()
+                uiRetirements[id] = nil
             }
         }
     }

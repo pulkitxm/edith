@@ -42,96 +42,104 @@ struct HerdrDiffSessionState: Codable {
 
 extension HerdrStore {
     func connectTerminal(for tab: HerdrOpenTab) async throws {
-        let generation = tab.holder.generation
-        if let terminalClient {
-            let data = try await terminalClient(
-                "herdr.terminal.open",
-                JSONSerialization.data(withJSONObject: ["agentID": tab.id]))
+        try await performTerminalWork { [self] in
+            let generation = tab.holder.generation
+            if let terminalClient {
+                let data = try await terminalClient(
+                    "herdr.terminal.open",
+                    JSONSerialization.data(withJSONObject: ["agentID": tab.id]))
+                try Task.checkCancellation()
+                guard tab.holder.generation == generation else { throw CancellationError() }
+                let descriptor = try JSONDecoder().decode(OwnedTerminalDescriptor.self, from: data)
+                if tab.holder.descriptor != descriptor {
+                    tab.holder.reset()
+                    tab.holder.bind(
+                        try OwnedTerminalClient(descriptor: descriptor, invoke: terminalClient))
+                }
+                return
+            }
+            guard Bundle.main.bundleURL.pathExtension != "appex" else {
+                throw ExtensionPeerError.unavailable
+            }
+            let request = try await attachRequest(
+                for: tab,
+                environment: QuinjetOperationExecution.terminalEnvironment())
             try Task.checkCancellation()
             guard tab.holder.generation == generation else { throw CancellationError() }
-            let descriptor = try JSONDecoder().decode(OwnedTerminalDescriptor.self, from: data)
-            if tab.holder.descriptor != descriptor {
-                tab.holder.reset()
-                tab.holder.bind(
-                    try OwnedTerminalClient(descriptor: descriptor, invoke: terminalClient))
-            }
-            return
+            tab.holder.start(
+                executable: request.executable, arguments: request.arguments,
+                environment: request.environment, allowsLocalFileLinks: tab.agent.machineIsLocal)
+            try await tab.holder.waitForCreation()
         }
-        guard Bundle.main.bundleURL.pathExtension != "appex" else {
-            throw ExtensionPeerError.unavailable
-        }
-        let request = try await attachRequest(
-            for: tab,
-            environment: QuinjetOperationExecution.terminalEnvironment())
-        try Task.checkCancellation()
-        guard tab.holder.generation == generation else { throw CancellationError() }
-        tab.holder.start(
-            executable: request.executable, arguments: request.arguments,
-            environment: request.environment, allowsLocalFileLinks: tab.agent.machineIsLocal)
-        guard tab.holder.descriptor != nil else { throw ExtensionPeerError.unavailable }
     }
 
     func connectTerminal(for terminal: HerdrPanelTerminal) async throws {
-        let generation = terminal.holder.generation
-        if let terminalClient {
-            let data = try await terminalClient(
-                "herdr.panel.open",
-                JSONSerialization.data(withJSONObject: ["terminalID": terminal.id]))
+        try await performTerminalWork { [self] in
+            let generation = terminal.holder.generation
+            if let terminalClient {
+                let data = try await terminalClient(
+                    "herdr.panel.open",
+                    JSONSerialization.data(withJSONObject: ["terminalID": terminal.id]))
+                try Task.checkCancellation()
+                guard terminal.holder.generation == generation else { throw CancellationError() }
+                let descriptor = try JSONDecoder().decode(OwnedTerminalDescriptor.self, from: data)
+                if terminal.holder.descriptor != descriptor {
+                    terminal.holder.reset()
+                    terminal.holder.bind(
+                        try OwnedTerminalClient(descriptor: descriptor, invoke: terminalClient))
+                }
+                return
+            }
+            guard Bundle.main.bundleURL.pathExtension != "appex" else {
+                throw ExtensionPeerError.unavailable
+            }
+            let request = try await attachRequest(
+                for: terminal,
+                environment: QuinjetOperationExecution.terminalEnvironment())
             try Task.checkCancellation()
             guard terminal.holder.generation == generation else { throw CancellationError() }
-            let descriptor = try JSONDecoder().decode(OwnedTerminalDescriptor.self, from: data)
-            if terminal.holder.descriptor != descriptor {
-                terminal.holder.reset()
-                terminal.holder.bind(
-                    try OwnedTerminalClient(descriptor: descriptor, invoke: terminalClient))
-            }
-            return
+            terminal.holder.start(
+                executable: request.executable, arguments: request.arguments,
+                environment: request.environment, allowsLocalFileLinks: terminal.host.isLocal)
+            try await terminal.holder.waitForCreation()
         }
-        guard Bundle.main.bundleURL.pathExtension != "appex" else {
-            throw ExtensionPeerError.unavailable
-        }
-        let request = try await attachRequest(
-            for: terminal,
-            environment: QuinjetOperationExecution.terminalEnvironment())
-        try Task.checkCancellation()
-        guard terminal.holder.generation == generation else { throw CancellationError() }
-        terminal.holder.start(
-            executable: request.executable, arguments: request.arguments,
-            environment: request.environment, allowsLocalFileLinks: terminal.host.isLocal)
-        guard terminal.holder.descriptor != nil else { throw ExtensionPeerError.unavailable }
     }
 
     func connectShell(
         _ holder: TerminalSessionHolder, paneID: UUID, target: PaneTarget,
-        prepare: @MainActor (PaneTarget, HerdrStore) async throws -> TerminalLaunchRequest =
+        prepare:
+            @escaping @MainActor (PaneTarget, HerdrStore) async throws -> TerminalLaunchRequest =
             HerdrShellLaunch.prepare
     ) async throws {
-        let generation = holder.generation
-        if let terminalClient {
-            var value: [String: Any] = [
-                "paneID": paneID.uuidString, "machineID": target.machineID.uuidString,
-            ]
-            if let directory = target.argument { value["directory"] = directory }
-            let data = try await terminalClient(
-                "herdr.shell.open", JSONSerialization.data(withJSONObject: value))
+        try await performTerminalWork { [self] in
+            let generation = holder.generation
+            if let terminalClient {
+                var value: [String: Any] = [
+                    "paneID": paneID.uuidString, "machineID": target.machineID.uuidString,
+                ]
+                if let directory = target.argument { value["directory"] = directory }
+                let data = try await terminalClient(
+                    "herdr.shell.open", JSONSerialization.data(withJSONObject: value))
+                try Task.checkCancellation()
+                guard holder.generation == generation else { throw CancellationError() }
+                let descriptor = try JSONDecoder().decode(OwnedTerminalDescriptor.self, from: data)
+                if holder.descriptor != descriptor {
+                    holder.reset()
+                    holder.bind(
+                        try OwnedTerminalClient(descriptor: descriptor, invoke: terminalClient))
+                }
+                return
+            }
+            let request = try await prepare(target, self)
             try Task.checkCancellation()
             guard holder.generation == generation else { throw CancellationError() }
-            let descriptor = try JSONDecoder().decode(OwnedTerminalDescriptor.self, from: data)
-            if holder.descriptor != descriptor {
-                holder.reset()
-                holder.bind(try OwnedTerminalClient(descriptor: descriptor, invoke: terminalClient))
-            }
-            return
+            holder.start(
+                executable: request.executable, arguments: request.arguments,
+                environment: request.environment,
+                currentDirectory: target.machineID == Machine.localID ? target.argument : nil,
+                allowsLocalFileLinks: target.machineID == Machine.localID)
+            try await holder.waitForCreation()
         }
-        let request = try await prepare(target, self)
-        try Task.checkCancellation()
-        guard holder.generation == generation else { throw CancellationError() }
-        holder.start(
-            executable: request.executable, arguments: request.arguments,
-            environment: request.environment,
-            currentDirectory: target.machineID == Machine.localID ? target.argument : nil,
-            allowsLocalFileLinks: target.machineID == Machine.localID)
-        guard holder.descriptor != nil else { throw ExtensionPeerError.unavailable }
     }
 
     func prepareDiff(
@@ -139,31 +147,33 @@ extension HerdrStore {
         restarting: Bool, launchEnabled: Bool
     ) async {
         do {
-            if let terminalClient {
-                let data = try await terminalClient(
-                    "herdr.diff.open",
-                    JSONSerialization.data(withJSONObject: [
-                        "agentID": tab.id,
-                        "appearance": appearance.rawValue, "restart": restarting,
-                    ]))
-                try Task.checkCancellation()
-                let state = try JSONDecoder().decode(HerdrDiffSessionState.self, from: data)
-                try tab.quinjet.adopt(state, invoke: terminalClient)
-                return
-            }
-            guard Bundle.main.bundleURL.pathExtension != "appex" else {
-                throw ExtensionPeerError.unavailable
-            }
-            let remote = try await quinjetRemote(for: tab)
-            let configuration = quinjetConfiguration(appearance: appearance)
-            if restarting {
-                await tab.quinjet.restart(
-                    directory: tab.agent.cwd, remote: remote,
-                    configuration: configuration, launchEnabled: launchEnabled)
-            } else {
-                await tab.quinjet.prepare(
-                    directory: tab.agent.cwd, remote: remote,
-                    configuration: configuration, launchEnabled: launchEnabled)
+            try await performTerminalWork { [self] in
+                if let terminalClient {
+                    let data = try await terminalClient(
+                        "herdr.diff.open",
+                        JSONSerialization.data(withJSONObject: [
+                            "agentID": tab.id,
+                            "appearance": appearance.rawValue, "restart": restarting,
+                        ]))
+                    try Task.checkCancellation()
+                    let state = try JSONDecoder().decode(HerdrDiffSessionState.self, from: data)
+                    try tab.quinjet.adopt(state, invoke: terminalClient)
+                    return
+                }
+                guard Bundle.main.bundleURL.pathExtension != "appex" else {
+                    throw ExtensionPeerError.unavailable
+                }
+                let remote = try await quinjetRemote(for: tab)
+                let configuration = quinjetConfiguration(appearance: appearance)
+                if restarting {
+                    await tab.quinjet.restart(
+                        directory: tab.agent.cwd, remote: remote,
+                        configuration: configuration, launchEnabled: launchEnabled)
+                } else {
+                    await tab.quinjet.prepare(
+                        directory: tab.agent.cwd, remote: remote,
+                        configuration: configuration, launchEnabled: launchEnabled)
+                }
             }
         } catch is CancellationError {} catch {
             tab.quinjet.errorMessage = error.localizedDescription

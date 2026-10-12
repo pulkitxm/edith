@@ -8,6 +8,9 @@ import Observation
     private var stopped = false
     private var checkTask: Task<Void, Never>?
     private var actionTask: Task<Void, Never>?
+    private var pendingCheck: Int?
+    private var pendingAction: (String, UUID)?
+    private var actionToken: UUID?
     private(set) var result: HerdrSessionCheck?
     private(set) var checking = false
     private(set) var error: String?
@@ -22,7 +25,18 @@ import Observation
         checking = true
         result = nil
         error = nil
-        checkTask = Task {
+        pendingCheck = current
+        startCheck()
+    }
+
+    private func startCheck() {
+        guard !stopped, checkTask == nil, let current = pendingCheck else { return }
+        pendingCheck = nil
+        checkTask = Task { [self] in
+            defer {
+                checkTask = nil
+                startCheck()
+            }
             defer { if generation == current { checking = false } }
             do {
                 let data = try await client.perform("herdr.settings.sessions")
@@ -45,18 +59,37 @@ import Observation
     private func action(_ operation: String) {
         guard !stopped else { return }
         actionTask?.cancel()
-        actionTask = Task {
+        let token = UUID()
+        actionToken = token
+        pendingAction = (operation, token)
+        startAction()
+    }
+
+    private func startAction() {
+        guard !stopped, actionTask == nil, let (operation, token) = pendingAction else { return }
+        pendingAction = nil
+        actionTask = Task { [self] in
+            defer {
+                actionTask = nil
+                startAction()
+            }
             do {
                 _ = try await client.perform(operation)
                 try Task.checkCancellation()
-                guard !stopped else { return }
+                guard !stopped, actionToken == token else { return }
                 error = nil
             } catch is CancellationError {
             } catch {
-                guard !stopped else { return }
+                guard !stopped, actionToken == token else { return }
                 self.error = error.localizedDescription
             }
         }
+    }
+
+    func stopAndWait() async {
+        shutdown()
+        await checkTask?.value
+        await actionTask?.value
     }
 
     func shutdown() {
@@ -64,8 +97,9 @@ import Observation
         generation += 1
         checkTask?.cancel()
         actionTask?.cancel()
-        checkTask = nil
-        actionTask = nil
+        pendingCheck = nil
+        pendingAction = nil
+        actionToken = nil
         checking = false
         client.stop()
     }

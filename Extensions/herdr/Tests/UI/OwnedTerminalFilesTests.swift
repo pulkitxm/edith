@@ -6,11 +6,11 @@ import Testing
 @testable import HerdrUI
 
 @MainActor @Suite(.serialized) struct OwnedTerminalFilesTests {
-    private func session(_ registry: OwnedTerminalSessionRegistry, local: Bool = true) throws
+    private func session(_ registry: OwnedTerminalSessionRegistry, local: Bool = true) async throws
         -> OwnedTerminalSession
     {
-        try OwnedTerminalContext.$registry.withValue(registry) {
-            try OwnedTerminalSession(
+        try await OwnedTerminalContext.$registry.withValue(registry) {
+            try await OwnedTerminalSession(
                 launch: .init(
                     executable: "/bin/sh",
                     arguments: [
@@ -31,7 +31,7 @@ import Testing
     @Test func rawNativeMediaBytesStayBinaryAndAreMaterializedOnlyByOwningEngine() async throws {
         let registry = OwnedTerminalSessionRegistry()
         defer { registry.stopAll() }
-        let terminal = try session(registry)
+        let terminal = try await session(registry)
         let bridge = SyntheticPTYEngineBridge(registry: registry)
         let sdk = try #require(
             ExtensionEngineClient(bridge: bridge, presentationID: bridge.presentation))
@@ -55,8 +55,8 @@ import Testing
         try Data([0, 255]).write(to: source)
         let registry = OwnedTerminalSessionRegistry()
         defer { registry.stopAll() }
-        let old = try session(registry)
-        let current = try session(registry)
+        let old = try await session(registry)
+        let current = try await session(registry)
         let holder = TerminalSessionHolder()
         holder.bind(
             try OwnedTerminalClient(descriptor: old.descriptor) {
@@ -88,7 +88,7 @@ import Testing
         try bytes.write(to: first); try Data().write(to: empty)
         let registry = OwnedTerminalSessionRegistry()
         defer { registry.stopAll() }
-        let terminal = try session(registry)
+        let terminal = try await session(registry)
         let bridge = SyntheticPTYEngineBridge(registry: registry)
         let sdk = try #require(
             ExtensionEngineClient(bridge: bridge, presentationID: bridge.presentation))
@@ -119,7 +119,7 @@ import Testing
         try bytes.write(to: source)
         let registry = OwnedTerminalSessionRegistry()
         defer { registry.stopAll() }
-        let terminal = try session(registry)
+        let terminal = try await session(registry)
         let holder = TerminalSessionHolder()
         let client = try OwnedTerminalClient(descriptor: terminal.descriptor) {
             try await terminal.execute($0, payload: $1)
@@ -165,7 +165,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: root) }
         let registry = OwnedTerminalSessionRegistry()
         defer { registry.stopAll() }
-        let terminal = try session(registry, local: false)
+        let terminal = try await session(registry, local: false)
         var services = 0
         registry.files.upload = { _, files in
             services += 1
@@ -201,7 +201,7 @@ import Testing
             .init(
                 session: terminal.descriptor.handle, token: token, index: 0, offset: 0, bytes: data)
         )
-        let other = try session(registry, local: false)
+        let other = try await session(registry, local: false)
         await #expect(throws: ExtensionPeerError.self) {
             try await other.execute(
                 "herdr.terminal.drop.finish",
@@ -233,8 +233,8 @@ import Testing
         try bytes.write(to: source)
         let registry = OwnedTerminalSessionRegistry()
         defer { registry.stopAll() }
-        let first = try session(registry, local: false)
-        let second = try session(registry, local: false)
+        let first = try await session(registry, local: false)
+        let second = try await session(registry, local: false)
         var started: Set<UUID> = []
         var stopped: Set<UUID> = []
         var copied: [UUID: [URL]] = [:]
@@ -293,7 +293,7 @@ import Testing
         try Data([0, 255]).write(to: source)
         let registry = OwnedTerminalSessionRegistry()
         defer { registry.stopAll() }
-        let terminal = try session(registry, local: false)
+        let terminal = try await session(registry, local: false)
         var started = false
         var stopped = false
         var copied: [URL] = []

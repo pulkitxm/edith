@@ -60,11 +60,11 @@
       "sources": [
         {
           "path": "Extensions/focusDim/Runtime.swift",
-          "sha256": "8f07e0268ace64cad04331f2dee03d5e397d104b3eae945fd92a0f3f3868b655"
+          "sha256": "285ad7fd425753c2c708bcd60f5f602fdae0f1c55ba0d6fd39d9ea57a26177ab"
         },
         {
           "path": "Extensions/focusDim/Presentation.swift",
-          "sha256": "3ed7399749328e08e84eb4be07a80ca241182e83a5d6ee08d5598f4072b0ba57"
+          "sha256": "f1cecafa79278dca96b5e96d415017bee728e12f79311a1981aadc823658851f"
         }
       ]
     },
@@ -126,11 +126,11 @@
       "sources": [
         {
           "path": "Extensions/keystrokeHighlight/Runtime.swift",
-          "sha256": "57af7074beb80ab779bbd09994531acf982eabaa6fb2399a085ba0686ee87142"
+          "sha256": "6c1d79042c6f89829cabf3229b60b641537ae4bfe0fd017d3d54bd9cd807c4c7"
         },
         {
           "path": "Extensions/keystrokeHighlight/Presentation.swift",
-          "sha256": "864050c5b09d2b1558e5bc150641418dcd768dfab38cf2cf759e32f2b399f958"
+          "sha256": "266f43f6fd29320016fc34026e14ff71410e4e370e75592f949950cd16656f29"
         }
       ]
     },
@@ -214,11 +214,11 @@
       "sources": [
         {
           "path": "Extensions/emoji/Runtime.swift",
-          "sha256": "edb5ef8141b703af5431a9e0d91212a4cf0f05de553f42bc0d43a658d201ca1b"
+          "sha256": "dbe35a52c56ffd509fc0b7f671c7be90e6acce77dad1420a6d342f6530049528"
         },
         {
           "path": "Extensions/emoji/Presentation.swift",
-          "sha256": "ea1d156d1cb464b692d278dead363b25c3cb34deea19e6d28a250d7bb8f16986"
+          "sha256": "b7efdd398182327f8cc32d89cfe0f6a2adadc827be5d25f96d18fb6084181b75"
         }
       ]
     },
@@ -500,7 +500,7 @@
       "sources": [
         {
           "path": "Extensions/docs/Runtime.swift",
-          "sha256": "545504faa0cdf8d930196cf38cfd6ea057614e68ee50fae50c81555b456b7699"
+          "sha256": "6cc04b778b03005e1d07273948d10d3f0d120a15224d79ff81badff864a53b7e"
         },
         {
           "path": "Extensions/docs/DocsUIBridge.swift",
@@ -522,11 +522,11 @@
       "sources": [
         {
           "path": "Extensions/latex/Runtime.swift",
-          "sha256": "f39509f44ecf4f846f4e7a7a213deb85fa0b044687fa4987789e120b705f89e3"
+          "sha256": "853f80eedc03bf2796dcce5937acc26505036d8a448fa038f6a0d072061478f3"
         },
         {
           "path": "Extensions/latex/LaTeXModel.swift",
-          "sha256": "5c1933aff553b84150e7499e7c474da7e72a603ac501e8686573c6e71a925155"
+          "sha256": "b64dee3bdfdd2d51f10a4b724f0249d4d1ef5caabb1ae0e41806e4cc214acb05"
         }
       ]
     },
@@ -654,11 +654,11 @@
       "sources": [
         {
           "path": "Extensions/lidAwake/Runtime.swift",
-          "sha256": "e75b983772745392d6632ba4c0c6f2683cb11878999f0636f400bfff92fdf3c2"
+          "sha256": "5344288b0b6e444c1727a54ffa39833d3b4b28b9100f91a3cb66ce4164db7d52"
         },
         {
           "path": "Extensions/lidAwake/Views/LidAwakeSettingsModel.swift",
-          "sha256": "c90e8b128836cb0736d1908cf9350ee2198d01a197f37b3d862da862f609402f"
+          "sha256": "8326e4b3083355561a74b3efb2af1f57bb7178e0a017f66cbe89542bb401ac59"
         }
       ]
     },
@@ -694,11 +694,11 @@
       "sources": [
         {
           "path": "Extensions/machines/Runtime.swift",
-          "sha256": "8a860ea7f73dee6350814c15a3831e9a3dad89947875f3de6d7340111b1c01fb"
+          "sha256": "a34fbff8b5aa32aeb800f4717208a864c8d85b5cdbe6613312b31ae5b9f67be5"
         },
         {
           "path": "Extensions/machines/Services/MachineUIClient.swift",
-          "sha256": "da8847f9de6aef5208cc1e27d7c55535efaf06c539ca3bfd7a5dcd6516038781"
+          "sha256": "9d84710fc398ebf3439115f56cf2388a24393a9a37a8a0a6e994a789f8310656"
         }
       ]
     },
@@ -716,7 +716,7 @@
       "sources": [
         {
           "path": "Extensions/downloads/Runtime.swift",
-          "sha256": "526d3186ee3cc6a9c46192e9e90439b0130085da3149089d88473e21af85ce68"
+          "sha256": "5e5ed50e9c10aca6c82841ae4fc049e000fd75a58f73c3f37237e1cd3ed048a2"
         },
         {
           "path": "Extensions/downloads/DownloadsUIBridge.swift",
@@ -804,7 +804,7 @@
       "sources": [
         {
           "path": "Extensions/herdr/Runtime.swift",
-          "sha256": "711f02f28ca2e51714142ade7c03dfbe8778871237266d73ff564cccd405a1c3"
+          "sha256": "f0e7a3b1cfb7ea14f39cf26e6004de2a3683be0c39d3307b22fcef87da9f0239"
         },
         {
           "path": "Extensions/herdr/ViewModels/HerdrUIProjection.swift",

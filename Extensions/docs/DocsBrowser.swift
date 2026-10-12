@@ -40,6 +40,7 @@ final class DocsBrowser {
     private var loadTask: Task<Void, Never>?
     private var askTask: Task<DocsPresentationAnswer, Never>?
     private var stopped = false
+    private var followWork: [UUID: Task<Void, Never>] = [:]
     private var cancelledWork: [UUID: Task<Void, Never>] = [:]
     private let defaults: UserDefaults
     private let remote: DocsUIBridge?
@@ -122,30 +123,40 @@ final class DocsBrowser {
         guard !stopped else { return }
         filter = String(text.prefix(256))
         filterGeneration &+= 1
-        let generation = filterGeneration
-        retire(filterTask)
-        filterTask = nil
-        let groups = library?.groups ?? []
-        guard !text.trimmingCharacters(in: .whitespaces).isEmpty else {
+        filterTask?.cancel()
+        if filter.trimmingCharacters(in: .whitespaces).isEmpty {
             appliedFilter = ""
-            sidebarGroups = Self.listing(groups)
+            sidebarGroups = Self.listing(library?.groups ?? [])
+        }
+        startFilter()
+    }
+
+    private func startFilter() {
+        guard !stopped, filterTask == nil, !filter.trimmingCharacters(in: .whitespaces).isEmpty
+        else {
             return
         }
+        let generation = filterGeneration
+        let groups = library?.groups ?? []
         let delay = filterDelay
         let matchPages = matchPages
-        let query = String(text.prefix(256))
-        filterTask = Task { [weak self] in
+        let query = filter
+        filterTask = Task { [self] in
+            defer {
+                filterTask = nil
+                if generation != filterGeneration { startFilter() }
+            }
             try? await Task.sleep(for: delay)
-            guard !Task.isCancelled, let self, self.filterGeneration == generation else { return }
+            guard !Task.isCancelled, !stopped, filterGeneration == generation else { return }
             let matched = await Task.detached { matchPages(groups, query) }.value
-            guard !Task.isCancelled, self.filterGeneration == generation else { return }
-            self.appliedFilter = query
-            self.sidebarGroups = matched
+            guard !Task.isCancelled, !stopped, filterGeneration == generation else { return }
+            appliedFilter = query
+            sidebarGroups = matched
         }
     }
 
     func settleFilter() async {
-        await filterTask?.value
+        while let task = filterTask { await task.value }
     }
 
     private static func listing(_ groups: [DocsGroup]) -> [(DocsGroup, [DocsPage])] {
@@ -161,11 +172,17 @@ final class DocsBrowser {
     }
 
     func follow(_ link: DocsLink) {
+        guard !stopped else { return }
         switch link {
         case .page(let path, let anchor): open(DocsLocation(path: path, anchor: anchor))
         case .external(let url):
             if let remote {
-                Task { try? await remote.follow(url) }
+                let id = UUID()
+                followWork[id] = Task { [self] in
+                    defer { followWork[id] = nil }
+                    guard !Task.isCancelled else { return }
+                    try? await remote.follow(url)
+                }
             } else {
                 NSWorkspace.shared.open(url)
             }
@@ -204,10 +221,13 @@ final class DocsBrowser {
 
     func ask(_ request: String, decider: JevDeciding?) async {
         guard let library, !stopped, request.utf8.count <= 4096 else { return }
-        retire(askTask)
+        let previous = askTask
+        previous?.cancel()
         askSerial += 1
         let serial = askSerial
         asking = true
+        _ = await previous?.value
+        guard !stopped, !Task.isCancelled, serial == askSerial else { return }
         let task = Task {
             if let remote = self.remote {
                 return (try? await remote.answer(request, library: library))
@@ -264,8 +284,7 @@ final class DocsBrowser {
     func clearQuestion() -> Bool {
         guard !question.isEmpty || answer != nil else { return false }
         askSerial += 1
-        retire(askTask)
-        askTask = nil
+        askTask?.cancel()
         question = ""
         answer = nil
         asking = false
@@ -273,7 +292,8 @@ final class DocsBrowser {
         return true
     }
 
-    func shutdown() {
+    func cancelPendingWork() {
+        guard !stopped else { return }
         stopped = true
         askSerial += 1
         filterGeneration &+= 1
@@ -283,6 +303,11 @@ final class DocsBrowser {
         askTask = nil
         filterTask = nil
         loadTask = nil
+        for task in followWork.values { task.cancel() }
+    }
+
+    func shutdown() {
+        cancelPendingWork()
         asking = false
         resultsVisible = false
         answer = nil
@@ -301,8 +326,9 @@ final class DocsBrowser {
     }
 
     func drain() async {
-        shutdown()
-        for task in Array(cancelledWork.values) { await task.value }
+        cancelPendingWork()
+        let pending = Array(cancelledWork.values) + Array(followWork.values)
+        for task in pending { await task.value }
     }
 
     private func show(_ target: DocsLocation, reveal: Bool = true) {

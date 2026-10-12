@@ -9,7 +9,7 @@ import Testing
     @Test func mediaCallbackTransfersExactBinaryBytesToOwningEngineAndRetiresFiles() async throws {
         let registry = OwnedTerminalSessionRegistry()
         defer { registry.stopAll() }
-        let session = try terminal(registry, local: true)
+        let session = try await terminal(registry, local: true)
         let holder = TerminalSessionHolder()
         var paths: [String] = []
         holder.bind(
@@ -50,8 +50,8 @@ import Testing
         }
         registry.links.handler = { _ in "Synthetic handler" }
         registry.links.now = { date }
-        let session = try terminal(registry)
-        let other = try terminal(registry)
+        let session = try await terminal(registry)
+        let other = try await terminal(registry)
         let bridge = SyntheticPTYEngineBridge(registry: registry)
         let sdk = try #require(
             ExtensionEngineClient(bridge: bridge, presentationID: bridge.presentation))
@@ -89,11 +89,12 @@ import Testing
         await registry.stopAllAndWait()
     }
 
-    private func terminal(_ registry: OwnedTerminalSessionRegistry, local: Bool = false) throws
+    private func terminal(_ registry: OwnedTerminalSessionRegistry, local: Bool = false)
+        async throws
         -> OwnedTerminalSession
     {
-        try OwnedTerminalContext.$registry.withValue(registry) {
-            try OwnedTerminalSession(
+        try await OwnedTerminalContext.$registry.withValue(registry) {
+            try await OwnedTerminalSession(
                 launch: .init(
                     executable: "/bin/sh", arguments: ["-c", "exec sleep 30"],
                     environment: ["PATH=/usr/bin:/bin"], currentDirectory: "/tmp",

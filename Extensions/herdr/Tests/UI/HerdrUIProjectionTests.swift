@@ -820,6 +820,63 @@ import Testing
         await worker.shutdown()
     }
 
+    @Test(arguments: ["shell", "terminal", "diff"])
+    func originalTerminalCallbackKeepsDrainPendingUntilActualReplyReturns(_ kind: String)
+        async throws
+    {
+        defer { HerdrWorkOwnership.enable() }
+        let worker = worker()
+        let store = worker.store
+        let agent = try #require(store.agents.first)
+        store.open(agent)
+        let tab = try #require(store.session(agent.id))
+        let holder = TerminalSessionHolder()
+        var reply: CheckedContinuation<Data, Error>?
+        store.terminalClient = { operation, _ in
+            #expect(operation == "herdr." + kind + ".open")
+            return try await withCheckedThrowingContinuation { reply = $0 }
+        }
+        let request = Task {
+            switch kind {
+            case "shell":
+                try await store.connectShell(
+                    holder, paneID: UUID(),
+                    target: .init(
+                        machineID: Machine.localID, screen: .terminal, argument: "/synthetic"))
+            case "terminal": try await store.connectTerminal(for: tab)
+            default:
+                await store.prepareDiff(
+                    for: tab, appearance: .dark, restarting: false, launchEnabled: false)
+            }
+        }
+        while reply == nil { await Task.yield() }
+        store.cancelPendingWork()
+        var draining = false
+        var drained = false
+        let drain = Task {
+            draining = true
+            await store.drain()
+            drained = true
+        }
+        while !draining { await Task.yield() }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(!drained)
+        reply?.resume(returning: Data())
+        if kind == "diff" {
+            try await request.value
+        } else {
+            await #expect(throws: CancellationError.self) { try await request.value }
+        }
+        await drain.value
+        #expect(drained)
+        #expect(holder.descriptor == nil && tab.holder.descriptor == nil)
+        #expect(tab.quinjet.holder.descriptor == nil && !tab.quinjet.preparing)
+        await #expect(throws: CancellationError.self) {
+            try await store.connectTerminal(for: tab)
+        }
+        await worker.shutdown()
+    }
+
     @Test func cancelledProjectionRejectsLateResponseAndOlderSequence() async throws {
         defer { HerdrWorkOwnership.enable() }
         let worker = worker()

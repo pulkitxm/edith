@@ -44,6 +44,8 @@ import WorkerFixtureSupport
     private let send: @Sendable (String, HerdrAgent) async -> HerdrPromptOutcome
     private(set) var isStopped = false
     private var started = false
+    private var workSuspended = false
+    private var pendingDrain: Task<Void, Never>?
     private var cliStreams: ExtensionCLIStreams?
     private var agentCLIStreams: ExtensionCLIStreams?
     private struct ShellSelection {
@@ -190,7 +192,7 @@ import WorkerFixtureSupport
     }
 
     func applyAmbientPolicy(context: NSDictionary) throws {
-        guard !isStopped else { throw ExtensionPeerError.unavailable }
+        guard !isStopped, !workSuspended else { throw ExtensionPeerError.unavailable }
         try ambientPolicy.apply(context: context)
         if automaticActions {
             try ambientPolicy.start { [weak self] in self?.discoveryAdmission.refresh() }
@@ -205,10 +207,10 @@ import WorkerFixtureSupport
         let next: Bool
         do {
             next = version == nil ? false : try await trackingDemand()
-            guard !isStopped, !Task.isCancelled else { return }
+            guard !isStopped, !workSuspended, !Task.isCancelled else { return }
             trackingDemandError = nil
         } catch {
-            guard !isStopped, !Task.isCancelled else { return }
+            guard !isStopped, !workSuspended, !Task.isCancelled else { return }
             next = false
             trackingDemandError = error.localizedDescription
         }
@@ -246,7 +248,9 @@ import WorkerFixtureSupport
     }
 
     private func startOwned() async {
-        guard fixture == nil, !started, !isStopped, ambientPolicyApplied else { return }
+        guard fixture == nil, !started, !isStopped, !workSuspended, ambientPolicyApplied else {
+            return
+        }
         started = true
         do { try await activity.hookFiles.resume(activityInstaller) } catch {
             activity.hookError = error.localizedDescription
@@ -257,8 +261,9 @@ import WorkerFixtureSupport
         guard automaticActions else { return }
         _ = try? await MachineRegistry.refresh()
         await refreshDiscoveryDemand()
-        guard !Task.isCancelled, !isStopped else { return }
+        guard !Task.isCancelled, !isStopped, !workSuspended else { return }
         await store.watch()
+        guard !Task.isCancelled, !workSuspended else { return }
         await hooks.start { data in HerdrTopicFeed.publish(.hooks, data: data) }
         maintenance = HerdrWorkOwnership.start { [weak self] in
             while !Task.isCancelled {
@@ -295,7 +300,7 @@ import WorkerFixtureSupport
     }
 
     private func executeOwned(_ command: String, payload: Data) async throws -> Data {
-        guard !isStopped else { throw ExtensionPeerError.unavailable }
+        guard !isStopped, !workSuspended else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
         if command.hasPrefix("herdr.ui.launchSettings.") {
             return try await HerdrUILaunchSettingsEngine.execute(
@@ -371,7 +376,7 @@ import WorkerFixtureSupport
             else { throw ExtensionPeerError.invalidRequest }
             if command == "herdr.settings.sessions" {
                 let result = try await inventory.checkSessions()
-                guard !isStopped else { throw ExtensionPeerError.unavailable }
+                guard !isStopped, !workSuspended else { throw ExtensionPeerError.unavailable }
                 return try JSONEncoder().encode(result)
             }
             try openGuide()
@@ -423,7 +428,7 @@ import WorkerFixtureSupport
             guard object.isEmpty else { throw ExtensionPeerError.invalidRequest }
             let snapshots = await HerdrCollector.collect(.local)
             try Task.checkCancellation()
-            guard !isStopped else { throw ExtensionPeerError.unavailable }
+            guard !isStopped, !workSuspended else { throw ExtensionPeerError.unavailable }
             store.hosts = snapshots
             return try AgentPayload.encode(snapshots)
         case "herdr.terminal.status":
@@ -451,7 +456,7 @@ import WorkerFixtureSupport
             }
             try await store.connectTerminal(for: tab)
             try Task.checkCancellation()
-            guard !isStopped else { throw ExtensionPeerError.unavailable }
+            guard !isStopped, !workSuspended else { throw ExtensionPeerError.unavailable }
             guard let descriptor = tab.holder.descriptor else {
                 throw ExtensionPeerError.unavailable
             }
@@ -466,7 +471,7 @@ import WorkerFixtureSupport
                     session: terminal.session, pane: pane, machine: terminal.host.machine)
             }
             try Task.checkCancellation()
-            guard !isStopped, let descriptor = terminal.holder.descriptor else {
+            guard !isStopped, !workSuspended, let descriptor = terminal.holder.descriptor else {
                 throw ExtensionPeerError.unavailable
             }
             return try JSONEncoder().encode(descriptor)
@@ -487,7 +492,7 @@ import WorkerFixtureSupport
                 for: tab, appearance: appearance,
                 restarting: number.boolValue, launchEnabled: true)
             try Task.checkCancellation()
-            guard !isStopped, let terminal = tab.quinjet.holder.descriptor else {
+            guard !isStopped, !workSuspended, let terminal = tab.quinjet.holder.descriptor else {
                 throw ExtensionPeerError.unavailable
             }
             return try JSONEncoder().encode(
@@ -524,7 +529,7 @@ import WorkerFixtureSupport
                     target: target, prepare: prepareShell)
             }
             try Task.checkCancellation()
-            guard !isStopped, let descriptor = holder.descriptor else {
+            guard !isStopped, !workSuspended, let descriptor = holder.descriptor else {
                 throw ExtensionPeerError.unavailable
             }
             return try JSONEncoder().encode(descriptor)
@@ -584,7 +589,7 @@ import WorkerFixtureSupport
     }
 
     func currentAgent(_ id: String) -> HerdrAgent? {
-        guard !isStopped, !id.isEmpty, id.utf8.count <= 512 else { return nil }
+        guard !isStopped, !workSuspended, !id.isEmpty, id.utf8.count <= 512 else { return nil }
         if let agent = store.agents.first(where: { $0.id == id }) { return agent }
         guard
             let terminal = store.hosts.map({ HerdrMachineTerminal.agent(for: $0) }).first(where: {
@@ -595,17 +600,42 @@ import WorkerFixtureSupport
     }
 
     func prepareDisable() async throws {
-        await shutdown()
+        await cancelPendingWork()
         try await activity.hookFiles.suspend(activityInstaller)
     }
 
+    func requestWorkCancellation() {
+        workSuspended = true
+        terminalSessions.stopAll()
+        for selection in shells.values { selection.holder.stopRendering() }
+        store.cancelPendingWork()
+        maintenance?.cancel()
+        cliStreams?.stop()
+        agentCLIStreams?.stop()
+        HerdrWorkOwnership.cancel()
+        activity.beginCommandDrain()
+    }
+
     func cancelPendingWork() async {
+        requestWorkCancellation()
+        if let pendingDrain { await pendingDrain.value; return }
+        let task = Task { await finishPendingWork() }
+        pendingDrain = task
+        await task.value
+    }
+
+    private func finishPendingWork() async {
         hostWindowNavigation?.invalidate()
         hostFolderChoice?.invalidate()
         ambientPolicy.stop()
         await discoveryAdmission.stopAndWait()
         await terminalSessions.stopAllAndWait()
         maintenance?.cancel()
+        await maintenance?.value
+        await activity.cancelPendingWorkAndWait()
+        await hooks.stop()
+        await HerdrWorkOwnership.shutdown()
+        await store.drain()
         await catalogs.shutdown()
         await cliStreams?.stopAndWait()
         await agentCLIStreams?.stopAndWait()
@@ -623,7 +653,7 @@ import WorkerFixtureSupport
         spaces.stopAll()
         uiHookPlans.shutdown()
         await catalogs.shutdown()
-        for selection in shells.values { selection.holder.stop() }
+        for selection in shells.values { await selection.holder.stopAndWait() }
         shells.removeAll()
         await cliStreams?.stopAndWait()
         await agentCLIStreams?.stopAndWait()
@@ -636,6 +666,7 @@ import WorkerFixtureSupport
         attention.shutdown()
         notifications.shutdown()
         maintenance?.cancel()
+        await maintenance?.value
         await hooks.stop()
         await store.shutdown()
         await AgentSearchService.shared.shutdown()

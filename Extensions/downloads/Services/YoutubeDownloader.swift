@@ -192,6 +192,10 @@ public final class YoutubeDownloader {
     public private(set) var updateResult: Result<String, Error>? = nil
     public private(set) var estimates: [URL: DownloadEstimate] = [:]
 
+    @ObservationIgnored private var stopped = false
+    @ObservationIgnored private var availabilityRequested = false
+    @ObservationIgnored private var updateRequested = false
+    @ObservationIgnored private var updateCompletion: ((Result<String, Error>) -> Void)?
     @ObservationIgnored private var mutationTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var updateTask: Task<Void, Never>?
     public var errorMessage: String?
@@ -307,6 +311,7 @@ public final class YoutubeDownloader {
     }
 
     func apply(_ snapshot: DownloadWorkerSnapshot) {
+        guard !stopped else { return }
         let generationChanged = activeGeneration != snapshot.generation
         if generationChanged {
             activeGeneration = snapshot.generation
@@ -334,11 +339,22 @@ public final class YoutubeDownloader {
     }
 
     public func checkAvailability() {
+        guard !stopped else { return }
+        availabilityGeneration = UUID()
+        availabilityRequested = true
         availabilityTask?.cancel()
-        let generation = UUID()
-        availabilityGeneration = generation
-        availabilityTask = Task {
-            defer { if generation == availabilityGeneration { availabilityTask = nil } }
+        startAvailabilityCheck()
+    }
+
+    private func startAvailabilityCheck() {
+        guard !stopped, availabilityTask == nil, availabilityRequested else { return }
+        availabilityRequested = false
+        let generation = availabilityGeneration
+        availabilityTask = Task { [self] in
+            defer {
+                availabilityTask = nil
+                startAvailabilityCheck()
+            }
             do {
                 let snapshot = try await client.snapshot()
                 try Task.checkCancellation()
@@ -347,6 +363,8 @@ public final class YoutubeDownloader {
                 let status: DownloadToolStatus
                 if let remote {
                     let configuration = try await remote.configuration()
+                    try Task.checkCancellation()
+                    guard generation == availabilityGeneration, !stopped else { return }
                     remoteDirectories = configuration.directories
                     SharedDefaults.store.set(
                         configuration.kind.rawValue, forKey: AppStorageKeys.Music.downloadKind)
@@ -372,6 +390,7 @@ public final class YoutubeDownloader {
     }
 
     private func mutate(_ request: DownloadsMutation) {
+        guard !stopped else { return }
         errorMessage = nil
         let token = UUID()
         mutationTasks[token] = Task {
@@ -388,11 +407,26 @@ public final class YoutubeDownloader {
     }
 
     public func updateYTDLP(completion: ((Result<String, Error>) -> Void)? = nil) {
+        guard !stopped else { return }
         isUpdatingYTDLP = true
         updateResult = nil
         ytdlpUpdateMessage = nil
+        updateRequested = true
+        updateCompletion = completion
         updateTask?.cancel()
-        updateTask = Task {
+        startToolUpdate()
+    }
+
+    private func startToolUpdate() {
+        guard !stopped, updateTask == nil, updateRequested else { return }
+        updateRequested = false
+        let completion = updateCompletion
+        updateCompletion = nil
+        updateTask = Task { [self] in
+            defer {
+                updateTask = nil
+                startToolUpdate()
+            }
             do {
                 let update: DownloadToolUpdate
                 if let remote {
@@ -489,6 +523,7 @@ public final class YoutubeDownloader {
     }
 
     func setPreferredKind(_ kind: DownloadKind) {
+        guard !stopped else { return }
         guard let remote else { return }
         let token = UUID()
         mutationTasks[token] = Task {
@@ -500,6 +535,7 @@ public final class YoutubeDownloader {
     }
 
     func setAudioDirectory(_ url: URL) {
+        guard !stopped else { return }
         if let remote {
             remoteResult(nil, action: "audioFolder", directory: url)
         } else {
@@ -508,6 +544,7 @@ public final class YoutubeDownloader {
     }
 
     private func remoteResult(_ id: UUID?, action: String, directory: URL? = nil) {
+        guard !stopped else { return }
         guard let remote else { return }
         let token = UUID()
         mutationTasks[token] = Task {
@@ -543,19 +580,31 @@ public final class YoutubeDownloader {
 
     public func cancelAll() { mutate(.cancel(id: nil, includeQueued: true, reason: "Cancelled")) }
 
-    public func shutdown() async {
+    func cancelPendingWork() {
+        stopped = true
+        availabilityRequested = false
+        updateRequested = false
+        updateCompletion = nil
+        availabilityGeneration = UUID()
         let pending =
             [streamTask, availabilityTask, updateTask].compactMap { $0 }
             + Array(mutationTasks.values)
-        streamTask?.cancel(); streamTask = nil
-        availabilityTask?.cancel(); availabilityTask = nil
-        availabilityGeneration = UUID()
-        for task in mutationTasks.values { task.cancel() }
-        mutationTasks.removeAll()
-        updateTask?.cancel(); updateTask = nil
-        isRunning = false
         for task in pending { task.cancel() }
+    }
+
+    func drain() async {
+        cancelPendingWork()
+        let pending =
+            [streamTask, availabilityTask, updateTask].compactMap { $0 }
+            + Array(mutationTasks.values)
         for task in pending { await task.value }
+    }
+
+    public func shutdown() async {
+        await drain()
+        streamTask = nil; availabilityTask = nil; updateTask = nil
+        mutationTasks.removeAll()
+        isRunning = false
     }
 
     deinit {

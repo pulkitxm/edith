@@ -29,6 +29,9 @@ final class LaTeXModel {
     private var remoteApplying = false
     private var remoteActionRunning = false
     private var draftTask: Task<Void, Never>?
+    private var draftGeneration = UUID()
+    private var pendingDraft: LaTeXUIAction?
+    private var toolDrain: Task<Void, Never>?
     private let service: LaTeXService
     let store: LaTeXProjectStore
     private var operation: Task<Void, Never>?
@@ -439,19 +442,47 @@ final class LaTeXModel {
         }
         isStopped = true
         remoteGeneration &+= 1
-        remoteTask?.cancel(); remoteTask = nil
-        draftTask?.cancel(); draftTask = nil
-        operation?.cancel()
-        for job in jobs.values { job.cancel() }
-        if let operation { await operation.value }
-        for job in Array(jobs.values) { await job.value }
+        cancelPendingWork()
+        await drain()
         operation = nil; jobs.removeAll(); pdfID = nil
-        await tools.shutdown()
         editorControls.shutdown()
         load.reset(); editorRequest = 0
         projects.removeAll(); selectedID = nil; source = ""; original = nil
         review = nil; pdfPreview = nil; log = ""; message = nil
         busy = false; buildingPDF = false; hasRepositoryBuild = false; buildURL = nil
+    }
+
+    func cancelPendingWork() {
+        isStopped = true
+        remoteGeneration &+= 1
+        remoteTask?.cancel()
+        retireDraft()
+        operation?.cancel()
+        for task in jobs.values { task.cancel() }
+        if toolDrain == nil {
+            let tools = tools
+            toolDrain = Task { await tools.shutdown() }
+        }
+    }
+
+    private func retireDraft() {
+        draftGeneration = UUID()
+        pendingDraft = nil
+        draftTask?.cancel()
+    }
+
+    func drainTools() async {
+        cancelPendingWork()
+        await toolDrain?.value
+    }
+
+    func drain() async {
+        cancelPendingWork()
+        let pending =
+            [remoteTask, draftTask, operation].compactMap { $0 }
+            + Array(jobs.values)
+        for task in pending { await task.value }
+        await toolDrain?.value
     }
 
     func settleOperation() async { await operation?.value }
@@ -516,15 +547,31 @@ final class LaTeXModel {
     }
 
     private func publishDraft() {
-        guard let remote, !isStopped, let id = selectedID, let original else { return }
-        draftTask?.cancel()
-        let request = LaTeXUIAction(
+        guard remote != nil, !isStopped, let id = selectedID, let original else { return }
+        draftGeneration = UUID()
+        pendingDraft = LaTeXUIAction(
             action: "draft", projectID: id, revision: original.revision, text: source)
-        draftTask = Task { [weak self] in
+        draftTask?.cancel()
+        startPendingDraft()
+    }
+
+    private func startPendingDraft() {
+        guard draftTask == nil, !isStopped, let remote, let request = pendingDraft else { return }
+        pendingDraft = nil
+        let generation = draftGeneration
+        draftTask = Task { [self, remote] in
+            defer {
+                draftTask = nil
+                startPendingDraft()
+            }
             do {
                 try await Task.sleep(for: .milliseconds(150))
                 _ = try await remote.perform(request)
-            } catch { if !Task.isCancelled { self?.message = error.localizedDescription } }
+            } catch {
+                if !isStopped, !Task.isCancelled, generation == draftGeneration {
+                    message = error.localizedDescription
+                }
+            }
         }
     }
 
@@ -549,10 +596,12 @@ final class LaTeXModel {
         guard let remote, !isStopped, !busy else { return }
         remoteGeneration &+= 1
         let generation = remoteGeneration
-        draftTask?.cancel()
+        retireDraft()
         busy = true
         remoteActionRunning = true
         defer { remoteActionRunning = false }
+        await draftTask?.value
+        guard !isStopped, !Task.isCancelled, generation == remoteGeneration else { return }
         do {
             let value = try await remote.perform(action)
             guard !isStopped, !Task.isCancelled, generation == remoteGeneration else { return }

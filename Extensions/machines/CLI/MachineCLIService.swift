@@ -9,6 +9,7 @@ import Foundation
     private let previousRunner: (Machine) -> RemoteRunner
     private var connections: [UUID: SSHConnection] = [:]
     private var stopped = false
+    private var draining: Task<Void, Never>?
 
     init(runner: ((Machine, MachineExecutionOwner) -> RemoteRunner)? = nil) throws {
         streams = try ExtensionCLIStreams(owner: "machines")
@@ -58,12 +59,27 @@ import Foundation
             payload: payload)
     }
 
-    func shutdown() async {
+    func cancelPendingWork() {
         stopped = true
         streams.stop()
         owner.cancel()
-        await streams.stopAndWait()
-        await owner.shutdown()
+    }
+
+    func drain() async {
+        cancelPendingWork()
+        if let draining { await draining.value; return }
+        let streams = streams
+        let owner = owner
+        let task = Task {
+            await streams.stopAndWait()
+            await owner.shutdown()
+        }
+        draining = task
+        await task.value
+    }
+
+    func shutdown() async {
+        await drain()
         let retained = Array(connections.values)
         connections = [:]
         for connection in retained { await connection.disconnect() }
