@@ -235,6 +235,7 @@ struct HostLifecycleHarness {
         guard surfaces.context.activeIDs.isEmpty else { throw HostWorkerError.rejected }
         defer { for handle in logHandles { try? handle.close() } }
         var stage = "installation"
+        var initialWorker: ExtensionProcessIdentity?
         var terminalChildren: [Int32] = []
         var cameraChildren: [Int32] = []
         do {
@@ -248,13 +249,15 @@ struct HostLifecycleHarness {
             guard let oldPID = sessions.processIdentifiers[first.id] else {
                 throw HostWorkerError.rejected
             }
+            initialWorker = ExtensionProcessIdentity.read(oldPID)
             guard surfaces.context.activeIDs == [extensionID] else {
                 throw HostWorkerError.invalidResponse
             }
             let savedSurface = surfaces.layouts.home
             stage = "engine data"
             try await verifySurfaceContext(
-                endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
+                endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface,
+                stage: &stage)
             stage = "initial commands"
             if extensionID == "calendar" { try await verifyCalendar(endpoint) }
             if extensionID == "virtualCamera" {
@@ -324,7 +327,8 @@ struct HostLifecycleHarness {
                 surfaces.layouts.home == savedSurface
             else { throw HostWorkerError.invalidResponse }
             try await verifySurfaceContext(
-                endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
+                endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface,
+                stage: &stage)
             stage = "updated commands"
             if extensionID == "calendar" { try await verifyCalendar(endpoint) }
             guard sessions.versions[first.id] == second.version,
@@ -436,7 +440,8 @@ struct HostLifecycleHarness {
             else { throw HostWorkerError.rejected }
             stage = "restore surface in replacement host"
             try await verifySurfaceContext(
-                endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
+                endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface,
+                stage: &stage)
             guard sessions.versions[first.id] == second.version,
                 let restoredPID = sessions.processIdentifiers[first.id]
             else {
@@ -565,7 +570,8 @@ struct HostLifecycleHarness {
                 sessions.versions[extensionID] == second.version
             else { throw HostWorkerError.invalidResponse }
             try await verifySurfaceContext(
-                endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
+                endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface,
+                stage: &stage)
             if extensionID == "usage" {
                 try await verifyUsageHook(endpoint, restored: true, fixture: workerFixture)
             }
@@ -604,6 +610,9 @@ struct HostLifecycleHarness {
                 "{\"downloadedBundle\":true,\"nativeWindow\":false,\"headlessCLI\":\(headlessCLI),\"headlessLifecycle\":true,\"engineLifecycleValidated\":true,\"managedNativeViewValidated\":false,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":false,\"studioMetadataValidated\":\(extensionID == "studio"),\"notchMetadataValidated\":\(extensionID == "notchShelf"),\"inertFeatureDeclineValidated\":\(["music", "notchShelf"].contains(extensionID)),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"usageHookLifecycleValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"agentActivityValidated\":\(extensionID == "herdr"),\"systemCleaningValidated\":\(extensionID == "system"),\"calendarFixtureLifecycleValidated\":\(extensionID == "calendar"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
             )
         } catch {
+            if extensionID == "keepAwake", stage.hasPrefix("engine data/") {
+                workerFailureDiagnostics(endpoint: endpoint, worker: initialWorker, stage: stage)
+            }
             if extensionID == "jev" {
                 _ = try? await endpoint.invoke(
                     "jev.key.set", payload: Data("{\"key\":null}".utf8), timeout: 2)
@@ -624,15 +633,21 @@ struct HostLifecycleHarness {
     }
 
     @MainActor private static func verifySurfaceContext(
-        _ endpoint: ExtensionPeerEndpoint, saved: SurfaceLayout, id: String, validateData: Bool
+        _ endpoint: ExtensionPeerEndpoint, saved: SurfaceLayout, id: String, validateData: Bool,
+        stage: inout String
     ) async throws {
+        let originalStage = stage
+        stage = originalStage + "/surface.context.invoke"
         let data = try await endpoint.invoke("surface.context")
+        stage = originalStage + "/surface.context.decode"
         let context = try JSONDecoder().decode(SurfaceContextSnapshot.self, from: data)
+        stage = originalStage + "/surface.context.validate"
         guard context.contractVersion == 1, context.activeIDs == [id],
             context.activeVersions[id] != nil, context.home == saved
         else {
             throw HostWorkerError.invalidResponse
         }
+        stage = originalStage
         if id == "music" {
             try await InertCommandDecline.verify([
                 "surface.snapshot", "surface.perform", "music.ui.hostSlots", "music.cli",
@@ -650,20 +665,48 @@ struct HostLifecycleHarness {
             var tile = SurfaceTile(.ability(id))
             tile.itemLimit = 3
             let request = SurfaceSnapshotRequest(target: .home, tile: tile)
+            stage = originalStage + "/surface.snapshot.invoke"
             let data = try await endpoint.invoke(
                 "surface.snapshot", payload: request.encoded(providerID: id))
+            stage = originalStage + "/surface.snapshot.decode"
             let snapshot = try SurfaceSnapshot.decode(data, providerID: id)
+            stage = originalStage + "/surface.snapshot.validate"
             guard snapshot.rows.count <= request.tile.itemLimit else {
                 throw HostWorkerError.invalidResponse
             }
-            do {
-                let invalid = SurfaceActionRequest(
-                    snapshot: request, actionID: "invalid-synthetic-action")
-                _ = try await endpoint.invoke(
+            stage = originalStage + "/surface.perform"
+            let invalid = SurfaceActionRequest(
+                snapshot: request, actionID: "invalid-synthetic-action")
+            try await SurfaceActionRejection.require {
+                try await endpoint.invoke(
                     "surface.perform", payload: invalid.encoded(providerID: id))
-                throw HostWorkerError.invalidResponse
-            } catch HostWorkerError.invalidResponse { throw HostWorkerError.invalidResponse } catch
-            {}
+            }
+        }
+        stage = originalStage
+    }
+
+    private static func workerFailureDiagnostics(
+        endpoint: ExtensionPeerEndpoint, worker: ExtensionProcessIdentity?, stage: String
+    ) {
+        let registration = endpoint.directory.appendingPathComponent(endpoint.name + ".json")
+        var metadata = stat()
+        let exists = lstat(registration.path, &metadata) == 0
+        let fields: [String: Any] = [
+            "stage": stage,
+            "workerBirthAvailable": worker != nil,
+            "workerBirthCurrent": worker?.isAlive ?? false,
+            "clientPeerIdentityAvailable": ExtensionPeerProcess.read(getpid()) != nil,
+            "workerPeerIdentityAvailable": worker.map { ExtensionPeerProcess.read($0.pid) != nil }
+                ?? false,
+            "endpointRegistrationExists": exists,
+            "endpointRegistrationRegular": exists && metadata.st_mode & S_IFMT == S_IFREG,
+            "endpointRegistrationOwned": exists && metadata.st_uid == getuid(),
+            "endpointRegistrationPrivate": exists && metadata.st_mode & 0o777 == 0o600,
+            "endpointRegistrationWithinBound": exists && metadata.st_size > 0
+                && metadata.st_size <= 4_096,
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: ["workerFailure": fields]) {
+            FileHandle.standardError.write(data + Data([10]))
         }
     }
 
