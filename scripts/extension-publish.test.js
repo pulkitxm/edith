@@ -97,6 +97,17 @@ test("publication retries cannot replace an existing version", () => {
   ).toThrow("immutable");
 });
 
+test("published version metadata is immutable even when the archive digest matches", () => {
+  for (const change of [
+    { sourceFingerprint: "c".repeat(64) },
+    { minimumSystemVersion: "15.0.0" },
+    { installedBytes: 2 },
+  ])
+    expect(() =>
+      mergeExtensionCatalog(previous, [{ ...packageRecord, ...change }], 2),
+    ).toThrow("immutable");
+});
+
 test("catalog publication always increases the revision", () => {
   for (const revision of [0, 1, NaN, Number.MAX_SAFE_INTEGER + 1])
     expect(() => mergeExtensionCatalog(previous, [], revision)).toThrow(
@@ -453,6 +464,7 @@ test("all local package identities are checked before any release client request
       repository: "synthetic/fixture",
       directory,
       include: [entry],
+      previous: { schemaVersion: 1, revision: 0, packages: [] },
       preflightAsset: ({ file }) => calls.push(file),
     };
     await preflightExtensionBuilds(options);
