@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 public struct ClaudeAccountLimits: Codable, Equatable, Identifiable, Sendable {
@@ -26,11 +27,10 @@ public enum ClaudeAccountLimitsLayout {
 public actor ClaudeAccountLimitsCollector {
     public static let shared = ClaudeAccountLimitsCollector()
     private struct Cached {
-        let account: ClaudeAccount
         let snapshot: ClaudeAccountLimits
         let retryAt: Date
     }
-    private var cached: [UUID: Cached] = [:]
+    private var cached: [String: Cached] = [:]
     private var collecting = false
     private var followers: [CheckedContinuation<Void, Never>] = []
 
@@ -54,15 +54,13 @@ public actor ClaudeAccountLimitsCollector {
             followers = []
             for follower in pending { follower.resume() }
         }
-        let ids = Set(accounts.map(\.id))
-        cached = cached.filter { ids.contains($0.key) }
-        var result: [UUID: ClaudeAccountLimits] = [:]
+        let keys = Set(accounts.map(cacheKey))
+        cached = cached.filter { keys.contains($0.key) }
+        var scheduled = Set<String>()
         let pending = accounts.filter { account in
-            if let saved = cached[account.id], saved.account == account, saved.retryAt > now {
-                result[account.id] = saved.snapshot
-                return false
-            }
-            return true
+            let key = cacheKey(account)
+            guard scheduled.insert(key).inserted else { return false }
+            return cached[key].map { $0.retryAt <= now } ?? true
         }
         let read: @Sendable (ClaudeAccount) async -> (ClaudeAccount, ClaudeAccountLimits, Date) = {
             account in
@@ -91,8 +89,7 @@ public actor ClaudeAccountLimitsCollector {
                 group.addTask { await read(account) }
             }
             while let (account, snapshot, retry) = await group.next() {
-                cached[account.id] = Cached(account: account, snapshot: snapshot, retryAt: retry)
-                result[account.id] = snapshot
+                cached[cacheKey(account)] = Cached(snapshot: snapshot, retryAt: retry)
                 if nextIndex < pending.count {
                     let next = pending[nextIndex]
                     nextIndex += 1
@@ -100,6 +97,19 @@ public actor ClaudeAccountLimitsCollector {
                 }
             }
         }
-        return accounts.compactMap { result[$0.id] }
+        return accounts.compactMap { account in
+            guard let saved = cached[cacheKey(account)] else { return nil }
+            return ClaudeAccountLimits(
+                id: account.id, name: account.name, limits: saved.snapshot.limits,
+                refreshedAt: saved.snapshot.refreshedAt)
+        }
+    }
+
+    private func cacheKey(_ account: ClaudeAccount) -> String {
+        let value =
+            account.authentication == .browserLogin
+            ? account.id.uuidString + (account.loginData ?? "")
+            : account.authentication.rawValue + account.credential
+        return SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 }

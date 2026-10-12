@@ -76,9 +76,41 @@ import Testing
         #expect(key.authentication == .apiKey)
         #expect(key.credential == "synthetic-key")
         #expect(
-            try ClaudeAccount.currentCLIAccount(environment: [:], savedLogin: "synthetic-login")
-                .credential == "synthetic-login")
+            try ClaudeAccount.currentCLIAccount(
+                environment: [:],
+                savedLoginData: Data(
+                    #"{"claudeAiOauth":{"accessToken":"synthetic-login","refreshToken":"synthetic-refresh"}}"#
+                        .utf8)
+            )
+            .credential == "synthetic-login")
         #expect(throws: (any Error).self) { try ClaudeAccount.currentCLIAccount(environment: [:]) }
+    }
+
+    @Test func importedLoginKeepsRefreshCredentialsAndNeverOverwritesAnUpdatedLogin() throws {
+        let data = Data(
+            #"{"claudeAiOauth":{"accessToken":"synthetic-access","refreshToken":"synthetic-refresh"}}"#
+                .utf8)
+        let account = try ClaudeAccount.currentCLIAccount(environment: [:], savedLoginData: data)
+        #expect(account.authentication == .browserLogin)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = try account.launcher(command: "/usr/bin/env", arguments: [], directory: root)
+        let credentials = file.deletingLastPathComponent().appendingPathComponent(
+            ".credentials.json")
+        #expect(try Data(contentsOf: credentials) == data)
+        #expect(
+            (try FileManager.default.attributesOfItem(atPath: credentials.path)[.posixPermissions]
+                as? NSNumber)?.intValue == 0o600)
+        #expect(try run(file)["CLAUDE_CODE_OAUTH_TOKEN"] == nil)
+        let updated = Data(
+            #"{"claudeAiOauth":{"accessToken":"synthetic-updated","refreshToken":"synthetic-refreshed"}}"#
+                .utf8)
+        try updated.write(to: credentials)
+        _ = try account.launcher(command: "/usr/bin/env", arguments: [], directory: root)
+        #expect(try Data(contentsOf: credentials) == updated)
+        #expect(
+            try JSONDecoder().decode(ClaudeAccount.self, from: JSONEncoder().encode(account))
+                == account)
     }
 
     @Test func invalidAndIncompleteAccountsCannotLaunch() throws {

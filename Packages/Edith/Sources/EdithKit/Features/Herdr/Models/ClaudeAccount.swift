@@ -20,6 +20,7 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
     public var name: String
     public var authentication: Authentication = .oauthToken
     public var credential = ""
+    public var loginData: String?
 
     public init(
         id: UUID = UUID(), name: String, authentication: Authentication = .oauthToken,
@@ -32,7 +33,7 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
     }
 
     public static func currentCLIAccount(
-        environment: [String: String], savedLogin: String? = nil
+        environment: [String: String], savedLoginData: Data? = nil
     ) throws -> ClaudeAccount {
         if let token = environment["CLAUDE_CODE_OAUTH_TOKEN"], !token.isEmpty {
             return ClaudeAccount(name: "Current CLI account", credential: token)
@@ -41,8 +42,17 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
             return ClaudeAccount(
                 name: "Current CLI account", authentication: .apiKey, credential: key)
         }
-        if let savedLogin, !savedLogin.isEmpty {
-            return ClaudeAccount(name: "Current CLI account", credential: savedLogin)
+        if let savedLoginData,
+            let object = try? JSONSerialization.jsonObject(with: savedLoginData) as? [String: Any],
+            let login = object["claudeAiOauth"] as? [String: Any],
+            let token = login["accessToken"] as? String, !token.isEmpty,
+            let value = String(data: savedLoginData, encoding: .utf8)
+        {
+            var account = ClaudeAccount(
+                name: "Current CLI account", authentication: .browserLogin, credential: token)
+            account.loginData = value
+            try account.validate()
+            return account
         }
         throw ClaudeAccountError.rejected(
             "No current Claude credentials were found. Sign in with the CLI or add a token manually."
@@ -72,17 +82,14 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
         }
         let saved = try await connection.run(
             "head -c 65537 \"$HOME/.claude/.credentials.json\"", timeout: 5)
-        let login =
-            saved.succeeded
-            ? ClaudeSavedLogin.token(
-                environment: ["CLAUDE_CONFIG_DIR": "/account"], readFile: { _ in saved.stdout })
-            : nil
-        return try currentCLIAccount(environment: environment, savedLogin: login)
+        return try currentCLIAccount(
+            environment: environment, savedLoginData: saved.succeeded ? saved.stdout : nil)
     }
 
     public func validate() throws {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             name.utf8.count <= 128, credential.utf8.count <= 8192,
+            (loginData?.utf8.count ?? 0) <= 65_536,
             !name.utf8.contains(0), !credential.utf8.contains(0)
         else { throw ClaudeAccountError.rejected("Enter a valid account name and credential.") }
     }
@@ -103,6 +110,14 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
         let folder = directory.appendingPathComponent(id.uuidString, isDirectory: true)
         try FileManager.default.createDirectory(
             at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        if authentication == .browserLogin, let loginData {
+            let credentials = folder.appendingPathComponent(".credentials.json")
+            if !FileManager.default.fileExists(atPath: credentials.path) {
+                try Data(loginData.utf8).write(to: credentials, options: .atomic)
+                try FileManager.default.setAttributes(
+                    [.posixPermissions: 0o600], ofItemAtPath: credentials.path)
+            }
+        }
         let file = folder.appendingPathComponent("launch-\(UUID().uuidString).sh")
         try launchScript(
             command: command, arguments: arguments, configurationPath: folder.path,

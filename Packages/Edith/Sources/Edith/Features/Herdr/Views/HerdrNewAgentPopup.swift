@@ -33,6 +33,15 @@ struct HerdrNewAgentPopup: View {
         ) { ["space", model.selectedHost?.id ?? "local", $0.label] }
     }
 
+    private var accountMachine: Machine? {
+        let host =
+            model.selectedHost
+            ?? model.space.flatMap { space in
+                store.hosts.first { $0.id == space.agents.first?.machineID }
+            }
+        return host.flatMap { store.machine(for: $0) }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -41,7 +50,7 @@ struct HerdrNewAgentPopup: View {
             if model.selectedKind == "Claude Code" || model.space != nil {
                 ClaudeAccountLaunchPicker(
                     accounts: store.claudeAccounts,
-                    machine: model.selectedHost.flatMap { store.machine(for: $0) },
+                    machine: accountMachine,
                     selection: $model.selectedAccountID
                 )
                 .disabled(model.launching)

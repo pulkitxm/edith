@@ -55,7 +55,7 @@ import Observation
                 account = try await Task.detached {
                     try ClaudeAccount.currentCLIAccount(
                         environment: environment,
-                        savedLogin: ClaudeSavedLogin.token(environment: environment))
+                        savedLoginData: ClaudeSavedLogin.credentials(environment: environment))
                 }.value
             }
             var next = state

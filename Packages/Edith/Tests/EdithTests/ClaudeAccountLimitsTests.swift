@@ -7,6 +7,14 @@ import Testing
 @testable import EdithKit
 
 @Suite struct ClaudeAccountLimitsTests {
+    @Test func namedAccountsReplaceTheDefaultCredentialPoll() {
+        let providers: [LimitProvider] = [.claude, .codex]
+        #expect(LimitsCollector.pollingProviders(providers, accounts: []) == providers)
+        #expect(
+            LimitsCollector.pollingProviders(providers, accounts: [ClaudeAccount(name: "Company")])
+                == [.codex])
+    }
+
     @Test func menuBarKeepsTwoAccountsNamedAndBoundsLargerSets() {
         let accounts = fixtures(5)
         #expect(
@@ -55,6 +63,30 @@ import Testing
         let remaining = await collector.refresh(
             accounts: Array(accounts.prefix(1)), now: now.addingTimeInterval(62), fetch: read)
         #expect(remaining.count == 1)
+    }
+
+    @Test func duplicateCredentialsAndRenamesDoNotRepeatRateLimitedRequests() async {
+        var company = ClaudeAccount(name: "Company", credential: "synthetic-shared-token")
+        let duplicate = ClaudeAccount(name: "Current CLI account", credential: company.credential)
+        let collector = ClaudeAccountLimitsCollector()
+        let calls = AccountLimitsCalls()
+        let now = Date()
+        let fetch: @Sendable (ClaudeAccount, URL) async throws -> LimitsProviderSnapshot = {
+            account, _ in
+            await calls.record(account.id)
+            throw ClaudeLimitsReader.Failure.rateLimited(300)
+        }
+        let first = await collector.refresh(accounts: [company, duplicate], now: now, fetch: fetch)
+        #expect(first.map(\.id) == [company.id, duplicate.id])
+        #expect(await calls.count == 1)
+        company.name = "Renamed company"
+        let second = await collector.refresh(
+            accounts: [company], now: now.addingTimeInterval(61), fetch: fetch)
+        #expect(second.first?.name == company.name)
+        #expect(await calls.count == 1)
+        _ = await collector.refresh(
+            accounts: [company], now: now.addingTimeInterval(301), fetch: fetch)
+        #expect(await calls.count == 2)
     }
 
     @Test func concurrentRefreshesCoalesceWithoutCrossAccountTokens() async {

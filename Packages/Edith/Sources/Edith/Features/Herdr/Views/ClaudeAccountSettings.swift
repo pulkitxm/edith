@@ -4,6 +4,7 @@ import SwiftUI
 struct ClaudeAccountSettings: View {
     let accounts: ClaudeAccountsModel
     var machine: Machine? = nil
+    var accountAdded: (ClaudeAccount) -> Void = { _ in }
     @State private var draft: ClaudeAccount?
     @State private var defaultID: UUID?
 
@@ -35,6 +36,7 @@ struct ClaudeAccountSettings: View {
                         if let account = await accounts.importCurrentCLIAccount(on: machine) {
                             draft = account
                             defaultID = account.id
+                            accountAdded(account)
                         }
                     }
                 }
@@ -46,10 +48,16 @@ struct ClaudeAccountSettings: View {
                     TextField("Account name", text: binding(\.name))
                         .textFieldStyle(.roundedBorder)
                         .accessibilityLabel("Account name")
-                    Picker("Authentication", selection: binding(\.authentication)) {
+                    Picker("Authentication", selection: authenticationBinding) {
                         ForEach(ClaudeAccount.Authentication.allCases) { method in
                             Text(method.title).tag(method)
                         }
+                    }
+                    if draft?.authentication == .browserLogin, draft?.loginData != nil {
+                        Text("Full OAuth token").font(.edithText(.caption))
+                        Text(draft?.credential ?? "")
+                            .font(.system(size: UIScale.pt(11), design: .monospaced))
+                            .textSelection(.enabled)
                     }
                     if draft?.authentication != .browserLogin {
                         Text(draft?.authentication == .apiKey ? "Full API key" : "Full OAuth token")
@@ -112,6 +120,15 @@ struct ClaudeAccountSettings: View {
         .onChange(of: accounts.state.defaultID) { _, value in defaultID = value }
     }
 
+    private var authenticationBinding: Binding<ClaudeAccount.Authentication> {
+        Binding(
+            get: { draft?.authentication ?? .oauthToken },
+            set: { value in
+                if value != draft?.authentication { draft?.loginData = nil }
+                draft?.authentication = value
+            })
+    }
+
     private func binding<Value>(_ path: WritableKeyPath<ClaudeAccount, Value>) -> Binding<Value> {
         let initial = draft![keyPath: path]
         return Binding(
@@ -122,7 +139,7 @@ struct ClaudeAccountSettings: View {
         guard var draft else { return }
         draft.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.credential =
-            draft.authentication == .browserLogin
+            draft.authentication == .browserLogin && draft.loginData == nil
             ? "" : draft.credential.trimmingCharacters(in: .whitespacesAndNewlines)
         self.draft = draft
         var next = accounts.state
@@ -132,7 +149,11 @@ struct ClaudeAccountSettings: View {
         } else {
             next.accounts.append(draft)
         }
-        Task { await accounts.save(next) }
+        let added = !accounts.state.accounts.contains { $0.id == draft.id }
+        Task {
+            await accounts.save(next)
+            if added, accounts.error == nil { accountAdded(draft) }
+        }
     }
 
     private func removeDraft() {
@@ -172,7 +193,9 @@ struct ClaudeAccountLaunchPicker: View {
         .pageTask { await accounts.read() }
         .edithSheet(isPresented: $editing) {
             VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                ClaudeAccountSettings(accounts: accounts, machine: machine)
+                ClaudeAccountSettings(
+                    accounts: accounts, machine: machine,
+                    accountAdded: { selection = $0.id.uuidString })
                 Button("Done") { editing = false }
             }
             .padding(UIScale.pt(18))

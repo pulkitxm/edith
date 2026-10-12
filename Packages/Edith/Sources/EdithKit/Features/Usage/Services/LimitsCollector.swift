@@ -83,8 +83,14 @@ public enum LimitsCollector {
         announce: @Sendable (Notification.Name) -> Void = { IPC.post($0) }
     ) async -> LimitsTopicSnapshot {
         let providers = enabledProviders(defaults: defaults)
+        var configured: [ClaudeAccount] = []
+        if providers.contains(.claude) {
+            do { configured = try await ClaudeAccountStorage().load().accounts } catch {
+                logger.error("Account limits configuration could not be loaded.")
+            }
+        }
         let snapshot = await collect(
-            providers: providers, force: force,
+            providers: pollingProviders(providers, accounts: configured), force: force,
             refreshSession: refreshSession, announce: { _ in }
         ) { provider in
             switch provider {
@@ -99,21 +105,18 @@ public enum LimitsCollector {
                 return await fetchGrok()
             }
         }
-        var accounts: [ClaudeAccountLimits] = []
-        if providers.contains(.claude) {
-            do {
-                let state = try await ClaudeAccountStorage().load()
-                accounts = await ClaudeAccountLimitsCollector.shared.refresh(
-                    accounts: state.accounts)
-            } catch {
-                logger.error("Account limits configuration could not be loaded.")
-            }
-        }
+        let accounts = await ClaudeAccountLimitsCollector.shared.refresh(accounts: configured)
         announce(IPC.Name.limitsUpdated)
         return LimitsTopicSnapshot(
             refreshedAt: snapshot.refreshedAt, providers: snapshot.providers,
             failure: snapshot.providers.filter { accounts.isEmpty || $0.provider != .claude }
                 .compactMap(\.error).first, claudeAccounts: accounts)
+    }
+
+    static func pollingProviders(_ providers: [LimitProvider], accounts: [ClaudeAccount])
+        -> [LimitProvider]
+    {
+        providers.filter { $0 != .claude || accounts.isEmpty }
     }
 
     public static func connectClaudeStatusLine() {

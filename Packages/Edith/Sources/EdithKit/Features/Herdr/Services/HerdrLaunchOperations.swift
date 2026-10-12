@@ -35,6 +35,16 @@ public enum HerdrLaunchOperations {
             command: command, arguments: arguments, configurationPath: prepared.stdoutText,
             launcherPath: path)
         do {
+            if account.authentication == .browserLogin, let loginData = account.loginData {
+                let credentials = ShellQuote.quote(prepared.stdoutText + "/.credentials.json")
+                let seeded = try await connection.run(
+                    "umask 077; if [ ! -f " + credentials + " ]; then cat > " + credentials
+                        + "; else cat >/dev/null; fi",
+                    stdin: Data(loginData.utf8), timeout: 15)
+                guard seeded.succeeded else {
+                    throw HerdrCommandError.commandFailed(seeded.stderrText)
+                }
+            }
             let uploaded = try await connection.run(
                 "umask 077; cat > " + ShellQuote.quote(path) + " && chmod 700 "
                     + ShellQuote.quote(path),
