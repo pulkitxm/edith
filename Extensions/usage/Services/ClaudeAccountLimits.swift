@@ -58,7 +58,8 @@ public actor ClaudeAccountLimitsCollector {
         if activeID != nil {
             let id = UUID()
             try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { continuation in
+                try await withCheckedThrowingContinuation {
+                    (continuation: CheckedContinuation<Void, Error>) in
                     if Task.isCancelled {
                         continuation.resume(throwing: CancellationError())
                     } else {
@@ -80,7 +81,8 @@ public actor ClaudeAccountLimitsCollector {
         let task = Task {
             try await withThrowingTaskGroup(of: (String, Cached).self) { group in
                 let read: @Sendable ((String, ClaudeAccount)) async throws -> (String, Cached) = {
-                    key, account in
+                    item in
+                    let (key, account) = item
                     try Task.checkCancellation()
                     let limits: LimitsProviderSnapshot
                     var retryAt = now.addingTimeInterval(60)
