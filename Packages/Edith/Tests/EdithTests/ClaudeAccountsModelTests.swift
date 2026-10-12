@@ -283,6 +283,9 @@ import Testing
                     ClaudeAccount(name: "Personal", authentication: .browserLogin),
                 ], defaultID: account.id))
         try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
+        let launchDefaults = scratchDefaults()
+        try HerdrLaunchSettings.setSharedClaudeLaunch(
+            arguments: "--verbose", environment: "IS_DEMO=1", in: launchDefaults)
         let previousScale = UIScale.current
         defer { UIScale.apply(previousScale) }
         for (name, width, scheme, zoom) in [
@@ -290,13 +293,17 @@ import Testing
             ("zoom-light", 660.0, .light, 1.5),
         ] {
             UIScale.apply(zoom)
-            let view = ClaudeAccountSettings(accounts: model)
-                .padding(18).frame(width: width, height: 430 * zoom, alignment: .topLeading)
-                .background(scheme == .dark ? Color.black : Color.white)
-                .environment(\.colorScheme, scheme)
+            let view = VStack(alignment: .leading, spacing: UIScale.pt(18)) {
+                ClaudeAccountSettings(accounts: model)
+                Divider()
+                ClaudeSharedLaunchSettings(defaults: launchDefaults)
+            }
+            .padding(18).frame(width: width, height: 760 * zoom, alignment: .topLeading)
+            .background(scheme == .dark ? Color.black : Color.white)
+            .environment(\.colorScheme, scheme)
             let host = NSHostingView(rootView: view)
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: width, height: 430 * zoom),
+                contentRect: NSRect(x: 0, y: 0, width: width, height: 760 * zoom),
                 styleMask: [.borderless], backing: .buffered, defer: false)
             window.contentView = host
             window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)

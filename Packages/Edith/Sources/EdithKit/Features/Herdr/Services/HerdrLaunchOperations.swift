@@ -152,8 +152,8 @@ public enum HerdrLaunchOperations {
         catalog: AgentLaunchCatalog? = nil, session: String = HerdrTerminalSpace.defaultSession,
         defaults: UserDefaults = SharedDefaults.store
     ) -> HerdrAgentLaunch {
-        let agentArguments = AgentLaunchArguments.launchArguments(
-            kind: kind, options: options, catalog: catalog)
+        let agentArguments = HerdrLaunchSettings.launchArguments(
+            kind: kind, options: options, catalog: catalog, in: defaults)
         if HerdrLaunchSettings.usesHerdrAgentStart(for: kind, in: defaults),
             let slug = HerdrLaunchSettings.defaultHerdrSlug(for: kind)
         {
@@ -172,7 +172,7 @@ public enum HerdrLaunchOperations {
                                 agentArguments: agentArguments), session: session), platform: $0)
                 }, timeout: TimeInterval(timeoutMS / 1_000) + 5)
         }
-        let command = HerdrLaunchSettings.command(for: kind, in: defaults)
+        let command = HerdrLaunchSettings.launchCommand(for: kind, in: defaults)
         return HerdrAgentLaunch(
             local: HerdrSessionCommand.scoped(
                 HerdrPaneRunCommand.arguments(

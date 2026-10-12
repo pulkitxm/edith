@@ -1987,7 +1987,8 @@ final class HerdrStore {
             try await claudeAccounts.load()
             let chosen =
                 accountID == nil || accountID == "default"
-                ? claudeAccounts.state.defaultID?.uuidString : accountID
+                ? (claudeAccounts.state.defaultID ?? claudeAccounts.state.accounts.first?.id)?
+                    .uuidString : accountID
             if let chosen, chosen != "cli" {
                 guard let id = UUID(uuidString: chosen), let saved = claudeAccounts.account(id)
                 else {
@@ -2002,9 +2003,10 @@ final class HerdrStore {
         }
         let accountLauncher: URL?
         if let account, machine == nil {
-            let arguments = AgentLaunchArguments.launchArguments(
-                kind: kind, options: HerdrLaunchSettings.options(for: kind, in: defaults))
-            let command = HerdrLaunchSettings.command(for: kind, in: defaults)
+            let arguments = HerdrLaunchSettings.launchArguments(
+                kind: kind, options: HerdrLaunchSettings.options(for: kind, in: defaults),
+                in: defaults)
+            let command = HerdrLaunchSettings.launchCommand(for: kind, in: defaults)
             let directory = claudeAccounts.directory
             accountLauncher = try await Task.detached {
                 try account.launcher(command: command, arguments: arguments, directory: directory)
@@ -2035,9 +2037,9 @@ final class HerdrStore {
         let start = agentStarter
         let startAccount = accountAgentStarter
         let startRemoteAccount = remoteAccountAgentStarter
-        let accountCommand = HerdrLaunchSettings.command(for: kind, in: defaults)
-        let accountArguments = AgentLaunchArguments.launchArguments(
-            kind: kind, options: HerdrLaunchSettings.options(for: kind, in: defaults))
+        let accountCommand = HerdrLaunchSettings.launchCommand(for: kind, in: defaults)
+        let accountArguments = HerdrLaunchSettings.launchArguments(
+            kind: kind, options: HerdrLaunchSettings.options(for: kind, in: defaults), in: defaults)
         let id = placeholder.id
         agentStartupTasks[id] = Task { [weak self] in
             do {

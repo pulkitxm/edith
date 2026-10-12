@@ -4,6 +4,44 @@ import Testing
 @testable import Edith
 
 @Suite struct ClaudeAccountTests {
+    @Test func sharedLaunchOptionsApplyToEveryAccountAndPreserveLiteralValues() throws {
+        let defaults = UserDefaults(suiteName: "test.shared-launch." + UUID().uuidString)!
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try HerdrLaunchSettings.setSharedClaudeLaunch(
+            arguments: "FLAG_VALUE=two words",
+            environment: "IS_DEMO=1\nLITERAL=$(touch forbidden); 'quoted'", in: defaults)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("alias cc='/usr/bin/env'\n".utf8).write(to: root.appendingPathComponent(".zshrc"))
+        HerdrLaunchSettings.setCommand("cc", for: "Claude Code", in: defaults)
+        let command = HerdrLaunchSettings.launchCommand(for: "Claude Code", in: defaults)
+        let arguments = HerdrLaunchSettings.launchArguments(
+            kind: "Claude Code", options: .none, in: defaults)
+        for credential in ["synthetic-work", "synthetic-personal"] {
+            let account = ClaudeAccount(name: credential, credential: credential)
+            let file = try account.launcher(command: command, arguments: arguments, directory: root)
+            let environment = try run(file, shell: "/bin/zsh", startupDirectory: root)
+            #expect(environment["FLAG_VALUE"] == "two words")
+            #expect(environment["IS_DEMO"] == "1")
+            #expect(environment["LITERAL"] == "$(touch forbidden); 'quoted'")
+            #expect(environment["CLAUDE_CODE_OAUTH_TOKEN"] == credential)
+        }
+        #expect(HerdrLaunchSettings.launchCommand(for: "Gemini", in: defaults) == "gemini")
+        #expect(
+            HerdrLaunchSettings.launchArguments(kind: "Gemini", options: .none, in: defaults)
+                .isEmpty)
+        for value in [
+            "BAD-NAME=value", "MISSING_VALUE", "CLAUDE_CODE_OAUTH_TOKEN=wrong",
+            "CLAUDE_CONFIG_DIR=/tmp",
+        ] {
+            #expect(throws: ClaudeAccountError.self) {
+                try HerdrLaunchSettings.setSharedClaudeLaunch(
+                    arguments: "", environment: value, in: defaults)
+            }
+        }
+        #expect(HerdrLaunchSettings.sharedArguments(in: defaults) == "FLAG_VALUE=two words")
+    }
+
     @Test func simultaneousAccountsHaveIsolatedCredentialsAndConfigDirectories() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

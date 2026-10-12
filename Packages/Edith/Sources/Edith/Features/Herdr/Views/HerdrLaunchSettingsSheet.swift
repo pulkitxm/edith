@@ -13,6 +13,8 @@ struct HerdrLaunchSettingsSheet: View {
                 VStack(spacing: 0) {
                     ClaudeAccountSettings(accounts: accounts).padding(UIScale.pt(18))
                     Divider()
+                    ClaudeSharedLaunchSettings().padding(UIScale.pt(18))
+                    Divider()
                     ForEach(HerdrLaunchSettings.kinds, id: \.self) { kind in
                         HerdrLaunchKindRow(kind: kind)
                         if kind != HerdrLaunchSettings.kinds.last { Divider() }
@@ -215,5 +217,52 @@ private struct HerdrLaunchKindRow: View {
         await catalogLoad.perform(operation: {
             await AgentLaunchCatalogs.shared.catalog(for: launchKind, refresh: refresh)
         }) { catalog = $0 }
+    }
+}
+
+struct ClaudeSharedLaunchSettings: View {
+    var defaults: UserDefaults = SharedDefaults.store
+    @State private var arguments = ""
+    @State private var environment = ""
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            Text("Claude launch options").font(.edithText(.headline))
+            Text(
+                "Shared by all Claude accounts on this Mac and used for local and remote sessions."
+            )
+            .font(.edithText(.caption)).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            Text("Additional arguments, one per line").font(.edithText(.caption))
+            TextEditor(text: $arguments)
+                .font(.system(size: UIScale.pt(11), design: .monospaced))
+                .frame(height: UIScale.pt(48))
+                .accessibilityLabel("Shared Claude launch arguments")
+            Text("Environment variables, NAME=value per line").font(.edithText(.caption))
+            TextEditor(text: $environment)
+                .font(.system(size: UIScale.pt(11), design: .monospaced))
+                .frame(height: UIScale.pt(48))
+                .accessibilityLabel("Shared Claude launch environment")
+            Text(
+                "Added to the configured command, including aliases such as cc. Put flag values on their own lines."
+            )
+            .font(.edithText(.caption)).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            Button("Save launch options") {
+                do {
+                    try HerdrLaunchSettings.setSharedClaudeLaunch(
+                        arguments: arguments, environment: environment, in: defaults)
+                    error = nil
+                } catch {
+                    self.error = error.localizedDescription
+                }
+            }
+            if let error { Text(error).font(.edithText(.caption)).foregroundStyle(.red) }
+        }
+        .onAppear {
+            arguments = HerdrLaunchSettings.sharedArguments(in: defaults)
+            environment = HerdrLaunchSettings.sharedEnvironment(in: defaults)
+        }
     }
 }

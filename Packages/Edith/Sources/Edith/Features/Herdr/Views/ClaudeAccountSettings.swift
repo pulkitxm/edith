@@ -20,7 +20,9 @@ struct ClaudeAccountSettings: View {
                             get: { draft?.id },
                             set: { draft = accounts.account($0) })
                     ) {
-                        Text("Choose an account").tag(UUID?.none)
+                        if accounts.state.accounts.isEmpty {
+                            Text("Choose an account").tag(UUID?.none)
+                        }
                         ForEach(accounts.state.accounts) { account in
                             Text(account.name).tag(Optional(account.id))
                         }
@@ -51,7 +53,11 @@ struct ClaudeAccountSettings: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text("Default for new Claude sessions").font(.edithText(.caption))
                     Picker("Default for new Claude sessions", selection: $defaultID) {
-                        Text("Existing CLI login").tag(UUID?.none)
+                        if accounts.state.accounts.isEmpty {
+                            Text("Existing CLI login").tag(UUID?.none)
+                        } else {
+                            Text("First saved account").tag(UUID?.none)
+                        }
                         ForEach(accounts.state.accounts) { account in
                             Text(account.name).tag(Optional(account.id))
                         }
@@ -99,12 +105,14 @@ struct ClaudeAccountSettings: View {
                                 "Generate a token with claude setup-token. Tokens without profile access can launch sessions but cannot show subscription limits."
                             )
                             .font(.edithText(.caption)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                         }
                     } else {
                         Text(
                             "The first launch opens Claude's login flow. Each account keeps its own login and settings."
                         )
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     }
                     HStack {
                         Button("Save account") { saveDraft() }
@@ -124,6 +132,10 @@ struct ClaudeAccountSettings: View {
                     Button("Reload") { Task { await accounts.read() } }
                 }.font(.edithText(.caption))
             }
+        }
+        .onAppear {
+            defaultID = accounts.state.defaultID
+            selectAccountIfNeeded()
         }
         .pageTask {
             await accounts.read()
@@ -202,10 +214,12 @@ struct ClaudeAccountLaunchPicker: View {
         HStack {
             Picker("Claude account", selection: $selection) {
                 Text(
-                    "Launch default: \(accounts.account(accounts.state.defaultID)?.name ?? "Existing CLI login")"
+                    "Launch default: \((accounts.account(accounts.state.defaultID) ?? accounts.state.accounts.first)?.name ?? "Existing CLI login")"
                 )
                 .tag("default")
-                Text("Existing CLI login").tag("cli")
+                if accounts.state.accounts.isEmpty {
+                    Text("Existing CLI login").tag("cli")
+                }
                 ForEach(accounts.state.accounts) { account in
                     Text("\(account.name) (\(account.authentication.title))").tag(
                         account.id.uuidString)
@@ -216,14 +230,18 @@ struct ClaudeAccountLaunchPicker: View {
         .font(.edithText(.caption))
         .pageTask { await accounts.read() }
         .edithSheet(isPresented: $editing) {
-            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                ClaudeAccountSettings(
-                    accounts: accounts, machine: machine,
-                    accountAdded: { selection = $0.id.uuidString })
-                Button("Done") { editing = false }
+            ScrollView {
+                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                    ClaudeAccountSettings(
+                        accounts: accounts, machine: machine,
+                        accountAdded: { selection = $0.id.uuidString })
+                    Divider()
+                    ClaudeSharedLaunchSettings()
+                    Button("Done") { editing = false }
+                }
+                .padding(UIScale.pt(18))
             }
-            .padding(UIScale.pt(18))
-            .frame(width: PresentationMetrics.width(540))
+            .frame(width: PresentationMetrics.width(540), height: PresentationMetrics.width(640))
         }
     }
 }
