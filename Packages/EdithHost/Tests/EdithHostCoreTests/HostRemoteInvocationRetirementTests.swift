@@ -138,4 +138,46 @@ import Testing
         #expect(ownership.count == 0)
     }
 
+    @Test func queuedAcceptedOwnerKeepsCapabilityAfterAdmissionCloses() async throws {
+        let ownership = HostRemoteInvocationRetirement()
+        let token = UUID()
+        var executed = false
+        var captured: HostRemoteInvocationAdmission?
+        let actual = Task { @MainActor in
+            guard let admission = ownership.admission(for: token) else { return }
+            captured = admission
+            HostRemoteInvocationAdmission.$current.withValue(admission) {
+                #expect(HostRemoteInvocationAdmission.current?.authorizes(token) == true)
+                #expect(HostRemoteInvocationAdmission.current?.authorizes(UUID()) == false)
+                #expect(!ownership.accepts(UUID()))
+                #expect(!Task.isCancelled)
+                executed = true
+            }
+        }
+        ownership.retain(actual, token: token)
+        ownership.closeAdmission()
+        #expect(!executed)
+        #expect(!ownership.accepts(UUID()))
+        await ownership.joinCurrent()
+        #expect(executed)
+        #expect(captured?.isCurrent == false)
+        #expect(HostRemoteInvocationAdmission.current == nil)
+        #expect(!ownership.accepts(UUID()))
+    }
+
+    @Test func retiredCapabilityCannotAuthorizeReusedToken() async throws {
+        let ownership = HostRemoteInvocationRetirement()
+        let token = UUID()
+        ownership.retain(Task {}, token: token)
+        let old = try #require(ownership.admission(for: token))
+        #expect(old.authorizes(token))
+        await ownership.joinCurrent()
+        ownership.retain(Task {}, token: token)
+        let current = try #require(ownership.admission(for: token))
+        #expect(!old.authorizes(token))
+        #expect(current.authorizes(token))
+        await ownership.joinCurrent()
+        #expect(!current.authorizes(token))
+    }
+
 }

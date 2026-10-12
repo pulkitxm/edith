@@ -73,7 +73,6 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
         let receiver = Exchange(
             connection: connection, peer: peer, execute: execute, didDisconnect: didDisconnect,
             admit: { [weak self] command in self?.admit(command) == true },
-            mayExecute: { [weak self] command in self?.mayExecute(command) == true },
             stopReturned: { [weak self] token in self?.releaseStop(token) })
         let accepted = lock.withLock {
             guard !invalidated, connections.contains(where: { $0 === connection }),
@@ -193,13 +192,6 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
         }
     }
 
-    private func mayExecute(_ command: HostRemoteCommand) -> Bool {
-        lock.withLock {
-            !invalidated
-                && (!draining || (command.operation == "stop" && activeStop == command.token))
-        }
-    }
-
     private func releaseStop(_ token: UUID) {
         lock.withLock { if activeStop == token { activeStop = nil } }
     }
@@ -260,7 +252,6 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
         private let callbacks = HostRemoteCallbackRetirement()
         private let markers = HostRemoteCallbackRetirement()
         private let admit: @Sendable (HostRemoteCommand) -> Bool
-        private let mayExecute: @Sendable (HostRemoteCommand) -> Bool
         private let stopReturned: @Sendable (UUID) -> Void
         @MainActor private let ownership = HostRemoteInvocationRetirement()
         @MainActor private var authenticated = false
@@ -277,7 +268,6 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
             connection: NSXPCConnection, peer: HostRemoteKernelIdentity, execute: @escaping Execute,
             didDisconnect: @escaping @MainActor @Sendable () -> Void,
             admit: @escaping @Sendable (HostRemoteCommand) -> Bool,
-            mayExecute: @escaping @Sendable (HostRemoteCommand) -> Bool,
             stopReturned: @escaping @Sendable (UUID) -> Void
         ) {
             self.connection = connection
@@ -285,7 +275,6 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
             self.execute = execute
             self.didDisconnect = didDisconnect
             self.admit = admit
-            self.mayExecute = mayExecute
             self.stopReturned = stopReturned
         }
 
@@ -320,10 +309,12 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
                 let actual = Task { @MainActor [self] in
                     do {
                         try Task.checkCancellation()
-                        guard mayExecute(command), (try? peer.verify(connection)) != nil else {
-                            throw HostWorkerError.exited
-                        }
-                        let bytes = try await execute(command)
+                        guard !invalidated, isAuthenticated,
+                            let admission = ownership.admission(for: command.token)
+                        else { throw HostWorkerError.exited }
+                        let bytes = try await HostRemoteInvocationAdmission.$current.withValue(
+                            admission
+                        ) { try await execute(command) }
                         try Task.checkCancellation()
                         guard !invalidated, (try? peer.verify(connection)) != nil else {
                             throw HostWorkerError.exited
