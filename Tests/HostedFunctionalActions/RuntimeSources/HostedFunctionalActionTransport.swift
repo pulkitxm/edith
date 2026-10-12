@@ -315,7 +315,8 @@ enum HostedFunctionalActionNativeDriver {
         transport: HostedFunctionalActionTransport,
         makeCase: @MainActor () throws -> Case
     ) async throws -> (authoritative: Data, persistent: Data?) {
-        guard Case.owner == context.owner, transport.context == context,
+        guard context.owner != "calendar", Case.owner == context.owner,
+            transport.context == context,
             Case.activationOperation == context.activationOperation
         else {
             throw HostedFunctionalActionError.invalid

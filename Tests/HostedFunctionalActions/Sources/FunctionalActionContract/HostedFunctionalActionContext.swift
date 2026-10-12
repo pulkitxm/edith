@@ -62,7 +62,7 @@ public struct HostedFunctionalActionContext: Codable, Equatable, Sendable {
     public let dataDirectory: String
     public let hostABI: String
     public let caseSHA256: String
-    public let activationOperation: String
+    public let activationOperation: String?
     public let phase: String
     public let pairScope: String
     public let previousVersion: String
@@ -73,6 +73,39 @@ public struct HostedFunctionalActionContext: Codable, Equatable, Sendable {
     public let ui: HostedFunctionalProcessIdentity
     public let operations: [String]
     public let ownedPaths: [HostedFunctionalOwnedPath]
+
+    enum CodingKeys: String, CodingKey {
+        case schema, sourceCommit, session, owner, uid, fixtureRoot, hostIdentifier, home,
+            dataDirectory, hostABI, caseSHA256, activationOperation, phase, pairScope,
+            previousVersion, currentVersion, version, packageSHA256, engine, ui, operations,
+            ownedPaths
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(schema, forKey: .schema)
+        try values.encode(sourceCommit, forKey: .sourceCommit)
+        try values.encode(session, forKey: .session)
+        try values.encode(owner, forKey: .owner)
+        try values.encode(uid, forKey: .uid)
+        try values.encode(fixtureRoot, forKey: .fixtureRoot)
+        try values.encode(hostIdentifier, forKey: .hostIdentifier)
+        try values.encode(home, forKey: .home)
+        try values.encode(dataDirectory, forKey: .dataDirectory)
+        try values.encode(hostABI, forKey: .hostABI)
+        try values.encode(caseSHA256, forKey: .caseSHA256)
+        try values.encode(activationOperation, forKey: .activationOperation)
+        try values.encode(phase, forKey: .phase)
+        try values.encode(pairScope, forKey: .pairScope)
+        try values.encode(previousVersion, forKey: .previousVersion)
+        try values.encode(currentVersion, forKey: .currentVersion)
+        try values.encode(version, forKey: .version)
+        try values.encode(packageSHA256, forKey: .packageSHA256)
+        try values.encode(engine, forKey: .engine)
+        try values.encode(ui, forKey: .ui)
+        try values.encode(operations, forKey: .operations)
+        try values.encode(ownedPaths, forKey: .ownedPaths)
+    }
 
     public static func decode(_ data: Data) throws -> Self {
         guard !data.isEmpty, data.count <= 131_072,
@@ -121,7 +154,10 @@ public struct HostedFunctionalActionContext: Codable, Equatable, Sendable {
             Self.validHash(packageSHA256), self.engine == engine, self.ui == ui,
             engine.pid != ui.pid, operations == expectedOperations,
             !operations.isEmpty, operations.count <= 16,
-            Set(operations).count == operations.count, operations.contains(activationOperation),
+            Set(operations).count == operations.count,
+            (owner == "calendar"
+                ? activationOperation == nil && operations == ["calendar.ui.list"]
+                : activationOperation.map({ operations.contains($0) }) == true),
             operations.allSatisfy(Self.operation), ownedPaths.count <= 32,
             Set(ownedPaths.map(\.name)).count == ownedPaths.count,
             Set(ownedPaths.map(\.path)).count == ownedPaths.count,
@@ -438,5 +474,186 @@ public struct HostedFunctionalMutationJournal: Codable, Equatable, Sendable {
 
     private static func digest(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+public struct HostedFunctionalCalendarControlSnapshot: Equatable, Sendable {
+    public let bytes: Data
+    public let visibleStaticTexts: [String]
+
+    public static func decode(_ bytes: Data) throws -> Self {
+        guard !bytes.isEmpty, bytes.count <= 131_072 else {
+            throw HostedFunctionalActionError.invalid
+        }
+        let value = try HostedFunctionalJSON.object(bytes)
+        guard Set(value.keys) == ["schema", "kind", "visibleStaticTexts"],
+            let schema = value["schema"] as? NSNumber,
+            CFGetTypeID(schema) != CFBooleanGetTypeID(), schema == 1,
+            value["kind"] as? String == "calendar-details",
+            let labels = value["visibleStaticTexts"] as? [String], labels.count <= 512,
+            labels.allSatisfy({ $0.utf8.count <= 4096 && !$0.utf8.contains(0) }),
+            try JSONSerialization.data(
+                withJSONObject: value, options: [.sortedKeys, .withoutEscapingSlashes]) == bytes
+        else { throw HostedFunctionalActionError.invalid }
+        return .init(bytes: bytes, visibleStaticTexts: labels)
+    }
+}
+
+public struct HostedFunctionalOriginalUIReceipt: Sendable {
+    public let context: HostedFunctionalActionContext
+    public let recipeSHA256: String
+    public let beforeBackend: Data
+    public let afterBackend: Data
+    public let beforeControl: HostedFunctionalCalendarControlSnapshot
+    public let afterControl: HostedFunctionalCalendarControlSnapshot
+    public let signedBytes: Data
+
+    public static func verify(
+        signedBytes: Data, issuerKey: Data, context: HostedFunctionalActionContext,
+        presentationID: String, capabilitySHA256: String, recipeSHA256: String
+    ) throws -> Self {
+        let value = try envelope(signedBytes, key: issuerKey)
+        guard
+            Set(value.keys) == [
+                "schema", "kind", "sourceCommit", "session", "owner", "phase",
+                "caseSHA256", "presentationID", "capabilitySHA256", "recipeSHA256", "authorization",
+                "completion", "beforeBackend", "afterBackend", "beforeControl", "afterControl",
+            ],
+            try integer(value, "schema") == 1,
+            value["kind"] as? String == "original-calendar-local-control",
+            context.owner == "calendar", value["sourceCommit"] as? String == context.sourceCommit,
+            value["session"] as? String == context.session,
+            value["owner"] as? String == context.owner,
+            value["phase"] as? String == context.phase,
+            value["caseSHA256"] as? String == context.caseSHA256,
+            value["presentationID"] as? String == presentationID,
+            UUID(uuidString: presentationID)?.uuidString.lowercased() == presentationID,
+            value["capabilitySHA256"] as? String == capabilitySHA256,
+            value["recipeSHA256"] as? String == recipeSHA256,
+            HostedFunctionalActionContext.validHash(capabilitySHA256),
+            HostedFunctionalActionContext.validHash(recipeSHA256),
+            let authorization = value["authorization"] as? [String: Any],
+            let completion = value["completion"] as? [String: Any]
+        else { throw HostedFunctionalActionError.invalid }
+        let beforeControl = try HostedFunctionalCalendarControlSnapshot.decode(
+            binary(value, "beforeControl", maximum: 131_072))
+        let afterControl = try HostedFunctionalCalendarControlSnapshot.decode(
+            binary(value, "afterControl", maximum: 131_072))
+        let before = try boundary(
+            authorization, operation: "authorize-original-step", key: issuerKey,
+            context: context, presentationID: presentationID, capabilitySHA256: capabilitySHA256,
+            control: beforeControl.bytes)
+        let after = try boundary(
+            completion, operation: "complete-original-step", key: issuerKey,
+            context: context, presentationID: presentationID, capabilitySHA256: capabilitySHA256,
+            control: afterControl.bytes)
+        guard before["actor"] as? [String: Any] != nil,
+            try JSONSerialization.data(
+                withJSONObject: before["actor"]!, options: [.sortedKeys, .withoutEscapingSlashes])
+                == JSONSerialization.data(
+                    withJSONObject: after["actor"]!,
+                    options: [.sortedKeys, .withoutEscapingSlashes]),
+            before["authorizationID"] as? String == after["authorizationID"] as? String,
+            before["stepSHA256"] as? String == after["stepSHA256"] as? String,
+            before["sourceSHA256"] as? String == after["sourceSHA256"] as? String
+        else { throw HostedFunctionalActionError.invalid }
+        return .init(
+            context: context, recipeSHA256: recipeSHA256,
+            beforeBackend: try binary(value, "beforeBackend", maximum: 1_048_576),
+            afterBackend: try binary(value, "afterBackend", maximum: 1_048_576),
+            beforeControl: beforeControl, afterControl: afterControl, signedBytes: signedBytes)
+    }
+
+    private static func integer(_ value: [String: Any], _ key: String) throws -> Int {
+        guard let number = value[key] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+            number.doubleValue.isFinite, number.doubleValue == Double(number.intValue)
+        else { throw HostedFunctionalActionError.invalid }
+        return number.intValue
+    }
+
+    private static func uuid(_ value: String) -> Bool {
+        guard UUID(uuidString: value)?.uuidString.lowercased() == value, value.utf8.count == 36
+        else { return false }
+        let bytes = Array(value.utf8)
+        return bytes[14] == 52 && [56, 57, 97, 98].contains(bytes[19])
+    }
+
+    private static func binary(_ value: [String: Any], _ key: String, maximum: Int) throws -> Data {
+        guard let text = value[key] as? String, let bytes = Data(base64Encoded: text),
+            !bytes.isEmpty, bytes.count <= maximum, bytes.base64EncodedString() == text
+        else { throw HostedFunctionalActionError.invalid }
+        return bytes
+    }
+
+    private static func envelope(_ bytes: Data, key: Data) throws -> [String: Any] {
+        guard key.count == 32, bytes.count <= 4_194_304 else {
+            throw HostedFunctionalActionError.invalid
+        }
+        let object = try HostedFunctionalJSON.object(bytes)
+        guard Set(object.keys) == ["schema", "payload", "signature"],
+            let schema = object["schema"] as? NSNumber, CFGetTypeID(schema) != CFBooleanGetTypeID(),
+            schema == 1,
+            let payload = object["payload"] as? String, !payload.isEmpty,
+            let text = object["signature"] as? String, let signature = Data(base64Encoded: text),
+            signature.count == 64, signature.base64EncodedString() == text
+        else { throw HostedFunctionalActionError.invalid }
+        let data = Data(payload.utf8)
+        let value = try HostedFunctionalJSON.object(data)
+        guard
+            try JSONSerialization.data(
+                withJSONObject: value, options: [.sortedKeys, .withoutEscapingSlashes]) == data,
+            try Curve25519.Signing.PublicKey(rawRepresentation: key).isValidSignature(
+                signature, for: data)
+        else { throw HostedFunctionalActionError.invalid }
+        return value
+    }
+
+    private static func boundary(
+        _ object: [String: Any], operation: String, key: Data,
+        context: HostedFunctionalActionContext, presentationID: String,
+        capabilitySHA256: String, control: Data
+    ) throws -> [String: Any] {
+        let value = try envelope(
+            JSONSerialization.data(
+                withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]), key: key)
+        guard
+            Set(value.keys) == [
+                "schema", "sourceCommit", "session", "requestID", "operation", "owner", "phase",
+                "authorizationID", "actor", "stepIndex", "stepSHA256", "sourceSHA256",
+                "presentationID",
+                "capabilitySHA256", "firstEventOrdinal", "lastEventOrdinal", "localControlSHA256",
+            ],
+            value["sourceCommit"] as? String == context.sourceCommit,
+            value["session"] as? String == context.session,
+            value["owner"] as? String == context.owner,
+            value["phase"] as? String == context.phase, value["operation"] as? String == operation,
+            value["presentationID"] as? String == presentationID,
+            value["capabilitySHA256"] as? String == capabilitySHA256,
+            try integer(value, "schema") == 1, try integer(value, "stepIndex") == 0,
+            let requestID = value["requestID"] as? String, uuid(requestID),
+            let authorizationID = value["authorizationID"] as? String, uuid(authorizationID),
+            let sourceSHA256 = value["sourceSHA256"] as? String,
+            HostedFunctionalActionContext.validHash(sourceSHA256),
+            let stepSHA256 = value["stepSHA256"] as? String,
+            HostedFunctionalActionContext.validHash(stepSHA256),
+            try integer(value, "firstEventOrdinal") >= 0,
+            try integer(value, "lastEventOrdinal") >= integer(value, "firstEventOrdinal"),
+            let actor = value["actor"] as? [String: Any],
+            Set(actor.keys) == [
+                "pid", "birthSeconds", "birthMicroseconds", "uid", "executable", "executableSHA256",
+            ],
+            let path = actor["executable"] as? String,
+            path.hasPrefix(context.fixtureRoot + "/XCTest/"),
+            try integer(actor, "uid") == Int(context.uid),
+            try integer(actor, "pid") > 1, try integer(actor, "pid") != Int(context.engine.pid),
+            try integer(actor, "pid") != Int(context.ui.pid),
+            try integer(actor, "birthSeconds") > 0,
+            (0..<1_000_000).contains(try integer(actor, "birthMicroseconds")),
+            let executableHash = actor["executableSHA256"] as? String,
+            HostedFunctionalActionContext.validHash(executableHash),
+            let hash = value["localControlSHA256"] as? String,
+            hash == SHA256.hash(data: control).map({ String(format: "%02x", $0) }).joined()
+        else { throw HostedFunctionalActionError.invalid }
+        return value
     }
 }
