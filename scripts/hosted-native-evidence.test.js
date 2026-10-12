@@ -159,6 +159,38 @@ test("durable signed evidence preserves exact original archives after CI expiry"
   }
 });
 
+test("shipping evidence requires one successful bounded peer diagnostic step", () => {
+  expect(stagedEvidence(fixture())).toBeDefined();
+  for (const mutation of [
+    (steps) =>
+      steps.filter(
+        ({ name }) => name !== "Verify bounded peer failure diagnostics",
+      ),
+    (steps) =>
+      steps.map((step) =>
+        step.name === "Verify bounded peer failure diagnostics"
+          ? { ...step, conclusion: "skipped" }
+          : step,
+      ),
+    (steps) =>
+      steps.map((step) =>
+        step.name === "Verify bounded peer failure diagnostics"
+          ? { ...step, conclusion: "failure" }
+          : step,
+      ),
+    (steps) => [
+      ...steps,
+      steps.find(
+        ({ name }) => name === "Verify bounded peer failure diagnostics",
+      ),
+    ],
+  ]) {
+    const value = fixture();
+    value.jobs[2].steps = mutation(value.jobs[2].steps);
+    expect(() => stagedEvidence(value)).toThrow();
+  }
+});
+
 test("staging requires real source and attempt identity with all actual native predecessors successful", () => {
   for (const mutation of [
     (value) => {

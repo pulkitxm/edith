@@ -45,6 +45,7 @@ EXACT = {
     "ci-extension-keep-awake": "swift-test",
     "ci-extension-keep-awake-native": "swift-test",
     "ci-extension-keep-awake-peer-contracts": "swift-test",
+    "ci-extension-keep-awake-peer-diagnostics": "swift-test",
     "package-extension-keep-awake": "swift-test",
     "host": "swift-test",
     "ci-swift-test-batch": "swift-test",
