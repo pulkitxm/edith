@@ -86,6 +86,8 @@ export function planSwiftTests(
     if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(definition.id))
       throw new Error("Invalid extension test owner");
     const ownedTargets = extensionTestTargets(definition);
+    if (ownedTargets.includes("ci-extension-accounts-local"))
+      throw new Error("Local account checks cannot enter hosted lanes");
     if (ownedTargets.length === 0) {
       if (!targets.includes("ci-extension-support"))
         targets.unshift("ci-extension-support");
@@ -114,14 +116,28 @@ export function planSwiftTests(
       lane: "feature-models",
       targets: targets.join(" "),
     });
+  const selectedLanes = shipping
+    ? include.filter(
+        (lane) =>
+          lane.lane === "host-runtime" ||
+          shippingExtensionIDs.includes(lane.extension),
+      )
+    : include;
+  const scheduledTargets = new Set();
   return {
-    include: shipping
-      ? include.filter(
-          (lane) =>
-            lane.lane === "host-runtime" ||
-            shippingExtensionIDs.includes(lane.extension),
-        )
-      : include,
+    include: selectedLanes
+      .map((lane) => ({
+        ...lane,
+        targets: lane.targets
+          .split(" ")
+          .filter((target) => {
+            if (scheduledTargets.has(target)) return false;
+            scheduledTargets.add(target);
+            return true;
+          })
+          .join(" "),
+      }))
+      .filter((lane) => lane.targets.length > 0),
   };
 }
 

@@ -298,6 +298,59 @@ test("full verification preserves every declared check exactly once", () => {
   }
 });
 
+test("shared account contracts run once while both owning native lanes remain", () => {
+  const paths = [
+    "Extensions/herdr/Runtime.swift",
+    "Extensions/usage/Runtime.swift",
+  ];
+  const owners = definitions.filter(({ id }) =>
+    ["herdr", "usage"].includes(id),
+  );
+  const lanes = planSwiftTests(paths).include.filter((lane) =>
+    ["herdr", "usage"].includes(lane.extension),
+  );
+  expect(lanes.map((lane) => lane.extension)).toEqual(
+    owners.map(({ id }) => id),
+  );
+  expect(lanes.flatMap((lane) => lane.targets.split(" ")).sort()).toEqual(
+    [...new Set(owners.flatMap(({ testTargets }) => testTargets))].sort(),
+  );
+  for (const owner of owners) {
+    const selected = planSwiftTests([
+      `Extensions/${owner.id}/Runtime.swift`,
+    ]).include;
+    expect(selected.flatMap((lane) => lane.targets.split(" "))).toEqual(
+      owner.testTargets,
+    );
+  }
+});
+
+test("the local account helper never enters hosted native plans", () => {
+  expect(readFileSync("Makefile", "utf8")).toMatch(
+    /^ci-extension-accounts-local:/m,
+  );
+  for (const [paths, options] of [
+    [[], { all: true }],
+    [["Makefile"], {}],
+    [[".github/workflows/ci.yml"], {}],
+    [[], { all: true, shipping: true }],
+  ]) {
+    expect(
+      planSwiftTests(paths, options).include.flatMap((lane) =>
+        lane.targets.split(" "),
+      ),
+    ).not.toContain("ci-extension-accounts-local");
+  }
+  expect(() =>
+    planSwiftTests([], {
+      all: true,
+      extensions: [
+        { id: "synthetic", testTargets: ["ci-extension-accounts-local"] },
+      ],
+    }),
+  ).toThrow("Local account checks cannot enter hosted lanes");
+});
+
 test("Docs changes retain both actual packages in one owning lane", () => {
   for (const path of [
     "Extensions/docs/Runtime.swift",

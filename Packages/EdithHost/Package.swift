@@ -59,6 +59,7 @@ let package = Package(
                 "QuinjetFixture.swift",
                 "QuinjetLifecycleFixture.swift",
                 "StudioFixture.swift",
+                "SurfaceActionRejection.swift",
                 "SystemFixture.swift",
                 "TerminalLifecycleFixture.swift",
                 "UsageFixture.swift",
