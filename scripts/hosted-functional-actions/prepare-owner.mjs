@@ -12,11 +12,13 @@ import {
 import { join, resolve } from "node:path";
 import { requireRegularTree } from "../build-contained-host-runtime.mjs";
 import { functionalCanonicalJSON } from "./contract.mjs";
+import * as trustCompiler from "./fixture-trust.mjs";
 import {
   functionalFixtureRolePolicySource,
   functionalFixtureTrustSource,
 } from "./fixture-trust.mjs";
 import { functionalActionOwners } from "./owners.mjs";
+import { admitFunctionalRunner } from "./producer-project.mjs";
 
 const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const exact = (value, fields) => {
@@ -26,6 +28,8 @@ const exact = (value, fields) => {
 
 export function functionalPairBuildPlan({
   owner,
+  issuerManifestBytes,
+  admittedIssuer,
   artifactBytes,
   admittedArtifact,
   policyBytes,
@@ -44,31 +48,19 @@ export function functionalPairBuildPlan({
     policyBytes,
     admittedPolicies,
   );
+  assert.equal(
+    typeof trustCompiler.functionalFixtureBootstrapTrustSource,
+    "function",
+  );
+  const bootstrapAnchor = trustCompiler.functionalFixtureBootstrapTrustSource(
+    issuerManifestBytes,
+    admittedIssuer,
+    policyBytes,
+    admittedPolicies,
+  );
+  assert.equal(bootstrapAnchor.sourceCommit, anchor.sourceCommit);
   const artifact = JSON.parse(artifactBytes.toString("utf8"));
-  assert.equal(environment.GITHUB_ACTIONS, "true");
-  assert.equal(environment.RUNNER_ENVIRONMENT, "github-hosted");
-  assert.equal(environment.RUNNER_OS, "macOS");
-  assert.equal(environment.GITHUB_REPOSITORY, "pulkitxm/edith");
-  assert.equal(environment.GITHUB_EVENT_NAME, "workflow_dispatch");
-  assert.equal(environment.EDITH_HOSTED_FUNCTIONAL_ACTIONS, "1");
-  assert.equal(environment.GITHUB_SHA, admittedArtifact.sourceCommit);
-  assert.equal(environment.EXPECTED_SOURCE_SHA, admittedArtifact.sourceCommit);
-  assert(["65671483", "320458784"].includes(environment.GITHUB_ACTOR_ID));
-  assert(
-    ["refs/heads/feat/extension-marketplace", "refs/heads/main"].includes(
-      environment.GITHUB_REF,
-    ),
-  );
-  assert.equal(environment.EXTENSION_SWIFT_JOBS, "1");
-  assert(
-    environment.EXTENSION_SIGN_IDENTITY &&
-      environment.EXTENSION_SIGN_IDENTITY !== "-",
-  );
-  assert(
-    environment.DEVELOPER_DIR?.startsWith("/Applications/Xcode") &&
-      environment.DEVELOPER_DIR.endsWith(".app/Contents/Developer"),
-  );
-  assert.equal(resolve(environment.RUNNER_TEMP), environment.RUNNER_TEMP);
+  admitFunctionalRunner(environment, admittedArtifact.sourceCommit);
   assert(artifact.root.startsWith(`${environment.RUNNER_TEMP}/`));
   exact(sourcePins, ["sourceCommit", "files"]);
   assert.equal(sourcePins.sourceCommit, admittedArtifact.sourceCommit);
@@ -99,11 +91,15 @@ export function functionalPairBuildPlan({
   }
   for (const path of [
     anchor.generatedPath,
+    bootstrapAnchor.generatedPath,
     "Extensions/manifest.json",
     "scripts/build-extension-package.mjs",
     "scripts/hosted-managed-views/verify-package.py",
     "scripts/hosted-functional-actions/prepare-owner.mjs",
     "scripts/hosted-functional-actions/fixture-trust.mjs",
+    "scripts/hosted-functional-actions/producer-project.mjs",
+    "scripts/hosted-functional-actions/functional-build.mjs",
+    ".github/workflows/hosted-functional-actions.yml",
     "Extensions/fixtureSupport/WorkerFixtureRolePolicy.swift",
     "Extensions/fixtureSupport/WorkerFixtureUIAdmission.swift",
     "Extensions/fixtureSupport/WorkerFixtureUIContract.swift",
@@ -112,6 +108,11 @@ export function functionalPairBuildPlan({
   ])
     assert(files.has(path), `Missing independently admitted source: ${path}`);
   assert.equal(policy.sourceCommit, sourcePins.sourceCommit);
+  assert.equal(
+    sha(Buffer.from(functionalCanonicalJSON(sourcePins))),
+    JSON.parse(issuerManifestBytes.toString("utf8")).producer.sourceSHA256,
+    "Pair source union differs from actual live issuer authority",
+  );
   assert.equal(
     files.get("Extensions/manifest.json"),
     admittedPolicies.manifest.sha256,
@@ -128,6 +129,7 @@ export function functionalPairBuildPlan({
     sourceCommit: sourcePins.sourceCommit,
     pairScope: "synthetic-development",
     anchor,
+    bootstrapAnchor,
     policySHA256: policy.policySHA256,
     host: Object.freeze(structuredClone(artifact.host)),
     root: artifact.root,
@@ -164,10 +166,12 @@ async function requirePrivateDirectory(path) {
 
 async function verifyPins(root, plan, generated = false) {
   for (const pin of plan.sourcePins) {
-    const expected =
-      generated && pin.path === plan.anchor.generatedPath
-        ? sha(Buffer.from(plan.anchor.source))
-        : pin.sha256;
+    const anchor =
+      generated &&
+      [plan.anchor, plan.bootstrapAnchor].find(
+        (entry) => entry.generatedPath === pin.path,
+      );
+    const expected = anchor ? sha(Buffer.from(anchor.source)) : pin.sha256;
     assert.equal(
       sha(await readFile(join(root, pin.path))),
       expected,
@@ -190,16 +194,21 @@ function run(command, args, cwd, environment, input) {
 export async function prepareFunctionalOwnerPair({
   repository,
   owner,
+  issuerManifestBytes,
+  admittedIssuer,
   artifactBytes,
   admittedArtifact,
   policyBytes,
   admittedPolicies,
   sourcePins,
+  compilation,
   environment = process.env,
 }) {
   environment = Object.freeze({ ...environment });
   const plan = functionalPairBuildPlan({
     owner,
+    issuerManifestBytes,
+    admittedIssuer,
     artifactBytes,
     admittedArtifact,
     policyBytes,
@@ -207,6 +216,16 @@ export async function prepareFunctionalOwnerPair({
     sourcePins,
     environment,
   });
+  const { functionalCompilationForBuilder } = await import(
+    "./functional-build.mjs"
+  );
+  const compiled = await functionalCompilationForBuilder(compilation);
+  assert.equal(compiled.sourceCommit, plan.sourceCommit);
+  assert.equal(compiled.root, plan.root);
+  assert.equal(
+    compiled.source.sha256,
+    sha(Buffer.from(functionalCanonicalJSON(sourcePins))),
+  );
   assert.equal(process.platform, "darwin");
   assert.equal(process.arch, "arm64");
   assert.equal(await realpath(repository), repository);
@@ -283,10 +302,12 @@ export async function prepareFunctionalOwnerPair({
     );
     await requireRegularTree(step.sourceRoot);
     await verifyPins(step.sourceRoot, plan);
-    await writeFile(
-      join(step.sourceRoot, plan.anchor.generatedPath),
-      plan.anchor.source,
-    );
+    for (const anchor of [plan.anchor, plan.bootstrapAnchor])
+      await writeFile(
+        join(step.sourceRoot, anchor.generatedPath),
+        anchor.source,
+        { mode: 0o600 },
+      );
     await verifyPins(step.sourceRoot, plan, true);
     const buildEnvironment = {
       ...environment,
@@ -308,6 +329,7 @@ export async function prepareFunctionalOwnerPair({
       step.sourceRoot,
       buildEnvironment,
     );
+    await functionalCompilationForBuilder(compilation);
     await verifyPins(step.sourceRoot, plan, true);
     const metadata = JSON.parse(
       await readFile(join(step.output, `${owner}.json`), "utf8"),
@@ -407,6 +429,7 @@ export async function prepareFunctionalOwnerPair({
     pairScope: plan.pairScope,
     fixtureTrustArtifactSHA256: plan.anchor.artifactSHA256,
     generatedAnchorSHA256: sha(Buffer.from(plan.anchor.source)),
+    generatedBootstrapSHA256: sha(Buffer.from(plan.bootstrapAnchor.source)),
     packages,
     scope:
       "independently source-built signed development package pair; no functional or public release qualification",

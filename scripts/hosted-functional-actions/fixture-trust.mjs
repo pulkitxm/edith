@@ -129,7 +129,8 @@ function fileScopeSource(scope) {
       scope.components.length <= 32,
   );
   let sessions = 0,
-    phases = 0;
+    phases = 0,
+    defaults = 0;
   const components = scope.components.map((value) => {
     assert(value && Object.getPrototypeOf(value) === Object.prototype);
     if (Object.hasOwn(value, "literal")) {
@@ -143,12 +144,29 @@ function fileScopeSource(scope) {
       sessions += 1;
       return `.sessionUUID(.${value.sessionUUID})`;
     }
+    if (Object.hasOwn(value, "workerDefaultsPlist")) {
+      exact(value, ["workerDefaultsPlist"]);
+      assert(["engine", "ui"].includes(value.workerDefaultsPlist));
+      defaults += 1;
+      return `.workerDefaultsPlist(.${value.workerDefaultsPlist})`;
+    }
     exact(value, ["phase"]);
     assert.equal(value.phase, true);
     phases += 1;
     return ".phase";
   });
-  assert(sessions <= 1 && phases <= 1);
+  assert(sessions <= 1 && phases <= 1 && defaults <= 1);
+  if (defaults > 0) {
+    assert.equal(scope.kind, "file");
+    assert.equal(scope.purpose, "mutable-state");
+    assert.equal(scope.root, "owner-home");
+    assert.equal(scope.components.length, 3);
+    assert.deepEqual(scope.components.slice(0, 2), [
+      { literal: "Library" },
+      { literal: "Preferences" },
+    ]);
+    exact(scope.components[2], ["workerDefaultsPlist"]);
+  }
   assert(
     Array.isArray(scope.immutableFiles) && Array.isArray(scope.mutableFiles),
   );
@@ -350,6 +368,12 @@ export function functionalFixtureRolePolicySource(
     );
     assert.equal(new Set(policy.operations).size, policy.operations.length);
     for (const operation of policy.operations) assert.match(operation, token);
+    if (policy.owner === "notchShelf")
+      assert.deepEqual(policy.operations, [
+        "notch.settings.read",
+        "notch.settings.write",
+        "notchShelf.cli.catalog",
+      ]);
     assert(
       Array.isArray(policy.presentations) &&
         policy.presentations.length > 0 &&
@@ -404,47 +428,483 @@ export function functionalFixtureRolePolicySource(
   });
 }
 
-export function functionalFixtureTrustSource(
-  artifactBytes,
-  admittedArtifact,
-  policyBytes,
-  admittedPolicies,
+const liveIssuers = new WeakMap();
+const fixtureHosts = new WeakMap();
+const digest = (value) => createHash("sha256").update(value).digest("hex");
+
+function document(value, maximum = 65536) {
+  assert(Buffer.isBuffer(value) && value.length > 0 && value.length <= maximum);
+  const result = JSON.parse(
+    new TextDecoder("utf-8", { fatal: true }).decode(value),
+  );
+  assert.equal(functionalCanonicalJSON(result), value.toString("utf8"));
+  return result;
+}
+
+function positive(value) {
+  assert(Number.isSafeInteger(value) && value > 0);
+}
+
+function same(value, expected) {
+  assert.equal(
+    functionalCanonicalJSON(value),
+    functionalCanonicalJSON(expected),
+  );
+}
+
+function signature(certificate, requirement) {
+  bytes(certificate);
+  assert(
+    typeof requirement === "string" &&
+      requirement.length > 0 &&
+      requirement.length <= 1024,
+  );
+  assert(
+    [...requirement].every(
+      (character) =>
+        character.charCodeAt(0) >= 32 && character.charCodeAt(0) < 127,
+    ),
+  );
+}
+
+function signing(value) {
+  exact(value, [
+    "path",
+    "executableSHA256",
+    "certificateSHA256",
+    "requirement",
+  ]);
+  canonicalPath(value.path);
+  assert.match(value.executableSHA256, hash);
+  signature(value.certificateSHA256, value.requirement);
+}
+
+function provenance(value, sourceCommit, toolchain = false) {
+  exact(value, ["bytes", "sha256"]);
+  assert.match(value.sha256, hash);
+  const parsed = document(value.bytes, toolchain ? 65536 : 16777216);
+  assert.equal(digest(value.bytes), value.sha256);
+  if (toolchain) {
+    exact(parsed, ["swiftCompilerSHA256", "sdkSHA256", "buildSettingsSHA256"]);
+    Object.values(parsed).forEach((value) => {
+      assert.match(value, hash);
+    });
+    return parsed;
+  }
+  exact(parsed, ["sourceCommit", "files"]);
+  assert.equal(parsed.sourceCommit, sourceCommit);
+  assert(
+    Array.isArray(parsed.files) &&
+      parsed.files.length > 0 &&
+      parsed.files.length <= 100000,
+  );
+  const files = new Map();
+  for (const entry of parsed.files) {
+    exact(entry, ["path", "sha256"]);
+    assert(
+      typeof entry.path === "string" &&
+        entry.path.length > 0 &&
+        entry.path.length <= 4096,
+    );
+    assert(!entry.path.startsWith("/") && !entry.path.includes("\\"));
+    assert(
+      !entry.path
+        .split("/")
+        .some((part) =>
+          ["", ".", "..", ".git", ".build", "node_modules"].includes(part),
+        ),
+    );
+    assert.match(entry.sha256, hash);
+    assert(!files.has(entry.path));
+    files.set(entry.path, entry.sha256);
+  }
+  for (const path of [
+    "Extensions/manifest.json",
+    ".github/workflows/hosted-functional-actions.yml",
+    "Extensions/fixtureSupport/WorkerFixtureRolePolicy.swift",
+    "Tests/HostedFunctionalActions/ProducerSources/FunctionalIssuer.swift",
+    "Tests/HostedFunctionalActions/ProducerSources/FunctionalProducer.swift",
+    "Tests/HostedFunctionalActions/ProducerSources/FunctionalSignatureProbe.swift",
+    "scripts/hosted-functional-actions/fixture-trust.mjs",
+    "scripts/hosted-functional-actions/producer-project.mjs",
+    "scripts/hosted-functional-actions/controller.mjs",
+    "scripts/hosted-functional-actions/prepare-owner.mjs",
+  ])
+    assert(files.has(path), `Missing immutable build source: ${path}`);
+  return files;
+}
+
+function ownedProducer(value) {
+  exact(value, [
+    "pid",
+    "birthSeconds",
+    "birthMicroseconds",
+    "uid",
+    "executable",
+    "executableSHA256",
+    "certificateSHA256",
+    "requirement",
+  ]);
+  positive(value.pid);
+  positive(value.birthSeconds);
+  assert(
+    Number.isSafeInteger(value.birthMicroseconds) &&
+      value.birthMicroseconds >= 0 &&
+      value.birthMicroseconds < 1000000,
+  );
+  assert(Number.isSafeInteger(value.uid) && value.uid >= 0);
+  signing({
+    path: value.executable,
+    executableSHA256: value.executableSHA256,
+    certificateSHA256: value.certificateSHA256,
+    requirement: value.requirement,
+  });
+}
+
+function prContext(context, sourceCommit) {
+  exact(context, [
+    "event",
+    "pullRequest",
+    "mergeCommit",
+    "workflow",
+    "runAttempt",
+  ]);
+  positive(context.runAttempt);
+  const repository = (value) => {
+    assert.equal(value.id, 1289153439);
+    assert.equal(value.full_name, "pulkitxm/edith");
+  };
+  repository(context.event.repository);
+  assert.equal(context.event.number, 1014);
+  assert(
+    ["opened", "synchronize", "reopened", "ready_for_review"].includes(
+      context.event.action,
+    ),
+  );
+  const current = context.pullRequest;
+  assert.equal(current.number, 1014);
+  assert.equal(current.state, "open");
+  assert.equal(current.merged, false);
+  for (const pull of [context.event.pull_request, current]) {
+    assert.equal(pull.number, 1014);
+    repository(pull.head.repo);
+    repository(pull.base.repo);
+    assert.equal(pull.head.sha, sourceCommit);
+    assert.match(pull.base.sha, source);
+    assert.equal(pull.base.ref, "main");
+    assert.equal(pull.head.ref, "feat/extension-marketplace");
+    assert.equal(pull.base.sha, current.base.sha);
+  }
+  assert.equal(current.merge_commit_sha, context.mergeCommit.sha);
+  assert.match(context.mergeCommit.sha, source);
+  assert.notEqual(context.mergeCommit.sha, sourceCommit);
+  assert.deepEqual(
+    context.mergeCommit.parents.map((parent) => parent.sha),
+    [current.base.sha, sourceCommit],
+  );
+  positive(context.workflow.id);
+  assert.equal(
+    context.workflow.path,
+    ".github/workflows/hosted-functional-actions.yml",
+  );
+  assert.equal(context.workflow.state, "active");
+  return {
+    repositoryID: 1289153439,
+    pullRequestNumber: 1014,
+    sourceCommit,
+    baseCommit: current.base.sha,
+    mergeCommit: context.mergeCommit.sha,
+    workflowID: context.workflow.id,
+    runAttempt: context.runAttempt,
+    headRef: current.head.ref,
+    baseRef: current.base.ref,
+    action: context.event.action,
+  };
+}
+
+function liveJob(manifest, evidence) {
+  assert.match(evidence.sourceCommit, source);
+  assert.equal(manifest.sourceCommit, evidence.sourceCommit);
+  const context = prContext(evidence.context, evidence.sourceCommit);
+  const { run, job } = evidence;
+  positive(run.id);
+  positive(job.id);
+  assert.equal(manifest.runID, run.id);
+  assert.equal(manifest.jobID, job.id);
+  assert.equal(run.head_sha, evidence.sourceCommit);
+  assert.equal(run.repository.id, 1289153439);
+  assert.equal(run.repository.full_name, "pulkitxm/edith");
+  assert.equal(run.head_repository.id, 1289153439);
+  assert.equal(run.head_repository.full_name, "pulkitxm/edith");
+  assert([65671483, 320458784].includes(run.actor.id));
+  assert([65671483, 320458784].includes(run.triggering_actor.id));
+  assert.equal(run.event, "pull_request");
+  assert(Array.isArray(run.pull_requests) && run.pull_requests.length === 1);
+  const pull = run.pull_requests[0];
+  assert.equal(pull.number, 1014);
+  assert.equal(pull.head.sha, evidence.sourceCommit);
+  assert.equal(pull.base.sha, evidence.context.pullRequest.base.sha);
+  assert.equal(pull.head.repo.id, 1289153439);
+  assert.equal(pull.base.repo.id, 1289153439);
+  assert.equal(run.run_attempt, evidence.context.runAttempt);
+  assert.equal(run.workflow_id, evidence.context.workflow.id);
+  assert.equal(run.path, ".github/workflows/hosted-functional-actions.yml");
+  assert.equal(run.status, "in_progress");
+  assert.equal(run.conclusion, null);
+  assert.equal(job.run_id, run.id);
+  assert.equal(job.run_attempt, evidence.context.runAttempt);
+  assert(
+    typeof job.runner_name === "string" &&
+      job.runner_name.trim().length > 0 &&
+      job.runner_name.length <= 256,
+  );
+  assert(
+    [...job.runner_name].every(
+      (character) =>
+        character.charCodeAt(0) >= 32 && character.charCodeAt(0) < 127,
+    ),
+  );
+  assert.equal(job.head_sha, evidence.sourceCommit);
+  assert.equal(job.name, "functional-build");
+  assert.equal(job.status, "in_progress");
+  assert.equal(job.conclusion, null);
+  assert(
+    Array.isArray(job.labels) &&
+      job.labels.includes("macos-26") &&
+      !job.labels.includes("self-hosted"),
+  );
+  return {
+    ...context,
+    runID: run.id,
+    jobID: job.id,
+    actorID: run.actor.id,
+    triggeringActorID: run.triggering_actor.id,
+    runnerName: job.runner_name,
+  };
+}
+
+export function admitFunctionalLiveIssuer(
+  manifestBytes,
+  evidence,
+  observeOwnedProducer,
 ) {
+  exact(evidence, [
+    "sourceCommit",
+    "run",
+    "job",
+    "context",
+    "build",
+    "launch",
+    "bootstrap",
+  ]);
+  assert.equal(typeof observeOwnedProducer, "function");
+  const manifest = document(manifestBytes);
+  exact(manifest, [
+    "schema",
+    "sourceCommit",
+    "runID",
+    "jobID",
+    "session",
+    "root",
+    "hostIdentifier",
+    "issuerPublicKey",
+    "policySHA256",
+    "producer",
+    "signing",
+  ]);
+  assert.equal(manifest.schema, 2);
+  liveJob(manifest, evidence);
+  assert.match(manifest.session, uuid);
+  canonicalPath(manifest.root);
+  assert(manifest.root.endsWith(`/functional-fixture-${manifest.session}`));
+  assert.equal(
+    manifest.hostIdentifier,
+    `com.pulkit.edith.tests.worker-${manifest.session}`,
+  );
+  bytes(manifest.issuerPublicKey);
+  assert.match(manifest.policySHA256, hash);
+  exact(manifest.producer, [
+    "path",
+    "executableSHA256",
+    "certificateSHA256",
+    "requirement",
+    "sourceSHA256",
+    "toolchainSHA256",
+  ]);
+  const { sourceSHA256, toolchainSHA256, ...producer } = manifest.producer;
+  signing(producer);
+  assert.equal(producer.path, `${manifest.root}/Producer/functional-producer`);
+  exact(manifest.signing, [
+    "hostRequirement",
+    "hostCertificateSHA256",
+    "workerCertificateSHA256",
+    "roleCertificateSHA256",
+  ]);
+  signature(
+    manifest.signing.hostCertificateSHA256,
+    manifest.signing.hostRequirement,
+  );
+  bytes(manifest.signing.workerCertificateSHA256);
+  bytes(manifest.signing.roleCertificateSHA256);
+  exact(evidence.build, [
+    "sourceCommit",
+    "policySHA256",
+    "source",
+    "toolchain",
+    "producer",
+  ]);
+  assert.equal(evidence.build.sourceCommit, manifest.sourceCommit);
+  assert.equal(evidence.build.policySHA256, manifest.policySHA256);
+  const files = provenance(evidence.build.source, manifest.sourceCommit);
+  provenance(evidence.build.toolchain, manifest.sourceCommit, true);
+  assert.equal(sourceSHA256, evidence.build.source.sha256);
+  assert.equal(toolchainSHA256, evidence.build.toolchain.sha256);
+  same(evidence.build.producer, producer);
+  ownedProducer(evidence.launch);
+  same(
+    {
+      path: evidence.launch.executable,
+      executableSHA256: evidence.launch.executableSHA256,
+      certificateSHA256: evidence.launch.certificateSHA256,
+      requirement: evidence.launch.requirement,
+    },
+    producer,
+  );
+  exact(evidence.bootstrap, [
+    "schema",
+    "kind",
+    "sourceCommit",
+    "session",
+    "issuerPublicKey",
+    "producer",
+  ]);
+  assert.equal(evidence.bootstrap.schema, 1);
+  assert.equal(evidence.bootstrap.kind, "bootstrap");
+  assert.equal(evidence.bootstrap.sourceCommit, manifest.sourceCommit);
+  assert.equal(evidence.bootstrap.session, manifest.session);
+  assert.equal(evidence.bootstrap.issuerPublicKey, manifest.issuerPublicKey);
+  const { certificateSHA256, requirement, ...birth } = evidence.launch;
+  same(evidence.bootstrap.producer, birth);
+  const launch = structuredClone(evidence.launch);
+  const admitted = Object.freeze({
+    sourceCommit: manifest.sourceCommit,
+    runID: manifest.runID,
+    jobID: manifest.jobID,
+    manifestSHA256: digest(manifestBytes),
+  });
+  liveIssuers.set(admitted, {
+    manifest,
+    files,
+    launch,
+    jobBindings: liveJob(manifest, evidence),
+    observeOwnedProducer,
+    bootstrapHashes: new Set(),
+  });
+  requireLiveIssuer(admitted);
+  return admitted;
+}
+
+function requireLiveIssuer(admitted) {
+  const state = liveIssuers.get(admitted);
+  assert(state, "Expected independently admitted live issuer");
+  const observed = state.observeOwnedProducer();
+  exact(observed, ["sourceCommit", "run", "job", "context", "producer"]);
+  same(liveJob(state.manifest, observed), state.jobBindings);
+  ownedProducer(observed.producer);
+  same(observed.producer, state.launch);
+  return state;
+}
+
+function admittedPolicy(policyBytes, admittedPolicies, issuer) {
   const policy = functionalFixtureRolePolicySource(
     policyBytes,
     admittedPolicies,
   );
-  exact(admittedArtifact, [
+  assert.equal(policy.sourceCommit, issuer.manifest.sourceCommit);
+  assert.equal(policy.policySHA256, issuer.manifest.policySHA256);
+  assert.equal(
+    issuer.files.get("Extensions/manifest.json"),
+    admittedPolicies.manifest.sha256,
+  );
+  for (const entry of admittedPolicies.cases)
+    assert.equal(issuer.files.get(entry.path), entry.sha256);
+  return policy;
+}
+
+function trustSource(manifest, policy, host) {
+  const data = (value) => `Data(base64Encoded: ${swiftString(value)})!`;
+  const arguments_ = [
+    `sourceCommit: ${swiftString(manifest.sourceCommit)}`,
+    `session: ${swiftString(manifest.session)}`,
+    `root: ${swiftString(manifest.root)}`,
+    `issuerKey: ${data(manifest.issuerPublicKey)}`,
+    ...(host
+      ? [`hostExecutableSHA256: ${swiftString(host.executableSHA256)}`]
+      : []),
+    `hostRequirement: ${swiftString(manifest.signing.hostRequirement)}`,
+    `hostCertificateSHA256: ${data(manifest.signing.hostCertificateSHA256)}`,
+    `workerCertificateSHA256: ${data(manifest.signing.workerCertificateSHA256)}`,
+    `roleCertificateSHA256: ${data(manifest.signing.roleCertificateSHA256)}`,
+    `producerExecutable: ${swiftString(manifest.producer.path)}`,
+    `producerExecutableSHA256: ${swiftString(manifest.producer.executableSHA256)}`,
+    `rolePolicies: ${policy.swiftExpression}`,
+  ];
+  const type = host ? "UI" : "Bootstrap";
+  const sourceText = `import Foundation\n\npublic enum WorkerFixture${type}TrustAnchor {\n    public static let admitted: WorkerFixture${type}Trust? = try! WorkerFixture${type}Trust(\n        ${arguments_.join(",\n        ")}\n    )\n}\n`;
+  return Object.freeze({
+    sourceCommit: manifest.sourceCommit,
+    source: sourceText,
+    sourceSHA256: digest(sourceText),
+    generatedPath: `Extensions/fixtureSupport/WorkerFixture${type}TrustAnchor.swift`,
+    scope:
+      "independently admitted same-job source build constants before compilation and signing",
+  });
+}
+
+export function functionalFixtureBootstrapTrustSource(
+  manifestBytes,
+  admittedIssuer,
+  policyBytes,
+  admittedPolicies,
+) {
+  const issuer = requireLiveIssuer(admittedIssuer);
+  assert.equal(digest(manifestBytes), admittedIssuer.manifestSHA256);
+  same(document(manifestBytes), issuer.manifest);
+  const policy = admittedPolicy(policyBytes, admittedPolicies, issuer);
+  const result = trustSource(issuer.manifest, policy);
+  issuer.bootstrapHashes.add(result.sourceSHA256);
+  return result;
+}
+
+export function admitFunctionalFixtureHost(
+  artifactBytes,
+  admittedIssuer,
+  evidence,
+  observeOwnedHost,
+) {
+  const issuer = requireLiveIssuer(admittedIssuer);
+  assert.equal(typeof observeOwnedHost, "function");
+  exact(evidence, [
     "sourceCommit",
     "runID",
     "jobID",
-    "artifactID",
-    "artifactSHA256",
+    "source",
+    "toolchain",
+    "bootstrapSHA256",
+    "host",
+    "hostProcess",
   ]);
-  assert.match(admittedArtifact.sourceCommit, source);
-  assert.equal(policy.sourceCommit, admittedArtifact.sourceCommit);
-  assert.match(admittedArtifact.artifactSHA256, hash);
-  for (const field of ["runID", "jobID", "artifactID"])
-    assert(
-      Number.isSafeInteger(admittedArtifact[field]) &&
-        admittedArtifact[field] > 0,
-    );
+  assert.equal(evidence.sourceCommit, admittedIssuer.sourceCommit);
+  assert.equal(evidence.runID, admittedIssuer.runID);
+  assert.equal(evidence.jobID, admittedIssuer.jobID);
+  provenance(evidence.source, admittedIssuer.sourceCommit);
+  provenance(evidence.toolchain, admittedIssuer.sourceCommit, true);
+  assert.equal(evidence.source.sha256, issuer.manifest.producer.sourceSHA256);
   assert(
-    Buffer.isBuffer(artifactBytes) &&
-      artifactBytes.length > 0 &&
-      artifactBytes.length <= 65536,
+    issuer.bootstrapHashes.has(evidence.bootstrapSHA256),
+    "Host must compile admitted bootstrap source first",
   );
-  assert.equal(
-    createHash("sha256").update(artifactBytes).digest("hex"),
-    admittedArtifact.artifactSHA256,
-  );
-  const artifact = JSON.parse(
-    new TextDecoder("utf-8", { fatal: true }).decode(artifactBytes),
-  );
-  assert.equal(
-    functionalCanonicalJSON(artifact),
-    artifactBytes.toString("utf8"),
-  );
+  const artifact = document(artifactBytes);
   exact(artifact, [
     "schema",
     "sourceCommit",
@@ -452,70 +912,107 @@ export function functionalFixtureTrustSource(
     "root",
     "hostIdentifier",
     "issuerPublicKey",
+    "issuerManifestSHA256",
     "host",
     "producer",
     "workerCertificateSHA256",
     "roleCertificateSHA256",
   ]);
-  assert.equal(artifact.schema, 1);
-  assert.equal(artifact.sourceCommit, admittedArtifact.sourceCommit);
-  assert.match(artifact.session, uuid);
-  canonicalPath(artifact.root);
-  assert(artifact.root.endsWith(`/functional-fixture-${artifact.session}`));
-  assert.equal(
-    artifact.hostIdentifier,
-    `com.pulkit.edith.tests.worker-${artifact.session}`,
-  );
-  exact(artifact.host, [
-    "path",
-    "executableSHA256",
-    "certificateSHA256",
-    "requirement",
-  ]);
+  assert.equal(artifact.schema, 2);
+  for (const field of [
+    "sourceCommit",
+    "session",
+    "root",
+    "hostIdentifier",
+    "issuerPublicKey",
+  ])
+    assert.equal(artifact[field], issuer.manifest[field]);
+  assert.equal(artifact.issuerManifestSHA256, admittedIssuer.manifestSHA256);
+  const {
+    sourceSHA256,
+    toolchainSHA256,
+    certificateSHA256,
+    requirement,
+    ...producer
+  } = issuer.manifest.producer;
+  same(artifact.producer, producer);
+  signing(artifact.host);
   assert.equal(artifact.host.path, `${artifact.root}/Fixture.app`);
-  assert.match(artifact.host.executableSHA256, hash);
-  bytes(artifact.host.certificateSHA256);
-  assert(
-    typeof artifact.host.requirement === "string" &&
-      artifact.host.requirement.length > 0 &&
-      artifact.host.requirement.length <= 1024,
-  );
-  assert(
-    [...artifact.host.requirement].every(
-      (character) =>
-        character.charCodeAt(0) >= 32 && character.charCodeAt(0) < 127,
-    ),
-  );
-  exact(artifact.producer, ["path", "executableSHA256"]);
   assert.equal(
-    artifact.producer.path,
-    `${artifact.root}/Producer/functional-producer`,
+    artifact.host.certificateSHA256,
+    issuer.manifest.signing.hostCertificateSHA256,
   );
-  assert.match(artifact.producer.executableSHA256, hash);
-  bytes(artifact.issuerPublicKey);
-  bytes(artifact.workerCertificateSHA256);
-  bytes(artifact.roleCertificateSHA256);
-  const data = (value) => `Data(base64Encoded: ${swiftString(value)})!`;
-  const arguments_ = [
-    `sourceCommit: ${swiftString(artifact.sourceCommit)}`,
-    `session: ${swiftString(artifact.session)}`,
-    `root: ${swiftString(artifact.root)}`,
-    `issuerKey: ${data(artifact.issuerPublicKey)}`,
-    `hostExecutableSHA256: ${swiftString(artifact.host.executableSHA256)}`,
-    `hostRequirement: ${swiftString(artifact.host.requirement)}`,
-    `hostCertificateSHA256: ${data(artifact.host.certificateSHA256)}`,
-    `workerCertificateSHA256: ${data(artifact.workerCertificateSHA256)}`,
-    `roleCertificateSHA256: ${data(artifact.roleCertificateSHA256)}`,
-    `producerExecutable: ${swiftString(artifact.producer.path)}`,
-    `producerExecutableSHA256: ${swiftString(artifact.producer.executableSHA256)}`,
-    `rolePolicies: ${policy.swiftExpression}`,
-  ];
+  assert.equal(
+    artifact.host.requirement,
+    issuer.manifest.signing.hostRequirement,
+  );
+  assert.equal(
+    artifact.workerCertificateSHA256,
+    issuer.manifest.signing.workerCertificateSHA256,
+  );
+  assert.equal(
+    artifact.roleCertificateSHA256,
+    issuer.manifest.signing.roleCertificateSHA256,
+  );
+  same(evidence.host, artifact.host);
+  ownedProducer(evidence.hostProcess);
+  assert.equal(
+    evidence.hostProcess.executable,
+    artifact.host.path + "/Contents/MacOS/Edith",
+  );
+  assert.equal(
+    evidence.hostProcess.executableSHA256,
+    artifact.host.executableSHA256,
+  );
+  assert.equal(
+    evidence.hostProcess.certificateSHA256,
+    artifact.host.certificateSHA256,
+  );
+  assert.equal(evidence.hostProcess.requirement, artifact.host.requirement);
+  assert.equal(evidence.hostProcess.uid, issuer.launch.uid);
+  assert.notEqual(evidence.hostProcess.pid, issuer.launch.pid);
+  const expected = {
+    sourceCommit: admittedIssuer.sourceCommit,
+    runID: admittedIssuer.runID,
+    jobID: admittedIssuer.jobID,
+    sourceSHA256: evidence.source.sha256,
+    toolchainSHA256: evidence.toolchain.sha256,
+    bootstrapSHA256: evidence.bootstrapSHA256,
+    host: structuredClone(evidence.host),
+    hostProcess: structuredClone(evidence.hostProcess),
+  };
+  same(observeOwnedHost(), expected);
+  const admitted = Object.freeze({
+    sourceCommit: admittedIssuer.sourceCommit,
+    runID: admittedIssuer.runID,
+    jobID: admittedIssuer.jobID,
+    artifactSHA256: digest(artifactBytes),
+  });
+  fixtureHosts.set(admitted, {
+    admittedIssuer,
+    artifact,
+    expected,
+    observeOwnedHost,
+  });
+  return admitted;
+}
+
+export function functionalFixtureTrustSource(
+  artifactBytes,
+  admittedArtifact,
+  policyBytes,
+  admittedPolicies,
+) {
+  const host = fixtureHosts.get(admittedArtifact);
+  assert(host, "Expected independently admitted same-job Host build");
+  const issuer = requireLiveIssuer(host.admittedIssuer);
+  assert.equal(digest(artifactBytes), admittedArtifact.artifactSHA256);
+  same(document(artifactBytes), host.artifact);
+  same(host.observeOwnedHost(), host.expected);
+  const policy = admittedPolicy(policyBytes, admittedPolicies, issuer);
+  const result = trustSource(issuer.manifest, policy, host.artifact.host);
   return Object.freeze({
-    sourceCommit: artifact.sourceCommit,
+    ...result,
     artifactSHA256: admittedArtifact.artifactSHA256,
-    source: `import Foundation\n\npublic enum WorkerFixtureUITrustAnchor {\n    public static let admitted: WorkerFixtureUITrust? = try! WorkerFixtureUITrust(\n        ${arguments_.join(",\n        ")}\n    )\n}\n`,
-    generatedPath: "Extensions/fixtureSupport/WorkerFixtureUITrustAnchor.swift",
-    scope:
-      "independently admitted fixture build constants before compilation and signing",
   });
 }

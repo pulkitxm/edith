@@ -4,7 +4,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { definition } from "./cases/keepAwake.mjs";
 import { functionalCanonicalJSON, functionalDigest } from "./contract.mjs";
+import { functionalActionOwners } from "./owners.mjs";
 import {
+  heldInstalledPresentationSteps,
+  installedPresentationControlTestSource,
+  installedPresentationID,
   installedPresentationUITestSource,
   installedPresentationWindowTitle,
   loadInstalledPresentationRecipe,
@@ -56,7 +60,7 @@ export const capability = {
     },
   ],
 };
-const presentationID = "12345678-1234-4123-8123-123456789abd";
+const presentationID = installedPresentationID(capability);
 const inventory = () => ({
   sourceCommit: capability.sourceCommit,
   sourceClean: true,
@@ -88,6 +92,11 @@ const observation = () => ({
   before: inventory(),
   after: inventory(),
   steps: recipe.steps,
+  stepInventories: recipe.steps.map((_, index) => ({
+    index,
+    before: inventory(),
+    after: inventory(),
+  })),
   mutation: {
     origin: "authenticated-downloaded-ui-engine-receiver",
     operation: recipe.operation,
@@ -277,7 +286,7 @@ test("recipes pin actual original sources and missing per-owner selectors fail c
 });
 
 test("actual generated XCTest acts on an already held original window and never launches a substitute presentation", () => {
-  const source = installedPresentationUITestSource(
+  const source = installedPresentationControlTestSource(
     recipe,
     definition,
     capability,
@@ -288,4 +297,355 @@ test("actual generated XCTest acts on an already held original window and never 
   assert(!source.includes("application.launch("));
   assert(!source.includes("application.terminate("));
   assert(!source.includes("NSHostingController"));
+});
+
+test("external capability presentation ID and every held original step inventory reject drift", () => {
+  const wrong = observation();
+  wrong.presentationID = "12345678-1234-4123-8123-123456789abd";
+  assert.throws(() => validate(wrong));
+  const drift = observation();
+  drift.stepInventories[0].after.engine = structuredClone(
+    drift.stepInventories[0].after.engine,
+  );
+  drift.stepInventories[0].after.engine.pid++;
+  assert.throws(() => validate(drift));
+  const missing = observation();
+  missing.stepInventories = [];
+  assert.throws(() => validate(missing));
+});
+
+test("original named chooser requires explicit owned path and held panel scope", () => {
+  const scoped = structuredClone(recipe);
+  scoped.steps = [
+    {
+      role: "button",
+      label: "Choose",
+      action: "choose-owned-path",
+      value: null,
+      scope: { kind: "panel", label: "Save" },
+      ownedPath: "data",
+    },
+  ];
+  const steps = heldInstalledPresentationSteps(scoped, definition, capability);
+  assert.equal(steps[0].value, null);
+  assert.equal(steps[0].ownedPath, "data");
+  const wrong = structuredClone(scoped);
+  wrong.steps[0].ownedPath = "unrelated";
+  assert.throws(() =>
+    heldInstalledPresentationSteps(wrong, definition, capability),
+  );
+  delete scoped.steps[0].scope;
+  assert.throws(() => validateInstalledPresentationRecipe(scoped, definition));
+});
+
+test("source anchors select unlabeled original groups, menu options and variable row buttons without invented labels", () => {
+  const scoped = structuredClone(recipe);
+  scoped.steps = [
+    {
+      role: "button",
+      label: "",
+      action: "click",
+      value: null,
+      scope: {
+        kind: "button",
+        label: "",
+        anchor: { role: "staticText", label: "Standard" },
+      },
+    },
+  ];
+  validateInstalledPresentationRecipe(scoped, definition);
+  const source = installedPresentationControlTestSource(
+    scoped,
+    definition,
+    capability,
+  );
+  assert(source.includes('case "button": scopes = window.buttons'));
+  const missing = structuredClone(scoped);
+  delete missing.steps[0].scope.anchor;
+  assert.throws(() => validateInstalledPresentationRecipe(missing, definition));
+  scoped.steps = [
+    {
+      role: "menuItem",
+      label: "Custom",
+      action: "click",
+      value: null,
+      scope: {
+        kind: "menu",
+        label: "",
+        anchor: { role: "menuItem", label: "Custom" },
+      },
+    },
+  ];
+  validateInstalledPresentationRecipe(scoped, definition);
+});
+
+test("source-scoped unnamed controls, multiline editor input and actual menu or header actions retain original selectors", () => {
+  const steps = [
+    {
+      role: "slider",
+      label: "",
+      action: "set-slider",
+      value: 0.25,
+      scope: {
+        kind: "group",
+        label: "",
+        anchor: { role: "staticText", label: "Synthetic audio" },
+      },
+    },
+    {
+      role: "textArea",
+      label: "",
+      action: "replace-text",
+      value: "synthetic\nsecond line",
+      scope: {
+        kind: "group",
+        label: "Editor",
+        anchor: { role: "staticText", label: "Editor" },
+      },
+    },
+    {
+      role: "row",
+      label: "synthetic-machine",
+      action: "show-menu",
+      value: null,
+    },
+    { role: "column", label: "Name", action: "set-column-width", value: 238 },
+    {
+      role: "textField",
+      label: "Ask a question",
+      selector: "placeholder",
+      action: "submit",
+      value: null,
+    },
+    {
+      role: "button",
+      label: "New terminal (⌘T)",
+      selector: "help",
+      action: "click",
+      value: null,
+    },
+  ];
+  const value = { ...recipe, steps };
+  validateInstalledPresentationRecipe(value, definition);
+  const source = installedPresentationControlTestSource(
+    value,
+    definition,
+    capability,
+  );
+  assert(source.includes("control.rightClick()"));
+  assert(source.includes("start.click(forDuration: 0.1, thenDragTo: end)"));
+  assert(source.includes("$0.placeholderValue == label"));
+  assert(source.includes("candidate.hover()"));
+  assert(source.includes("let sourceScopes") === false);
+  assert(source.includes("func sourceScopes()"));
+});
+
+test("unsupported selectors, unscoped empty controls, invalid guards and unsafe text fail before original UI generation", () => {
+  const values = [
+    { role: "slider", label: "", action: "set-slider", value: 0.25 },
+    {
+      role: "button",
+      label: "New",
+      selector: "ordinal",
+      action: "click",
+      value: null,
+    },
+    {
+      role: "button",
+      label: "New",
+      selector: "placeholder",
+      action: "click",
+      value: null,
+    },
+    {
+      role: "textArea",
+      label: "Editor",
+      action: "replace-text",
+      value: "synthetic\u0000secret",
+    },
+    { role: "column", label: "Name", action: "set-column-width", value: 2049 },
+    { role: "row", label: "machine", action: "show-menu", value: "pretend" },
+    {
+      role: "button",
+      label: "New",
+      action: "click",
+      value: null,
+      when: "value-differs",
+    },
+    {
+      role: "checkBox",
+      label: "Enabled",
+      action: "set-checkbox",
+      value: true,
+      when: "always",
+    },
+  ];
+  for (const step of values)
+    assert.throws(() =>
+      validateInstalledPresentationRecipe(
+        { ...recipe, steps: [step] },
+        definition,
+      ),
+    );
+});
+
+test("basename labels come only from exact named signed capabilities and missing names cannot generate a chooser", () => {
+  const step = {
+    role: "button",
+    label: "",
+    ownedLabel: { name: "data", component: "basename" },
+    action: "click",
+    value: null,
+  };
+  const value = { ...recipe, steps: [step] };
+  const held = heldInstalledPresentationSteps(value, definition, capability);
+  assert.equal(held[0].label, "keepAwake");
+  assert.equal(held[0].ownedLabel.name, "data");
+  const missing = structuredClone(value);
+  missing.steps[0].ownedLabel.name = "another-owner";
+  assert.throws(() =>
+    heldInstalledPresentationSteps(missing, definition, capability),
+  );
+  missing.steps[0].ownedLabel.component = "arbitrary-path";
+  assert.throws(() => validateInstalledPresentationRecipe(missing, definition));
+});
+
+test("native preactivation presentation identity binds the source template before unknown peer births", () => {
+  const changed = structuredClone(capability);
+  changed.engine.pid += 1;
+  changed.ui.birthSeconds += 1;
+  assert.equal(
+    installedPresentationID(changed),
+    installedPresentationID(capability),
+  );
+  changed.packageSHA256 = "d".repeat(64);
+  assert.notEqual(
+    installedPresentationID(changed),
+    installedPresentationID(capability),
+  );
+  changed.packageSHA256 = capability.packageSHA256;
+  changed.phase = "updated";
+  assert.notEqual(
+    installedPresentationID(changed),
+    installedPresentationID(capability),
+  );
+});
+
+test("original menu choices are one source-scoped action with an exact selected value", () => {
+  const menu = structuredClone(recipe);
+  menu.steps = [
+    {
+      role: "popUpButton",
+      label: "Color",
+      action: "select-menu",
+      value: "Custom",
+      when: "value-differs",
+    },
+  ];
+  assert.equal(validateInstalledPresentationRecipe(menu, definition), menu);
+  const source = installedPresentationControlTestSource(
+    menu,
+    definition,
+    capability,
+  );
+  assert(source.includes('case ("select-menu", .text(let value))'));
+  assert(source.includes("options.count == 1"));
+  assert(source.includes("control.value as? String == value"));
+  for (const patch of [
+    { role: "menuItem" },
+    { value: null },
+    { value: "" },
+    { when: "not-selected" },
+  ])
+    assert.throws(() =>
+      validateInstalledPresentationRecipe(
+        { ...menu, steps: [{ ...menu.steps[0], ...patch }] },
+        definition,
+      ),
+    );
+});
+
+function commonActorFixture() {
+  const plan = {
+    sourceCommit: capability.sourceCommit,
+    session: capability.session,
+    root: capability.fixtureRoot,
+    hostIdentifier: capability.hostIdentifier,
+    producerIdentifier: `com.pulkit.edith.tests.functional-producer-${capability.session}`,
+    certificateSHA256: Buffer.alloc(32, 9).toString("base64"),
+    definitions: [],
+    recipes: {},
+  };
+  for (const owner of functionalActionOwners) {
+    const item = structuredClone(definition);
+    item.owner = owner;
+    item.activation.sources = item.activation.sources.map((pin) => ({
+      ...pin,
+      path: pin.path.replace("/keepAwake/", `/${owner}/`),
+    }));
+    const original = structuredClone(recipe);
+    original.owner = owner;
+    original.location = "main";
+    original.section = owner;
+    original.sources = original.sources.map((pin) => ({
+      ...pin,
+      path: pin.path.replace("/keepAwake/", `/${owner}/`),
+    }));
+    plan.definitions.push(item);
+    plan.recipes[owner] = original;
+  }
+  return { plan, issuerPublicKey: Buffer.alloc(32, 7).toString("base64") };
+}
+
+test("one compiled XCTest actor pins all39 original recipes and verifies native signed invocation and every step boundary", () => {
+  const fixture = commonActorFixture();
+  const source = installedPresentationUITestSource(fixture);
+  for (const owner of functionalActionOwners)
+    assert(source.includes(functionalDigest(fixture.plan.recipes[owner])));
+  for (const text of [
+    "authorize-original-step",
+    "complete-original-step",
+    "Curve25519.Signing.PublicKey",
+    "isValidSignature",
+    "FunctionalSocketPeer",
+    "FunctionalBirth.observe(getpid())",
+    "XCTest/invocations/",
+    "XCTest caller supplied recipe",
+    "EDITH_FUNCTIONAL_XCTEST_INVOCATION",
+    "localControlSHA256",
+    "calendar-details",
+    "visibleStaticTexts",
+    "$0.exists && $0.isHittable",
+    "labels.count <= 512",
+    "$0.utf8.count <= 4096",
+    "canonical(value).count <= 131_072",
+    "foreign local control snapshot",
+  ])
+    assert(source.includes(text));
+  assert(!source.includes("application.launch("));
+  assert(!source.includes("application.terminate("));
+  assert(!source.includes("NSHostingController"));
+  assert(
+    source.indexOf('boundary("authorize-original-step"') <
+      source.indexOf("try perform(step"),
+  );
+  assert(
+    source.indexOf("try perform(step") <
+      source.indexOf('boundary("complete-original-step"'),
+  );
+  assert(
+    source.indexOf("let beforeLocal =") <
+      source.indexOf('boundary("authorize-original-step"'),
+  );
+  assert(
+    source.indexOf("try perform(step") < source.indexOf("let afterLocal ="),
+  );
+  assert(
+    source.indexOf("let afterLocal =") <
+      source.indexOf('boundary("complete-original-step"'),
+  );
+  assert(!source.includes("Synthetic agenda notes"));
+  const missing = commonActorFixture();
+  delete missing.plan.recipes.studio;
+  assert.throws(() => installedPresentationUITestSource(missing));
 });

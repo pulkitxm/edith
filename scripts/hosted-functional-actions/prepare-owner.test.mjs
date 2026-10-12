@@ -1,28 +1,46 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
 import test from "node:test";
 import { functionalCanonicalJSON } from "./contract.mjs";
+import {
+  admitFunctionalFixtureHost,
+  admitFunctionalLiveIssuer,
+  functionalFixtureBootstrapTrustSource,
+  functionalFixtureRolePolicySource,
+} from "./fixture-trust.mjs";
 import { functionalActionOwners } from "./owners.mjs";
 import { functionalPairBuildPlan } from "./prepare-owner.mjs";
 
 const sourceCommit = "a".repeat(40);
 const session = "12345678-1234-4123-8123-123456789abc";
-const root = `/private/synthetic/functional-fixture-${session}`;
+const runnerTemporaryDirectory = realpathSync(tmpdir());
+const root = `${runnerTemporaryDirectory}/functional-fixture-${session}`;
 const encoded = Buffer.alloc(32, 1).toString("base64");
 const pinPaths = [
   "Extensions/fixtureSupport/WorkerFixtureUITrustAnchor.swift",
+  "Extensions/fixtureSupport/WorkerFixtureBootstrapTrustAnchor.swift",
   "Extensions/manifest.json",
   "scripts/build-extension-package.mjs",
   "scripts/hosted-managed-views/verify-package.py",
   "scripts/hosted-functional-actions/prepare-owner.mjs",
   "scripts/hosted-functional-actions/fixture-trust.mjs",
+  "scripts/hosted-functional-actions/producer-project.mjs",
+  "scripts/hosted-functional-actions/functional-build.mjs",
+  ".github/workflows/hosted-functional-actions.yml",
   "Extensions/fixtureSupport/WorkerFixtureRolePolicy.swift",
   "Extensions/fixtureSupport/WorkerFixtureUIAdmission.swift",
   "Extensions/fixtureSupport/WorkerFixtureUIContract.swift",
   "Extensions/fixtureSupport/WorkerFixtureUITrust.swift",
+  "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
+  "Extensions/fixtureSupport/WorkerFixtureBootstrapAdmission.swift",
+  "Extensions/fixtureSupport/WorkerFixtureBootstrapContract.swift",
+  "Extensions/fixtureSupport/WorkerFixtureBootstrapTrust.swift",
+  "Extensions/fixtureSupport/WorkerFixtureEngineContract.swift",
   "Tests/HostedFunctionalActions/ProducerSources/FunctionalSignatureProbe.swift",
 ];
-function policyFixture() {
+function policyFixture(mutate = () => {}) {
   const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
   const helpers = new Set([
     "keepAwake",
@@ -37,7 +55,7 @@ function policyFixture() {
     "notchShelf",
     "clipboard",
   ]);
-  const manifest = Buffer.from(
+  const manifestBytes = Buffer.from(
     JSON.stringify(
       functionalActionOwners.map((owner) => ({
         id: owner,
@@ -59,7 +77,14 @@ function policyFixture() {
   const policies = functionalActionOwners.map((owner) => ({
     owner,
     primaryRole: helpers.has(owner) ? "helper" : "app",
-    operations: [`${owner}.probe`],
+    operations:
+      owner === "notchShelf"
+        ? [
+            "notch.settings.read",
+            "notch.settings.write",
+            "notchShelf.cli.catalog",
+          ]
+        : [`${owner}.probe`],
     presentations: [
       {
         location: ["notchShelf", "systemStats"].includes(owner)
@@ -73,88 +98,237 @@ function policyFixture() {
     inputs: [],
     outputs: [],
     fileScopes: [],
-    manifestSHA256: digest(manifest),
+    manifestSHA256: digest(manifestBytes),
     caseSHA256: cases.find((entry) => entry.owner === owner).sha256,
   }));
-  const policyBytes = Buffer.from(functionalCanonicalJSON(policies));
+  mutate(policies);
+  const bytes = Buffer.from(functionalCanonicalJSON(policies));
   return {
-    policyBytes,
-    admittedPolicies: {
+    policies,
+    bytes,
+    admitted: {
       sourceCommit,
-      policySHA256: digest(policyBytes),
-      manifest: { bytes: manifest, sha256: digest(manifest) },
+      policySHA256: digest(bytes),
+      manifest: { bytes: manifestBytes, sha256: digest(manifestBytes) },
       cases,
     },
   };
 }
-function fixture() {
-  const policy = policyFixture();
-  const artifactBytes = Buffer.from(
-    functionalCanonicalJSON({
-      schema: 1,
-      sourceCommit,
-      session,
-      root,
-      hostIdentifier: `com.pulkit.edith.tests.worker-${session}`,
-      issuerPublicKey: encoded,
-      host: {
-        path: `${root}/Fixture.app`,
-        executableSHA256: "b".repeat(64),
-        certificateSHA256: encoded,
-        requirement: "anchor trusted",
+const sha = (value) => createHash("sha256").update(value).digest("hex");
+const canonicalBytes = (value) => Buffer.from(functionalCanonicalJSON(value));
+
+function liveFixture(mutate) {
+  const policies = policyFixture(mutate);
+  const paths = [
+    ...pinPaths.filter((path) => path !== "Extensions/manifest.json"),
+    ".github/workflows/hosted-functional-actions.yml",
+    "Extensions/fixtureSupport/WorkerFixtureRolePolicy.swift",
+    "Tests/HostedFunctionalActions/ProducerSources/FunctionalIssuer.swift",
+    "Tests/HostedFunctionalActions/ProducerSources/FunctionalProducer.swift",
+    "Tests/HostedFunctionalActions/ProducerSources/FunctionalSignatureProbe.swift",
+    "scripts/hosted-functional-actions/fixture-trust.mjs",
+    "scripts/hosted-functional-actions/producer-project.mjs",
+    "scripts/hosted-functional-actions/controller.mjs",
+    "scripts/hosted-functional-actions/prepare-owner.mjs",
+  ];
+  const sourceBytes = canonicalBytes({
+    sourceCommit,
+    files: [
+      {
+        path: "Extensions/manifest.json",
+        sha256: policies.admitted.manifest.sha256,
       },
-      producer: {
-        path: `${root}/Producer/functional-producer`,
-        executableSHA256: "c".repeat(64),
-      },
+      ...policies.admitted.cases.map(({ path, sha256 }) => ({ path, sha256 })),
+      ...[...new Set(paths)].map((path) => ({
+        path,
+        sha256: sha(Buffer.from(`synthetic source ${path}`)),
+      })),
+    ],
+  });
+  const toolchainBytes = canonicalBytes({
+    swiftCompilerSHA256: "1".repeat(64),
+    sdkSHA256: "2".repeat(64),
+    buildSettingsSHA256: "3".repeat(64),
+  });
+  const producer = {
+    path: `${root}/Producer/functional-producer`,
+    executableSHA256: "c".repeat(64),
+    certificateSHA256: encoded,
+    requirement: 'identifier "functional-producer" and anchor trusted',
+  };
+  const manifest = {
+    schema: 2,
+    sourceCommit,
+    runID: 10,
+    jobID: 11,
+    session,
+    root,
+    hostIdentifier: `com.pulkit.edith.tests.worker-${session}`,
+    issuerPublicKey: encoded,
+    policySHA256: policies.admitted.policySHA256,
+    producer: {
+      ...producer,
+      sourceSHA256: sha(sourceBytes),
+      toolchainSHA256: sha(toolchainBytes),
+    },
+    signing: {
+      hostCertificateSHA256: encoded,
       workerCertificateSHA256: encoded,
       roleCertificateSHA256: encoded,
-    }),
-  );
-  return {
-    owner: "plugins",
-    ...policy,
-    artifactBytes,
-    admittedArtifact: {
-      sourceCommit,
-      runID: 1,
-      jobID: 2,
-      artifactID: 3,
-      artifactSHA256: createHash("sha256").update(artifactBytes).digest("hex"),
-    },
-    sourcePins: {
-      sourceCommit,
-      files: [
-        ...pinPaths.map((path) => ({
-          path,
-          sha256:
-            path === "Extensions/manifest.json"
-              ? policy.admittedPolicies.manifest.sha256
-              : "d".repeat(64),
-        })),
-        ...policy.admittedPolicies.cases.map(({ path, sha256 }) => ({
-          path,
-          sha256,
-        })),
-      ],
-    },
-    environment: {
-      GITHUB_ACTIONS: "true",
-      RUNNER_ENVIRONMENT: "github-hosted",
-      RUNNER_OS: "macOS",
-      GITHUB_REPOSITORY: "pulkitxm/edith",
-      GITHUB_EVENT_NAME: "workflow_dispatch",
-      EDITH_HOSTED_FUNCTIONAL_ACTIONS: "1",
-      GITHUB_SHA: sourceCommit,
-      EXPECTED_SOURCE_SHA: sourceCommit,
-      GITHUB_ACTOR_ID: "65671483",
-      GITHUB_REF: "refs/heads/feat/extension-marketplace",
-      EXTENSION_SWIFT_JOBS: "1",
-      EXTENSION_SIGN_IDENTITY: "Synthetic fixture signer",
-      RUNNER_TEMP: "/private/synthetic",
-      DEVELOPER_DIR: "/Applications/Xcode.app/Contents/Developer",
+      hostRequirement: 'identifier "com.pulkit.edith.tests" and anchor trusted',
     },
   };
+  const launch = {
+    pid: 42,
+    birthSeconds: 100,
+    birthMicroseconds: 101,
+    uid: 501,
+    executable: producer.path,
+    executableSHA256: producer.executableSHA256,
+    certificateSHA256: encoded,
+    requirement: producer.requirement,
+  };
+  const { certificateSHA256, requirement, ...birth } = launch;
+  const evidence = {
+    sourceCommit,
+    ...activeJobFixture().value,
+    build: {
+      sourceCommit,
+      policySHA256: policies.admitted.policySHA256,
+      source: { bytes: sourceBytes, sha256: sha(sourceBytes) },
+      toolchain: { bytes: toolchainBytes, sha256: sha(toolchainBytes) },
+      producer,
+    },
+    launch,
+    bootstrap: {
+      schema: 1,
+      kind: "bootstrap",
+      sourceCommit,
+      session,
+      issuerPublicKey: encoded,
+      producer: birth,
+    },
+  };
+  const observed = {
+    sourceCommit,
+    run: structuredClone(evidence.run),
+    job: structuredClone(evidence.job),
+    context: structuredClone(evidence.context),
+    producer: structuredClone(launch),
+  };
+  return { manifest, evidence, policies, observed, observe: () => observed };
+}
+
+function liveAdmissionFixture(mutate) {
+  const live = liveFixture(mutate);
+  const manifestBytes = canonicalBytes(live.manifest);
+  const admittedIssuer = admitFunctionalLiveIssuer(
+    manifestBytes,
+    live.evidence,
+    live.observe,
+  );
+  const bootstrap = functionalFixtureBootstrapTrustSource(
+    manifestBytes,
+    admittedIssuer,
+    live.policies.bytes,
+    live.policies.admitted,
+  );
+  const artifact = {
+    schema: 2,
+    sourceCommit,
+    session,
+    root,
+    hostIdentifier: live.manifest.hostIdentifier,
+    issuerPublicKey: encoded,
+    issuerManifestSHA256: sha(manifestBytes),
+    host: {
+      path: `${root}/Fixture.app`,
+      executableSHA256: "b".repeat(64),
+      certificateSHA256: encoded,
+      requirement: live.manifest.signing.hostRequirement,
+    },
+    producer: {
+      path: live.manifest.producer.path,
+      executableSHA256: live.manifest.producer.executableSHA256,
+    },
+    workerCertificateSHA256: encoded,
+    roleCertificateSHA256: encoded,
+  };
+  const hostEvidence = {
+    sourceCommit,
+    runID: 10,
+    jobID: 11,
+    source: live.evidence.build.source,
+    toolchain: live.evidence.build.toolchain,
+    bootstrapSHA256: bootstrap.sourceSHA256,
+    host: artifact.host,
+    hostProcess: {
+      pid: 43,
+      birthSeconds: 102,
+      birthMicroseconds: 103,
+      uid: live.evidence.launch.uid,
+      executable: `${artifact.host.path}/Contents/MacOS/Edith`,
+      executableSHA256: artifact.host.executableSHA256,
+      certificateSHA256: artifact.host.certificateSHA256,
+      requirement: artifact.host.requirement,
+    },
+  };
+  const observedHost = {
+    value: {
+      sourceCommit,
+      runID: 10,
+      jobID: 11,
+      sourceSHA256: hostEvidence.source.sha256,
+      toolchainSHA256: hostEvidence.toolchain.sha256,
+      bootstrapSHA256: bootstrap.sourceSHA256,
+      host: structuredClone(artifact.host),
+      hostProcess: structuredClone(hostEvidence.hostProcess),
+    },
+  };
+  const observeHost = () => observedHost.value;
+  const bytes = canonicalBytes(artifact);
+  const admitted = admitFunctionalFixtureHost(
+    bytes,
+    admittedIssuer,
+    hostEvidence,
+    observeHost,
+  );
+  return {
+    ...live,
+    artifact,
+    bytes,
+    admitted,
+    admittedIssuer,
+    manifestBytes,
+    bootstrap,
+    hostEvidence,
+    observedHost,
+    observeHost,
+  };
+}
+
+export function functionalBuildTestFixture(mutate) {
+  const live = liveAdmissionFixture(mutate);
+  const files = JSON.parse(
+    live.evidence.build.source.bytes.toString("utf8"),
+  ).files;
+  return {
+    ...live,
+    owner: "plugins",
+    issuerManifestBytes: live.manifestBytes,
+    admittedArtifact: live.admitted,
+    artifactBytes: live.bytes,
+    policyBytes: live.policies.bytes,
+    admittedPolicies: live.policies.admitted,
+    sourcePins: { sourceCommit, files },
+    environment: {
+      ...activeJobFixture().environment,
+      RUNNER_TEMP: runnerTemporaryDirectory,
+    },
+  };
+}
+function fixture(mutate) {
+  return functionalBuildTestFixture(mutate);
 }
 
 test("pair preparation plans independent source builds with version selected before compilation and signing", () => {
@@ -178,7 +352,7 @@ test("pair preparation rejects local execution, source drift, ad hoc signing and
     { GITHUB_ACTIONS: "false" },
     { RUNNER_ENVIRONMENT: "self-hosted" },
     { GITHUB_EVENT_NAME: "push" },
-    { GITHUB_SHA: "b".repeat(40) },
+    { GITHUB_SHA: sourceCommit },
     { EXPECTED_SOURCE_SHA: "b".repeat(40) },
     { GITHUB_ACTOR_ID: "foreign" },
     { GITHUB_REF: "refs/heads/unreviewed" },
@@ -268,6 +442,76 @@ test("pair preparation binds all compiled policy bytes to independently frozen m
   }
 });
 
+test("pair preparation compiles closed file scopes and rejects missing or widened authority", () => {
+  const scope = {
+    name: "plugins-state",
+    kind: "file",
+    purpose: "mutable-state",
+    root: "owner-data",
+    components: [{ literal: "plugins.json" }],
+    maximumBytes: 4096,
+    maximumEntries: 1,
+    initialState: "present",
+    allowedStates: ["present"],
+    immutableFiles: [],
+    mutableFiles: [],
+  };
+  const sourceFixture = fixture();
+  const sourcePolicies = JSON.parse(sourceFixture.policyBytes.toString("utf8"));
+  sourcePolicies.find((entry) => entry.owner === "plugins").fileScopes = [
+    scope,
+  ];
+  const scopedBytes = canonicalBytes(sourcePolicies);
+  const compiled = functionalFixtureRolePolicySource(scopedBytes, {
+    ...sourceFixture.admittedPolicies,
+    policySHA256: sha(scopedBytes),
+  });
+  assert(compiled.swiftExpression.includes('name: "plugins-state"'));
+  assert(
+    compiled.swiftExpression.includes('components: [.literal("plugins.json")]'),
+  );
+  assert(compiled.swiftExpression.includes("maximumBytes: 4096"));
+  const scopedFixture = (mutate) => {
+    const f = fixture();
+    const policies = JSON.parse(f.policyBytes.toString("utf8"));
+    const policy = policies.find((entry) => entry.owner === "plugins");
+    policy.fileScopes = [structuredClone(scope)];
+    mutate(policy);
+    f.policyBytes = canonicalBytes(policies);
+    f.admittedPolicies.policySHA256 = sha(f.policyBytes);
+    return f;
+  };
+  for (const mutate of [
+    (policy) => {
+      delete policy.fileScopes;
+    },
+    (policy) => {
+      policy.fileScopes[0].components = [
+        { literal: ".." },
+        { literal: "plugins.json" },
+      ];
+    },
+    (policy) => {
+      policy.fileScopes[0].root = "user-home";
+    },
+    (policy) => {
+      policy.fileScopes[0].maximumBytes = 268435457;
+    },
+    (policy) => {
+      policy.fileScopes[0].allowedStates = [];
+    },
+    (policy) => {
+      policy.fileScopes.push(structuredClone(policy.fileScopes[0]));
+    },
+  ])
+    assert.throws(() => functionalPairBuildPlan(scopedFixture(mutate)));
+  const f = fixture();
+  const policies = JSON.parse(f.policyBytes.toString("utf8"));
+  policies.find((entry) => entry.owner === "plugins").fileScopes = [scope];
+  f.policyBytes = canonicalBytes(policies);
+  assert.throws(() => functionalPairBuildPlan(f));
+});
+
 function syntheticFileScope() {
   return {
     name: "synthetic-state",
@@ -292,13 +536,12 @@ function replacePolicyBytes(f, policies) {
 }
 
 test("pair preparation carries admitted synthetic file scopes into the generated trust anchor", () => {
-  const f = fixture();
-  const originalDigest = f.admittedPolicies.policySHA256;
-  const policies = JSON.parse(f.policyBytes.toString("utf8"));
-  policies.find((policy) => policy.owner === f.owner).fileScopes = [
-    syntheticFileScope(),
-  ];
-  replacePolicyBytes(f, policies);
+  const originalDigest = fixture().admittedPolicies.policySHA256;
+  const f = fixture((policies) => {
+    policies.find((policy) => policy.owner === "plugins").fileScopes = [
+      syntheticFileScope(),
+    ];
+  });
   const plan = functionalPairBuildPlan(f);
   assert.notEqual(plan.policySHA256, originalDigest);
   assert.equal(plan.policySHA256, f.admittedPolicies.policySHA256);
@@ -428,3 +671,100 @@ test("pair preparation requires every admitted policy source pin and matching so
     assert.throws(() => functionalPairBuildPlan(f), { code: "ERR_ASSERTION" });
   }
 });
+
+function activeJobFixture() {
+  const sourceCommit = "a".repeat(40);
+  const repository = { id: 1289153439, full_name: "pulkitxm/edith" };
+  const pull = {
+    number: 1014,
+    state: "open",
+    merged: false,
+    merge_commit_sha: "c".repeat(40),
+    head: {
+      sha: sourceCommit,
+      ref: "feat/extension-marketplace",
+      repo: { ...repository },
+    },
+    base: { sha: "b".repeat(40), ref: "main", repo: { ...repository } },
+  };
+  const value = {
+    sourceCommit,
+    run: {
+      id: 10,
+      run_attempt: 1,
+      head_sha: sourceCommit,
+      head_branch: "feat/extension-marketplace",
+      repository: { ...repository },
+      head_repository: { ...repository },
+      actor: { id: 65671483 },
+      triggering_actor: { id: 65671483, login: "pulkitxm" },
+      event: "pull_request",
+      path: ".github/workflows/hosted-functional-actions.yml",
+      workflow_id: 20,
+      status: "in_progress",
+      conclusion: null,
+      pull_requests: [
+        {
+          number: 1014,
+          head: structuredClone(pull.head),
+          base: structuredClone(pull.base),
+        },
+      ],
+    },
+    job: {
+      id: 11,
+      run_id: 10,
+      run_attempt: 1,
+      head_sha: sourceCommit,
+      name: "functional-build",
+      runner_name: "synthetic-hosted-runner",
+      status: "in_progress",
+      conclusion: null,
+      labels: ["macos-26", "ARM64"],
+    },
+    context: {
+      event: {
+        action: "synchronize",
+        number: 1014,
+        repository: { ...repository },
+        pull_request: structuredClone(pull),
+      },
+      pullRequest: structuredClone(pull),
+      mergeCommit: {
+        sha: "c".repeat(40),
+        parents: [{ sha: "b".repeat(40) }, { sha: sourceCommit }],
+      },
+      workflow: {
+        id: 20,
+        path: ".github/workflows/hosted-functional-actions.yml",
+        state: "active",
+      },
+      runAttempt: 1,
+    },
+  };
+  const environment = {
+    GITHUB_ACTIONS: "true",
+    RUNNER_ENVIRONMENT: "github-hosted",
+    RUNNER_OS: "macOS",
+    GITHUB_REPOSITORY: "pulkitxm/edith",
+    GITHUB_REPOSITORY_ID: "1289153439",
+    GITHUB_EVENT_NAME: "pull_request",
+    GITHUB_REF: "refs/pull/1014/merge",
+    GITHUB_JOB: "functional-build",
+    GITHUB_SHA: value.context.mergeCommit.sha,
+    EXPECTED_SOURCE_SHA: sourceCommit,
+    GITHUB_ACTOR_ID: "65671483",
+    GITHUB_TRIGGERING_ACTOR: "pulkitxm",
+    GITHUB_RUN_ID: "10",
+    GITHUB_RUN_ATTEMPT: "1",
+    FUNCTIONAL_JOB_ID: "11",
+    RUNNER_NAME: "synthetic-hosted-runner",
+    GITHUB_EVENT_PATH: "/private/synthetic/event.json",
+    EDITH_HOSTED_FUNCTIONAL_ACTIONS: "1",
+    EXTENSION_SWIFT_JOBS: "1",
+    EXTENSION_SIGN_IDENTITY: "synthetic reviewed signer",
+    DEVELOPER_DIR: "/Applications/Xcode.app/Contents/Developer",
+    RUNNER_TEMP: "/private/synthetic",
+  };
+  return { value, environment };
+}

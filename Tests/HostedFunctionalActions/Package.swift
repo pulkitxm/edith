@@ -23,7 +23,8 @@ let package = Package(
             path: "ProducerSources",
             exclude: [
                 "FunctionalProducer.swift", "FunctionalOriginalUI.swift",
-                "FunctionalSignatureProbe.swift", "FunctionalRequestJournal.swift",
+                "FunctionalSignatureProbe.swift", "FunctionalProcessProbe.swift",
+                "FunctionalRequestJournal.swift",
                 "FunctionalProducerReceiver.swift",
             ],
             sources: [
