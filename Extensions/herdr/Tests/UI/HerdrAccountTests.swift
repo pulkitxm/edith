@@ -80,8 +80,9 @@ private actor HerdrAccountLaunchRecorder {
         let store = HerdrStore(
             defaults: HerdrUIDefaults(), claudeAccounts: model,
             newAgentPaneCreator: { _, _, _, _ in await recorder.createPane() },
+            agentStarter: { _, _, _ in },
             accountAgentStarter: { launcher, _ in try await recorder.begin(launcher, suspend: false)
-            }, agentStarter: { _, _, _ in })
+            })
         try await store.launchNewAgent(
             kind: "Claude Code", host: .local(herdrPresent: true), existingSpace: nil,
             newSpaceLabel: nil, accountID: second.id.uuidString)
@@ -107,8 +108,9 @@ private actor HerdrAccountLaunchRecorder {
         let store = HerdrStore(
             defaults: HerdrUIDefaults(), claudeAccounts: model,
             newAgentPaneCreator: { _, _, _, _ in await recorder.createPane() },
+            agentStarter: { _, _, _ in },
             accountAgentStarter: { launcher, _ in try await recorder.begin(launcher, suspend: true)
-            }, agentStarter: { _, _, _ in })
+            })
         try await store.launchNewAgent(
             kind: "Claude Code", host: .local(herdrPresent: true), existingSpace: nil,
             newSpaceLabel: nil, accountID: account.id.uuidString)
