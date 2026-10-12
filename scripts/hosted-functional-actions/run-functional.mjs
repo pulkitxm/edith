@@ -1524,7 +1524,7 @@ export function validateFunctionalPersistenceObservation({
   assert.equal(observation.expectedSHA256, digest);
   validateFunctionalRawSaved(claim.raw, policy, expected, bytes);
   if (final) {
-    assert(baseline && baseline.claim && Buffer.isBuffer(issuerDER));
+    assert(baseline?.claim && Buffer.isBuffer(issuerDER));
     assert.equal(claim.capabilitySHA256, functionalDigest(capability));
     assert.equal(observation.sequence > baseline.claim.baseline.sequence, true);
     assert.notEqual(

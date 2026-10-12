@@ -423,8 +423,7 @@ export async function createFunctionalOwnedProcessObserver(configuration) {
     assert(!closed, "Observer closed");
     const state = receipts.get(receipt);
     assert(
-      state &&
-        state.birth &&
+      state?.birth &&
         state.exited &&
         state.joinedComplete &&
         !state.failed &&
@@ -675,7 +674,7 @@ export async function createFunctionalOwnedProcessObserver(configuration) {
     },
     async observeNaturalExit(receipt) {
       const state = receipts.get(receipt);
-      assert(state && state.birth, "Expected independently bound owned child");
+      assert(state?.birth, "Expected independently bound owned child");
       await receipt.joined;
       retainedExited(receipt);
       assert(

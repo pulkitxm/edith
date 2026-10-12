@@ -1573,7 +1573,7 @@ test("full run source admission rejects missing native seals and unavailable ope
   for (const changed of [
     source.replace('case "seal-owner-proof":', 'case "foreign":'),
     source.replace('case "seal-qualified-evidence":', 'case "foreign":'),
-    source + '\ncase "finish": try emit([:])',
+    `${source}\ncase "finish": try emit([:])`,
     source.replace(
       'case "finish":',
       'case "finish": throw FunctionalFailure.unavailable("stub")',

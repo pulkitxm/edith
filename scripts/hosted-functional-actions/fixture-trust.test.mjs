@@ -325,7 +325,7 @@ function fixture() {
     hostProcess: {
       ...live.evidence.launch,
       pid: 43,
-      executable: artifact.host.path + "/Contents/MacOS/Edith",
+      executable: `${artifact.host.path}/Contents/MacOS/Edith`,
       executableSHA256: artifact.host.executableSHA256,
       certificateSHA256: artifact.host.certificateSHA256,
       requirement: artifact.host.requirement,

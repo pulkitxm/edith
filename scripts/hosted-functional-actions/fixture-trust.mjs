@@ -958,7 +958,7 @@ export function admitFunctionalFixtureHost(
   ownedProducer(evidence.hostProcess);
   assert.equal(
     evidence.hostProcess.executable,
-    artifact.host.path + "/Contents/MacOS/Edith",
+    `${artifact.host.path}/Contents/MacOS/Edith`,
   );
   assert.equal(
     evidence.hostProcess.executableSHA256,
