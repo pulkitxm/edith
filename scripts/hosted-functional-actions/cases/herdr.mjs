@@ -8,7 +8,7 @@ export const definition = {
     "sources": [
       {
         "path": "Extensions/herdr/ViewModels/HerdrSettingsModel.swift",
-        "sha256": "b4229cd994053b4c66a3aa1b3305b0ec984ea5c5f467897537a2e60210b4204a"
+        "sha256": "7c2ad191f18810cac7544d9633130467104643563633b799cb45b8892078f53c"
       },
       {
         "path": "Extensions/herdr/Views/HerdrSettingsPage.swift",

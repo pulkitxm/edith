@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "owner": "herdr",
+  "location": "settings",
+  "section": "backgroundAgent",
+  "operation": "herdr.settings.save",
+  "steps": [
+    {
+      "role": "checkBox",
+      "label": "Looks stuck",
+      "action": "set-checkbox",
+      "value": true
+    },
+    {
+      "role": "stepper",
+      "label": "Stuck after 17 minutes without screen progress",
+      "action": "increment",
+      "value": null
+    },
+    {
+      "role": "stepper",
+      "label": "Stuck after 18 minutes without screen progress",
+      "action": "decrement",
+      "value": null
+    },
+    {
+      "role": "checkBox",
+      "label": "Looks stuck",
+      "action": "set-checkbox",
+      "value": false
+    }
+  ],
+  "sources": [
+    {
+      "path": "Extensions/herdr/Runtime.swift",
+      "sha256": "f0e7a3b1cfb7ea14f39cf26e6004de2a3683be0c39d3307b22fcef87da9f0239"
+    },
+    {
+      "path": "Extensions/herdr/Views/HerdrSettingsPage.swift",
+      "sha256": "5e0c325da5a7f7cf0ba37c02cf3b9c1e06c5269d4c6d75af4a6c84ad8efce237"
+    },
+    {
+      "path": "Extensions/herdr/ViewModels/HerdrSettingsModel.swift",
+      "sha256": "7c2ad191f18810cac7544d9633130467104643563633b799cb45b8892078f53c"
+    },
+    {
+      "path": "Extensions/herdr/Activity/HerdrAttentionSettings.swift",
+      "sha256": "32db51d5edebe5e46a5d948278785add82164614d466a5eb4897234cca5f02e3"
+    }
+  ]
+}
