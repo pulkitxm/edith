@@ -81,8 +81,8 @@ final class ExtensionRuntime: NSObject {
             completion("Invalid Music presentation."); return
         }
         Task {
-            await embeddedUI.prepareToClose(id)
-            completion(nil)
+            let failure = await embeddedUI.prepareToClose(id)
+            completion(failure.map { $0 as NSString })
         }
     }
 

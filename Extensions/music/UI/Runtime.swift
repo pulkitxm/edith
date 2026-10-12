@@ -61,8 +61,14 @@ import SwiftUI
         return true
     }
 
-    func prepareToClose(_ id: UUID) async {
-        guard let scene = presentations.removeValue(forKey: id) else { return }
+    func prepareToClose(_ id: UUID) async -> String? {
+        guard let scene = presentations[id] else { return nil }
+        do {
+            try await scene.prepareToClose()
+            try Task.checkCancellation()
+            guard presentations[id] === scene else { throw ExtensionPeerError.unavailable }
+        } catch { return error.localizedDescription }
+        presentations[id] = nil
         scene.beginShutdown()
         if scene.isMain { EmbeddedMusicVideoSession.stopAll() }
         if presentations.isEmpty {
@@ -70,6 +76,7 @@ import SwiftUI
         }
         await retire(scene, id: id, drainAuxiliary: true).value
         configured = !presentations.isEmpty
+        return nil
     }
 
     func suspendCommands() {
@@ -241,6 +248,10 @@ import SwiftUI
         }
         if let controller { presentedController = controller; pending = false }
         return controller
+    }
+
+    func prepareToClose() async throws {
+        try await settingsModel?.prepareToClose()
     }
 
     func suspendCommands() { settingsModel?.suspendCommands() }
