@@ -694,3 +694,39 @@ test("shipping tests exclude unrelated native models while all-extension validat
     true,
   );
 });
+
+test("shipping publication exercises original Keep Awake controls through the exact frozen lifecycle tools", () => {
+  const checks = workflow.jobs.tests;
+  const native = checks.steps.find(
+    (step) =>
+      step.name ===
+      "Exercise original Keep Awake controls and native lifecycle",
+  );
+  expect(native.if).toBe(
+    "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'",
+  );
+  expect(native.env.EXPECTED_SOURCE_SHA).toBe("${{ github.sha }}");
+  expect(native.env.EXTENSION_LIFECYCLE_HARNESS).toBe(
+    "local/extension-tools/HostLifecycleHarness",
+  );
+  expect(native.run).toBe("make ci-extension-keep-awake-native");
+  for (const [mode, event_name, admitted] of [
+    ["selective", "push", true],
+    ["selective", "workflow_dispatch", true],
+    ["selective", "pull_request", false],
+    ["validation", "push", false],
+    ["validation", "workflow_dispatch", false],
+  ]) {
+    const context = routingContext({
+      github: { event_name },
+      needs: { plan: { result: "success", outputs: { mode } } },
+    });
+    expect(jobAdmitted({ ...native, needs: ["plan"] }, context)).toBe(admitted);
+  }
+  const verifyTools = checks.steps.findIndex(
+    (step) => step.name === "Verify lifecycle tools and their frozen index",
+  );
+  expect(verifyTools).toBeGreaterThan(-1);
+  expect(checks.steps.indexOf(native)).toBeGreaterThan(verifyTools);
+  expect(publish.needs).toContain("tests");
+});

@@ -186,6 +186,12 @@ jobs:
           cp local/extension-tools/MarketplaceHarness Packages/ExtensionMarketplace/.build/debug/MarketplaceHarness
       - run: bun scripts/test-extension-catalog-retention.mjs
       - run: bun scripts/test-extension-marketplace.mjs
+      - name: Exercise original Keep Awake controls and native lifecycle
+        if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
+        env:
+          EXPECTED_SOURCE_SHA: "${{ github.sha }}"
+          EXTENSION_LIFECYCLE_HARNESS: local/extension-tools/HostLifecycleHarness
+        run: make ci-extension-keep-awake-native
     needs:
       - frozen-host
       - plan
