@@ -73,11 +73,12 @@ final class MachineUsageProgress: @unchecked Sendable {
         cancel?.cancel()
     }
 
-    func finish(receipt: MachineUsageCollectionDescriptor? = nil, error: Error? = nil) {
+    @discardableResult
+    func finish(receipt: MachineUsageCollectionDescriptor? = nil, error: Error? = nil) -> Bool {
         lock.withLock {
             finished = true
             task = nil
-            guard state == .running else { return }
+            guard state == .running else { return false }
             self.receipt = receipt
             if let error {
                 state = error is CancellationError ? .cancelled : .failed
@@ -86,6 +87,7 @@ final class MachineUsageProgress: @unchecked Sendable {
             } else {
                 state = .completed
             }
+            return true
         }
     }
 

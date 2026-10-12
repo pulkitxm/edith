@@ -47,22 +47,35 @@ import Foundation
             let request = try MachineCommandPayload.decode(
                 CollectRequest.self, data: payload, required: ["machineID", "force"])
             let machine = try selected(request.machineID)
-            guard progressJobs.count < 2 else { throw ExtensionPeerError.unavailable }
+            guard progressJobs.count < 2, activeCollectionCount < 2 else {
+                throw ExtensionPeerError.unavailable
+            }
             let id = UUID()
             let stream = MachineUsageProgress()
             let task = Task {
+                var retainedID: UUID?
                 do {
-                    let receipt = try await MachineUsageProgressContext.$output.withValue({
-                        line, error in
-                        stream.receive(line, error: error)
-                    }) {
-                        try await self.execute("machines.usage.collect", payload: payload)
+                    let receipt: MachineUsageCollectionDescriptor
+                    if !request.force,
+                        let cached = collections.first(where: { $0.value.machine == machine })
+                    {
+                        receipt = descriptorValue(id: cached.key, collection: cached.value)
+                    } else {
+                        let document = try await MachineUsageProgressContext.$output.withValue({
+                            line, error in
+                            stream.receive(line, error: error)
+                        }) {
+                            try await collect(machine, request.force)
+                        }
+                        receipt = try retain(document, machine: machine)
+                        retainedID = receipt.collectionID
                     }
                     try Task.checkCancellation()
-                    stream.finish(
-                        receipt: try JSONDecoder().decode(
-                            MachineUsageCollectionDescriptor.self, from: receipt))
+                    if !stream.finish(receipt: receipt), let retainedID {
+                        collections.removeValue(forKey: retainedID)
+                    }
                 } catch {
+                    if let retainedID { collections.removeValue(forKey: retainedID) }
                     stream.finish(error: error)
                 }
             }
@@ -92,7 +105,7 @@ import Foundation
             {
                 return try descriptor(id: cached.key, collection: cached.value)
             }
-            guard pending.count < 2 else {
+            guard activeCollectionCount < 2 else {
                 throw ExtensionPeerError.rejected("A usage collection is already running.")
             }
             let id = UUID()
@@ -105,26 +118,8 @@ import Foundation
                 task.cancel()
             }
             try Task.checkCancellation()
-            guard !stopped, pending[id] != nil, try selected(machine.id) == machine,
-                document.count <= Self.maximumDocumentBytes,
-                let object = try JSONSerialization.jsonObject(with: document) as? [String: Any],
-                let schema = object["schemaVersion"] as? Int, schema == 8,
-                let generatedAt = object["generatedAt"] as? String,
-                Self.timestamp(generatedAt) != nil,
-                object["sources"] is [String], object["daily"] is [Any],
-                object["sessions"] is [Any], object["totals"] is [String: Any]
-            else { throw ExtensionPeerError.invalidRequest }
-            let collection = Collection(
-                machine: machine, expires: now().addingTimeInterval(lifetime),
-                document: document, generatedAt: generatedAt)
-            collections = collections.filter { $0.value.machine.id != machine.id }
-            if collections.count >= 2,
-                let oldest = collections.min(by: { $0.value.expires < $1.value.expires })?.key
-            {
-                collections.removeValue(forKey: oldest)
-            }
-            collections[id] = collection
-            return try descriptor(id: id, collection: collection)
+            guard pending[id] != nil else { throw ExtensionPeerError.invalidRequest }
+            return try JSONEncoder().encode(retain(document, machine: machine, id: id))
         case "machines.usage.result":
             let request = try MachineCommandPayload.decode(
                 ResultRequest.self, data: payload,
@@ -219,13 +214,48 @@ import Foundation
                 && machines.filter { $0.id == entry.value.machine.id } == [entry.value.machine]
         }
     }
+    private var activeCollectionCount: Int {
+        pending.count + progressJobs.values.filter { !$0.stream.isFinished }.count
+    }
+
+    private func retain(_ document: Data, machine: Machine, id: UUID = UUID()) throws
+        -> MachineUsageCollectionDescriptor
+    {
+        try Task.checkCancellation()
+        guard !stopped, try selected(machine.id) == machine,
+            document.count <= Self.maximumDocumentBytes,
+            let object = try JSONSerialization.jsonObject(with: document) as? [String: Any],
+            let schema = object["schemaVersion"] as? Int, schema == 8,
+            let generatedAt = object["generatedAt"] as? String,
+            Self.timestamp(generatedAt) != nil,
+            object["sources"] is [String], object["daily"] is [Any],
+            object["sessions"] is [Any], object["totals"] is [String: Any]
+        else { throw ExtensionPeerError.invalidRequest }
+        let collection = Collection(
+            machine: machine, expires: now().addingTimeInterval(lifetime),
+            document: document, generatedAt: generatedAt)
+        collections = collections.filter { $0.value.machine.id != machine.id }
+        if collections.count >= 2,
+            let oldest = collections.min(by: { $0.value.expires < $1.value.expires })?.key
+        {
+            collections.removeValue(forKey: oldest)
+        }
+        collections[id] = collection
+        return descriptorValue(id: id, collection: collection)
+    }
+
     private func descriptor(id: UUID, collection: Collection) throws -> Data {
+        try JSONEncoder().encode(descriptorValue(id: id, collection: collection))
+    }
+
+    private func descriptorValue(id: UUID, collection: Collection)
+        -> MachineUsageCollectionDescriptor
+    {
         let hash = SHA256.hash(data: collection.document).map { String(format: "%02x", $0) }
             .joined()
-        return try JSONEncoder().encode(
-            MachineUsageCollectionDescriptor(
-                collectionID: id, byteCount: collection.document.count,
-                sha256: hash, generatedAt: collection.generatedAt))
+        return MachineUsageCollectionDescriptor(
+            collectionID: id, byteCount: collection.document.count,
+            sha256: hash, generatedAt: collection.generatedAt)
     }
     private static func timestamp(_ value: String) -> Date? {
         let formatter = ISO8601DateFormatter()
