@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "owner": "notchShelf",
+  "location": "settings",
+  "section": "extension",
+  "operation": "notch.settings.write",
+  "steps": [
+    {
+      "role": "checkBox",
+      "label": "Require ⌥ to trigger",
+      "action": "set-checkbox",
+      "value": false
+    },
+    {
+      "role": "checkBox",
+      "label": "Require ⌥ to trigger",
+      "action": "set-checkbox",
+      "value": true
+    }
+  ],
+  "sources": [
+    {
+      "path": "Extensions/notchShelf/Shelf/Views/NotchSettingsPage.swift",
+      "sha256": "d1c33a16ce42c2d037ad6d4f53ec9a4e57e5a26729164ce6d65c0dcaa1d81268"
+    },
+    {
+      "path": "Extensions/notchShelf/Settings/NotchSettingsModel.swift",
+      "sha256": "794cef02b5fc1c896a74a9ff70415be06a167a0e311237e5a7287678ad51b08f"
+    },
+    {
+      "path": "Extensions/notchShelf/Runtime.swift",
+      "sha256": "3afa836f18cc40b93c0322ad182bca506f7af5b781c3f8d7dc4450a324f18331"
+    },
+    {
+      "path": "Extensions/notchShelf/Settings/NotchFixturePreferences.swift",
+      "sha256": "5d1c40c44610d4078d51f97ad0215e7509046814513eb6df8df6440ed1341db7"
+    },
+    {
+      "path": "Extensions/notchShelf/Settings/NotchSettingsContract.swift",
+      "sha256": "514a003560475f2644b74146618839d342f71510d635e64ff533f70e94dd0ebc"
+    }
+  ]
+}
