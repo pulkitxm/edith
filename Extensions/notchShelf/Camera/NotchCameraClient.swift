@@ -15,6 +15,7 @@ import SwiftUI
     private var generation = UUID()
     private var stopped = false
     private var task: Task<Void, Never>?
+    private var stoppingTask: Task<Void, Never>?
     private var readAgain = false
     private var actions: [(NotchCameraRequest.Operation, String?)] = []
     @ObservationIgnored private nonisolated(unsafe) var observer: NSObjectProtocol?
@@ -87,12 +88,19 @@ import SwiftUI
         let index = state.devices.firstIndex(where: { $0.id == desired }) ?? 0
         perform(.select, deviceID: state.devices[(index + 1) % state.devices.count].id)
     }
-    func drain() async { await task?.value }
+    func drain() async { await task?.value; await stoppingTask?.value }
     func stop() {
-        generation = UUID(); stopped = true; task?.cancel(); task = nil; state = nil; image = nil
+        generation = UUID(); stopped = true
+        if let task { task.cancel(); stoppingTask = task; self.task = nil }
+        state = nil; image = nil
         actions = []; readAgain = false
         if let observer { DistributedNotificationCenter.default().removeObserver(observer) }
         observer = nil
+    }
+    func stopAndWait() async {
+        stop()
+        await stoppingTask?.value
+        stoppingTask = nil
     }
 }
 

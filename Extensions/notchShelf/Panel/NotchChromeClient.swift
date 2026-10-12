@@ -79,6 +79,7 @@ import Observation
         let refreshing = refreshTask
         let acting = actionTask
         let geometry = geometryRequests
+        let camera = self.camera
         let thumbnails = Array(thumbnailTasks.values)
         stopped = true
         generation = UUID()
@@ -90,11 +91,12 @@ import Observation
         if let observer { DistributedNotificationCenter.default().removeObserver(observer) }
         observer = nil
         remoteLayouts.changed = nil
-        camera?.stop(); camera = nil
+        camera?.stop(); self.camera = nil
         drainBrowser()
         let drains = Array(browserDrains.values)
         teardown = Task {
             await refreshing?.value; await acting?.value; await geometry.stopAndWait()
+            await camera?.stopAndWait()
             for task in thumbnails { _ = await task.value }
             for task in drains { await task.value }
         }
