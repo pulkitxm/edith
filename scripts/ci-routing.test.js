@@ -478,7 +478,7 @@ test("independent feature changes do not release or invalidate the host", () => 
   }
 });
 
-test("native extension contracts run on macOS with private SDK execution enabled", () => {
+test("full native extension contracts run on macOS with private SDK execution enabled", () => {
   const jobs = Bun.YAML.parse(
     readFileSync(".github/workflows/extensions.yml", "utf8"),
   ).jobs;
@@ -490,7 +490,7 @@ test("native extension contracts run on macOS with private SDK execution enabled
   expect(job.needs).toContain("frozen-host");
   expect(proof.env.EXTENSION_SUPPORT_NATIVE_TESTS).toBe("1");
   expect(proof.run).toContain("scripts/extension-ghostty-native.test.js");
-  expect(proof.if).toBeUndefined();
+  expect(proof.if).toBe("needs.plan.outputs.mode == 'validation'");
   expect(proof["timeout-minutes"]).toBeGreaterThan(0);
   const restore = job.steps.findIndex((step) =>
     step.run?.includes("tar -xzf local/extension-host-artifact/host.tar.gz"),
