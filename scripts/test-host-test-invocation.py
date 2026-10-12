@@ -81,9 +81,19 @@ class HostTestInvocationTests(unittest.TestCase):
                     runner.main()
                 lookup.assert_not_called()
 
+    def test_standalone_contract_target_is_light_without_a_resource_slot(self):
+        spec = importlib.util.spec_from_file_location(
+            "host_contract_resource_gate", ROOT / "scripts/make-resource-gate.py")
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        self.assertIsNone(gate.profile_for("ci-host-invocation"))
+        self.assertIsNone(gate.cost_for(["ci-host-invocation"]))
+
     def test_make_builds_once_and_retains_every_xctest_before_swift_testing(self):
         make = (ROOT / "Makefile").read_text()
-        recipe = make.split("ci-host:\n", 1)[1].split("\n\n", 1)[0].splitlines()
+        recipe = make.split("ci-host: ci-host-invocation\n", 1)[1].split("\n\n", 1)[0].splitlines()
+        self.assertIn("ci-scripts: ci-host-invocation\n", make)
+        self.assertIn("ci-host-invocation:\n\tpython3 -B scripts/test-host-test-invocation.py\n", make)
         self.assertEqual(len(recipe), 4)
         self.assertTrue(recipe[0].startswith("\tswift format lint --strict"))
         self.assertTrue(recipe[1].startswith("\tswift build --build-tests "))
