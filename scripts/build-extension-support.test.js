@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import {
   rewriteArgumentParserSource,
   rewriteSupportImports,
@@ -6,6 +7,33 @@ import {
   supportProducts,
   supportSourceInputs,
 } from "./build-extension-support.mjs";
+import { planExtensionBuilds } from "./extension-release-plan.mjs";
+
+test("account support changes select Herdr and Usage independently of the empty host", () => {
+  const definitions = JSON.parse(
+    readFileSync("Extensions/manifest.json", "utf8"),
+  );
+  expect(
+    planExtensionBuilds(definitions, [
+      "Packages/ExtensionSupport/Sources/EdithExtensionAccounts/ClaudeAccountStorage.swift",
+    ])
+      .map(({ id }) => id)
+      .sort(),
+  ).toEqual(["herdr", "usage"]);
+  expect(
+    readFileSync("Packages/EdithHost/Package.swift", "utf8"),
+  ).not.toContain("EdithExtensionAccounts");
+  for (const id of ["herdr", "usage"]) {
+    const definition = definitions.find((entry) => entry.id === id);
+    expect(supportProducts(definition.supportProduct)).toContain(
+      "EdithExtensionAccounts",
+    );
+    expect(
+      definition.roles.app.some((path) => path.includes("ClaudeAccount")),
+    ).toBeTrue();
+    expect(definition.testTargets).toContain("ci-extension-accounts");
+  }
+});
 
 test("each extension role has independent Swift and Objective-C support types", () => {
   const first = supportModules("calendar_app");

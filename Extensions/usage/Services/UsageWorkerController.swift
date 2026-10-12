@@ -37,6 +37,7 @@ public final class UsageWorkerController {
     private let limitsSession = LimitsRefreshSession()
     private var usageTask: Task<Void, Never>?
     private var limitsTask: Task<Void, Never>?
+    private var limitsResetting = false
     private var refreshWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var limitsWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var usageID: UUID?
@@ -155,7 +156,7 @@ public final class UsageWorkerController {
 
     public func requestLimitsRefresh() throws {
         guard !stopped else { throw ExtensionPeerError.unavailable }
-        guard limitsTask == nil else { return }
+        guard limitsTask == nil, !limitsResetting else { return }
         let fetch = fetchLimits
         limitsTask = Task { [weak self, limitsSession] in
             let result = await fetch(limitsSession)
@@ -165,6 +166,23 @@ public final class UsageWorkerController {
             self.finishLimitsWaiters()
             UsageEvents.post(UsageEvents.limitsUpdated)
         }
+    }
+
+    public func accountsChanged() async throws {
+        guard !stopped, !limitsResetting else { throw ExtensionPeerError.unavailable }
+        limitsResetting = true
+        defer { limitsResetting = false }
+        let task = limitsTask
+        task?.cancel()
+        await task?.value
+        limitsTask = nil
+        await limitsSession.clear()
+        latestLimits = nil
+        finishLimitsWaiters()
+        try Task.checkCancellation()
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        limitsResetting = false
+        try requestLimitsRefresh()
     }
 
     public func waitForLimitsRefresh() async throws {

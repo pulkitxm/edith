@@ -14,6 +14,7 @@ let package = Package(
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionAccounts", package: "ExtensionSupport"),
             ], path: ".", exclude: ["Tests", "Package.swift", "Makefile"],
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),

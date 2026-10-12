@@ -1744,7 +1744,10 @@
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionCommands",
+    "supportProduct": [
+      "EdithExtensionCommands",
+      "EdithExtensionAccounts"
+    ],
     "roles": {
       "app": [
         "Extensions/usage/Collection/UsageNativeArchive.swift",
@@ -1884,7 +1887,11 @@
         "Extensions/usage/Services/UsageHostNavigation.swift",
         "Extensions/usage/Views/UsageUIPresentation.swift",
         "Extensions/usage/Views/UsageHomeLimitsCard.swift",
-        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
+        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
+        "Extensions/usage/Services/ClaudeAccountLimits.swift",
+        "Extensions/usage/Services/ClaudeAccountRemoteLogin.swift",
+        "Extensions/usage/Views/ClaudeAccountLimitsView.swift",
+        "Extensions/usage/Views/ClaudeQuotaAccountSelectionRow.swift"
       ]
     },
     "resources": {
@@ -1910,12 +1917,14 @@
       "scripts/build-extension-ui-carrier.mjs",
       "scripts/build-contained-host-runtime.mjs",
       "Packages/ExtensionSupport/Sources/EdithExtensionCommands",
-      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
+      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
+      "Packages/ExtensionSupport/Sources/EdithExtensionAccounts"
     ],
     "dependencies": [],
     "sameExecutableWorker": true,
     "testTargets": [
-      "ci-extension-usage-native"
+      "ci-extension-usage-native",
+      "ci-extension-accounts"
     ]
   },
   {
@@ -2800,7 +2809,8 @@
     "minimumSystemVersion": "14.0.0",
     "supportProduct": [
       "EdithExtensionDocuments",
-      "EdithExtensionCommands"
+      "EdithExtensionCommands",
+      "EdithExtensionAccounts"
     ],
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
@@ -2832,7 +2842,8 @@
       "app"
     ],
     "testTargets": [
-      "ci-extension-herdr"
+      "ci-extension-herdr",
+      "ci-extension-accounts"
     ],
     "roles": {
       "app": [
@@ -3016,7 +3027,12 @@
         "Extensions/herdr/Views/HerdrRemoteScene.swift",
         "Extensions/herdr/Transport/OwnedTerminalFiles.swift",
         "Extensions/herdr/ViewModels/HerdrSessionSettingsModel.swift",
-        "Extensions/herdr/Views/HerdrExtensionSettingsPage.swift"
+        "Extensions/herdr/Views/HerdrExtensionSettingsPage.swift",
+        "Extensions/herdr/Models/ClaudeAccountLaunch.swift",
+        "Extensions/herdr/Services/ClaudeAccountImport.swift",
+        "Extensions/herdr/ViewModels/ClaudeAccountsModel.swift",
+        "Extensions/herdr/ViewModels/ClaudeAccountsUI.swift",
+        "Extensions/herdr/Views/ClaudeAccountSettings.swift"
       ]
     },
     "resources": {

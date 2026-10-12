@@ -95,6 +95,7 @@ final class UsageStore {
     private(set) var grokWeek: LimitWindow?
     private(set) var grokAllowance: GrokAllowance?
     private(set) var limitsError: String?
+    private(set) var claudeAccounts: [ClaudeAccountLimits] = []
     private(set) var limitsUpdatedAt: Date?
     private(set) var refreshingLimits = false
 
@@ -281,6 +282,7 @@ final class UsageStore {
 
     func receiveLimitsSnapshot(_ snapshot: LimitsTopicSnapshot) async {
         guard !terminating else { return }
+        claudeAccounts = snapshot.claudeAccounts
         if let claude = snapshot.providers.first(where: { $0.provider == .claude }) {
             claudeUnavailable = claude.error != nil && claude.session == nil
             session = Self.fresh(claude.session)

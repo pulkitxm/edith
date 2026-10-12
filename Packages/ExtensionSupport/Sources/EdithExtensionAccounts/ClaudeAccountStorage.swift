@@ -20,8 +20,8 @@ public actor ClaudeAccountStorage {
         let data = URL(fileURLWithPath: path, isDirectory: true)
         let parent = data.deletingLastPathComponent()
         let application = parent.deletingLastPathComponent()
-        guard data.standardizedFileURL.path == path, data.resolvingSymlinksInPath().path == path,
-            data.lastPathComponent == owner, parent.lastPathComponent == "Data",
+        try OwnedAccountFiles.validateAncestors(data)
+        guard data.lastPathComponent == owner, parent.lastPathComponent == "Data",
             environment["EDITH_EXTENSION_STATE_ROOT"]
                 == application.appendingPathComponent("ExtensionState").path
         else { throw ClaudeAccountError.invalidRequest }
@@ -104,8 +104,8 @@ public actor ClaudeAccountStorage {
     }
 
     public func removeLauncher(_ url: URL) throws {
-        guard url.isFileURL, url.standardizedFileURL.path == url.path,
-            url.deletingLastPathComponent().deletingLastPathComponent().path == directory.path,
+        _ = try OwnedAccountFiles.components(url)
+        guard url.deletingLastPathComponent().deletingLastPathComponent().path == directory.path,
             let id = UUID(uuidString: url.deletingLastPathComponent().lastPathComponent),
             url.deletingLastPathComponent().lastPathComponent == id.uuidString,
             url.lastPathComponent.hasPrefix("launch-"), url.lastPathComponent.hasSuffix(".sh"),

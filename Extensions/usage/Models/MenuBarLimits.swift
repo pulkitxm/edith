@@ -87,14 +87,48 @@ public struct MenuBarLimitSegment: Equatable, Sendable {
 public struct MenuBarProviderGroup: Equatable, Sendable {
     public let provider: LimitProvider
     public let segments: [MenuBarLimitSegment]
+    public let accountLabel: String?
+    public let remainingAccounts: Int
 
-    public init(provider: LimitProvider, segments: [MenuBarLimitSegment]) {
+    public init(
+        provider: LimitProvider, segments: [MenuBarLimitSegment], accountLabel: String? = nil,
+        remainingAccounts: Int = 0
+    ) {
         self.provider = provider
         self.segments = segments
+        self.accountLabel = accountLabel
+        self.remainingAccounts = remainingAccounts
     }
 }
 
 public enum MenuBarLimits {
+    public static let accountSelectionKey = "menuBar.claudeAccount"
+
+    public static func accountGroups(
+        _ accounts: [ClaudeAccountLimits], selectedID: String?, slots: [LimitWindowSlot],
+        masked: Bool
+    ) -> [MenuBarProviderGroup] {
+        let visible = ClaudeAccountLimitsLayout.inlineAccounts(accounts, selectedID: selectedID)
+        return visible.compactMap { account in
+            let provider = ProviderLimits(
+                provider: .claude, session: fresh(account.limits.session),
+                week: fresh(account.limits.week), fable: fresh(account.limits.fable))
+            guard
+                let group = groups(providers: [provider], selection: { _ in slots }, masked: masked)
+                    .first
+            else { return nil }
+            return .init(
+                provider: .claude, segments: group.segments,
+                accountLabel: masked ? "Account" : String(account.name.prefix(8)),
+                remainingAccounts: !masked && accounts.count > 2 ? accounts.count - 1 : 0)
+        }
+    }
+
+    private static func fresh(_ window: LimitWindow?) -> LimitWindow? {
+        guard let window, let percent = UsageCompactQuotaValue(window).percent else { return nil }
+        return .init(percent: percent, resetsAt: window.resetsAt, period: window.period)
+    }
+
     public static func slots(for provider: LimitProvider) -> [LimitWindowSlot] {
         switch provider {
         case .claude: [.session, .week, .fable]

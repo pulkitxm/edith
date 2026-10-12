@@ -53,11 +53,20 @@ final class LimitsStatusItem {
             UsagePresenterState.shared.active
             && (defaults.object(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
                 as? Bool ?? false)
-        let source = Self.stableProviders(providers, defaults: defaults)
-        let groups = MenuBarLimits.groups(
-            providers: source,
-            selection: { MenuBarLimits.selection(for: $0, defaults: defaults) },
-            masked: masked)
+        let accounts = store?.providerEnabled(.claude) == true ? store?.claudeAccounts ?? [] : []
+        let source = Self.stableProviders(providers, defaults: defaults).filter {
+            accounts.isEmpty || $0.provider != .claude
+        }
+        let accountGroups = MenuBarLimits.accountGroups(
+            accounts, selectedID: defaults.string(forKey: MenuBarLimits.accountSelectionKey),
+            slots: MenuBarLimits.selection(for: .claude, defaults: defaults),
+            masked: masked || UsagePresenterState.shared.hides("Usage"))
+        let groups =
+            accountGroups
+            + MenuBarLimits.groups(
+                providers: source,
+                selection: { MenuBarLimits.selection(for: $0, defaults: defaults) },
+                masked: masked)
         guard !groups.isEmpty else {
             item?.isVisible = false
             return
@@ -88,7 +97,11 @@ final class LimitsStatusItem {
         let title = NSMutableAttributedString()
         for (index, group) in groups.enumerated() {
             if index > 0 { title.append(NSAttributedString(string: "   ")) }
-            if showsLogo(group.provider, multi: multi) { appendLogo(group.provider, into: title) }
+            if let label = group.accountLabel {
+                appendLabel(label + " ", into: title)
+            } else if showsLogo(group.provider, multi: multi) {
+                appendLogo(group.provider, into: title)
+            }
             for (segmentIndex, segment) in group.segments.enumerated() {
                 if segmentIndex > 0 { title.append(NSAttributedString(string: "  ")) }
                 appendLabel(
@@ -96,6 +109,9 @@ final class LimitsStatusItem {
                         + " ",
                     into: title)
                 appendValue(segment, provider: group.provider, percentSuffix: !multi, into: title)
+            }
+            if group.remainingAccounts > 0 {
+                appendLabel(" +\(group.remainingAccounts)", into: title)
             }
         }
         return title
@@ -111,7 +127,11 @@ final class LimitsStatusItem {
             .withAlphaComponent(0.65)
         for (index, group) in groups.enumerated() {
             if index > 0 { title.append(NSAttributedString(string: "   ")) }
-            appendLogo(group.provider, into: title)
+            if let label = group.accountLabel {
+                appendLabel(label + " ", into: title)
+            } else {
+                appendLogo(group.provider, into: title)
+            }
             for (segmentIndex, segment) in group.segments.enumerated() {
                 if segmentIndex > 0 {
                     title.append(
@@ -124,6 +144,9 @@ final class LimitsStatusItem {
                             ]))
                 }
                 appendValue(segment, provider: group.provider, percentSuffix: false, into: title)
+            }
+            if group.remainingAccounts > 0 {
+                appendLabel(" +\(group.remainingAccounts)", into: title)
             }
         }
         return title
@@ -197,7 +220,7 @@ final class LimitsStatusItem {
         let logoColor = subColor ?? NSColor.labelColor
         let labelColor = subColor ?? NSColor.secondaryLabelColor
         let dimColor = subColor ?? NSColor.tertiaryLabelColor
-        let showsLogo = showsLogo(group.provider, multi: multi)
+        let showsLogo = group.accountLabel == nil && showsLogo(group.provider, multi: multi)
         var columns: [StackedLimitsView.Column] = []
         columns.reserveCapacity(group.segments.count)
         for segment in group.segments {
@@ -223,10 +246,17 @@ final class LimitsStatusItem {
             }
             columns.append(
                 StackedLimitsView.Column(
-                    label: segment.slot.menuBarLabel(
-                        for: group.provider, period: segment.window?.period), value: value,
+                    label: (group.accountLabel.map { $0 + " " } ?? "")
+                        + segment.slot.menuBarLabel(
+                            for: group.provider, period: segment.window?.period), value: value,
                     valueColor: color,
                     labelColor: labelColor))
+        }
+        if group.remainingAccounts > 0 {
+            columns.append(
+                .init(
+                    label: "accounts", value: "+\(group.remainingAccounts)",
+                    valueColor: dimColor, labelColor: labelColor))
         }
         return StackedLimitsView.Group(
             logo: showsLogo ? ProviderLogo.tintedImage(group.provider, color: logoColor) : nil,
@@ -468,25 +498,44 @@ final class StackedLimitsView: NSView {
 
 struct LimitsMenuPanel: View {
     let store: UsageStore
+    @AppStorage(MenuBarLimits.accountSelectionKey, store: SharedDefaults.store) private
+        var selectedID = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if UsagePresenterState.shared.active
-                && SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
+            if UsagePresenterState.shared.hides("Usage")
+                || (UsagePresenterState.shared.active
+                    && SharedDefaults.store.bool(
+                        forKey: AppStorageKeys.Presenter.hideMenuBarNumbers))
             {
                 Text("Usage hidden during presentation").foregroundStyle(.secondary)
             } else {
                 ForEach(store.enabledProviders) { provider in
-                    let limits = store.limits(for: provider)
-                    Text(provider.label).font(.edithText(.headline))
-                    let slots = MenuBarLimits.slots(for: provider).filter { slot in
-                        slot != .fable || limits.window(for: slot) != nil
-                    }
-                    ForEach(slots, id: \.self) { slot in
-                        let window = limits.window(for: slot)
-                        StatusProgressRow(
-                            title: slot.title(for: provider), percent: window?.percent,
-                            resetsAt: window?.resetsAt)
+                    if provider == .claude, !store.claudeAccounts.isEmpty {
+                        if store.claudeAccounts.count > 2 {
+                            Picker("Claude account", selection: $selectedID) {
+                                Text("First account").tag("")
+                                ForEach(store.claudeAccounts) {
+                                    Text($0.name).tag($0.id.uuidString)
+                                }
+                            }
+                        }
+                        ScrollView {
+                            ClaudeAccountLimitsView(accounts: store.claudeAccounts, compact: true)
+                        }
+                        .frame(maxHeight: UIScale.pt(store.claudeAccounts.count <= 2 ? 340 : 420))
+                    } else {
+                        let limits = store.limits(for: provider)
+                        Text(provider.label).font(.edithText(.headline))
+                        let slots = MenuBarLimits.slots(for: provider).filter { slot in
+                            slot != .fable || limits.window(for: slot) != nil
+                        }
+                        ForEach(slots, id: \.self) { slot in
+                            let window = limits.window(for: slot)
+                            StatusProgressRow(
+                                title: slot.title(for: provider), percent: window?.percent,
+                                resetsAt: window?.resetsAt)
+                        }
                     }
                 }
             }
@@ -498,5 +547,6 @@ struct LimitsMenuPanel: View {
                     .font(.edithText(.caption)).foregroundStyle(.secondary)
             }
         }
+        .onChange(of: selectedID) { UsageWorkerOperations.controller?.settingsChanged() }
     }
 }

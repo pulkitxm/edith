@@ -5,7 +5,9 @@ import Testing
 
 @Suite struct AccountSupportStorageTests {
     private func fixture() throws -> URL {
-        let root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+        let physical = try #require(realpath(FileManager.default.temporaryDirectory.path, nil))
+        defer { free(physical) }
+        let root = URL(fileURLWithPath: String(cString: physical), isDirectory: true)
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(
             at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -15,6 +17,38 @@ import Testing
     private func mode(_ url: URL) throws -> Int {
         try #require(
             FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int)
+    }
+
+    @Test func physicalRootRemainsUsableBeforeAndAfterCreation() async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        #expect(!FileManager.default.fileExists(atPath: directory.path))
+        #expect(try await store.load() == .init())
+        #expect(FileManager.default.fileExists(atPath: directory.path))
+        let account = ClaudeAccount(name: "Synthetic physical", credential: "synthetic-token")
+        let state = ClaudeAccountsState(accounts: [account], defaultID: account.id)
+        try await store.save(state, expected: .init())
+        #expect(try await store.load() == state)
+        let launcher = try await store.writeLauncher(account: account) { _, _ in
+            Data("synthetic".utf8)
+        }
+        try await store.removeLauncher(launcher)
+        #expect(try await store.load() == state)
+    }
+
+    @Test func symlinkAncestorIsRejectedBeforeRootCreation() async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let alias = root.appendingPathComponent("alias", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: root)
+        let directory = alias.appendingPathComponent("Accounts", isDirectory: true)
+        await #expect(throws: ClaudeAccountError.self) {
+            _ = try await ClaudeAccountStorage(directory: directory).load()
+        }
+        #expect(
+            !FileManager.default.fileExists(atPath: root.appendingPathComponent("Accounts").path))
     }
 
     @Test func storageUsesPrivateFilesAndAtomicExpectedState() async throws {
@@ -186,6 +220,20 @@ import Testing
         #expect(
             try ClaudeAccountStorage.directory(environment: environment)
                 == root.appendingPathComponent("Accounts", isDirectory: true))
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("Data/herdr"), withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
+        #expect(
+            try ClaudeAccountStorage.directory(environment: environment)
+                == root.appendingPathComponent("Accounts", isDirectory: true))
+        let alias = root.appendingPathComponent("alias", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: root)
+        var aliased = environment
+        aliased["EDITH_EXTENSION_DATA_ROOT"] = alias.appendingPathComponent("Data/herdr").path
+        aliased["EDITH_EXTENSION_STATE_ROOT"] = alias.appendingPathComponent("ExtensionState").path
+        #expect(throws: ClaudeAccountError.self) {
+            try ClaudeAccountStorage.directory(environment: aliased)
+        }
         environment["EDITH_EXTENSION_ID"] = "clipboard"
         #expect(throws: ClaudeAccountError.self) {
             try ClaudeAccountStorage.directory(environment: environment)

@@ -26,7 +26,7 @@ import Testing
 
     @Test func keychainQueryOnlyReadsTheCliLoginAndCannotPrompt() throws {
         var count = 0
-        let token = ClaudeSavedLogin.token(
+        let token = UsageSavedLogin.token(
             environment: [:], now: now,
             readFile: { _ in
                 Issue.record("The default login must not read a file"); return nil
@@ -47,7 +47,7 @@ import Testing
     }
 
     @Test func configuredProfileDoesNotReadAnotherAccountsKeychain() {
-        let token = ClaudeSavedLogin.token(
+        let token = UsageSavedLogin.token(
             environment: ["CLAUDE_CONFIG_DIR": "/synthetic/profile"], now: now,
             readFile: { url in
                 #expect(url.path == "/synthetic/profile/.credentials.json")
@@ -61,7 +61,7 @@ import Testing
 
     @Test func missingConfiguredProfileCannotFallBackToTheDefaultAccount() {
         #expect(
-            ClaudeSavedLogin.token(
+            UsageSavedLogin.token(
                 environment: ["CLAUDE_CONFIG_DIR": "/synthetic/missing-profile"], now: now,
                 readFile: { _ in nil },
                 readKeychain: { _ in
@@ -73,7 +73,7 @@ import Testing
     @Test(arguments: [999_000.0, 1_000_000.0])
     func expiredCredentialsAreNotSentToTheApi(expiry: Double) {
         #expect(
-            ClaudeSavedLogin.token(
+            UsageSavedLogin.token(
                 environment: [:], now: now, readKeychain: { _ in credential(expiry: expiry) })
                 == nil)
     }
@@ -81,23 +81,23 @@ import Testing
     @Test(arguments: ["", "invalid\ntoken", String(repeating: "x", count: 8193)])
     func malformedCredentialsAreNotSelected(token: String) {
         #expect(
-            ClaudeSavedLogin.token(
+            UsageSavedLogin.token(
                 environment: [:], now: now, readKeychain: { _ in credential(token: token) }) == nil)
     }
 
     @Test func inferenceOnlyLoginCannotBeSelectedForUsage() {
         #expect(
-            ClaudeSavedLogin.token(
+            UsageSavedLogin.token(
                 environment: [:], now: now,
                 readKeychain: { _ in credential(scopes: ["user:inference"]) }) == nil)
     }
 
     @Test func loginRenewalIsPickedUpOnTheNextRead() {
         var current = credential(token: "synthetic-first-token")
-        let first = ClaudeSavedLogin.token(
+        let first = UsageSavedLogin.token(
             environment: [:], now: now, readKeychain: { _ in current })
         current = credential(token: "synthetic-renewed-token")
-        let second = ClaudeSavedLogin.token(
+        let second = UsageSavedLogin.token(
             environment: [:], now: now, readKeychain: { _ in current })
         #expect(first == "synthetic-first-token")
         #expect(second == "synthetic-renewed-token")
@@ -106,7 +106,7 @@ import Testing
     @Test(arguments: [Data(), Data("{}".utf8), Data(repeating: 0, count: 65_537)])
     func absentOrMalformedDataLeavesShellAuthenticationAvailable(data: Data) {
         #expect(
-            ClaudeSavedLogin.token(environment: [:], now: now, readKeychain: { _ in data }) == nil)
+            UsageSavedLogin.token(environment: [:], now: now, readKeychain: { _ in data }) == nil)
     }
 
     @Test func savedLoginReachesTheUsageApiAndPersistsEveryWindow() async throws {
@@ -115,7 +115,7 @@ import Testing
             fetch: {
                 let token = try await ClaudeLimitsReader.resolveUsageToken(
                     savedLogin: {
-                        ClaudeSavedLogin.token(
+                        UsageSavedLogin.token(
                             environment: [:], now: now, readKeychain: { _ in credential() })
                     },
                     shellToken: {

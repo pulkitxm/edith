@@ -71,6 +71,7 @@ struct HerdrUIState: Codable {
     let layout: HerdrUILayoutState
     let hooks: HerdrHooksSnapshot
     let startupMessages: [String: String]
+    var accountSessions: [String: String] = [:]
     let preferences: [String: HerdrUIPreference]
     let activity: AgentActivitySnapshot
     let activitySettings: AgentActivitySettings
@@ -81,7 +82,10 @@ struct HerdrUIState: Codable {
         guard owner == "herdr", sequence > 0, hosts.count <= 1025,
             Set(hosts.map(\.id)).count == hosts.count,
             hosts.reduce(0, { $0 + $1.agents.count }) <= 4096,
-            startupMessages.count <= 4096,
+            startupMessages.count <= 4096, accountSessions.count <= 4096,
+            accountSessions.allSatisfy({
+                $0.key.utf8.count <= 512 && UUID(uuidString: $0.value) != nil
+            }),
             Set(preferences.keys).isSubset(of: HerdrUIEngine.preferenceKeys)
         else { throw ExtensionPeerError.invalidRequest }
         let agents = hosts.flatMap(\.agents)
@@ -414,7 +418,7 @@ final class HerdrUIDefaults: UserDefaults {
         case "herdr.ui.launch":
             guard
                 Set(object.keys).isSubset(of: [
-                    "kind", "machineID", "workspaceID", "label", "beside",
+                    "kind", "machineID", "workspaceID", "label", "beside", "accountID",
                 ]),
                 let kind = object["kind"] as? String, HerdrKind.filterLabels.contains(kind),
                 let id = object["machineID"] as? String,
@@ -424,6 +428,12 @@ final class HerdrUIDefaults: UserDefaults {
                 let beside = object["beside"] as? NSNumber,
                 CFGetTypeID(beside) == CFBooleanGetTypeID()
             else { throw ExtensionPeerError.invalidRequest }
+            if let value = object["accountID"] {
+                guard let selection = value as? String, kind == "Claude Code",
+                    selection == "default" || selection == "cli"
+                        || UUID(uuidString: selection) != nil
+                else { throw ExtensionPeerError.invalidRequest }
+            }
             var workspace: HerdrWorkspaceSummary?
             if let value = object["workspaceID"] {
                 guard let id = value as? String else { throw ExtensionPeerError.invalidRequest }
@@ -438,7 +448,7 @@ final class HerdrUIDefaults: UserDefaults {
             else { throw ExtensionPeerError.invalidRequest }
             try await store.launchNewAgent(
                 kind: kind, host: host, existingSpace: workspace, newSpaceLabel: label,
-                openBeside: beside.boolValue)
+                openBeside: beside.boolValue, accountID: object["accountID"] as? String)
         case "herdr.ui.search":
             guard Set(object.keys) == ["query", "machineID", "agentIDs"],
                 let query = object["query"] as? String, query.utf8.count <= 4096,
@@ -580,6 +590,7 @@ final class HerdrUIDefaults: UserDefaults {
                 uniqueKeysWithValues: store.detachedIDs.map { ($0, store.view(for: $0)) }),
             panels: store.terminalPanels.uiState, layout: store.uiLayout,
             hooks: await worker.hooks.list(), startupMessages: store.agentStartupMessages,
+            accountSessions: store.accountSessions,
             preferences: store.uiPreferences, activity: worker.activity.activity,
             activitySettings: worker.activity.settings,
             attention: HerdrAttentionSettings(defaults: store.uiDefaults),
@@ -629,6 +640,7 @@ final class HerdrUIDefaults: UserDefaults {
             agentFocuser: { _, _, _ in throw ExtensionPeerError.unavailable },
             machinesProvider: { [] }, messaging: messaging)
         self.uiClient = uiClient
+        self.claudeAccounts = ClaudeAccountsModel(client: uiClient)
         configureRenderingOnly()
         terminalPanels.uiAction = { [weak self] operation, object in
             guard let self else { throw ExtensionPeerError.unavailable }

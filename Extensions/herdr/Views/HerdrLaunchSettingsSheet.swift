@@ -1,9 +1,12 @@
+import AppKit
+import EdithExtensionAccounts
 import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
 
 struct HerdrLaunchSettingsSheet: View {
     var store: HerdrStore?
+    var accounts = ClaudeAccountsModel.shared
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -12,6 +15,10 @@ struct HerdrLaunchSettingsSheet: View {
             Divider()
             ScrollView {
                 VStack(spacing: 0) {
+                    ClaudeAccountSettings(accounts: accounts).padding(UIScale.pt(18))
+                    Divider()
+                    ClaudeSharedLaunchSettings(accounts: accounts).padding(UIScale.pt(18))
+                    Divider()
                     ForEach(HerdrLaunchSettings.kinds, id: \.self) { kind in
                         HerdrLaunchKindRow(kind: kind, store: store)
                         if kind != HerdrLaunchSettings.kinds.last { Divider() }
@@ -245,5 +252,129 @@ private struct HerdrLaunchKindRow: View {
         await catalogLoad.perform(operation: {
             await HerdrLaunchCatalogContext.current.catalog(for: launchKind, refresh: refresh)
         }) { localCatalog = $0 }
+    }
+}
+
+struct ClaudeSharedLaunchSettings: View {
+    var accounts: ClaudeAccountsModel? = nil
+    var defaults: UserDefaults = SharedDefaults.store
+    @State private var arguments = ""
+    @State private var environment = ""
+    @State private var baseline: ClaudeSharedLaunchState?
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            Text("Claude launch options").font(.edithText(.headline))
+            Text(
+                "Shared by all Claude accounts on this Mac and used for local and remote sessions."
+            )
+            .font(.edithText(.caption)).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            Text("Additional arguments, one per line").font(.edithText(.caption))
+            ShellInputEditor(text: $arguments, label: "Shared Claude launch arguments")
+                .frame(height: UIScale.pt(48))
+                .accessibilityLabel("Shared Claude launch arguments")
+            Text("Environment variables, NAME=value per line").font(.edithText(.caption))
+            ShellInputEditor(text: $environment, label: "Shared Claude launch environment")
+                .frame(height: UIScale.pt(48))
+                .accessibilityLabel("Shared Claude launch environment")
+            Text(
+                "Added to the configured command, including aliases such as cc. Put flag values on their own lines."
+            )
+            .font(.edithText(.caption)).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            Button("Save launch options") {
+                Task {
+                    do {
+                        let next = ClaudeSharedLaunchState(
+                            arguments: arguments, environment: environment)
+                        if let accounts, accounts.client != nil {
+                            guard let baseline else { throw ExtensionPeerError.unavailable }
+                            let payload = try JSONEncoder().encode(
+                                ClaudeSharedLaunchMutation(baseline: baseline, state: next))
+                            let data = try await accounts.performData(
+                                "herdr.ui.accounts.launchSave", payload: payload)
+                            self.baseline = try JSONDecoder().decode(
+                                ClaudeSharedLaunchState.self, from: data)
+                        } else {
+                            try HerdrLaunchSettings.setSharedClaudeLaunch(
+                                arguments: arguments, environment: environment, in: defaults)
+                            baseline = next
+                        }
+                        error = nil
+                    } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
+                }
+            }
+            .disabled(accounts?.client != nil && baseline == nil)
+            if let error { Text(error).font(.edithText(.caption)).foregroundStyle(.red) }
+        }
+        .pageTask {
+            do {
+                let state: ClaudeSharedLaunchState
+                if let accounts, accounts.client != nil {
+                    state = try JSONDecoder().decode(
+                        ClaudeSharedLaunchState.self,
+                        from: await accounts.performData("herdr.ui.accounts.launchRead"))
+                } else {
+                    state = ClaudeSharedLaunchState(
+                        arguments: HerdrLaunchSettings.sharedArguments(in: defaults),
+                        environment: HerdrLaunchSettings.sharedEnvironment(in: defaults))
+                }
+                try Task.checkCancellation()
+                arguments = state.arguments; environment = state.environment; baseline = state
+                error = nil
+            } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
+        }
+    }
+}
+
+struct ShellInputEditor: NSViewRepresentable {
+    @Environment(\.isEnabled) private var isEnabled
+    @Binding var text: String
+    let label: String
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSTextView.scrollableTextView()
+        let editor = scrollView.documentView as! NSTextView
+        editor.isRichText = false
+        editor.allowsUndo = true
+        editor.isAutomaticDashSubstitutionEnabled = false
+        editor.isAutomaticQuoteSubstitutionEnabled = false
+        editor.isAutomaticTextReplacementEnabled = false
+        editor.isAutomaticSpellingCorrectionEnabled = false
+        editor.isContinuousSpellCheckingEnabled = false
+        editor.isGrammarCheckingEnabled = false
+        editor.isAutomaticLinkDetectionEnabled = false
+        editor.textContainerInset = NSSize(width: 5, height: 4)
+        editor.delegate = context.coordinator
+        configure(editor)
+        return scrollView
+    }
+
+    func updateNSView(_ view: NSScrollView, context: Context) {
+        context.coordinator.text = $text
+        configure(view.documentView as! NSTextView)
+    }
+
+    private func configure(_ editor: NSTextView) {
+        editor.isEditable = isEnabled
+        editor.font = .monospacedSystemFont(ofSize: UIScale.pt(11), weight: .regular)
+        editor.textColor = .labelColor
+        editor.setAccessibilityLabel(label)
+        if editor.string != text { editor.string = text }
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var text: Binding<String>
+
+        init(text: Binding<String>) { self.text = text }
+
+        func textDidChange(_ notification: Notification) {
+            guard let editor = notification.object as? NSTextView else { return }
+            text.wrappedValue = editor.string
+        }
     }
 }

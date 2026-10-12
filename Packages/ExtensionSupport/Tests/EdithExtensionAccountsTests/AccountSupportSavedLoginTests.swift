@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 @testable import EdithExtensionAccounts
@@ -40,7 +41,9 @@ import Testing
     }
 
     @Test func scopedLookupNeverUsesGlobalSecretsAndLogoutRejectsBeforeRead() async throws {
-        let fixtureRoot = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+        let physical = try #require(realpath(FileManager.default.temporaryDirectory.path, nil))
+        defer { free(physical) }
+        let fixtureRoot = URL(fileURLWithPath: String(cString: physical), isDirectory: true)
             .appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(
             at: fixtureRoot, withIntermediateDirectories: true,

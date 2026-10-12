@@ -37,10 +37,18 @@ jobs:
           EXPECTED_SOURCE_SHA: "${{ github.event.pull_request.head.sha || github.sha }}"
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
       - name: Install the pinned terminal toolchain
+        id: ghostty-toolchain
         if: "matrix.target == 'ci-extension-herdr-accounts'"
         run: |
           command -v zig >/dev/null 2>&1 || brew install zig
           test "$(zig version)" = "0.16.0"
+          echo "fingerprint=$(node scripts/extension-ghostty-native.mjs --fingerprint)" >> "$GITHUB_OUTPUT"
+      - name: Reuse verified terminal native resources
+        if: "matrix.target == 'ci-extension-herdr-accounts'"
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: Extensions/terminal/Native/vendor
+          key: "ghostty-extension-${{ runner.os }}-${{ runner.arch }}-${{ steps.ghostty-toolchain.outputs.fingerprint }}-${{ hashFiles('scripts/build-ghostty.sh', 'scripts/patches/ghostty-external-io.patch', 'scripts/extension-ghostty-native.mjs', 'Extensions/terminal/Native/Package.swift') }}"
       - name: Verify focused fixture isolation
         run: python3 -B scripts/account-focused-targets.test.py
       - name: Run account contracts with synthetic data
@@ -48,3 +56,6 @@ jobs:
           ACCOUNT_TEST_TARGET: "${{ matrix.target }}"
           EXTENSION_SWIFT_JOBS: "1"
         run: make "$ACCOUNT_TEST_TARGET"
+      - name: Verify terminal cache integrity after the contracts
+        if: "matrix.target == 'ci-extension-herdr-accounts'"
+        run: node scripts/extension-ghostty-native.mjs --check

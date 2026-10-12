@@ -163,6 +163,7 @@ struct UsageSettingsRows: View {
                 )
                 if claudeEnabled {
                     ClaudeStatusLineRow()
+                    ClaudeQuotaAccountSelectionRow()
                 }
                 Toggle(
                     "Codex limits",

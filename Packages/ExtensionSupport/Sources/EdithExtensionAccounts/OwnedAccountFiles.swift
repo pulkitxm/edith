@@ -4,17 +4,35 @@ import Foundation
 enum OwnedAccountFiles {
     static let maximumBytes = 65_536
 
-    static func root(_ url: URL) throws -> Int32 {
-        guard url.isFileURL, url.path.hasPrefix("/"),
-            url.standardizedFileURL.path == url.path,
-            url.resolvingSymlinksInPath().path == url.path,
-            !url.path.utf8.contains(0)
+    static func components(_ url: URL) throws -> [String] {
+        let path = url.path
+        let parts = path.split(separator: "/", omittingEmptySubsequences: false)
+        guard url.isFileURL, path.hasPrefix("/"), path.utf8.count <= 8192,
+            !path.utf8.contains(0), parts.count > 1,
+            parts.dropFirst().allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." })
         else { throw ClaudeAccountError.invalidRequest }
+        return parts.dropFirst().map(String.init)
+    }
+
+    static func validateAncestors(_ url: URL) throws {
+        let names = try components(url)
+        var parent = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC)
+        guard parent >= 0 else { throw ClaudeAccountError.invalidRequest }
+        defer { close(parent) }
+        for name in names {
+            let next = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            if next < 0, errno == ENOENT { return }
+            guard next >= 0 else { throw ClaudeAccountError.invalidRequest }
+            close(parent)
+            parent = next
+        }
+    }
+
+    static func root(_ url: URL) throws -> Int32 {
+        let names = try components(url)
         var parent = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC)
         guard parent >= 0 else { throw ClaudeAccountError.invalidRequest }
         do {
-            let names = url.path.split(separator: "/").map(String.init)
-            guard !names.isEmpty else { throw ClaudeAccountError.invalidRequest }
             for (index, name) in names.enumerated() {
                 var next = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
                 if next < 0, errno == ENOENT, index == names.count - 1 {

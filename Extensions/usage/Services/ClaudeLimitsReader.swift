@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithExtensionAccounts
 import Foundation
 
 public enum ClaudeLimitsReader {
@@ -49,13 +50,122 @@ public enum ClaudeLimitsReader {
         await UserShellEnvironment.shared.refreshIfEnabled()
         let environment = UserShellEnvironment.userEnvironment()
         let token = try await resolveUsageToken(
-            savedLogin: { ClaudeSavedLogin.token(environment: environment) },
+            savedLogin: { UsageSavedLogin.token(environment: environment) },
             shellToken: { try await resolveToken() })
         return try await fetch(token: token) { request in
             let (data, response) = try await session.data(for: request)
             guard let response = response as? HTTPURLResponse else { throw Failure.unavailable }
             return (data, response)
         }
+    }
+
+    public static func fetch(account: ClaudeAccount, directory: URL) async throws
+        -> LimitsProviderSnapshot
+    {
+        guard UsageExecutionEnvironment.fixtureHome == nil else { throw Failure.missingToken }
+        try Task.checkCancellation()
+        return try await fetchAccount(
+            account, directory: directory,
+            resolveToken: { try await resolveAccountToken(account, directory: directory) },
+            send: { request in
+                let (data, response) = try await session.data(for: request)
+                guard let response = response as? HTTPURLResponse else { throw Failure.unavailable }
+                return (data, response)
+            })
+    }
+
+    static func fetchAccount(
+        _ account: ClaudeAccount, directory: URL,
+        isCurrent: @Sendable (ClaudeAccount, URL) async throws -> Bool = { account, directory in
+            try await ClaudeAccountStorage(directory: directory).load().accounts.contains(account)
+        },
+        resolveToken: () async throws -> String,
+        send: (URLRequest) async throws -> (Data, HTTPURLResponse)
+    ) async throws -> LimitsProviderSnapshot {
+        try Task.checkCancellation()
+        guard try await isCurrent(account, directory) else { throw CancellationError() }
+        let token = try await resolveToken()
+        try Task.checkCancellation()
+        guard try await isCurrent(account, directory) else { throw CancellationError() }
+        let result: LimitsProviderSnapshot
+        do {
+            result = try await fetch(token: token, send: send)
+        } catch {
+            try Task.checkCancellation()
+            guard try await isCurrent(account, directory) else { throw CancellationError() }
+            throw error
+        }
+        try Task.checkCancellation()
+        guard try await isCurrent(account, directory) else { throw CancellationError() }
+        return result
+    }
+
+    static func accountToken(
+        _ account: ClaudeAccount, directory: URL,
+        savedLogin: (ClaudeAccount, URL) -> String? = { account, directory in
+            ClaudeSavedLogin.scopedToken(
+                account: account, directory: directory,
+                readScopedSecret: { UsageSavedLogin.scopedCredentials(directory: $0) })
+        }
+    ) throws -> String {
+        try Task.checkCancellation()
+        try account.validate()
+        guard !account.isLoggedOut else { throw Failure.missingToken }
+        switch account.authentication {
+        case .apiKey:
+            throw ClaudeAccountError.rejected(
+                "Subscription limits are unavailable for API-key accounts.")
+        case .oauthToken: return try validatedToken(account.credential)
+        case .browserLogin:
+            guard let token = savedLogin(account, directory) else {
+                throw ClaudeAccountError.rejected(
+                    "Launch a session with this account and complete Claude's login to show its limits."
+                )
+            }
+            return try validatedToken(token)
+        }
+    }
+
+    static func resolveAccountToken(
+        _ account: ClaudeAccount, directory: URL,
+        isCurrent: @Sendable (ClaudeAccount, URL) async throws -> Bool = { account, directory in
+            try await ClaudeAccountStorage(directory: directory).load().accounts.contains(account)
+        },
+        savedLogin: (ClaudeAccount, URL) -> String? = { account, directory in
+            ClaudeSavedLogin.scopedToken(
+                account: account, directory: directory,
+                readScopedSecret: { UsageSavedLogin.scopedCredentials(directory: $0) })
+        },
+        remoteLogin: @Sendable (ClaudeAccount) async throws -> String? = {
+            try await ClaudeAccountRemoteLogin.token(account: $0)
+        }
+    ) async throws -> String {
+        try Task.checkCancellation()
+        try account.validate()
+        guard !account.isLoggedOut else { throw Failure.missingToken }
+        guard try await isCurrent(account, directory) else { throw CancellationError() }
+        try Task.checkCancellation()
+        let token: String
+        if account.authentication == .browserLogin, let machineID = account.remoteMachineID {
+            guard UUID(uuidString: machineID) != nil else {
+                throw ClaudeAccountError.invalidRequest
+            }
+            if let local = savedLogin(account, directory) {
+                token = try validatedToken(local)
+            } else {
+                try Task.checkCancellation()
+                guard try await isCurrent(account, directory) else { throw CancellationError() }
+                guard let remote = try await remoteLogin(account) else {
+                    throw Failure.missingToken
+                }
+                token = try validatedToken(remote)
+            }
+        } else {
+            token = try accountToken(account, directory: directory, savedLogin: savedLogin)
+        }
+        try Task.checkCancellation()
+        guard try await isCurrent(account, directory) else { throw CancellationError() }
+        return token
     }
 
     static func resolveUsageToken(

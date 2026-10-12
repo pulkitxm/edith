@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithExtensionAccounts
 import Darwin
 import Foundation
 import os
@@ -36,11 +37,16 @@ public struct LimitsTopicSnapshot: Codable, Equatable, Sendable {
     public let refreshedAt: Date
     public let providers: [LimitsProviderSnapshot]
     public let failure: String?
+    public let claudeAccounts: [ClaudeAccountLimits]
 
-    public init(refreshedAt: Date, providers: [LimitsProviderSnapshot], failure: String?) {
+    public init(
+        refreshedAt: Date, providers: [LimitsProviderSnapshot], failure: String?,
+        claudeAccounts: [ClaudeAccountLimits] = []
+    ) {
         self.refreshedAt = refreshedAt
         self.providers = providers
         self.failure = failure
+        self.claudeAccounts = claudeAccounts
     }
 }
 
@@ -79,9 +85,11 @@ public enum LimitsCollector {
         if UsageExecutionEnvironment.fixtureHome != nil {
             return LimitsTopicSnapshot(refreshedAt: Date(), providers: [], failure: nil)
         }
-        return await collect(
+        return await collectConfigured(
             providers: enabledProviders(defaults: defaults), force: force,
-            refreshSession: refreshSession, announce: announce
+            refreshSession: refreshSession, announce: announce,
+            accountDirectory: { try ClaudeAccountStorage.directory() },
+            loadAccounts: { try await ClaudeAccountStorage(directory: $0).load().accounts }
         ) { provider in
             switch provider {
             case .claude:
@@ -96,14 +104,60 @@ public enum LimitsCollector {
         }
     }
 
-    static func collect(
+    static func collectConfigured(
         providers: [LimitProvider], force: Bool = false,
         refreshSession: LimitsRefreshSession, now: Date = Date(),
         announce: @Sendable (Notification.Name) -> Void,
+        accountDirectory: () throws -> URL,
+        loadAccounts: (URL) async throws -> [ClaudeAccount],
+        fetchAccount:
+            @escaping @Sendable (ClaudeAccount, URL) async throws -> LimitsProviderSnapshot = {
+                try await ClaudeLimitsReader.fetch(account: $0, directory: $1)
+            }, fetch: (LimitProvider) async -> (LimitsProviderSnapshot, Date?)
+    ) async -> LimitsTopicSnapshot {
+        guard !Task.isCancelled else { return cancelled(now) }
+        var accounts: [ClaudeAccount] = []
+        var directory: URL?
+        if providers.contains(.claude) {
+            do {
+                directory = try accountDirectory()
+                accounts = try await loadAccounts(directory!)
+                try Task.checkCancellation()
+            } catch {
+                if error is CancellationError || Task.isCancelled { return cancelled(now) }
+                return .init(
+                    refreshedAt: now, providers: [],
+                    failure: "Account limits configuration could not be loaded.")
+            }
+        }
+        let collector = await refreshSession.accountCollector
+        return await collect(
+            providers: providers.filter { $0 != .claude || accounts.isEmpty },
+            leaseProviders: providers,
+            force: force,
+            refreshSession: refreshSession, now: now, announce: announce,
+            fetchAccounts: {
+                guard let directory else { return [] }
+                return try await collector.refresh(
+                    accounts: accounts, directory: directory, now: now, fetch: fetchAccount)
+            }, fetch: fetch)
+    }
+
+    private static func cancelled(_ now: Date) -> LimitsTopicSnapshot {
+        .init(refreshedAt: now, providers: [], failure: "Cancelled")
+    }
+
+    static func collect(
+        providers: [LimitProvider], leaseProviders: [LimitProvider]? = nil, force: Bool = false,
+        refreshSession: LimitsRefreshSession, now: Date = Date(),
+        announce: @Sendable (Notification.Name) -> Void,
+        fetchAccounts: () async throws -> [ClaudeAccountLimits] = { [] },
         fetch: (LimitProvider) async -> (LimitsProviderSnapshot, Date?)
     ) async -> LimitsTopicSnapshot {
         let lease: LimitsRefreshSession.Lease
-        switch await refreshSession.begin(force: force, providers: providers, now: now) {
+        switch await refreshSession.begin(
+            force: force, providers: leaseProviders ?? providers, now: now)
+        {
         case .cached(let snapshot): return snapshot
         case .collect(let owner): lease = owner
         case .cancelled:
@@ -123,6 +177,10 @@ public enum LimitsCollector {
                 }
             } else {
                 let (snapshot, deadline) = await fetch(provider)
+                guard snapshot.error != "Cancelled", !Task.isCancelled else {
+                    await refreshSession.abort(lease: lease.id)
+                    return cancelled(now)
+                }
                 snapshots.append(snapshot)
                 deadlines[provider] = deadline
             }
@@ -131,8 +189,21 @@ public enum LimitsCollector {
             await refreshSession.abort(lease: lease.id)
             return LimitsTopicSnapshot(refreshedAt: now, providers: [], failure: "Cancelled")
         }
+        let accounts: [ClaudeAccountLimits]
+        do {
+            accounts = try await fetchAccounts()
+            try Task.checkCancellation()
+        } catch {
+            await refreshSession.abort(lease: lease.id)
+            if error is CancellationError || Task.isCancelled { return cancelled(now) }
+            return .init(
+                refreshedAt: now, providers: [], failure: "Account limits are unavailable.")
+        }
         let snapshot = LimitsTopicSnapshot(
-            refreshedAt: now, providers: snapshots, failure: snapshots.compactMap(\.error).first)
+            refreshedAt: now, providers: snapshots,
+            failure: snapshots.compactMap(\.error).first
+                ?? accounts.compactMap(\.limits.error).first,
+            claudeAccounts: accounts)
         guard await refreshSession.finish(snapshot, retryNotBefore: deadlines, lease: lease.id)
         else {
             return LimitsTopicSnapshot(refreshedAt: now, providers: [], failure: "Cancelled")
@@ -160,7 +231,7 @@ public enum LimitsCollector {
             try persist(snapshot)
             return (snapshot, nil)
         } catch {
-            guard !Task.isCancelled else {
+            guard !(error is CancellationError), !Task.isCancelled else {
                 return (
                     LimitsProviderSnapshot(
                         provider: .claude, session: nil, week: nil, error: "Cancelled"), nil

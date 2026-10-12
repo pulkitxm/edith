@@ -1,9 +1,35 @@
 import EdithExtensionSupport
+import CryptoKit
 import Foundation
 import LocalAuthentication
 import Security
 
-enum ClaudeSavedLogin {
+enum UsageSavedLogin {
+    static func scopedCredentials(
+        directory: URL?,
+        readKeychain: ([String: Any]) -> Data? = { query in
+            var item: CFTypeRef?
+            guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess else {
+                return nil
+            }
+            return item as? Data
+        }
+    ) -> Data? {
+        guard let directory else { return nil }
+        let hash = SHA256.hash(data: Data(directory.path.utf8))
+            .map { String(format: "%02x", $0) }.joined().prefix(8)
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        let value = readKeychain([
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "Claude Code-credentials-" + hash,
+            kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecUseAuthenticationContext as String: context,
+        ])
+        guard let value, value.count <= 65_536 else { return nil }
+        return value
+    }
+
     static func token(
         environment: [String: String] = UserShellEnvironment.userEnvironment(),
         now: Date = Date(),
