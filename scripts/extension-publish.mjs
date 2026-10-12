@@ -47,19 +47,25 @@ import {
   verifiedCatalogPayload,
 } from "./verify-extension-catalog.mjs";
 
+function publishedVersion(packages, record) {
+  const existing = packages.find(
+    (candidate) =>
+      candidate.id === record.id &&
+      candidate.hostABI === record.hostABI &&
+      candidate.architecture === record.architecture &&
+      candidate.version === record.version,
+  );
+  if (existing && !isDeepStrictEqual(existing, record))
+    throw new Error("Published package versions are immutable");
+  return existing;
+}
+
 export function mergeExtensionCatalog(previous, records, revision) {
   if (!Number.isSafeInteger(revision) || revision <= previous.revision)
     throw new Error("Catalog revision must increase");
   const packages = [...previous.packages];
   for (const record of records) {
-    const identity = (candidate) =>
-      candidate.id === record.id &&
-      candidate.hostABI === record.hostABI &&
-      candidate.architecture === record.architecture &&
-      candidate.version === record.version;
-    const existing = packages.find(identity);
-    if (existing && existing.sha256 !== record.sha256)
-      throw new Error("Published package versions are immutable");
+    const existing = publishedVersion(packages, record);
     if (!existing) packages.push(record);
   }
   const tiers = new Map();
@@ -176,10 +182,18 @@ export async function preflightExtensionBuilds({
   repository,
   directory,
   include,
+  previous,
   preflightAsset = preflightReleaseAsset,
 }) {
-  for (const entry of include)
-    await validatedExtensionBuild({ repository, directory, entry });
+  const packages = [...previous.packages];
+  for (const entry of include) {
+    const record = await validatedExtensionBuild({
+      repository,
+      directory,
+      entry,
+    });
+    if (!publishedVersion(packages, record)) packages.push(record);
+  }
   for (const entry of include)
     for (const suffix of ["zip", "json", "zip.sha256"])
       preflightAsset({
@@ -717,7 +731,12 @@ export async function publishExtensions({
       "--make-latest",
       "false",
     );
-  await preflightExtensionBuilds({ repository, directory, include });
+  await preflightExtensionBuilds({
+    repository,
+    directory,
+    include,
+    previous: old,
+  });
   const nativeEvidence = await publishEvidence({
     directory,
     target,

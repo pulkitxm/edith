@@ -221,6 +221,40 @@ process.stdout.write(JSON.stringify(result));
       change(current);
       writeFileSync(stateFile, JSON.stringify(current));
     },
+    preparePublishedVersion: (change) => {
+      const published = { ...record(original), ...change };
+      const tag = extensionReleaseTag({
+        id: published.id,
+        version: published.version,
+        fingerprint: published.sourceFingerprint,
+      });
+      published.downloadURL = `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/keepAwake.zip`;
+      const previous = { schemaVersion: 1, revision: 1, packages: [published] };
+      const payload = Buffer.from(JSON.stringify(previous));
+      const envelope = Buffer.from(
+        JSON.stringify({
+          payload: payload.toString("base64"),
+          signature: sign(null, payload, privateKey).toString("base64"),
+        }),
+      );
+      writeFileSync(join(directory, "previous.json"), JSON.stringify(previous));
+      const current = JSON.parse(readFileSync(stateFile));
+      const asset = {
+        id: current.next++,
+        name: "catalog-1.json",
+        size: envelope.length,
+        digest: `sha256:${createHash("sha256").update(envelope).digest("hex")}`,
+      };
+      current.bytes[asset.id] = envelope.toString("base64");
+      current.releases.push({
+        id: current.next++,
+        tag_name: catalogTag,
+        draft: false,
+        body: JSON.stringify(catalogPointer(envelope, 1)),
+        assets: [asset],
+      });
+      writeFileSync(stateFile, JSON.stringify(current));
+    },
     prepareEmptyDraft: () => {
       environment.FIXTURE_EMPTY_RESUME = "true";
       const definitions = JSON.parse(readFileSync("Extensions/manifest.json"));
@@ -419,6 +453,33 @@ process.stdout.write(JSON.stringify(result));
       }),
     close: () => rmSync(directory, { recursive: true, force: true }),
   };
+}
+
+for (const change of [
+  { sha256: "d".repeat(64) },
+  { sourceFingerprint: "c".repeat(64) },
+]) {
+  test(`a conflicting published ${Object.keys(change)[0]} fails before every release mutation`, () => {
+    const fixture = publisherFixture("");
+    try {
+      fixture.preparePublishedVersion(change);
+      const before = fixture.state();
+      const failed = fixture.run();
+      expect(failed.status).not.toBe(0);
+      expect(failed.stderr).toContain(
+        "Published package versions are immutable",
+      );
+      expect(fixture.state()).toEqual(before);
+      expect(fixture.state().uploads).toEqual([]);
+      expect(fixture.state().pointerEdits).toBe(0);
+      expect(fixture.state().releases).toHaveLength(1);
+      expect(() =>
+        readFileSync(join(fixture.directory, "keepAwake.native-evidence.json")),
+      ).toThrow();
+    } finally {
+      fixture.close();
+    }
+  }, 30_000);
 }
 
 test("an archive-only retry recovers original immutable bytes and signed lineage after a different rebuild", () => {
