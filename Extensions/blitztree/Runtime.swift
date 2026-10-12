@@ -41,17 +41,20 @@ final class ExtensionRuntime: NSObject {
             #if EDITH_FUNCTIONAL_FIXTURE
             if let admission = signedFixture {
                 guard let token, let fixtureFiles else { throw WorkerFixtureError.invalid }
-                try admission.requireCurrent()
-                try fixtureFiles.validateCommand(command, payload: payload)
-                let request = try admission.beginRequest(
-                    token: token, operation: command, payload: payload)
-                do {
-                    let result = try await executeCommand(command, payload: payload)
-                    try admission.completeRequest(request)
-                    return result
-                } catch {
-                    admission.cancelRequest(request)
-                    throw error
+                return try await fixtureFiles.withAction { [self] in
+                    try fixtureFiles.validateCommand(command, payload: payload)
+                    let request = try admission.beginRequest(
+                        token: token, operation: command, payload: payload)
+                    do {
+                        let result = try await self.executeCommand(command, payload: payload)
+                        try fixtureFiles.requireCurrentAction()
+                        try admission.completeRequest(request)
+                        return result
+                    } catch {
+                        await self.model?.finishWork()
+                        admission.cancelRequest(request)
+                        throw error
+                    }
                 }
             }
             #endif
@@ -116,6 +119,10 @@ final class ExtensionRuntime: NSObject {
         let owner = model
         let uiOwner = uiModel
         commandsSuspended = true
+        #if EDITH_FUNCTIONAL_FIXTURE
+        let files = fixtureFiles
+        files?.closeAdmission()
+        #endif
         _ = commands.suspend()
         if let commandDrain { return commandDrain }
         owner?.cancelPendingCommands()
@@ -126,6 +133,9 @@ final class ExtensionRuntime: NSObject {
             await owner?.cancelAndWait()
             await uiOwner?.cancelAndWait()
             while let task = uiDrains.values.first { await task.value }
+            #if EDITH_FUNCTIONAL_FIXTURE
+            await files?.closeAndWait()
+            #endif
         }
         commandDrain = task
         return task
@@ -190,7 +200,7 @@ final class ExtensionRuntime: NSObject {
                     if let admitted {
                         let files = try BlitzTreeFixtureFiles.admit(admitted)
                         let client = BlitzTreeClient { root, progress in
-                            try await admitted.requireCurrent()
+                            try await files.requireCurrentAction()
                             let cancellation = Progress(totalUnitCount: 0)
                             let report = try await withTaskCancellationHandler {
                                 try await BlockingWork.perform {
@@ -200,15 +210,15 @@ final class ExtensionRuntime: NSObject {
                             } onCancel: {
                                 cancellation.cancel()
                             }
-                            try await admitted.requireCurrent()
+                            try await files.requireCurrentAction()
                             return report
                         }
                         model = BlitzTreeModel(client: client) { entry, root, cancellation in
-                            try await admitted.requireCurrent()
+                            try await files.requireCurrentAction()
                             try await BlockingWork.perform {
                                 try files.trash(entry, root: root, cancellation: cancellation)
                             }
-                            try await admitted.requireCurrent()
+                            try await files.requireCurrentAction()
                         }
                         fixtureFiles = files
                         signedFixture = admitted
@@ -301,22 +311,27 @@ private final class BlitzTreeFixtureFiles: @unchecked Sendable {
     private let victim: BlitzTreeFixtureFile
     private let metadata: BlitzTreeFixtureMetadata
     private var moved = false
+    @MainActor private let namespace: WorkerFixtureNamespaceLease
+    @MainActor private var action: WorkerFixtureNamespaceAction?
 
+    @MainActor
     private init(
         scanDirectory: BlitzTreeFixtureDirectory, trashDirectory: BlitzTreeFixtureDirectory,
-        victim: BlitzTreeFixtureFile, metadata: BlitzTreeFixtureMetadata
+        victim: BlitzTreeFixtureFile, metadata: BlitzTreeFixtureMetadata,
+        namespace: WorkerFixtureNamespaceLease
     ) throws {
         self.scanDirectory = scanDirectory
         self.trashDirectory = trashDirectory
         self.victim = victim
         self.metadata = metadata
+        self.namespace = namespace
         try validate()
     }
 
     @MainActor
     static func admit(_ admission: WorkerFixtureEngineAdmission) throws -> BlitzTreeFixtureFiles {
         try admission.requireCurrent()
-        try requireExclusiveNamespaceAuthority()
+        let namespace = try admission.requireExclusiveNamespace()
         guard let trust = WorkerFixtureUITrustAnchor.admitted,
             let phase = WorkerFixtureFilePhase(rawValue: admission.descriptor.phase)
         else { throw WorkerFixtureError.invalid }
@@ -367,15 +382,31 @@ private final class BlitzTreeFixtureFiles: @unchecked Sendable {
         let victim = try BlitzTreeFixtureFile(directory: scanDirectory)
         let files = try BlitzTreeFixtureFiles(
             scanDirectory: scanDirectory, trashDirectory: trashDirectory,
-            victim: victim, metadata: metadata)
-        try admission.requireCurrent()
+            victim: victim, metadata: metadata, namespace: namespace)
+        try namespace.requireCurrent()
         return files
     }
 
-    private static func requireExclusiveNamespaceAuthority() throws {
-        throw ExtensionPeerError.rejected(
-            "The signed private namespace mutation lease is unavailable.")
+    @MainActor
+    func withAction<Value>(_ body: () async throws -> Value) async throws -> Value {
+        try await namespace.withAction { value in
+            action = value
+            defer { action = nil }
+            return try await body()
+        }
     }
+
+    @MainActor
+    func requireCurrentAction() throws {
+        guard let action else { throw WorkerFixtureError.invalid }
+        try namespace.requireCurrent(action)
+    }
+
+    @MainActor
+    func closeAdmission() { namespace.closeAdmission() }
+
+    @MainActor
+    func closeAndWait() async { await namespace.closeAndWait() }
 
     private static func sourceScopes() throws -> [WorkerFixtureFileScope] {
         [
