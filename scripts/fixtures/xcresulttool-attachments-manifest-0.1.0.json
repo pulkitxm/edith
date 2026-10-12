@@ -1,0 +1,98 @@
+[
+  {
+    "attachments": [
+      {
+        "configurationName": "Synthetic Debug",
+        "deviceId": "synthetic-device",
+        "deviceName": "Synthetic Mac",
+        "exportedFileName": "00000000-0000-4000-8000-000000000001.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "edith-journey-storage-distribution_0_10000000-0000-4000-8000-000000000001.png",
+        "timestamp": 1
+      },
+      {
+        "configurationName": "Synthetic Debug",
+        "deviceId": "synthetic-device",
+        "deviceName": "Synthetic Mac",
+        "exportedFileName": "00000000-0000-4000-8000-000000000002.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "edith-journey-marketplace-installed-calendar_0_10000000-0000-4000-8000-000000000002.png",
+        "timestamp": 1
+      },
+      {
+        "configurationName": "Synthetic Debug",
+        "deviceId": "synthetic-device",
+        "deviceName": "Synthetic Mac",
+        "exportedFileName": "00000000-0000-4000-8000-000000000003.json",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "edith-journey-outcome-0008_0_10000000-0000-4000-8000-000000000003.json",
+        "timestamp": 1
+      },
+      {
+        "configurationName": "Synthetic Debug",
+        "deviceId": "synthetic-device",
+        "deviceName": "Synthetic Mac",
+        "exportedFileName": "00000000-0000-4000-8000-000000000004.json",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "edith-journey-outcome-0007_0_10000000-0000-4000-8000-000000000004.json",
+        "timestamp": 1
+      },
+      {
+        "configurationName": "Synthetic Debug",
+        "deviceId": "synthetic-device",
+        "deviceName": "Synthetic Mac",
+        "exportedFileName": "00000000-0000-4000-8000-000000000005.json",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "edith-journey-outcome-0006_0_10000000-0000-4000-8000-000000000005.json",
+        "timestamp": 1
+      },
+      {
+        "configurationName": "Synthetic Debug",
+        "deviceId": "synthetic-device",
+        "deviceName": "Synthetic Mac",
+        "exportedFileName": "00000000-0000-4000-8000-000000000006.json",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "edith-journey-outcome-0005_0_10000000-0000-4000-8000-000000000006.json",
+        "timestamp": 1
+      },
+      {
+        "configurationName": "Synthetic Debug",
+        "deviceId": "synthetic-device",
+        "deviceName": "Synthetic Mac",
+        "exportedFileName": "00000000-0000-4000-8000-000000000007.json",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "edith-journey-outcome-0004_0_10000000-0000-4000-8000-000000000007.json",
+        "timestamp": 1
+      },
+      {
+        "configurationName": "Synthetic Debug",
+        "deviceId": "synthetic-device",
+        "deviceName": "Synthetic Mac",
+        "exportedFileName": "00000000-0000-4000-8000-000000000008.json",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "edith-journey-outcome-0003_0_10000000-0000-4000-8000-000000000008.json",
+        "timestamp": 1
+      },
+      {
+        "configurationName": "Synthetic Debug",
+        "deviceId": "synthetic-device",
+        "deviceName": "Synthetic Mac",
+        "exportedFileName": "00000000-0000-4000-8000-000000000009.json",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "edith-journey-outcome-0002_0_10000000-0000-4000-8000-000000000009.json",
+        "timestamp": 1
+      },
+      {
+        "configurationName": "Synthetic Debug",
+        "deviceId": "synthetic-device",
+        "deviceName": "Synthetic Mac",
+        "exportedFileName": "00000000-0000-4000-8000-00000000000A.json",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "edith-journey-outcome-0001_0_10000000-0000-4000-8000-00000000000A.json",
+        "timestamp": 1
+      }
+    ],
+    "testIdentifier": "OriginalShellJourneyTests/testOriginalCalendarInstallCustomizeReplaceUpdateDisableAndRemove()",
+    "testIdentifierURL": "test://com.apple.xcode/HostedShellJourney/HostedShellJourney/OriginalShellJourneyTests/testOriginalCalendarInstallCustomizeReplaceUpdateDisableAndRemove"
+  }
+]

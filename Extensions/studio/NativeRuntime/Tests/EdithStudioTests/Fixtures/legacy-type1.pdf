@@ -1,0 +1,138 @@
+%PDF-1.3
+%âãÏÓ
+1 0 obj
+<<
+/Producer (pypdf)
+>>
+endobj
+2 0 obj
+<<
+/Type /Pages
+/Count 1
+/Kids [ 7 0 R ]
+>>
+endobj
+3 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+4 0 obj
+<<
+/Length1 343
+/Length2 362
+/Length3 552
+/Length 1257
+>>
+stream
+%!FontType1-1.1: SyntheticTriangle
+%t1Font: (4.66.1)
+%%BeginResource: font SyntheticTriangle
+11 dict dup begin
+/FontName /SyntheticTriangle def
+/FontType 1 def
+/PaintType 0 def
+/FontMatrix [0.001 0 0 0.001 0 0] def
+/FontBBox [0 0 600 700] def
+/Encoding 256 array
+0 1 255 {1 index exch /.notdef put} for
+dup 65 /A put
+def
+end
+currentfile eexec º´1ê»
+1áª‘žqJÆ˜lø…·[P|ÏQŒ²
+¼Òé-2]Ííf¬d`ííƒ¹"%“ê•Èê?)«……ÅÑè‰çÇùÄW`¼@üÐ‚ÐñG‘OÝ~^åœ˜Ä/ñ¾¡I5AeØrÃYžÉbÐPFóuåÛF@¿eÍà&Ä}=þžþÉVµ†E¦îÅŠC1çË¤ÚY‚@þÕžIu@Ã× 2œÆµ‘váó]ÐT`5‹è0WÉŽ½Øf)2Š›¶dºzÝ¬Ñ ¢¤Ö|Ù²²Ý[û·²¬óŒÏ9·ëOÕ÷´Üú«põL'_Ê¤0Äýoµ©}w*³ØæöêáÇš„~¯#o•_/×hZx–au÷!AdÍ>àOMdbü±·ï]à£FM:›þßß¼ÂŠŽ¢äLªÆ‚éð—„r‡2„Ïµ:-Îò‚a€òÎûdâ/º/Â
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+cleartomark
+%%EndResource
+%%EOF
+endstream
+endobj
+5 0 obj
+<<
+/Type /FontDescriptor
+/FontName /SyntheticTriangle
+/Flags 32
+/FontBBox [ 0 0 600 700 ]
+/ItalicAngle 0
+/Ascent 700
+/Descent 0
+/CapHeight 700
+/StemV 80
+/FontFile 4 0 R
+>>
+endobj
+6 0 obj
+<<
+/Type /Font
+/Subtype /CIDFontType0
+/BaseFont /SyntheticTriangle
+/CIDSystemInfo <<
+/Registry (Adobe)
+/Ordering (Identity)
+/Supplement 0
+>>
+/FontDescriptor 5 0 R
+/DW 600
+/CIDToGIDMap /Identity
+>>
+endobj
+7 0 obj
+<<
+/Type /Page
+/Resources <<
+/Font <<
+/F1 8 0 R
+>>
+>>
+/MediaBox [ 0.0 0.0 240 160 ]
+/Parent 2 0 R
+/Contents 9 0 R
+>>
+endobj
+8 0 obj
+<<
+/Type /Font
+/Subtype /Type0
+/BaseFont /SyntheticTriangle
+/Encoding /Identity-H
+/DescendantFonts [ 6 0 R ]
+>>
+endobj
+9 0 obj
+<<
+/Length 43
+>>
+stream
+BT /F1 100 Tf 1 0 0 1 40 30 Tm <0001> Tj ET
+endstream
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000054 00000 n 
+0000000113 00000 n 
+0000000162 00000 n 
+0000001510 00000 n 
+0000001697 00000 n 
+0000001909 00000 n 
+0000002041 00000 n 
+0000002168 00000 n 
+trailer
+<<
+/Size 10
+/Root 3 0 R
+/Info 1 0 R
+>>
+startxref
+2261
+%%EOF

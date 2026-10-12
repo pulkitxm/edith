@@ -1,0 +1,219 @@
+import AppKit
+import CoreImage
+import CoreText
+
+enum VideoStyledCaptionImage {
+    static func composite(_ foreground: CIImage, over background: CIImage) -> CIImage {
+        foreground.applyingFilter("CILinearToSRGBToneCurve")
+            .composited(over: background.applyingFilter("CILinearToSRGBToneCurve"))
+            .applyingFilter("CISRGBToneCurveToLinear")
+    }
+
+    struct Line {
+        let text: CTLine
+        let baseline: CGPoint
+        var integerGlyphs: [CGGlyph]? = nil
+        var integerPositions: [CGPoint] = []
+        var font: CTFont? = nil
+    }
+
+    private static func ascent(_ font: CTFont, style: VideoCaptionStyle) -> CGFloat {
+        style.metrics == .fontBounds ? ceil(CTFontGetAscent(font)) : CTFontGetAscent(font)
+    }
+
+    private static func descent(_ font: CTFont, style: VideoCaptionStyle) -> CGFloat {
+        style.metrics == .fontBounds ? ceil(CTFontGetDescent(font)) : CTFontGetDescent(font)
+    }
+
+    static func rect(_ text: String, style: VideoCaptionStyle) throws -> CGRect {
+        let lines = try layout(text, style: style)
+        let font = try style.font()
+        let height =
+            ascent(font, style: style) + descent(font, style: style)
+            + Double(max(0, lines.count - 1)) * style.lineAdvance
+        return CGRect(
+            x: (style.x
+                - (style.alignment == .center
+                    ? style.width / 2 : style.alignment == .right ? style.width : 0))
+                / style.canvasWidth,
+            y: (style.y
+                - (style.anchor == .center ? height / 2 : style.anchor == .bottom ? height : 0))
+                / style.canvasHeight,
+            width: style.width / style.canvasWidth, height: height / style.canvasHeight)
+    }
+
+    static func layout(_ text: String, style: VideoCaptionStyle) throws -> [Line] {
+        try style.validate()
+        let font = try style.font()
+        var attributes: [NSAttributedString.Key: Any] = [
+            NSAttributedString.Key(kCTFontAttributeName as String): font,
+            NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true,
+        ]
+        if style.metrics == .fontBounds {
+            attributes[NSAttributedString.Key(kCTKernAttributeName as String)] = 0
+            attributes[NSAttributedString.Key(kCTLigatureAttributeName as String)] = 0
+        }
+        var lines: [CTLine] = []
+        for paragraph in text.components(separatedBy: "\n") {
+            let attributed = NSAttributedString(string: paragraph, attributes: attributes)
+            let typesetter = CTTypesetterCreateWithAttributedString(attributed)
+            if attributed.length == 0 { lines.append(CTLineCreateWithAttributedString(attributed)) }
+            var offset = 0
+            while offset < attributed.length {
+                let length = CTTypesetterSuggestLineBreak(typesetter, offset, style.width)
+                try VideoCaptionStyle.require(length > 0, "Caption width cannot fit a glyph.")
+                lines.append(
+                    CTTypesetterCreateLine(typesetter, CFRange(location: offset, length: length)))
+                offset += length
+            }
+        }
+        let ascent = ascent(font, style: style)
+        let height =
+            ascent + descent(font, style: style) + Double(max(0, lines.count - 1))
+            * style.lineAdvance
+        let left =
+            style.x
+            - (style.alignment == .center
+                ? style.width / 2 : style.alignment == .right ? style.width : 0)
+        let top =
+            style.y - (style.anchor == .center ? height / 2 : style.anchor == .bottom ? height : 0)
+        try VideoCaptionStyle.require(
+            left >= 0 && left + style.width <= style.canvasWidth && top >= 0
+                && top + height <= style.canvasHeight,
+            "Caption layout exceeds the reference canvas; adjust position, width, size or line advance."
+        )
+        return try lines.enumerated().map { index, line in
+            var integerGlyphs: [CGGlyph] = []
+            var integerPositions: [CGPoint] = []
+            var integerAdvance: CGFloat = 0
+            var integerInk = CGRect.null
+            for run in CTLineGetGlyphRuns(line) as! [CTRun] {
+                let attributes = CTRunGetAttributes(run) as NSDictionary
+                let runFont = attributes[kCTFontAttributeName] as! CTFont
+                var glyphs = [CGGlyph](repeating: 0, count: CTRunGetGlyphCount(run))
+                CTRunGetGlyphs(run, CFRange(location: 0, length: 0), &glyphs)
+                guard CTFontCopyPostScriptName(runFont) == CTFontCopyPostScriptName(font),
+                    !glyphs.contains(0)
+                else {
+                    throw VideoEditorService.Failure(
+                        "unsupported_caption_glyph",
+                        "Caption contains glyphs unavailable in \(style.fontFamily) \(style.fontStyle)."
+                    )
+                }
+                if style.metrics == .fontBounds {
+                    var advances = [CGSize](repeating: .zero, count: glyphs.count)
+                    var boxes = [CGRect](repeating: .zero, count: glyphs.count)
+                    CTFontGetAdvancesForGlyphs(font, .horizontal, glyphs, &advances, glyphs.count)
+                    CTFontGetBoundingRectsForGlyphs(font, .horizontal, glyphs, &boxes, glyphs.count)
+                    for glyphIndex in glyphs.indices {
+                        integerPositions.append(CGPoint(x: integerAdvance, y: 0))
+                        if !boxes[glyphIndex].isEmpty {
+                            integerInk = integerInk.union(
+                                boxes[glyphIndex].offsetBy(dx: integerAdvance, dy: 0))
+                        }
+                        integerAdvance += advances[glyphIndex].width.rounded()
+                    }
+                    integerGlyphs.append(contentsOf: glyphs)
+                }
+            }
+            let advance =
+                CTLineGetTypographicBounds(line, nil, nil, nil)
+                - CTLineGetTrailingWhitespaceWidth(line)
+            let width =
+                style.metrics == .fontBounds
+                ? ceil(max(integerAdvance, integerInk.isNull ? 0 : integerInk.maxX))
+                    - floor(min(0, integerInk.isNull ? 0 : integerInk.minX)) : advance
+            try VideoCaptionStyle.require(
+                width <= style.width + 0.01, "Caption width cannot fit a glyph.")
+            let x =
+                left
+                + (style.alignment == .center
+                    ? (style.width - width) / 2
+                    : style.alignment == .right ? style.width - width : 0)
+            return Line(
+                text: line,
+                baseline: CGPoint(
+                    x: x, y: style.canvasHeight - top - ascent - Double(index) * style.lineAdvance),
+                integerGlyphs: style.metrics == .fontBounds ? integerGlyphs : nil,
+                integerPositions: integerPositions, font: style.metrics == .fontBounds ? font : nil)
+        }
+    }
+
+    static func make(_ annotation: VideoProject.Annotation, style: VideoCaptionStyle, size: CGSize)
+        -> CIImage?
+    {
+        guard let lines = try? layout(annotation.text, style: style),
+            let context = CGContext(
+                data: nil, width: Int(size.width), height: Int(size.height),
+                bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        context.scaleBy(x: size.width / style.canvasWidth, y: size.height / style.canvasHeight)
+        if let gradient = style.gradient,
+            let ramp = CGGradient(
+                colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+                colors: gradient.stops.map { $0.color.cgColor } as CFArray,
+                locations: gradient.stops.map { CGFloat($0.location) })
+        {
+            context.drawLinearGradient(
+                ramp,
+                start: CGPoint(x: 0, y: style.canvasHeight - gradient.startY),
+                end: CGPoint(x: 0, y: style.canvasHeight - gradient.endY),
+                options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+        }
+        let bounds = CGRect(origin: .zero, size: size)
+        let referenceBounds = CGRect(
+            x: 0, y: 0, width: style.canvasWidth, height: style.canvasHeight)
+        guard let background = context.makeImage() else { return nil }
+        var backdrop = CIImage(cgImage: background)
+        context.clear(referenceBounds)
+        if let shadow = style.shadow {
+            context.saveGState()
+            context.setBlendMode(.copy)
+            if shadow.strokeWidth > 0 {
+                draw(
+                    lines, context: context, stroke: shadow.strokeWidth,
+                    color: (shadow.strokeColor ?? shadow.color).cgColor)
+            }
+            draw(lines, context: context, stroke: 0, color: shadow.color.cgColor)
+            context.restoreGState()
+            if let raster = context.makeImage() {
+                let scaleX = size.width / style.canvasWidth
+                let scaleY = size.height / style.canvasHeight
+                let shade = CIImage(cgImage: raster)
+                    .transformed(by: CGAffineTransform(scaleX: 1 / scaleX, y: 1 / scaleY))
+                    .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: shadow.blur])
+                    .transformed(by: CGAffineTransform(translationX: shadow.x, y: -shadow.y))
+                    .transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
+                backdrop = composite(shade, over: backdrop).cropped(to: bounds)
+            }
+            context.clear(referenceBounds)
+        }
+        if let outline = style.outline, outline.width > 0 {
+            draw(lines, context: context, stroke: outline.width, color: outline.color.cgColor)
+        }
+        draw(lines, context: context, stroke: 0, color: style.fill.cgColor)
+        return context.makeImage().map {
+            composite(CIImage(cgImage: $0), over: backdrop).cropped(to: bounds)
+        }
+    }
+
+    private static func draw(_ lines: [Line], context: CGContext, stroke: Double, color: CGColor) {
+        context.setTextDrawingMode(stroke > 0 ? .stroke : .fill)
+        context.setLineWidth(stroke * 2)
+        context.setLineJoin(.round)
+        context.setStrokeColor(color)
+        context.setFillColor(color)
+        for line in lines {
+            if let glyphs = line.integerGlyphs, let font = line.font {
+                let positions = line.integerPositions.map {
+                    CGPoint(x: $0.x + line.baseline.x, y: $0.y + line.baseline.y)
+                }
+                CTFontDrawGlyphs(font, glyphs, positions, glyphs.count, context)
+            } else {
+                context.textPosition = line.baseline
+                CTLineDraw(line.text, context)
+            }
+        }
+    }
+}

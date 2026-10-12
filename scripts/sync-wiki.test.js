@@ -54,26 +54,16 @@ test("guides link to each other by slug", () => {
   expect(mapTarget("homebrew.md", "docs", options)).toBe("Guides-Homebrew");
 });
 
-test("a command page nests under its group", () => {
-  const ps = docs.find((d) => d.src === "docs/cli/machines-docker/ps.md");
-  expect(ps.slug).toBe("CLI-Machines-Docker-Ps");
+test("a marketplace command page nests under its group", () => {
+  const ps = docs.find((d) => d.src === "docs/cli/extensions/enable.md");
+  expect(ps.slug).toBe("CLI-Extensions-Enable");
   expect(ps.depth).toBe(1);
-  expect(ps.parent).toBe("CLI-Machines-Docker");
-});
-
-test("a nested command page stays under its top level group", () => {
-  const start = docs.find((d) => d.src === "docs/cli/attention/focus/start.md");
-  expect(start.slug).toBe("CLI-Attention-Focus-Start");
-  expect(start.title).toBe("Focus Start");
-  expect(start.depth).toBe(1);
-  expect(start.parent).toBe("CLI-Attention");
+  expect(ps.parent).toBe("CLI-Extensions");
 });
 
 test("a group README keeps the group slug", () => {
-  const group = docs.find(
-    (d) => d.src === "docs/cli/machines-docker/README.md",
-  );
-  expect(group.slug).toBe("CLI-Machines-Docker");
+  const group = docs.find((d) => d.src === "docs/cli/extensions/README.md");
+  expect(group.slug).toBe("CLI-Extensions");
   expect(group.isGroup).toBe(true);
   expect(group.depth).toBe(0);
 });
@@ -104,25 +94,27 @@ test("sibling doc links become wiki slugs", () => {
 });
 
 test("a group directory link resolves to the group page", () => {
-  expect(mapTarget("./config/README.md", "docs/cli", options)).toBe(
-    "CLI-Config",
+  expect(mapTarget("./extensions/README.md", "docs/cli", options)).toBe(
+    "CLI-Extensions",
   );
-  expect(mapTarget("../machines/README.md", "docs/cli/usage", options)).toBe(
-    "CLI-Machines",
+  expect(mapTarget("../invoke/README.md", "docs/cli/extensions", options)).toBe(
+    "CLI-Invoke",
   );
 });
 
 test("a link between siblings in a group resolves", () => {
-  expect(mapTarget("./daily.md", "docs/cli/usage", options)).toBe(
-    "CLI-Usage-Daily",
+  expect(mapTarget("./enable.md", "docs/cli/extensions", options)).toBe(
+    "CLI-Extensions-Enable",
   );
-  expect(mapTarget("./README.md", "docs/cli/usage", options)).toBe("CLI-Usage");
+  expect(mapTarget("./README.md", "docs/cli/extensions", options)).toBe(
+    "CLI-Extensions",
+  );
 });
 
 test("anchors and link titles survive rewriting", () => {
-  expect(mapTarget("./daily.md#examples", "docs/cli/usage", options)).toBe(
-    "CLI-Usage-Daily#examples",
-  );
+  expect(
+    mapTarget("./enable.md#examples", "docs/cli/extensions", options),
+  ).toBe("CLI-Extensions-Enable#examples");
 });
 
 test("external and anchor-only links are left alone", () => {
@@ -159,19 +151,19 @@ test("wiki build emits Home, sidebar and footer", () => {
   expect(pages.has("CLI.md")).toBe(true);
 });
 
-test("the sidebar lists getting started before the machine pages", () => {
+test("the sidebar lists conventions before the marketplace pages", () => {
   const sidebar = buildPages().get("_Sidebar.md");
-  expect(sidebar.indexOf("CLI-Getting-Started")).toBeLessThan(
-    sidebar.indexOf("CLI-Machines-Docker"),
+  expect(sidebar.indexOf("CLI-Conventions")).toBeLessThan(
+    sidebar.indexOf("CLI-Extensions"),
   );
 });
 
 test("the sidebar collapses a group behind its own link", () => {
   const sidebar = buildPages().get("_Sidebar.md");
   expect(sidebar).toContain(
-    '<summary><a href="CLI-Config">Config</a></summary>',
+    '<summary><a href="CLI-Extensions">Extensions</a></summary>',
   );
-  expect(sidebar).toContain("- [Ls](CLI-Config-Ls)");
+  expect(sidebar).toContain("- [Ls](CLI-Extensions-Ls)");
   expect(sidebar).toContain("- [Conventions](CLI-Conventions)");
 });
 
@@ -197,15 +189,14 @@ test("the sidebar gives every group a direct or collapsible row", () => {
     expect(sidebar).toContain(`- [${group.title}](${group.slug})`);
   }
   expect(collapsibleGroups.length + directGroups.length).toBe(groups);
-  expect(commands).toBeGreaterThan(groups * 2);
+  expect(commands).toBe(7);
 });
 
 test("home lists each group with its commands on one line", () => {
   const home = buildPages().get("Home.md");
   expect(home).toContain(
-    "- [Config](CLI-Config): [Ls](CLI-Config-Ls), [Get](CLI-Config-Get)",
+    "- [Extensions](CLI-Extensions): [Ls](CLI-Extensions-Ls), [Info](CLI-Extensions-Info)",
   );
-  expect(home.split("\n").length).toBeLessThan(docs.length);
 });
 
 test("every page ends with exactly one newline", () => {

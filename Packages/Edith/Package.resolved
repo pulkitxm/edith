@@ -1,5 +1,5 @@
 {
-  "originHash" : "fc58ab7a986d9d5e5cb7ca7d781c77de6c88fdcc6cac557ec46dcbdc6ce84295",
+  "originHash" : "00c8ee657f2425bd6ea2b27da053aceff3b908cd499843603efaeca7a5104586",
   "pins" : [
     {
       "identity" : "bson",
@@ -52,14 +52,6 @@
       "location" : "https://github.com/vapor/mysql-nio.git",
       "state" : {
         "revision" : "a9378d6ed22899b7df72894719cc3df51a37fb18"
-      }
-    },
-    {
-      "identity" : "onnxruntime-swift-package-manager",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/microsoft/onnxruntime-swift-package-manager.git",
-      "state" : {
-        "revision" : "b7fb7f7dea8a2469e6335d95a61b8f36d0dc83b2"
       }
     },
     {

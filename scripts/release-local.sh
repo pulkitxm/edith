@@ -8,13 +8,13 @@ usage() {
   cat >&2 <<'USAGE'
 usage: ./scripts/release-local.sh [--dry-run]
 
-Cuts a release the way CI used to, but entirely on this Mac:
+Builds and publishes an empty-host release on this Mac:
 resolve the next version, build and sign the release app, package and verify the
 DMG, generate the signed Sparkle appcast, stamp the version files and cask,
-commit and tag on main, push, then publish the GitHub release with Pukbot.
+commit and tag through Pukbot, then publish the verified host assets.
 
   --dry-run        build, sign, package, and verify, but do not commit, tag,
-                   push, or publish. Leaves the artifacts under dist/ for review.
+                   or publish. Leaves the artifacts under dist/ for review.
 
 Signing material is read from .env at the repository root. See AGENTS.md.
 USAGE
@@ -57,6 +57,8 @@ WWDR="$(find /Applications/Xcode*.app -iname 'AppleWWDRCA-2030.cer' 2>/dev/null 
 [ -n "$WWDR" ] || { echo "release blocked: the WWDR G3 intermediate (AppleWWDRCA-2030.cer) is not in Xcode" >&2; exit 1; }
 
 git fetch origin main --tags --quiet
+BUILT_SHA="$(git rev-parse HEAD)"
+export BUILT_SHA
 
 TMP_OUT="$(mktemp)"
 GITHUB_OUTPUT="$TMP_OUT" ./scripts/resolve-release-version.sh
@@ -72,10 +74,13 @@ KEYCHAIN="$HOME/Library/Keychains/edith-release-$$.keychain-db"
 ORIG_KEYCHAINS="$(security list-keychains -d user | sed 's/[",]//g' | xargs)"
 STAGED_FILES=(Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb)
 COMMITTED=0
+RELEASE_PLISTS_DIR="$(mktemp -d)"
+SUPERSEDED_FILE="$RELEASE_PLISTS_DIR/superseded"
 
 cleanup() {
   security list-keychains -d user -s $ORIG_KEYCHAINS >/dev/null 2>&1 || true
   security delete-keychain "$KEYCHAIN" >/dev/null 2>&1 || true
+  rm -rf "$RELEASE_PLISTS_DIR"
   if [ "$COMMITTED" -eq 0 ]; then
     git checkout HEAD -- "${STAGED_FILES[@]}" >/dev/null 2>&1 || true
   fi
@@ -101,37 +106,22 @@ for plist in Resources/Info.plist Resources/HelperInfo.plist; do
 done
 
 echo "==> building the release app"
-./build.sh --no-open --release
+if [ "$DRY_RUN" -eq 1 ]; then
+  ./build.sh --no-open --release
+else
+  RELEASE_SUPERSEDED_FILE="$SUPERSEDED_FILE" ./scripts/run-current-release-build.sh ./build.sh --no-open --release
+fi
 make verify-bundle
 
 BUILT="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/Edith.app/Contents/Info.plist)"
 [ "$BUILT" = "$RELEASE_VERSION" ] \
   || { echo "release blocked: built $BUILT, expected $RELEASE_VERSION" >&2; exit 1; }
 
-echo "==> packaging the database pack"
-./scripts/package-database-pack.sh dist/edith-database .
-
-echo "==> packaging the DMG"
-rm -rf dmg-root Edith.dmg && mkdir dmg-root
-ditto dist/Edith.app dmg-root/Edith.app
-ln -s /Applications dmg-root/Applications
-dmg_size_kb="$(du -Ask dmg-root | awk '{print $1}')"
-dmg_size_kb=$((dmg_size_kb + dmg_size_kb / 4 + 65536))
-hdiutil create -volname Edith -fs HFS+ -size "${dmg_size_kb}k" \
-  -srcfolder dmg-root -format ULMO Edith.dmg
-verify_status=1
-for attempt in 1 2 3 4 5; do
-  if hdiutil verify Edith.dmg; then verify_status=0; break; fi
-  verify_status=$?
-  [ "$attempt" -lt 5 ] && sleep 2
-done
-/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister \
-  -u "$PWD/dmg-root/Edith.app" 2>/dev/null || true
-rm -rf dmg-root
-[ "$verify_status" -eq 0 ] || { echo "release blocked: the DMG failed verification" >&2; exit 1; }
+echo "==> packaging the empty-host DMG"
+python3 scripts/package-host-dmg.py dist/Edith.app Edith.dmg
 
 echo "==> generating the signed appcast"
-GENERATE_APPCAST="$(find build/SourcePackages/artifacts -type f -name generate_appcast -perm -u+x -print -quit)"
+GENERATE_APPCAST="$(find Packages/EdithHost/.build/artifacts -type f -name generate_appcast -perm -u+x -print -quit)"
 [ -n "$GENERATE_APPCAST" ] || { echo "release blocked: generate_appcast is missing" >&2; exit 1; }
 rm -rf dist/appcast && mkdir dist/appcast
 cp Edith.dmg dist/appcast/
@@ -157,33 +147,32 @@ grep -qx "  version \"$RELEASE_VERSION\"" Casks/edith.rb \
   || { echo "release blocked: the cask rewrite did not take" >&2; exit 1; }
 
 if [ "$DRY_RUN" -eq 1 ]; then
-  echo "==> dry run complete: dist/Edith.app, Edith.dmg, edith-database.zip, and dist/appcast/appcast.xml are ready"
+  echo "==> dry run complete: dist/Edith.app, Edith.dmg, and dist/appcast/appcast.xml are ready"
   echo "    version files and cask are staged in the working tree and will be reverted on exit"
   exit 0
 fi
 
-echo "==> committing the release through pukbot"
-git add "${STAGED_FILES[@]}"
-pukbot commit create --repo "$REPO" --branch main --as-app \
-  --message "Release ${RELEASE_TAG}" "${STAGED_FILES[@]}" --json
+node scripts/extension-release-ready.mjs .
+pukbot capabilities --json
+pukbot commit create --help
+pukbot tag create --help
+pukbot release create --help
+pukbot release upload-asset --help
+
+export RELEASE_TAG RELEASE_VERSION RELEASE_BUILD RELEASE_SHA256 RELEASE_PLISTS_DIR
+mkdir -p dist/host-release-assets
+cp Edith.dmg dist/host-release-assets/
+cp dist/appcast/appcast.xml dist/host-release-assets/
+GITHUB_REPOSITORY="$REPO" node scripts/publish-host-release.mjs --preflight dist/host-release-assets
+
+echo "==> committing and tagging the verified release"
+cp Resources/Info.plist Resources/HelperInfo.plist "$RELEASE_PLISTS_DIR/"
+export RELEASE_TAG RELEASE_VERSION RELEASE_BUILD RELEASE_SHA256 RELEASE_PLISTS_DIR
+GITHUB_REPOSITORY="$REPO" bash scripts/publish-release-state.sh cut
 COMMITTED=1
-git fetch origin main --tags --quiet
-RELEASE_SHA="$(git rev-parse origin/main)"
-git reset --hard origin/main --quiet
-
-echo "==> tagging ${RELEASE_TAG} through pukbot"
-pukbot tag create "$RELEASE_TAG" --repo "$REPO" --target "$RELEASE_SHA" \
-  --message "Edith $RELEASE_TAG build $RELEASE_BUILD" --json
-git fetch origin --tags --quiet
-
-echo "==> publishing the GitHub release"
-pukbot release create "$RELEASE_TAG" --repo "$REPO" --name "Edith $RELEASE_TAG" \
-  --target "$RELEASE_SHA" --json
-RELEASE_ID="$(gh api "repos/${REPO}/releases/tags/${RELEASE_TAG}" --jq .id)"
-[ -n "$RELEASE_ID" ] || { echo "release blocked: could not resolve the release id" >&2; exit 1; }
-pukbot release upload-asset "$RELEASE_ID" Edith.dmg --repo "$REPO" --json
-pukbot release upload-asset "$RELEASE_ID" dist/appcast/appcast.xml --repo "$REPO" --json
-pukbot release upload-asset "$RELEASE_ID" edith-database.zip --repo "$REPO" --json
-pukbot release upload-asset "$RELEASE_ID" edith-database.zip.sha256 --repo "$REPO" --json
-
+RELEASE_TARGET_SHA="$(git rev-parse HEAD)"
+echo "==> publishing the host release"
+GITHUB_REPOSITORY="$REPO" RELEASE_TARGET_SHA="$RELEASE_TARGET_SHA" \
+  node scripts/publish-host-release.mjs dist/host-release-assets
+git switch main
 echo "==> released $RELEASE_TAG"

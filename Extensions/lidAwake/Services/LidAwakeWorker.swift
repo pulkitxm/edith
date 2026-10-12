@@ -1,0 +1,149 @@
+import AppKit
+import EdithExtensionSupport
+import Foundation
+
+@MainActor final class LidAwakeWorker {
+    let engine: LidAwakeEngine
+    private var observer: NSObjectProtocol?
+    private var stopped = false
+    private var commandWorkClosed = false
+    private let recoveryOnly: Bool
+    private let defaults: UserDefaults
+    private let confirm: @MainActor () -> Bool
+
+    init(
+        defaults: UserDefaults = SharedDefaults.store, engine: LidAwakeEngine? = nil,
+        recoveryOnly: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"]
+            == "1",
+        confirm: @escaping @MainActor () -> Bool = LidAwakeWorker.confirmActivation
+    ) {
+        self.defaults = defaults; self.confirm = confirm; self.recoveryOnly = recoveryOnly
+        if !recoveryOnly { defaults.set(true, forKey: LidAwakeState.enabledKey) }
+        let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+        let applySystemState: (@MainActor @Sendable (Bool) async -> LidAwakeOutcome)?
+        let systemStateReader: @Sendable () async throws -> Bool
+        if fixture {
+            applySystemState = { value in
+                defaults.set(value, forKey: LidAwakeState.activeKey)
+                return .applied
+            }
+            systemStateReader = { false }
+        } else {
+            applySystemState = nil
+            systemStateReader = { try await LidAwakeSystemStateReader.read() }
+        }
+        let created =
+            engine
+            ?? LidAwakeEngine(
+                defaults: defaults,
+                readSystemState: { defaults.bool(forKey: LidAwakeState.activeKey) },
+                applySystemState: applySystemState,
+                startServices: !fixture && !recoveryOnly, recoveryOnly: recoveryOnly,
+                systemStateReader: systemStateReader)
+        self.engine = created
+        guard !recoveryOnly else { return }
+        observer = NotificationCenter.default.addObserver(
+            forName: Notification.Name("lidAwakeSettingsChanged"), object: nil, queue: .main
+        ) { _ in MainActor.assumeIsolated { created.syncSettings() } }
+    }
+
+    func perform(_ request: LidAwakeRequest, requiresConfirmation: Bool = false) async throws
+        -> LidAwakeSnapshot
+    {
+        try requireCommandAdmission(request)
+        if requiresConfirmation, !confirm() { throw CancellationError() }
+        try Task.checkCancellation()
+        try requireCommandAdmission(request)
+        return try await Self.perform(request, engine: engine, defaults: defaults)
+    }
+
+    private func requireCommandAdmission(_ request: LidAwakeRequest) throws {
+        guard !stopped, !recoveryOnly else { throw ExtensionPeerError.unavailable }
+        guard commandWorkClosed else { return }
+        switch request {
+        case .status, .setBatteryThreshold, .setRestoreOnQuit: return
+        case .on, .off, .enableExtension, .disableExtension:
+            throw ExtensionPeerError.unavailable
+        }
+    }
+
+    private static func perform(
+        _ request: LidAwakeRequest, engine: LidAwakeEngine, defaults: UserDefaults
+    ) async throws -> LidAwakeSnapshot {
+        switch request {
+        case .status: return engine.snapshot()
+        case .setBatteryThreshold, .setRestoreOnQuit:
+            guard LidAwakeOperationExecution.applySetting(request, defaults: defaults) else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            engine.syncSettings(); return engine.snapshot()
+        case .enableExtension, .disableExtension:
+            throw ExtensionPeerError.rejected(
+                "Enable or disable Lid Awake from the extension marketplace.")
+        case .on, .off:
+            let outcome = await withCheckedContinuation { continuation in
+                engine.execute(request) { continuation.resume(returning: $0) }
+            }
+            if case .failed(let message) = outcome { throw LidAwakeOperationFailure(message) }
+            return engine.snapshot()
+        }
+    }
+
+    func setSession(_ session: LidAwakeSession) throws {
+        guard !stopped, !commandWorkClosed, !recoveryOnly else {
+            throw ExtensionPeerError.unavailable
+        }
+        defaults.set(session.rawValue, forKey: LidAwakeState.sessionKey)
+        engine.syncSettings()
+    }
+
+    func beginCommandDrain() {
+        commandWorkClosed = true
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+        observer = nil
+        engine.beginCommandDrain()
+    }
+
+    func cancelPendingWorkAndWait() async {
+        beginCommandDrain()
+        await engine.cancelPendingWorkAndWait()
+    }
+
+    func prepareDisable() async throws {
+        await cancelPendingWorkAndWait()
+        try await engine.prepareDisable()
+    }
+    func requestApproval() throws { try engine.requestApproval() }
+    func prepareApplicationQuit(_ context: LidAwakeApplicationQuitContext) async throws {
+        guard !recoveryOnly else { throw ExtensionPeerError.unavailable }
+        await cancelPendingWorkAndWait()
+        try await engine.prepareForApplicationQuit(context)
+        await prepareToStop()
+    }
+    func prepareToStop() async {
+        await cancelPendingWorkAndWait()
+        if !stopped {
+            stopped = true
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+            observer = nil
+        }
+        await engine.shutdownForTermination()
+        defaults.set(false, forKey: LidAwakeState.enabledKey)
+    }
+
+    func shutdown() {
+        guard !stopped else { return }; stopped = true
+        beginCommandDrain()
+        if let observer { NotificationCenter.default.removeObserver(observer) }; observer = nil
+        engine.shutdown()
+        defaults.set(false, forKey: LidAwakeState.enabledKey)
+    }
+
+    static func confirmActivation() -> Bool {
+        let alert = NSAlert(); alert.messageText = "Keep running with the lid closed?"
+        alert.informativeText =
+            LidAwakeOperationExecution.preview(for: .on(.indefinite))?.warning ?? ""
+        alert.addButton(withTitle: "Turn On"); alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+}

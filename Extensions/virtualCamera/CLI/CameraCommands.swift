@@ -1,0 +1,745 @@
+import ArgumentParser
+import EdithExtensionCommands
+import EdithExtensionSupport
+import Foundation
+
+struct CameraCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "camera",
+        abstract: "Frame, style and control Edith's virtual camera.",
+        discussion: """
+            Frames, styles and controls Edith Camera, the virtual camera that Zoom,
+            Meet, FaceTime, OBS, Chrome and every other video app can pick.
+
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+
+            ed camera status
+            """,
+        subcommands: [
+            CameraStatusCommand.self, CameraOnCommand.self, CameraOffCommand.self,
+            CameraSourcesCommand.self, CameraSourceCommand.self, CameraZoomCommand.self,
+            CameraFrameCommand.self, CameraResetCommand.self, CameraResetLookCommand.self,
+            CameraLookCommand.self,
+            CameraBackgroundCommand.self, CameraPauseCommand.self, CameraResumeCommand.self,
+            CameraSceneCommand.self, CameraAudioCommand.self, CameraVideoCommand.self,
+            CameraPlayCommand.self,
+            CameraFreezeCommand.self, CameraMirrorCommand.self, CameraRecordCommand.self,
+            CameraScreenCommand.self,
+            CameraExtensionCommand.self,
+        ],
+        defaultSubcommand: CameraStatusCommand.self)
+}
+
+@MainActor enum CameraCLI {
+    static let name = "Virtual Camera"
+
+    static func request(_ request: VirtualCameraRequest) async throws -> VirtualCameraSnapshot {
+        guard let engine = CameraCLIEnvironment.currentEngine else {
+            throw ExtensionPeerError.unavailable
+        }
+        return try await engine.performRecording(request)
+    }
+
+    static func status() async throws -> VirtualCameraSnapshot {
+        guard let engine = CameraCLIEnvironment.currentEngine else {
+            throw ExtensionPeerError.unavailable
+        }
+        return engine.snapshot()
+    }
+
+    static func emit(_ snapshot: VirtualCameraSnapshot, json: Bool) {
+        if json {
+            CLIOut.json(snapshot.jsonValue)
+        } else if let message = snapshot.message {
+            CLIOut.out(message)
+        } else {
+            snapshot.summaryLines.forEach { CLIOut.out($0) }
+        }
+    }
+
+    static func perform(_ request: VirtualCameraRequest, json: Bool) async throws {
+        emit(try await self.request(request), json: json)
+    }
+
+    static func setEnabled(_ enabled: Bool, json: Bool) async throws {
+        guard let lifecycle = CameraCLIEnvironment.lifecycle else {
+            throw CLIFailure(
+                .unavailable,
+                "Camera enable and disable require the extension marketplace lifecycle.")
+        }
+        let permissions = try await lifecycle(enabled)
+        if json {
+            CLIOut.json(
+                .object(["enabled": .bool(enabled), "missingPermissions": .strings(permissions)]))
+        } else {
+            CLIOut.out("virtual camera \(enabled ? "on" : "off")")
+            for permission in permissions where enabled {
+                CLIOut.note(
+                    "note: Virtual Camera needs \(permission); run `ed permissions request \(permission)`"
+                )
+            }
+        }
+    }
+
+    static func boolean(_ raw: String) throws -> Bool {
+        switch raw.lowercased() {
+        case "1", "true", "yes", "on": return true
+        case "0", "false", "no", "off": return false
+        default: throw CLIFailure.usage("\(raw) is not a boolean", hint: "use on or off")
+        }
+    }
+
+    static func number(_ raw: String, _ name: String) throws -> Double {
+        guard let value = Double(raw.replacingOccurrences(of: "x", with: "")), value.isFinite
+        else { throw CLIFailure("\(raw) is not a number for \(name)") }
+        return value
+    }
+
+    static func autoFrame(_ raw: String) throws -> VirtualCameraAutoFrame {
+        guard let value = VirtualCameraAutoFrame(rawValue: raw.lowercased()) else {
+            throw CLIFailure(
+                "\(raw) is not an auto framing mode", hint: "use off, close, medium or wide")
+        }
+        return value
+    }
+
+    static func look(_ raw: String) throws -> VirtualCameraLookPreset {
+        guard let value = VirtualCameraLookPreset(rawValue: raw.lowercased()) else {
+            throw CLIFailure(
+                "\(raw) is not a look",
+                hint: VirtualCameraLookPreset.allCases.map(\.rawValue).joined(separator: ", "))
+        }
+        return value
+    }
+
+    static func background(_ raw: String) throws -> VirtualCameraBackgroundMode {
+        let normalized = raw.lowercased() == "original" ? "none" : raw.lowercased()
+        guard let value = VirtualCameraBackgroundMode(rawValue: normalized) else {
+            throw CLIFailure("\(raw) is not a background", hint: "use none, blur, color or image")
+        }
+        return value
+    }
+
+    static func pause(_ raw: String) throws -> VirtualCameraPrivacy {
+        guard let value = VirtualCameraPrivacy(rawValue: raw.lowercased()), value != .live else {
+            throw CLIFailure(
+                "\(raw) is not a pause style", hint: "use card, blank, freeze or stopped")
+        }
+        return value
+    }
+}
+
+struct CameraStatusCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "status", abstract: VirtualCameraOperation.status.descriptor.summary,
+        discussion: """
+            Show the virtual camera state.
+
+            Reads the current state. Does not change it.
+
+            ed camera status
+            ed camera status --json
+            """, )
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute {
+            var snapshot = try await CameraCLI.status()
+            snapshot.message = nil
+            CameraCLI.emit(snapshot, json: json)
+        }
+    }
+}
+
+struct CameraOnCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "on", abstract: VirtualCameraOperation.on.descriptor.summary,
+        discussion: """
+            Turn the virtual camera on.
+
+            Changes the machine by opening one saved port forward.
+
+            ed camera on
+            ed camera on --json
+            """, )
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute { try await CameraCLI.setEnabled(true, json: json) }
+    }
+}
+
+struct CameraOffCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "off", abstract: VirtualCameraOperation.off.descriptor.summary,
+        discussion: """
+            Turn the virtual camera off.
+
+            Changes the machine by closing one saved port forward.
+
+            ed camera off
+            ed camera off --json
+            """, )
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute { try await CameraCLI.setEnabled(false, json: json) }
+    }
+}
+
+struct CameraSourcesCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "sources", abstract: VirtualCameraOperation.sources.descriptor.summary,
+        discussion: """
+            List the cameras Edith can use.
+
+            Reads the current state. Does not change it.
+
+            ed camera sources
+            ed camera sources --json
+            """,
+        aliases: ["cameras"])
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute {
+            let snapshot = try await CameraCLI.request(.status)
+            if json {
+                CLIOut.json(.array(snapshot.sources.map(\.jsonValue)))
+                return
+            }
+            guard !snapshot.sources.isEmpty else {
+                CLIOut.out("no cameras")
+                return
+            }
+            for (index, source) in snapshot.sources.enumerated() {
+                let marker = source.id == snapshot.source?.id ? "*" : " "
+                CLIOut.out("\(marker) \(index + 1). \(source.name) [\(source.kind.rawValue)]")
+            }
+        }
+    }
+}
+
+struct CameraSourceCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "source", abstract: VirtualCameraOperation.source.descriptor.summary,
+        discussion: """
+            Choose the camera Edith frames.
+
+            Changes the state this command names.
+
+            ed camera source camera
+            ed camera source camera --json
+            """, )
+
+    @Argument(help: "A camera name, its number from `ed camera sources`, or its id.")
+    var camera: String
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute { try await CameraCLI.perform(.selectSource(camera), json: json) }
+    }
+}
+
+struct CameraZoomCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "zoom", abstract: VirtualCameraOperation.zoom.descriptor.summary,
+        discussion: """
+            Set the zoom level.
+
+            Changes the state this command names.
+
+            ed camera zoom 40
+            ed camera zoom 40 --json
+            """, )
+
+    @Argument(help: "A zoom level from 1 to 8, such as 1.5 or 2x.")
+    var level: String
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute {
+            try await CameraCLI.perform(.zoom(try CameraCLI.number(level, "zoom")), json: json)
+        }
+    }
+}
+
+struct CameraFrameCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "frame", abstract: VirtualCameraOperation.frame.descriptor.summary,
+        discussion: """
+            Set zoom, position, tilt, and auto-framing.
+
+            Changes the state this command names.
+
+            ed camera frame
+            ed camera frame --json
+            """, )
+
+    @Option(help: "Zoom level from 1 to 8.")
+    var zoom: Double?
+
+    @Option(help: "Horizontal center from 0 (left) to 1 (right).")
+    var x: Double?
+
+    @Option(help: "Vertical center from 0 (top) to 1 (bottom).")
+    var y: Double?
+
+    @Option(help: "Tilt in degrees from -45 to 45.")
+    var tilt: Double?
+
+    @Option(help: "Quarter turns clockwise, from 0 to 3.")
+    var turns: Int?
+
+    @Option(help: "Flip the picture horizontally: true or false.")
+    var flip: String?
+
+    @Option(name: .customLong("flip-vertical"), help: "Flip the picture vertically: true or false.")
+    var flipVertical: String?
+
+    @Option(help: "Auto framing: off, close, medium or wide.")
+    var auto: String?
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute {
+            let change = VirtualCameraFrameChange(
+                zoom: zoom, centerX: x, centerY: y, tilt: tilt, quarterTurns: turns,
+                flipHorizontal: try flip.map(CameraCLI.boolean),
+                flipVertical: try flipVertical.map(CameraCLI.boolean),
+                autoFrame: try auto.map(CameraCLI.autoFrame))
+            guard !change.isEmpty else {
+                throw CLIFailure(
+                    VirtualCameraRequestError.emptyFrameChange.errorDescription
+                        ?? "Nothing to change")
+            }
+            try await CameraCLI.perform(.frame(change), json: json)
+        }
+    }
+}
+
+struct CameraResetCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "reset", abstract: VirtualCameraOperation.reset.descriptor.summary,
+        discussion: """
+            Reset the framing to the full picture.
+
+            Changes the state this command names.
+
+            ed camera reset
+            ed camera reset --json
+            """, )
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute { try await CameraCLI.perform(.reset, json: json) }
+    }
+}
+
+struct CameraResetLookCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "reset-look",
+        abstract: VirtualCameraOperation.resetLook.descriptor.summary,
+        discussion: """
+            Puts the inspector look back to the natural preset and the default sliders.
+            This is the Reset the look button. Framing stays where `ed camera reset` left it.
+            Changes the camera look. Does not change framing.
+
+            ed camera reset-look
+            ed camera reset-look --json
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute { try await CameraCLI.perform(.resetLook, json: json) }
+    }
+}
+
+struct CameraLookCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "look", abstract: VirtualCameraOperation.look.descriptor.summary,
+        discussion: """
+            Apply a color look.
+
+            Changes the state this command names.
+
+            ed camera look preset
+            ed camera look preset --json
+            """, )
+
+    @Argument(help: "natural, bright, studio, warm, cool, vivid, muted, film, mono or noir.")
+    var preset: String
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute {
+            try await CameraCLI.perform(.look(try CameraCLI.look(preset)), json: json)
+        }
+    }
+}
+
+struct CameraBackgroundCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "background", abstract: VirtualCameraOperation.background.descriptor.summary,
+        discussion: """
+            Blur or replace the background.
+
+            Changes the state this command names.
+
+            ed camera background on
+            ed camera background on --json
+            """, )
+
+    @Argument(help: "none, blur, color or image.")
+    var mode: String
+
+    @Option(help: "Backdrop color as a hex value, such as #1E293B.")
+    var color: String?
+
+    @Option(help: "Blur strength from 0 to 1.")
+    var blur: Double?
+
+    @Option(help: "Path to a backdrop image.")
+    var image: String?
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute {
+            var parsedColor: VirtualCameraColor?
+            if let color {
+                guard let value = VirtualCameraColor(hex: color) else {
+                    throw CLIFailure(
+                        "\(color) is not a hex color", hint: "use a value like #1E293B")
+                }
+                parsedColor = value
+            }
+            let path = try image.map {
+                try ExtensionCLIContext.resolvePath(($0 as NSString).expandingTildeInPath).path
+            }
+            let change = VirtualCameraBackgroundChange(
+                mode: try CameraCLI.background(mode), color: parsedColor, blur: blur,
+                imagePath: path)
+            try await CameraCLI.perform(.background(change), json: json)
+        }
+    }
+}
+
+struct CameraPauseCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "pause", abstract: VirtualCameraOperation.pause.descriptor.summary,
+        discussion: """
+            Hide the camera behind a card, a blank frame, or a frozen frame.
+
+            Changes the container by freezing its processes.
+
+            ed camera pause
+            ed camera pause --json
+            """, )
+
+    @Option(help: "card, blank, freeze or stopped (stops capture and output completely).")
+    var style = "card"
+
+    @Option(help: "The message on the card.")
+    var message: String?
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute {
+            try await CameraCLI.perform(
+                .pause(try CameraCLI.pause(style), message: message), json: json)
+        }
+    }
+}
+
+struct CameraResumeCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "resume", abstract: VirtualCameraOperation.resume.descriptor.summary,
+        discussion: """
+            Show the live camera again.
+
+            Reads the current state. Does not change it.
+
+            ed camera resume
+            ed camera resume --json
+            """, )
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute { try await CameraCLI.perform(.resume, json: json) }
+    }
+}
+
+struct CameraSceneCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "scene",
+        abstract: "List, apply, save and edit camera scenes.",
+        discussion: """
+            Reads nothing until a subcommand runs. Does not change anything by itself.
+            Scenes store framing, look and background. Example: `ed camera scene list --json`.
+            """,
+        subcommands: [
+            CameraSceneListCommand.self, CameraSceneApplyCommand.self,
+            CameraSceneSaveCommand.self, CameraSceneRenameCommand.self,
+            CameraSceneDuplicateCommand.self, CameraSceneMoveCommand.self,
+            CameraSceneDeleteCommand.self, CameraSceneNextCommand.self,
+            CameraScenePreviousCommand.self,
+        ],
+        defaultSubcommand: CameraSceneListCommand.self)
+}
+
+struct CameraSceneListCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "list", abstract: VirtualCameraOperation.sceneList.descriptor.summary,
+        discussion: """
+            List saved camera scenes.
+
+            Reads the saved records in stored order. Does not change them.
+
+            ed camera scene list
+            ed camera scene list --json
+            """,
+        aliases: ["ls"])
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute {
+            let snapshot = try await CameraCLI.status()
+            if json {
+                CLIOut.json(snapshot.scenesJSON)
+                return
+            }
+            guard !snapshot.state.scenes.isEmpty else {
+                CLIOut.out("no scenes")
+                return
+            }
+            for (index, scene) in snapshot.state.scenes.enumerated() {
+                let marker = scene.id == snapshot.state.activeSceneID ? "*" : " "
+                CLIOut.out("\(marker) \(index + 1). \(scene.name)")
+            }
+        }
+    }
+}
+
+struct CameraSceneApplyCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "apply", abstract: VirtualCameraOperation.sceneApply.descriptor.summary,
+        discussion: """
+            Switch to a saved camera scene.
+
+            Changes the state this command names.
+
+            ed camera scene apply scene
+            ed camera scene apply scene --json
+            """, )
+
+    @Argument(help: "A scene name, its number from `ed camera scene list`, or its id.")
+    var scene: String
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute { try await CameraCLI.perform(.applyScene(scene), json: json) }
+    }
+}
+
+struct CameraSceneSaveCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "save", abstract: VirtualCameraOperation.sceneSave.descriptor.summary,
+        discussion: """
+            Save the current look as a camera scene.
+
+            Changes the state this command names.
+
+            ed camera scene save notes
+            ed camera scene save notes --json
+            """, )
+
+    @Argument(help: "The scene name.")
+    var name: String
+
+    @Flag(help: "Overwrite a scene with the same name.")
+    var replace = false
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute {
+            try await CameraCLI.perform(.saveScene(name, replace: replace), json: json)
+        }
+    }
+}
+
+struct CameraSceneNextCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "next",
+        abstract: VirtualCameraOperation.sceneNext.descriptor.summary,
+        discussion: """
+            Steps to the next saved scene, which changes the live camera. Use it from a
+            hotkey or a stream deck. The Virtual Camera page picks a scene directly.
+            Example: `ed camera scene next`.
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute { try await CameraCLI.perform(.stepScene(1), json: json) }
+    }
+}
+
+struct CameraScenePreviousCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "previous",
+        abstract: VirtualCameraOperation.scenePrevious.descriptor.summary,
+        discussion: """
+            Steps to the previous saved scene, which changes the live camera. Use it from a
+            hotkey or a stream deck. The Virtual Camera page picks a scene directly.
+            Example: `ed camera scene previous`.
+            """,
+        aliases: ["prev"])
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute { try await CameraCLI.perform(.stepScene(-1), json: json) }
+    }
+}
+
+struct CameraSceneRenameCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "rename",
+        abstract: "Rename a saved camera scene.",
+        discussion: """
+            Writes the new name, matching the scene name field in the inspector.
+            Example: `ed camera scene rename Close-up Desk`.
+            """)
+
+    @Argument(help: "A scene name, its number from `ed camera scene list`, or its id.")
+    var scene: String
+
+    @Argument(help: "The new scene name.")
+    var name: String
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute {
+            try await CameraCLI.perform(.renameScene(scene, name), json: json)
+        }
+    }
+}
+
+struct CameraSceneDuplicateCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "duplicate",
+        abstract: "Copy a saved camera scene.",
+        discussion: """
+            Writes a copy after the original, the way the scene menu does.
+            Example: `ed camera scene duplicate Close-up`.
+            """)
+
+    @Argument(help: "A scene name, its number from `ed camera scene list`, or its id.")
+    var scene: String
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute { try await CameraCLI.perform(.duplicateScene(scene), json: json) }
+    }
+}
+
+struct CameraSceneMoveCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "move",
+        abstract: "Move a saved camera scene up or down the list.",
+        discussion: """
+            Writes the new order. `--by 1` moves it later. `--by -1` moves it earlier.
+            Example: `ed camera scene move Close-up --by 1`.
+            """)
+
+    @Argument(help: "A scene name, its number from `ed camera scene list`, or its id.")
+    var scene: String
+
+    @Option(name: .long, help: "How many places to move. Negative moves earlier.")
+    var by: Int
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute { try await CameraCLI.perform(.moveScene(scene, by), json: json) }
+    }
+}
+
+struct CameraSceneDeleteCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "delete",
+        abstract: "Delete a saved camera scene.",
+        discussion: """
+            Previews the scene, then --yes writes the deletion.
+            Example: `ed camera scene delete Close-up --yes`.
+            """)
+
+    @Argument(help: "A scene name, its number from `ed camera scene list`, or its id.")
+    var scene: String
+
+    @Flag(name: .long, help: "Delete the scene after printing the plan.")
+    var yes = false
+
+    @Flag(name: .long, help: "Emit the plan, or the camera status, as JSON.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute {
+            let snapshot = try await CameraCLI.status()
+            guard let match = VirtualCameraSceneLibrary.find(scene, in: snapshot.state.scenes)
+            else {
+                throw CLIFailure.notFound(
+                    "no scene matches \(scene)", hint: "run `ed camera scene list`")
+            }
+            let plan = CLIDestructivePlan(
+                action: "delete scene \(match.name)", targets: [match.name], confirmed: yes,
+                json: json)
+            guard plan.shouldApply() else { return }
+            let updated = try await CameraCLI.request(.deleteScene(match.id.uuidString))
+            if json {
+                CameraCLI.emit(updated, json: true)
+            } else {
+                plan.finish(changed: true, plain: "deleted \(match.name)")
+            }
+        }
+    }
+}

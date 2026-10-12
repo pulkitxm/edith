@@ -1,0 +1,166 @@
+name: Hosted managed original views
+"on":
+  workflow_call:
+    inputs:
+      expected_sha:
+        required: true
+        type: string
+      artifact_run:
+        required: true
+        type: string
+      artifact_source:
+        required: true
+        type: string
+      release:
+        required: true
+        type: boolean
+      rebuild:
+        required: true
+        type: string
+    secrets:
+      MACOS_CERT_P12:
+        required: true
+      MACOS_CERT_PASSWORD:
+        required: true
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: hosted-managed-original-views
+  cancel-in-progress: false
+jobs:
+  original-views:
+    name: "managed views (${{ matrix.chunk }})"
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        chunk: [0, 1, 2]
+    if: github.repository == 'pulkitxm/edith' && github.event_name == 'workflow_dispatch' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-managed-view-execution' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.expected_sha == github.sha && !inputs.release && inputs.rebuild == '' && inputs.artifact_run != '' && inputs.artifact_source != ''
+    runs-on: macos-26
+    timeout-minutes: 360
+    env:
+      EXTENSION_SWIFT_JOBS: "1"
+      EDITH_HOSTED_MANAGED_VIEWS: "1"
+      EXPECTED_SOURCE_SHA: "${{ inputs.expected_sha }}"
+      PUBLISH: "${{ inputs.release }}"
+      REBUILD: "${{ inputs.rebuild }}"
+      ARTIFACT_RUN: "${{ inputs.artifact_run }}"
+      MANAGED_CHUNK: "${{ matrix.chunk }}"
+      ARTIFACT_SOURCE: "${{ inputs.artifact_source }}"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: "${{ github.sha }}"
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Admit the reviewed disposable hosted source and artifact source
+        run: |
+          set -euo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$RUNNER_OS" = macOS
+          test "$(uname -m)" = arm64
+          test "$PUBLISH" = false
+          test -z "$REBUILD"
+          [[ "$EXPECTED_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$ARTIFACT_SOURCE" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$ARTIFACT_RUN" =~ ^[1-9][0-9]{0,15}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          git cat-file -e "$ARTIFACT_SOURCE^{commit}"
+          echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - name: Verify closed route, archive and process contracts
+        run: |
+          set -euo pipefail
+          bun test scripts/hosted-managed-execution-contract.test.js scripts/hosted-managed-frozen-host.test.js scripts/hosted-managed-process-proof.test.js scripts/hosted-managed-run-owner.test.js scripts/hosted-managed-owned-cleanup.test.js scripts/hosted-managed-ui-project.test.js scripts/hosted-managed-chunks.test.js scripts/hosted-managed-chunk-intake.test.js scripts/hosted-managed-package-preparation.test.js scripts/hosted-managed-workflow.test.js
+          bun scripts/hosted-host-manifest-cold.mjs
+          python3 scripts/test-hosted-managed-frozen-host.py
+          python3 scripts/test-hosted-managed-chunk-artifact.py
+          swift test --package-path Tests/HostedManagedViews/ApprovalSources --jobs 1
+      - name: Import signing into one owned disposable keychain
+        env:
+          MACOS_CERT_P12: "${{ secrets.MACOS_CERT_P12 }}"
+          MACOS_CERT_PASSWORD: "${{ secrets.MACOS_CERT_PASSWORD }}"
+        run: |
+          set -euo pipefail
+          test -n "$MACOS_CERT_P12"
+          test -n "$MACOS_CERT_PASSWORD"
+          keychain="$RUNNER_TEMP/hosted-managed-views.keychain-db"
+          test ! -e "$keychain"
+          security create-keychain -p "$MACOS_CERT_PASSWORD" "$keychain" >/dev/null
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$MACOS_CERT_PASSWORD" "$keychain"
+          printf '%s' "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/hosted-managed-views.p12"
+          security import "$RUNNER_TEMP/hosted-managed-views.p12" -k "$keychain" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign >/dev/null
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_CERT_PASSWORD" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain"
+          rm "$RUNNER_TEMP/hosted-managed-views.p12"
+      - name: Build the source-bound test Host with closed fixture context
+        run: bun scripts/hosted-managed-views/build-host.mjs --build-only
+      - name: Verify original package provenance and managed ready, close, reopen and disable
+        env:
+          GITHUB_TOKEN: "${{ github.token }}"
+        run: bun scripts/hosted-managed-views/run-managed.mjs --artifact-run "$ARTIFACT_RUN" --artifact-source "$ARTIFACT_SOURCE" --chunk "$MANAGED_CHUNK"
+      - name: Retain only bounded synthetic smoke outcomes
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: "hosted-managed-original-view-chunk-${{ matrix.chunk }}"
+          retention-days: 3
+          path: local/hosted-managed-execution/result.json
+          if-no-files-found: error
+      - name: Retain the source-bound fixture Host build receipt
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: "hosted-managed-fixture-host-chunk-${{ matrix.chunk }}"
+          retention-days: 3
+          path: local/hosted-managed-views/host-build-receipt.json
+          if-no-files-found: warn
+      - name: Remove the owned disposable signing keychain
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/hosted-managed-views.p12"
+          keychain="$RUNNER_TEMP/hosted-managed-views.keychain-db"
+          if [ -e "$keychain" ]; then
+            security delete-keychain "$keychain"
+          fi
+
+  aggregate:
+    needs: original-views
+    if: always() && github.repository == 'pulkitxm/edith' && github.event_name == 'workflow_dispatch' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-managed-view-execution' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.expected_sha == github.sha && !inputs.release && inputs.rebuild == '' && inputs.artifact_run != '' && inputs.artifact_source != ''
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      EDITH_HOSTED_MANAGED_VIEWS: "1"
+      EXPECTED_SOURCE_SHA: "${{ inputs.expected_sha }}"
+      PUBLISH: "${{ inputs.release }}"
+      REBUILD: "${{ inputs.rebuild }}"
+      ARTIFACT_RUN: "${{ inputs.artifact_run }}"
+      ARTIFACT_SOURCE: "${{ inputs.artifact_source }}"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: "${{ github.sha }}"
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - name: Require all39 actual original managed views and owned drains
+        env:
+          GITHUB_TOKEN: "${{ github.token }}"
+        run: bun scripts/hosted-managed-views/aggregate-managed.mjs --artifact-run "$ARTIFACT_RUN" --artifact-source "$ARTIFACT_SOURCE"
+      - name: Retain bounded complete aggregate outcome
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hosted-managed-original-view-outcomes
+          retention-days: 3
+          path: local/hosted-managed-aggregate/result.json
+          if-no-files-found: error

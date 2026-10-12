@@ -1,0 +1,113 @@
+import EdithExtensionSupport
+import EdithExtensionUI
+@testable import UsageExtension
+import Foundation
+import Testing
+
+@MainActor
+@Suite struct DashboardSourceSelectionTests {
+    private func preferences() -> (UserDefaults, String) {
+        let name = "DashboardSourceSelectionTests.\(UUID().uuidString)"
+        return (UserDefaults(suiteName: name)!, name)
+    }
+
+    private let period: String = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: Date())
+    }()
+
+    private func usage() throws -> DashUsage {
+        let json = """
+            {
+              "schemaVersion": 4,
+              "sources": ["cli", "codex"],
+              "defaultSources": ["cli", "codex"],
+              "sourceMeta": {
+                "cli": {"label": "Claude Code"},
+                "codex": {"label": "Codex"}
+              },
+              "daily": [{
+                "period": "\(period)",
+                "bySource": {
+                  "cli": [{
+                    "modelName": "claude", "inputTokens": 403000, "outputTokens": 0,
+                    "cacheCreationTokens": 0, "cacheReadTokens": 0, "cost": 1
+                  }],
+                  "codex": [{
+                    "modelName": "gpt", "inputTokens": 31000000, "outputTokens": 0,
+                    "cacheCreationTokens": 0, "cacheReadTokens": 0, "cost": 10
+                  }]
+                }
+              }]
+            }
+            """
+        return try JSONDecoder().decode(DashUsage.self, from: Data(json.utf8))
+    }
+
+    @Test func migrationPersistsAllSourcesAcrossRelaunch() throws {
+        let (defaults, name) = preferences()
+        defer { defaults.removePersistentDomain(forName: name) }
+        defaults.set("cli", forKey: "dashSources")
+        defaults.set("cli,codex", forKey: "dashKnownSources")
+
+        let firstLaunch = DashboardModel(preferences: defaults)
+        firstLaunch.ingest(try usage())
+
+        #expect(firstLaunch.selectedSources == ["cli", "codex"])
+        #expect(defaults.string(forKey: "dashSources") == "cli,codex")
+        #expect(
+            defaults.integer(forKey: "dashSourceSelectionVersion")
+                == UsageSourceSelection.currentVersion)
+
+        let secondLaunch = DashboardModel(preferences: defaults)
+        secondLaunch.ingest(try usage())
+
+        #expect(secondLaunch.selectedSources == ["cli", "codex"])
+        #expect(secondLaunch.series.first { $0.id == period }?.tokens == 31_403_000)
+    }
+
+    @Test func versionedIntentionalDeselectionSurvivesRelaunch() throws {
+        let (defaults, name) = preferences()
+        defer { defaults.removePersistentDomain(forName: name) }
+        defaults.set("cli", forKey: "dashSources")
+        defaults.set("cli,codex", forKey: "dashKnownSources")
+        defaults.set(
+            UsageSourceSelection.currentVersion, forKey: "dashSourceSelectionVersion")
+
+        let model = DashboardModel(preferences: defaults)
+        model.ingest(try usage())
+
+        #expect(model.selectedSources == ["cli"])
+        #expect(model.series.first { $0.id == period }?.tokens == 403_000)
+    }
+
+    @Test func externalCompleteScopeChangesUpdateAnAlreadyLoadedDashboard() throws {
+        let (defaults, name) = preferences()
+        defer { defaults.removePersistentDomain(forName: name) }
+        defaults.set("cli", forKey: "dashSources")
+        defaults.set("cli,codex", forKey: "dashKnownSources")
+        defaults.set("claude", forKey: "dashModels")
+        defaults.set(
+            UsageSourceSelection.currentVersion, forKey: "dashSourceSelectionVersion")
+        let model = DashboardModel(preferences: defaults)
+        model.ingest(try usage())
+        #expect(model.series.first { $0.id == period }?.tokens == 403_000)
+
+        model.selectedPaths = ["/synthetic/project"]
+        defaults.set("cli,codex", forKey: "dashSources")
+        defaults.set("claude,gpt", forKey: "dashModels")
+        defaults.set("all", forKey: "dashRange")
+        defaults.set("", forKey: "dashPaths")
+        model.reloadPreferences()
+
+        #expect(model.selectedSources == ["cli", "codex"])
+        #expect(model.selectedModels == ["claude", "gpt"])
+        #expect(model.selectedPaths.isEmpty)
+        #expect(model.series.first { $0.id == period }?.tokens == 31_403_000)
+        model.ingest(try usage())
+        #expect(model.series.first { $0.id == period }?.tokens == 31_403_000)
+    }
+
+}

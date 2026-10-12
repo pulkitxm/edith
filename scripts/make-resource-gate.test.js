@@ -211,6 +211,42 @@ test("mixed goals take the heavier target", () => {
   expect(tests.profile).toBe("swift test");
 });
 
+for (const goal of [
+  "ci-extension-keep-awake-compile",
+  "ci-extension-keep-awake",
+  "ci-extension-keep-awake-native",
+  "package-extension-keep-awake",
+]) {
+  test(`focused Keep Awake ${goal} respects the Swift resource budget`, () => {
+    const admitted = decide([goal], healthy, []);
+    expect(admitted.action).toBe("run");
+    expect(admitted.profile).toBe("swift test");
+    expect(admitted.need_threads).toBe(2.5);
+    expect(admitted.need_mem_mb).toBe(2560);
+
+    const cpuLimited = { ...healthy, cpus: 6 };
+    const cpu = decide([goal], cpuLimited, [seated(0)]);
+    expect(cpu.action).toBe("wait");
+    expect(cpu.threads_left).toBeLessThan(cpu.need_threads);
+    expect(cpu.mem_left_mb).toBeGreaterThan(cpu.need_mem_mb);
+
+    const memory = decide([goal], { ...healthy, mem_available_mb: 10000 }, [
+      seated(0),
+    ]);
+    expect(memory.action).toBe("wait");
+    expect(memory.threads_left).toBeGreaterThan(memory.need_threads);
+    expect(memory.mem_left_mb).toBeLessThan(memory.need_mem_mb);
+
+    const pressureHost = { ...healthy, cpus: 8 };
+    expect(decide([goal], pressureHost, [seated(0)]).action).toBe("run");
+    expect(
+      decide([goal], { ...pressureHost, pressure: "warn" }, [seated(0)]).action,
+    ).toBe("wait");
+    expect(decide([goal], cpuLimited, [seated(0)], 30, 20).action).toBe("run");
+    expect(decide([goal, "build"], healthy, []).profile).toBe("xcode build");
+  });
+}
+
 test("five concurrent app builds stay inside the live budget", async () => {
   const root = tempDir();
   const env = gateEnv(root);

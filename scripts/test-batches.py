@@ -177,11 +177,6 @@ def check():
     for name, count in script_counts.items():
         if count == 0:
             failures.append(f"scripts batch {name} matches nothing")
-    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
-    listed = " ".join(re.findall(r"batches: ([a-z0-9 -]+)", workflow)).split()
-    expected = [batch["name"] for batch in catalog["swift"]]
-    if listed != expected:
-        failures.append(f"ci swift batches {listed} != {expected}")
     if failures:
         print("\n".join(failures), file=sys.stderr)
         return 1

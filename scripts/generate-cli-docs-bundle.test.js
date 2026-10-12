@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
-  bundlePath,
+  bundlePaths,
   collectPages,
   parseArguments,
   renderBundle,
@@ -27,7 +27,12 @@ test("docs bundle renders one sorted page per line", () => {
 
 test("the committed docs bundle matches docs/cli", () => {
   const pages = collectPages();
-  expect(pages.length).toBeGreaterThan(300);
+  expect(pages.map((page) => page.path)).toContain("invoke/README.md");
+  expect(pages.map((page) => page.path)).toContain("extensions/enable.md");
   expect(pages.map((page) => page.path)).toContain("README.md");
-  expect(readFileSync(bundlePath, "utf8")).toBe(renderBundle(pages));
+  expect(bundlePaths).toContain(
+    "Packages/EdithDocsWorker/Sources/EdithDocsWorker/Resources/cli-docs.json",
+  );
+  for (const bundlePath of bundlePaths)
+    expect(readFileSync(bundlePath, "utf8")).toBe(renderBundle(pages));
 });

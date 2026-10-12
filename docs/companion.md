@@ -108,5 +108,12 @@ Common failures are a stopped container runtime, a closed SSH connection, an
 occupied port, a model that has not finished downloading, or a missing source tree
 on the first deployment.
 
-The CLI exposes the same deployment, stack, health, export, import and erase
-operations. See the [Companion command reference](cli/companion/README.md).
+Enable Companion and keep Edith running before invoking its worker:
+
+```sh
+ed invoke companion companion.status --json '{}'
+ed invoke companion companion.health --json '{"refresh":true}'
+ed invoke companion companion.search --json '{"query":"synthetic note","limit":10}'
+```
+
+Deployment, stack controls, export, import, and erase remain in the Companion UI. See the [public invocation reference](cli/invoke/README.md) for worker availability and request limits.

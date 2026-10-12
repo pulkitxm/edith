@@ -1,0 +1,196 @@
+name: Hosted functional actions
+"on":
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+concurrency:
+  group: hosted-functional-actions
+  cancel-in-progress: false
+jobs:
+  functional-build:
+    name: functional-build
+    if: >-
+      github.event_name == 'pull_request'
+      && github.repository == 'pulkitxm/edith'
+      && github.repository_id == '1289153439'
+      && github.event.pull_request.number == 1014
+      && github.event.pull_request.head.repo.full_name == 'pulkitxm/edith'
+      && github.event.pull_request.head.ref == 'feat/extension-marketplace'
+      && github.event.pull_request.base.ref == 'main'
+      && (github.actor_id == '65671483' || github.actor_id == '320458784')
+    runs-on: macos-26
+    timeout-minutes: 360
+    defaults:
+      run:
+        shell: bash
+    env:
+      EXPECTED_SOURCE_SHA: "${{ github.event.pull_request.head.sha }}"
+      EDITH_HOSTED_FUNCTIONAL_ACTIONS: "1"
+      EXTENSION_SWIFT_JOBS: "1"
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: "${{ github.event.pull_request.head.sha }}"
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Bind the actual PR run, job, merge and reviewed source
+        env: &source_admission_environment
+          GITHUB_TOKEN: "${{ github.token }}"
+          WORKFLOW_SOURCE_SHA: "${{ github.workflow_sha }}"
+        run: &source_admission |
+          set -euo pipefail
+          python3 - <<'PYCODE'
+          import json, os, platform, re, subprocess, urllib.request
+          from pathlib import Path
+          env = os.environ
+          assert env["GITHUB_ACTIONS"] == "true"
+          assert env["RUNNER_ENVIRONMENT"] == "github-hosted"
+          assert env["RUNNER_OS"] == "macOS" and platform.machine() == "arm64"
+          assert env["GITHUB_REPOSITORY"] == "pulkitxm/edith"
+          repository_id = 1289153439
+          assert env["GITHUB_REPOSITORY_ID"] == str(repository_id)
+          assert env["GITHUB_EVENT_NAME"] == "pull_request"
+          assert env["GITHUB_REF"] == "refs/pull/1014/merge"
+          assert env["GITHUB_ACTOR_ID"] in ["65671483", "320458784"]
+          source = env["EXPECTED_SOURCE_SHA"]
+          assert re.fullmatch("[0-9a-f]{40}", source)
+          event = json.loads(Path(env["GITHUB_EVENT_PATH"]).read_text())
+          pr = event["pull_request"]
+          assert event["number"] == pr["number"] == 1014
+          assert event["repository"]["full_name"] == "pulkitxm/edith"
+          assert event["repository"]["id"] == repository_id
+          assert pr["head"]["repo"]["full_name"] == "pulkitxm/edith"
+          assert pr["head"]["repo"]["id"] == repository_id
+          assert pr["base"]["repo"]["full_name"] == "pulkitxm/edith"
+          assert pr["base"]["repo"]["id"] == repository_id
+          assert pr["head"]["ref"] == "feat/extension-marketplace"
+          assert pr["base"]["ref"] == "main" and pr["state"] == "open"
+          assert pr["head"]["sha"] == source
+          def git(*args):
+              return subprocess.check_output(["git", *args])
+          assert git("rev-parse", "HEAD").decode().strip() == source
+          assert not git("status", "--porcelain", "--untracked-files=no")
+          merge = env["GITHUB_SHA"]
+          assert re.fullmatch("[0-9a-f]{40}", merge)
+          assert env["WORKFLOW_SOURCE_SHA"] == merge
+          subprocess.check_call(["git", "fetch", "--no-tags", "origin", merge], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+          assert git("show", "-s", "--format=%P", merge).decode().split() == [pr["base"]["sha"], source]
+          workflow = ".github/workflows/hosted-functional-actions.yml"
+          assert git("show", f"{merge}:{workflow}") == git("show", f"{source}:{workflow}")
+          def api(path):
+              request = urllib.request.Request("https://api.github.com/repos/pulkitxm/edith/" + path, headers={"Authorization": "Bearer " + env["GITHUB_TOKEN"], "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
+              with urllib.request.urlopen(request, timeout=15) as response:
+                  data = response.read(1048577)
+              assert len(data) <= 1048576
+              return json.loads(data)
+          run_id = env["GITHUB_RUN_ID"]
+          assert re.fullmatch("[1-9][0-9]{0,15}", run_id)
+          run = api("actions/runs/" + run_id)
+          assert run["id"] == int(run_id) and run["run_attempt"] == int(env["GITHUB_RUN_ATTEMPT"])
+          assert run["event"] == "pull_request" and run["head_sha"] == source
+          assert run["head_branch"] == "feat/extension-marketplace" and run["path"] == workflow
+          assert run["repository"]["full_name"] == "pulkitxm/edith"
+          assert run["repository"]["id"] == repository_id
+          assert run["actor"]["id"] in [65671483, 320458784]
+          assert run["triggering_actor"]["id"] in [65671483, 320458784]
+          assert run["status"] == "in_progress" and run["conclusion"] is None
+          pulls = run["pull_requests"]
+          assert len(pulls) == 1 and pulls[0]["number"] == 1014
+          assert pulls[0]["head"]["repo"]["id"] == repository_id
+          assert pulls[0]["base"]["repo"]["id"] == repository_id
+          assert pulls[0]["head"]["sha"] == source and pulls[0]["base"]["sha"] == pr["base"]["sha"]
+          jobs = api("actions/runs/" + run_id + "/attempts/" + env["GITHUB_RUN_ATTEMPT"] + "/jobs?per_page=100")
+          assert 0 < jobs["total_count"] <= 100 and len(jobs["jobs"]) == jobs["total_count"]
+          matching = [job for job in jobs["jobs"] if job["name"] == "functional-build" and job["runner_name"] == env["RUNNER_NAME"]]
+          assert len(matching) == 1
+          job = matching[0]
+          assert job["run_id"] == int(run_id) and job["head_sha"] == source
+          assert job["status"] == "in_progress" and job["conclusion"] is None
+          assert "macos-26" in job["labels"] and "self-hosted" not in job["labels"]
+          current = api("pulls/1014")
+          assert current["state"] == "open" and current["head"]["sha"] == source
+          assert current["head"]["repo"]["full_name"] == "pulkitxm/edith"
+          assert current["head"]["repo"]["id"] == repository_id
+          assert current["base"]["repo"]["full_name"] == "pulkitxm/edith"
+          assert current["base"]["repo"]["id"] == repository_id
+          assert current["head"]["ref"] == "feat/extension-marketplace" and current["base"]["ref"] == "main"
+          with Path(env["GITHUB_ENV"]).open("a") as output:
+              output.write(f"FUNCTIONAL_JOB_ID={job['id']}\n")
+          PYCODE
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - name: Preserve the existing OBS Camera carrier route
+        run: |
+          set -euo pipefail
+          bun -e 'const entries = await Bun.file("Extensions/manifest.json").json(); const camera = entries.find(entry => entry.id === "virtualCamera"); if (camera?.systemExtensionCarrier?.transport !== "obs") throw new Error("Functional verification requires the existing OBS carrier"); for (const name of ["CAMERA_SIGN_TEAM", "CAMERA_CARRIER_PROFILE", "CAMERA_EXTENSION_PROFILE"]) if (process.env[name]) throw new Error("Camera profiles are outside functional verification");'
+      - name: Require the complete maintained source before signing
+        run: bun scripts/hosted-functional-actions/controller.mjs --check-source-ready
+      - name: Prepare the native terminal prerequisite once
+        run: |
+          set -euo pipefail
+          command -v zig >/dev/null 2>&1 || brew install zig
+          test "$(zig version)" = "0.16.0"
+          make ghostty-extension
+          node scripts/extension-ghostty-native.mjs --check
+      - name: Recheck the actual source immediately before signing
+        env: *source_admission_environment
+        run: *source_admission
+      - name: Import signing into one disposable keychain
+        env:
+          MACOS_CERT_P12: "${{ secrets.MACOS_CERT_P12 }}"
+          MACOS_CERT_PASSWORD: "${{ secrets.MACOS_CERT_PASSWORD }}"
+        run: |
+          set -euo pipefail
+          test -n "$MACOS_CERT_P12"
+          test -n "$MACOS_CERT_PASSWORD"
+          keychain="$RUNNER_TEMP/hosted-functional-actions.keychain-db"
+          certificate="$RUNNER_TEMP/hosted-functional-actions.p12"
+          test ! -e "$keychain"
+          test ! -e "$certificate"
+          umask 077
+          trap 'rm -f "$certificate"' EXIT
+          security create-keychain -p "$MACOS_CERT_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$MACOS_CERT_PASSWORD" "$keychain"
+          printf '%s' "$MACOS_CERT_P12" | base64 --decode > "$certificate"
+          security import "$certificate" -k "$keychain" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_CERT_PASSWORD" "$keychain"
+          keychains=("$keychain")
+          while IFS= read -r existing; do
+            keychains+=("${existing//\"/}")
+          done < <(security list-keychains -d user)
+          security list-keychains -d user -s "${keychains[@]}"
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -n 1)"
+          if [ -z "$identity" ]; then
+            identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Apple Development:.*\)"/\1/p' | head -n 1)"
+          fi
+          test -n "$identity"
+          printf 'EXTENSION_SIGN_IDENTITY=%s\n' "$identity" >> "$GITHUB_ENV"
+      - name: Run all original controls and three lifecycle phases with one live issuer
+        env:
+          GITHUB_TOKEN: "${{ github.token }}"
+        run: bun scripts/hosted-functional-actions/controller.mjs --run
+      - name: Retain only qualified synthetic outcomes and attested artifacts
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: functional-fixture-trust
+          path: local/hosted-functional-actions/qualified-evidence
+          retention-days: 3
+          if-no-files-found: error
+      - name: Remove the disposable signing keychain
+        if: always()
+        run: |
+          set -euo pipefail
+          rm -f "$RUNNER_TEMP/hosted-functional-actions.p12"
+          keychain="$RUNNER_TEMP/hosted-functional-actions.keychain-db"
+          if [ -e "$keychain" ]; then
+            security delete-keychain "$keychain"
+          fi

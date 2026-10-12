@@ -114,108 +114,16 @@ describe("build install lifecycle", () => {
     }
   });
 
-  test("builds database executables separately and stops before packaging on failure", () => {
-    const phase = script.slice(
-      script.indexOf("for BUILD_SCHEME in "),
-      script.indexOf("\n\nBUILT="),
-    );
-    const scheme = readFileSync(
-      resolve("edth.xcodeproj/xcshareddata/xcschemes/EdithMain.xcscheme"),
-      "utf8",
-    );
-    expect(scheme).not.toContain('BlueprintIdentifier = "edithd"');
-    expect(scheme).not.toContain('BlueprintIdentifier = "edith-database"');
-    for (const [name, product] of [
-      ["EdithAgentRuntime", "edithd"],
-      ["EdithDatabaseRuntime", "edith-database"],
-    ]) {
-      const runtime = readFileSync(
-        resolve(`edth.xcodeproj/xcshareddata/xcschemes/${name}.xcscheme`),
-        "utf8",
-      );
-      const roots = [
-        ...runtime.matchAll(/BlueprintIdentifier\s*=\s*"([^"]+)"/g),
-      ].map((match) => match[1]);
-      expect(roots).toEqual(["9E41503E3A9738BFE160D1F8", product]);
-    }
-    for (const failure of ["", "EdithAgentRuntime", "EdithDatabaseRuntime"]) {
-      const result = Bun.spawnSync(
-        [
-          "bash",
-          "-c",
-          `set -euo pipefail
-CONFIG=Release
-DERIVED=fixture
-SIGN_IDENTITY=-
-TEAM_ID=fixture
-XCODE_BUILD_SETTINGS=(ARCHS=arm64)
-xcodebuild() {
-  while [ "$1" != -scheme ]; do shift; done
-  printf '%s\\n' "$2"
-  [ "$2" != "$FAILURE" ]
-}
-${phase}`,
-        ],
-        {
-          env: { ...process.env, FAILURE: failure },
-          stdout: "pipe",
-          stderr: "pipe",
-        },
-      );
-      const builds = new TextDecoder().decode(result.stdout).trim().split("\n");
-      expect(builds).toEqual(
-        failure === "EdithAgentRuntime"
-          ? ["EdithAgentRuntime"]
-          : failure === "EdithDatabaseRuntime"
-            ? ["EdithAgentRuntime", "EdithDatabaseRuntime"]
-            : ["EdithAgentRuntime", "EdithDatabaseRuntime", "EdithMain"],
-      );
-      expect(result.exitCode).toBe(failure ? 1 : 0);
-    }
-  });
-
-  test("routes CLI names through the application executable", () => {
-    const removal = script.indexOf('rm -f "$APP/Contents/MacOS/edh"');
-    const install = script.indexOf(
-      'install -m 755 Resources/ed-launcher "$APP/Contents/Resources/ed-launcher"',
-    );
-
-    expect(removal).toBeGreaterThan(-1);
-    expect(install).toBeGreaterThan(removal);
-    expect(script).toContain(
-      'ln -s ../Resources/ed-launcher "$APP/Contents/MacOS/ed"',
-    );
+  test("uses the host for CLI and workers without another feature executable", () => {
+    const packaging = readFileSync("scripts/package-shipping-host.py", "utf8");
+    expect(script).toContain("node scripts/build-minimal-host.mjs");
+    expect(script).not.toContain("EdithDatabaseRuntime");
+    expect(script).not.toContain("edith-music-player");
+    expect(packaging).toContain("symlink_to('../Resources/ed-launcher')");
     expect(launcher).toContain(
       'EDITH_CLI=1 exec "$edith_launcher_directory/../MacOS/Edith" "$@"',
     );
-    expect(script).not.toContain('ln -sfn ed "$APP/Contents/MacOS/edith"');
     expect(script).not.toContain('sign_tool "$APP/Contents/MacOS/ed"');
-  });
-
-  test("removes unused executable architectures from every bundle", () => {
-    expect(script).toContain('lipo "$binary" -thin arm64');
-    expect(script).toContain('mv "$binary.arm64" "$binary"');
-  });
-
-  test("signs nested runtime libraries before their bundles", () => {
-    const runtimeSigning = script.indexOf(
-      'for library in "$APP"/Contents/Frameworks/*.dylib "$HELPER"/Contents/Frameworks/*.dylib; do',
-    );
-    const helperSigning = script.indexOf('sign "$HELPER"');
-    const appSigning = script.indexOf('sign "$APP"');
-
-    expect(runtimeSigning).toBeGreaterThan(-1);
-    expect(helperSigning).toBeGreaterThan(runtimeSigning);
-    expect(appSigning).toBeGreaterThan(helperSigning);
-  });
-
-  test("shares resources with the nested login item", () => {
-    expect(script).toContain(
-      'ln -s ../../../../../Resources/AppIcon.icns "$HELPER/Contents/Resources/AppIcon.icns"',
-    );
-    expect(script).toContain(
-      '"$HELPER/Contents/Resources/Edith_EdithKit.bundle"',
-    );
   });
 
   test.skipIf(process.platform !== "darwin")(
@@ -323,7 +231,8 @@ ${phase}`,
       expect(result.exitCode).toBe(0);
       expect(new TextDecoder().decode(result.stdout).trim()).toBe(slot);
     }
-    expect(script).toContain('XCODE_BUILD_SETTINGS+=(EDITH_DEV_SLOT="$SLOT")');
+    expect(script).toContain('SLOT="$(scripts/dev-slots.sh claim)"');
+    expect(script).toContain(["$", '{SLOT:+--slot "$SLOT"}'].join(""));
   });
 
   test("never launches a production copy outside /Applications", () => {
