@@ -7,7 +7,18 @@ import Foundation
 final class CommandFixtureRuntime: NSObject {
     private var task: Task<Void, Never>?
     private var mode = ""
-    private let commands = ExtensionCommandRegistry()
+    private let commands: ExtensionCommandRegistry
+
+    override init() {
+        commands = ExtensionCommandRegistry()
+        super.init()
+    }
+
+    init(task: Task<Void, Never>, commands: ExtensionCommandRegistry) {
+        self.task = task
+        self.commands = commands
+        super.init()
+    }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { command, payload in
@@ -39,11 +50,26 @@ final class CommandFixtureRuntime: NSObject {
         return Data("ready".utf8)
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        commands.suspend()
+        let pending = task
+        pending?.cancel()
+        Task {
+            await commands.suspendAndWait()
+            await pending?.value
+            completion()
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         commands.shutdown()
-        task?.cancel()
+        let pending = task
+        pending?.cancel()
         Task {
+            await commands.shutdownAndWait()
+            await pending?.value
             if mode == "asyncHang" { try? await Task.sleep(for: .seconds(30)) }
             if mode == "asyncStop" {
                 try? await Task.sleep(for: .milliseconds(300))
