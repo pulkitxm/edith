@@ -91,5 +91,9 @@ let package = Package(
         .testTarget(
             name: "HostLifecycleHarnessTests",
             dependencies: ["HostLifecycleHarness", "WorkerLifecycleFixtureSupport"]),
+        .testTarget(
+            name: "HostCommandFixtureTests",
+            dependencies: [.product(name: "EdithExtensionSupport", package: "ExtensionSupport")],
+            path: "Tests/CommandFixture"),
     ]
 )
