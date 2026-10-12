@@ -15,7 +15,8 @@ let package = Package(
             dependencies: [.product(name: "ZIPFoundation", package: "ZIPFoundation")]),
         .executableTarget(
             name: "MarketplaceHarness", dependencies: ["ExtensionMarketplace"],
-            path: "Tests/Harness"),
+            path: "Tests/Harness",
+            swiftSettings: [.unsafeFlags(["-parse-as-library"])]),
         .testTarget(name: "ExtensionMarketplaceTests", dependencies: ["ExtensionMarketplace"]),
     ]
 )
