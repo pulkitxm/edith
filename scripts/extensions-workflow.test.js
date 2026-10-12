@@ -722,6 +722,9 @@ test("shipping publication exercises original Keep Awake controls through the ex
     "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'",
   );
   expect(native.env.EXPECTED_SOURCE_SHA).toBe(`\${{ github.sha }}`);
+  expect(native.env.EXTENSION_PUBLISH).toBe(
+    `\${{ inputs.publish == true && 'true' || 'false' }}`,
+  );
   expect(native.env.EXTENSION_LIFECYCLE_HARNESS).toBe(
     "local/extension-tools/HostLifecycleHarness",
   );
@@ -774,6 +777,7 @@ test("shipping native controls run before the broad marketplace suite with verif
   expect(steps[native].env).toEqual({
     EXPECTED_SOURCE_SHA: `\${{ github.sha }}`,
     EXTENSION_LIFECYCLE_HARNESS: "local/extension-tools/HostLifecycleHarness",
+    EXTENSION_PUBLISH: `\${{ inputs.publish == true && 'true' || 'false' }}`,
   });
   expect(steps[general].run).toBe(
     "make ci-marketplace-runtime ci-extension-keep-awake ci-comments",

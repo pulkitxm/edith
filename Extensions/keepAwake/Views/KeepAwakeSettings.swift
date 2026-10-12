@@ -17,6 +17,7 @@ struct KeepAwakeSettings: View {
                 Toggle("Keep awake", isOn: $preventSleep)
                     .accessibilityLabel("Keep awake")
                     .accessibilityIdentifier("keepAwake.preventSleep")
+                    .accessibilityAction(.default) { preventSleep.toggle() }
                 Text(
                     "Keeps the Mac and display awake until turned off. Closing the lid still sleeps the Mac; use Lid Awake for that."
                 )

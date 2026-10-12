@@ -5,6 +5,7 @@ import io
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 spec = importlib.util.spec_from_file_location(
@@ -14,6 +15,82 @@ spec.loader.exec_module(acceptance)
 
 
 class AcceptanceContracts(unittest.TestCase):
+    def hosted_environment(self):
+        return {
+            'GITHUB_ACTIONS': 'true', 'RUNNER_ENVIRONMENT': 'github-hosted',
+            'RUNNER_OS': 'macOS', 'GITHUB_REPOSITORY': 'pulkitxm/edith',
+            'GITHUB_REPOSITORY_ID': '1289153439', 'GITHUB_ACTOR_ID': '65671483',
+            'GITHUB_REF': 'refs/heads/fix/keep-awake-accessibility-action',
+            'GITHUB_EVENT_NAME': 'workflow_dispatch', 'EXTENSION_PUBLISH': 'false',
+            'EXPECTED_SOURCE_SHA': 'a' * 40, 'GITHUB_SHA': 'a' * 40,
+        }
+
+    def test_exact_nonpublishing_preview_keeps_checkout_identity_and_cleanliness_checks(self):
+        environment = self.hosted_environment()
+        root = Path('/synthetic/checkout')
+        with patch.object(acceptance.subprocess, 'check_output',
+                          side_effect=['a' * 40 + '\n', '']) as lookup:
+            self.assertEqual(acceptance.admit_source(environment, root), 'a' * 40)
+        self.assertEqual(lookup.call_args_list[0].args[0], ['git', 'rev-parse', 'HEAD'])
+        self.assertEqual(lookup.call_args_list[1].args[0],
+                         ['git', 'status', '--porcelain', '--untracked-files=no'])
+        self.assertTrue(all(call.kwargs == {'cwd': root, 'text': True}
+                            for call in lookup.call_args_list))
+
+    def test_only_exact_manual_nonpublishing_preview_ref_is_added(self):
+        cases = [
+            ('refs/heads/main', 'push', 'true', True),
+            ('refs/heads/feat/extension-marketplace', 'workflow_dispatch', 'false', True),
+            ('refs/heads/fix/keep-awake-accessibility-action', 'workflow_dispatch', 'false', True),
+            ('refs/heads/fix/keep-awake-accessibility-action', 'push', 'false', False),
+            ('refs/heads/fix/keep-awake-accessibility-action', 'pull_request', 'false', False),
+            ('refs/heads/fix/keep-awake-accessibility-action', 'workflow_dispatch', 'true', False),
+            ('refs/heads/fix/keep-awake-accessibility-action', 'workflow_dispatch', None, False),
+            ('refs/heads/fix/keep-awake-accessibility-action', 'workflow_dispatch', '', False),
+            ('refs/heads/fix/keep-awake-accessibility-action', 'workflow_dispatch', 'False', False),
+            ('refs/heads/fix/extension-peer-unix', 'workflow_dispatch', 'false', False),
+            ('refs/heads/fix/keep-awake-accessibility-action-extra', 'workflow_dispatch', 'false', False),
+            ('refs/pull/1371/merge', 'workflow_dispatch', 'false', False),
+        ]
+        for ref, event, publication, admitted in cases:
+            with self.subTest(ref=ref, event=event, publication=publication):
+                environment = {**self.hosted_environment(), 'GITHUB_REF': ref,
+                               'GITHUB_EVENT_NAME': event, 'EXTENSION_PUBLISH': publication}
+                with patch.object(acceptance.subprocess, 'check_output',
+                                  side_effect=['a' * 40 + '\n', '']):
+                    if admitted:
+                        self.assertEqual(acceptance.admit_source(environment, Path('/synthetic')),
+                                         'a' * 40)
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'Unreviewed source ref'):
+                            acceptance.admit_source(environment, Path('/synthetic'))
+
+    def test_preview_cannot_bypass_host_repository_actor_or_full_source_guards(self):
+        changes = [
+            {'GITHUB_ACTIONS': 'false'}, {'RUNNER_ENVIRONMENT': 'self-hosted'},
+            {'RUNNER_OS': 'Linux'}, {'GITHUB_REPOSITORY': 'synthetic/other'},
+            {'GITHUB_REPOSITORY_ID': '1'}, {'GITHUB_ACTOR_ID': '1'},
+            {'EXPECTED_SOURCE_SHA': 'a' * 39}, {'EXPECTED_SOURCE_SHA': 'a' * 41},
+            {'EXPECTED_SOURCE_SHA': 'A' * 40, 'GITHUB_SHA': 'A' * 40},
+            {'EXPECTED_SOURCE_SHA': 'g' * 40, 'GITHUB_SHA': 'g' * 40},
+            {'GITHUB_SHA': 'b' * 40},
+        ]
+        for changed in changes:
+            with self.subTest(changed=changed):
+                with patch.object(acceptance.subprocess, 'check_output') as lookup:
+                    with self.assertRaises(ValueError):
+                        acceptance.admit_source({**self.hosted_environment(), **changed},
+                                                Path('/synthetic'))
+                lookup.assert_not_called()
+
+    def test_preview_rejects_changed_head_and_tracked_source(self):
+        for head, status, message in [('b' * 40, '', 'Checkout source mismatch'),
+                                     ('a' * 40, ' M synthetic.swift', 'Tracked source is dirty')]:
+            with self.subTest(message=message):
+                with patch.object(acceptance.subprocess, 'check_output', side_effect=[head, status]):
+                    with self.assertRaisesRegex(ValueError, message):
+                        acceptance.admit_source(self.hosted_environment(), Path('/synthetic'))
+
     def failed_runner(self):
         return {
             'passed': False, 'exitCode': 7, 'timedOut': False,
