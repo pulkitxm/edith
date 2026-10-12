@@ -120,7 +120,7 @@ import Testing
     @Test func cancelledTasksStopFileScansAndSQLiteReads() async throws {
         let task = Task {
             try await Task.sleep(for: .milliseconds(20))
-            try UsageNativeFileIO.files(
+            _ = try UsageNativeFileIO.files(
                 under: URL(fileURLWithPath: "/missing/mock"), extensions: ["json"])
         }
         task.cancel()

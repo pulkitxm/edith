@@ -130,7 +130,7 @@ public enum LimitsCollector {
                     failure: "Account limits configuration could not be loaded.")
             }
         }
-        let collector = await refreshSession.accountCollector
+        let collector = refreshSession.accountCollector
         return await collect(
             providers: providers.filter { $0 != .claude || accounts.isEmpty },
             leaseProviders: providers,
