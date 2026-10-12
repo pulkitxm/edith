@@ -68,6 +68,29 @@ class HostReleaseProofTests(unittest.TestCase):
         self.assertTrue(any(call[:3] == ['xcrun', 'stapler', 'validate'] for call in self.commands))
         self.assertTrue(any(call[0] == 'spctl' for call in self.commands))
 
+    def test_quoted_designated_team_preserves_exact_verification_requirement(self):
+        proof, _ = self.proof()
+        self.assertEqual(proof['verifiedDesignatedRequirement'], self.requirement)
+        self.assertIn(['codesign', '--verify', '--strict', '-R=' + self.requirement, str(self.bundle)], self.commands)
+
+    def test_unquoted_designated_team_preserves_exact_verification_requirement(self):
+        expected = self.requirement
+        self.requirement = expected.replace('"ABCDEFGHIJ"', 'ABCDEFGHIJ')
+        proof, _ = self.proof()
+        self.assertEqual(proof['verifiedDesignatedRequirement'], expected)
+        self.assertIn(['codesign', '--verify', '--strict', '-R=' + expected, str(self.bundle)], self.commands)
+
+    def test_designated_requirement_rejects_other_teams_identifiers_and_clauses(self):
+        expected = self.requirement
+        invalid = [expected.replace('ABCDEFGHIJ', 'FOREIGN000'), expected.replace('com.pulkit.edith', 'com.example.foreign'), expected.replace('anchor apple generic', 'anchor trusted'), expected.replace(' and ', ' or ', 1), expected + ' or true', expected + ' and true', expected.replace('"ABCDEFGHIJ"', '"ABCDEFGHIJ'), expected + '\ndesignated => ' + expected]
+        for value in invalid:
+            with self.subTest(requirement=value):
+                self.requirement = value
+                self.commands.clear()
+                with self.assertRaisesRegex(ValueError, 'Host designated requirement differs'):
+                    self.proof()
+                self.assertFalse(any(call[:3] == ['codesign', '--verify', '--strict'] for call in self.commands))
+
     def builder_metadata(self):
         return {**{name: self.metadata[name] for name in METADATA_FIELDS}, 'hostExecutableSHA256': 'b' * 64, 'xcode': 'Xcode 26.0.1\nBuild version 17A400', 'sdk': '26.0', 'signature': 'ad-hoc'}
 
