@@ -20,7 +20,15 @@ export const definition = {
       },
       {
         "path": "Extensions/codeStats/Runtime.swift",
-        "sha256": "25cfa25d56ba41c3343871b2530ed9c4e80c3bef2f7bc056ce8517cb7164a8e9"
+        "sha256": "b7e5de2d7f44bed1d061df0558cc1bd599af732b2b4093cde6b0523f149e05c4"
+      },
+      {
+        "path": "Extensions/codeStats/Views/CodeStatsPage.swift",
+        "sha256": "4c9afc790726f99c8a983e64e95f709125aca5a4c9d7e324b9ccc9fffa7e61f6"
+      },
+      {
+        "path": "Extensions/codeStats/Services/CodeStatsWorkflow.swift",
+        "sha256": "290154ff354204ee6aa2dd4c72a8f77da4929b1ff0de63ecd1c15f4eeb87ca14"
       }
     ],
     "mutation": {
@@ -32,7 +40,10 @@ export const definition = {
   },
   "operations": [
     "codeStats.ui.folder",
-    "codeStats.ui.status"
+    "codeStats.ui.status",
+    "codeStats.ui.facts",
+    "codeStats.ui.report",
+    "codeStats.ui.profile"
   ],
   "observation": {
     "kind": "checked-engine-readback",
