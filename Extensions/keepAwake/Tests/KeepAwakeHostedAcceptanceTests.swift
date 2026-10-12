@@ -179,6 +179,7 @@ import Testing
         var checkboxRoles = 0
         var exactLabelMatches = 0
         var exactTitleMatches = 0
+        var exactIdentifierMatches = 0
         while !pending.isEmpty && examinedNodes < 4096 {
             examinedNodes += 1
             let value = pending.removeLast()
@@ -187,6 +188,9 @@ import Testing
             if object.accessibilityRole?() == .checkBox { checkboxRoles += 1 }
             if object.accessibilityLabel?() == "Keep awake" { exactLabelMatches += 1 }
             if object.accessibilityTitle?() == "Keep awake" { exactTitleMatches += 1 }
+            if object.accessibilityIdentifier?() == "keepAwake.preventSleep" {
+                exactIdentifierMatches += 1
+            }
             if let children = object.accessibilityChildren?() {
                 pending.append(contentsOf: children)
             }
@@ -198,6 +202,7 @@ import Testing
             "checkboxRoles": checkboxRoles,
             "exactLabelMatches": exactLabelMatches,
             "exactTitleMatches": exactTitleMatches,
+            "exactIdentifierMatches": exactIdentifierMatches,
             "traversalCapReached": !pending.isEmpty,
         ])
     }
