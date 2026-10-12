@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AVFoundation
 import EdithExtensionSupport
 import Foundation
@@ -233,9 +236,48 @@ enum TimeLapseExporter {
     }
 
     @available(macOS 15.0, *)
-    static func export(
+    @MainActor static func export(
         _ recording: TimeLapseRecording, quality: TimeLapseExportQuality,
         to destination: URL
+    ) async throws {
+        try await performExport(recording, quality: quality, to: destination)
+    }
+
+    #if canImport(WorkerFixtureSupport)
+    @available(macOS 15.0, *)
+    @MainActor static func export(
+        _ recording: TimeLapseRecording, quality: TimeLapseExportQuality,
+        to destination: URL, lease: WorkerFixtureNativeExportLease
+    ) async throws {
+        try await lease.withExport { lease in
+            try lease.requireCurrent()
+            guard quality == .original, destination == lease.finalURL,
+                recording.directory == lease.inputs.directoryURL,
+                recording.session.settings.mode == .standard,
+                recording.session.settings.speed == 1,
+                !recording.session.settings.systemAudio,
+                recording.session.settings.microphoneID == nil,
+                recording.session.segments.count == 1,
+                recording.session.segments[0].kind == "video",
+                recording.session.segments[0].file == "video.mp4"
+            else { throw TimeLapseError.invalidSession }
+            try await performExport(
+                recording, quality: quality, to: destination, staging: lease.stagingURL,
+                requireCurrent: { try lease.requireCurrent() },
+                publish: {
+                    guard try lease.publish() == destination else {
+                        throw TimeLapseError.invalidSession
+                    }
+                })
+        }
+    }
+    #endif
+
+    @available(macOS 15.0, *)
+    @MainActor private static func performExport(
+        _ recording: TimeLapseRecording, quality: TimeLapseExportQuality,
+        to destination: URL, staging: URL? = nil,
+        requireCurrent: () throws -> Void = {}, publish: (() throws -> Void)? = nil
     ) async throws {
         let composition = try await composition(recording)
         let mixedAudio = try await mixAudio(
@@ -248,10 +290,13 @@ enum TimeLapseExporter {
             throw TimeLapseError.encoding("This Mac does not support the selected export quality.")
         }
         let fileType = quality.fileType
-        let temporary = destination.deletingLastPathComponent().appendingPathComponent(
-            ".\(UUID().uuidString).partial")
-        defer { try? FileManager.default.removeItem(at: temporary) }
+        let temporary =
+            staging
+            ?? destination.deletingLastPathComponent().appendingPathComponent(
+                ".\(UUID().uuidString).partial")
+        defer { if staging == nil { try? FileManager.default.removeItem(at: temporary) } }
         export.shouldOptimizeForNetworkUse = true
+        try requireCurrent()
         try await withTaskCancellationHandler {
             try Task.checkCancellation()
             try await export.export(to: temporary, as: fileType)
@@ -259,6 +304,11 @@ enum TimeLapseExporter {
             export.cancelExport()
         }
         try Task.checkCancellation()
+        if let publish {
+            try requireCurrent()
+            try publish()
+            return
+        }
         if FileManager.default.fileExists(atPath: destination.path) {
             _ = try FileManager.default.replaceItemAt(destination, withItemAt: temporary)
         } else {

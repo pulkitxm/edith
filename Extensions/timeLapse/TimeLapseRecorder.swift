@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AVFoundation
 import AppKit
 import EdithExtensionSupport
@@ -123,6 +126,15 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     }
 
     var exportOnly: Bool { exportLibrary != nil }
+
+    func performExportRequest(
+        token: UUID, command: String, payload: Data,
+        operation: () async throws -> Data
+    ) async throws -> Data {
+        guard let exportLibrary else { return try await operation() }
+        return try await exportLibrary.performRequest(
+            token: token, command: command, payload: payload, operation: operation)
+    }
 
     func requireExportLibraryCurrent() throws { try exportLibrary?.requireCurrent() }
 
@@ -604,6 +616,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
 
     func beginSuspension() {
         stopped = true
+        exportLibrary?.closeAdmission()
         library.beginSuspension()
         callbacks.close()
         permissionTask?.cancel()
@@ -618,6 +631,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         for task in pending { await task.value }
         await callbacks.wait()
         await library.suspendAndWait()
+        await exportLibrary?.closeAndWait()
         if engineClient == nil {
             while writer != nil || !streams.isEmpty {
                 await stop()
@@ -776,6 +790,10 @@ struct TimeLapseSavedRecordingScope: Sendable {
 @MainActor final class TimeLapseExportLibrary {
     let scope: TimeLapseSavedRecordingScope
     private let current: () throws -> Void
+    #if canImport(WorkerFixtureSupport)
+    private let authority: WorkerFixtureEngineAdmission?
+    private let nativeLease: WorkerFixtureNativeExportLease?
+    #endif
     private let read: () throws -> Data
     private let write: (TimeLapseRecording, TimeLapseExportQuality, URL) async throws -> Void
 
@@ -785,10 +803,97 @@ struct TimeLapseSavedRecordingScope: Sendable {
         write: @escaping (TimeLapseRecording, TimeLapseExportQuality, URL) async throws -> Void
     ) throws {
         self.scope = scope
+        #if canImport(WorkerFixtureSupport)
+        authority = nil
+        nativeLease = nil
+        #endif
         self.current = current
         self.read = read
         self.write = write
         _ = try recordings()
+    }
+
+    #if canImport(WorkerFixtureSupport)
+    @available(macOS 15.0, *)
+    private init(
+        scope: TimeLapseSavedRecordingScope, authority: WorkerFixtureEngineAdmission,
+        nativeLease: WorkerFixtureNativeExportLease
+    ) throws {
+        self.scope = scope
+        self.authority = authority
+        self.nativeLease = nativeLease
+        current = { try nativeLease.requireCurrent() }
+        read = { try nativeLease.inputs.read(named: "saved-session") }
+        write = { recording, quality, destination in
+            try await TimeLapseExporter.export(
+                recording, quality: quality, to: destination, lease: nativeLease)
+        }
+        _ = try recordings()
+    }
+
+    @available(macOS 15.0, *)
+    static func signed(context: NSDictionary, roleBundle: Bundle) throws -> TimeLapseExportLibrary?
+    {
+        guard
+            let authority = try WorkerFixtureEngineAdmission.current(
+                extensionID: "timeLapse", context: context, roleBundle: roleBundle,
+                expectedRole: .app)
+        else { return nil }
+        let descriptor = authority.descriptor
+        let operations: Set<String> = [
+            "recording.ui.snapshot", "recording.ui.sources", "recording.ui.library",
+            "recording.ui.export", "recording.ui.exportPoll", "recording.ui.exportCancel",
+        ]
+        guard descriptor.operations.count == operations.count,
+            Set(descriptor.operations) == operations,
+            Set(descriptor.inputs.map(\.name)) == ["saved-session", "saved-video"],
+            Set(descriptor.outputs.map(\.name)) == ["export-staging", "exported-recording"]
+        else { throw TimeLapseError.invalidSession }
+        let lease = try authority.nativeExportLease(
+            staging: "export-staging", publication: "exported-recording",
+            inputs: ["saved-session", "saved-video"])
+        let scope = try TimeLapseSavedRecordingScope(
+            session: descriptor.session, root: descriptor.root, phase: descriptor.phase,
+            metadata: lease.inputs.url(named: "saved-session"),
+            video: lease.inputs.url(named: "saved-video"), destination: lease.finalURL)
+        guard scope.directory == lease.inputs.directoryURL, scope.staging == lease.stagingURL else {
+            throw TimeLapseError.invalidSession
+        }
+        return try TimeLapseExportLibrary(scope: scope, authority: authority, nativeLease: lease)
+    }
+
+    #endif
+
+    func performRequest(
+        token: UUID, command: String, payload: Data, operation: () async throws -> Data
+    ) async throws -> Data {
+        #if canImport(WorkerFixtureSupport)
+        guard let authority else { return try await operation() }
+        let request = try authority.beginRequest(token: token, operation: command, payload: payload)
+        do {
+            let result = try await operation()
+            try authority.completeRequest(request)
+            return result
+        } catch {
+            authority.cancelRequest(request)
+            throw error
+        }
+        #else
+        return try await operation()
+        #endif
+    }
+
+    func closeAdmission() {
+        #if canImport(WorkerFixtureSupport)
+        authority?.closeNamespaceAdmission()
+        #endif
+    }
+
+    func closeAndWait() async {
+        #if canImport(WorkerFixtureSupport)
+        await nativeLease?.closeAndWait()
+        await authority?.closeNamespaceAndWait()
+        #endif
     }
 
     func requireCurrent() throws { try current() }

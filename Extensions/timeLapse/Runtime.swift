@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
@@ -24,8 +27,19 @@ final class ExtensionRuntime: NSObject {
             if command.hasPrefix("recording.ui."),
                 let operations = self?.uiOperations as? TimeLapseUICommands
             {
+                if recorder.exportOnly {
+                    guard let value = request["token"] as? String,
+                        let token = UUID(uuidString: value)
+                    else { throw ExtensionPeerError.invalidRequest }
+                    return try await recorder.performExportRequest(
+                        token: token, command: command, payload: payload
+                    ) {
+                        try await operations.execute(command, payload: payload)
+                    }
+                }
                 return try await operations.execute(command, payload: payload)
             }
+            guard !recorder.exportOnly else { throw ExtensionPeerError.invalidRequest }
             if command == "surface.snapshot" || command == "surface.perform" {
                 return try await SurfaceCommandService.execute(
                     providerID: "timeLapse", command: command, payload: payload,
@@ -75,14 +89,12 @@ final class ExtensionRuntime: NSObject {
 
     @objc(suspendCommandsWithCompletion:)
     func suspendCommands(completion: @escaping () -> Void) {
-        _ = commands.suspend()
         draining = true
-        stopUI()
         let recorder = recorder, operations = uiOperations
-        if #available(macOS 15.0, *) {
-            (operations as? TimeLapseUICommands)?.shutdown()
-            (recorder as? TimeLapseRecorder)?.beginSuspension()
-        }
+        if #available(macOS 15.0, *) { (recorder as? TimeLapseRecorder)?.beginSuspension() }
+        _ = commands.suspend()
+        stopUI()
+        if #available(macOS 15.0, *) { (operations as? TimeLapseUICommands)?.shutdown() }
         Task { [self, recorder, operations] in
             _ = await commands.suspendAndWait()
             if #available(macOS 15.0, *) {
@@ -96,14 +108,12 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        commands.shutdown()
         draining = true
-        stopUI()
         let recorder = recorder, operations = uiOperations
-        if #available(macOS 15.0, *) {
-            (operations as? TimeLapseUICommands)?.shutdown()
-            (recorder as? TimeLapseRecorder)?.beginSuspension()
-        }
+        if #available(macOS 15.0, *) { (recorder as? TimeLapseRecorder)?.beginSuspension() }
+        commands.shutdown()
+        stopUI()
+        if #available(macOS 15.0, *) { (operations as? TimeLapseUICommands)?.shutdown() }
         Task { [self, recorder, operations] in
             await commands.shutdownAndWait()
             if #available(macOS 15.0, *) {
@@ -128,15 +138,35 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard !draining, !TimeLapseExportIntent.present(input), #available(macOS 15.0, *),
+            guard !draining, #available(macOS 15.0, *),
                 let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else {
                 return ["ok": false] as NSDictionary
             }
             if recorder == nil {
-                let created = TimeLapseRecorder(); recorder = created;
-                uiOperations = TimeLapseUICommands(recorder: created)
+                do {
+                    let created: TimeLapseRecorder
+                    #if canImport(WorkerFixtureSupport)
+                    if let library = try TimeLapseExportLibrary.signed(
+                        context: input, roleBundle: Bundle(for: ExtensionRuntime.self))
+                    {
+                        created = TimeLapseRecorder(exportLibrary: library)
+                    } else {
+                        guard !TimeLapseExportIntent.present(input) else {
+                            return ["ok": false] as NSDictionary
+                        }
+                        created = TimeLapseRecorder()
+                    }
+                    #else
+                    guard !TimeLapseExportIntent.present(input) else {
+                        return ["ok": false] as NSDictionary
+                    }
+                    created = TimeLapseRecorder()
+                    #endif
+                    recorder = created
+                    uiOperations = TimeLapseUICommands(recorder: created)
+                } catch { return ["ok": false] as NSDictionary }
             }
         case "configureUI":
             guard !draining, uiStops.isEmpty,
