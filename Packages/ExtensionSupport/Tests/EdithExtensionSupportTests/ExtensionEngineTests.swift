@@ -100,7 +100,8 @@ struct ExtensionEngineTests {
         let task = Task { try await client.invoke("sample.hold") }
         try await wait { bridge.callbacks.count == 1 }
         let token = try #require(bridge.callbacks.keys.first)
-        let completion = try #require(bridge.callbacks.removeValue(forKey: token))
+        let removed = bridge.callbacks.removeValue(forKey: token)
+        let completion = try #require(removed)
         let payload = Data("{\"value\":\"synthetic\"}".utf8)
         let reply = try ExtensionEngineWire.encode(
             ExtensionEngineReply(token: token, ok: true, payload: payload))
