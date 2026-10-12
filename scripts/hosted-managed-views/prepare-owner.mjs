@@ -255,6 +255,7 @@ export async function prepareManagedOwner({
       ? await rebindCamera({ original, payload, host, identity })
       : null;
   await buildExtensionUICarrier({
+    root,
     minimumSystemVersion: package_.minimumSystemVersion,
     hostApp: app,
     payloadDirectory: payload,
@@ -320,6 +321,7 @@ export async function prepareManagedOwner({
       hostABI: package_.hostABI,
       hostExecutableSHA256: host.executableSHA256,
       sourceHost,
+      sourceCommit: sourceHostReceipt.sourceCommit,
       sourceHostExecutableSHA256: sourceHostReceipt.executableSHA256,
     }),
     { mode: 0o600 },

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  chmod,
   copyFile,
   mkdir,
   mkdtemp,
@@ -13,13 +14,15 @@ import {
 } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   buildExtensionUICarrier,
   extensionUICarrierMetadata,
   extensionUICarrierPaths,
   extensionUIExtensionPoint,
   extensionUIWorkerEntitlements,
+  readBoundedCarrierBytes,
+  readFrozenUICarrier,
 } from "./build-extension-ui-carrier.mjs";
 
 const fixture = {
@@ -28,17 +31,188 @@ const fixture = {
   version: "1.0.0",
   hostABI: "edith-host-1",
   executableSHA256: "a".repeat(64),
+  carrierExecutableSHA256: "b".repeat(64),
   hostCodeRequirement:
     'identifier "com.pulkit.edith.tests.ui" and anchor apple generic',
   hostExecutablePath:
     "/tmp/edith-ui-carrier-synthetic/Edith.app/Contents/MacOS/Edith",
 };
 
+async function carrierFixtureRoot(prefix) {
+  const directory = resolve("local");
+  await mkdir(directory, { recursive: true });
+  return mkdtemp(join(directory, prefix));
+}
+
+async function frozenCarrierTools(host, executable) {
+  const root = process.cwd();
+  const temporary = dirname(host);
+  const products = join(temporary, "products");
+  const tools = join(temporary, "tools");
+  const resource = "EdithHost_EdithHostCore.bundle/index.json";
+  const index = await readFile(
+    "Packages/EdithHost/Sources/EdithHostCore/Resources/index.json",
+  );
+  await mkdir(join(host, "Contents/Resources"), { recursive: true });
+  await writeFile(join(host, "Contents/Resources/index.json"), index);
+  await mkdir(join(products, dirname(resource)), { recursive: true });
+  await writeFile(join(products, resource), index);
+  for (const name of ["HostLifecycleHarness", "MarketplaceHarness"]) {
+    await writeFile(join(products, name), "synthetic lifecycle tool", {
+      mode: 0o755,
+    });
+  }
+  await copyFile(executable, join(products, "EdithExtensionCarrier"));
+  await chmod(join(products, "EdithExtensionCarrier"), 0o755);
+  const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
+    encoding: "utf8",
+  }).trim();
+  await writeFile(
+    join(temporary, "build-metadata.json"),
+    JSON.stringify({
+      sourceCommit,
+      sourceTreeDirty: false,
+      hostExecutableSHA256: createHash("sha256")
+        .update(await readFile(join(host, "Contents/MacOS/Edith")))
+        .digest("hex"),
+    }),
+  );
+  execFileSync(
+    "python3",
+    [
+      "-B",
+      "scripts/package_extension_lifecycle_tools.py",
+      "--root",
+      root,
+      "--host",
+      host,
+      "--host-products",
+      products,
+      "--marketplace-products",
+      products,
+      "--output",
+      tools,
+    ],
+    { stdio: "pipe" },
+  );
+  return { root, frozenHostApp: host, carrierTools: tools };
+}
+
 describe("extension UI carriers", () => {
+  test.each(["exact", "short", "growing"])(
+    "bounded carrier reads reject incomplete or growing input: %s",
+    async (kind) => {
+      const expected = Buffer.from([1, 2, 3, 4]);
+      let consumed = 0;
+      const descriptor = {
+        async read(buffer, offset, length) {
+          const available =
+            kind === "growing" ? Infinity : kind === "short" ? 3 : 4;
+          const bytesRead = Math.min(length, 2, available - consumed);
+          for (let index = 0; index < bytesRead; index++)
+            buffer[offset + index] =
+              expected[(consumed + index) % expected.length];
+          consumed += bytesRead;
+          return { bytesRead };
+        },
+      };
+      if (kind === "exact")
+        expect(
+          await readBoundedCarrierBytes(descriptor, expected.length),
+        ).toEqual(expected);
+      else
+        await expect(
+          readBoundedCarrierBytes(descriptor, expected.length),
+        ).rejects.toThrow("bound");
+      expect(consumed).toBeLessThanOrEqual(expected.length + 1);
+    },
+  );
+
+  test("frozen carrier bytes are independently source bound and reject receipt tampering", async () => {
+    const root = await carrierFixtureRoot("carrier-input-");
+    try {
+      const host = join(root, "Edith.app");
+      await mkdir(join(host, "Contents/MacOS"), { recursive: true });
+      const executable = join(host, "Contents/MacOS/Edith");
+      await writeFile(executable, "synthetic inner executable", {
+        mode: 0o755,
+      });
+      const carrier = join(root, "carrier");
+      await writeFile(carrier, "synthetic independent outer executable", {
+        mode: 0o755,
+      });
+      const frozen = await frozenCarrierTools(host, carrier);
+      const input = await readFrozenUICarrier(frozen);
+      expect(input.bytes.toString()).toBe(
+        "synthetic independent outer executable",
+      );
+      expect(input.sha256).not.toBe(input.hostExecutableSHA256);
+      const receiptPath = join(frozen.carrierTools, "lifecycle-tools.json");
+      const original = await readFile(receiptPath);
+      for (const field of ["sourceCommit", "hostExecutableSHA256"]) {
+        const receipt = JSON.parse(original);
+        receipt[field] = "0".repeat(field === "sourceCommit" ? 40 : 64);
+        await writeFile(receiptPath, JSON.stringify(receipt));
+        await expect(readFrozenUICarrier(frozen)).rejects.toThrow();
+      }
+      await writeFile(receiptPath, original);
+      const selected = join(frozen.carrierTools, "EdithExtensionCarrier");
+      await writeFile(selected, "tampered executable");
+      await expect(readFrozenUICarrier(frozen)).rejects.toThrow();
+      await rm(selected);
+      await symlink(carrier, selected);
+      await expect(readFrozenUICarrier(frozen)).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("outer target retains the original check-in loop without host linkage or payload", async () => {
+    const entry = await readFile(
+      "Packages/EdithHost/Sources/EdithExtensionCarrier/Entry.swift",
+      "utf8",
+    );
+    const original = await readFile(
+      "Packages/EdithHost/Sources/EdithHost/HostEntry.swift",
+      "utf8",
+    );
+    for (const retained of [
+      "application.setActivationPolicy(.prohibited)",
+      "application.delegate = delegate",
+      "withExtendedLifetime(delegate) { application.run() }",
+      "DispatchQueue.main.asyncAfter(deadline: .now() + 0.25)",
+      "NSApplication.shared.terminate(nil)",
+    ]) {
+      expect(entry).toContain(retained);
+      expect(original).toContain(retained);
+    }
+    expect(entry).toContain(
+      'Array(CommandLine.arguments.dropFirst()) == ["--extension-ui-carrier"]',
+    );
+    expect(entry.match(/^import .+$/gm)).toEqual([
+      "import AppKit",
+      "import Foundation",
+    ]);
+    const manifest = await readFile("Packages/EdithHost/Package.swift", "utf8");
+    const target = manifest.slice(
+      manifest.indexOf('name: "EdithExtensionCarrier",\n'),
+      manifest.indexOf('name: "EdithHostCore",'),
+    );
+    expect(target).not.toContain("dependencies:");
+    expect(target).not.toContain("resources:");
+    const builder = await readFile("scripts/build-minimal-host.mjs", "utf8");
+    expect(builder).toContain("extensionPayloadBytes: 0");
+    expect(builder).toContain('join(destination, "..", "carrier-tools")');
+    expect(builder).toContain(
+      'carrierBuild[carrierBuild.indexOf("EdithHost")] = "EdithExtensionCarrier"',
+    );
+    expect(builder).toMatch(/"--carrier-only",\s*"--carrier-products"/);
+  });
+
   test.skipIf(process.platform !== "darwin")(
     "signed sandboxed Music and Notch workers alone can connect to synthetic loopback",
     async () => {
-      const root = await mkdtemp(join(tmpdir(), "edith-ui-network-test-"));
+      const root = await carrierFixtureRoot("edith-ui-network-test-");
       const server = createServer((socket) => socket.end("S"));
       try {
         await new Promise((resolve, reject) => {
@@ -106,10 +280,15 @@ int main(int argc, char **argv) {
         execFileSync("codesign", ["--force", "--sign", "-", host], {
           stdio: "pipe",
         });
+        const frozen = await frozenCarrierTools(
+          host,
+          join(contents, "MacOS/Edith"),
+        );
         for (const id of ["music", "notchShelf", "calendar"]) {
           const payload = join(root, id);
           await mkdir(payload);
           await buildExtensionUICarrier({
+            ...frozen,
             minimumSystemVersion: "14.0.0",
             hostApp: host,
             payloadDirectory: payload,
@@ -216,6 +395,9 @@ int main(int argc, char **argv) {
     expect(first.attributes.EdithExecutableProvenance).toBe(
       fixture.executableSHA256,
     );
+    expect(first.attributes.EdithCarrierExecutableProvenance).toBe(
+      fixture.carrierExecutableSHA256,
+    );
     expect(first.attributes.EdithPayloadRelativePath).toBe(
       "Contents/Resources/Payload",
     );
@@ -250,6 +432,8 @@ int main(int argc, char **argv) {
     ["hostABI", ""],
     ["executableSHA256", "a".repeat(63)],
     ["executableSHA256", "g".repeat(64)],
+    ["carrierExecutableSHA256", "a".repeat(63)],
+    ["carrierExecutableSHA256", "g".repeat(64)],
     ["hostCodeRequirement", ""],
     ["hostCodeRequirement", "true\nfalse"],
     ["hostCodeRequirement", "x".repeat(4097)],
@@ -352,9 +536,7 @@ int main(int argc, char **argv) {
     )(
       `real signed ${id} carrier restricts its sandboxed worker capabilities`,
       async () => {
-        const root = await mkdtemp(
-          join(tmpdir(), "edith-ui-carrier-signed-test-"),
-        );
+        const root = await carrierFixtureRoot("edith-ui-carrier-signed-test-");
         try {
           const host = join(root, "Edith.app");
           const contents = join(host, "Contents");
@@ -405,6 +587,14 @@ int main(int argc, char **argv) {
           execFileSync("codesign", ["--force", "--sign", "-", host], {
             stdio: "pipe",
           });
+          const frozen = await frozenCarrierTools(host, executable);
+          const carrierDigest = createHash("sha256")
+            .update(
+              await readFile(
+                join(frozen.carrierTools, "EdithExtensionCarrier"),
+              ),
+            )
+            .digest("hex");
           const digest = createHash("sha256")
             .update(await readFile(executable))
             .digest("hex");
@@ -428,6 +618,7 @@ int main(int argc, char **argv) {
             join(role, "Contents/MacOS/Runtime"),
           );
           const built = await buildExtensionUICarrier({
+            ...frozen,
             minimumSystemVersion: "14.0.0",
             hostApp: host,
             payloadDirectory: payload,
@@ -437,6 +628,7 @@ int main(int argc, char **argv) {
             development: true,
           });
           expect(built.executableSHA256).toBe(digest);
+          expect(built.carrierExecutableSHA256).toBe(carrierDigest);
           expect(
             await readFile(
               join(
@@ -500,6 +692,12 @@ int main(int argc, char **argv) {
             `${carrierInfo.CFBundleIdentifier}.worker`,
           );
           expect(workerInfo.EdithExecutableProvenance).toBe(digest);
+          expect(workerInfo.EdithCarrierExecutableProvenance).toBe(
+            carrierDigest,
+          );
+          expect(carrierInfo.EdithCarrierExecutableProvenance).toBe(
+            carrierDigest,
+          );
           expect(workerInfo.EdithHostExecutablePath).toBe(
             await realpath(executable),
           );
@@ -563,6 +761,7 @@ int main(int argc, char **argv) {
           }
           await expect(
             buildExtensionUICarrier({
+              ...frozen,
               minimumSystemVersion: "14.0.0",
               hostApp: host,
               payloadDirectory: payload,

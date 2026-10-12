@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "EdithHost", targets: ["EdithHost"]),
+        .executable(name: "EdithExtensionCarrier", targets: ["EdithExtensionCarrier"]),
         .executable(name: "HostLifecycleHarness", targets: ["HostLifecycleHarness"]),
         .executable(name: "HostCommandHarness", targets: ["HostCommandHarness"]),
         .executable(name: "HostNativeTaskHarness", targets: ["HostNativeTaskHarness"]),
@@ -18,6 +19,13 @@ let package = Package(
     ],
     targets: [
         .target(name: "HostBootstrap"),
+        .executableTarget(
+            name: "EdithExtensionCarrier",
+            linkerSettings: [
+                .unsafeFlags(
+                    ["-Xlinker", "-no_exported_symbols", "-Xlinker", "-dead_strip"],
+                    .when(configuration: .release))
+            ]),
         .target(
             name: "EdithHostCore",
             dependencies: [

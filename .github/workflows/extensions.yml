@@ -109,7 +109,7 @@ jobs:
       - run: |
           swift build --package-path Packages/EdithHost --build-system native --jobs 2 --product HostLifecycleHarness
           swift build --package-path Packages/ExtensionMarketplace --build-system native --jobs 2 --product MarketplaceHarness
-          python3 scripts/package_extension_lifecycle_tools.py --host local/minimal-host/Edith.app --host-products "$(swift build --package-path Packages/EdithHost --build-system native --show-bin-path)" --marketplace-products "$(swift build --package-path Packages/ExtensionMarketplace --build-system native --show-bin-path)" --output local/extension-tools
+          python3 scripts/package_extension_lifecycle_tools.py --host local/minimal-host/Edith.app --host-products "$(swift build --package-path Packages/EdithHost --build-system native --show-bin-path)" --marketplace-products "$(swift build --package-path Packages/ExtensionMarketplace --build-system native --show-bin-path)" --carrier-products "$(swift build --package-path Packages/EdithHost --build-system native --configuration release --show-bin-path)" --output local/extension-tools
       - name: Import the release signing certificate
         if: "!inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
         env:
@@ -374,6 +374,7 @@ jobs:
           EXTENSION_ID: "${{ matrix.id }}"
           EXTENSION_VERSION: "${{ matrix.version }}"
           DEVELOPMENT: "${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.publish != true) }}"
+          EXTENSION_UI_CARRIER_TOOLS: local/extension-tools
           EXTENSION_CONTAINING_HOST_APP: "${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.publish != true)) && 'local/minimal-host/Edith.app' || 'local/extension-release-host/Edith.app' }}"
         run: |
           if [ "$DEVELOPMENT" = true ]; then

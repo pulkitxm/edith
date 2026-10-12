@@ -4,6 +4,7 @@ import plistlib
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('host_inventory', Path(__file__).with_name('hosted-managed-views') / 'fixture-host-inventory.py')
 module = importlib.util.module_from_spec(spec)
@@ -14,14 +15,21 @@ class FixtureHostInventoryTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix='edith-managed-host-')
         self.root = Path(self.directory.name).resolve()
+        self.carrier = self.root / "carrier"
+        self.carrier.write_bytes(b"tiny-carrier")
+        self.carrier_digest = hashlib.sha256(self.carrier.read_bytes()).hexdigest()
+        provider = patch.object(module, "carrier_input", return_value={"path": self.carrier, "sha256": self.carrier_digest, "sourceCommit": "a" * 40})
+        provider.start()
+        self.addCleanup(provider.stop)
         self.host = self.root / 'Fixture.app'
         self.payload = self.root / 'music'
         self.worker = self.payload / 'ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex'
         self.identifier = 'com.pulkit.edith.tests.worker-00000000-0000-4000-8000-000000000001'
-        self.metadata = {'hostIdentifier': self.identifier, 'extensionID': 'music', 'version': '1.0.0', 'hostABI': 'edith-host-2', 'hostExecutableSHA256': hashlib.sha256(b'host-code').hexdigest()}
+        self.metadata = {'sourceCommit': 'a' * 40, 'hostIdentifier': self.identifier, 'extensionID': 'music', 'version': '1.0.0', 'hostABI': 'edith-host-2', 'hostExecutableSHA256': hashlib.sha256(b'host-code').hexdigest()}
         self.make_bundle(self.host, {'CFBundleIdentifier': self.identifier, 'CFBundleExecutable': 'Edith'})
         for bundle, suffix in [(self.payload / 'ExtensionCarrier.app', ''), (self.worker, '.worker')]:
-            self.make_bundle(bundle, {'CFBundleIdentifier': self.identifier + '.extension.music' + suffix, 'CFBundleExecutable': 'Edith', 'CFBundleShortVersionString': '1.0.0', 'EdithHostIdentifier': self.identifier, 'EdithHostABI': 'edith-host-2', 'EdithExecutableProvenance': self.metadata['hostExecutableSHA256'], 'EdithExtensionID': 'music', 'EdithExtensionVersion': '1.0.0', 'EdithHostExecutablePath': str(self.host / 'Contents/MacOS/Edith')})
+            self.make_bundle(bundle, {'CFBundleIdentifier': self.identifier + '.extension.music' + suffix, 'CFBundleExecutable': 'Edith', 'CFBundleShortVersionString': '1.0.0', 'EdithHostIdentifier': self.identifier, 'EdithHostABI': 'edith-host-2', 'EdithExecutableProvenance': self.metadata['hostExecutableSHA256'], 'EdithCarrierExecutableProvenance': self.carrier_digest, 'EdithExtensionID': 'music', 'EdithExtensionVersion': '1.0.0', 'EdithHostExecutablePath': str(self.host / 'Contents/MacOS/Edith')})
+        (self.payload / "ExtensionCarrier.app/Contents/MacOS/Edith").write_bytes(self.carrier.read_bytes())
         self.source_host = self.root / 'Source.app'
         self.make_bundle(self.source_host, {'CFBundleIdentifier': 'com.pulkit.edith.tests.remote-00000000-0000-4000-8000-000000000002', 'CFBundleExecutable': 'Edith'})
         self.metadata.update(sourceHost=str(self.source_host), sourceHostExecutableSHA256=hashlib.sha256(b'host-code').hexdigest())
@@ -50,6 +58,23 @@ class FixtureHostInventoryTests(unittest.TestCase):
         self.assertFalse(proof['productionExecutableUnchangedProof'])
         self.assertFalse(proof['codeExecuted'])
         self.assertEqual(proof['workerEntitlements'], self.entitlements)
+
+    def test_identity_reread_must_match_the_frozen_receipt(self):
+        def identity(path):
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            return {'signedSHA256': 'b' * 64 if path == self.carrier else digest, 'rawUnsignedSHA256': digest, 'normalizedUnsignedSHA256': digest}
+        with self.assertRaisesRegex(ValueError, 'identity differs from its receipt'):
+            module.fixture_host_inventory(self.host, self.payload, self.metadata, identity=identity, verify=lambda path: None, entitlements=lambda path: self.entitlements)
+
+    def test_outer_and_inner_code_are_bound_to_separate_frozen_inputs(self):
+        outer = self.payload / 'ExtensionCarrier.app/Contents/MacOS/Edith'
+        outer.write_bytes(b'host-code')
+        with self.assertRaisesRegex(ValueError, 'executable code differs'):
+            self.inventory()
+        outer.write_bytes(b'tiny-carrier')
+        self.carrier.write_bytes(b'foreign-carrier')
+        with self.assertRaisesRegex(ValueError, 'Frozen carrier input'):
+            self.inventory()
 
     def test_missing_extra_and_nonboolean_capabilities_reject(self):
         for capabilities in ({'com.apple.security.app-sandbox': True}, {**self.entitlements, 'com.apple.security.device.audio-input': True}, {**self.entitlements, 'com.apple.security.network.client': 1}):

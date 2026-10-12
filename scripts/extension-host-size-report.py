@@ -15,6 +15,7 @@ import tempfile
 import uuid
 import zipfile
 from macho_code_identity import executable_identity
+from package_extension_lifecycle_tools import carrier_input
 from size_report_filesystem import TreeSnapshot, digest_file, read_bytes, stable_file
 
 
@@ -160,6 +161,12 @@ def read_archive_document(zipped, name, parser):
 
 def verify_package_host(packages, metadata, definition, app, expected_commit, host_hash, unsigned_hash):
     identifier = metadata["id"]
+    carrier_source = carrier_input()
+    if carrier_source["sourceCommit"] != expected_commit or digest_file(carrier_source["path"]) != carrier_source["sha256"]:
+        raise ValueError("Carrier input differs from the frozen source")
+    carrier_code = executable_identity(carrier_source["path"])
+    if carrier_code["signedSHA256"] != carrier_source["sha256"]:
+        raise ValueError("Frozen carrier identity differs from its receipt")
     expected_hash = host_hash
     clone = None
     clone_path = packages / f"{identifier}.synthetic-host-provenance.json"
@@ -170,7 +177,8 @@ def verify_package_host(packages, metadata, definition, app, expected_commit, ho
         expected_hash = clone["executableAfterSigningSHA256"]
     host_identifier = clone["identifier"] if clone else plistlib.loads((app / "Contents/Info.plist").read_bytes())["CFBundleIdentifier"]
     result = {"sourceCommit": expected_commit, "sourceHostExecutableSHA256": host_hash,
-              "unsignedExecutableSHA256": unsigned_hash, "normalizedUnsignedSHA256": unsigned_hash, "executables": []}
+              "unsignedExecutableSHA256": unsigned_hash, "normalizedUnsignedSHA256": unsigned_hash, "carrierExecutableSHA256": carrier_source["sha256"],
+              "carrierNormalizedUnsignedSHA256": carrier_code["normalizedUnsignedSHA256"], "executables": []}
     if clone:
         result["syntheticHost"] = {key: clone[key] for key in ["identifier", "sourceCommit", "sourceExecutableSHA256",
             "executableBeforeSigningSHA256", "executableAfterSigningSHA256", "unsignedExecutableSHA256"]}
@@ -208,10 +216,11 @@ def verify_package_host(packages, metadata, definition, app, expected_commit, ho
                          for bundle in [carrier, worker]}
         for info in carrier_infos.values():
             if (info.get("EdithExtensionID") != identifier or info.get("EdithExtensionVersion") != metadata["version"]
-                    or info.get("EdithHostABI") != metadata["hostABI"]):
+                    or info.get("EdithHostABI") != metadata["hostABI"]
+                    or info.get("EdithCarrierExecutableProvenance") != carrier_source["sha256"]):
                 raise ValueError("Sealed UI carrier identity, version or ABI differs from the package")
         if any(carrier_infos[carrier].get(key) != carrier_infos[worker].get(key)
-               for key in ["EdithHostIdentifier", "EdithExecutableProvenance"]):
+               for key in ["EdithHostIdentifier", "EdithExecutableProvenance", "EdithCarrierExecutableProvenance"]):
             raise ValueError("Sealed UI carrier and worker host provenance differ")
         if any(info.get("EdithHostIdentifier") != host_identifier for info in carrier_infos.values()):
             raise ValueError("UI carrier identity differs from its source-bound host")
@@ -241,14 +250,15 @@ def verify_package_host(packages, metadata, definition, app, expected_commit, ho
                     shutil.copyfileobj(source, destination, 1024 * 1024)
                 actual_hash = digest_file(target)
                 code_identity = executable_identity(target)
-                if code_identity["normalizedUnsignedSHA256"] != unsigned_hash:
+                expected_code = carrier_code["normalizedUnsignedSHA256"] if bundle == carrier else unsigned_hash
+                if code_identity["normalizedUnsignedSHA256"] != expected_code:
                     raise ValueError("Contained executable code differs from the frozen host")
             copied[bundle] = {"member": executable, "sha256": actual_hash,
-                "installedBytes": zipped.getinfo(executable).file_size, "frozenExecutableProvenance": expected_hash,
+                "installedBytes": zipped.getinfo(executable).file_size, "frozenExecutableProvenance": carrier_source["sha256"] if bundle == carrier else expected_hash,
                 "codeIdentity": code_identity}
             result["executables"].append(copied[bundle])
         if not {carrier, worker}.issubset(copied):
-            raise ValueError("Both sealed UI carrier executable copies are required")
+            raise ValueError("Both sealed UI carrier and inner loader executables are required")
         if "cameraCarrier" in definition.get("roles", []):
             receipt = json.loads((packages / "virtualCamera.carrier-provenance.json").read_text())
             roles = receipt.get("roles", [])
@@ -348,7 +358,7 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
         "artifactPublication": "not-verified",
         "sourceFingerprintsVerified": expected_fingerprints is not None,
         "carrierHostProvenanceVerified": source_mode == "final",
-        "carrierExecutableMethod": "Sealed frozen-host provenance and SHA-256 after strictly verified signature removal and arm64 terminal LINKEDIT mapping normalization in private temporary files. Actual signed and raw unsigned checksums and expanded bytes remain recorded. Synthetic Camera hosts require a source-bound clone receipt and matching code and resources.",
+        "carrierExecutableMethod": "Separate sealed frozen carrier and full-host provenance and SHA-256 after strictly verified signature removal and arm64 terminal LINKEDIT mapping normalization in private temporary files. Actual signed and raw unsigned checksums and expanded bytes remain recorded. Synthetic Camera hosts require a source-bound clone receipt and matching code and resources.",
         "appZipMethod": "Regular files only, symlinks excluded, ZIP deflate level 9. Comparison metric, not a shipping installer.",
         "installedMethod": "Logical regular-file bytes including packaged models, excluding filesystem allocation rounding, external downloaded models, receipts, caches, user data, retained versions and OS-managed deployment copies.",
         "verificationScope": "Package archive size, SHA-256, expanded bytes and CRC. Source fingerprints when supplied. Final reports also bind carrier code and source provenance. This report does not run lifecycle, visual, signing or cloud publication checks.",
