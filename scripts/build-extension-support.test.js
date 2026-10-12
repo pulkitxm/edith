@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  rewriteArgumentParserSource,
   rewriteSupportImports,
   supportModules,
   supportProducts,
@@ -151,4 +152,62 @@ test("private parser targets rewrite Swift 6 internal imports without alias flag
       supportModules("latex_app"),
     ),
   ).toBe("internal import ArgumentParserToolInfo_latex_app\n");
+});
+
+test("private parser defaults use the current error prefix without changing overrides", () => {
+  const source =
+    'import ArgumentParserToolInfo\n  public static var _errorPrefix: String {\n    "\\(_errorLabel): "\n  }\nstruct Command { static var _errorPrefix: String { "Fixture: " } }\n';
+  expect(
+    rewriteArgumentParserSource(
+      source,
+      supportModules("fixture_app"),
+      "Parsable Types/ParsableArguments.swift",
+    ),
+  ).toBe(
+    'import ArgumentParserToolInfo_fixture_app\n  public static var _errorPrefix: String {\n    "Error: "\n  }\nstruct Command { static var _errorPrefix: String { "Fixture: " } }\n',
+  );
+});
+
+test("private parser help maps single-argument callbacks to the current completion kind", () => {
+  const source =
+    "    case .customDeprecated(_):\n      self = .customDeprecated\n    case .custom(_):\n      self = .custom\n    case .customAsync(_):\n      self = .customAsync\n";
+  expect(
+    rewriteArgumentParserSource(
+      source,
+      supportModules("fixture_app"),
+      "Usage/DumpHelpGenerator.swift",
+    ),
+  ).toBe(
+    "    case .customDeprecated(_):\n      self = .custom\n    case .custom(_):\n      self = .custom\n    case .customAsync(_):\n      self = .customAsync\n",
+  );
+});
+
+test.each([
+  "Parsable Types/ParsableArguments.swift",
+  "Usage/DumpHelpGenerator.swift",
+])(
+  "private parser source migration rejects changed upstream shape %s",
+  (path) => {
+    expect(() =>
+      rewriteArgumentParserSource(
+        "struct Changed {}",
+        supportModules("fixture_app"),
+        path,
+      ),
+    ).toThrow("Unexpected pinned ArgumentParser source");
+  },
+);
+
+test("private parser migration leaves other declarations and text unchanged", () => {
+  const source =
+    'import ArgumentParserToolInfo\nlet value = "_errorLabel customDeprecated"\n';
+  expect(
+    rewriteArgumentParserSource(
+      source,
+      supportModules("fixture_app"),
+      "Other.swift",
+    ),
+  ).toBe(
+    'import ArgumentParserToolInfo_fixture_app\nlet value = "_errorLabel customDeprecated"\n',
+  );
 });
