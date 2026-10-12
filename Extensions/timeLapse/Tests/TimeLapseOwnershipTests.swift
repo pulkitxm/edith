@@ -165,8 +165,20 @@ import Testing
             }
         }
         await gate.started()
-        await recorder.shutdown()
+        let suspension = AsyncStream<Void>.makeStream()
+        var shutdownFinished = false
+        let shutdown = Task {
+            recorder.beginSuspension()
+            suspension.continuation.yield(())
+            await recorder.shutdown()
+            shutdownFinished = true
+        }
+        var suspended = suspension.stream.makeAsyncIterator()
+        _ = await suspended.next()
+        #expect(!shutdownFinished)
         await gate.release()
+        await shutdown.value
+        #expect(shutdownFinished)
         await discovery.value
         await recorder.loadSources {
             Issue.record("A disabled recorder must not discover sources.")
@@ -188,8 +200,20 @@ import Testing
         })
         let refresh = Task { await model.refresh() }
         await readGate.started()
-        await model.shutdown()
+        let suspension = AsyncStream<Void>.makeStream()
+        var shutdownFinished = false
+        let readShutdown = Task {
+            model.beginSuspension()
+            suspension.continuation.yield(())
+            await model.shutdown()
+            shutdownFinished = true
+        }
+        var suspended = suspension.stream.makeAsyncIterator()
+        _ = await suspended.next()
+        #expect(!shutdownFinished)
         await readGate.release()
+        await readShutdown.value
+        #expect(shutdownFinished)
         await refresh.value
         #expect(model.recordings.isEmpty)
         #expect(!model.loading.isRunning)
