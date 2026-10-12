@@ -55,6 +55,14 @@ import Observation
     }
     var installedIDs: Set<String> { environment.installed() }
     var activeIDs: Set<String> { environment.active() }
+    var offeredIDs: Set<String> {
+        _ = catalogRevision
+        return Set(environment.available().keys).union(installedIDs)
+    }
+    var visibleEntries: [HostExtension] {
+        let visible = offeredIDs.union(selected)
+        return entries.filter { visible.contains($0.id) }
+    }
     var canInstall: Bool { !busy && cost.complete && !selected.isEmpty }
 
     func present() {
@@ -81,7 +89,8 @@ import Observation
     func choose(_ workflow: HostWorkflow) {
         guard !busy else { return }
         self.workflow = workflow
-        selected = workflow.suggestions.intersection(Set(entries.map(\.id)))
+        selected = workflow.suggestions.intersection(Set(entries.map(\.id))).intersection(
+            offeredIDs)
         stage = .review
         saveSelection()
         states = [:]
@@ -90,6 +99,7 @@ import Observation
 
     func toggle(_ id: String) {
         guard !busy, entries.contains(where: { $0.id == id }) else { return }
+        guard selected.contains(id) || offeredIDs.contains(id) else { return }
         if !selected.insert(id).inserted { selected.remove(id) }
         states = [:]
         saveSelection()

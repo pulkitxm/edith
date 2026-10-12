@@ -7,6 +7,40 @@ import Testing
 @testable import EdithHost
 
 @Suite @MainActor struct HostWorkflowOnboardingTests {
+    @Test func firstShippingCatalogOffersOnlyKeepAwakeWithoutStartingIt() throws {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        fixture.available = ["keepAwake": package("keepAwake")]
+        let model = fixture.model(entries: try HostIndex.bundled())
+        model.present()
+        model.choose(.essentials)
+        #expect(model.selected == ["keepAwake"])
+        #expect(model.visibleEntries.map(\.id) == ["keepAwake"])
+        #expect(model.canInstall)
+        #expect(model.cost.downloadBytes == 100)
+        model.toggle("calendar")
+        #expect(model.selected == ["keepAwake"])
+        #expect(fixture.installs.isEmpty && fixture.active.isEmpty)
+    }
+
+    @Test func unpublishedRestoredSelectionCanBeRemovedWithoutLosingInstalledTools() {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        fixture.available = [:]
+        fixture.installed = ["usage"]
+        fixture.defaults.set(true, forKey: HostWorkflowOnboardingModel.reviewPendingKey)
+        fixture.defaults.set(["herdr"], forKey: HostSettingsCatalog.workflowSelectionKey)
+        let model = fixture.model()
+        model.present()
+        #expect(Set(model.visibleEntries.map(\.id)) == ["usage", "herdr"])
+        #expect(!model.canInstall)
+        model.toggle("herdr")
+        #expect(model.selected.isEmpty)
+        #expect(model.visibleEntries.map(\.id) == ["usage"])
+        #expect(fixture.installed == ["usage"])
+        #expect(fixture.installs.isEmpty && fixture.active.isEmpty)
+    }
+
     @Test func selectingWorkflowSuggestsKnownOptionalPackagesWithoutStartingThem() throws {
         let fixture = Fixture()
         defer { fixture.remove() }

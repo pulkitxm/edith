@@ -107,7 +107,7 @@ struct HostWorkflowOnboardingView: View {
                 "Back up my settings to iCloud",
                 isOn: Binding(get: { model.icloudBackup }, set: { model.setICloudBackup($0) })
             ).disabled(model.busy)
-            ForEach(model.entries) { entry in
+            ForEach(model.visibleEntries) { entry in
                 HStack(spacing: UIScale.pt(12)) {
                     Image(systemName: entry.symbolName).foregroundStyle(DashSkin.accent(dark))
                         .frame(width: UIScale.pt(24))
