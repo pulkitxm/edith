@@ -12,6 +12,7 @@ import IOKit.ps
     private let defaults: UserDefaults
     private var work: Task<Void, Error>?
     private var stopping = false
+    private var commandsSuspended = false
     private var events: MusicBackupEventQueue?
     private var observers: [NSObjectProtocol] = []
     private var bootstrapCancelled = false
@@ -93,7 +94,7 @@ import IOKit.ps
     }
 
     func execute(_ command: String, payload: Data) async throws -> Data {
-        guard !stopping else { throw ExtensionPeerError.unavailable }
+        guard !stopping, !commandsSuspended else { throw ExtensionPeerError.unavailable }
         guard payload.count <= 512 else { throw ExtensionPeerError.invalidRequest }
         if !payload.isEmpty {
             guard let object = (try? JSONSerialization.jsonObject(with: payload)) as? [String: Any],
@@ -120,7 +121,7 @@ import IOKit.ps
     }
 
     func restoreOnEnable() async -> Bool {
-        guard !stopping else { return false }
+        guard !stopping, !commandsSuspended else { return false }
         guard cloudEnabled else { return true }
         guard directory().standardizedFileURL == ownedDirectory.standardizedFileURL else {
             return false
@@ -136,7 +137,7 @@ import IOKit.ps
     private var exportEnabled: Bool { defaults.bool(forKey: AppStorageKeys.Music.backup) }
 
     func startScheduling(debounce: Duration = .seconds(5), restorePending: Bool = false) {
-        guard !stopping, events == nil else { return }
+        guard !stopping, !commandsSuspended, events == nil else { return }
         observedCloudEnabled = cloudEnabled
         needsRestore = restorePending && cloudEnabled
         events = MusicBackupEventQueue(
@@ -146,7 +147,7 @@ import IOKit.ps
                 return cloudEnabled && (exportEnabled || needsRestore)
             },
             transfer: { [weak self] in
-                guard let self, !stopping else { throw CancellationError() }
+                guard let self, !stopping, !commandsSuspended else { throw CancellationError() }
                 if needsRestore {
                     if directory().standardizedFileURL == ownedDirectory.standardizedFileURL {
                         guard await restoreOnEnable() else { throw ExtensionPeerError.unavailable }
@@ -174,7 +175,7 @@ import IOKit.ps
     }
 
     func preferencesChanged() {
-        guard !stopping else { return }
+        guard !stopping, !commandsSuspended else { return }
         applicationDefaults.synchronize(); defaults.synchronize()
         let enabled = cloudEnabled
         if enabled && !observedCloudEnabled { needsRestore = true }
@@ -183,8 +184,22 @@ import IOKit.ps
         events?.changed()
     }
 
+    func suspendCommands() {
+        commandsSuspended = true
+        events?.suspendCommands()
+        work?.cancel()
+    }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        let ownedWork = work
+        await events?.suspendCommandsAndWait()
+        _ = try? await ownedWork?.value
+    }
+
     func shutdown() async {
         stopping = true
+        suspendCommands()
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         observers.removeAll()
         await events?.shutdown()
@@ -205,7 +220,7 @@ import IOKit.ps
     }
 
     private func transfer(export: Bool) async throws {
-        guard !stopping, work == nil else { throw ExtensionPeerError.unavailable }
+        guard !stopping, !commandsSuspended, work == nil else { throw ExtensionPeerError.unavailable }
         let local = directory(), cloud = cloud
         let work = Task {
             let deadline = ContinuousClock.now.advanced(by: .seconds(600))
@@ -350,6 +365,7 @@ import IOKit.ps
     private let retry: Duration
     private var pending = false
     private var stopping = false
+    private var commandsSuspended = false
     private var cancelling = false
     private var deadline = ContinuousClock.now
     private var task: Task<Void, Never>?
@@ -372,7 +388,7 @@ import IOKit.ps
     }
 
     func changed() {
-        guard !stopping, !cancelling else { return }
+        guard !stopping, !commandsSuspended, !cancelling else { return }
         guard enabled() else { pending = false; task?.cancel(); return }
         pending = true
         deadline = ContinuousClock.now.advanced(by: debounce)
@@ -382,9 +398,9 @@ import IOKit.ps
             defer {
                 task = nil
                 pausedOnBattery = false
-                if pending, !stopping, enabled() { changed() }
+                if pending, !stopping, !commandsSuspended, enabled() { changed() }
             }
-            while pending, !stopping, enabled(), !Task.isCancelled {
+            while pending, !stopping, !commandsSuspended, enabled(), !Task.isCancelled {
                 if onBattery() {
                     pausedOnBattery = true
                     do { try await sleep(.seconds(60)) } catch { return }
@@ -401,7 +417,7 @@ import IOKit.ps
                     try Task.checkCancellation()
                     try await transfer()
                 } catch is CancellationError { return } catch {
-                    guard !stopping, enabled(), !Task.isCancelled else { return }
+                    guard !stopping, !commandsSuspended, enabled(), !Task.isCancelled else { return }
                     pending = true
                     deadline = ContinuousClock.now.advanced(by: retry)
                 }
@@ -419,8 +435,20 @@ import IOKit.ps
         cancelling = false
     }
 
+    func suspendCommands() {
+        commandsSuspended = true
+        task?.cancel()
+    }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        let owned = task
+        await owned?.value
+    }
+
     func shutdown() async {
         stopping = true
+        suspendCommands()
         await cancel()
     }
 }
