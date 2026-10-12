@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "reviewedSource": "71b4793ec6bb65da660f7217d1c68df0da749fcb",
+  "reviewedSource": "ea5ed34e4ce981de1f5384c8fb27dde98ad41adc",
   "owners": [
     {
       "id": "keepAwake",
@@ -254,7 +254,7 @@
       "factoryOverlay": false,
       "scope": "original-view-creation-close-reopen-disable",
       "functionalActionsValidated": false,
-      "effects": "CalendarUIPresentation reads actual synthetic engine. No EventKit access in remote UI. Calendar13 separately tests actual user lifecycle.",
+      "effects": "CalendarUIPresentation reads the actual synthetic engine without EventKit access in remote UI; its original controller owns the facade and joins retirement after release. Calendar13 separately tests the actual user lifecycle.",
       "sources": [
         {
           "path": "Extensions/calendar/Runtime.swift",
@@ -262,7 +262,7 @@
         },
         {
           "path": "Extensions/calendar/Views/CalendarUIPresentation.swift",
-          "sha256": "d31f4c2f66c9a7d5a009143a798bbca0898b886cb550ac2055e6db40f432718f"
+          "sha256": "532154a99ad9ae026c99f48648bef3ff381ad36760224ba1a952093367dfb964"
         }
       ]
     },
@@ -474,15 +474,15 @@
       "factoryOverlay": false,
       "scope": "original-view-creation-close-reopen-disable",
       "functionalActionsValidated": false,
-      "effects": "Actual embedded main page uses presentation-owned remote client. Strict inert engine declines all feature reads. No browser/video/media/download action; this is view creation only.",
+      "effects": "The actual embedded main page uses a presentation-owned remote client and joined retirement. The signed functional fixture admits preference reads and four original settings actions only; browser, video, playback, media and download actions remain unavailable. This route qualifies view creation only.",
       "sources": [
         {
           "path": "Extensions/music/Runtime.swift",
-          "sha256": "d71e1c8a2e4ed185f5315b00d02cb8b06e7b0f5481d9c010fb178e8c5f4b090d"
+          "sha256": "ea50e3188636814d77c32d56e8026fe4b7a45fc92f90cdebcfd4c679dc00836d"
         },
         {
           "path": "Extensions/music/UI/Runtime.swift",
-          "sha256": "e03bee33ed02e410fe78fa28eaf9071c1162116159a336b36c407040471e1e3e"
+          "sha256": "74f224e6d368694291bf38fd1b806efbedb817d72a1dd7bc2b84fe017f1a249b"
         }
       ]
     },

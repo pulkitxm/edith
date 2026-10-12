@@ -322,7 +322,8 @@ import Testing
                 uiOnly: false, version: "1.2.3"))
         let runtime = MusicEmbeddedRuntime()
         defer { runtime.stop() }
-        #expect(runtime.install(scene, id: id))
+        var retiredGenerations: [String] = []
+        #expect(runtime.install(scene, id: id, onRetired: { retiredGenerations.append("old") }))
         let model = try #require(scene.settingsModel)
         let read = Task { await model.refresh() }
         try await settle { bridge.request("music.ui.settings") != nil }
@@ -342,10 +343,12 @@ import Testing
         }
         try await settle { started }
         #expect(!finished && scene.isRetained && runtime.presentationCount == 1)
+        #expect(retiredGenerations.isEmpty)
         #expect(!model.closed && !bridge.cancelled.contains(action.token))
         bridge.complete(action, payload: Data("{}".utf8), success: false)
         let failure = await close.value
         #expect(failure != nil && finished)
+        #expect(retiredGenerations.isEmpty)
         #expect(runtime.configured && runtime.presentationCount == 1 && scene.isRetained)
         #expect(scene.matches(["location": "settings", "section": "music"]))
         #expect(!model.closed && !model.preferences.barCollapsed && !collapsed.wrappedValue)
@@ -363,6 +366,7 @@ import Testing
         await retry.value
         #expect(model.preferences.barCollapsed && collapsed.wrappedValue && model.error == nil)
         #expect(await runtime.prepareToClose(id) == nil)
+        #expect(retiredGenerations == ["old"])
         #expect(runtime.presentationCount == 0 && !runtime.configured && !scene.isRetained)
         #expect(model.closed && !runtime.release(["presentationID": id.uuidString]))
     }
@@ -377,7 +381,8 @@ import Testing
                 uiOnly: false, version: "1.2.3"))
         let runtime = MusicEmbeddedRuntime()
         defer { runtime.stop() }
-        #expect(runtime.install(scene, id: id))
+        var retiredGenerations: [String] = []
+        #expect(runtime.install(scene, id: id, onRetired: { retiredGenerations.append("old") }))
         let model = try #require(scene.settingsModel)
         let read = Task { await model.refresh() }
         try await settle { bridge.request("music.ui.settings") != nil }
@@ -397,7 +402,8 @@ import Testing
             MusicEmbeddedPresentation(
                 context: ["location": "settings", "section": "music"], client: nil,
                 uiOnly: true, version: "1.2.3"))
-        #expect(runtime.install(replacement, id: id))
+        #expect(
+            runtime.install(replacement, id: id, onRetired: { retiredGenerations.append("new") }))
         #expect(await close.value != nil)
         #expect(runtime.configured && runtime.presentationCount == 1 && replacement.isRetained)
         #expect(model.closed && !scene.isRetained)
@@ -406,7 +412,10 @@ import Testing
         for _ in 0..<20 { await Task.yield() }
         #expect(!model.loaded && !model.preferences.barCollapsed)
         #expect(runtime.presentationCount == 1 && replacement.isRetained)
+        #expect(retiredGenerations == ["old"])
         #expect(runtime.release(["presentationID": id.uuidString]))
+        await runtime.stopAndWait()
+        #expect(retiredGenerations == ["old", "new"])
     }
 
     @Test func settingsPresentationReleaseCancelsItsExactClientAndRejectsLateReply() async throws {
@@ -418,7 +427,8 @@ import Testing
                 context: ["location": "settings", "section": "music"], client: client,
                 uiOnly: false, version: "1.2.3"))
         let runtime = MusicEmbeddedRuntime()
-        #expect(runtime.install(scene, id: id))
+        var retiredAfterDrain = false
+        #expect(runtime.install(scene, id: id, onRetired: { retiredAfterDrain = true }))
         let controller = try #require(
             runtime.view([
                 "location": "settings", "section": "music", "presentationID": id.uuidString,
@@ -431,13 +441,38 @@ import Testing
         #expect(request.presentationID == id)
         #expect(request.operation == "music.ui.settings")
         #expect(runtime.release(["presentationID": id.uuidString]))
+        #expect(!retiredAfterDrain)
         await read.value
         #expect(bridge.cancelled.contains(request.token.uuidString))
         bridge.complete(try reply(collapsed: true))
         for _ in 0..<20 { await Task.yield() }
         #expect(model.closed && !model.loaded && !model.preferences.barCollapsed)
         #expect(runtime.presentationCount == 0)
-        runtime.stop()
+        await runtime.stopAndWait()
+        #expect(retiredAfterDrain)
+    }
+
+    @Test func stalePresentationSweepAndStopRetireEveryInstalledAdmissionOnce() async throws {
+        let runtime = MusicEmbeddedRuntime()
+        var retiredIDs: [UUID] = []
+        var installedIDs: [UUID] = []
+        for _ in 0..<(MusicEmbeddedRuntime.presentationLimit + 2) {
+            let id = UUID()
+            let scene = try #require(
+                MusicEmbeddedPresentation(
+                    context: ["location": "settings", "section": "music"], client: nil,
+                    uiOnly: true, version: "1.2.3"))
+            #expect(runtime.install(scene, id: id, onRetired: { retiredIDs.append(id) }))
+            installedIDs.append(id)
+            #expect(scene.isRetained)
+            scene.beginShutdown()
+            #expect(!scene.isRetained)
+        }
+        await runtime.stopAndWait()
+        #expect(retiredIDs.count == installedIDs.count)
+        #expect(Set(retiredIDs) == Set(installedIDs))
+        await runtime.stopAndWait()
+        #expect(retiredIDs.count == installedIDs.count)
     }
 
     @Test func originalSettingsControlsRenderUnshownAtBothWidthsThemesAndZoom() async throws {

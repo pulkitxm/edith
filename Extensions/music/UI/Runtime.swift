@@ -10,11 +10,12 @@ import SwiftUI
     private var closing: [UUID: MusicEmbeddedPresentation] = [:]
     private var closingTasks: [UUID: Task<Void, Never>] = [:]
     private var retired: [UUID: MusicEmbeddedPresentation] = [:]
+    private var retirement: [ObjectIdentifier: () -> Void] = [:]
     private var hasRemoteWork = false
     private var stopping = false
     static let presentationLimit = 16
 
-    func configure(_ input: NSDictionary) -> NSDictionary {
+    func configure(_ input: NSDictionary, onRetired: (() -> Void)? = nil) -> NSDictionary {
         guard !stopping else { return ["ok": false] as NSDictionary }
         guard let configuration = ExtensionUIConfiguration(context: input),
             configuration.extensionID == "music",
@@ -26,12 +27,14 @@ import SwiftUI
                 context: input, client: configuration.engineClient,
                 uiOnly: configuration.uiOnly, version: version)
         else { return ["ok": false] }
-        return install(scene, id: id) ? ["ok": true] : ["ok": false]
+        return install(scene, id: id, onRetired: onRetired) ? ["ok": true] : ["ok": false]
     }
 
     var presentationCount: Int { presentations.count + closing.count }
 
-    func install(_ scene: MusicEmbeddedPresentation, id: UUID) -> Bool {
+    func install(
+        _ scene: MusicEmbeddedPresentation, id: UUID, onRetired: (() -> Void)? = nil
+    ) -> Bool {
         guard !stopping else { retire(scene); return false }
         for key in Array(presentations.keys) where presentations[key]?.isRetained == false {
             if let scene = presentations.removeValue(forKey: key) { retire(scene) }
@@ -42,6 +45,7 @@ import SwiftUI
             retire(scene); return false
         }
         if let previous = presentations.removeValue(forKey: id) { retire(previous) }
+        retirement[ObjectIdentifier(scene)] = onRetired
         presentations[id] = scene
         hasRemoteWork = hasRemoteWork || scene.usesRemoteClient
         scene.attach()
@@ -123,6 +127,7 @@ import SwiftUI
         if let pending = closingTasks[id] { return pending }
         if drainAuxiliary { scene.beginShutdown(); closing[id] = scene } else { scene.shutdown() }
         retired[id] = scene
+        let onRetired = retirement.removeValue(forKey: ObjectIdentifier(scene))
         let task = Task { [weak self] in
             defer { self?.closing[id] = nil; self?.closingTasks[id] = nil; self?.retired[id] = nil }
             if drainAuxiliary {
@@ -130,6 +135,7 @@ import SwiftUI
                 await EmbeddedMusicBrowserSession.drainAll()
             }
             await scene.stopAndWait()
+            onRetired?()
         }
         closingTasks[id] = task
         return task
