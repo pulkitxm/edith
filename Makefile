@@ -194,6 +194,10 @@ package-extension-keep-awake:
 ci-extension-keep-awake-native:
 	/usr/bin/time -p python3 -B scripts/test-keep-awake-hosted-acceptance.py
 
+.PHONY: ci-extension-accounts-local
+ci-extension-accounts-local:
+	python3 -B scripts/test-account-sdk-local.py
+
 .PHONY: ci-extension-accounts
 ci-extension-accounts:
 	@test "$$GITHUB_ACTIONS" = true && test "$$RUNNER_ENVIRONMENT" = github-hosted && test "$$RUNNER_OS" = macOS
