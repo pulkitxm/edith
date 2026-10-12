@@ -172,6 +172,67 @@ private let frequent = [
         #expect(model.sections.flatMap(\.emoji).map(\.character) == ["🚀"])
         #expect(!model.isSearching)
     }
+
+    @Test func stopAndWaitJoinsEveryCancelledQueryAfterTheNewestStarts() async throws {
+        let fixture = EmojiPanelSearchFixture()
+        let model = EmojiPanelModel(
+            catalog: catalog, frequent: [], search: { await fixture.search($0) })
+        model.setQuery("smile")
+        let oldest = try #require(model.searchTask)
+        await fixture.waitUntilStarted(1)
+        model.setQuery("rocket")
+        let previous = try #require(model.searchTask)
+        await fixture.waitUntilStarted(2)
+        model.setQuery("love")
+        let latest = try #require(model.searchTask)
+        await fixture.waitUntilStarted(3)
+
+        model.stop()
+        let probe = EmojiStopProbe()
+        let draining = Task {
+            probe.markStarted()
+            await model.stopAndWait()
+            probe.finished = true
+        }
+        await probe.waitUntilStarted()
+        #expect(oldest.isCancelled)
+        #expect(previous.isCancelled)
+        #expect(latest.isCancelled)
+        await fixture.release(2, result: [catalog.emoji[1]])
+        await latest.value
+        await Task.yield()
+        #expect(!probe.finished)
+        await fixture.release(1, result: [catalog.emoji[2]])
+        await previous.value
+        await Task.yield()
+        #expect(!probe.finished)
+        await fixture.release(0, result: [catalog.emoji[0]])
+        await oldest.value
+        await draining.value
+        #expect(probe.finished)
+        #expect(!model.isSearching)
+        #expect(model.sections.flatMap(\.emoji) == catalog.emoji)
+        #expect(model.searchTask == nil)
+        model.setQuery("ignored")
+        #expect(model.query == "love")
+    }
+
+    private final class EmojiStopProbe {
+        var finished = false
+        private var started = false
+        private var startWaiter: CheckedContinuation<Void, Never>?
+
+        func markStarted() {
+            started = true
+            startWaiter?.resume()
+            startWaiter = nil
+        }
+
+        func waitUntilStarted() async {
+            guard !started else { return }
+            await withCheckedContinuation { startWaiter = $0 }
+        }
+    }
 }
 
 private actor EmojiPanelSearchFixture {
