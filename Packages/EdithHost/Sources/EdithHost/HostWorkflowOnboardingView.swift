@@ -116,6 +116,10 @@ struct HostWorkflowOnboardingView: View {
                         Text(HostMarketplaceCatalog.subtitles[entry.id] ?? entry.category).font(
                             .edithText(.caption)
                         ).foregroundStyle(.secondary)
+                        Text(model.reviewMetadata(for: entry.id).summary).font(
+                            .edithText(.caption)
+                        ).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("workflow.package-review.\(entry.id)")
                     }
                     Spacer()
                     if model.installedIDs.contains(entry.id) {
