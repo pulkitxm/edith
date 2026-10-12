@@ -1,10 +1,13 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { constants } from "node:fs";
 import {
+  chmod,
   copyFile,
   cp,
   lstat,
   mkdir,
+  open,
   readdir,
   readFile,
   readlink,
@@ -59,6 +62,7 @@ export function extensionUICarrierMetadata({
   version,
   hostABI,
   executableSHA256,
+  carrierExecutableSHA256,
   hostCodeRequirement,
   hostExecutablePath,
 }) {
@@ -68,6 +72,7 @@ export function extensionUICarrierMetadata({
     !versionPattern.test(version ?? "") ||
     !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(hostABI ?? "") ||
     !hashPattern.test(executableSHA256 ?? "") ||
+    !hashPattern.test(carrierExecutableSHA256 ?? "") ||
     typeof hostCodeRequirement !== "string" ||
     hostCodeRequirement.length < 1 ||
     hostCodeRequirement.length > 4096 ||
@@ -92,6 +97,7 @@ export function extensionUICarrierMetadata({
       EdithExtensionVersion: version,
       EdithHostABI: hostABI,
       EdithExecutableProvenance: executableSHA256,
+      EdithCarrierExecutableProvenance: carrierExecutableSHA256,
       EdithHostCodeRequirement: hostCodeRequirement,
       EdithHostExecutablePath: hostExecutablePath,
       EdithPayloadRelativePath: "Contents/Resources/Payload",
@@ -218,7 +224,102 @@ function sign(path, identity, development, entitlements) {
   );
 }
 
+export async function readBoundedCarrierBytes(descriptor, size) {
+  if (!Number.isSafeInteger(size) || size < 1 || size > 134217728)
+    throw new Error("Invalid frozen UI carrier byte bound");
+  const buffer = Buffer.alloc(size + 1);
+  let offset = 0;
+  while (offset < buffer.length) {
+    const { bytesRead } = await descriptor.read(
+      buffer,
+      offset,
+      buffer.length - offset,
+      null,
+    );
+    if (bytesRead === 0) break;
+    offset += bytesRead;
+  }
+  if (offset !== size)
+    throw new Error(
+      "The frozen UI carrier exceeds or falls short of its bound",
+    );
+  return buffer.subarray(0, offset);
+}
+
+export async function readFrozenUICarrier({
+  root,
+  frozenHostApp,
+  carrierTools,
+}) {
+  const verify = () =>
+    JSON.parse(
+      execFileSync(
+        "python3",
+        [
+          "-B",
+          resolve(root, "scripts/package_extension_lifecycle_tools.py"),
+          "--verify",
+          "--verify-carrier",
+          "--root",
+          root,
+          "--host",
+          frozenHostApp,
+          "--output",
+          carrierTools,
+        ],
+        { encoding: "utf8", stdio: "pipe", maxBuffer: 65536 },
+      ),
+    );
+  const receipt = verify();
+  const record = receipt.files.EdithExtensionCarrier;
+  const source = resolve(carrierTools, "EdithExtensionCarrier");
+  const descriptor = await open(
+    source,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
+  try {
+    const before = await descriptor.stat();
+    if (
+      !before.isFile() ||
+      before.uid !== process.getuid() ||
+      before.nlink !== 1 ||
+      before.mode & 0o022 ||
+      !(before.mode & 0o111) ||
+      before.size < 1 ||
+      before.size > 134217728 ||
+      before.size !== record.bytes ||
+      (before.mode & 0o777) !== record.mode
+    )
+      throw new Error(
+        "The frozen UI carrier is not an owned bounded executable",
+      );
+    const bytes = await readBoundedCarrierBytes(descriptor, record.bytes);
+    const after = await descriptor.stat();
+    if (
+      ["dev", "ino", "mode", "uid", "nlink", "size", "mtimeMs", "ctimeMs"].some(
+        (field) => before[field] !== after[field],
+      ) ||
+      bytes.length !== record.bytes ||
+      createHash("sha256").update(bytes).digest("hex") !== record.sha256 ||
+      JSON.stringify(verify()) !== JSON.stringify(receipt)
+    )
+      throw new Error("The frozen UI carrier changed during reading");
+    return {
+      bytes,
+      mode: record.mode,
+      sha256: record.sha256,
+      sourceCommit: receipt.sourceCommit,
+      hostExecutableSHA256: receipt.hostExecutableSHA256,
+    };
+  } finally {
+    await descriptor.close();
+  }
+}
+
 export async function buildExtensionUICarrier({
+  root = process.cwd(),
+  frozenHostApp = resolve(root, "local/minimal-host/Edith.app"),
+  carrierTools = resolve(root, "local/minimal-host/carrier-tools"),
   minimumSystemVersion,
   hostApp,
   payloadDirectory,
@@ -253,11 +354,17 @@ export async function buildExtensionUICarrier({
     throw new Error(
       "Ad-hoc UI carriers require a synthetic or development host",
     );
+  const carrierInput = await readFrozenUICarrier({
+    root,
+    frozenHostApp,
+    carrierTools,
+  });
   const metadata = extensionUICarrierMetadata({
     hostIdentifier,
     id,
     version,
     hostABI,
+    carrierExecutableSHA256: carrierInput.sha256,
     executableSHA256: createHash("sha256")
       .update(await readFile(source))
       .digest("hex"),
@@ -306,6 +413,21 @@ export async function buildExtensionUICarrier({
     identity: signingIdentity,
     development,
   });
+  const carrierExecutable = resolve(paths.contents, "MacOS/Edith");
+  await unlink(carrierExecutable);
+  await writeFile(carrierExecutable, carrierInput.bytes, {
+    flag: "wx",
+    mode: carrierInput.mode,
+  });
+  await chmod(carrierExecutable, carrierInput.mode);
+  if (
+    createHash("sha256")
+      .update(await readFile(carrierExecutable))
+      .digest("hex") !== carrierInput.sha256
+  )
+    throw new Error(
+      "The UI carrier executable differs from its frozen receipt",
+    );
   await cp(
     resolve(hostApp, "Contents/Resources/EdithHost_EdithHost.bundle"),
     resolve(paths.workerContents, "Resources/EdithHost_EdithHost.bundle"),
@@ -378,6 +500,9 @@ export async function buildExtensionUICarrier({
     workerIdentifier: metadata.workerIdentifier,
     extensionPointIdentifier: metadata.extensionPointIdentifier,
     executableSHA256: provenance.originalSHA256,
+    carrierExecutableSHA256: carrierInput.sha256,
+    carrierSourceCommit: carrierInput.sourceCommit,
+    carrierFrozenHostSHA256: carrierInput.hostExecutableSHA256,
     runtimeDependencies: provenance.runtimeDependencies,
   };
 }

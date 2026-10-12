@@ -10,6 +10,7 @@ public struct ExtensionUICarrier: Sendable {
     public let hostExecutablePath: String
     public let hostCodeRequirement: String
     public let executableProvenance: String
+    public let carrierExecutableProvenance: String
     public let payloadDirectory: URL
     private let extensionID: String
 
@@ -58,7 +59,9 @@ public struct ExtensionUICarrier: Sendable {
             !requirement.contains("\0"), !requirement.contains("\n"),
             !requirement.contains("\r"),
             let provenance = carrier["EdithExecutableProvenance"] as? String,
-            provenance.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil
+            provenance.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil,
+            let carrierProvenance = carrier["EdithCarrierExecutableProvenance"] as? String,
+            carrierProvenance.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil
         else { throw MarketplaceError.invalidArchive }
         var compiled: SecRequirement?
         guard
@@ -77,6 +80,7 @@ public struct ExtensionUICarrier: Sendable {
             "EdithHostCodeRequirement": requirement,
             "EdithHostExecutablePath": executablePath,
             "EdithExecutableProvenance": provenance,
+            "EdithCarrierExecutableProvenance": carrierProvenance,
             "EdithPayloadRelativePath": "Contents/Resources/Payload",
         ]
         guard shared.allSatisfy({ carrier[$0.key] as? String == $0.value }),
@@ -107,6 +111,7 @@ public struct ExtensionUICarrier: Sendable {
         hostExecutablePath = executablePath
         hostCodeRequirement = requirement
         executableProvenance = provenance
+        carrierExecutableProvenance = carrierProvenance
         workerIdentifier = "\(identifier).worker"
         extensionPointIdentifier = "\(host).ExtensionUI"
         extensionID = manifest.id

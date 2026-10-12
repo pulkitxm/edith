@@ -92,6 +92,14 @@ const swift = [
   `${developer}/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins`,
 ];
 execFileSync("swift", swift, { env: environment, stdio: "inherit" });
+const carrierBuild = [...swift];
+carrierBuild[carrierBuild.indexOf("--jobs") + 1] = "1";
+carrierBuild[carrierBuild.indexOf("EdithHost")] = "EdithExtensionCarrier";
+carrierBuild[
+  carrierBuild.indexOf(join(packageDirectory, ".build", "EdithHost-lto.o"))
+] = join(packageDirectory, ".build", "EdithExtensionCarrier-lto.o");
+execFileSync("swift", carrierBuild, { env: environment, stdio: "inherit" });
+
 const products = execFileSync(
   "swift",
   [
@@ -349,6 +357,25 @@ await writeFile(
 assert(
   bytes < 10_000_000,
   `The minimal host exceeds its 10 MB size limit: ${bytes}`,
+);
+const carrierTools = join(destination, "..", "carrier-tools");
+await rm(carrierTools, { recursive: true, force: true });
+execFileSync(
+  "python3",
+  [
+    "-B",
+    resolve(root, "scripts/package_extension_lifecycle_tools.py"),
+    "--root",
+    root,
+    "--host",
+    destination,
+    "--carrier-only",
+    "--carrier-products",
+    products,
+    "--output",
+    carrierTools,
+  ],
+  { env: environment, stdio: "inherit" },
 );
 const index = JSON.parse(
   await readFile(join(contents, "Resources/index.json"), "utf8"),

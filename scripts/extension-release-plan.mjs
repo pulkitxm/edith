@@ -13,6 +13,8 @@ export const workerRuntimeInputs = [
   "scripts/build-minimal-host.mjs",
   "scripts/package-shipping-host.py",
   "Packages/EdithHost/Sources/HostBootstrap",
+  "Packages/EdithHost/Sources/EdithExtensionCarrier",
+  "scripts/package_extension_lifecycle_tools.py",
   "Packages/EdithHost/Sources/EdithHost/HostEntry.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostPublicLauncher.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceNavigationClient.swift",

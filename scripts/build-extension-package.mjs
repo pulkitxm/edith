@@ -276,6 +276,8 @@ export async function buildExtensionPackage({
   version,
   tagOverride,
   containedHostApp = process.env.EXTENSION_CONTAINING_HOST_APP,
+  carrierTools = process.env.EXTENSION_UI_CARRIER_TOOLS ??
+    resolve(root, "local/minimal-host/carrier-tools"),
 }) {
   const definitions = JSON.parse(
     await readFile(resolve(root, "Extensions/manifest.json"), "utf8"),
@@ -780,6 +782,9 @@ export async function buildExtensionPackage({
     JSON.stringify(payloadManifest),
   );
   const uiCarrier = await buildExtensionUICarrier({
+    root,
+    carrierTools,
+    frozenHostApp: resolve(root, "local/minimal-host/Edith.app"),
     minimumSystemVersion: definition.minimumSystemVersion,
     hostApp: containedHostApp,
     payloadDirectory: payload,

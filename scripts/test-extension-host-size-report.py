@@ -34,6 +34,12 @@ class HostSizeReportTests(unittest.TestCase):
         self.executable = self.app / "Contents/MacOS/Edith"
         self.executable.parent.mkdir(parents=True)
         self.executable.write_bytes(b"synthetic host fixture")
+        self.carrier = self.root / "carrier"
+        self.carrier.write_bytes(b"synthetic tiny carrier")
+        self.carrier_input = {"path": self.carrier, "sha256": hashlib.sha256(self.carrier.read_bytes()).hexdigest(), "sourceCommit": "a" * 40}
+        carrier = patch.object(report, "carrier_input", return_value=self.carrier_input)
+        carrier.start()
+        self.addCleanup(carrier.stop)
         self.packages = self.root / "packages"
         self.packages.mkdir()
         normalization = patch.object(report, "unsigned_executable_digest", side_effect=lambda path:
@@ -80,12 +86,12 @@ class HostSizeReportTests(unittest.TestCase):
         host_hash = report.digest_file(self.executable)
         info = {"CFBundleExecutable": "Edith", "EdithHostABI": "edith-host-2", "EdithExtensionID": identifier,
             "EdithExtensionVersion": metadata["version"], "EdithHostIdentifier": "com.example.fixture",
-            "EdithExecutableProvenance": provenance or host_hash}
+            "EdithExecutableProvenance": provenance or host_hash, "EdithCarrierExecutableProvenance": self.carrier_input["sha256"]}
         entries = {f"{nested}/package.json": json.dumps({key: metadata[key]
             for key in ["id", "version", "hostABI", "architecture", "dependencies", "minimumSystemVersion"]}).encode()}
         for number, bundle in enumerate([carrier, worker]):
             entries[f"{bundle}/Contents/Info.plist"] = plistlib.dumps(info)
-            entries[f"{bundle}/Contents/MacOS/Edith"] = executable or self.executable.read_bytes() + f"|signature:{number}".encode()
+            entries[f"{bundle}/Contents/MacOS/Edith"] = executable or (self.carrier if bundle == carrier else self.executable).read_bytes() + f"|signature:{number}".encode()
         for role, bundle in (contained_roles or {}).items():
             entries[f"{bundle}/Contents/Info.plist"] = plistlib.dumps({**info, "EdithContainedRole": role,
                 "EdithContainedExtensionID": identifier})
@@ -368,10 +374,46 @@ class HostSizeReportTests(unittest.TestCase):
             self.assertGreater(executable["installedBytes"], self.executable.stat().st_size)
             self.assertEqual(executable["codeIdentity"]["signedSHA256"], executable["sha256"])
             self.assertEqual(executable["codeIdentity"]["signedBytes"], executable["installedBytes"])
-            self.assertEqual(executable["codeIdentity"]["normalizedUnsignedSHA256"], provenance["normalizedUnsignedSHA256"])
+            expected = provenance["carrierNormalizedUnsignedSHA256"] if "/Contents/Extensions/" not in executable["member"] else provenance["normalizedUnsignedSHA256"]
+            self.assertEqual(executable["codeIdentity"]["normalizedUnsignedSHA256"], expected)
             self.assertIn("rawUnsignedSHA256", executable["codeIdentity"])
         self.assertEqual(result["appWithMigratedExtensions"]["installedBytes"],
             result["appWithoutExtensions"]["installedBytes"] + sum(entry["installedBytes"] for entry in result["packages"]))
+
+    def test_identity_reread_must_match_the_frozen_receipt(self):
+        self.final_fixture()
+        self.sealed_package("sample")
+        original = report.executable_identity.side_effect
+        def identity(path):
+            result = original(path)
+            if path == self.carrier:
+                result["signedSHA256"] = "b" * 64
+            return result
+        with patch.object(report, "executable_identity", side_effect=identity), self.assertRaisesRegex(ValueError, "identity differs from its receipt"):
+            self.verify_host()
+
+    def test_outer_and_inner_cannot_swap_code_or_self_declare_carrier_provenance(self):
+        self.final_fixture()
+        entries = self.sealed_package("sample")
+        carrier = "sample/ExtensionCarrier.app"
+        worker = carrier + "/Contents/Extensions/ExtensionWorker.appex"
+        for target, source in [(carrier, self.executable), (worker, self.carrier)]:
+            original = entries[f"{target}/Contents/MacOS/Edith"]
+            entries[f"{target}/Contents/MacOS/Edith"] = source.read_bytes()
+            self.write_package_entries("sample", entries)
+            with self.assertRaisesRegex(ValueError, "executable code differs"):
+                self.verify_host()
+            entries[f"{target}/Contents/MacOS/Edith"] = original
+        for bundle in [carrier, worker]:
+            info = plistlib.loads(entries[f"{bundle}/Contents/Info.plist"])
+            info["EdithCarrierExecutableProvenance"] = "b" * 64
+            entries[f"{bundle}/Contents/Info.plist"] = plistlib.dumps(info)
+        self.write_package_entries("sample", entries)
+        with self.assertRaises(ValueError):
+            self.verify_host()
+        self.carrier_input["sourceCommit"] = "b" * 40
+        with self.assertRaisesRegex(ValueError, "frozen source"):
+            self.verify_host()
 
     def test_sealed_provenance_cannot_disguise_foreign_executable_code(self):
         self.final_fixture()

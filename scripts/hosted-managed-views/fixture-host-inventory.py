@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from macho_code_identity import executable_identity
+from package_extension_lifecycle_tools import carrier_input
 
 
 def resources(root):
@@ -76,6 +77,12 @@ def fixture_host_inventory(host, payload, metadata, *, identity=executable_ident
         raise ValueError('Re-signing changed the source Host executable code')
     if resources(source_host / 'Contents/Resources/EdithHost_EdithHost.bundle') != expected_resources:
         raise ValueError('Re-signing changed the source Host resources')
+    carrier_source = carrier_input()
+    if carrier_source["sourceCommit"] != metadata["sourceCommit"] or hashlib.sha256(carrier_source["path"].read_bytes()).hexdigest() != carrier_source["sha256"]:
+        raise ValueError("Frozen carrier input differs")
+    carrier_code = identity(carrier_source["path"])
+    if carrier_code["signedSHA256"] != carrier_source["sha256"]:
+        raise ValueError("Frozen carrier identity differs from its receipt")
     carrier = payload / 'ExtensionCarrier.app'
     worker = carrier / 'Contents/Extensions/ExtensionWorker.appex'
     copies = [('carrier', carrier, identifier + '.extension.' + owner), ('worker', worker, identifier + '.extension.' + owner + '.worker')]
@@ -91,10 +98,13 @@ def fixture_host_inventory(host, payload, metadata, *, identity=executable_ident
         if role == 'cameraCarrier':
             if info.get('EdithContainedRole') != role or info.get('EdithContainedExtensionID') != owner or info.get('EdithCameraTransport') != 'obs':
                 raise ValueError('Camera auxiliary carrier ownership differs')
+        elif info.get("EdithCarrierExecutableProvenance") != carrier_source["sha256"]:
+            raise ValueError("Fixture carrier input provenance differs")
         elif info.get('EdithExtensionID') != owner or info.get('EdithExtensionVersion') != metadata['version'] or info.get('EdithHostExecutablePath') != str(host / 'Contents/MacOS/Edith'):
             raise ValueError('UI carrier sealed ownership differs')
         copied_code = identity(bundle / 'Contents/MacOS/Edith')
-        if copied_code['normalizedUnsignedSHA256'] != host_code['normalizedUnsignedSHA256']:
+        expected_code = carrier_code if role == "carrier" else host_code
+        if copied_code['normalizedUnsignedSHA256'] != expected_code['normalizedUnsignedSHA256']:
             raise ValueError('Fixture carrier executable code differs')
         copied_resources = resources(bundle / 'Contents/Resources/EdithHost_EdithHost.bundle')
         if copied_resources != expected_resources:
@@ -106,7 +116,7 @@ def fixture_host_inventory(host, payload, metadata, *, identity=executable_ident
     actual_entitlements = entitlements(worker)
     if actual_entitlements != expected_entitlements or any(type(value) is not bool for value in actual_entitlements.values()):
         raise ValueError('Fixture worker capabilities differ')
-    return {'schema': 1, 'extensionID': owner, 'hostIdentifier': identifier, 'sourceHostCode': source_code, 'fixtureHostCode': host_code, 'sourceHostResourcesUnchanged': True, 'copies': result, 'workerEntitlements': actual_entitlements, 'productionExecutableUnchangedProof': False, 'scope': 'Synthetic Host executable carriers only, excluded from native role payload equivalence', 'codeExecuted': False}
+    return {'schema': 1, 'extensionID': owner, 'hostIdentifier': identifier, 'sourceHostCode': source_code, 'fixtureHostCode': host_code, 'carrierSourceCode': carrier_code, 'sourceHostResourcesUnchanged': True, 'copies': result, 'workerEntitlements': actual_entitlements, 'productionExecutableUnchangedProof': False, 'scope': 'Synthetic Host executable carriers only, excluded from native role payload equivalence', 'codeExecuted': False}
 
 
 if __name__ == '__main__':

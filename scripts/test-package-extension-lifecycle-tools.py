@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 from pathlib import Path
 import tempfile
@@ -13,6 +14,9 @@ class LifecycleToolsTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
+        revision = patch('package_extension_lifecycle_tools.subprocess.check_output', return_value='a' * 40 + '\n')
+        revision.start()
+        self.addCleanup(revision.stop)
         self.host = self.root / 'local/Edith.app'
         self.host_products = self.root / 'Packages/EdithHost/.build/arm64/debug'
         self.marketplace_products = self.root / 'Packages/ExtensionMarketplace/.build/arm64/debug'
@@ -24,6 +28,10 @@ class LifecycleToolsTests(unittest.TestCase):
         self.write(self.host_products / FILES[0], b'synthetic lifecycle executable', 0o751)
         self.write(self.marketplace_products / FILES[1], b'synthetic marketplace executable', 0o755)
         self.write(self.host_products / FILES[2], self.index)
+        self.write(self.host_products / FILES[3], b'synthetic carrier executable', 0o755)
+        executable = b'synthetic minimal host'
+        self.write(self.host / 'Contents/MacOS/Edith', executable, 0o755)
+        self.write(self.host.parent / 'build-metadata.json', json.dumps({'sourceCommit': 'a' * 40, 'sourceTreeDirty': False, 'hostExecutableSHA256': hashlib.sha256(executable).hexdigest()}).encode())
 
     def write(self, path, data, mode=0o644):
         path = self.root / path
@@ -39,7 +47,7 @@ class LifecycleToolsTests(unittest.TestCase):
         receipt = self.package()
         self.assertEqual(verify_tools(self.root, self.host, self.output), receipt)
         self.assertEqual((self.output / FILES[2]).read_bytes(), self.index)
-        for name, source in [(FILES[0], self.host_products / FILES[0]), (FILES[1], self.marketplace_products / FILES[1])]:
+        for name, source in [(FILES[0], self.host_products / FILES[0]), (FILES[1], self.marketplace_products / FILES[1]), (FILES[3], self.host_products / FILES[3])]:
             self.assertEqual((self.output / name).read_bytes(), source.read_bytes())
             self.assertEqual((self.output / name).stat().st_mode & 0o777, source.stat().st_mode & 0o777)
         self.assertEqual(set(receipt['files']), set(FILES))
@@ -157,6 +165,68 @@ class LifecycleToolsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             verify_tools(self.root, self.host, self.output)
 
+
+    def test_source_and_frozen_host_cannot_be_rebound_after_packaging(self):
+        self.package()
+        for key, value in [('sourceCommit', 'b' * 40), ('hostExecutableSHA256', '0' * 64), ('schema', 1)]:
+            receipt_path = self.output / RECEIPT
+            original = receipt_path.read_bytes()
+            receipt = json.loads(original)
+            receipt[key] = value
+            receipt_path.write_text(json.dumps(receipt))
+            with self.assertRaises(ValueError):
+                verify_tools(self.root, self.host, self.output)
+            receipt_path.write_bytes(original)
+        self.write(self.host / 'Contents/MacOS/Edith', b'changed host', 0o755)
+        with self.assertRaisesRegex(ValueError, 'frozen source'):
+            verify_tools(self.root, self.host, self.output)
+
+    def test_carrier_must_be_present_owned_executable_and_single_link(self):
+        carrier = self.host_products / FILES[3]
+        original = carrier.read_bytes()
+        carrier.unlink()
+        with self.assertRaises(FileNotFoundError):
+            self.package()
+        carrier.write_bytes(original)
+        for mode in (0o644, 0o777):
+            carrier.chmod(mode)
+            with self.assertRaises(ValueError):
+                self.package()
+        carrier.chmod(0o755)
+        link = carrier.with_suffix('.linked')
+        os.link(carrier, link)
+        with self.assertRaises(ValueError):
+            self.package()
+        link.unlink()
+        carrier.unlink()
+        carrier.symlink_to(self.host_products / FILES[0])
+        with self.assertRaises(ValueError):
+            self.package()
+        self.assertFalse(self.output.exists())
+
+    def test_dirty_or_foreign_frozen_metadata_is_rejected(self):
+        path = self.host.parent / 'build-metadata.json'
+        original = path.read_bytes()
+        for key, value in [('sourceCommit', 'b' * 40), ('sourceTreeDirty', True), ('hostExecutableSHA256', '0' * 64)]:
+            metadata = json.loads(original)
+            metadata[key] = value
+            path.write_text(json.dumps(metadata))
+            with self.assertRaisesRegex(ValueError, 'frozen source'):
+                self.package()
+            self.assertFalse(self.output.exists())
+
+    def test_carrier_only_input_reuses_source_seals_without_harness_payload(self):
+        receipt = package_tools(self.root, self.host, None, None, self.output, self.host_products, True)
+        self.assertEqual(receipt['kind'], 'carrier')
+        self.assertEqual(set(receipt['files']), set(FILES[2:]))
+        self.assertFalse((self.output / FILES[0]).exists())
+        self.assertEqual(verify_tools(self.root, self.host, self.output, carrier=True), receipt)
+        with self.assertRaises(ValueError):
+            verify_tools(self.root, self.host, self.output)
+        path = self.output / FILES[3]
+        path.write_bytes(b'tampered')
+        with self.assertRaises(ValueError):
+            verify_tools(self.root, self.host, self.output, carrier=True)
 
 if __name__ == '__main__':
     unittest.main()

@@ -419,19 +419,23 @@ test("frozen lifecycle tools include and verify their exact sibling source index
   expect(text(plan)).toContain("test-package-extension-lifecycle-tools.py");
 });
 
-test("lifecycle tool packaging does not alter any shipping package fingerprint input", () => {
+test("carrier packaging changes rebuild all shipping packages while proof-only edits do not", () => {
   const definitions = JSON.parse(
     readFileSync("Extensions/manifest.json", "utf8"),
   );
   expect(definitions).toHaveLength(39);
   expect(
     planExtensionBuilds(definitions, [
-      "scripts/package_extension_lifecycle_tools.py",
       "scripts/test-package-extension-lifecycle-tools.py",
       "scripts/extensions-workflow.test.js",
       ".github/workflows/extensions.yml",
     ]),
   ).toEqual([]);
+  for (const path of [
+    "scripts/package_extension_lifecycle_tools.py",
+    "Packages/EdithHost/Sources/EdithExtensionCarrier/Entry.swift",
+  ])
+    expect(planExtensionBuilds(definitions, [path])).toHaveLength(39);
 });
 
 test("package build job names bind the closed artifact intake to one owner", () => {
@@ -777,5 +781,19 @@ test("shipping native controls run before the broad marketplace suite with verif
   });
   expect(steps[general].run).toBe(
     "make ci-marketplace-runtime ci-extension-keep-awake ci-comments",
+  );
+});
+
+test("frozen outer carrier uses the host build and restored source bound tools", () => {
+  const compile = frozen.steps.find((step) =>
+    step.run?.includes("--carrier-products"),
+  );
+  expect(compile.run).toContain("--configuration release --show-bin-path");
+  expect(compile.run).toContain("--output local/extension-tools");
+  const packageStep = build.steps.find(
+    (step) => step.env?.EXTENSION_CONTAINING_HOST_APP,
+  );
+  expect(packageStep.env.EXTENSION_UI_CARRIER_TOOLS).toBe(
+    "local/extension-tools",
   );
 });

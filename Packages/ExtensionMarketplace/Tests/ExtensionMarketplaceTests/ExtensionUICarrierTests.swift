@@ -27,6 +27,7 @@ private struct UICarrierFixture {
             "EdithHostExecutablePath": "/tmp/fixture/Host.app/Contents/MacOS/Edith",
             "EdithHostCodeRequirement": "identifier \"com.pulkit.edith.tests.ui\"",
             "EdithExecutableProvenance": String(repeating: "a", count: 64),
+            "EdithCarrierExecutableProvenance": String(repeating: "b", count: 64),
             "EdithPayloadRelativePath": "Contents/Resources/Payload",
         ]
         var applicationInfo = shared
@@ -165,6 +166,7 @@ func signedWorkerRequiresExactlyItsOwnedCapabilities(id: String) throws {
 
 @Test(arguments: [
     "EdithHostABI", "EdithExtensionID", "CFBundleIdentifier", "EdithPayloadRelativePath",
+    "EdithCarrierExecutableProvenance",
 ])
 func changedWorkerSealedMetadataIsRejected(key: String) throws {
     let fixture = try UICarrierFixture()
@@ -275,5 +277,21 @@ func archiveValidatesCarrierMetadataBeforeItCanBeCommitted(forged: Bool) throws 
         #expect(
             !FileManager.default.fileExists(
                 atPath: installed.appendingPathComponent("app.bundle").path))
+    }
+}
+
+@Test
+func carrierAndInnerProvenanceRemainDistinctAndRequired() throws {
+    let fixture = try UICarrierFixture()
+    defer { fixture.clean() }
+    let carrier = try ExtensionUICarrier(payload: fixture.root, package: fixture.package)
+    #expect(carrier.executableProvenance == String(repeating: "a", count: 64))
+    #expect(carrier.carrierExecutableProvenance == String(repeating: "b", count: 64))
+    for value in ["", String(repeating: "b", count: 63), String(repeating: "g", count: 64)] {
+        try fixture.mutate(fixture.carrier, key: "EdithCarrierExecutableProvenance", value: value)
+        try fixture.mutate(fixture.worker, key: "EdithCarrierExecutableProvenance", value: value)
+        #expect(throws: MarketplaceError.invalidArchive) {
+            try ExtensionUICarrier(payload: fixture.root, package: fixture.package)
+        }
     }
 }
