@@ -284,7 +284,7 @@ console.log(JSON.stringify({steps: workflow.jobs.tests.steps, required: contract
         gate = runpy.run_path(str(ROOT / "scripts/make-resource-gate.py"))
         self.assertEqual(gate["profile_for"]("ci-extension-keep-awake-peer-transport")[:2], (2.5, 2560.0))
         tests = (ROOT / "Packages/ExtensionSupport/Tests/EdithExtensionSupportTests/ExtensionPeerSocketTests.swift").read_text()
-        self.assertEqual(len(re.findall(r"@Test\b", tests)), 7)
+        self.assertEqual(len(re.findall(r"@Test\b", tests)), 12)
         existing = (ROOT / "Packages/ExtensionSupport/Tests/EdithExtensionSupportTests/ExtensionPeerTests.swift").read_text()
         for name in ["staleIdentitiesAndLinkedRegistrationFilesCannotSelectAPeer", "restartWaitsForTheRetiredGenerationBeforeAdmittingCommands", "commandCapacityAndShutdownReleaseEveryRequest"]:
             self.assertIn(name, existing)

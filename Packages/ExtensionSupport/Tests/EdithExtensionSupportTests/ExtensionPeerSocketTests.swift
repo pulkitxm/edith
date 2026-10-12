@@ -163,4 +163,137 @@ import Testing
             Issue.record("A retired connection must not access a reused descriptor.")
         } catch ExtensionPeerError.unavailable {}
     }
+
+    private func connectedPair() throws
+        -> (ExtensionPeerSocketConnection, ExtensionPeerSocketConnection)
+    {
+        try ExtensionPeerSocket.prepare()
+        let path = ExtensionPeerSocket.path("peer-identity-fixture.\(UUID().uuidString)")
+        let listener = try ExtensionPeerSocketConnection()
+        defer { listener.close(); unlink(path) }
+        var address = sockaddr_un()
+        guard path.utf8.count < MemoryLayout.size(ofValue: address.sun_path) else {
+            throw ExtensionPeerError.unavailable
+        }
+        address.sun_family = sa_family_t(AF_UNIX)
+        address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
+        withUnsafeMutableBytes(of: &address.sun_path) {
+            $0.copyBytes(from: Array(path.utf8) + [0])
+        }
+        let bound = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.bind(listener.descriptor, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        guard bound == 0, chmod(path, 0o600) == 0, Darwin.listen(listener.descriptor, 1) == 0 else {
+            throw ExtensionPeerError.unavailable
+        }
+        let client = try ExtensionPeerSocketConnection()
+        try client.connect(path: path, deadline: DispatchTime.now() + 1)
+        let accepted = Darwin.accept(listener.descriptor, nil, nil)
+        guard accepted >= 0 else { throw ExtensionPeerError.unavailable }
+        let server = try ExtensionPeerSocketConnection(descriptor: accepted)
+        return (client, server)
+    }
+
+    private func waitForPeerDisconnect(
+        _ connection: ExtensionPeerSocketConnection, deadline: DispatchTime
+    ) throws {
+        while true {
+            try connection.check(deadline: deadline)
+            var pid: Int32 = 0
+            var size = socklen_t(MemoryLayout<Int32>.size)
+            let result = getsockopt(
+                connection.descriptor, SOL_LOCAL, LOCAL_PEERPID, &pid, &size)
+            let error = errno
+            if result == -1, error == ENOTCONN { return }
+            guard result == 0, size == MemoryLayout<Int32>.size else {
+                throw ExtensionPeerError.unavailable
+            }
+            usleep(1_000)
+        }
+    }
+
+    @Test func revalidationRequiresKernelCapturedPeer() throws {
+        let (client, server) = try connectedPair()
+        defer { client.close(); server.close() }
+        let peer = try #require(ExtensionPeerProcess.read(getpid()))
+        do {
+            try client.revalidatePeer(expected: peer.birth, deadline: DispatchTime.now() + 1)
+            Issue.record("An uncaptured peer must not qualify.")
+        } catch ExtensionPeerError.unavailable {}
+    }
+
+    @Test func completeResponseCloseRetainsStrictCapturedIdentity() throws {
+        let (client, server) = try connectedPair()
+        defer { client.close(); server.close() }
+        let peer = try #require(ExtensionPeerProcess.read(getpid()))
+        let deadline = DispatchTime.now() + 1
+        try client.capturePeer(expected: peer.birth, deadline: deadline)
+        let request = try ExtensionPeerFrame.encode(Data([1]))
+        try client.writeFrame(request, deadline: deadline)
+        _ = try server.readFrame(deadline: deadline)
+        let payload = Data([0, 255, 1, 127])
+        var length = UInt32(payload.count).bigEndian
+        var response = withUnsafeBytes(of: &length) { Data($0) }
+        response.append(payload)
+        try server.writeFrame(response, deadline: deadline)
+        server.close()
+        try waitForPeerDisconnect(client, deadline: deadline)
+        var uid: uid_t = 0
+        var gid: gid_t = 0
+        #expect(getpeereid(client.descriptor, &uid, &gid) == 0)
+        #expect(uid == getuid())
+        try client.revalidatePeer(expected: peer.birth, deadline: deadline)
+        #expect(try client.readFrame(deadline: deadline) == payload)
+        try client.revalidatePeer(expected: peer.birth, deadline: deadline)
+        #expect(peer.isCurrent)
+    }
+
+    @Test(arguments: [false, true])
+    func initialCaptureRejectsWrongExpectedBirth(_ wrongPID: Bool) throws {
+        let (client, server) = try connectedPair()
+        defer { client.close(); server.close() }
+        let peer = try #require(ExtensionPeerProcess.read(getpid()))
+        let wrong = ExtensionProcessIdentity(
+            pid: wrongPID ? peer.birth.pid + 1 : peer.birth.pid,
+            generation: wrongPID ? peer.birth.generation : peer.birth.generation + ".different")
+        do {
+            try client.capturePeer(expected: wrong, deadline: DispatchTime.now() + 1)
+            Issue.record("A mismatched registered process must not qualify.")
+        } catch ExtensionPeerError.unavailable {}
+        do {
+            try client.revalidatePeer(expected: peer.birth, deadline: DispatchTime.now() + 1)
+            Issue.record("A failed capture must leave no authenticated peer.")
+        } catch ExtensionPeerError.unavailable {}
+    }
+
+    @Test func postCloseRevalidationRejectsChangedExpectedBirth() throws {
+        let (client, server) = try connectedPair()
+        defer { client.close(); server.close() }
+        let peer = try #require(ExtensionPeerProcess.read(getpid()))
+        let deadline = DispatchTime.now() + 1
+        try client.capturePeer(expected: peer.birth, deadline: deadline)
+        server.close()
+        try waitForPeerDisconnect(client, deadline: deadline)
+        let wrong = ExtensionProcessIdentity(
+            pid: peer.birth.pid, generation: peer.birth.generation + ".different")
+        do {
+            try client.revalidatePeer(expected: wrong, deadline: deadline)
+            Issue.record("Peer closure must not admit a different process birth.")
+        } catch ExtensionPeerError.unavailable {}
+    }
+
+    @Test func capturedPeerCannotBeReplacedByAnotherCapture() throws {
+        let (client, server) = try connectedPair()
+        defer { client.close(); server.close() }
+        let peer = try #require(ExtensionPeerProcess.read(getpid()))
+        let deadline = DispatchTime.now() + 1
+        try client.capturePeer(expected: peer.birth, deadline: deadline)
+        do {
+            try client.capturePeer(expected: peer.birth, deadline: deadline)
+            Issue.record("A captured connection identity must remain immutable.")
+        } catch ExtensionPeerError.unavailable {}
+        try client.revalidatePeer(expected: peer.birth, deadline: deadline)
+    }
 }

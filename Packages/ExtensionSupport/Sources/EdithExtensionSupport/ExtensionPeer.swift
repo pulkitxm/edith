@@ -122,6 +122,7 @@ final class ExtensionPeerSocketConnection: @unchecked Sendable {
     private let lock = NSLock()
     private var cancelled = false
     private var closed = false
+    private var authenticatedPeer: ExtensionPeerProcess?
 
     init(descriptor: Int32) throws {
         self.descriptor = descriptor
@@ -236,10 +237,7 @@ final class ExtensionPeerSocketConnection: @unchecked Sendable {
         }
     }
 
-    func authenticate(
-        expected: ExtensionProcessIdentity, peer: ExtensionPeerProcess? = nil,
-        deadline: DispatchTime
-    ) throws -> ExtensionPeerProcess {
+    func capturePeer(expected: ExtensionProcessIdentity, deadline: DispatchTime) throws {
         try check(deadline: deadline)
         var uid: uid_t = 0
         var gid: gid_t = 0
@@ -249,14 +247,32 @@ final class ExtensionPeerSocketConnection: @unchecked Sendable {
             getsockopt(descriptor, SOL_LOCAL, LOCAL_PEERPID, &pid, &size) == 0,
             size == MemoryLayout<Int32>.size,
             let actual = ExtensionPeerProcess.read(pid), actual.birth == expected,
-            actual.isCurrent, peer == nil || actual == peer
+            actual.isCurrent,
+            lock.withLock({
+                guard !closed, !cancelled, authenticatedPeer == nil else { return false }
+                authenticatedPeer = actual
+                return true
+            })
         else {
             try check(deadline: deadline)
             ExtensionPeerFailureDiagnostics.report(.clientAuthentication)
             throw ExtensionPeerError.unavailable
         }
         try check(deadline: deadline)
-        return actual
+    }
+
+    func revalidatePeer(expected: ExtensionProcessIdentity, deadline: DispatchTime) throws {
+        try check(deadline: deadline)
+        var uid: uid_t = 0
+        var gid: gid_t = 0
+        guard let peer = lock.withLock({ authenticatedPeer }), peer.birth == expected,
+            getpeereid(descriptor, &uid, &gid) == 0, uid == getuid(), peer.isCurrent
+        else {
+            try check(deadline: deadline)
+            ExtensionPeerFailureDiagnostics.report(.clientAuthentication)
+            throw ExtensionPeerError.unavailable
+        }
+        try check(deadline: deadline)
     }
 
     func writeFrame(_ frame: Data, deadline: DispatchTime) throws {
@@ -393,14 +409,14 @@ private final class ExtensionPeerCall: @unchecked Sendable {
                 socket.st_mode & 0o777 == 0o600
             else { throw ExtensionPeerError.unavailable }
             try connection.connect(path: path, deadline: deadline)
-            let peer = try connection.authenticate(
+            try connection.capturePeer(
                 expected: registration.process, deadline: deadline)
             try connection.writeFrame(frame, deadline: deadline)
-            _ = try connection.authenticate(
-                expected: registration.process, peer: peer, deadline: deadline)
+            try connection.revalidatePeer(
+                expected: registration.process, deadline: deadline)
             let data = try connection.readFrame(deadline: deadline)
-            _ = try connection.authenticate(
-                expected: registration.process, peer: peer, deadline: deadline)
+            try connection.revalidatePeer(
+                expected: registration.process, deadline: deadline)
             try connection.check(deadline: deadline)
             try receive(data, connection: connection, deadline: deadline)
         } catch { finish(.failure(error)) }
