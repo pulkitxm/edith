@@ -707,6 +707,7 @@ struct TimeLapseSavedRecordingScope: Sendable {
     let metadata: URL
     let video: URL
     let destination: URL
+    let staging: URL
 
     init(session: String, root: String, phase: String, metadata: URL, video: URL, destination: URL)
         throws
@@ -731,6 +732,8 @@ struct TimeLapseSavedRecordingScope: Sendable {
         self.metadata = metadata
         self.video = video
         self.destination = destination
+        staging = expectedDestination.deletingLastPathComponent()
+            .appendingPathComponent("Recording.partial.mp4")
     }
 
     private static func matches(_ actual: URL, _ expected: URL) -> Bool {
