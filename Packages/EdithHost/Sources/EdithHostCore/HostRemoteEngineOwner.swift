@@ -40,11 +40,17 @@ final class HostRemoteEngineOwner {
     #endif
 
     func validate() throws {
+        try validateIdentity()
+        let id = configuration.package.id
+        guard !marketplace.pendingRemovalIDs.contains(id),
+            marketplace.sessions.activeIDs.contains(id)
+        else { throw HostWorkerError.rejected }
+    }
+
+    private func validateIdentity() throws {
         let id = configuration.package.id
         guard !configuration.uiOnly,
             marketplace.installed[id] == configuration.package,
-            !marketplace.pendingRemovalIDs.contains(id),
-            marketplace.sessions.activeIDs.contains(id),
             marketplace.sessions.versions[id] == configuration.package.version,
             marketplace.sessions.processIdentifiers[id] == process.pid,
             process.isRunning
@@ -58,7 +64,11 @@ final class HostRemoteEngineOwner {
         }
         pending.insert(request.token)
         defer { pending.remove(request.token) }
-        try validate()
+        if HostRemoteInvocationAdmission.current?.authorizes(request.token) == true {
+            try validateIdentity()
+        } else {
+            try validate()
+        }
         try Task.checkCancellation()
         let endpoint = try ExtensionPeerEndpoint(
             namespace: marketplace.identity.identifier, owner: configuration.package.id,
@@ -67,12 +77,8 @@ final class HostRemoteEngineOwner {
             request.operation, payload: request.payload, timeout: request.timeout,
             token: request.token)
         try Task.checkCancellation()
-        let id = configuration.package.id
-        guard pending.contains(request.token), !configuration.uiOnly,
-            marketplace.installed[id] == configuration.package,
-            marketplace.sessions.versions[id] == configuration.package.version,
-            marketplace.sessions.processIdentifiers[id] == process.pid, process.isRunning
-        else { throw HostWorkerError.rejected }
+        try validateIdentity()
+        guard pending.contains(request.token) else { throw HostWorkerError.rejected }
         guard result.count <= ExtensionEngineWire.maximumPayloadBytes,
             (try? JSONSerialization.jsonObject(with: result, options: .fragmentsAllowed)) != nil
         else { throw HostWorkerError.invalidResponse }

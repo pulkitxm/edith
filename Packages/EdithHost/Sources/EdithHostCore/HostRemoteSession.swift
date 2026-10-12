@@ -58,6 +58,7 @@ public final class HostRemoteSession {
     private static var retained: [UUID: HostRemoteSession] = [:]
     private let executable: URL
     private let executeEngine: HostRemoteEngineReceiver.Execute
+    private let admitEngine: @MainActor @Sendable (ExtensionEngineRequest) -> Bool
     private let receive: @MainActor (HostRemoteEvent) -> Void
     private var configuring: Task<Void, any Error>?
     private var activationExpiry: Task<Void, Never>?
@@ -96,6 +97,7 @@ public final class HostRemoteSession {
     private init(
         identity: AppExtensionIdentity, configuration: HostRemoteConfiguration,
         executable: URL, lease: PackageFileLock, engineIdentity: HostRemoteKernelIdentity?,
+        admitEngine: @escaping @MainActor @Sendable (ExtensionEngineRequest) -> Bool,
         executeEngine: @escaping HostRemoteEngineReceiver.Execute,
         receive: @escaping @MainActor (HostRemoteEvent) -> Void
     ) {
@@ -105,6 +107,7 @@ public final class HostRemoteSession {
         self.lease = lease
         self.engineIdentity = engineIdentity
         self.executeEngine = executeEngine
+        self.admitEngine = admitEngine
         self.receive = receive
     }
 
@@ -113,6 +116,8 @@ public final class HostRemoteSession {
         store: ExtensionPackageStore,
         receive: @escaping @MainActor (HostRemoteEvent) -> Void = { _ in },
         engineIdentity: HostRemoteKernelIdentity? = nil,
+        admitEngine: @escaping @MainActor @Sendable (ExtensionEngineRequest) -> Bool = { _ in true
+        },
         executeEngine:
             @escaping @MainActor @Sendable (ExtensionEngineRequest) async throws -> Data = {
                 _ in throw HostWorkerError.rejected
@@ -157,7 +162,8 @@ public final class HostRemoteSession {
         let session = HostRemoteSession(
             identity: identity, configuration: configuration,
             executable: carrier.worker.appendingPathComponent("Contents/MacOS/Edith"), lease: lease,
-            engineIdentity: engineIdentity, executeEngine: executeEngine, receive: receive)
+            engineIdentity: engineIdentity, admitEngine: admitEngine,
+            executeEngine: executeEngine, receive: receive)
         retained[configuration.session] = session
         session.activationExpiry = Task { [weak session] in
             do { try await Task.sleep(for: .seconds(20)) } catch { return }
@@ -609,8 +615,17 @@ public final class HostRemoteSession {
                 guard event.presentationID == handle.presentationID else { return }
                 receive(event)
             },
+            admitEngine: { [weak self, weak handle] request in
+                guard let self, let handle, !self.stopping, !self.stopped, !handle.closed,
+                    !self.configuration.uiOnly, self.handles[handle.presentationID] === handle,
+                    request.presentationID == handle.presentationID, handle.isReserved,
+                    self.peer?.isRunning == true, self.engineIdentity?.isRunning == true
+                else { return false }
+                return self.admitEngine(request)
+            },
             executeEngine: { [weak self, weak handle] request in
-                guard let self, let handle, !handle.closed, !self.stopping, !self.stopped,
+                guard let self, let handle, !handle.closed, !self.stopped,
+                    HostRemoteInvocationAdmission.current?.authorizes(request.token) == true,
                     !self.configuration.uiOnly, self.handles[handle.presentationID] === handle,
                     request.presentationID == handle.presentationID, handle.isReserved,
                     self.engineIdentity?.isRunning == true

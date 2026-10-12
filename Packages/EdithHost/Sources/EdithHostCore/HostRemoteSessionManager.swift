@@ -252,6 +252,10 @@ public final class HostRemoteSessionManager {
             store: marketplace.packageStore,
             receive: { [weak self] event in self?.receive(id, event) },
             engineIdentity: engine?.process,
+            admitEngine: { _ in
+                guard let engine else { return false }
+                return (try? engine.validate()) != nil
+            },
             executeEngine: { request in
                 guard let engine else { throw HostWorkerError.rejected }
                 return try await engine.invoke(request)

@@ -96,6 +96,7 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
     }
 
     @MainActor public func invokeEngine(_ request: ExtensionEngineRequest) async throws -> Data {
+        try request.validate()
         guard !lock.withLock({ invalidated || draining }), engineInvocations.accepts(request.token)
         else { throw HostWorkerError.rejected }
         let bytes = await withTaskCancellationHandler {
@@ -116,21 +117,22 @@ public final class HostRemoteEndpoint: NSObject, NSXPCListenerDelegate, HostRemo
     ) {
         guard !lock.withLock({ invalidated || draining }), engineInvocations.accepts(request.token)
         else { completion(Data()); return }
+        let receivers = lock.withLock { self.receivers }
+        let authenticated = receivers.filter { $0.isAuthenticated }
+        guard authenticated.count == 1, let selected = authenticated.first else {
+            completion(Data()); return
+        }
         let task = Task { @MainActor [self] in
             let outcome: Result<Data, any Error>
             do {
                 try Task.checkCancellation()
-                guard !lock.withLock({ invalidated }) else {
-                    throw HostWorkerError.exited
+                guard !lock.withLock({ invalidated }), selected.isAuthenticated,
+                    let admission = engineInvocations.admission(for: request.token)
+                else { throw HostWorkerError.exited }
+                let payload = try await HostRemoteInvocationAdmission.$current.withValue(admission)
+                {
+                    try await selected.engineCalls.request(request)
                 }
-                let receivers = lock.withLock { self.receivers }
-                var selected: Exchange?
-                for receiver in receivers where receiver.isAuthenticated {
-                    guard selected == nil else { throw HostWorkerError.rejected }
-                    selected = receiver
-                }
-                guard let selected else { throw HostWorkerError.rejected }
-                let payload = try await selected.engineCalls.request(request)
                 try Task.checkCancellation()
                 guard !lock.withLock({ invalidated }), selected.isAuthenticated else {
                     throw HostWorkerError.exited

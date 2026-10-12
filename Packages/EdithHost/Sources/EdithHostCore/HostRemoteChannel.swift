@@ -19,13 +19,16 @@ public final class HostRemoteChannel {
     public init(
         connection: NSXPCConnection,
         receive: @escaping @MainActor (HostRemoteEvent) -> Void = { _ in },
+        admitEngine: @escaping @MainActor @Sendable (ExtensionEngineRequest) -> Bool = { _ in true
+        },
         executeEngine:
             @escaping @MainActor @Sendable (ExtensionEngineRequest) async throws -> Data = {
                 _ in throw HostWorkerError.rejected
             }
     ) {
         self.connection = connection
-        events = HostRemoteEngineReceiver(receive: receive, execute: executeEngine)
+        events = HostRemoteEngineReceiver(
+            receive: receive, admit: admitEngine, execute: executeEngine)
         connection.remoteObjectInterface = NSXPCInterface(with: HostRemoteControl.self)
         connection.exportedInterface = NSXPCInterface(with: HostRemoteEvents.self)
         connection.exportedObject = events
@@ -43,6 +46,8 @@ public final class HostRemoteChannel {
         expectedPeer: HostRemoteProcessIdentity? = nil,
         rejectedPeer: @escaping @MainActor (HostRemoteProcessIdentity) -> Void = { _ in },
         receive: @escaping @MainActor (HostRemoteEvent) -> Void = { _ in },
+        admitEngine: @escaping @MainActor @Sendable (ExtensionEngineRequest) -> Bool = { _ in true
+        },
         executeEngine:
             @escaping @MainActor @Sendable (ExtensionEngineRequest) async throws -> Data = {
                 _ in throw HostWorkerError.rejected
@@ -52,7 +57,7 @@ public final class HostRemoteChannel {
         return try await connect(
             to: endpoint.value, executable: executable, expectedPeer: expectedPeer,
             rejectedPeer: rejectedPeer, receive: receive,
-            executeEngine: executeEngine)
+            admitEngine: admitEngine, executeEngine: executeEngine)
     }
 
     public static func connect(
@@ -60,6 +65,8 @@ public final class HostRemoteChannel {
         expectedPeer: HostRemoteProcessIdentity? = nil,
         rejectedPeer: @escaping @MainActor (HostRemoteProcessIdentity) -> Void = { _ in },
         receive: @escaping @MainActor (HostRemoteEvent) -> Void = { _ in },
+        admitEngine: @escaping @MainActor @Sendable (ExtensionEngineRequest) -> Bool = { _ in true
+        },
         executeEngine:
             @escaping @MainActor @Sendable (ExtensionEngineRequest) async throws -> Data = {
                 _ in throw HostWorkerError.rejected
@@ -67,7 +74,7 @@ public final class HostRemoteChannel {
     ) async throws -> HostRemoteChannel {
         let channel = HostRemoteChannel(
             connection: NSXPCConnection(listenerEndpoint: endpoint), receive: receive,
-            executeEngine: executeEngine)
+            admitEngine: admitEngine, executeEngine: executeEngine)
         do {
             _ = try await channel.request(HostRemoteCommand(operation: "authenticate"))
             let actual = try HostRemoteProcessIdentity.read(channel.connection.processIdentifier)
