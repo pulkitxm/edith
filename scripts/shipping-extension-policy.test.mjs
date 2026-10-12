@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
+import { ownedDraftResume } from "./hosted-public-release/contract.mjs";
 import {
   publicationComposition,
   verifiedComposition,
@@ -123,4 +124,56 @@ test("a signed single-extension publication binds its exact package and source",
     publicationComposition(source, 101, 1, [rows[0], rows[0]], fingerprints),
   );
   assert.throws(() => publicationComposition(source, 101, 1, [], {}));
+});
+
+test("a one-package owned draft resumes against the full source inventory", async () => {
+  const definitions = JSON.parse(
+    await readFile(
+      new URL("../Extensions/manifest.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const fingerprints = Object.fromEntries(
+    definitions.map(({ id }) => [id, "b".repeat(64)]),
+  );
+  const entry = shippingDefinitions(definitions)[0];
+  const record = {
+    id: entry.id,
+    version: "1.0.0",
+    hostABI: entry.hostABI,
+    architecture: "arm64",
+    minimumSystemVersion: entry.minimumSystemVersion,
+    downloadBytes: 100,
+    installedBytes: 200,
+    sha256: "c".repeat(64),
+    sourceFingerprint: fingerprints.keepAwake,
+    dependencies: [],
+    downloadURL: `https://github.com/pulkitxm/edith/releases/download/${encodeURIComponent(`extensions/keepAwake/1.0.0-${fingerprints.keepAwake.slice(0, 20)}`)}/keepAwake.zip`,
+  };
+  const resume = {
+    plan: { include: [] },
+    state: { draft: true },
+    previous: { schemaVersion: 1, revision: 1, packages: [record] },
+    definitions,
+    fingerprints,
+    shippingIDs: shippingExtensionIDs,
+  };
+  assert.deepEqual(ownedDraftResume(resume), [record]);
+  assert.throws(() =>
+    ownedDraftResume({
+      ...resume,
+      previous: { ...resume.previous, packages: [] },
+    }),
+  );
+  assert.throws(() => ownedDraftResume({ ...resume, shippingIDs: ["music"] }));
+  assert.throws(() =>
+    ownedDraftResume({ ...resume, shippingIDs: ["keepAwake", "keepAwake"] }),
+  );
+  assert.throws(() => ownedDraftResume({ ...resume, state: { draft: false } }));
+  assert.throws(() =>
+    ownedDraftResume({
+      ...resume,
+      fingerprints: { ...fingerprints, keepAwake: "d".repeat(64) },
+    }),
+  );
 });

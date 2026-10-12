@@ -9,6 +9,7 @@ import {
   shippingNativeTestSteps,
 } from "../hosted-managed-views/native-ci-contract.mjs";
 import { validateCIArtifactSet } from "../hosted-managed-views/package-preparation.mjs";
+import { assertShippingExtensions } from "../shipping-extension-policy.mjs";
 import { validateCatalog } from "../verify-extension-catalog.mjs";
 
 export const repository = "pulkitxm/edith";
@@ -307,6 +308,15 @@ export function ownedDraftResume(value) {
     Object.keys(fingerprints).sort(),
     definitions.map(({ id }) => id).sort(),
   );
+  if (value.shippingIDs !== undefined) {
+    assert(Array.isArray(value.shippingIDs) && value.shippingIDs.length > 0);
+    assertShippingExtensions(value.shippingIDs.map((id) => ({ id })));
+    const selected = value.shippingIDs.map((id) =>
+      definitions.find((entry) => entry.id === id),
+    );
+    assert(selected.every(Boolean));
+    return currentPackages(previous, selected, fingerprints);
+  }
   return currentPackages(previous, definitions, fingerprints);
 }
 

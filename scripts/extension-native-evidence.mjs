@@ -46,6 +46,7 @@ import { lookupRelease } from "./release-lookup.mjs";
 import {
   assertShippingExtensions,
   shippingDefinitions,
+  shippingExtensionIDs,
 } from "./shipping-extension-policy.mjs";
 
 export async function readEvidenceAPI(
@@ -322,6 +323,7 @@ export async function publishNativeEvidence({
       ),
       definitions,
       fingerprints,
+      shippingIDs: shippingExtensionIDs,
     };
     ownedDraftResume(resume);
     const { publicationPlanningState } = await import(
@@ -620,6 +622,7 @@ export async function preparedNativeEvidence({
         1024 ** 2,
       ),
       fingerprints: payload.fingerprints,
+      shippingIDs: shippingExtensionIDs,
     });
   const expected = {
     tag: evidenceTag(target, payload.runID, payload.runAttempt),
