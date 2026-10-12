@@ -33,8 +33,11 @@ public final class ExtensionEngineClient {
             try await withCheckedThrowingContinuation { continuation in
                 let deadline = Task { [weak self] in
                     do { try await Task.sleep(for: .seconds(timeout)) } catch { return }
-                    self?.finish(request.token, result: .failure(ExtensionEngineError.timedOut))
-                    self?.cancel(request.token)
+                    if self?.finish(request.token, result: .failure(ExtensionEngineError.timedOut))
+                        == true
+                    {
+                        self?.cancel(request.token)
+                    }
                 }
                 pending[request.token] = Pending(continuation: continuation, timeout: deadline)
                 let selector = NSSelectorFromString("invoke:completion:")
@@ -61,14 +64,16 @@ public final class ExtensionEngineClient {
                 }
                 invoke(bridge, selector, data as NSData, completion)
                 if Task.isCancelled {
-                    finish(request.token, result: .failure(CancellationError()))
-                    cancel(request.token)
+                    if finish(request.token, result: .failure(CancellationError())) {
+                        cancel(request.token)
+                    }
                 }
             }
         } onCancel: {
             Task { @MainActor [weak self] in
-                self?.finish(request.token, result: .failure(CancellationError()))
-                self?.cancel(request.token)
+                if self?.finish(request.token, result: .failure(CancellationError())) == true {
+                    self?.cancel(request.token)
+                }
             }
         }
     }
@@ -77,15 +82,18 @@ public final class ExtensionEngineClient {
         guard !invalidated else { return }
         invalidated = true
         for token in Array(pending.keys) {
-            cancel(token)
-            finish(token, result: .failure(ExtensionEngineError.unavailable))
+            if finish(token, result: .failure(ExtensionEngineError.unavailable)) {
+                cancel(token)
+            }
         }
     }
 
-    private func finish(_ token: UUID, result: Result<Data, any Error>) {
-        guard let request = pending.removeValue(forKey: token) else { return }
+    @discardableResult
+    private func finish(_ token: UUID, result: Result<Data, any Error>) -> Bool {
+        guard let request = pending.removeValue(forKey: token) else { return false }
         request.timeout.cancel()
         request.continuation.resume(with: result)
+        return true
     }
 
     private func cancel(_ token: UUID) {

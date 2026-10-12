@@ -60,6 +60,71 @@ struct ExtensionEngineTests {
         }
     }
 
+    @Test func invalidationAndCancellationClaimEachHeldRequestOnlyOnce() async throws {
+        let bridge = Bridge()
+        bridge.mode = "hold"
+        let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
+        defer { client.invalidate() }
+        let task = Task { try await client.invoke("sample.hold") }
+        try await wait { bridge.callbacks.count == 1 }
+        let token = try #require(bridge.callbacks.keys.first)
+        client.invalidate()
+        task.cancel()
+        await #expect(throws: ExtensionEngineError.unavailable) { try await task.value }
+        for _ in 0..<8 { await Task.yield() }
+        #expect(bridge.cancellationCalls == [token])
+        #expect(bridge.callbacks.isEmpty)
+    }
+
+    @Test func anAlreadyCancelledRequestSendsOnlyOneBridgeCancellation() async throws {
+        let bridge = Bridge()
+        bridge.mode = "hold"
+        let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
+        defer { client.invalidate() }
+        let task = Task { try await client.invoke("sample.hold") }
+        task.cancel()
+        await #expect(throws: CancellationError.self) { try await task.value }
+        for _ in 0..<8 { await Task.yield() }
+        #expect(bridge.cancellationCalls.count == 1)
+        #expect(bridge.callbacks.isEmpty)
+        client.invalidate()
+        #expect(bridge.cancellationCalls.count == 1)
+    }
+
+    @Test(arguments: [false, true])
+    func completionAndCancellationHaveOneWinner(completionFirst: Bool) async throws {
+        let bridge = Bridge()
+        bridge.mode = "hold"
+        let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
+        defer { client.invalidate() }
+        let task = Task { try await client.invoke("sample.hold") }
+        try await wait { bridge.callbacks.count == 1 }
+        let token = try #require(bridge.callbacks.keys.first)
+        let completion = try #require(bridge.callbacks.removeValue(forKey: token))
+        let payload = Data("{\"value\":\"synthetic\"}".utf8)
+        let reply = try ExtensionEngineWire.encode(
+            ExtensionEngineReply(token: token, ok: true, payload: payload))
+        if completionFirst {
+            completion(reply)
+            task.cancel()
+        } else {
+            task.cancel()
+            completion(reply)
+        }
+        var completed = false
+        do {
+            #expect(try await task.value == payload)
+            completed = true
+        } catch is CancellationError {
+        } catch {
+            Issue.record(error)
+        }
+        for _ in 0..<8 { await Task.yield() }
+        #expect(bridge.cancellationCalls == (completed ? [] : [token]))
+        client.invalidate()
+        #expect(bridge.cancellationCalls == (completed ? [] : [token]))
+    }
+
     @Test func sealedUIAdmissionRequiresItsOwnIdentityAndKeepsDisabledSettingsEngineFree() throws {
         let bridge = Bridge()
         let suite = "synthetic.host.extension.sample.worker"
@@ -110,6 +175,7 @@ struct ExtensionEngineTests {
         var lastPresentation: UUID?
         var callbacks: [UUID: (Data) -> Void] = [:]
         var cancelled = Set<UUID>()
+        var cancellationCalls: [UUID] = []
 
         @objc func invoke(_ data: Data, completion: @escaping (Data) -> Void) {
             guard
@@ -127,6 +193,7 @@ struct ExtensionEngineTests {
         @objc func cancel(_ token: String) {
             guard let token = UUID(uuidString: token) else { return }
             cancelled.insert(token)
+            cancellationCalls.append(token)
             callbacks[token] = nil
         }
     }
