@@ -160,6 +160,7 @@ ci-swift-test:
 .PHONY: ci-host-invocation
 ci-host-invocation:
 	python3 -B scripts/test-host-test-invocation.py
+	python3 -B scripts/test-run-host-swift-testing.py
 
 ci-host: ci-host-invocation
 	swift format lint --strict --parallel --recursive Packages/EdithHost/Sources Packages/EdithHost/Tests Packages/EdithHost/Package.swift
