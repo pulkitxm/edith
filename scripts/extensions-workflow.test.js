@@ -721,7 +721,7 @@ test("shipping publication exercises original Keep Awake controls through the ex
   expect(native.if).toBe(
     "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'",
   );
-  expect(native.env.EXPECTED_SOURCE_SHA).toBe("${{ github.sha }}");
+  expect(native.env.EXPECTED_SOURCE_SHA).toBe(`\${{ github.sha }}`);
   expect(native.env.EXTENSION_LIFECYCLE_HARNESS).toBe(
     "local/extension-tools/HostLifecycleHarness",
   );
@@ -745,4 +745,37 @@ test("shipping publication exercises original Keep Awake controls through the ex
   expect(verifyTools).toBeGreaterThan(-1);
   expect(checks.steps.indexOf(native)).toBeGreaterThan(verifyTools);
   expect(publish.needs).toContain("tests");
+});
+
+test("shipping native controls run before the broad marketplace suite with verified frozen prerequisites", () => {
+  const steps = workflow.jobs.tests.steps;
+  const verification = steps.findIndex(
+    (step) => step.name === "Verify lifecycle tools and their frozen index",
+  );
+  const harnessCopy = steps.findIndex((step) =>
+    step.run?.includes("cp local/extension-tools/MarketplaceHarness"),
+  );
+  const native = steps.findIndex(
+    (step) =>
+      step.name ===
+      "Exercise original Keep Awake controls and native lifecycle",
+  );
+  const general = steps.findIndex(
+    (step) => step.name === "Validate the shipping extension and marketplace",
+  );
+  expect(verification).toBeGreaterThan(-1);
+  expect(harnessCopy).toBeGreaterThan(verification);
+  expect(native).toBeGreaterThan(harnessCopy);
+  expect(general).toBeGreaterThan(native);
+  expect(steps[native].if).toBe(
+    "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'",
+  );
+  expect(steps[native].run).toBe("make ci-extension-keep-awake-native");
+  expect(steps[native].env).toEqual({
+    EXPECTED_SOURCE_SHA: `\${{ github.sha }}`,
+    EXTENSION_LIFECYCLE_HARNESS: "local/extension-tools/HostLifecycleHarness",
+  });
+  expect(steps[general].run).toBe(
+    "make ci-marketplace-runtime ci-extension-keep-awake ci-comments",
+  );
 });

@@ -170,6 +170,15 @@ jobs:
       - run: tar -xzf local/extension-host-artifact/host.tar.gz
       - name: Verify lifecycle tools and their frozen index
         run: python3 scripts/package_extension_lifecycle_tools.py --verify --host local/minimal-host/Edith.app --output local/extension-tools
+      - run: |
+          mkdir -p Packages/ExtensionMarketplace/.build/debug
+          cp local/extension-tools/MarketplaceHarness Packages/ExtensionMarketplace/.build/debug/MarketplaceHarness
+      - name: Exercise original Keep Awake controls and native lifecycle
+        if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
+        env:
+          EXPECTED_SOURCE_SHA: "${{ github.sha }}"
+          EXTENSION_LIFECYCLE_HARNESS: local/extension-tools/HostLifecycleHarness
+        run: make ci-extension-keep-awake-native
       - name: Verify native cache integrity and private SDK composition
         if: "needs.plan.outputs.mode == 'validation'"
         timeout-minutes: 20
@@ -186,17 +195,8 @@ jobs:
       - name: Validate the shipping extension and marketplace
         if: "needs.plan.outputs.mode != 'validation'"
         run: make ci-marketplace-runtime ci-extension-keep-awake ci-comments
-      - run: |
-          mkdir -p Packages/ExtensionMarketplace/.build/debug
-          cp local/extension-tools/MarketplaceHarness Packages/ExtensionMarketplace/.build/debug/MarketplaceHarness
       - run: bun scripts/test-extension-catalog-retention.mjs
       - run: bun scripts/test-extension-marketplace.mjs
-      - name: Exercise original Keep Awake controls and native lifecycle
-        if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
-        env:
-          EXPECTED_SOURCE_SHA: "${{ github.sha }}"
-          EXTENSION_LIFECYCLE_HARNESS: local/extension-tools/HostLifecycleHarness
-        run: make ci-extension-keep-awake-native
     needs:
       - frozen-host
       - plan
