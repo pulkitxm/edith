@@ -58,6 +58,15 @@ import {
   verifiedLineage,
 } from "./evidence.mjs";
 
+import {
+  shippingFingerprints,
+  shippingHosted,
+  shippingProductionPlan,
+  shippingReleaseDefinitions,
+  shippingRequest,
+  shippingUpdateVersions,
+} from "./shipping-scope.mjs";
+
 const script = fileURLToPath(import.meta.url);
 function command(file, args, cwd, timeout = 120000) {
   return execFileSync(file, args, {
@@ -85,16 +94,22 @@ async function privateDirectory(path) {
 }
 export function validateInstallerProof(
   installer,
-  { source, current, updateIDs },
+  { source, current, updateIDs, scope = "full39" },
 ) {
-  assert.equal(current.length, 39);
+  assert(["full39", "shipping"].includes(scope));
+  const owners = scope === "shipping" ? 1 : 39;
+  assert.equal(current.length, owners);
   const currentIDs = current.map(({ id }) => id).sort();
-  assert.equal(new Set(currentIDs).size, 39);
+  assert.equal(new Set(currentIDs).size, owners);
+  if (scope === "shipping") {
+    assert.deepEqual(currentIDs, ["keepAwake"]);
+    assert.deepEqual(updateIDs, ["keepAwake"]);
+  }
   assert(Array.isArray(updateIDs));
   assert.equal(new Set(updateIDs).size, updateIDs.length);
   assert(updateIDs.every((id) => currentIDs.includes(id)));
   assert.equal(installer.schema, 1);
-  assert.equal(installer.owners, 39);
+  assert.equal(installer.owners, owners);
   assert.equal(installer.sourceCommit, source);
   for (const field of [
     "installationVerified",
@@ -116,16 +131,24 @@ export function validateInstallerProof(
   assert.deepEqual(installer.updatedIDs, updateIDs);
   assert.equal(installer.publicVersionUpdateVerified, updateIDs.length > 0);
   assert(Number.isSafeInteger(installer.preservationChecks));
-  assert(installer.preservationChecks >= 45);
+  assert(installer.preservationChecks >= (scope === "shipping" ? 7 : 45));
   assert.equal(installer.workerEnableDisableExecuted, false);
   assert.equal(installer.workerProcessesStarted, 0);
   assert.equal(installer.featureCodeExecuted, false);
 }
-export async function run() {
-  hosted(process.env, process.env.EXPECTED_SOURCE_SHA);
+export async function run({ scope = "full39" } = {}) {
+  assert(["full39", "shipping"].includes(scope));
+  const shipping = scope === "shipping";
+  if (shipping) shippingHosted(process.env, process.env.EXPECTED_SOURCE_SHA);
+  else hosted(process.env, process.env.EXPECTED_SOURCE_SHA);
   assert.equal(process.platform, "darwin");
   assert.equal(process.arch, "arm64");
-  const options = request(process.env.PUBLIC_RELEASE_REQUEST);
+  const options = shipping
+    ? shippingRequest(
+        process.env.PUBLIC_RELEASE_REQUEST,
+        process.env.EXPECTED_SOURCE_SHA,
+      )
+    : request(process.env.PUBLIC_RELEASE_REQUEST);
   const root = await realpath(process.cwd());
   const clean = () => {
     assert.equal(
@@ -142,7 +165,12 @@ export async function run() {
     );
   };
   clean();
-  const output = join(root, "local/hosted-public-release");
+  const output = join(
+    root,
+    shipping
+      ? "local/hosted-shipping-public-release"
+      : "local/hosted-public-release",
+  );
   await mkdir(join(root, "local"), { recursive: true });
   await privateDirectory(output);
   const work = await realpath(
@@ -305,7 +333,10 @@ export async function run() {
   const publicKey = keys[0][1];
   const catalog = JSON.parse(verifiedCatalogPayload(envelopeBytes, publicKey));
   assert.equal(catalog.revision, pointer.revision);
-  const current = currentPackages(catalog, definitions, fingerprints),
+  const releaseDefinitions = shipping
+    ? shippingReleaseDefinitions(definitions)
+    : definitions;
+  const current = currentPackages(catalog, releaseDefinitions, fingerprints),
     packages = [],
     archives = {};
   const lineages = new Map(),
@@ -422,7 +453,9 @@ export async function run() {
           runID: value.run.id,
           attempt: value.run.run_attempt,
           records: raw.packages.map(({ package: record }) => record),
-          fingerprints,
+          fingerprints: shipping
+            ? shippingFingerprints(definitions, fingerprints)
+            : fingerprints,
         }),
         pin: bytes.pin,
       };
@@ -455,9 +488,10 @@ export async function run() {
     const previous = document(join(directory, "previous.json"));
     const expected = await planUnpublishedExtensions(
       sourceDirectory,
-      definitions,
+      shipping ? shippingReleaseDefinitions(definitions) : definitions,
       previous.packages,
     );
+    if (shipping) shippingProductionPlan(expected);
     assert.deepEqual(actual, { include: expected });
     const resume = expected.length
       ? undefined
@@ -565,6 +599,7 @@ export async function run() {
     };
   }
   const reusedCatalogPublication = production.run.head_sha !== options.source;
+  if (shipping) assert.equal(reusedCatalogPublication, false);
   let publicationDirectory = sourceDirectory;
   let publicationDefinitions = definitions;
   let publicationFingerprints = fingerprints;
@@ -1048,6 +1083,7 @@ export async function run() {
     archives[previous.downloadURL] = path;
     older.push(previous);
   }
+  if (shipping) shippingUpdateVersions(current, older);
   const mount = join(work, "dmg-mount");
   await privateDirectory(mount);
   let hostStatic;
@@ -1126,7 +1162,10 @@ export async function run() {
   const installer = JSON.parse(
     command(
       join(bin, "MarketplaceHarness"),
-      ["verify-public-release", harnessRequest],
+      [
+        shipping ? "verify-public-keep-awake" : "verify-public-release",
+        harnessRequest,
+      ],
       root,
       3600000,
     ),
@@ -1135,6 +1174,7 @@ export async function run() {
     source: options.source,
     current,
     updateIDs: options.updateIDs,
+    scope,
   });
   for (const value of [...productionByRun.values()]
     .map(({ value }) => value)
@@ -1168,6 +1208,7 @@ export async function run() {
   clean();
   await record(join(output, "result.json"), {
     schema: 1,
+    ...(shipping ? { scope, qualifiedIDs: ["keepAwake"] } : {}),
     sourceCommit: options.source,
     currentHostSource: options.source,
     catalogPublicationSource: production.run.head_sha,
