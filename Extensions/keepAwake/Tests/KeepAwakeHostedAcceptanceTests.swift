@@ -100,8 +100,8 @@ import Testing
         try await wait { checkbox(in: host) != nil }
         var transitions: [Bool] = []
         for requested in [true, false, true] {
-            let checkbox = try #require(checkbox(in: host))
-            try #require((checkbox as AnyObject).accessibilityPerformPress?() == true)
+            let control = try #require(checkbox(in: host))
+            try #require((control as AnyObject).accessibilityPerformPress?() == true)
             try await wait {
                 engine.bool(forKey: "preventSleep") == requested
                     && ((runtime.execute(["operation": "status"]) as? NSDictionary)?[
@@ -170,7 +170,7 @@ import Testing
 
     private func assertionCount() throws -> Int {
         var values: Unmanaged<CFDictionary>?
-        try #require(IOPMAssertionCopyAssertionsByProcess(&values) == kIOReturnSuccess)
+        try #require(IOPMCopyAssertionsByProcess(&values) == kIOReturnSuccess)
         let dictionary = try #require(values?.takeRetainedValue() as? [NSNumber: [[String: Any]]])
         return (dictionary[NSNumber(value: getpid())] ?? []).filter {
             $0[kIOPMAssertionNameKey as String] as? String == "Edith: Keep Awake is on"
