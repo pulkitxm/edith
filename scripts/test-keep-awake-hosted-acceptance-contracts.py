@@ -1,5 +1,8 @@
 from pathlib import Path
+from contextlib import redirect_stdout
 import importlib.util
+import io
+import json
 import tempfile
 import unittest
 
@@ -11,6 +14,61 @@ spec.loader.exec_module(acceptance)
 
 
 class AcceptanceContracts(unittest.TestCase):
+    def failed_runner(self):
+        return {
+            'passed': False, 'exitCode': 7, 'timedOut': False,
+            'logBoundExceeded': False, 'failure': 'synthetic failure',
+            'testsCompleted': False, 'observedTestingProcess': True,
+            'privateField': 'must not be logged',
+            'cleanup': {'naturalSurvivorCount': 0, 'reaped': True,
+                        'remainingOwnedProcesses': 0, 'unverifiedOwnedProcesses': 0,
+                        'ownershipErrors': ['private ownership detail']},
+        }
+
+    def test_native_failure_emits_closed_metadata_without_private_details(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / 'tests.log'
+            log.write_text('synthetic XCTest rejection\n')
+            captured = io.StringIO()
+            with redirect_stdout(captured):
+                acceptance.native_failure_diagnostics(self.failed_runner(), log)
+            rows = [json.loads(line) for line in captured.getvalue().splitlines()]
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(set(rows[0]), {'nativeFailure'})
+            metadata = rows[0]['nativeFailure']
+            self.assertEqual(set(metadata), {'exitCode', 'timedOut', 'logBoundExceeded',
+                             'failure', 'testsCompleted', 'observedTestingProcess', 'cleanup'})
+            self.assertEqual(metadata['exitCode'], 7)
+            self.assertEqual(metadata['failure'], 'synthetic failure')
+            self.assertEqual(metadata['cleanup'], {'naturalSurvivorCount': 0, 'reaped': True,
+                             'remainingOwnedProcesses': 0, 'unverifiedOwnedProcesses': 0,
+                             'ownershipErrorCount': 1})
+            self.assertEqual(rows[1], {'nativeLogTail': 'synthetic XCTest rejection\n'})
+            self.assertNotIn('private', captured.getvalue())
+
+    def test_native_failure_tail_is_bounded_and_stdout_commands_are_escaped(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / 'tests.log'
+            for payload in [b'x' * 32768, ('\u2603' * 12000).encode(), b'\xff' * 32768]:
+                ending = b'\n::error::synthetic final assertion\n'
+                log.write_bytes(b'excluded synthetic prefix\n' + payload + ending)
+                captured = io.StringIO()
+                with redirect_stdout(captured):
+                    acceptance.native_failure_diagnostics(self.failed_runner(), log)
+                rows = captured.getvalue().splitlines()
+                self.assertEqual(len(rows), 2)
+                tail = json.loads(rows[1])['nativeLogTail']
+                self.assertLessEqual(len(tail.encode('utf-8')), 16384)
+                self.assertTrue(tail.endswith(ending.decode()))
+                self.assertNotIn('excluded synthetic prefix', tail)
+                self.assertTrue(all(line.startswith('{') for line in rows))
+
+    def test_native_success_emits_nothing_and_does_not_require_a_log(self):
+        captured = io.StringIO()
+        with redirect_stdout(captured):
+            acceptance.native_failure_diagnostics({'passed': True}, Path('missing-tests.log'))
+        self.assertEqual(captured.getvalue(), '')
+
     def native(self):
         return {
             'schema': 1, 'sourceCommit': 'a' * 40, 'owner': 'keepAwake',

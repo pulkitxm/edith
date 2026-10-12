@@ -43,6 +43,31 @@ def lifecycle_proof(value):
             'Fixture lifecycle overclaims native presentation coverage')
 
 
+def native_failure_diagnostics(value, log_path):
+    if value['passed']:
+        return
+    fields = ['exitCode', 'timedOut', 'logBoundExceeded', 'failure',
+              'testsCompleted', 'observedTestingProcess']
+    metadata = {field: value[field] for field in fields}
+    if metadata['failure'] is not None:
+        metadata['failure'] = str(metadata['failure'])[:1024]
+    cleanup = value['cleanup']
+    metadata['cleanup'] = {field: cleanup[field] for field in
+                           ['naturalSurvivorCount', 'reaped', 'remainingOwnedProcesses',
+                            'unverifiedOwnedProcesses']}
+    metadata['cleanup']['ownershipErrorCount'] = len(cleanup['ownershipErrors'])
+    print(json.dumps({'nativeFailure': metadata}), flush=True)
+    try:
+        with log_path.open('rb') as log:
+            log.seek(0, os.SEEK_END)
+            log.seek(max(0, log.tell() - 16384))
+            tail = log.read(16384).decode('utf-8', errors='replace')
+        tail = tail.encode('utf-8')[-16384:].decode('utf-8', errors='ignore')
+    except OSError:
+        tail = ''
+    print(json.dumps({'nativeLogTail': tail}), flush=True)
+
+
 def private_directory(path, private=False):
     require(path.resolve() == path and not path.is_symlink(), 'Output path traverses a symlink')
     attributes = path.stat()
@@ -123,6 +148,7 @@ def main():
         native = runner.run_original(['make', 'ci-extension-keep-awake'], root,
                                      child_environment, work / 'native', deadline=900)
         result['native'] = native
+        native_failure_diagnostics(native, work / 'native/tests.log')
         require(native['passed'], 'Original Keep Awake native suite did not complete cleanly')
         native_result = json.loads(native_receipt.read_text())
         native_proof(native_result, source)
