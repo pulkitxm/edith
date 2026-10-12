@@ -7,6 +7,7 @@ import {
   mkdir,
   readdir,
   readFile,
+  readlink,
   realpath,
   rename,
   unlink,
@@ -133,6 +134,55 @@ async function writePlist(path, value) {
   );
 }
 
+export async function verifyExtensionUIHost(
+  hostApp,
+  verify = (arguments_) =>
+    execFileSync("codesign", arguments_, { stdio: "pipe" }),
+) {
+  const root = resolve(hostApp);
+  const rootInfo = await lstat(root);
+  if (
+    !rootInfo.isDirectory() ||
+    rootInfo.uid !== process.getuid() ||
+    (await realpath(root)) !== root
+  )
+    throw new Error("The frozen host must be an owned canonical directory");
+  const launcher = resolve(root, "Contents/MacOS/ed");
+  const target = resolve(root, "Contents/Resources/ed-launcher");
+  let entries = 0;
+  async function validate(path) {
+    if (++entries > 100000)
+      throw new Error("The frozen host tree exceeds its entry bound");
+    const info = await lstat(path);
+    if (info.isSymbolicLink()) {
+      if (
+        path !== launcher ||
+        info.uid !== process.getuid() ||
+        (await readlink(path)) !== "../Resources/ed-launcher"
+      )
+        throw new Error("The frozen host contains an unexpected symbolic link");
+      const targetInfo = await lstat(target);
+      if (
+        !targetInfo.isFile() ||
+        targetInfo.uid !== process.getuid() ||
+        targetInfo.nlink !== 1 ||
+        (await realpath(target)) !== target
+      )
+        throw new Error(
+          "The frozen host launcher target is not a regular in-bundle file",
+        );
+      return;
+    }
+    if (!info.isFile() && !info.isDirectory())
+      throw new Error("The frozen host contains a special file");
+    if (info.isDirectory())
+      for (const child of await readdir(path))
+        await validate(resolve(path, child));
+  }
+  await validate(root);
+  await verify(["--verify", "--deep", "--strict", hostApp]);
+}
+
 function codeRequirement(hostApp, development) {
   const result = spawnSync("codesign", ["-d", "-r", "-", hostApp], {
     encoding: "utf8",
@@ -184,10 +234,7 @@ export async function buildExtensionUICarrier({
   validateMinimumSystemVersion(minimumSystemVersion);
   const signingIdentity = development ? "-" : identity;
   const source = resolve(hostApp, "Contents/MacOS/Edith");
-  await requireRegularTree(hostApp);
-  execFileSync("codesign", ["--verify", "--deep", "--strict", hostApp], {
-    stdio: "pipe",
-  });
+  await verifyExtensionUIHost(hostApp);
   const hostIdentifier = execFileSync(
     "/usr/libexec/PlistBuddy",
     [
