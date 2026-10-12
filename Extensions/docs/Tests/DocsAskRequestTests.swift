@@ -85,6 +85,13 @@ import Testing
         #expect(answer.picks.first?.command.summary == "Lists sessions.")
         #expect(presentation.resultsVisible && !presentation.asking)
         #expect(operations == ["docs.ui.library", "docs.ui.ask"])
+        presentation.question = "unrelated synthetic question"
+        presentation.questionChanged()
+        #expect(!presentation.resultsVisible)
+        #expect(presentation.answer?.request == "list sessions")
+        presentation.moveSelection(1)
+        #expect(!presentation.resultsVisible)
+        #expect(operations == ["docs.ui.library", "docs.ui.ask"])
         presentation.shutdown()
         engine.shutdown()
         await presentation.drain()

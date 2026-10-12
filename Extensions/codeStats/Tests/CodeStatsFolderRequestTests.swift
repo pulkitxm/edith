@@ -40,6 +40,22 @@ import Testing
         }
     }
 
+    @Test func decodedFolderByteLimitIsIndependentOfJSONEscaping() throws {
+        let folder = "/" + String(repeating: "界", count: 1365)
+        #expect(folder.utf8.count == 4096)
+        let literal = try JSONEncoder().encode(CodeStatsFolderRequest(folder: folder))
+        let escaped = Data(("{\"folder\":\"/" + String(repeating: "\\u754c", count: 1365) + "\"}").utf8)
+        #expect(try CodeStatsFolderRequest.decode(literal).folder == folder)
+        #expect(try CodeStatsFolderRequest.decode(escaped).folder == folder)
+        #expect(escaped.count > literal.count)
+        for payload in [
+            try JSONEncoder().encode(CodeStatsFolderRequest(folder: folder + "x")),
+            Data(("{\"folder\":\"/" + String(repeating: "\\u754c", count: 1365) + "x\"}").utf8),
+        ] {
+            #expect(throws: (any Error).self) { try CodeStatsFolderRequest.decode(payload) }
+        }
+    }
+
     @Test func originalChooseFolderRoutesObjectThroughBridgeAndReloadsStatus() async throws {
         let suite = "test.edith.folder-request." + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))
