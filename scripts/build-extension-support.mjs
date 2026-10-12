@@ -19,6 +19,7 @@ export function supportModules(scope) {
       "EdithExtensionUI",
       "EdithExtensionDocuments",
       "EdithExtensionArchive",
+      "EdithExtensionAccounts",
       "EdithExtensionCommands",
       "ArgumentParser",
       "ArgumentParserToolInfo",
@@ -29,7 +30,7 @@ export function supportModules(scope) {
 
 export function rewriteSupportImports(source, modules) {
   return source.replace(
-    /^(\s*(?:(?:@testable|@_implementationOnly|@_exported|@preconcurrency)\s+)*(?:(?:public|internal|private|fileprivate|package)\s+)?import\s+)(EdithExtensionSupport|EdithExtensionUI|EdithExtensionDocuments|EdithExtensionArchive|EdithExtensionCommands|ArgumentParserToolInfo|ArgumentParser)(?=\s|$)/gm,
+    /^(\s*(?:(?:@testable|@_implementationOnly|@_exported|@preconcurrency)\s+)*(?:(?:public|internal|private|fileprivate|package)\s+)?import\s+)(EdithExtensionSupport|EdithExtensionUI|EdithExtensionDocuments|EdithExtensionArchive|EdithExtensionCommands|EdithExtensionAccounts|ArgumentParserToolInfo|ArgumentParser)(?=\s|$)/gm,
     (_, prefix, name) => `${prefix}${modules[name]}`,
   );
 }
@@ -74,6 +75,7 @@ export function supportProducts(product) {
       "EdithExtensionUI",
       "EdithExtensionArchive",
     ],
+    EdithExtensionAccounts: ["EdithExtensionSupport", "EdithExtensionAccounts"],
   };
   const requested = Array.isArray(product) ? product : [product];
   if (
@@ -198,6 +200,10 @@ export function buildExtensionSupport(root, product, scope) {
       `.target(name: "${documents}", dependencies: ["${ui}"], resources: [.process("Resources")], swiftSettings: [.swiftLanguageMode(.v5)])`,
     );
   }
+  if (selected.includes("EdithExtensionAccounts"))
+    targets.push(
+      `.target(name: "${modules.EdithExtensionAccounts}", dependencies: ["${core}"], swiftSettings: [.swiftLanguageMode(.v5)])`,
+    );
   const packageDependencies = [];
   let parserDependency;
   if (selected.includes("EdithExtensionArchive"))

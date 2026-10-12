@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import {
   rewriteArgumentParserSource,
   rewriteSupportImports,
@@ -6,6 +7,33 @@ import {
   supportProducts,
   supportSourceInputs,
 } from "./build-extension-support.mjs";
+import { planExtensionBuilds } from "./extension-release-plan.mjs";
+
+test("account support changes select Herdr and Usage independently of the empty host", () => {
+  const definitions = JSON.parse(
+    readFileSync("Extensions/manifest.json", "utf8"),
+  );
+  expect(
+    planExtensionBuilds(definitions, [
+      "Packages/ExtensionSupport/Sources/EdithExtensionAccounts/ClaudeAccountStorage.swift",
+    ])
+      .map(({ id }) => id)
+      .sort(),
+  ).toEqual(["herdr", "usage"]);
+  expect(
+    readFileSync("Packages/EdithHost/Package.swift", "utf8"),
+  ).not.toContain("EdithExtensionAccounts");
+  for (const id of ["herdr", "usage"]) {
+    const definition = definitions.find((entry) => entry.id === id);
+    expect(supportProducts(definition.supportProduct)).toContain(
+      "EdithExtensionAccounts",
+    );
+    expect(
+      definition.roles.app.some((path) => path.includes("ClaudeAccount")),
+    ).toBeTrue();
+    expect(definition.testTargets).toContain("ci-extension-accounts");
+  }
+});
 
 test("each extension role has independent Swift and Objective-C support types", () => {
   const first = supportModules("calendar_app");
@@ -209,5 +237,41 @@ test("private parser migration leaves other declarations and text unchanged", ()
     ),
   ).toBe(
     'import ArgumentParserToolInfo_fixture_app\nlet value = "_errorLabel customDeprecated"\n',
+  );
+});
+
+test("account code is an optional dependency isolated from the empty host products", () => {
+  expect(supportProducts("EdithExtensionAccounts")).toEqual([
+    "EdithExtensionSupport",
+    "EdithExtensionAccounts",
+  ]);
+  for (const product of ["EdithExtensionSupport", "EdithExtensionUI"]) {
+    expect(supportProducts(product)).not.toContain("EdithExtensionAccounts");
+    expect(supportSourceInputs(product)).not.toContain(
+      "Packages/ExtensionSupport/Sources/EdithExtensionAccounts",
+    );
+  }
+  const selection = ["EdithExtensionUI", "EdithExtensionAccounts"];
+  expect(supportProducts(selection)).toEqual([
+    "EdithExtensionSupport",
+    "EdithExtensionUI",
+    "EdithExtensionAccounts",
+  ]);
+  expect(supportProducts(selection.toReversed())).toEqual(
+    supportProducts(selection),
+  );
+  expect(supportSourceInputs(selection)).toContain(
+    "Packages/ExtensionSupport/Sources/EdithExtensionAccounts",
+  );
+});
+
+test("account imports remain private to each independently loaded extension", () => {
+  const source =
+    '@testable import EdithExtensionAccounts\nlet text = "EdithExtensionAccounts"\n';
+  expect(rewriteSupportImports(source, supportModules("herdr_app"))).toBe(
+    '@testable import EdithExtensionAccounts_herdr_app\nlet text = "EdithExtensionAccounts"\n',
+  );
+  expect(rewriteSupportImports(source, supportModules("usage_app"))).toBe(
+    '@testable import EdithExtensionAccounts_usage_app\nlet text = "EdithExtensionAccounts"\n',
   );
 });

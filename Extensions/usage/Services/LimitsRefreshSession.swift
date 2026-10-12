@@ -13,6 +13,7 @@ public actor LimitsRefreshSession {
     }
 
     public static let shared = LimitsRefreshSession()
+    let accountCollector = ClaudeAccountLimitsCollector()
     private var activeID: UUID?
     private var retryNotBefore: [LimitProvider: Date] = [:]
     private var latest: LimitsTopicSnapshot?
@@ -55,7 +56,8 @@ public actor LimitsRefreshSession {
             return .cached(
                 LimitsTopicSnapshot(
                     refreshedAt: latest.refreshedAt, providers: paused,
-                    failure: paused.compactMap(\.error).first))
+                    failure: paused.compactMap(\.error).first,
+                    claudeAccounts: providers.contains(.claude) ? latest.claudeAccounts : []))
         }
         let id = UUID()
         activeID = id
@@ -88,10 +90,11 @@ public actor LimitsRefreshSession {
         for follower in pending.values { follower.resume(returning: .cancelled) }
     }
 
-    public func clear() {
+    public func clear() async {
         abort()
         latest = nil
         retryNotBefore = [:]
+        await accountCollector.clear()
     }
 
     private func cancelFollower(_ id: UUID) {

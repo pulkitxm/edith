@@ -316,6 +316,9 @@ import WorkerFixtureSupport
     private func executeOwned(_ command: String, payload: Data) async throws -> Data {
         guard !isStopped, !workSuspended else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
+        if command.hasPrefix("herdr.ui.accounts.") {
+            return try await ClaudeAccountsUI.execute(command, payload: payload, worker: self)
+        }
         if command.hasPrefix("herdr.ui.launchSettings.") {
             return try await HerdrUILaunchSettingsEngine.execute(
                 command, payload: payload, worker: self)

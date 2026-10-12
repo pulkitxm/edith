@@ -73,9 +73,43 @@ struct UsageCompactLimitsSnapshot: Codable, Equatable, Sendable {
         let providers = snapshot.providers.filter {
             tile.sourceIDs?.contains($0.provider.rawValue) ?? true
         }
+        let accounts = snapshot.claudeAccounts.filter { account in
+            tile.sourceIDs.map { selected in
+                selected.contains("claude")
+                    || selected.contains("claude-account:" + account.id.uuidString)
+            } ?? true
+        }
+        let inputs =
+            providers.filter { $0.provider != .claude || snapshot.claudeAccounts.isEmpty }
+            .map { ($0.provider.rawValue, $0.provider.rawValue, $0.provider.label, $0) }
+            + accounts.map {
+                (
+                    "claude-account:" + $0.id.uuidString, "claude-account:" + $0.id.uuidString,
+                    $0.name, $0.limits
+                )
+            }
         var rows: [UsageCompactLimitsSnapshot.Row] = []
         var remaining: [Int] = []
-        for provider in providers {
+        for (id, source, label, provider) in inputs {
+            if accounts.count > 2, source.hasPrefix("claude-account:") {
+                let session = UsageCompactQuotaValue(provider.session, now: now)
+                let week = UsageCompactQuotaValue(provider.week, now: now)
+                let quotas = [session, week].compactMap(\.remaining)
+                remaining.append(contentsOf: quotas)
+                let details: [Detail] =
+                    provider.error.map { [.init("errors", $0)] }
+                    ?? [
+                        .init("session", "5h: " + session.text),
+                        .init("weekly", "7d: " + week.text),
+                    ]
+                rows.append(
+                    .init(
+                        id, source: source, title: label,
+                        value: quotas.min().map { "\($0)% left" } ?? "Unavailable", icon: "gauge",
+                        progress: [session.fraction, week.fraction].compactMap { $0 }.max(),
+                        field: "weekly", details: details))
+                continue
+            }
             let windows: [(String, String, LimitWindow?)] = [
                 (
                     "session", provider.provider == .cursor ? "Cursor models" : "Session (5h)",
@@ -90,7 +124,10 @@ struct UsageCompactLimitsSnapshot: Codable, Equatable, Sendable {
                 ),
                 ("additional", "Additional models", provider.fable),
             ]
-            for (field, title, window) in windows where window != nil || field == "weekly" {
+            for (field, title, window) in windows
+            where window != nil || field == "weekly"
+                || (source.hasPrefix("claude-account:") && field == "session")
+            {
                 let quota = UsageCompactQuotaValue(window, now: now)
                 if let capacity = quota.remaining { remaining.append(capacity) }
                 var details: [UsageCompactLimitsSnapshot.Detail] = []
@@ -109,9 +146,9 @@ struct UsageCompactLimitsSnapshot: Codable, Equatable, Sendable {
                 if let error = provider.error { details.append(.init("errors", error)) }
                 rows.append(
                     .init(
-                        provider.provider.rawValue + ":" + field,
-                        source: provider.provider.rawValue,
-                        title: provider.provider.label + " · " + title, value: quota.text,
+                        id + ":" + field,
+                        source: source,
+                        title: label + " · " + title, value: quota.text,
                         icon: quota.expired
                             ? "clock.badge.exclamationmark"
                             : quota.percent == nil
@@ -119,20 +156,31 @@ struct UsageCompactLimitsSnapshot: Codable, Equatable, Sendable {
                         progress: quota.fraction, field: field, details: details))
             }
         }
+        var metrics: [SurfaceMetric] = [
+            .init("providers", "Providers", "\(Set(inputs.map { $0.3.provider }).count)"),
+            .init(
+                "remaining", "Lowest remaining",
+                remaining.min().map { "\($0)%" } ?? "Unavailable"),
+        ]
+        if !accounts.isEmpty {
+            metrics.insert(.init("accounts", "Claude accounts", "\(accounts.count)"), at: 1)
+        }
         return .init(
-            metrics: [
-                .init("providers", "Providers", "\(providers.count)"),
-                .init(
-                    "remaining", "Lowest remaining",
-                    remaining.min().map { "\($0)%" } ?? "Unavailable"),
-            ],
-            rows: rows,
+            metrics: metrics,
+            rows: Array(rows.prefix(64)),
             message: snapshot.failure
-                ?? (providers.isEmpty
+                ?? (inputs.isEmpty
                     ? "No providers match this widget. Connect a provider in Agent Usage or change the selection."
                     : nil),
             updatedAt: snapshot.refreshedAt,
-            sources: snapshot.providers.map { .init($0.provider.rawValue, $0.provider.label) })
+            sources: Array(
+                (snapshot.providers.filter {
+                    $0.provider != .claude || snapshot.claudeAccounts.isEmpty
+                }.map { SurfaceSourceChoice($0.provider.rawValue, $0.provider.label) }
+                    + (snapshot.claudeAccounts.isEmpty ? [] : [.init("claude", "Claude accounts")])
+                    + snapshot.claudeAccounts.map {
+                        .init("claude-account:" + $0.id.uuidString, $0.name)
+                    }).prefix(16)))
     }
     private static func duration(_ seconds: Double) -> String {
         let minutes = Int(min(525_600, max(1, ceil(seconds / 60))))

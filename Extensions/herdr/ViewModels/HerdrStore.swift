@@ -1,3 +1,4 @@
+import EdithExtensionAccounts
 import EdithExtensionSupport
 import EdithExtensionUI
 import AppKit
@@ -155,6 +156,13 @@ final class HerdrStore {
         }
     }
 
+    var claudeAccounts: ClaudeAccountsModel
+    var accountFilter: String? {
+        didSet { reconcileCollapseCountsIfReady() }
+    }
+    var accountSessions: [String: String] = [:]
+    private var accountSessionIdentities: [String: HerdrNativeSession] = [:]
+
     var machineFilter = "all" {
         didSet {
             guard machineFilter != oldValue else { return }
@@ -290,6 +298,9 @@ final class HerdrStore {
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
+    private let accountAgentStarter: @Sendable (URL, String) async throws -> Void
+    private let remoteAccountAgentStarter:
+        @Sendable (ClaudeAccount, String, [String], String, Machine) async throws -> Void
     private let newAgentPaneCreator: HerdrNewAgentPaneCreator
     private let agentStarter: @Sendable (String, String, Machine?) async throws -> Void
     private(set) var agentStartupMessages: [String: String] = [:]
@@ -315,6 +326,7 @@ final class HerdrStore {
 
     init(
         defaults: UserDefaults = SharedDefaults.store,
+        claudeAccounts: ClaudeAccountsModel? = nil,
         liveWatcher: @escaping HerdrLiveWatcher = { yield in await HerdrLive.watch(yield) },
         agentCloser: @escaping HerdrAgentCloser = { try await HerdrAgentCloseExecution.close($0) },
         newAgentPaneCreator: @escaping HerdrNewAgentPaneCreator = {
@@ -333,6 +345,18 @@ final class HerdrStore {
                 name: HerdrLaunchSettings.defaultHerdrSlug(for: kind) ?? kind.lowercased(),
                 pane: pane, on: machine)
         },
+        accountAgentStarter: @escaping @Sendable (URL, String) async throws -> Void = {
+            launcher, pane in
+            try await HerdrLaunchOperations.launchLocalAccount(launcher: launcher, pane: pane)
+        },
+        remoteAccountAgentStarter:
+            @escaping @Sendable (ClaudeAccount, String, [String], String, Machine) async throws ->
+            Void = {
+                account, command, arguments, pane, machine in
+                try await HerdrLaunchOperations.launchRemoteAccount(
+                    account: account, command: command, arguments: arguments, pane: pane,
+                    on: machine)
+            },
         terminalIDResolver: @escaping @Sendable (String, String, Machine?) async throws -> String =
             {
                 try await HerdrPaneOperations.terminalID(session: $0, pane: $1, on: $2)
@@ -349,6 +373,26 @@ final class HerdrStore {
         workspacePresenter: @escaping @MainActor () -> Void = {}
     ) {
         self.defaults = defaults
+        self.claudeAccounts = claudeAccounts ?? ClaudeAccountsModel()
+        let restoredAccountSessions = Dictionary(
+            uniqueKeysWithValues: (defaults.dictionary(forKey: "herdr.claudeAccountSessions")
+                as? [String: String] ?? [:])
+                .filter {
+                    $0.key.utf8.count <= 512 && !$0.key.utf8.contains(0)
+                        && UUID(uuidString: $0.value) != nil
+                }
+                .sorted { $0.key < $1.key }.prefix(4096).map { ($0.key, $0.value) })
+        accountSessions = restoredAccountSessions
+        if let data = defaults.data(forKey: "herdr.claudeAccountSessionIdentities"),
+            data.count <= 1_048_576
+        {
+            accountSessionIdentities =
+                ((try? JSONDecoder().decode([String: HerdrNativeSession].self, from: data)) ?? [:])
+                .filter {
+                    restoredAccountSessions[$0.key] != nil && $0.value.provider.utf8.count <= 256
+                        && $0.value.value.utf8.count <= 512
+                }
+        }
         sidebarAgentOrder = HerdrSidebarOrder(
             defaults.stringArray(forKey: AppStorageKeys.Herdr.sidebarAgentOrder) ?? [])
         sidebarSpaceOrder = HerdrSidebarOrder(
@@ -360,6 +404,8 @@ final class HerdrStore {
         self.agentCloser = agentCloser
         self.newAgentPaneCreator = newAgentPaneCreator
         self.agentStarter = agentStarter
+        self.accountAgentStarter = accountAgentStarter
+        self.remoteAccountAgentStarter = remoteAccountAgentStarter
         self.terminalIDResolver = terminalIDResolver
         self.agentFocuser = agentFocuser
         self.workspacePresenter = workspacePresenter
@@ -518,6 +564,13 @@ final class HerdrStore {
                 if agent.machineID != machineFilter { return false }
             }
             if !kindFilter.isEmpty, !kindFilter.contains(agent.kind) { return false }
+            if let accountFilter {
+                guard agent.kind == "Claude Code",
+                    (accountFilter == "cli"
+                        ? accountSessions[agent.id] == nil
+                        : accountSessions[agent.id] == accountFilter)
+                else { return false }
+            }
             return true
         }
     }
@@ -547,6 +600,7 @@ final class HerdrStore {
     }
 
     func clearSessionFilters() {
+        accountFilter = nil
         machineFilter = "all"
         kindFilter = []
         spaceGroupingEnabled = false
@@ -657,6 +711,7 @@ final class HerdrStore {
     }
 
     func cancelPendingWork() {
+        claudeAccounts.cancelPendingWork()
         workSuspended = true
         for task in terminalRequests.values { task.cancel() }
         for tab in sessions + Array(detachedTabs.values) { tab.quinjet.cancelPendingWork() }
@@ -825,6 +880,16 @@ final class HerdrStore {
 
     private func apply(_ snapshots: [HerdrHostSnapshot], collapseSnapshotComplete: Bool) {
         inventoryReceived = true
+        for agent in snapshots.flatMap(\.agents) where accountSessions[agent.id] != nil {
+            guard let identity = agent.nativeSession else { continue }
+            if let previous = accountSessionIdentities[agent.id], previous != identity {
+                accountSessions.removeValue(forKey: agent.id)
+                accountSessionIdentities.removeValue(forKey: agent.id)
+            } else {
+                accountSessionIdentities[agent.id] = identity
+            }
+        }
+        persistAccountSessions()
         if hosts != snapshots { hosts = snapshots }
         for index in sessions.indices {
             if let updated = agents.first(where: { $0.id == sessions[index].id }),
@@ -2154,39 +2219,145 @@ final class HerdrStore {
 
     func launchNewAgent(
         kind: String, host: HerdrHostSnapshot, existingSpace: HerdrWorkspaceSummary?,
-        newSpaceLabel: String?, openBeside: Bool = false
+        newSpaceLabel: String?, openBeside: Bool = false, accountID: String? = nil
     ) async throws {
         if uiClient != nil {
             var object: [String: Any] = ["kind": kind, "machineID": host.id, "beside": openBeside]
             object["workspaceID"] = existingSpace?.id
             object["label"] = newSpaceLabel
+            object["accountID"] = accountID
             try await performUI("herdr.ui.launch", object: object)
             return
         }
         let machine = machine(for: host)
         guard host.isLocal || machine != nil else { throw HerdrQuinjetError.machineUnavailable }
-        let created = try await newAgentPaneCreator(
-            kind, machine, existingSpace, newSpaceLabel)
+        var account: ClaudeAccount?
+        if kind == "Claude Code", accountID != "cli",
+            accountID != nil || claudeAccounts.hasConfiguredStore
+        {
+            try await claudeAccounts.load()
+            let chosen =
+                accountID == nil || accountID == "default"
+                ? (claudeAccounts.state.defaultID ?? claudeAccounts.state.accounts.first?.id)?
+                    .uuidString : accountID
+            if let chosen, chosen != "cli" {
+                guard let id = UUID(uuidString: chosen), let saved = claudeAccounts.account(id)
+                else {
+                    throw ClaudeAccountError.rejected(
+                        "This account was removed. Choose another account.")
+                }
+                try saved.validateLaunch()
+                var selected = saved
+                if let machine {
+                    if let associated = selected.remoteMachineID,
+                        associated != machine.id.uuidString
+                    {
+                        throw ClaudeAccountError.rejected(
+                            "Choose the machine associated with this account.")
+                    }
+                    if selected.remoteMachineID == nil {
+                        selected.remoteMachineID = machine.id.uuidString
+                        var next = claudeAccounts.state
+                        next.accounts = next.accounts.map { $0.id == selected.id ? selected : $0 }
+                        try await claudeAccounts.persist(next)
+                    }
+                }
+                account = selected
+            }
+        } else if kind != "Claude Code", accountID != nil {
+            throw ClaudeAccountError.invalidRequest
+        }
+        let accountLauncher: URL?
+        if let account, machine == nil {
+            let arguments = HerdrLaunchSettings.launchArguments(
+                kind: kind, options: HerdrLaunchSettings.options(for: kind, in: defaults),
+                in: defaults)
+            let command = HerdrLaunchSettings.launchCommand(for: kind, in: defaults)
+            let directory = try claudeAccounts.directory
+            accountLauncher = try await account.launcher(
+                command: command, arguments: arguments, directory: directory)
+        } else {
+            accountLauncher = nil
+        }
+        let created: HerdrCreatedPane
+        do {
+            created = try await newAgentPaneCreator(kind, machine, existingSpace, newSpaceLabel)
+            try Task.checkCancellation()
+        } catch {
+            if let accountLauncher {
+                try? await ClaudeAccountStorage(directory: try claudeAccounts.directory)
+                    .removeLauncher(accountLauncher)
+            }
+            throw error
+        }
         let placeholder = HerdrAgent.make(
             machineID: host.id, machineName: host.name, machineIsLocal: host.isLocal,
             sshTarget: host.sshTarget, session: "default", pane: created.paneID, kind: kind,
             status: .unknown, title: kind,
             workspace: existingSpace?.label ?? newSpaceLabel ?? "", cwd: "")
+        accountSessions[placeholder.id] = account?.id.uuidString
+        accountSessionIdentities.removeValue(forKey: placeholder.id)
+        persistAccountSessions()
         if openBeside {
             open(placeholder, beside: .right)
         } else {
             open(placeholder)
         }
+        let launcherDirectory = accountLauncher.map {
+            $0.deletingLastPathComponent().deletingLastPathComponent()
+        }
         let start = agentStarter
+        let startAccount = accountAgentStarter
+        let startRemoteAccount = remoteAccountAgentStarter
+        let accountCommand = HerdrLaunchSettings.launchCommand(for: kind, in: defaults)
+        let accountArguments = HerdrLaunchSettings.launchArguments(
+            kind: kind, options: HerdrLaunchSettings.options(for: kind, in: defaults), in: defaults)
         let id = placeholder.id
         agentStartupTasks[id] = HerdrWorkOwnership.start { [weak self] in
             do {
-                try await start(kind, created.paneID, machine)
+                if let accountLauncher {
+                    do {
+                        try await startAccount(accountLauncher, created.paneID)
+                    } catch {
+                        try? await ClaudeAccountStorage(
+                            directory: launcherDirectory
+                                ?? accountLauncher.deletingLastPathComponent()
+                                .deletingLastPathComponent()
+                        ).removeLauncher(accountLauncher)
+                        throw error
+                    }
+                } else if let account, let machine {
+                    try await startRemoteAccount(
+                        account, accountCommand, accountArguments, created.paneID, machine)
+                    try Task.checkCancellation()
+                    if account.isLoggedOut, account.authentication == .browserLogin, let self {
+                        try await self.claudeAccounts.load()
+                        if self.claudeAccounts.account(account.id) == account {
+                            var next = self.claudeAccounts.state
+                            next.accounts = next.accounts.map {
+                                var current = $0
+                                if current.id == account.id { current.isLoggedOut = false }
+                                return current
+                            }
+                            try await self.claudeAccounts.persist(next)
+                            await self.claudeAccounts.notifyChanged()
+                        }
+                    }
+                } else {
+                    try await start(kind, created.paneID, machine)
+                }
             } catch {
                 guard !Task.isCancelled else { return }
                 self?.agentStartupMessages[id] = HerdrLaunchOperations.startupMessage(for: error)
             }
             self?.agentStartupTasks[id] = nil
+        }
+    }
+
+    private func persistAccountSessions() {
+        defaults.set(accountSessions, forKey: "herdr.claudeAccountSessions")
+        if let data = try? JSONEncoder().encode(accountSessionIdentities) {
+            defaults.set(data, forKey: "herdr.claudeAccountSessionIdentities")
         }
     }
 
@@ -2464,6 +2635,7 @@ final class HerdrStore {
         applyUILayout(state.layout)
         terminalPanels.adoptUI(state.panels)
         agentStartupMessages = state.startupMessages
+        accountSessions = state.accountSessions
         messaging.adopt(state.hooks)
         uiActivity?.adoptUI(state)
         uiError = nil

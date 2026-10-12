@@ -20,6 +20,7 @@ struct UsageUIPreferences: Codable, Equatable, Sendable {
 
     var values: [String: Value]
     static let editableKeys: Set<String> = [
+        MenuBarLimits.accountSelectionKey,
         AppStorageKeys.Budget.capPercent,
         AppStorageKeys.Budget.deadline,
         AppStorageKeys.Budget.enabled,
@@ -126,6 +127,11 @@ struct UsageUIPreferences: Codable, Equatable, Sendable {
             case .text(let text):
                 guard text.utf8.count <= 65_536, !text.utf8.contains(0) else {
                     throw ExtensionPeerError.invalidRequest
+                }
+                if key == MenuBarLimits.accountSelectionKey {
+                    guard text.isEmpty || UUID(uuidString: text) != nil else {
+                        throw ExtensionPeerError.invalidRequest
+                    }
                 }
             case .strings(let strings):
                 guard strings.count <= 100,

@@ -13,23 +13,28 @@ final class UsageSurface {
 
     init(
         store: SurfaceUsageStore, controller: UsageWorkerController,
-        limits: @escaping @Sendable () async -> LimitsTopicSnapshot = {
-            let values = await LimitsHistory.loadLatestProviders()
-            return LimitsTopicSnapshot(
-                refreshedAt: values.values.map(\.date).max() ?? .distantPast,
-                providers: LimitProvider.allCases.compactMap { provider in
-                    values[provider].map {
-                        .init(
-                            provider: provider, session: $0.session, week: $0.week, fable: $0.fable,
-                            grok: $0.grok)
-                    }
-                }, failure: nil)
-        }, open: @escaping @MainActor () -> Void = { ExtensionPresentation.showWindow() },
+        limits: (@Sendable () async -> LimitsTopicSnapshot)? = nil,
+        open: @escaping @MainActor () -> Void = { ExtensionPresentation.showWindow() },
         privacy: @escaping @MainActor () -> [String: String] = {
             ExtensionSharedState.current?.values(for: "presenter") ?? [:]
         }
     ) {
-        self.store = store; self.controller = controller; self.limits = limits; self.open = open;
+        self.store = store; self.controller = controller; self.open = open;
+        self.limits =
+            limits ?? { [weak controller] in
+                if let latest = await controller?.latestLimits { return latest }
+                let values = await LimitsHistory.loadLatestProviders()
+                return LimitsTopicSnapshot(
+                    refreshedAt: values.values.map(\.date).max() ?? .distantPast,
+                    providers: LimitProvider.allCases.compactMap { provider in
+                        values[provider].map {
+                            .init(
+                                provider: provider, session: $0.session, week: $0.week,
+                                fable: $0.fable,
+                                grok: $0.grok)
+                        }
+                    }, failure: nil)
+            }
         self.privacy = privacy
     }
 
@@ -143,7 +148,8 @@ final class UsageSurface {
         }
         try Task.checkCancellation()
         let selected = cached.providers.filter {
-            tile.sourceIDs?.contains($0.provider.rawValue) ?? true
+            ($0.provider != .claude || cached.claudeAccounts.isEmpty)
+                && (tile.sourceIDs?.contains($0.provider.rawValue) ?? true)
         }
         var rows: [SurfaceDataRow] = []
         for provider in selected {
@@ -183,14 +189,36 @@ final class UsageSurface {
                         icon: "exclamationmark.triangle", field: "errors"))
             }
         }
+        let projected = UsageCompactLimitsSnapshot.project(cached, tile: tile)
+        let accountRows = projected.rows.filter {
+            $0.source.hasPrefix("claude-account:") && tile.shows($0.field)
+        }
+        for row in accountRows {
+            rows.append(
+                .init(
+                    row.id, sourceID: row.source, title: row.title,
+                    detail: row.details.filter { tile.shows($0.field) }.map(\.text).joined(
+                        separator: " · "),
+                    value: row.value, icon: row.icon, progress: row.progress, field: row.field))
+        }
         return .init(
-            providerID: "usage", metrics: [.init("providers", "Providers", String(selected.count))],
+            providerID: "usage",
+            metrics: [
+                .init(
+                    "providers", "Providers",
+                    String(selected.count + (accountRows.isEmpty ? 0 : 1)))
+            ]
+                + projected.metrics.filter { $0.id == "accounts" },
             rows: Array(rows.prefix(tile.itemLimit)),
             actions: [
                 .init("limits-refresh", "Refresh limits", "arrow.clockwise"),
                 .init("open", "Open Usage", "arrow.up.right"),
             ],
-            sources: LimitProvider.allCases.map { .init($0.rawValue, $0.label) },
+            sources: Array(
+                (LimitProvider.allCases.map { SurfaceSourceChoice($0.rawValue, $0.label) }
+                    + cached.claudeAccounts.map {
+                        .init("claude-account:" + $0.id.uuidString, $0.name)
+                    }).prefix(16)),
             message: rows.isEmpty
                 ? "No current limits. Open Usage to connect a provider." : cached.failure,
             updatedAt: cached.refreshedAt == .distantPast ? nil : cached.refreshedAt)

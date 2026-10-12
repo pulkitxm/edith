@@ -180,7 +180,7 @@ struct HerdrPage: View {
             }
         }
         .edithSheet(isPresented: $launchSettingsPresented) {
-            HerdrLaunchSettingsSheet(store: store)
+            HerdrLaunchSettingsSheet(store: store, accounts: store.claudeAccounts)
         }
         .edithSheet(isPresented: $newAgentPopupPresented, dismissible: nil) {
             HerdrNewAgentPopup(store: store)

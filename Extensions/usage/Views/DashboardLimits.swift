@@ -14,6 +14,7 @@ struct RateLimitsDialsView: View {
     @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
         LimitRing.defaultCriticalPercent
     @Environment(\.surfacePresentation) private var presentation
+    @Environment(\.compactLayout) private var compact
     @State private var latestProviders: [LimitProvider: LimitsHistory.Latest] = [:]
     @State private var point: LimitPoint?
     @State private var allowance: GrokAllowance?
@@ -45,14 +46,20 @@ struct RateLimitsDialsView: View {
                 if let client {
                     return
                         (try? await client.value(
-                            "usage.ui.limits.latest", as: UsageUILimitsSummary.self))?.providers
-                        ?? [:]
+                            "usage.ui.limits.latest", as: UsageUILimitsSummary.self))
+                        ?? UsageUILimitsSummary(providers: [:], current: nil)
                 }
-                return await LimitsHistory.loadLatestProviders()
-            }) {
-                latest in
+                return UsageUILimitsSummary(
+                    providers: await LimitsHistory.loadLatestProviders(),
+                    current: UsageWorkerOperations.controller?.latestLimits)
+            }) { summary in
+                let latest = summary.providers
                 latestProviders = latest
-                let found = LimitProvider.allCases.filter { latest[$0] != nil }
+                latestLimits = summary.current
+                let found = LimitProvider.allCases.filter {
+                    latest[$0] != nil
+                        || ($0 == .claude && summary.current?.claudeAccounts.isEmpty == false)
+                }
                 providers = found
                 let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
                 let provider = found.contains(saved) ? saved : found.first ?? saved
@@ -84,7 +91,10 @@ struct RateLimitsDialsView: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 LimitsRefreshButton(dark: dark) { reload() }
             }
-            if showsJumpLink {
+            if selected == .claude, let accounts = latestLimits?.claudeAccounts, !accounts.isEmpty {
+                ClaudeAccountLimitsView(accounts: accounts, compact: compact)
+                    .presenterCover(UsagePresenterState.shared.hides("Usage"))
+            } else if showsJumpLink {
                 providerOverview
             } else {
                 HStack(spacing: UIScale.pt(24)) {
