@@ -191,6 +191,40 @@ test("shipping evidence requires one successful bounded peer diagnostic step", (
   }
 });
 
+test("shipping evidence requires one successful authenticated peer transport step", () => {
+  expect(stagedEvidence(fixture())).toBeDefined();
+  for (const mutation of [
+    (steps) =>
+      steps.filter(
+        ({ name }) =>
+          name !== "Verify authenticated peer transport and lifecycle",
+      ),
+    (steps) =>
+      steps.map((step) =>
+        step.name === "Verify authenticated peer transport and lifecycle"
+          ? { ...step, conclusion: "skipped" }
+          : step,
+      ),
+    (steps) =>
+      steps.map((step) =>
+        step.name === "Verify authenticated peer transport and lifecycle"
+          ? { ...step, conclusion: "failure" }
+          : step,
+      ),
+    (steps) => [
+      ...steps,
+      steps.find(
+        ({ name }) =>
+          name === "Verify authenticated peer transport and lifecycle",
+      ),
+    ],
+  ]) {
+    const value = fixture();
+    value.jobs[2].steps = mutation(value.jobs[2].steps);
+    expect(() => stagedEvidence(value)).toThrow();
+  }
+});
+
 test("staging requires real source and attempt identity with all actual native predecessors successful", () => {
   for (const mutation of [
     (value) => {

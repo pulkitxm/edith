@@ -11,6 +11,7 @@ enum ExtensionPeerFailureDiagnostics {
         case registrationPhysicalName = "registration_physical_name"
         case registrationProcess = "registration_process"
         case connectionFailed = "connection_failed"
+        case clientAuthentication = "client_authentication"
         case sendFailed = "send_failed"
         case responseReadUnavailable = "response_read_unavailable"
         case serverPeerCredentials = "server_peer_credentials"
