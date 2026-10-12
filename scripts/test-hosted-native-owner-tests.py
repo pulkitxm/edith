@@ -45,15 +45,21 @@ class Process:
 
 
 class Ownership:
-    def __init__(self, process, survives_term=False, conflicts=False):
+    def __init__(self, process, survives_term=False, conflicts=False, observes_test=True):
         self.process = process
         self.survives_term = survives_term
         self.identity_value = (234, 100, 7, '/fixture/swiftpm-testing', 123)
         self.active = process.returncode is None
         self.signals = []
         self.has_conflicts = conflicts
+        self.observes_test = observes_test
+        self.first = True
 
     def refresh(self):
+        if self.first and self.observes_test and self.process.returncode == 0:
+            self.first = False
+            return [self.identity_value]
+        self.first = False
         return [self.identity_value] if self.active else []
 
     def identity(self, pid):
@@ -170,6 +176,14 @@ class OriginalNativeOwnerTests(unittest.TestCase):
         self.assertIn('parentExitCode', timeline)
         self.assertEqual(len(result['logSHA256']), 64)
 
+    def test_clean_wrapper_exit_without_observed_native_testing_process_fails(self):
+        process = Process(0)
+        result, _, _ = self.run_fixture(
+            'Test run with 19 tests in 4 suites passed.\n', process,
+            Ownership(process, observes_test=False))
+        self.assertFalse(result['passed'])
+        self.assertFalse(result['observedTestingProcess'])
+
     def test_empty_or_failed_native_output_cannot_be_reported_as_pass(self):
         for text, code in (('Build complete!\n', 0), ('Test run with 0 tests passed.\n', 0),
                            ('Executed 2 tests, with 1 failure.\n', 0),
@@ -236,6 +250,166 @@ class OriginalNativeOwnerTests(unittest.TestCase):
                 self.assertEqual(kill.call_args_list, [
                     unittest.mock.call(123, signal.SIGTERM), unittest.mock.call(123, signal.SIGKILL)])
                 self.assertEqual(process.reaps, 1)
+
+
+class Kernel:
+    def __init__(self):
+        self.processes = {123: (123, 100, 7, '/usr/bin/make', 123, 1, 501, 501)}
+        self.signals = []
+
+    def proc_pidinfo(self, pid, flavor, argument, pointer, size):
+        value = self.processes.get(pid)
+        if value is None:
+            return 0
+        info = pointer._obj
+        info.pid, info.seconds, info.microseconds = value[:3]
+        info.pgid, info.ppid, info.uid, info.ruid = value[4:]
+        return size
+
+    def proc_pidpath(self, pid, buffer, size):
+        value = self.processes.get(pid)
+        if value is None:
+            return 0
+        buffer.value = value[3].encode()
+        return len(buffer.value)
+
+    def proc_listchildpids(self, pid, children, size):
+        values = [item[0] for item in self.processes.values() if item[5] == pid]
+        for index, child in enumerate(values[:64]):
+            children[index] = child
+        return len(values)
+
+    def kill(self, pid, value):
+        if pid not in self.processes:
+            raise ProcessLookupError()
+        if value:
+            self.signals.append((pid, value))
+
+
+class OwnedKernelContracts(unittest.TestCase):
+    def setUp(self):
+        self.kernel = Kernel()
+        self.library = patch.object(runner.watchdog.ctypes, 'CDLL', return_value=self.kernel)
+        self.kill = patch.object(runner.os, 'kill', side_effect=self.kernel.kill)
+        self.library.start()
+        self.kill.start()
+        self.addCleanup(self.library.stop)
+        self.addCleanup(self.kill.stop)
+        self.owner = runner.BoundedOwnership(123, 501)
+
+    def test_live_exec_transition_retains_root_and_discovers_original_native_child(self):
+        self.owner.refresh()
+        self.kernel.processes[123] = (123, 100, 7, '/fixture/Xcode/usr/bin/make', 123, 1, 501, 501)
+        self.kernel.processes[234] = (234, 101, 8, '/fixture/swiftpm-testing-helper', 123, 123, 501, 501)
+        self.assertEqual({item[0] for item in self.owner.refresh()}, {123, 234})
+        self.assertEqual(self.owner.transitions[0]['previous'][3], '/usr/bin/make')
+        self.assertEqual(self.owner.transitions[0]['current'][3], '/fixture/Xcode/usr/bin/make')
+        self.owner.terminate(signal.SIGSTOP)
+        self.assertEqual(set(self.kernel.signals), {(123, signal.SIGSTOP), (234, signal.SIGSTOP)})
+        self.assertEqual(self.owner.errors, [])
+
+    def test_original_deadline_stops_transitioned_root_and_native_child_before_sampling(self):
+        process = Process()
+        self.owner.refresh()
+        self.kernel.processes[123] = (123, 100, 7, '/fixture/Xcode/usr/bin/make', 123, 1, 501, 501)
+        self.kernel.processes[234] = (234, 101, 8, '/fixture/swiftpm-testing-helper', 123, 123, 501, 501)
+        samples = []
+        original = self.kernel.kill
+
+        def kill(pid, value):
+            original(pid, value)
+            if value == signal.SIGKILL:
+                self.kernel.processes.pop(pid)
+                if pid == process.pid:
+                    process.returncode = -value
+
+        self.kill.stop()
+        with patch.object(runner.os, 'kill', side_effect=kill):
+            result, _, _ = OriginalNativeOwnerTests.run_fixture(
+                self, 'Build complete!\n', process, self.owner,
+                lambda *args, **kwargs: samples.append((args[0], list(self.kernel.signals))))
+        self.assertTrue(result['timedOut'])
+        self.assertEqual(result['exitCode'], 124)
+        self.assertTrue(result['observedTestingProcess'])
+        self.assertEqual(samples[0][0][1], '234')
+        self.assertEqual(set(samples[0][1]), {(123, signal.SIGSTOP), (234, signal.SIGSTOP)})
+        self.assertEqual(result['cleanup']['remainingOwnedProcesses'], 0)
+        self.assertTrue(result['cleanup']['reaped'])
+
+    def test_reused_pid_birth_uid_real_uid_and_group_cannot_renew_ownership(self):
+        for index, value in [(1, 200), (2, 9), (4, 456), (6, 502), (7, 502)]:
+            with self.subTest(index=index):
+                self.kernel.processes[123] = (123, 100, 7, '/usr/bin/make', 123, 1, 501, 501)
+                owner = runner.BoundedOwnership(123, 501)
+                owner.refresh()
+                changed = list(self.kernel.processes[123])
+                changed[index] = value
+                self.kernel.processes[123] = tuple(changed)
+                self.kernel.signals.clear()
+                owner.terminate(signal.SIGKILL)
+                self.assertEqual(self.kernel.signals, [])
+                self.assertTrue(owner.errors)
+
+    def test_identity_is_rechecked_immediately_before_signal(self):
+        self.owner.refresh()
+        original = self.owner.refresh
+
+        def race():
+            values = original()
+            self.kernel.processes[123] = (123, 200, 7, '/usr/bin/make', 123, 1, 501, 501)
+            return values
+
+        self.owner.refresh = race
+        self.owner.terminate(signal.SIGTERM)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_parent_pid_reuse_during_child_enumeration_never_admits_or_signals_foreign_child(self):
+        original = self.kernel.proc_listchildpids
+
+        def enumerate_children(pid, children, size):
+            if pid == 123:
+                self.kernel.processes[123] = (123, 200, 7, '/fixture/foreign-parent', 123, 1, 501, 501)
+                self.kernel.processes[234] = (234, 201, 8, '/fixture/foreign-child', 123, 123, 501, 501)
+            return original(pid, children, size)
+
+        self.kernel.proc_listchildpids = enumerate_children
+        self.owner.refresh()
+        self.assertNotIn(234, self.owner.seals)
+        self.assertNotIn(234, self.owner.known)
+        self.assertIn('Owned parent identity changed before admission', self.owner.errors)
+        self.owner.terminate(signal.SIGKILL)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_verified_dead_history_does_not_consume_concurrent_bound_or_allow_pid_reuse(self):
+        self.owner.refresh()
+        for pid in range(200, 300):
+            self.kernel.processes[pid] = (pid, pid, 7, '/fixture/compiler', 123, 123, 501, 501)
+            self.assertEqual(len(self.owner.refresh()), 2)
+            del self.kernel.processes[pid]
+            self.assertEqual(len(self.owner.refresh()), 1)
+        self.assertEqual(len(self.owner.seals), 101)
+        self.assertEqual(len(self.owner.known), 1)
+        self.assertEqual(self.owner.errors, [])
+        self.kernel.processes[200] = (200, 400, 7, '/fixture/compiler', 123, 123, 501, 501)
+        self.owner.refresh()
+        self.assertTrue(self.owner.errors)
+
+    def test_concurrent_process_and_lifetime_transition_bounds_fail_closed(self):
+        for pid in range(200, 264):
+            self.kernel.processes[pid] = (pid, pid, 7, '/fixture/compiler', 123, 123, 501, 501)
+        self.owner.refresh()
+        self.assertTrue(self.owner.errors)
+        self.kernel.processes = {123: self.kernel.processes[123]}
+        owner = runner.BoundedOwnership(123, 501)
+        owner.refresh()
+        owner.transitions = [{}] * 1024
+        self.kernel.processes[123] = (123, 100, 7, '/fixture/other-make', 123, 1, 501, 501)
+        owner.refresh()
+        self.assertIn('Owned executable transition bound exceeded', owner.errors)
+        owner = runner.BoundedOwnership(123, 501)
+        owner.seals = {pid: (pid, 1, 1, 123) for pid in range(5000, 9096)}
+        owner.refresh()
+        self.assertIn('Owned lifetime process bound exceeded', owner.errors)
 
 
 if __name__ == '__main__':

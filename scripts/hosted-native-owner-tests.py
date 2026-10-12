@@ -1,4 +1,5 @@
 from pathlib import Path
+import ctypes
 import hashlib
 import importlib.util
 import json
@@ -35,17 +36,98 @@ class BoundedOwnership(watchdog.OwnedProcesses):
     def __init__(self, leader, uid):
         super().__init__(leader, uid)
         self.errors = []
+        self.seals = {}
+        self.transitions = []
+        self.rejected = {}
+        value = self.snapshot(leader)
+        if value is None or value[4] != leader:
+            raise RuntimeError('Owned leader identity unavailable')
+        identity = value[:5]
+        self.seals[leader] = identity[:3] + identity[4:5]
+        self.known[leader] = identity
+
+    def snapshot(self, pid):
+        value = super().snapshot(pid)
+        if value is None:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return None
+            raise RuntimeError('Live owned process identity unavailable')
+        return value
+
+    def reject(self, pid, message):
+        if message not in self.errors and len(self.errors) < 64:
+            self.errors.append(message)
+        if pid in self.known:
+            self.rejected[pid] = self.known[pid]
 
     def refresh(self):
+        pending = [(self.leader, None)] + [(pid, None) for pid in self.known]
+        visited = set()
+        active = {}
+        while pending:
+            pid, parent = pending.pop()
+            if pid in visited:
+                continue
+            visited.add(pid)
+            try:
+                value = self.snapshot(pid)
+                if value is None:
+                    self.known.pop(pid, None)
+                    continue
+                identity = value[:5]
+                seal = identity[:3] + identity[4:5]
+                previous = self.seals.get(pid)
+                if previous is not None and previous != seal:
+                    raise RuntimeError('Owned process birth or group changed')
+                if previous is None:
+                    if pid == self.leader:
+                        if identity[4] != self.leader:
+                            raise RuntimeError('Owned leader group changed')
+                    elif parent not in active or value[5] != parent:
+                        raise RuntimeError('Owned descendant parent changed')
+                    else:
+                        parent_snapshot = self.snapshot(parent)
+                        if parent_snapshot is None or parent_snapshot[:5] != active[parent]:
+                            raise RuntimeError('Owned parent identity changed before admission')
+                    if len(self.seals) >= 4096:
+                        raise RuntimeError('Owned lifetime process bound exceeded')
+                    self.seals[pid] = seal
+                prior = self.known.get(pid)
+                if prior is not None and prior[3] != identity[3]:
+                    if len(self.transitions) >= 1024:
+                        raise RuntimeError('Owned executable transition bound exceeded')
+                    self.transitions.append({'previous': prior, 'current': identity})
+                if len(active) >= 64:
+                    raise RuntimeError('Owned concurrent descendant bound exceeded')
+                self.known[pid] = identity
+                active[pid] = identity
+                children = (ctypes.c_int * 64)()
+                count = self.library.proc_listchildpids(pid, children, ctypes.sizeof(children))
+                if count < 0 or count >= len(children):
+                    raise RuntimeError('Invalid owned child enumeration')
+                pending.extend((children[index], pid) for index in range(count))
+            except (OSError, RuntimeError) as error:
+                self.reject(pid, str(error))
+        return list(active.values())
+
+    def conflicts(self):
+        return list(self.rejected.values())
+
+    def verified(self, identity):
         try:
-            return super().refresh()
+            current = self.identity(identity[0])
+            if current is not None and current != identity:
+                self.reject(identity[0], 'Owned identity changed before signal')
+            return current == identity
         except (OSError, RuntimeError) as error:
-            self.errors.append(str(error))
-            return [item for item in self.known.values() if self.identity(item[0]) == item]
+            self.reject(identity[0], str(error))
+            return False
 
     def terminate(self, value):
         for identity in self.refresh():
-            if self.identity(identity[0]) == identity:
+            if self.verified(identity):
                 try:
                     os.kill(identity[0], value)
                 except ProcessLookupError:
@@ -196,14 +278,16 @@ def run_original(arguments, root, environment, output, deadline=TEST_DEADLINE,
         r'Test run with [1-9][0-9]* tests? (?:in [1-9][0-9]* suites? )?passed|Executed [1-9][0-9]* tests?, with 0 failures',
         text))
     code = 124 if timed_out else 1 if overflow or failure else process.returncode
-    passed = (code == 0 and completed and cleanup['naturalSurvivorCount'] == 0
+    observed_testing = any(testing_process(item[3]) for item in observed)
+    passed = (code == 0 and completed and observed_testing and cleanup['naturalSurvivorCount'] == 0
               and cleanup['reaped'] and cleanup['remainingOwnedProcesses'] == 0
               and cleanup['unverifiedOwnedProcesses'] == 0 and not cleanup['ownershipErrors'])
     return {
         'argv': arguments, 'exitCode': code, 'passed': passed, 'timedOut': timed_out,
         'logBoundExceeded': overflow, 'failure': failure,
         'testsCompleted': completed, 'durationSeconds': round(clock() - started, 3),
-        'observedTestingProcess': any(testing_process(item[3]) for item in observed),
+        'observedTestingProcess': observed_testing,
+        'ownedExecutableTransitions': getattr(ownership, 'transitions', []),
         'knownOwnedProcesses': list(observed), 'cleanup': cleanup,
         'logSHA256': hashlib.sha256(log_path.read_bytes()).hexdigest(),
         'ownedCrashReports': watchdog.owned_crash_reports(
