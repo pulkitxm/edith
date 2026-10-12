@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   managedNativeBuildSteps,
   managedNativeTestSteps,
+  shippingNativeTestSteps,
 } from "./hosted-managed-views/native-ci-contract.mjs";
 import {
   artifact,
@@ -50,7 +51,9 @@ function fixture(publishing) {
     status: "completed",
     conclusion: name === "publish" && !publishing ? "skipped" : "success",
     steps: (name === "tests"
-      ? managedNativeTestSteps
+      ? publishing
+        ? shippingNativeTestSteps
+        : managedNativeTestSteps
       : name.startsWith("build (")
         ? managedNativeBuildSteps
         : name === "publish" && publishing
