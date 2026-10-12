@@ -1,5 +1,5 @@
 import AppKit
-@_implementationOnly import GhosttyKit
+internal import GhosttyKit
 import UniformTypeIdentifiers
 
 public struct TerminalDropMedia: Sendable {

@@ -1,5 +1,5 @@
 import AppKit
-@_implementationOnly import GhosttyKit
+internal import GhosttyKit
 
 final class GhosttySurfaceRegistry {
     static let shared = GhosttySurfaceRegistry()

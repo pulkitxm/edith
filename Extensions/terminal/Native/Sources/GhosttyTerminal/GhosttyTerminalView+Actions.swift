@@ -1,5 +1,5 @@
 import AppKit
-@_implementationOnly import GhosttyKit
+internal import GhosttyKit
 
 final class TerminalLinkHoverView: NSView {
     private let backdrop = NSVisualEffectView(frame: .zero)

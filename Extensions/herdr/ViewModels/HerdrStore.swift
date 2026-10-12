@@ -2649,7 +2649,7 @@ final class HerdrStore {
     }
 
     func listWorkspaces(for host: HerdrHostSnapshot) async throws -> [HerdrWorkspaceSummary] {
-        if let uiClient {
+        if uiClient != nil {
             return try JSONDecoder().decode(
                 [HerdrWorkspaceSummary].self,
                 from: await self.requestUI("herdr.ui.workspaces", object: ["machineID": host.id]))
@@ -2658,7 +2658,7 @@ final class HerdrStore {
     }
 
     func searchModel() -> HerdrSearchModel {
-        guard let uiClient else { return HerdrSearchModel(usage: usage) }
+        guard uiClient != nil else { return HerdrSearchModel(usage: usage) }
         return HerdrSearchModel(
             searcher: { request in
                 let data = try await self.requestUI(

@@ -53,6 +53,7 @@ import WorkerFixtureSupport
         let holder: TerminalSessionHolder
     }
     private var shells: [UUID: ShellSelection] = [:]
+    private var retiringShells: [UUID: (id: UUID, task: Task<Void, Never>)] = [:]
     private let prepareShell:
         @MainActor (PaneTarget, HerdrStore) async throws -> TerminalLaunchRequest
     private lazy var uiHookPlans = HerdrUIHookPlans(
@@ -154,11 +155,24 @@ import WorkerFixtureSupport
                 if let shell = self.shells.removeValue(forKey: pane) {
                     if let handle = shell.holder.descriptor?.handle { handles.append(handle) }
                     shell.holder.stop()
+                    self.retiringShells[pane] = (
+                        UUID(), Task { await shell.holder.stopAndWait() }
+                    )
                 }
             }
             return handles
         }
-        spaces.drain = { [weak self] handles in await self?.terminalSessions.files.drain(handles) }
+        spaces.drain = { [weak self] handles in
+            guard let self else { return }
+            let pending = self.retiringShells
+            for (pane, retired) in pending {
+                await retired.task.value
+                if self.retiringShells[pane]?.id == retired.id {
+                    self.retiringShells[pane] = nil
+                }
+            }
+            await self.terminalSessions.files.drain(handles)
+        }
         terminalSessions.files.upload = { [weak self] handle, urls in
             guard let self, !self.isStopped, self.terminalSessions.find(handle) != nil else {
                 throw ExtensionPeerError.unavailable
@@ -651,6 +665,7 @@ import WorkerFixtureSupport
         hostFolderChoice?.invalidate()
         await terminalSessions.stopAllAndWait()
         spaces.stopAll()
+        await spaces.drainPendingRetirements()
         uiHookPlans.shutdown()
         await catalogs.shutdown()
         for selection in shells.values { await selection.holder.stopAndWait() }

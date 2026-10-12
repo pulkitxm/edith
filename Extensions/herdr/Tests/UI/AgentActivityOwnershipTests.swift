@@ -14,6 +14,7 @@ import Testing
     }
 
     @Test func disableDrainsActivityAndHooksThenFreshWorkerRestoresOnlyOptedInScope() async throws {
+        defer { HerdrWorkOwnership.enable() }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let suite = "activity-disable-" + UUID().uuidString
@@ -44,11 +45,16 @@ import Testing
         _ = try await permission(surface, SurfaceTile(.agents))
         try await worker.prepareDisable()
         _ = try? await pending.value
-        #expect(worker.isStopped)
+        await #expect(throws: ExtensionPeerError.self) {
+            try await worker.execute("herdr.hooks.list", payload: Data("{}".utf8))
+        }
+        #expect(!worker.isStopped)
         #expect(
             !FileManager.default.fileExists(
                 atPath: installer.configurationURL(provider: .claude, scope: .global).path))
         #expect(monitor.settings.configuration(.claude).approvals)
+        await worker.shutdown()
+        #expect(worker.isStopped)
         let restarted = AgentActivityMonitor(
             defaults: defaults,
             hookFiles: AgentActivityHookFiles(root: root.appendingPathComponent("private")))
@@ -65,11 +71,13 @@ import Testing
         #expect(
             !FileManager.default.fileExists(
                 atPath: installer.configurationURL(provider: .claude, scope: .global).path))
+        await fresh.shutdown()
     }
 
     @Test func liveProviderProjectionHonorsIndependentStatesSubagentsFieldsAndCurrentApprovals()
         async throws
     {
+        defer { HerdrWorkOwnership.enable() }
         let suite = "activity-tests-" + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }

@@ -25,16 +25,8 @@ import Testing
         _ = await monitor.service.ingest(event)
         await monitor.refresh()
         let request = try #require(monitor.activity.approvals.first)
-        let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
-            NSAccessibility.Attribute(rawValue: $0)
-        }
-        let previous = attributes.map { NSApp.accessibilityAttributeValue($0) }
-        for key in attributes { NSApp.accessibilitySetValue(true, forAttribute: key) }
-        defer {
-            for (key, value) in zip(attributes, previous) {
-                NSApp.accessibilitySetValue(value ?? false, forAttribute: key)
-            }
-        }
+        let accessibility = try HerdrAccessibilityFixture.enable()
+        defer { for error in accessibility.restore() { Issue.record(error) } }
         for width in [340.0, 780.0] {
             for zoom in [1.0, 1.5] {
                 UIScale.apply(zoom)

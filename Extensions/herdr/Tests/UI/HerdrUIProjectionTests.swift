@@ -126,6 +126,7 @@ import Testing
                 environment: ["PATH=/usr/bin:/bin", "TERM=xterm-256color"],
                 currentDirectory: "/private/tmp")
         }
+        try await holder.waitForCreation()
         let descriptor = try #require(holder.descriptor)
         let client = try OwnedTerminalClient(descriptor: descriptor) {
             try await worker.execute($0, payload: $1)

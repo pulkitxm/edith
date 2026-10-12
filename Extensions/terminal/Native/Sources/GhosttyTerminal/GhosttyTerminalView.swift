@@ -1,5 +1,5 @@
 import AppKit
-@_implementationOnly import GhosttyKit
+internal import GhosttyKit
 
 public final class GhosttyTerminalView: NSView {
     public var onClose: ((Int32?) -> Void)?

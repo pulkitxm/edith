@@ -73,6 +73,7 @@ import Testing
     }
 
     @Test func resetWhileAnOwnerReplyIsPendingCannotRestoreTheRendererSession() async throws {
+        defer { HerdrWorkOwnership.enable() }
         let suite = "herdr.connections.fixture." + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }

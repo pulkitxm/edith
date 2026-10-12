@@ -1,6 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
-@_implementationOnly import GhosttyKit
+internal import GhosttyKit
 
 extension GhosttyTerminalView {
     static func mods(from flags: NSEvent.ModifierFlags) -> ghostty_input_mods_e {

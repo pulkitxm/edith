@@ -1,5 +1,5 @@
 import AppKit
-@_implementationOnly import GhosttyKit
+internal import GhosttyKit
 
 extension GhosttyTerminalView: NSTextInputClient {
     public func hasMarkedText() -> Bool {

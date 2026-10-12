@@ -21,6 +21,7 @@ private actor HerdrAmbientFlight {
 
 @MainActor @Suite(.serialized) struct HerdrAmbientPolicyTests {
     @Test func originalDefaultCadenceBatteryLiveDemandAndConstrainedPowerApply() async throws {
+        defer { HerdrWorkOwnership.enable() }
         var battery = true
         var constrained = false
         var powerChanged: (@MainActor () -> Void)?
@@ -56,6 +57,7 @@ private actor HerdrAmbientFlight {
     }
 
     @Test func originalNotificationsTrackingAndSubscriptionsAreActualDemand() async throws {
+        defer { HerdrWorkOwnership.enable() }
         let defaults = HerdrUIDefaults()
         HerdrAttentionSettings(blocked: false, finished: false, errors: false).save(in: defaults)
         var version: String? = "fixture-v1"
@@ -87,6 +89,7 @@ private actor HerdrAmbientFlight {
     }
 
     @Test func malformedPolicyAndPublicCommandsCannotForgeLiveDemand() async throws {
+        defer { HerdrWorkOwnership.enable() }
         let worker = makeWorker(defaults: HerdrUIDefaults())
         try worker.applyAmbientPolicy(context: context(pause: true))
         for invalid: NSDictionary in [
@@ -120,6 +123,7 @@ private actor HerdrAmbientFlight {
 
     @Test func policyChangesPreserveTheRealPollingFlightAndCancelOnlyFutureAdmissions() async throws
     {
+        defer { HerdrWorkOwnership.enable() }
         let worker = makeWorker(defaults: HerdrUIDefaults())
         try worker.applyAmbientPolicy(context: context(pause: false, subscribers: 1))
         let admission = try #require(HerdrLive.admission)

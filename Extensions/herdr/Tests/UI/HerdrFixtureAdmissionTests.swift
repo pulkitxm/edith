@@ -49,6 +49,7 @@ import WorkerFixtureTestSupport
 
 @MainActor @Suite(.serialized) struct HerdrFixtureAdmissionTests {
     @Test func admittedFixtureAppliesPolicyWithoutAnyPowerOrDiscoveryEffects() async throws {
+        defer { HerdrWorkOwnership.enable() }
         let fixture = try EngineFixture(owner: "herdr")
         defer { fixture.remove() }
         let admission = try #require(try fixture.admit())
@@ -69,6 +70,7 @@ import WorkerFixtureTestSupport
     }
 
     @Test func actualRuntimeRevalidatesFixtureBeforeEveryPolicySynchronization() async throws {
+        defer { HerdrWorkOwnership.enable() }
         let fixture = try EngineFixture(owner: "herdr")
         defer { fixture.remove() }
         let admitted = try #require(try fixture.admit())
@@ -134,6 +136,7 @@ import WorkerFixtureTestSupport
     }
 
     @Test func fixtureCannotBecomeProductionDuringSynchronization() async throws {
+        defer { HerdrWorkOwnership.enable() }
         let fixture = try EngineFixture(owner: "herdr")
         defer { fixture.remove() }
         var admitted = try fixture.admit()
@@ -150,6 +153,7 @@ import WorkerFixtureTestSupport
     }
 
     @Test func productionRuntimeStillAttachesOnlyItsInjectedOwnedObservation() async {
+        defer { HerdrWorkOwnership.enable() }
         let effects = HerdrFixtureEffects()
         let runtime = ExtensionRuntime(
             fixtureAdmission: { _ in nil },

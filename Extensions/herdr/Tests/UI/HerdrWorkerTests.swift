@@ -5,6 +5,7 @@ import Testing
 
 @MainActor @Suite(.serialized) struct HerdrWorkerTests {
     @Test func surfacesFilterSourcesFieldsAndOpaqueCurrentActions() async throws {
+        defer { HerdrWorkOwnership.enable() }
         let store = makeStore()
         let first = agent("first", host: "local")
         let second = agent("second", host: UUID().uuidString)
@@ -38,6 +39,7 @@ import Testing
     }
 
     @Test func privacyHidesSourcesAndPreventsDispatchAndCancellationPreventsOpen() async throws {
+        defer { HerdrWorkOwnership.enable() }
         let store = makeStore()
         store.hosts = [host(agent("private", host: "local"))]
         let worker = HerdrWorker(store: store, automaticActions: false)
@@ -68,6 +70,7 @@ import Testing
 
     @Test func admissionResolvesCurrentAgentsAndRejectsInjectedFieldsPathsAndOversize() async throws
     {
+        defer { HerdrWorkOwnership.enable() }
         let store = makeStore()
         let current = agent("current", host: "local")
         store.hosts = [host(current)]
@@ -102,6 +105,7 @@ import Testing
     }
 
     @Test func shutdownCancelsAndAwaitsWorkAndReleasesTerminalAndTopicOwners() async throws {
+        defer { HerdrWorkOwnership.enable() }
         let store = makeStore()
         let worker = HerdrWorker(store: store, automaticActions: false)
         var entered = false

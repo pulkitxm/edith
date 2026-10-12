@@ -194,18 +194,12 @@ import Testing
         let state = try #require(try facade.state(await facade.perform("herdr.ui.read")))
         store.adoptUI(state)
         let sessions = HerdrSessionSettingsModel(client: facade)
-        let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
-            NSAccessibility.Attribute(rawValue: $0)
-        }
-        let previous = attributes.map { NSApp.accessibilityAttributeValue($0) }
-        for attribute in attributes { NSApp.accessibilitySetValue(true, forAttribute: attribute) }
+        let accessibility = try HerdrAccessibilityFixture.enable()
         let previousZoom = UIScale.current
         defer {
             sessions.shutdown(); store.stopRendering()
             UIScale.apply(previousZoom)
-            for (attribute, value) in zip(attributes, previous) {
-                NSApp.accessibilitySetValue(value ?? false, forAttribute: attribute)
-            }
+            for error in accessibility.restore() { Issue.record(error) }
         }
         for zoom in [1.0, 1.4] {
             UIScale.apply(zoom)
@@ -263,17 +257,11 @@ import Testing
             try AgentPayload.encode(HerdrAttentionSettings(stuck: true))
         }
         await model.read()
-        let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
-            NSAccessibility.Attribute(rawValue: $0)
-        }
-        let prior = attributes.map { NSApp.accessibilityAttributeValue($0) }
-        for attribute in attributes { NSApp.accessibilitySetValue(true, forAttribute: attribute) }
+        let accessibility = try HerdrAccessibilityFixture.enable()
         let previousZoom = UIScale.current
         defer {
             UIScale.apply(previousZoom)
-            for (attribute, value) in zip(attributes, prior) {
-                NSApp.accessibilitySetValue(value ?? false, forAttribute: attribute)
-            }
+            for error in accessibility.restore() { Issue.record(error) }
             model.shutdown()
         }
         for zoom in [1.0, 1.5] {
@@ -329,5 +317,255 @@ import Testing
             if let result = find(child, label: label, depth: depth + 1) { return result }
         }
         return nil
+    }
+}
+
+@MainActor @Suite(.serialized) struct HerdrAccessibilityFixtureTests {
+    @Test(
+        arguments: [
+            [false, false], [false, true], [true, false], [true, true],
+            [nil, nil], [nil, false], [nil, true], [false, nil], [true, nil],
+        ] as [[Bool?]])
+    func snapshotsBothAttributesBeforeMutationAndRestoresExactValues(originals: [Bool?]) throws {
+        let memory = MemoryAccess(originals: originals)
+        let fixture = try HerdrAccessibilityFixture(access: memory.access)
+        #expect(
+            Array(memory.operations.prefix(2))
+                == HerdrAccessibilityFixture.attributes.map { "copy:" + $0 })
+        #expect(memory.values.values.allSatisfy { CFEqual($0, kCFBooleanTrue) })
+        #expect(fixture.restore().isEmpty)
+        #expect(memory.matchesOriginals)
+        #expect(Array(memory.writes.suffix(2)) == HerdrAccessibilityFixture.attributes.reversed())
+        let count = memory.operations.count
+        #expect(fixture.restore().isEmpty)
+        #expect(memory.operations.count == count)
+    }
+
+    @Test func restoresOriginalObjectWithoutReplacingItsIdentity() throws {
+        let memory = MemoryAccess(originals: [nil, false])
+        let original = NSMutableString(string: "synthetic attribute value")
+        memory.values[HerdrAccessibilityFixture.attributes[0]] = original
+        let fixture = try HerdrAccessibilityFixture(access: memory.access)
+        #expect(fixture.restore().isEmpty)
+        #expect(memory.values[HerdrAccessibilityFixture.attributes[0]] === original)
+        #expect(Array(memory.writes.suffix(2)) == HerdrAccessibilityFixture.attributes.reversed())
+    }
+
+    @Test(arguments: [1, 2])
+    func failedSnapshotNeverMutatesEitherAttribute(copy: Int) {
+        let memory = MemoryAccess()
+        memory.failedCopies = [copy]
+        #expect(throws: InjectedFailure.copy(copy)) {
+            try HerdrAccessibilityFixture(access: memory.access)
+        }
+        #expect(memory.writes.isEmpty && memory.matchesOriginals)
+    }
+
+    @Test(arguments: [1, 2])
+    func failingSetAfterMutationRestoresEveryAttemptedAttribute(set: Int) throws {
+        let memory = MemoryAccess()
+        memory.failedAfterMutation = [set]
+        do {
+            _ = try HerdrAccessibilityFixture(access: memory.access)
+            Issue.record("Expected the injected set failure")
+        } catch let error as HerdrAccessibilityFixture.ActivationFailure {
+            #expect(error.primary as? InjectedFailure == .set(set))
+            #expect(error.restoration.isEmpty)
+        }
+        #expect(memory.matchesOriginals)
+        #expect(
+            Array(memory.writes.suffix(set))
+                == Array(HerdrAccessibilityFixture.attributes.prefix(set).reversed()))
+    }
+
+    @Test func successfulSetWithWrongReadbackFailsAndRollsBack() throws {
+        let memory = MemoryAccess()
+        memory.ignoredSets = [1]
+        do {
+            _ = try HerdrAccessibilityFixture(access: memory.access)
+            Issue.record("Expected a failed enable readback")
+        } catch let error as HerdrAccessibilityFixture.ActivationFailure {
+            guard
+                case .mismatch(let operation, let attribute) = error.primary
+                    as? HerdrAccessibilityFixture.Failure
+            else {
+                Issue.record("Expected the enable mismatch error")
+                return
+            }
+            #expect(operation == "enable" && attribute == HerdrAccessibilityFixture.attributes[0])
+            #expect(error.restoration.isEmpty)
+        }
+        #expect(memory.matchesOriginals)
+    }
+
+    @Test func failedEnableReadbackRestoresTheAttemptedAttribute() throws {
+        let memory = MemoryAccess()
+        memory.failedCopies = [3]
+        do {
+            _ = try HerdrAccessibilityFixture(access: memory.access)
+            Issue.record("Expected the injected copy failure")
+        } catch let error as HerdrAccessibilityFixture.ActivationFailure {
+            #expect(error.primary as? InjectedFailure == .copy(3))
+            #expect(error.restoration.isEmpty)
+        }
+        #expect(memory.matchesOriginals)
+    }
+
+    @Test func restorationContinuesAfterFailureAndRetriesOnlyUnrestoredValues() throws {
+        let memory = MemoryAccess()
+        let fixture = try HerdrAccessibilityFixture(access: memory.access)
+        memory.failedSets = [3]
+        let failures = fixture.restore()
+        #expect(failures.count == 1 && failures.first as? InjectedFailure == .set(3))
+        #expect(CFEqual(memory.values[HerdrAccessibilityFixture.attributes[0]], kCFBooleanFalse))
+        #expect(CFEqual(memory.values[HerdrAccessibilityFixture.attributes[1]], kCFBooleanTrue))
+        #expect(memory.writes.count == 4)
+        #expect(fixture.restore().isEmpty && memory.matchesOriginals)
+        #expect(
+            memory.writes.count == 5
+                && memory.writes.last == HerdrAccessibilityFixture.attributes[1]
+        )
+        #expect(fixture.restore().isEmpty && memory.writes.count == 5)
+    }
+
+    @Test func restorationReadbackMismatchIsReportedAndRetainedForRetry() throws {
+        let memory = MemoryAccess()
+        let fixture = try HerdrAccessibilityFixture(access: memory.access)
+        memory.ignoredSets = [3]
+        let failures = fixture.restore()
+        #expect(failures.count == 1)
+        guard
+            case .mismatch(let operation, let attribute) = failures.first
+                as? HerdrAccessibilityFixture.Failure
+        else {
+            Issue.record("Expected the restore mismatch error")
+            return
+        }
+        #expect(operation == "restore" && attribute == HerdrAccessibilityFixture.attributes[1])
+        #expect(fixture.restore().isEmpty && memory.matchesOriginals)
+        #expect(memory.writes.count == 5)
+    }
+
+    @Test func failedRestorationReadbackRetriesOnlyTheUnverifiedNilSnapshot() throws {
+        let memory = MemoryAccess(originals: [false, nil])
+        let fixture = try HerdrAccessibilityFixture(access: memory.access)
+        memory.failedCopies = [5]
+        let failures = fixture.restore()
+        #expect(failures.count == 1 && failures.first as? InjectedFailure == .copy(5))
+        #expect(memory.matchesOriginals)
+        #expect(Array(memory.writes.suffix(2)) == HerdrAccessibilityFixture.attributes.reversed())
+        #expect(fixture.restore().isEmpty && memory.matchesOriginals)
+        #expect(
+            memory.writes.count == 5
+                && memory.writes.last == HerdrAccessibilityFixture.attributes[1]
+        )
+        #expect(fixture.restore().isEmpty && memory.writes.count == 5)
+    }
+
+    @Test func nilRestorationMismatchIsReportedWithoutReplacingNilWithFalse() throws {
+        let memory = MemoryAccess(originals: [nil, nil])
+        let fixture = try HerdrAccessibilityFixture(access: memory.access)
+        memory.ignoredSets = [3]
+        let failures = fixture.restore()
+        #expect(failures.count == 1)
+        guard
+            case .mismatch(let operation, let attribute) = failures.first
+                as? HerdrAccessibilityFixture.Failure
+        else {
+            Issue.record("Expected the nil restore mismatch error")
+            return
+        }
+        #expect(operation == "restore" && attribute == HerdrAccessibilityFixture.attributes[1])
+        #expect(memory.values[HerdrAccessibilityFixture.attributes[0]] == nil)
+        #expect(CFEqual(memory.values[HerdrAccessibilityFixture.attributes[1]], kCFBooleanTrue))
+        #expect(fixture.restore().isEmpty && memory.matchesOriginals)
+        #expect(memory.values.isEmpty && memory.writes.count == 5)
+    }
+
+    @Test func activationFailureIncludesRollbackFailureWithoutSkippingOtherRestorations() throws {
+        let memory = MemoryAccess()
+        memory.failedAfterMutation = [2]
+        memory.failedSets = [3]
+        do {
+            _ = try HerdrAccessibilityFixture(access: memory.access)
+            Issue.record("Expected activation and rollback failures")
+        } catch let error as HerdrAccessibilityFixture.ActivationFailure {
+            #expect(error.primary as? InjectedFailure == .set(2))
+            #expect(
+                error.restoration.count == 1
+                    && error.restoration.first as? InjectedFailure == .set(3))
+        }
+        #expect(memory.writes.count == 4)
+        #expect(CFEqual(memory.values[HerdrAccessibilityFixture.attributes[0]], kCFBooleanFalse))
+        #expect(CFEqual(memory.values[HerdrAccessibilityFixture.attributes[1]], kCFBooleanTrue))
+    }
+
+    @Test func throwingBodyStillRestoresItsOwnedFixture() throws {
+        let memory = MemoryAccess()
+        #expect(throws: InjectedFailure.body) {
+            let fixture = try HerdrAccessibilityFixture(access: memory.access)
+            defer { #expect(fixture.restore().isEmpty) }
+            throw InjectedFailure.body
+        }
+        #expect(memory.matchesOriginals)
+    }
+
+    private enum InjectedFailure: Error, Equatable {
+        case copy(Int)
+        case set(Int)
+        case body
+    }
+
+    @MainActor private final class MemoryAccess {
+        var values: [String: CFTypeRef]
+        let originals: [String: CFTypeRef]
+        var operations: [String] = []
+        var writes: [String] = []
+        var failedCopies: Set<Int> = []
+        var failedSets: Set<Int> = []
+        var failedAfterMutation: Set<Int> = []
+        var ignoredSets: Set<Int> = []
+        private var copies = 0
+        private var sets = 0
+
+        init(originals: [Bool?] = [false, false]) {
+            values = [:]
+            for (attribute, value) in zip(HerdrAccessibilityFixture.attributes, originals) {
+                if let value { values[attribute] = value ? kCFBooleanTrue : kCFBooleanFalse }
+            }
+            self.originals = values
+        }
+
+        var matchesOriginals: Bool {
+            HerdrAccessibilityFixture.attributes.allSatisfy {
+                switch (values[$0], originals[$0]) {
+                case (nil, nil): return true
+                case (let value?, let original?): return CFEqual(value, original)
+                default: return false
+                }
+            }
+        }
+
+        var access: HerdrAccessibilityFixture.Access {
+            .init(
+                copy: { attribute in
+                    self.copies += 1
+                    self.operations.append("copy:" + attribute)
+                    if self.failedCopies.contains(self.copies) {
+                        throw InjectedFailure.copy(self.copies)
+                    }
+                    return self.values[attribute]
+                },
+                set: { attribute, value in
+                    self.sets += 1
+                    self.operations.append("set:" + attribute)
+                    self.writes.append(attribute)
+                    if self.failedSets.contains(self.sets) { throw InjectedFailure.set(self.sets) }
+                    if !self.ignoredSets.contains(self.sets) { self.values[attribute] = value }
+                    if self.failedAfterMutation.contains(self.sets) {
+                        throw InjectedFailure.set(self.sets)
+                    }
+                })
+        }
     }
 }

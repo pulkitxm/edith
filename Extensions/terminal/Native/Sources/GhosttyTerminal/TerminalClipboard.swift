@@ -1,6 +1,6 @@
 import AppKit
 import Foundation
-@_implementationOnly import GhosttyKit
+internal import GhosttyKit
 import UniformTypeIdentifiers
 
 struct TerminalClipboardEntry: Equatable {
