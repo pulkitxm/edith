@@ -24,6 +24,15 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
     private var destination: URL?
     private var finished: ((URL) -> Void)?
     private var cursorTask: Task<Void, Never>?
+    private var commandsSuspended = false
+    private var resetting = false
+    private nonisolated let callbacks = StudioTaskOwner()
+    private let operations = StudioTaskOwner()
+    private var shutdownTask: Task<Void, Never>?
+    private var captureStopTask: Task<Void, Never>?
+    private var nativeStarted = false
+    private var nativeFinished = true
+    private var nativeWaiters: [CheckedContinuation<Void, Never>] = []
     private var cursorSamples: [[String: Any]] = []
     private var captureRect = CGRect.zero
     private var capturedWindow: CGWindowID?
@@ -35,9 +44,11 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
         init(_ recorder: VideoRecorder) { self.recorder = recorder }
     }
     private static var active: [Reference] = []
+    private static var allCommandsSuspended = false
 
     override init() {
         super.init()
+        if Self.allCommandsSuspended { suspendCommands() }
         Self.active.removeAll { $0.recorder == nil }
         Self.active.append(Reference(self))
     }
@@ -48,12 +59,30 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
         for recorder in recorders { await recorder.shutdown() }
     }
 
+    static func suspendAllCommands() {
+        allCommandsSuspended = true
+        for recorder in active.compactMap(\.recorder) { recorder.suspendCommands() }
+    }
+
+    static func suspendAllCommandsAndWait() async {
+        suspendAllCommands()
+        let recorders = active.compactMap(\.recorder)
+        for recorder in recorders { await recorder.suspendCommandsAndWait() }
+    }
+
     func loadSources() async {
+        await performOwned { await self.loadSourcesBody() }
+    }
+
+    private func loadSourcesBody() async {
+        guard !commandsSuspended, !resetting else { return }
         busy = true
         defer { busy = false }
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(
                 true, onScreenWindowsOnly: true)
+            try Task.checkCancellation()
+            guard !commandsSuspended, !resetting else { throw CancellationError() }
             displays = content.displays
             windows = content.windows.filter {
                 $0.isOnScreen && $0.windowLayer == 0
@@ -63,11 +92,15 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
                 source = "display:\(display.displayID)"
             }
             error = nil
-        } catch { self.error = error.localizedDescription }
+        } catch { if !commandsSuspended, !resetting { self.error = error.localizedDescription } }
     }
 
     func start(finished: @escaping (URL) -> Void) async {
-        guard !busy, !recording else { return }
+        await performOwned { await self.startBody(finished: finished) }
+    }
+
+    private func startBody(finished: @escaping (URL) -> Void) async {
+        guard !commandsSuspended, !resetting, !busy, !recording else { return }
         busy = true
         defer { busy = false }
         do {
@@ -75,6 +108,8 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
                 throw VideoRenderPipeline.RenderError.exportFailed(
                     "Allow microphone access in System Settings to record narration.")
             }
+            try Task.checkCancellation()
+            guard !commandsSuspended, !resetting else { throw CancellationError() }
             let filter: SCContentFilter
             if let display = displays.first(where: { source == "display:\($0.displayID)" }) {
                 filter = SCContentFilter(display: display, excludingWindows: [])
@@ -112,28 +147,34 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
             try stream.addRecordingOutput(output)
             self.output = output
             self.stream = stream
+            captureStopTask = nil
+            nativeStarted = false
+            nativeFinished = false
             destination = url
             self.finished = finished
             cursorSamples.removeAll()
             try await stream.startCapture()
+            nativeStarted = true
+            try Task.checkCancellation()
+            guard !commandsSuspended, !resetting else { throw CancellationError() }
             recording = true
             error = nil
         } catch {
+            if commandsSuspended || resetting { return }
+            await stopNativeCapture()
+            reset()
             self.error = error.localizedDescription
-            stream = nil
-            output = nil
-            destination = nil
-            self.finished = nil
         }
     }
 
     nonisolated func recordingOutputDidStartRecording(_ recordingOutput: SCRecordingOutput) {
-        Task { @MainActor [self] in
-            guard recordingOutput === output else { return }
+        callbacks.enqueue { [self] in
+            guard !commandsSuspended, !resetting, recordingOutput === output else { return }
             startedAt = Date()
             recordingStart = ProcessInfo.processInfo.systemUptime
             previousButtons = NSEvent.pressedMouseButtons
-            cursorTask = Task { [weak self] in
+            cursorTask?.cancel()
+            cursorTask = callbacks.start { [weak self] in
                 while !Task.isCancelled {
                     guard let self else { return }
                     await sampleCursor()
@@ -171,7 +212,11 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
     }
 
     func stop() async {
-        guard let stream, recording, !busy else { return }
+        await performOwned { await self.stopBody() }
+    }
+
+    private func stopBody() async {
+        guard !commandsSuspended, !resetting, let stream, recording, !busy else { return }
         busy = true
         do { try await stream.stopCapture() } catch {
             self.error = error.localizedDescription
@@ -180,8 +225,10 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
     }
 
     nonisolated func recordingOutputDidFinishRecording(_ recordingOutput: SCRecordingOutput) {
-        Task { @MainActor in
-            guard recordingOutput === output else { return }
+        callbacks.enqueue { [self] in
+            guard recordingOutput === self.output else { return }
+            finishNativeCapture()
+            guard !commandsSuspended, !resetting else { return }
             let url = destination
             let completion = finished
             if let url {
@@ -202,8 +249,10 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
     nonisolated func recordingOutput(
         _ recordingOutput: SCRecordingOutput, didFailWithError error: any Error
     ) {
-        Task { @MainActor in
-            guard recordingOutput === output else { return }
+        callbacks.enqueue { [self] in
+            guard recordingOutput === self.output else { return }
+            finishNativeCapture()
+            guard !commandsSuspended, !resetting else { return }
             let active = stream
             reset()
             self.error = error.localizedDescription
@@ -212,8 +261,8 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
     }
 
     nonisolated func stream(_ stream: SCStream, didStopWithError error: any Error) {
-        Task { @MainActor in
-            guard stream === self.stream else { return }
+        callbacks.enqueue { [self] in
+            guard !self.commandsSuspended, !self.resetting, stream === self.stream else { return }
             self.error = error.localizedDescription
             cursorTask?.cancel()
             cursorTask = nil
@@ -222,16 +271,74 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
         }
     }
 
+    func suspendCommands() {
+        commandsSuspended = true
+        operations.shutdown()
+        cursorTask?.cancel()
+    }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        let ownedShutdown = shutdownTask
+        await operations.shutdownAndWait()
+        await stopNativeCapture()
+        await ownedShutdown?.value
+        await callbacks.shutdownAndWait()
+    }
+
     func shutdown() async {
-        let active = stream
-        reset()
-        try? await active?.stopCapture()
+        if let shutdownTask { await shutdownTask.value; return }
+        resetting = true
+        cursorTask?.cancel()
+        let task = Task {
+            await operations.cancelPendingWorkAndWait()
+            await stopNativeCapture()
+            await callbacks.waitForPendingWork()
+            reset()
+            resetting = false
+        }
+        shutdownTask = task
+        await task.value
+        shutdownTask = nil
+    }
+
+    private func stopNativeCapture() async {
+        if let captureStopTask { await captureStopTask.value; return }
+        let task = Task {
+            if let active = stream, nativeStarted {
+                do { try await active.stopCapture() } catch { self.error = error.localizedDescription }
+                if !nativeFinished {
+                    await withCheckedContinuation { nativeWaiters.append($0) }
+                }
+            }
+        }
+        captureStopTask = task
+        await task.value
+    }
+
+    private func finishNativeCapture() {
+        nativeFinished = true
+        let waiting = nativeWaiters
+        nativeWaiters.removeAll()
+        for continuation in waiting { continuation.resume() }
+    }
+
+    private func performOwned(_ operation: @escaping @MainActor () async -> Void) async {
+        guard !commandsSuspended, !resetting, let task = operations.start(operation) else { return }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     private func reset() {
         cursorTask?.cancel()
         cursorTask = nil
         cursorSamples.removeAll()
+        nativeStarted = false
+        nativeFinished = true
+        captureStopTask = nil
         stream = nil
         output = nil
         destination = nil

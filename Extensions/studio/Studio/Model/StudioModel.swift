@@ -957,6 +957,12 @@ final class StudioTaskOwner: Sendable {
         for task in owned { await task.value }
     }
 
+    @MainActor func cancelPendingWorkAndWait() async {
+        let owned = state.snapshot()
+        for task in owned { task.cancel() }
+        for task in owned { await task.value }
+    }
+
 }
 
 final class StudioRecentWriter: @unchecked Sendable {
