@@ -101,7 +101,12 @@ export function supportSourceInputs(product) {
   return inputs;
 }
 
-export function buildExtensionSupport(root, product, scope) {
+export function buildExtensionSupport(
+  root,
+  product,
+  scope,
+  sourceEnvironment = process.env,
+) {
   const selected = supportProducts(product);
   const buildSystem = selected.includes("EdithExtensionCommands")
     ? "swiftbuild"
@@ -111,8 +116,9 @@ export function buildExtensionSupport(root, product, scope) {
     ? `EdithExtensionBundle_${scope}`
     : modules[product];
   const developer =
-    process.env.DEVELOPER_DIR ?? "/Applications/Xcode.app/Contents/Developer";
-  const environment = { ...process.env, DEVELOPER_DIR: developer };
+    sourceEnvironment.DEVELOPER_DIR ??
+    "/Applications/Xcode.app/Contents/Developer";
+  const environment = { ...sourceEnvironment, DEVELOPER_DIR: developer };
   const directory = resolve(root, "local/extension-support", scope);
   const hash = createHash("sha256")
     .update(Array.isArray(product) ? JSON.stringify(selected) : product)
@@ -285,7 +291,7 @@ export function buildExtensionSupport(root, product, scope) {
       "--configuration",
       "release",
       "--jobs",
-      process.env.EXTENSION_SWIFT_JOBS ?? "2",
+      environment.EXTENSION_SWIFT_JOBS ?? "2",
       "--product",
       library,
       "-Xswiftc",

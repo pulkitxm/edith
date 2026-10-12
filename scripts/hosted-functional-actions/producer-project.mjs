@@ -784,6 +784,42 @@ export async function verifyFunctionalSourcePins(repository, sourcePins) {
     );
 }
 
+export function functionalFixtureSupportCompilerArguments({
+  directory,
+  sources,
+}) {
+  assert.equal(resolve(directory), directory);
+  assert(Array.isArray(sources) && sources.length > 0);
+  assert.equal(new Set(sources).size, sources.length);
+  for (const path of sources) {
+    assert.equal(resolve(path), path);
+    assert(/\/Extensions\/fixtureSupport\/[^/]+\.swift$/.test(path));
+    assert(!path.endsWith("/Package.swift"));
+  }
+  return Object.freeze([
+    "swiftc",
+    "-target",
+    "arm64-apple-macosx14.0",
+    "-parse-as-library",
+    "-emit-module",
+    "-emit-library",
+    "-static",
+    "-swift-version",
+    "5",
+    "-O",
+    "-num-threads",
+    "1",
+    "-module-name",
+    "WorkerFixtureSupport",
+    "-DEDITH_FUNCTIONAL_FIXTURE",
+    ...sources,
+    "-emit-module-path",
+    join(directory, "WorkerFixtureSupport.swiftmodule"),
+    "-o",
+    join(directory, "libWorkerFixtureSupport.a"),
+  ]);
+}
+
 export async function buildFunctionalProducer({
   repository,
   plan,
@@ -894,26 +930,22 @@ export async function buildFunctionalProducer({
     ),
   );
   const supportLibrary = join(supportDirectory, "libWorkerFixtureSupport.a");
-  run("xcrun", [
-    "swiftc",
-    "-parse-as-library",
-    "-emit-module",
-    "-emit-library",
-    "-static",
-    "-swift-version",
-    "5",
-    "-O",
-    "-num-threads",
-    "1",
-    "-module-name",
-    "WorkerFixtureSupport",
-    "-DEDITH_FUNCTIONAL_FIXTURE",
-    ...supportSources.map(({ path }) => join(compiled.sourceRepository, path)),
-    "-emit-module-path",
-    join(supportDirectory, "WorkerFixtureSupport.swiftmodule"),
-    "-o",
-    supportLibrary,
-  ]);
+  execFileSync(
+    "xcrun",
+    functionalFixtureSupportCompilerArguments({
+      directory: supportDirectory,
+      sources: supportSources.map(({ path }) =>
+        join(compiled.sourceRepository, path),
+      ),
+    }),
+    {
+      cwd: repository,
+      env: environment,
+      timeout: 600000,
+      maxBuffer: 16777216,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
   const catalogDirectory = join(directory, "ExtensionMarketplace");
   await mkdir(catalogDirectory, { mode: 0o700 });
   await requireFunctionalPrivateDirectory(catalogDirectory);
@@ -1038,10 +1070,16 @@ export async function buildFunctionalProducer({
     },
     fixtureSupport: {
       module: "WorkerFixtureSupport",
+      targetTriple: "arm64-apple-macosx14.0",
       swiftVersion: "5",
       functionalFixture: true,
       sources: supportSources,
       librarySHA256: sha(await readFile(supportLibrary)),
+      moduleSHA256: sha(
+        await readFile(
+          join(supportDirectory, "WorkerFixtureSupport.swiftmodule"),
+        ),
+      ),
     },
     catalog: {
       module: "ExtensionMarketplace",
@@ -1086,6 +1124,10 @@ export async function buildFunctionalProducer({
     docsDependency,
     observeFunctionalDocsDependency,
   );
+  const { retainFunctionalRoleProducer } = await import(
+    "./functional-build.mjs"
+  );
+  await retainFunctionalRoleProducer({ compilation, receipt });
   return receipt;
 }
 

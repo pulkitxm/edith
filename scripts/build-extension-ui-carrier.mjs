@@ -126,7 +126,7 @@ export async function extensionUICarrierPaths(payloadDirectory) {
   };
 }
 
-async function writePlist(path, value) {
+async function writePlist(path, value, environment = process.env) {
   await mkdir(dirname(path), { recursive: true });
   execFileSync(
     "python3",
@@ -136,7 +136,7 @@ async function writePlist(path, value) {
       JSON.stringify(value),
       path,
     ],
-    { stdio: "pipe" },
+    { stdio: "pipe", env: environment },
   );
 }
 
@@ -189,9 +189,10 @@ export async function verifyExtensionUIHost(
   await verify(["--verify", "--deep", "--strict", hostApp]);
 }
 
-function codeRequirement(hostApp, development) {
+function codeRequirement(hostApp, development, environment = process.env) {
   const result = spawnSync("codesign", ["-d", "-r", "-", hostApp], {
     encoding: "utf8",
+    env: environment,
   });
   const requirements = `${result.stdout ?? ""}\n${result.stderr ?? ""}`
     .split("\n")
@@ -200,6 +201,7 @@ function codeRequirement(hostApp, development) {
   if (result.status === 0 && requirements.length === 0 && development) {
     const signature = spawnSync("codesign", ["-d", "-vvv", hostApp], {
       encoding: "utf8",
+      env: environment,
     });
     const digest = /^CDHash=([a-f0-9]{40})$/m.exec(signature.stderr ?? "");
     if (signature.status === 0 && digest) return `cdhash H"${digest[1]}"`;
@@ -209,7 +211,13 @@ function codeRequirement(hostApp, development) {
   return requirements[0];
 }
 
-function sign(path, identity, development, entitlements) {
+function sign(
+  path,
+  identity,
+  development,
+  entitlements,
+  environment = process.env,
+) {
   execFileSync(
     "codesign",
     [
@@ -220,7 +228,7 @@ function sign(path, identity, development, entitlements) {
       ...(entitlements ? ["--entitlements", entitlements] : []),
       path,
     ],
-    { stdio: "inherit" },
+    { stdio: "inherit", env: environment },
   );
 }
 
@@ -318,6 +326,8 @@ export async function readFrozenUICarrier({
 
 export async function buildExtensionUICarrier({
   root = process.cwd(),
+  functionalRoleBuild,
+  functionalInputs,
   frozenHostApp = resolve(root, "local/minimal-host/Edith.app"),
   carrierTools = resolve(root, "local/minimal-host/carrier-tools"),
   minimumSystemVersion,
@@ -328,15 +338,41 @@ export async function buildExtensionUICarrier({
   hostABI,
   dependencies = [],
   development = false,
-  identity = process.env.EXTENSION_SIGN_IDENTITY,
+  environment = process.env,
+  identity = environment.EXTENSION_SIGN_IDENTITY,
 }) {
+  if (functionalRoleBuild) {
+    if (
+      development ||
+      !functionalInputs ||
+      functionalInputs.root !== root ||
+      functionalInputs.id !== id ||
+      functionalInputs.version !== version ||
+      functionalInputs.hostApp !== hostApp
+    )
+      throw new Error("Functional UI carrier context changed");
+    const { functionalRoleBuildEnvironment } = await import(
+      "./hosted-functional-actions/functional-build.mjs"
+    );
+    environment = await functionalRoleBuildEnvironment(
+      functionalRoleBuild,
+      functionalInputs,
+      environment,
+    );
+    if (identity !== environment.EXTENSION_SIGN_IDENTITY)
+      throw new Error("Functional UI carrier signing identity changed");
+  }
+  const run = (file, args, options = {}) =>
+    execFileSync(file, args, { env: environment, ...options });
   if (!hostApp || !payloadDirectory || (!development && !identity))
     throw new Error("Extension UI carrier build inputs are incomplete");
   validateMinimumSystemVersion(minimumSystemVersion);
   const signingIdentity = development ? "-" : identity;
   const source = resolve(hostApp, "Contents/MacOS/Edith");
-  await verifyExtensionUIHost(hostApp);
-  const hostIdentifier = execFileSync(
+  await verifyExtensionUIHost(hostApp, (args) =>
+    run("codesign", args, { stdio: "pipe" }),
+  );
+  const hostIdentifier = run(
     "/usr/libexec/PlistBuddy",
     [
       "-c",
@@ -354,11 +390,30 @@ export async function buildExtensionUICarrier({
     throw new Error(
       "Ad-hoc UI carriers require a synthetic or development host",
     );
-  const carrierInput = await readFrozenUICarrier({
-    root,
-    frozenHostApp,
-    carrierTools,
-  });
+  let carrierInput;
+  if (functionalRoleBuild) {
+    if (
+      development ||
+      functionalInputs.root !== root ||
+      functionalInputs.id !== id ||
+      functionalInputs.version !== version ||
+      functionalInputs.hostApp !== hostApp
+    )
+      throw new Error("Functional UI carrier context changed");
+    const { functionalRoleCarrierInput } = await import(
+      "./hosted-functional-actions/functional-build.mjs"
+    );
+    carrierInput = await functionalRoleCarrierInput(
+      functionalRoleBuild,
+      functionalInputs,
+    );
+  } else {
+    carrierInput = await readFrozenUICarrier({
+      root,
+      frozenHostApp,
+      carrierTools,
+    });
+  }
   const metadata = extensionUICarrierMetadata({
     hostIdentifier,
     id,
@@ -368,7 +423,7 @@ export async function buildExtensionUICarrier({
     executableSHA256: createHash("sha256")
       .update(await readFile(source))
       .digest("hex"),
-    hostCodeRequirement: codeRequirement(hostApp, development),
+    hostCodeRequirement: codeRequirement(hostApp, development, environment),
     hostExecutablePath:
       hostIdentifier === "com.pulkit.edith"
         ? "/Applications/Edith.app/Contents/MacOS/Edith"
@@ -411,6 +466,7 @@ export async function buildExtensionUICarrier({
   );
   const provenance = await copyContainedHostRuntime(hostApp, paths.contents, {
     identity: signingIdentity,
+    environment,
     development,
   });
   const carrierExecutable = resolve(paths.contents, "MacOS/Edith");
@@ -434,7 +490,7 @@ export async function buildExtensionUICarrier({
     { recursive: true, dereference: false },
   );
   if (provenance.runtimeDependencies.length > 0) {
-    const loadCommands = execFileSync("otool", ["-l", source], {
+    const loadCommands = run("otool", ["-l", source], {
       encoding: "utf8",
       stdio: "pipe",
     });
@@ -466,32 +522,44 @@ export async function buildExtensionUICarrier({
     LSMinimumSystemVersion: "14.0",
     ...metadata.attributes,
   };
-  await writePlist(resolve(paths.contents, "Info.plist"), {
-    ...shared,
-    CFBundleIdentifier: metadata.applicationIdentifier,
-    CFBundleName: `Edith ${id} Extension`,
-    CFBundlePackageType: "APPL",
-    LSUIElement: true,
-    NSPrincipalClass: "NSApplication",
-  });
-  await writePlist(resolve(paths.workerContents, "Info.plist"), {
-    ...shared,
-    CFBundleIdentifier: metadata.workerIdentifier,
-    CFBundleName: `Edith ${id}`,
-    CFBundlePackageType: "XPC!",
-    EXAppExtensionAttributes: {
-      EXExtensionPointIdentifier: metadata.extensionPointIdentifier,
+  await writePlist(
+    resolve(paths.contents, "Info.plist"),
+    {
+      ...shared,
+      CFBundleIdentifier: metadata.applicationIdentifier,
+      CFBundleName: `Edith ${id} Extension`,
+      CFBundlePackageType: "APPL",
+      LSUIElement: true,
+      NSPrincipalClass: "NSApplication",
     },
-  });
+    environment,
+  );
+  await writePlist(
+    resolve(paths.workerContents, "Info.plist"),
+    {
+      ...shared,
+      CFBundleIdentifier: metadata.workerIdentifier,
+      CFBundleName: `Edith ${id}`,
+      CFBundlePackageType: "XPC!",
+      EXAppExtensionAttributes: {
+        EXExtensionPointIdentifier: metadata.extensionPointIdentifier,
+      },
+    },
+    environment,
+  );
   await writeFile(resolve(paths.contents, "PkgInfo"), "APPL????");
   await writeFile(resolve(paths.workerContents, "PkgInfo"), "XPC!????");
   const entitlements = resolve(paths.contents, ".worker-entitlements.plist");
-  await writePlist(entitlements, extensionUIWorkerEntitlements(id));
-  sign(paths.worker, signingIdentity, development, entitlements);
+  await writePlist(
+    entitlements,
+    extensionUIWorkerEntitlements(id),
+    environment,
+  );
+  sign(paths.worker, signingIdentity, development, entitlements, environment);
   await unlink(entitlements);
-  sign(paths.carrier, signingIdentity, development);
+  sign(paths.carrier, signingIdentity, development, undefined, environment);
   await requireRegularTree(paths.carrier);
-  execFileSync("codesign", ["--verify", "--deep", "--strict", paths.carrier], {
+  run("codesign", ["--verify", "--deep", "--strict", paths.carrier], {
     stdio: "inherit",
   });
   return {

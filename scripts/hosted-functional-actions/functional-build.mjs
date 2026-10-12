@@ -21,6 +21,7 @@ import { functionalActionOwners } from "./owners.mjs";
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 const compilations = new WeakMap();
 const hostBuilds = new WeakMap();
+const roleBuilds = new WeakMap();
 const toolchains = new WeakMap();
 const hashPattern = /^[0-9a-f]{64}$/;
 const commitPattern = /^[0-9a-f]{40}$/;
@@ -1680,6 +1681,7 @@ export async function buildFunctionalFixtureHost({
         plan,
         state,
       });
+      state.hostReceipt = receipt;
       state.hostStatus = "built";
       return receipt;
     },
@@ -2662,4 +2664,388 @@ export function observeFunctionalDocsDependency({
   );
   for (const pin of build.pins) requireSyncPin(pin);
   return build.projection;
+}
+
+export async function retainFunctionalRoleProducer({ compilation, receipt }) {
+  await functionalCompilationForBuilder(compilation);
+  const state = compilations.get(compilation);
+  assert(!state.roleProducer, "Functional role producer already retained");
+  const { functionalProducerBuildForLaunch } = await import(
+    "./producer-project.mjs"
+  );
+  const producer = functionalProducerBuildForLaunch(receipt);
+  assert.equal(producer.compilation, compilation);
+  assert.equal(producer.plan.sourceCommit, state.sourceCommit);
+  assert.equal(producer.plan.root, state.root);
+  assert.equal(receipt.source.sha256, compilation.source.sha256);
+  assert.equal(receipt.toolchain.sha256, compilation.toolchain.sha256);
+  assert.equal(receipt.fixtureSupport.module, "WorkerFixtureSupport");
+  assert.equal(receipt.fixtureSupport.targetTriple, "arm64-apple-macosx14.0");
+  assert.equal(receipt.fixtureSupport.swiftVersion, "5");
+  assert.equal(receipt.fixtureSupport.functionalFixture, true);
+  const directory = join(state.root, "Producer/WorkerFixtureSupport");
+  await requireDirectory(directory);
+  const pins = [];
+  for (const name of [
+    "libWorkerFixtureSupport.a",
+    "WorkerFixtureSupport.swiftmodule",
+    "WorkerFixtureSupport.swiftdoc",
+    "WorkerFixtureSupport.swiftsourceinfo",
+  ])
+    pins.push(await pinnedFile(join(directory, name)));
+  assert.equal(pins[0].sha256, receipt.fixtureSupport.librarySHA256);
+  assert.equal(pins[1].sha256, receipt.fixtureSupport.moduleSHA256);
+  state.roleProducer = { receipt, directory, pins };
+  await state.verify();
+}
+
+const roleBindingFields = Object.freeze([
+  "status",
+  "sourceCommit",
+  "sourceSHA256",
+  "toolchainSHA256",
+  "root",
+  "owner",
+  "version",
+  "sourceRoot",
+  "output",
+  "hostExecutableSHA256",
+  "librarySHA256",
+  "moduleSHA256",
+  "fixtureSupportTarget",
+]);
+
+function validateRoleBinding(expected, observed) {
+  exact(expected, roleBindingFields);
+  exact(observed, roleBindingFields);
+  assert.equal(expected.status, "ready");
+  assert.equal(expected.fixtureSupportTarget, "arm64-apple-macosx14.0");
+  assert.match(expected.sourceCommit, commitPattern);
+  for (const field of [
+    "sourceSHA256",
+    "toolchainSHA256",
+    "hostExecutableSHA256",
+    "librarySHA256",
+    "moduleSHA256",
+  ])
+    assert.match(expected[field], hashPattern);
+  assert(functionalActionOwners.includes(expected.owner));
+  assert(["1.0.0", "1.1.0"].includes(expected.version));
+  assert.equal(resolve(expected.root), expected.root);
+  assert.equal(
+    expected.sourceRoot,
+    join(expected.root, `source-${expected.owner}-${expected.version}`),
+  );
+  assert.equal(
+    expected.output,
+    join(expected.root, `packages-${expected.owner}-${expected.version}`),
+  );
+  assert.deepEqual(
+    observed,
+    expected,
+    "Functional role compiler binding changed",
+  );
+}
+
+export async function probeFunctionalRoleBinding({ expected, runtime }) {
+  exact(runtime, ["observe", "compile"]);
+  assert.equal(typeof runtime.observe, "function");
+  assert.equal(typeof runtime.compile, "function");
+  validateRoleBinding(expected, await runtime.observe());
+  await runtime.compile();
+  validateRoleBinding(expected, await runtime.observe());
+  return Object.freeze({
+    scope: "injected memory role binding probe",
+    nativeProof: false,
+  });
+}
+
+async function verifyFunctionalRoleBuild(capability, inputs) {
+  const build = roleBuilds.get(capability);
+  assert(build, "Expected owned functional role build capability");
+  const { compilation, plan, step, state } = build;
+  exact(inputs, ["root", "id", "version", "output", "hostApp"]);
+  assert.deepEqual(
+    inputs,
+    {
+      root: step.sourceRoot,
+      id: plan.owner,
+      version: step.version,
+      output: step.output,
+      hostApp: plan.host.path,
+    },
+    "Functional role build context changed",
+  );
+  await functionalCompilationForBuilder(compilation);
+  const { functionalPairPlanForBuilder } = await import("./prepare-owner.mjs");
+  functionalPairPlanForBuilder(plan);
+  assert.equal(plan.sourceCommit, state.sourceCommit);
+  assert.equal(plan.root, state.root);
+  assert.deepEqual(plan.sourcePins, state.sourcePins.files);
+  const producer = state.roleProducer;
+  assert(producer, "Functional role producer was not retained");
+  const { functionalProducerBuildForLaunch } = await import(
+    "./producer-project.mjs"
+  );
+  assert.equal(
+    functionalProducerBuildForLaunch(producer.receipt).compilation,
+    compilation,
+  );
+  await requireDirectory(producer.directory);
+  for (const pin of producer.pins) await requirePin(pin);
+  validateRoleBinding(build.binding, {
+    status: state.status,
+    sourceCommit: state.sourceCommit,
+    sourceSHA256: compilation.source.sha256,
+    toolchainSHA256: compilation.toolchain.sha256,
+    root: state.root,
+    owner: plan.owner,
+    version: step.version,
+    sourceRoot: step.sourceRoot,
+    output: step.output,
+    hostExecutableSHA256: plan.host.executableSHA256,
+    librarySHA256: producer.receipt.fixtureSupport.librarySHA256,
+    moduleSHA256: producer.receipt.fixtureSupport.moduleSHA256,
+    fixtureSupportTarget: producer.receipt.fixtureSupport.targetTriple,
+  });
+  const host = hostBuilds.get(state.hostReceipt);
+  assert(
+    host && host.compilation === compilation && state.hostStatus === "built",
+  );
+  assert.deepEqual(state.hostReceipt.host, plan.host);
+  await requirePin(host.hostPin);
+  for (const pin of host.generatedPins) await requirePin(pin);
+  await requireDirectory(step.sourceRoot);
+  await requireDirectory(step.output);
+  await verifySources(
+    step.sourceRoot,
+    state.sourcePins,
+    new Map(
+      [plan.anchor, plan.bootstrapAnchor].map((anchor) => [
+        anchor.generatedPath,
+        digest(anchor.source),
+      ]),
+    ),
+  );
+  if (state.roleCarrier) await requirePin(state.roleCarrier);
+  return build;
+}
+
+export async function createFunctionalRoleBuild({
+  compilation,
+  plan,
+  version,
+}) {
+  await functionalCompilationForBuilder(compilation);
+  const state = compilations.get(compilation);
+  const { functionalPairPlanForBuilder } = await import("./prepare-owner.mjs");
+  functionalPairPlanForBuilder(plan);
+  const step = plan.steps.find((entry) => entry.version === version);
+  assert(step, "Unknown functional pair version");
+  assert(functionalActionOwners.includes(plan.owner));
+  assert.equal(
+    step.sourceRoot,
+    join(state.root, `source-${plan.owner}-${version}`),
+  );
+  assert.equal(
+    step.output,
+    join(state.root, `packages-${plan.owner}-${version}`),
+  );
+  const capability = Object.freeze({});
+  assert(state.roleProducer, "Functional role producer was not retained");
+  const binding = Object.freeze({
+    status: "ready",
+    sourceCommit: state.sourceCommit,
+    sourceSHA256: compilation.source.sha256,
+    toolchainSHA256: compilation.toolchain.sha256,
+    root: state.root,
+    owner: plan.owner,
+    version,
+    sourceRoot: step.sourceRoot,
+    output: step.output,
+    hostExecutableSHA256: plan.host.executableSHA256,
+    librarySHA256: state.roleProducer.receipt.fixtureSupport.librarySHA256,
+    moduleSHA256: state.roleProducer.receipt.fixtureSupport.moduleSHA256,
+    fixtureSupportTarget:
+      state.roleProducer.receipt.fixtureSupport.targetTriple,
+  });
+  roleBuilds.set(capability, { compilation, plan, step, state, binding });
+  const inputs = {
+    root: step.sourceRoot,
+    id: plan.owner,
+    version,
+    output: step.output,
+    hostApp: plan.host.path,
+  };
+  try {
+    await verifyFunctionalRoleBuild(capability, inputs);
+    if (!state.roleCarrier) {
+      const directory = join(state.root, "RoleCarrier");
+      await mkdir(directory, { mode: 0o700 });
+      await requireDirectory(directory);
+      const source = join(
+        state.snapshot,
+        "Packages/EdithHost/Sources/EdithExtensionCarrier/Entry.swift",
+      );
+      assert(
+        state.sourcePins.files.some(
+          (pin) =>
+            pin.path ===
+            "Packages/EdithHost/Sources/EdithExtensionCarrier/Entry.swift",
+        ),
+      );
+      const output = join(directory, "EdithExtensionCarrier");
+      execFileSync(
+        "xcrun",
+        [
+          "swiftc",
+          "-target",
+          "arm64-apple-macosx14.0",
+          "-parse-as-library",
+          "-Osize",
+          "-num-threads",
+          "1",
+          source,
+          "-o",
+          output,
+        ],
+        {
+          cwd: state.snapshot,
+          env: state.environment,
+          stdio: "pipe",
+          timeout: 600000,
+          maxBuffer: 16777216,
+        },
+      );
+      await chmod(output, 0o500);
+      state.roleCarrier = await pinnedFile(output);
+      await verifyFunctionalRoleBuild(capability, inputs);
+    }
+    return capability;
+  } catch (error) {
+    roleBuilds.delete(capability);
+    throw error;
+  }
+}
+
+export async function functionalRoleCompilerInputs(capability, inputs) {
+  const { state } = await verifyFunctionalRoleBuild(capability, inputs);
+  return Object.freeze([
+    "-DEDITH_FUNCTIONAL_FIXTURE",
+    "-I",
+    state.roleProducer.directory,
+    join(state.roleProducer.directory, "libWorkerFixtureSupport.a"),
+  ]);
+}
+
+export async function functionalRoleCarrierInput(capability, inputs) {
+  const { state, plan } = await verifyFunctionalRoleBuild(capability, inputs);
+  const pin = state.roleCarrier;
+  assert(pin, "Functional role carrier was not compiled");
+  const { readBoundedCarrierBytes } = await import(
+    "../build-extension-ui-carrier.mjs"
+  );
+  const descriptor = await open(
+    pin.path,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
+  let bytes;
+  try {
+    const metadata = await descriptor.stat();
+    assert(
+      metadata.isFile() &&
+        metadata.uid === process.getuid() &&
+        metadata.nlink === 1 &&
+        (metadata.mode & 0o777) === 0o500,
+    );
+    bytes = await readBoundedCarrierBytes(descriptor, metadata.size);
+    assert.equal(digest(bytes), pin.sha256);
+  } finally {
+    await descriptor.close();
+  }
+  await verifyFunctionalRoleBuild(capability, inputs);
+  return {
+    bytes,
+    mode: 0o500,
+    sha256: pin.sha256,
+    sourceCommit: state.sourceCommit,
+    hostExecutableSHA256: plan.host.executableSHA256,
+  };
+}
+
+export async function functionalRoleBuildEnvironment(
+  capability,
+  inputs,
+  environment,
+) {
+  const { state, step, plan } = await verifyFunctionalRoleBuild(
+    capability,
+    inputs,
+  );
+  const expected = {
+    ...state.environment,
+    ...step.environment,
+    EXTENSION_OUTPUT: step.output,
+    EXTENSION_CONTAINING_HOST_APP: plan.host.path,
+  };
+  delete expected.EXTENSION_RELEASE_TAG;
+  delete expected.EXTENSION_CATALOG_PRIVATE_KEY;
+  assert.deepEqual(
+    environment,
+    expected,
+    "Functional role compiler environment changed",
+  );
+  return Object.freeze(expected);
+}
+
+export async function functionalRoleVerificationInput(capability, inputs) {
+  const { state, plan, step, compilation } = await verifyFunctionalRoleBuild(
+    capability,
+    inputs,
+  );
+  const pin = state.roleCarrier;
+  assert(pin, "Functional role carrier was not compiled");
+  const descriptor = await open(
+    pin.path,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
+  let bytes;
+  try {
+    bytes = (await descriptor.stat()).size;
+  } finally {
+    await descriptor.close();
+  }
+  const index = await pinnedFile(
+    join(
+      state.snapshot,
+      "Packages/EdithHost/Sources/EdithHostCore/Resources/index.json",
+    ),
+  );
+  const indexSize = Number(index.identity[2]);
+  assert(indexSize > 0 && indexSize <= 1048576);
+  const hostIndex = await pinnedFile(
+    join(plan.host.path, "Contents/Resources/index.json"),
+  );
+  assert.equal(hostIndex.sha256, index.sha256);
+  await verifyFunctionalRoleBuild(capability, inputs);
+  return freeze({
+    schema: 1,
+    kind: "functional-role-carrier",
+    root: state.root,
+    owner: plan.owner,
+    version: step.version,
+    sourceRoot: step.sourceRoot,
+    sourceCommit: state.sourceCommit,
+    sourceSHA256: compilation.source.sha256,
+    toolchainSHA256: compilation.toolchain.sha256,
+    host: plan.host.path,
+    hostExecutableSHA256: plan.host.executableSHA256,
+    carrier: { path: pin.path, sha256: pin.sha256, bytes, mode: 0o500 },
+    index: {
+      path: index.path,
+      sha256: index.sha256,
+      bytes: indexSize,
+      mode: Number(index.identity[3]) & 0o777,
+    },
+  });
 }

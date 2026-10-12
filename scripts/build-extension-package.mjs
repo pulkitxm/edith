@@ -115,7 +115,12 @@ export async function copyNativeResources(
   }
 }
 
-export async function copyNativeFrameworks(root, definition, contents) {
+export async function copyNativeFrameworks(
+  root,
+  definition,
+  contents,
+  environment = process.env,
+) {
   const directory = resolve(contents, "Frameworks");
   const names = new Set();
   const binaries = [];
@@ -132,7 +137,7 @@ export async function copyNativeFrameworks(root, definition, contents) {
     names.add(name);
     await mkdir(directory, { recursive: true });
     const destination = resolve(directory, name);
-    execFileSync("/bin/cp", ["-RL", origin, destination]);
+    execFileSync("/bin/cp", ["-RL", origin, destination], { env: environment });
     await rm(resolve(destination, "Versions"), {
       recursive: true,
       force: true,
@@ -186,7 +191,12 @@ export function nativeClangModuleFlags(root, definition) {
   ];
 }
 
-export function nativeSwiftPackageArguments(root, definition, developer) {
+export function nativeSwiftPackageArguments(
+  root,
+  definition,
+  developer,
+  environment = process.env,
+) {
   return [
     "build",
     "--package-path",
@@ -196,7 +206,7 @@ export function nativeSwiftPackageArguments(root, definition, developer) {
     "--configuration",
     "release",
     "--jobs",
-    process.env.EXTENSION_SWIFT_JOBS ?? "2",
+    environment.EXTENSION_SWIFT_JOBS ?? "2",
     "--force-resolved-versions",
     "--product",
     definition.nativeProduct,
@@ -275,10 +285,35 @@ export async function buildExtensionPackage({
   development = false,
   version,
   tagOverride,
-  containedHostApp = process.env.EXTENSION_CONTAINING_HOST_APP,
-  carrierTools = process.env.EXTENSION_UI_CARRIER_TOOLS ??
+  environment = process.env,
+  functionalRoleBuild,
+  containedHostApp = environment.EXTENSION_CONTAINING_HOST_APP,
+  carrierTools = environment.EXTENSION_UI_CARRIER_TOOLS ??
     resolve(root, "local/minimal-host/carrier-tools"),
 }) {
+  const functionalInputs = {
+    root,
+    id,
+    version,
+    output,
+    hostApp: containedHostApp,
+  };
+  if (functionalRoleBuild) {
+    if (development || tagOverride)
+      throw new Error(
+        "Functional roles require their exact admitted release inputs",
+      );
+    const { functionalRoleBuildEnvironment } = await import(
+      "./hosted-functional-actions/functional-build.mjs"
+    );
+    environment = await functionalRoleBuildEnvironment(
+      functionalRoleBuild,
+      functionalInputs,
+      environment,
+    );
+  }
+  const run = (file, args, options = {}) =>
+    execFileSync(file, args, { env: environment, ...options });
   const definitions = JSON.parse(
     await readFile(resolve(root, "Extensions/manifest.json"), "utf8"),
   );
@@ -294,22 +329,18 @@ export async function buildExtensionPackage({
     throw new Error(
       "A frozen signed host app is required for extension UI packages",
     );
-  execFileSync(
-    "codesign",
-    ["--verify", "--deep", "--strict", containedHostApp],
-    {
-      stdio: "pipe",
-    },
-  );
+  run("codesign", ["--verify", "--deep", "--strict", containedHostApp], {
+    stdio: "pipe",
+  });
   const nativePolicy = nativeRolePolicy(definition);
   if (definition.contractVersion === 1 && definition.usesHostFramework)
     throw new Error(
       "Worker extensions must not depend on the legacy host framework",
     );
   const developer =
-    process.env.DEVELOPER_DIR ?? "/Applications/Xcode.app/Contents/Developer";
+    environment.DEVELOPER_DIR ?? "/Applications/Xcode.app/Contents/Developer";
   const releaseVersion = version ?? definition.version;
-  const identity = process.env.EXTENSION_SIGN_IDENTITY;
+  const identity = environment.EXTENSION_SIGN_IDENTITY;
   if (!development && (!identity || identity === "-"))
     throw new Error("A release signing identity is required");
   const fingerprint = await extensionFingerprint(root, definition, definitions);
@@ -323,20 +354,22 @@ export async function buildExtensionPackage({
   const payload = resolve(staging, id);
   await mkdir(payload);
   const hostProducts = definition.usesHostFramework
-    ? (process.env.EXTENSION_HOST_PRODUCTS ?? (await buildHostInterfaces(root)))
+    ? (environment.EXTENSION_HOST_PRODUCTS ?? (await buildHostInterfaces(root)))
     : undefined;
   if (definition.nativePackage) {
-    prepareNativeSupport(root, definition);
-    execFileSync(
+    prepareNativeSupport(root, definition, (supportRoot, product, scope) =>
+      buildExtensionSupport(supportRoot, product, scope, environment),
+    );
+    run(
       "swift",
-      nativeSwiftPackageArguments(root, definition, developer),
+      nativeSwiftPackageArguments(root, definition, developer, environment),
       { stdio: "inherit" },
     );
   }
   let cargoLibrary;
   if (definition.nativeCargo) {
     const cargoTarget = resolve(root, "dist/native", id);
-    execFileSync(
+    run(
       "cargo",
       [
         "build",
@@ -344,7 +377,7 @@ export async function buildExtensionPackage({
         "--release",
         "--lib",
         "--jobs",
-        process.env.EXTENSION_SWIFT_JOBS ?? "2",
+        environment.EXTENSION_SWIFT_JOBS ?? "2",
         "--manifest-path",
         resolve(root, definition.nativeCargo.manifest),
         "--target-dir",
@@ -353,7 +386,7 @@ export async function buildExtensionPackage({
       {
         stdio: "inherit",
         env: {
-          ...process.env,
+          ...environment,
           MACOSX_DEPLOYMENT_TARGET: validateMinimumSystemVersion(
             definition.minimumSystemVersion,
           ),
@@ -385,7 +418,12 @@ export async function buildExtensionPackage({
         ? definition.supportProducts[role]
         : definition.supportProduct;
     const support = supportProduct
-      ? buildExtensionSupport(root, supportProduct, `${id}_${role}`)
+      ? buildExtensionSupport(
+          root,
+          supportProduct,
+          `${id}_${role}`,
+          environment,
+        )
       : undefined;
     const compileSources = [];
     for (const [index, path] of sources.entries()) {
@@ -448,13 +486,13 @@ export async function buildExtensionPackage({
       await mkdir(frameworks, { recursive: true });
       const library = resolve(frameworks, definition.nativeCargo.library);
       await copyFile(cargoLibrary, library);
-      execFileSync("strip", ["-x", library]);
-      execFileSync("install_name_tool", [
+      run("strip", ["-x", library]);
+      run("install_name_tool", [
         "-id",
         `@rpath/${definition.nativeCargo.library}`,
         library,
       ]);
-      execFileSync(
+      run(
         "codesign",
         [
           "--force",
@@ -475,9 +513,10 @@ export async function buildExtensionPackage({
         root,
         definition,
         contents,
+        environment,
       );
       for (const { binary, framework, installName } of frameworkBinaries) {
-        const architectures = execFileSync("lipo", ["-archs", binary], {
+        const architectures = run("lipo", ["-archs", binary], {
           encoding: "utf8",
         })
           .trim()
@@ -486,19 +525,13 @@ export async function buildExtensionPackage({
           throw new Error("A native framework lacks arm64");
         if (architectures.length > 1) {
           const temporary = `${binary}.arm64`;
-          execFileSync("lipo", [
-            binary,
-            "-thin",
-            "arm64",
-            "-output",
-            temporary,
-          ]);
+          run("lipo", [binary, "-thin", "arm64", "-output", temporary]);
           await copyFile(temporary, binary);
           await rm(temporary);
         }
-        execFileSync("install_name_tool", ["-id", installName, binary]);
-        execFileSync("strip", ["-rSTx", binary]);
-        execFileSync(
+        run("install_name_tool", ["-id", installName, binary]);
+        run("strip", ["-rSTx", binary]);
+        run(
           "codesign",
           [
             "--force",
@@ -517,7 +550,7 @@ export async function buildExtensionPackage({
       );
       if (
         nativePolicy.presentations.includes(role) &&
-        !execFileSync("nm", ["-gUj", library], {
+        !run("nm", ["-gUj", library], {
           encoding: "utf8",
           maxBuffer: 16 * 1024 * 1024,
         })
@@ -525,12 +558,8 @@ export async function buildExtensionPackage({
           .includes("_edith_extension_presentation_create")
       )
         throw new Error("Native presentation entry point was not exported");
-      execFileSync("install_name_tool", [
-        "-id",
-        `@rpath/${libraryName}`,
-        library,
-      ]);
-      const dependencies = execFileSync("otool", ["-L", library], {
+      run("install_name_tool", ["-id", `@rpath/${libraryName}`, library]);
+      const dependencies = run("otool", ["-L", library], {
         encoding: "utf8",
       })
         .split("\n")
@@ -542,7 +571,7 @@ export async function buildExtensionPackage({
             dependency.startsWith(`@rpath/${basename(framework)}/`) &&
             dependency !== installName
           )
-            execFileSync("install_name_tool", [
+            run("install_name_tool", [
               "-change",
               dependency,
               installName,
@@ -552,17 +581,13 @@ export async function buildExtensionPackage({
       }
       if (
         frameworkBinaries.length &&
-        !execFileSync("otool", ["-l", library], {
+        !run("otool", ["-l", library], {
           encoding: "utf8",
         }).includes("path @loader_path (")
       )
-        execFileSync("install_name_tool", [
-          "-add_rpath",
-          "@loader_path",
-          library,
-        ]);
-      execFileSync("strip", ["-rSTx", library]);
-      execFileSync(
+        run("install_name_tool", ["-add_rpath", "@loader_path", library]);
+      run("strip", ["-rSTx", library]);
+      run(
         "codesign",
         [
           "--force",
@@ -586,7 +611,12 @@ export async function buildExtensionPackage({
       contents,
       resourceNames,
     );
-    execFileSync(
+    const fixtureFlags = functionalRoleBuild
+      ? await (
+          await import("./hosted-functional-actions/functional-build.mjs")
+        ).functionalRoleCompilerInputs(functionalRoleBuild, functionalInputs)
+      : [];
+    run(
       "xcrun",
       [
         "swiftc",
@@ -604,6 +634,7 @@ export async function buildExtensionPackage({
         "-target",
         `arm64-apple-macos${definition.minimumSystemVersion}`,
         ...compileSources,
+        ...fixtureFlags,
         ...(support
           ? [
               "-swift-version",
@@ -651,12 +682,12 @@ export async function buildExtensionPackage({
         executable,
       ],
       {
-        env: { ...process.env, DEVELOPER_DIR: developer },
+        env: { ...environment, DEVELOPER_DIR: developer },
         stdio: "inherit",
       },
     );
     if (hostProducts) {
-      const dependencies = execFileSync("otool", ["-L", executable], {
+      const dependencies = run("otool", ["-L", executable], {
         encoding: "utf8",
       });
       const shared = dependencies
@@ -664,7 +695,7 @@ export async function buildExtensionPackage({
         .map((line) => line.trim().split(" ")[0])
         .find((path) => path.endsWith("/libEdithShared.dylib"));
       if (!shared) throw new Error("Missing host framework linkage");
-      execFileSync("install_name_tool", [
+      run("install_name_tool", [
         "-change",
         shared,
         "@rpath/EdithShared.framework/Versions/A/EdithShared",
@@ -681,7 +712,7 @@ export async function buildExtensionPackage({
       EdithHostABI: definition.hostABI,
     };
     if (definition.contractVersion === 1) {
-      const linkage = execFileSync("otool", ["-L", executable], {
+      const linkage = run("otool", ["-L", executable], {
         encoding: "utf8",
       });
       if (
@@ -701,14 +732,14 @@ export async function buildExtensionPackage({
     }
     const infoJSON = resolve(staging, `${role}-info.json`);
     await writeFile(infoJSON, JSON.stringify(info));
-    execFileSync("python3", [
+    run("python3", [
       "-c",
       "import json,plistlib,sys; plistlib.dump(json.load(open(sys.argv[1])),open(sys.argv[2],'wb'),fmt=plistlib.FMT_BINARY)",
       infoJSON,
       resolve(contents, "Info.plist"),
     ]);
-    execFileSync("strip", ["-rSTx", executable]);
-    const symbols = execFileSync("nm", ["-g", executable], {
+    run("strip", ["-rSTx", executable]);
+    const symbols = run("nm", ["-g", executable], {
       encoding: "utf8",
     });
     if (!symbols.includes(" T _edith_extension_create"))
@@ -719,12 +750,12 @@ export async function buildExtensionPackage({
     )
       throw new Error("Extension presentation entry point was not exported");
     const flags = development ? [] : ["--options", "runtime", "--timestamp"];
-    execFileSync(
+    run(
       "codesign",
       ["--force", "--sign", development ? "-" : identity, ...flags, bundle],
       { stdio: "inherit" },
     );
-    execFileSync("codesign", ["--verify", "--strict", bundle], {
+    run("codesign", ["--verify", "--strict", bundle], {
       stdio: "inherit",
     });
   }
@@ -733,7 +764,7 @@ export async function buildExtensionPackage({
       throw new Error(
         "A frozen signed host app is required for a system extension carrier",
       );
-    const hostIdentifier = execFileSync(
+    const hostIdentifier = run(
       "/usr/libexec/PlistBuddy",
       [
         "-c",
@@ -783,6 +814,9 @@ export async function buildExtensionPackage({
   );
   const uiCarrier = await buildExtensionUICarrier({
     root,
+    environment,
+    functionalRoleBuild,
+    functionalInputs,
     carrierTools,
     frozenHostApp: resolve(root, "local/minimal-host/Edith.app"),
     minimumSystemVersion: definition.minimumSystemVersion,
@@ -801,7 +835,7 @@ export async function buildExtensionPackage({
   );
   const archive = resolve(target, `${id}.zip`);
   const summary = JSON.parse(
-    execFileSync(
+    run(
       "python3",
       [
         "-c",
@@ -813,7 +847,7 @@ export async function buildExtensionPackage({
     ),
   );
   const bytes = await readFile(archive);
-  const repository = process.env.GITHUB_REPOSITORY ?? "pulkitxm/edith";
+  const repository = environment.GITHUB_REPOSITORY ?? "pulkitxm/edith";
   const packageRecord = {
     ...payloadManifest,
     downloadURL: `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${id}.zip`,
