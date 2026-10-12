@@ -553,6 +553,7 @@ jobs:
       RELEASE_BUILD: ${{ needs.version.outputs.build }}
       BUILT_SHA: ${{ needs.version.outputs.sha }}
       RELEASE_PRERELEASE: "true"
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -675,6 +676,7 @@ jobs:
           set -euo pipefail
           notary=skipped
           if [ "$HAS_NOTARY" = true ]; then notary=verified; fi
+          python3 -B scripts/test-host-release-source-cleanliness.py
           python3 scripts/test-host-release-proof.py
           python3 scripts/host_release_proof.py dist/Edith.app Edith.dmg dist/appcast/appcast.xml local/host-release-proof \
             --source "$BUILT_SHA" --tag "$RELEASE_TAG" --version "$RELEASE_VERSION" --build "$RELEASE_BUILD" \
