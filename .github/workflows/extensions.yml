@@ -184,6 +184,7 @@ jobs:
         env:
           EXPECTED_SOURCE_SHA: "${{ github.sha }}"
           EXTENSION_LIFECYCLE_HARNESS: local/extension-tools/HostLifecycleHarness
+          EXTENSION_PUBLISH: "${{ inputs.publish == true && 'true' || 'false' }}"
         run: make ci-extension-keep-awake-native
       - name: Verify Keep Awake peer rejection contracts
         if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
