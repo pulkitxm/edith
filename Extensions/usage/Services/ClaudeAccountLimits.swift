@@ -90,8 +90,9 @@ public actor ClaudeAccountLimitsCollector {
                         guard !account.isLoggedOut else {
                             throw ClaudeLimitsReader.Failure.missingToken
                         }
-                        limits = try await fetch(account, directory)
+                        let fetched = try await fetch(account, directory)
                         try Task.checkCancellation()
+                        limits = fetched
                     } catch {
                         if error is CancellationError { throw error }
                         try Task.checkCancellation()
