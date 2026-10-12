@@ -4,9 +4,9 @@ import Foundation
 
 @MainActor final class LidAwakeWorker {
     let engine: LidAwakeEngine
-    let operations: LidAwakeOperationModel
     private var observer: NSObjectProtocol?
     private var stopped = false
+    private var commandWorkClosed = false
     private let recoveryOnly: Bool
     private let defaults: UserDefaults
     private let confirm: @MainActor () -> Bool
@@ -20,32 +20,42 @@ import Foundation
         self.defaults = defaults; self.confirm = confirm; self.recoveryOnly = recoveryOnly
         if !recoveryOnly { defaults.set(true, forKey: LidAwakeState.enabledKey) }
         let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+        let applySystemState: (@MainActor @Sendable (Bool) async -> LidAwakeOutcome)?
+        let systemStateReader: @Sendable () async throws -> Bool
+        if fixture {
+            applySystemState = { value in
+                defaults.set(value, forKey: LidAwakeState.activeKey)
+                return .applied
+            }
+            systemStateReader = { false }
+        } else {
+            applySystemState = nil
+            systemStateReader = { try await LidAwakeSystemStateReader.read() }
+        }
         let created =
             engine
             ?? LidAwakeEngine(
                 defaults: defaults,
                 readSystemState: { defaults.bool(forKey: LidAwakeState.activeKey) },
-                applySystemState: fixture
-                    ? { value in
-                        defaults.set(value, forKey: LidAwakeState.activeKey); return .applied
-                    } : nil, startServices: !fixture && !recoveryOnly, recoveryOnly: recoveryOnly,
-                systemStateReader: fixture
-                    ? { false } : { try await LidAwakeSystemStateReader.read() })
+                applySystemState: applySystemState,
+                startServices: !fixture && !recoveryOnly, recoveryOnly: recoveryOnly,
+                systemStateReader: systemStateReader)
         self.engine = created
-        operations = LidAwakeOperationModel { request in
-            try await Self.perform(request, engine: created, defaults: defaults)
-        }
         guard !recoveryOnly else { return }
         observer = NotificationCenter.default.addObserver(
             forName: Notification.Name("lidAwakeSettingsChanged"), object: nil, queue: .main
-        ) { _ in Task { @MainActor in created.syncSettings() } }
+        ) { _ in MainActor.assumeIsolated { created.syncSettings() } }
     }
 
     func perform(_ request: LidAwakeRequest, requiresConfirmation: Bool = false) async throws
         -> LidAwakeSnapshot
     {
-        guard !stopped, !recoveryOnly else { throw ExtensionPeerError.unavailable }
+        guard !stopped, !commandWorkClosed, !recoveryOnly else {
+            throw ExtensionPeerError.unavailable
+        }
         if requiresConfirmation, !confirm() { throw CancellationError() }
+        try Task.checkCancellation()
+        guard !commandWorkClosed else { throw ExtensionPeerError.unavailable }
         return try await Self.perform(request, engine: engine, defaults: defaults)
     }
 
@@ -72,22 +82,40 @@ import Foundation
     }
 
     func setSession(_ session: LidAwakeSession) throws {
-        guard !stopped, !recoveryOnly else { throw ExtensionPeerError.unavailable }
+        guard !stopped, !commandWorkClosed, !recoveryOnly else {
+            throw ExtensionPeerError.unavailable
+        }
         defaults.set(session.rawValue, forKey: LidAwakeState.sessionKey)
         engine.syncSettings()
     }
 
-    func prepareDisable() async throws { try await engine.prepareDisable() }
+    func beginCommandDrain() {
+        commandWorkClosed = true
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+        observer = nil
+        engine.beginCommandDrain()
+    }
+
+    func cancelPendingWorkAndWait() async {
+        beginCommandDrain()
+        await engine.cancelPendingWorkAndWait()
+    }
+
+    func prepareDisable() async throws {
+        await cancelPendingWorkAndWait()
+        try await engine.prepareDisable()
+    }
     func requestApproval() throws { try engine.requestApproval() }
     func prepareApplicationQuit(_ context: LidAwakeApplicationQuitContext) async throws {
         guard !recoveryOnly else { throw ExtensionPeerError.unavailable }
+        await cancelPendingWorkAndWait()
         try await engine.prepareForApplicationQuit(context)
         await prepareToStop()
     }
     func prepareToStop() async {
+        await cancelPendingWorkAndWait()
         if !stopped {
             stopped = true
-            operations.cancel()
             if let observer { NotificationCenter.default.removeObserver(observer) }
             observer = nil
         }
@@ -97,7 +125,7 @@ import Foundation
 
     func shutdown() {
         guard !stopped else { return }; stopped = true
-        operations.cancel()
+        beginCommandDrain()
         if let observer { NotificationCenter.default.removeObserver(observer) }; observer = nil
         engine.shutdown()
         defaults.set(false, forKey: LidAwakeState.enabledKey)

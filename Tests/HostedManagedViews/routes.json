@@ -236,7 +236,7 @@
       "sources": [
         {
           "path": "Extensions/homebrew/Runtime.swift",
-          "sha256": "c4344710ed0344f687a8e7a02f0f4a63e8bb1120789be9df081d8f58ee71e339"
+          "sha256": "e37ba5a493ce88ea3cf6cd423abfd3fa5b4c3c19e4fed3e8a6b56c86db2020a5"
         },
         {
           "path": "Extensions/homebrew/ViewModels/HomebrewPageModel.swift",
@@ -280,7 +280,7 @@
       "sources": [
         {
           "path": "Extensions/jev/Runtime.swift",
-          "sha256": "b3ace73b577e89b787143981a9d96f81ae53adb4a9453db144e71ac79b73aed8"
+          "sha256": "41260febdd2d115151a1607e2f5fafd38c8654794bc1d43977d5bf33d7d802a5"
         },
         {
           "path": "Extensions/jev/ViewModels/JevSettingsModel.swift",
@@ -676,7 +676,7 @@
       "sources": [
         {
           "path": "Extensions/attention/NativeRuntime/Sources/AttentionNative/AttentionExtensionController.swift",
-          "sha256": "3eabaf6bcd1239a59f0521e712ab5226ca311edb4f5e3b12bbdbd0fe31e5387e"
+          "sha256": "01560e8071a7e72b1b837b649ab9e766f27cd99d0871a82159af877229849b9b"
         }
       ]
     },

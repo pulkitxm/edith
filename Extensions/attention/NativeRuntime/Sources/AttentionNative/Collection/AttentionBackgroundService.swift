@@ -10,6 +10,25 @@ struct AttentionRuntimeSnapshot: Codable, Sendable {
     var schedulingFailure: String? = nil
 }
 
+private final class AttentionMaintenanceIntent: @unchecked Sendable {
+    private let lock = NSLock()
+    private var settingsPending = false
+
+    func markSettings() {
+        lock.lock()
+        settingsPending = true
+        lock.unlock()
+    }
+
+    func takeSettings() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        let pending = settingsPending
+        settingsPending = false
+        return pending
+    }
+}
+
 actor AttentionBackgroundService {
     private let events: AttentionEventStore
     private let repository: AttentionRepository
@@ -41,11 +60,14 @@ actor AttentionBackgroundService {
     private let clock: @Sendable () -> Date
     private let sleep: @Sendable (Duration) async throws -> Void
     private var lastPeriodicIngest: Date?
-    private var settingsRefreshPending = false
     private var refreshTask: Task<Void, Never>?
     private var summaryTasks: [AttentionSummaryCacheKey: AttentionSummaryFlight] = [:]
     private var summaryCache: [AttentionSummaryCacheEntry] = []
     private var stopped = false
+    private var commandWorkClosed = false
+    private var commandDrainTask: Task<Void, Never>?
+    private var stopTask: Task<Void, Never>?
+    private var automaticCategorization: Task<Void, Never>?
     private var schedulingFailure: String?
     private var agentRecorder = AttentionAgentRecorder()
     private let decider: @Sendable () async -> JevDeciding?
@@ -96,17 +118,19 @@ actor AttentionBackgroundService {
     }
 
     func start() async {
-        guard !stopped, refreshTask == nil else { return }
+        guard !stopped, !commandWorkClosed, refreshTask == nil else { return }
         schedulingFailure = nil
         let (stream, continuation) = AsyncStream<Void>.makeStream(
             bufferingPolicy: .bufferingNewest(1))
         maintenanceContinuation = continuation
+        let intent = AttentionMaintenanceIntent()
         observation = notificationCenter.addObserver(
             forName: Notification.Name(IPC.Name.settingsChanged), object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { await self?.requestSettingsRefresh() }
+        ) { _ in
+            intent.markSettings()
+            continuation.yield(())
         }
-        do { try await ambientPolicy?.start { continuation.yield() } } catch {
+        do { try await ambientPolicy?.start { continuation.yield(()) } } catch {
             schedulingFailure = error.localizedDescription
             continuation.finish()
             maintenanceContinuation = nil
@@ -114,21 +138,23 @@ actor AttentionBackgroundService {
         do { try await synchronizeTracking(settings: repository.loadSettings()) } catch {
             NSLog("Attention tracking setup failed: %@", error.localizedDescription)
         }
-        guard !stopped, schedulingFailure == nil else { return }
+        guard !stopped, !commandWorkClosed, schedulingFailure == nil else { return }
         refreshTask = Task { [weak self] in
             for await _ in stream {
                 guard !Task.isCancelled, let self else { return }
-                await self.refreshMaintenance(continuation: continuation)
+                await self.refreshMaintenance(intent: intent, continuation: continuation)
             }
         }
-        continuation.yield()
+        continuation.yield(())
     }
 
-    private func refreshMaintenance(continuation: AsyncStream<Void>.Continuation) async {
-        guard !stopped, !Task.isCancelled else { return }
+    private func refreshMaintenance(
+        intent: AttentionMaintenanceIntent,
+        continuation: AsyncStream<Void>.Continuation
+    ) async {
+        guard !stopped, !commandWorkClosed, !Task.isCancelled else { return }
         do {
-            if settingsRefreshPending {
-                settingsRefreshPending = false
+            if intent.takeSettings() {
                 _ = try await run(now: clock())
             } else {
                 try await runPeriodicMaintenance(now: clock())
@@ -141,14 +167,8 @@ actor AttentionBackgroundService {
         await scheduleMaintenance(continuation: continuation)
     }
 
-    private func requestSettingsRefresh() {
-        guard !stopped else { return }
-        settingsRefreshPending = true
-        maintenanceContinuation?.yield()
-    }
-
     func runPeriodicMaintenance(now: Date) async throws {
-        guard !stopped else { throw CancellationError() }
+        guard !stopped, !commandWorkClosed else { throw CancellationError() }
         let interval = await ingestInterval()
         if let interval,
             now.timeIntervalSince(lastPeriodicIngest ?? .distantPast) >= interval
@@ -166,7 +186,7 @@ actor AttentionBackgroundService {
     }
 
     func nextMaintenanceDelay(now: Date) async -> TimeInterval? {
-        guard !stopped else { return nil }
+        guard !stopped, !commandWorkClosed else { return nil }
         var delays: [TimeInterval] = []
         if let interval = await ingestInterval() {
             delays.append(max(0, interval - now.timeIntervalSince(lastPeriodicIngest ?? now)))
@@ -184,14 +204,15 @@ actor AttentionBackgroundService {
         maintenanceTask = nil
         previous?.cancel()
         await previous?.value
-        guard !stopped, !Task.isCancelled,
+        guard !stopped, !commandWorkClosed, !Task.isCancelled,
             let delay = await nextMaintenanceDelay(now: clock())
         else { return }
+        guard !stopped, !commandWorkClosed, !Task.isCancelled else { return }
         let sleep = sleep
         maintenanceTask = Task {
             do { try await sleep(.seconds(delay)) } catch { return }
             guard !Task.isCancelled else { return }
-            continuation.yield()
+            continuation.yield(())
         }
     }
 
@@ -204,17 +225,24 @@ actor AttentionBackgroundService {
     }
 
     func run(now: Date = Date()) async throws -> Data? {
-        guard !stopped else { throw CancellationError() }
+        guard !stopped, !commandWorkClosed else { throw CancellationError() }
         guard restoreTask == nil else { return nil }
         let report = try await importSpoolWhenAvailable(now: now)
+        try Task.checkCancellation()
+        guard !stopped, !commandWorkClosed else { throw CancellationError() }
         let settings = repository.loadSettings()
         try await synchronizeTracking(settings: settings)
+        try Task.checkCancellation()
+        guard !stopped, !commandWorkClosed else { throw CancellationError() }
         if collectsSystemActivity, settings.isEnabled, settings.jevCategorizationEnabled,
-            categorizeTask == nil,
+            categorizeTask == nil, automaticCategorization == nil,
             now.timeIntervalSince(lastCategorizedAt ?? .distantPast) >= 1_800
         {
             lastCategorizedAt = now
-            Task { _ = try? await self.categorize() }
+            automaticCategorization = Task { [self] in
+                defer { automaticCategorization = nil }
+                _ = try? await categorize()
+            }
         }
         try await backupWhenDue(now: now)
         return try AttentionPayload.encode(
@@ -255,7 +283,7 @@ actor AttentionBackgroundService {
     }
 
     private func backupWhenDue(now: Date) async throws {
-        guard !stopped, restoreTask == nil else { return }
+        guard !stopped, !commandWorkClosed, restoreTask == nil else { return }
         if backupEligible(settings: repository.loadSettings()),
             now.timeIntervalSince(lastBackupAt ?? .distantPast) >= 900
         {
@@ -263,7 +291,53 @@ actor AttentionBackgroundService {
         }
     }
 
+    func cancelPendingWorkAndWait() async {
+        commandWorkClosed = true
+        if let commandDrainTask { await commandDrainTask.value; return }
+        maintenanceContinuation?.finish()
+        maintenanceContinuation = nil
+        if let observation { notificationCenter.removeObserver(observation) }
+        observation = nil
+        let categorizing = categorizeTask
+        let automatic = automaticCategorization
+        let backup = backupTask
+        let restore = restoreTask
+        let maintenance = maintenanceTask
+        let refresh = refreshTask
+        let summaries = summaryTasks.values.map(\.task)
+        categorizing?.cancel()
+        automatic?.cancel()
+        backup?.cancel()
+        restore?.cancel()
+        maintenance?.cancel()
+        refresh?.cancel()
+        for task in summaries { task.cancel() }
+        let task = Task { [self] in
+            await ambientPolicy?.stop()
+            _ = await categorizing?.result
+            await automatic?.value
+            _ = await backup?.result
+            _ = await restore?.result
+            await maintenance?.value
+            await refresh?.value
+            for task in summaries { _ = await task.result }
+        }
+        commandDrainTask = task
+        await task.value
+    }
+
     func stop() async {
+        if let stopTask { await stopTask.value; return }
+        stopped = true
+        let task = Task { [self] in
+            await cancelPendingWorkAndWait()
+            await stopResources()
+        }
+        stopTask = task
+        await task.value
+    }
+
+    private func stopResources() async {
         stopped = true
         maintenanceContinuation?.finish()
         maintenanceContinuation = nil
@@ -313,12 +387,14 @@ actor AttentionBackgroundService {
     }
 
     func categorize(now: Date = Date()) async throws -> AttentionCategorizeReport {
-        guard !stopped else { throw CancellationError() }
+        guard !stopped, !commandWorkClosed else { throw CancellationError() }
         if let categorizeTask { return try await categorizeTask.value }
         let settings = repository.loadSettings()
         guard settings.jevCategorizationEnabled, let decider = await decider() else {
             return AttentionCategorizeReport(available: false)
         }
+        try Task.checkCancellation()
+        guard !stopped, !commandWorkClosed else { throw CancellationError() }
         try importSpool()
         let events = events
         let repository = repository
@@ -397,7 +473,7 @@ actor AttentionBackgroundService {
     func summary(_ request: AttentionSummaryRequest, now: Date = Date()) async throws
         -> AttentionPageSnapshot
     {
-        guard !stopped else { throw CancellationError() }
+        guard !stopped, !commandWorkClosed else { throw CancellationError() }
         try importSpool()
         let request = try request.coveringAllTime(
             since: request.allTime ? events.firstEventDate() : nil)
@@ -418,11 +494,16 @@ actor AttentionBackgroundService {
         if let flight = summaryTasks[key] {
             return try await flight.task.value.trimmed(to: request.parts)
         }
-        if summaryTasks.count >= 3,
+        while summaryTasks.count >= 3,
             let oldest = summaryTasks.min(by: { $0.value.startedAt < $1.value.startedAt })
         {
             oldest.value.task.cancel()
-            summaryTasks[oldest.key] = nil
+            _ = await oldest.value.task.result
+            if summaryTasks[oldest.key]?.id == oldest.value.id {
+                summaryTasks[oldest.key] = nil
+            }
+            try Task.checkCancellation()
+            guard !stopped, !commandWorkClosed else { throw CancellationError() }
         }
         let events = events
         let repository = repository
@@ -499,7 +580,7 @@ actor AttentionBackgroundService {
     }
 
     func backup(now: Date = Date()) async throws {
-        guard !stopped else { throw CancellationError() }
+        guard !stopped, !commandWorkClosed else { throw CancellationError() }
         guard restoreTask == nil else {
             throw AttentionServiceError(.unavailable, "Attention is restoring an archive.")
         }
@@ -538,7 +619,7 @@ actor AttentionBackgroundService {
     }
 
     func restore() async throws {
-        guard !stopped else { throw CancellationError() }
+        guard !stopped, !commandWorkClosed else { throw CancellationError() }
         if let restoreTask { return try await restoreTask.value }
         guard backupTask == nil else {
             throw AttentionServiceError(.unavailable, "Attention is creating an archive.")

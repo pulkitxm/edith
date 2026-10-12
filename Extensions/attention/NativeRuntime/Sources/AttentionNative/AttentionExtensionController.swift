@@ -25,6 +25,7 @@ public final class AttentionExtensionController: NSObject {
     private var startup: Task<Void, Never>?
     private var stopped = false
     private var stoppingTask: Task<Void, Never>?
+    private var uiShutdownTasks: [UUID: Task<Void, Never>] = [:]
     private var activeCalls = 0
     @MainActor
     private final class Storage {
@@ -115,6 +116,24 @@ public final class AttentionExtensionController: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    public func suspendCommands(completion: @escaping () -> Void) {
+        let commands = commands
+        commands.suspend()
+        let startup = startup
+        let service = service
+        let favicon = favicon
+        startup?.cancel()
+        Task { [self, commands, startup, service, favicon] in
+            await startup?.value
+            await service?.cancelPendingWorkAndWait()
+            await favicon?.cancelPendingWorkAndWait()
+            await commands.suspendAndWait()
+            self.startup = nil
+            completion()
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     public func prepareToStop(completion: @escaping () -> Void) {
         stopUI()
@@ -134,6 +153,8 @@ public final class AttentionExtensionController: NSObject {
             await startup?.value
             await service?.stop()
             await favicon?.stop()
+            for task in self.uiShutdownTasks.values { await task.value }
+            await self.commands.shutdownAndWait()
             while self.activeCalls > 0 { await Task.yield() }
             try? self.database?.close()
             self.database = nil
@@ -310,7 +331,12 @@ public final class AttentionExtensionController: NSObject {
         uiModel?.cancelLoading()
         let model = uiModel
         uiModel = nil
-        Task { await model?.shutdown() }
+        guard let model else { return }
+        let token = UUID()
+        uiShutdownTasks[token] = Task { [self, model] in
+            await model.shutdown()
+            uiShutdownTasks[token] = nil
+        }
     }
 
 }

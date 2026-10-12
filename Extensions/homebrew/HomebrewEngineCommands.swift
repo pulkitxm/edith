@@ -121,7 +121,9 @@ import Foundation
 
     func shutdown() { stopped = true; cancel(); uiJobs.shutdown(); cliStreams?.stop() }
 
-    func shutdownAndWait() async {
+    func shutdownAndWait() async { await cancelPendingWorkAndWait() }
+
+    func cancelPendingWorkAndWait() async {
         shutdown()
         await uiJobs.shutdownAndWait()
         await cliStreams?.stopAndWait()

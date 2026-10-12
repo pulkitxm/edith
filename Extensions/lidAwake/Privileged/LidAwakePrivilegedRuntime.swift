@@ -1,36 +1,50 @@
 import Darwin
 import Foundation
+import EdithExtensionSupport
 
 @MainActor @objc(EdithLidAwakePrivilegedRuntime)
 final class LidAwakePrivilegedRuntime: NSObject {
     private var controller: LidAwakePrivilegedController?
     private var fixtureState = false
+    private let commands = ExtensionCommandRegistry()
     private var journal: URL {
         Bundle(for: LidAwakePrivilegedRuntime.self).bundleURL.deletingLastPathComponent()
             .appendingPathComponent("lidAwake-state.json")
     }
 
+    override init() { super.init() }
+
+    init(controller: LidAwakePrivilegedController) {
+        self.controller = controller
+        super.init()
+    }
+
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        Task { [self] in
-            do {
-                guard let command = request["command"] as? String,
-                    let payload = request["payload"] as? Data, payload.count <= 16
-                else { throw CocoaError(.coderReadCorrupt) }
-                if command == "status" {
-                    guard payload.isEmpty || payload == Data("{}".utf8) else {
-                        throw CocoaError(.coderReadCorrupt)
-                    }
-                    let state =
-                        getuid() == 0 ? try await LidAwakeSystemStateReader.read() : fixtureState
-                    completion(try JSONEncoder().encode(["sleepDisabled": state]) as NSData, nil)
-                    return
+        commands.invoke(request, completion: completion) { [self] command, payload in
+            try Task.checkCancellation()
+            guard payload.count <= 16 else { throw CocoaError(.coderReadCorrupt) }
+            if command == "status" {
+                guard payload.isEmpty || payload == Data("{}".utf8) else {
+                    throw CocoaError(.coderReadCorrupt)
                 }
-                guard command == "setSleepDisabled" else { throw CocoaError(.coderReadCorrupt) }
-                let disabled = try JSONDecoder().decode(Bool.self, from: payload)
-                let controller = try makeController()
-                try await controller.setSleepDisabled(disabled)
-                completion(Data("{}".utf8) as NSData, nil)
-            } catch { completion(nil, error.localizedDescription as NSString) }
+                let state =
+                    getuid() == 0 ? try await LidAwakeSystemStateReader.read() : fixtureState
+                return try JSONEncoder().encode(["sleepDisabled": state])
+            }
+            guard command == "setSleepDisabled" else { throw CocoaError(.coderReadCorrupt) }
+            let disabled = try JSONDecoder().decode(Bool.self, from: payload)
+            let controller = try makeController()
+            try await controller.setSleepDisabled(disabled)
+            return Data("{}".utf8)
+        }
+    }
+
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        commands.suspend()
+        Task { [self] in
+            await commands.suspendAndWait()
+            completion()
         }
     }
 

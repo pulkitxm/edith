@@ -18,6 +18,7 @@ import Foundation
     public let owner: String
     private let idleTimeout: Duration
     private var sessions: [UUID: Session] = [:]
+    private var retirements: [UUID: Task<Void, Never>] = [:]
     private var stopping = false
 
     public init(owner: String, idleTimeout: Duration = .seconds(60)) throws {
@@ -138,9 +139,14 @@ import Foundation
     }
 
     public func stopAndWait() async {
-        let tasks = sessions.values.map(\.task)
         stop()
-        for task in tasks { await task.value }
+        let pending = Array(sessions.values)
+        let retiring = Array(retirements.values)
+        for session in pending {
+            await session.task.value
+            await session.timer.value
+        }
+        for task in retiring { await task.value }
     }
 
     public func invoke<Command: AsyncParsableCommand>(
@@ -193,16 +199,20 @@ import Foundation
         session.input.close()
         session.timer.cancel()
         session.task.cancel()
-        if session.buffer.finished {
-            sessions.removeValue(forKey: token)
-        } else {
-            sessions[token] = session
+        sessions[token] = session
+        guard retirements[token] == nil else { return }
+        let retained = session
+        retirements[token] = Task { [weak self] in
+            await retained.task.value
+            await retained.timer.value
+            self?.sessions.removeValue(forKey: token)
+            self?.retirements.removeValue(forKey: token)
         }
     }
 
     private func finished(_ token: UUID) {
-        guard let session = sessions[token] else { return }
-        if session.ended { sessions.removeValue(forKey: token) }
+        guard let session = sessions[token], session.ended else { return }
+        endRetainingTask(token)
     }
 }
 

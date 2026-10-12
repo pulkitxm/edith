@@ -65,11 +65,30 @@ final class ExtensionRuntime: NSObject {
         uiClient?.invalidate(); uiClient = nil
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let owner = commands
+        owner?.suspend()
+        let startup = startup
+        startup?.cancel()
+        Task { [self, owner, startup] in
+            await startup?.value
+            await owner?.suspendAndWait()
+            self.startup = nil
+            completion()
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        let owner = commands
+        let startup = startup
         startup?.cancel()
-        Task {
-            await commands?.shutdownAndWait(); completion()
+        Task { [self, owner, startup] in
+            await startup?.value
+            await owner?.shutdownAndWait()
+            self.startup = nil
+            completion()
         }
     }
 }

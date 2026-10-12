@@ -29,6 +29,8 @@ actor FaviconService {
     private var cached: [URL: Cached] = [:]
     private var order: [URL] = []
     private var stopped = false
+    private var commandWorkClosed = false
+    private var commandDrainTask: Task<Void, Never>?
     private let allowsNetwork: Bool
 
     init(
@@ -49,7 +51,7 @@ actor FaviconService {
     }
 
     func data(for url: URL) async throws -> Data? {
-        guard !stopped else {
+        guard !stopped, !commandWorkClosed else {
             throw AttentionServiceError(.unavailable, "The favicon service is stopping.")
         }
         guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
@@ -82,17 +84,32 @@ actor FaviconService {
         defer { pending[url] = nil }
         do {
             let data = try await task.value
-            guard !stopped else { throw CancellationError() }
+            guard !stopped, !commandWorkClosed else { throw CancellationError() }
             remember(data, url: url)
             return data
         } catch {
-            if !stopped, !(error is CancellationError) { remember(nil, url: url) }
+            if !stopped, !commandWorkClosed, !(error is CancellationError) {
+                remember(nil, url: url)
+            }
             throw error
         }
     }
 
+    func cancelPendingWorkAndWait() async {
+        commandWorkClosed = true
+        if let commandDrainTask { await commandDrainTask.value; return }
+        let pending = Array(pending.values)
+        for task in pending { task.cancel() }
+        let task = Task {
+            for task in pending { _ = await task.result }
+        }
+        commandDrainTask = task
+        await task.value
+    }
+
     func stop() async {
         stopped = true
+        await cancelPendingWorkAndWait()
         let tasks = Array(pending.values)
         tasks.forEach { $0.cancel() }
         session.invalidateAndCancel()

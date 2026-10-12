@@ -4,22 +4,31 @@ import EdithExtensionSupport
 @MainActor
 final class LidAwakeMutationSequencer {
     private var tail: Task<Void, Never>?
+    private var commandTasks: [UUID: Task<Void, Never>] = [:]
 
     @discardableResult
     func enqueue(
         _ operation: @escaping @MainActor @Sendable () async -> Void
     ) -> Task<Void, Never> {
         let prior = tail
-        let task = Task { @MainActor in
+        let token = UUID()
+        let task = Task { @MainActor [self] in
+            defer { commandTasks[token] = nil }
             await prior?.value
             await operation()
         }
+        commandTasks[token] = task
         tail = task
         return task
     }
 
+    func cancelPendingWork() {
+        for task in commandTasks.values { task.cancel() }
+    }
+
     func drain() async {
-        await tail?.value
+        let task = tail
+        await task?.value
     }
 
     func enqueueResult<Result: Sendable>(
@@ -143,6 +152,10 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
     private var sessionRevision: UInt = 0
     private var systemReadGeneration: UInt = 0
     private var systemReadTask: Task<Void, Never>?
+    private var systemReads: [UUID: Task<Void, Never>] = [:]
+    private var systemReadRequested = false
+    private var commandWorkClosed = false
+    private var commandDrainTask: Task<Void, Never>?
     private var terminateObserver: NSObjectProtocol?
     private var stopped = false
 
@@ -196,16 +209,16 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
             }
         }
         batteryMonitor.onChange = { [weak self] snapshot in
-            Task { @MainActor in self?.handleBattery(snapshot) }
+            MainActor.assumeIsolated { self?.handleBattery(snapshot) }
         }
         lidMonitor.onChange = { [weak self] closed in
-            Task { @MainActor in self?.handleLid(closed) }
+            MainActor.assumeIsolated { self?.handleLid(closed) }
         }
         autoOffTimer.onExpire = { [weak self] in
-            Task { @MainActor in self?.requestAutomaticStop() }
+            MainActor.assumeIsolated { self?.requestAutomaticStop() }
         }
         autoOffTimer.onTick = { [weak self] in
-            Task { @MainActor in self?.updateRemaining() }
+            MainActor.assumeIsolated { self?.updateRemaining() }
         }
         if active, automaticStopPending, !recoveryOnly { requestAutomaticStop() }
         if startServices {
@@ -224,6 +237,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
     }
 
     func prepareDisable() async throws {
+        await cancelPendingWorkAndWait()
         await mutationSequencer.drain()
         guard !stopped else { try await privilegedClient.release(); return }
         var needsRestoration =
@@ -288,8 +302,35 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
     }
 
     func shutdownForTermination() async {
+        beginCommandDrain()
         _ = stopEngine(force: false)
+        await cancelPendingWorkAndWait()
         await mutationSequencer.drain()
+    }
+
+    func beginCommandDrain() {
+        commandWorkClosed = true
+        cancelSystemReads()
+        mutationSequencer.cancelPendingWork()
+    }
+
+    func cancelPendingWorkAndWait() async {
+        beginCommandDrain()
+        if let commandDrainTask { await commandDrainTask.value; return }
+        let reads = Array(systemReads.values)
+        let task = Task { [self, reads] in
+            for task in reads { await task.value }
+            await mutationSequencer.drain()
+        }
+        commandDrainTask = task
+        await task.value
+    }
+
+    private func cancelSystemReads() {
+        systemReadRequested = false
+        systemReadGeneration &+= 1
+        for task in systemReads.values { task.cancel() }
+        systemReadTask = nil
     }
 
     func uninstall() -> Task<LidAwakeOutcome, Never>? {
@@ -316,7 +357,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
     func start(
         session: LidAwakeSession, completion: ((LidAwakeOutcome) -> Void)? = nil
     ) {
-        guard !stopped else {
+        guard !stopped, !commandWorkClosed else {
             completion?(.failed("Lid Awake is not available."))
             return
         }
@@ -354,7 +395,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
         automaticRetriesRemaining: Int,
         completion: ((LidAwakeOutcome) -> Void)? = nil
     ) {
-        guard !stopped else {
+        guard !stopped, !commandWorkClosed else {
             completion?(.failed("Lid Awake is not available."))
             return
         }
@@ -378,28 +419,46 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
     }
 
     func refreshFromSystem() {
-        guard !applying, !stopped, let systemStateReader else { return }
+        guard !applying, !stopped, !commandWorkClosed, let systemStateReader else { return }
+        if !systemReads.isEmpty {
+            systemReadRequested = true
+            systemReadTask?.cancel()
+            return
+        }
+        systemReadRequested = false
         systemReadGeneration &+= 1
         let generation = systemReadGeneration
         systemReadTask?.cancel()
+        let token = UUID()
         let task = Task { @MainActor [weak self] in
+            defer { self?.finishSystemRead(token) }
             do {
+                try Task.checkCancellation()
                 let system = try await systemStateReader()
                 guard !Task.isCancelled else { return }
                 guard let self, generation == self.systemReadGeneration, !self.applying,
-                    !self.stopped
+                    !self.stopped, !self.commandWorkClosed
                 else { return }
                 self.reconcileSystemState(system)
             } catch is CancellationError {
             } catch {
-                guard let self, generation == self.systemReadGeneration, !self.stopped else {
+                guard let self, generation == self.systemReadGeneration, !self.stopped,
+                    !self.commandWorkClosed
+                else {
                     return
                 }
                 self.lastError = error.localizedDescription
                 self.announceChange()
             }
         }
+        systemReads[token] = task
         systemReadTask = task
+    }
+
+    private func finishSystemRead(_ token: UUID) {
+        systemReads[token] = nil
+        systemReadTask = nil
+        if systemReadRequested { refreshFromSystem() }
     }
 
     private func reconcileSystemState(_ system: Bool) {
@@ -432,7 +491,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
     }
 
     func syncSettings() {
-        guard !stopped else { return }
+        guard !stopped, !commandWorkClosed else { return }
         let selectedSession = LidAwakeState.session(defaults)
         if selectedSession != session {
             sessionRevision &+= 1
@@ -477,6 +536,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
     }
 
     private func handleBattery(_ snapshot: LidAwakeBatterySnapshot) {
+        guard !stopped, !commandWorkClosed else { return }
         lastBattery = snapshot
         safetyReconciler.recordBattery()
         batteryOverride = LidAwakeBatteryPolicy.shouldKeepOverride(
@@ -516,11 +576,13 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
     }
 
     private func handleLid(_ closed: Bool) {
-        guard intent, session == .untilLidReopens, lidSession.isActive else { return }
+        guard !stopped, !commandWorkClosed, intent, session == .untilLidReopens, lidSession.isActive
+        else { return }
         if lidSession.handle(lidClosed: closed) { requestAutomaticStop() }
     }
 
     func requestAutomaticStop() {
+        guard !stopped, !commandWorkClosed else { return }
         LidAwakeState.setAutomaticStopPending(true, defaults)
         if safetyReconciler.requestAutomaticStop(applying: applying) {
             stop(automaticRetriesRemaining: automaticStopRetries)
@@ -537,15 +599,21 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
         automaticRetriesRemaining: Int = 0,
         completion: ((LidAwakeOutcome) -> Void)? = nil
     ) {
-        guard !applying else { return }
-        systemReadGeneration &+= 1
-        systemReadTask?.cancel()
-        systemReadTask = nil
+        guard !applying, !stopped, !commandWorkClosed else {
+            completion?(.failed("Lid Awake is not available."))
+            return
+        }
+        cancelSystemReads()
         applying = true
         lastError = nil
         let mutationBatteryRevision = safetyReconciler.batteryRevision
         let mutationSessionRevision = sessionRevision
         mutationSequencer.enqueue { [self] in
+            guard !Task.isCancelled else {
+                applying = false
+                completion?(.failed("The Lid Awake request was cancelled."))
+                return
+            }
             let outcome = await self.apply(systemActive: systemActive)
             self.finish(
                 outcome,
@@ -661,7 +729,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
             NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
             publishState()
         case .failed(let message):
-            if automaticRetriesRemaining > 0, !stopped {
+            if automaticRetriesRemaining > 0, !stopped, !commandWorkClosed {
                 applySystemState(
                     false,
                     intentAfter: false,
@@ -691,7 +759,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
         guard completesRequest else { return }
         completion?(outcome)
         switch safetyReconciler.followUp(
-            stopped: stopped,
+            stopped: stopped || commandWorkClosed,
             mutationBatteryRevision: mutationBatteryRevision,
             hasBattery: lastBattery != nil)
         {
@@ -731,6 +799,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
     }
 
     private func updateRemaining() {
+        guard !stopped, !commandWorkClosed else { return }
         remaining = autoOffTimer.remaining
         if let deadline = autoOffTimer.deadline {
             LidAwakeState.setSessionDeadline(deadline, defaults)
@@ -747,9 +816,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
         batteryMonitor.stop()
         lidMonitor.stop()
         displayWakeKeeper.allow()
-        systemReadGeneration &+= 1
-        systemReadTask?.cancel()
-        systemReadTask = nil
+        cancelSystemReads()
         autoOffTimer.cancel()
         lidSession.cancel()
         let shouldRestore = active || batterySuspended || intent || applying
