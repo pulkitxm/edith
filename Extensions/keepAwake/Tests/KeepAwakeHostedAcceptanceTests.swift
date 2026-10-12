@@ -94,15 +94,22 @@ import Testing
         host.frame = CGRect(x: 0, y: 0, width: 500, height: 400)
         let window = NSWindow(
             contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
         window.contentView = host
         window.orderBack(nil)
-        defer { window.orderOut(nil); window.close() }
-        try await wait { checkbox(in: host) != nil }
+        defer {
+            window.contentView = nil
+            window.orderOut(nil)
+            window.close()
+        }
+        window.layoutIfNeeded()
+        host.layoutSubtreeIfNeeded()
+        try await wait("Discover original Keep awake checkbox") { checkbox(in: host) != nil }
         var transitions: [Bool] = []
         for requested in [true, false, true] {
             let control = try #require(checkbox(in: host))
             try #require((control as AnyObject).accessibilityPerformPress?() == true)
-            try await wait {
+            try await wait("Apply original Keep awake preference \(requested)") {
                 engine.bool(forKey: "preventSleep") == requested
                     && ((runtime.execute(["operation": "status"]) as? NSDictionary)?[
                         "preventingSleep"] as? Bool) == requested
@@ -135,10 +142,10 @@ import Testing
             [.posixPermissions: 0o600], ofItemAtPath: receipt.path)
     }
 
-    private func wait(_ condition: () -> Bool) async throws {
+    private func wait(_ phase: String, _ condition: () -> Bool) async throws {
         let deadline = ContinuousClock.now + .seconds(5)
         while !condition() {
-            try #require(ContinuousClock.now < deadline)
+            try #require(ContinuousClock.now < deadline, "\(phase)")
             advanceRunLoop()
             await Task.yield()
         }
