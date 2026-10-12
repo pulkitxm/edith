@@ -64,7 +64,7 @@ class Ownership:
 
     def terminate(self, value):
         self.signals.append(value)
-        if value == signal.SIGKILL or not self.survives_term:
+        if value == signal.SIGKILL or (value == signal.SIGTERM and not self.survives_term):
             self.active = False
             self.process.returncode = -value
 
@@ -183,15 +183,18 @@ class OriginalNativeOwnerTests(unittest.TestCase):
         process = Process()
         ownership = Ownership(process, survives_term=True)
         samples = []
+        def sample(*args, **kwargs):
+            self.assertEqual(ownership.signals, [signal.SIGSTOP])
+            samples.append(args[0])
         result, text, timeline = self.run_fixture(
-            'Build complete!\n', process, ownership, lambda *args, **kwargs: samples.append(args[0]))
+            'Build complete!\n', process, ownership, sample)
         self.assertFalse(result['passed'])
         self.assertTrue(result['timedOut'])
         self.assertEqual(result['exitCode'], 124)
         self.assertTrue(result['observedTestingProcess'])
         self.assertIn('/fixture/swiftpm-testing', timeline)
         self.assertEqual(samples[0][:3], ['/usr/bin/sample', '234', '3'])
-        self.assertEqual(ownership.signals, [signal.SIGTERM, signal.SIGKILL])
+        self.assertEqual(ownership.signals, [signal.SIGSTOP, signal.SIGTERM, signal.SIGKILL])
         self.assertTrue(result['cleanup']['reaped'])
         self.assertEqual(result['cleanup']['remainingOwnedProcesses'], 0)
         self.assertEqual(text, 'Build complete!\n')

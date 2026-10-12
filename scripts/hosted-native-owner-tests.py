@@ -166,6 +166,7 @@ def run_original(arguments, root, environment, output, deadline=TEST_DEADLINE,
                 overflow = log_path.stat().st_size > LOG_BOUND
                 timed_out = now - started >= deadline
                 if timed_out or overflow:
+                    ownership.terminate(signal.SIGSTOP)
                     for index, identity in enumerate(
                             [item for item in current if testing_process(item[3])][:2]):
                         if ownership.identity(identity[0]) == identity:
