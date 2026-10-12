@@ -690,9 +690,25 @@ test("shipping tests exclude unrelated native models while all-extension validat
       (step) => step.name === "Exercise this worker against the frozen host",
     ).run,
   ).toContain("matrix.id");
-  expect(frozen.steps.some((step) => step.run === "make ci-host host")).toBe(
-    true,
+  const fullHost = frozen.steps.find(
+    (step) => step.run === "make ci-host host",
   );
+  const shippingHost = frozen.steps.find((step) => step.run === "make host");
+  expect(fullHost.if).toBe("needs.plan.outputs.mode == 'validation'");
+  expect(shippingHost.if).toBe("needs.plan.outputs.mode != 'validation'");
+  for (const mode of ["selective", "validation"])
+    for (const event_name of ["push", "pull_request", "workflow_dispatch"]) {
+      const context = routingContext({
+        github: { event_name },
+        needs: { plan: { result: "success", outputs: { mode } } },
+      });
+      expect(jobAdmitted({ ...fullHost, needs: ["plan"] }, context)).toBe(
+        mode === "validation",
+      );
+      expect(jobAdmitted({ ...shippingHost, needs: ["plan"] }, context)).toBe(
+        mode !== "validation",
+      );
+    }
 });
 
 test("shipping publication exercises original Keep Awake controls through the exact frozen lifecycle tools", () => {

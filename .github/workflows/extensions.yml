@@ -100,7 +100,12 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Cache the worker host
         uses: ./.github/actions/cache-host
-      - run: make ci-host host
+      - name: Validate the full host before all-extension validation
+        if: "needs.plan.outputs.mode == 'validation'"
+        run: make ci-host host
+      - name: Build the frozen shipping host
+        if: "needs.plan.outputs.mode != 'validation'"
+        run: make host
       - run: |
           swift build --package-path Packages/EdithHost --build-system native --jobs 2 --product HostLifecycleHarness
           swift build --package-path Packages/ExtensionMarketplace --build-system native --jobs 2 --product MarketplaceHarness
