@@ -244,11 +244,12 @@ import Testing
         try await worker.start()
         do { try await worker.show(); try await worker.synchronize() } catch {}
         let deadline = ContinuousClock.now + .seconds(2)
-        while worker.ready, ContinuousClock.now < deadline {
+        while !worker.isStopped, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(10))
         }
         #expect(received == 0)
         #expect(!worker.ready)
+        try #require(worker.isStopped)
         try await worker.stop()
     }
 
