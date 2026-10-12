@@ -54,6 +54,8 @@ class NativeCompileDiagnosticsTests(unittest.TestCase):
         self.assertEqual(command[:2], ['swift', 'build'])
         self.assertIn('--build-tests', command)
         self.assertIn('-v', command)
+        self.assertIn('-disable-batch-mode', command)
+        self.assertIn('-j1', command)
         self.assertEqual(command[command.index('--package-path') + 1], 'Extensions/attention/NativeRuntime')
         self.assertEqual(command[command.index('--jobs') + 1], '1')
         self.assertNotIn('test', command)

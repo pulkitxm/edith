@@ -34,6 +34,7 @@ def compile_command(developer):
     return [
         'swift', 'build', '--package-path', 'Extensions/attention/NativeRuntime',
         '--build-tests', '--build-system', 'native', '--jobs', '1', '-v',
+        '-Xswiftc', '-disable-batch-mode', '-Xswiftc', '-j1',
         '-Xswiftc', '-plugin-path', '-Xswiftc', plugins,
     ]
 
