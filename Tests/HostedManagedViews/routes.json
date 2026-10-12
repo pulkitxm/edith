@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "reviewedSource": "7551c187a449fe6e51d50a7ab0907a796d2ccf8f",
+  "reviewedSource": "71b4793ec6bb65da660f7217d1c68df0da749fcb",
   "owners": [
     {
       "id": "keepAwake",
@@ -800,7 +800,7 @@
       "factoryOverlay": false,
       "scope": "original-view-creation-close-reopen-disable",
       "functionalActionsValidated": false,
-      "effects": "Original page projection through authenticated client. No agent spawn, connection, terminal, hook, approval or send action.",
+      "effects": "Original page projection through the authenticated client includes bounded account UUID associations and a rendering-only account model. No credentials, agent spawn, connection, terminal, hook, approval or send action.",
       "sources": [
         {
           "path": "Extensions/herdr/Runtime.swift",
@@ -808,7 +808,7 @@
         },
         {
           "path": "Extensions/herdr/ViewModels/HerdrUIProjection.swift",
-          "sha256": "4e85cfd406d9125054148d184012ccf5ab568d33118ba9c6724e216eede3bbdb"
+          "sha256": "7d7ee9168c534c43a6b791b7202157ed8bd9317769092b736dff91c7d983cdd9"
         }
       ]
     },
