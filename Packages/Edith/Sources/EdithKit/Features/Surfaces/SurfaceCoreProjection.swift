@@ -101,14 +101,16 @@ public enum SurfaceCoreProjection {
                         progress: quota.fraction, field: field, details: details))
             }
         }
+        var metrics: [SurfaceMetric] = [
+            .init("providers", "Providers", "\(providers.count)"),
+            .init(
+                "remaining", "Lowest remaining", remaining.min().map { "\($0)%" } ?? "Unavailable"),
+        ]
+        if !accounts.isEmpty {
+            metrics.insert(.init("accounts", "Claude accounts", "\(accounts.count)"), at: 1)
+        }
         return .init(
-            metrics: [
-                .init("providers", "Providers", "\(providers.count)"),
-                .init("accounts", "Claude accounts", "\(accounts.count)"),
-                .init(
-                    "remaining", "Lowest remaining",
-                    remaining.min().map { "\($0)%" } ?? "Unavailable"),
-            ],
+            metrics: metrics,
             rows: rows,
             actions: [.init("Open Agent Usage", "arrow.up.right", .navigate("dashboard"))],
             message: snapshot.failure

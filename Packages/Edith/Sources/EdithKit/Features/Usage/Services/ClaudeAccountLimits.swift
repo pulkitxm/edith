@@ -21,11 +21,6 @@ public enum ClaudeAccountLimitsLayout {
         if accounts.count <= 2 { return accounts }
         return [accounts.first { $0.id.uuidString == selectedID } ?? accounts[0]]
     }
-
-    public static func columns(accountCount: Int, compact: Bool) -> Int {
-        if compact || accountCount <= 1 { return 1 }
-        return min(accountCount, 2)
-    }
 }
 
 public actor ClaudeAccountLimitsCollector {
