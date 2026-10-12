@@ -14,7 +14,7 @@ struct HostRemoteEngineTests {
         defer { server.invalidate() }
         let presentation = UUID()
         let request = ExtensionEngineRequest(presentationID: presentation, operation: "sample.read")
-        await #expect(throws: HostWorkerError.rejected) { try await server.invokeEngine(request) }
+        await #expect(throws: ExtensionEngineError.rejected) { try await server.invokeEngine(request) }
         let state = RequestState()
         let payload = try JSONEncoder().encode(
             String(repeating: "Synthetic record ", count: 20_000))
