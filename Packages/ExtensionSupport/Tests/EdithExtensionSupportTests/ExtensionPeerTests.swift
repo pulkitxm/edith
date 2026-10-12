@@ -258,16 +258,25 @@ import Testing
             Data([255, 255, 255, 255]), Data([0, 0, 0, 0]),
             Data([0, 0, 0, 5]) + Data("wrong".utf8),
         ] {
-            let connection = NWConnection(
-                to: .unix(path: ExtensionPeerSocket.path(registration.physicalName)), using: .tcp)
-            connection.start(queue: .global(qos: .utility))
-            defer { connection.cancel() }
-            connection.send(content: frame, completion: .contentProcessed { _ in })
-            await #expect(throws: ExtensionPeerError.self) {
-                try await withCheckedThrowingContinuation { continuation in
-                    ExtensionPeerFrame.receive(from: connection) { continuation.resume(with: $0) }
+            let connection = try ExtensionPeerSocketConnection()
+            let work = Task.detached {
+                defer { connection.close() }
+                let deadline = DispatchTime.now() + 3
+                try connection.connect(
+                    path: ExtensionPeerSocket.path(registration.physicalName), deadline: deadline)
+                try frame.withUnsafeBytes { bytes in
+                    guard
+                        Darwin.write(connection.descriptor, bytes.baseAddress, bytes.count)
+                            == bytes.count
+                    else { throw ExtensionPeerError.unavailable }
                 }
+                return Result { try connection.readFrame(deadline: deadline) }
             }
+            let response = try await work.value
+            do {
+                _ = try response.get()
+                Issue.record("A malformed frame must be closed without a response.")
+            } catch ExtensionPeerError.unavailable {}
         }
         #expect(executed == 0)
         #expect(

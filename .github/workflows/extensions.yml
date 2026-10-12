@@ -176,6 +176,9 @@ jobs:
       - name: Verify bounded peer failure diagnostics
         if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
         run: make ci-extension-keep-awake-peer-diagnostics
+      - name: Verify authenticated peer transport and lifecycle
+        if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
+        run: make ci-extension-keep-awake-peer-transport
       - name: Exercise original Keep Awake controls and native lifecycle
         if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
         env:

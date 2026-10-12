@@ -1,7 +1,6 @@
 import CryptoKit
 import Darwin
 import Foundation
-import Network
 
 public enum ExtensionPeerError: Error, LocalizedError, Sendable {
     case unavailable
@@ -116,46 +115,211 @@ enum ExtensionPeerFrame {
         frame.append(body)
         return frame
     }
+}
 
-    static func receive(
-        from connection: NWConnection, completion: @escaping (Result<Data, any Error>) -> Void
-    ) {
-        read(from: connection, remaining: 4, buffer: Data()) { result in
-            switch result {
-            case let .failure(error): completion(.failure(error))
-            case let .success(header):
-                let count = header.reduce(0) { ($0 << 8) | Int($1) }
-                guard count > 0, count <= ExtensionPeerEndpoint.maximumMessageBytes else {
-                    completion(.failure(ExtensionPeerError.invalidRequest))
-                    return
+final class ExtensionPeerSocketConnection: @unchecked Sendable {
+    let descriptor: Int32
+    private let lock = NSLock()
+    private var cancelled = false
+    private var closed = false
+
+    init(descriptor: Int32) throws {
+        self.descriptor = descriptor
+        let flags = fcntl(descriptor, F_GETFL)
+        var noSignal: Int32 = 1
+        guard descriptor >= 0, flags >= 0,
+            fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) == 0,
+            fcntl(descriptor, F_SETFD, FD_CLOEXEC) == 0,
+            setsockopt(
+                descriptor, SOL_SOCKET, SO_NOSIGPIPE, &noSignal,
+                socklen_t(MemoryLayout<Int32>.size)) == 0
+        else {
+            close()
+            throw ExtensionPeerError.unavailable
+        }
+    }
+
+    convenience init() throws {
+        let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard descriptor >= 0 else { throw ExtensionPeerError.unavailable }
+        try self.init(descriptor: descriptor)
+    }
+
+    deinit { close() }
+
+    func cancel() {
+        lock.withLock {
+            guard !closed, !cancelled else { return }
+            cancelled = true
+            _ = Darwin.shutdown(descriptor, SHUT_RDWR)
+        }
+    }
+
+    func close() {
+        lock.withLock {
+            guard !closed else { return }
+            closed = true
+            _ = Darwin.close(descriptor)
+        }
+    }
+
+    func check(deadline: DispatchTime) throws {
+        let state = lock.withLock { (cancelled, closed) }
+        if state.0 { throw CancellationError() }
+        guard !state.1 else { throw ExtensionPeerError.unavailable }
+        guard DispatchTime.now().uptimeNanoseconds < deadline.uptimeNanoseconds else {
+            throw ExtensionPeerError.timedOut
+        }
+    }
+
+    func wait(for events: Int16, deadline: DispatchTime) throws {
+        while true {
+            try check(deadline: deadline)
+            let now = DispatchTime.now().uptimeNanoseconds
+            guard now < deadline.uptimeNanoseconds else { throw ExtensionPeerError.timedOut }
+            let remaining = deadline.uptimeNanoseconds - now
+            let milliseconds = Int32(max(1, min(50, (remaining + 999_999) / 1_000_000)))
+            var event = pollfd(fd: descriptor, events: events, revents: 0)
+            let result = Darwin.poll(&event, 1, milliseconds)
+            if result < 0, errno == EINTR { continue }
+            guard result >= 0 else { throw ExtensionPeerError.unavailable }
+            try check(deadline: deadline)
+            if result > 0 {
+                guard event.revents & Int16(POLLNVAL) == 0 else {
+                    throw ExtensionPeerError.unavailable
                 }
-                read(from: connection, remaining: count, buffer: Data(), completion: completion)
+                return
             }
         }
     }
 
-    private static func read(
-        from connection: NWConnection, remaining: Int, buffer: Data,
-        completion: @escaping (Result<Data, any Error>) -> Void
-    ) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: min(remaining, 65_536)) {
-            bytes, _, complete, error in
-            guard error == nil, let bytes, !bytes.isEmpty, bytes.count <= remaining else {
-                completion(.failure(ExtensionPeerError.unavailable))
-                return
-            }
-            var buffer = buffer
-            buffer.append(bytes)
-            if bytes.count == remaining {
-                completion(.success(buffer))
-            } else if complete {
-                completion(.failure(ExtensionPeerError.unavailable))
-            } else {
-                read(
-                    from: connection, remaining: remaining - bytes.count, buffer: buffer,
-                    completion: completion)
+    func connect(path: String, deadline: DispatchTime) throws {
+        try check(deadline: deadline)
+        var address = sockaddr_un()
+        guard !path.utf8.contains(0), path.utf8.count < MemoryLayout.size(ofValue: address.sun_path)
+        else { throw ExtensionPeerError.invalidRequest }
+        address.sun_family = sa_family_t(AF_UNIX)
+        address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
+        withUnsafeMutableBytes(of: &address.sun_path) {
+            $0.copyBytes(from: Array(path.utf8) + [0])
+        }
+        let result = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
             }
         }
+        let error = errno
+        try check(deadline: deadline)
+        if result != 0 {
+            guard error == EINPROGRESS || error == EINTR else {
+                ExtensionPeerFailureDiagnostics.report(.connectionFailed, errorNumber: error)
+                throw ExtensionPeerError.unavailable
+            }
+            try finishConnection(deadline: deadline)
+        }
+        try check(deadline: deadline)
+    }
+
+    func finishConnection(deadline: DispatchTime) throws {
+        try wait(for: Int16(POLLOUT), deadline: deadline)
+        var error: Int32 = 0
+        var size = socklen_t(MemoryLayout<Int32>.size)
+        let result = getsockopt(descriptor, SOL_SOCKET, SO_ERROR, &error, &size)
+        let systemError = errno
+        try check(deadline: deadline)
+        guard result == 0, size == MemoryLayout<Int32>.size, error == 0
+        else {
+            ExtensionPeerFailureDiagnostics.report(
+                .connectionFailed,
+                errorNumber: error == 0 ? systemError : error)
+            throw ExtensionPeerError.unavailable
+        }
+    }
+
+    func authenticate(
+        expected: ExtensionProcessIdentity, peer: ExtensionPeerProcess? = nil,
+        deadline: DispatchTime
+    ) throws -> ExtensionPeerProcess {
+        try check(deadline: deadline)
+        var uid: uid_t = 0
+        var gid: gid_t = 0
+        var pid: Int32 = 0
+        var size = socklen_t(MemoryLayout<Int32>.size)
+        guard getpeereid(descriptor, &uid, &gid) == 0, uid == getuid(),
+            getsockopt(descriptor, SOL_LOCAL, LOCAL_PEERPID, &pid, &size) == 0,
+            size == MemoryLayout<Int32>.size,
+            let actual = ExtensionPeerProcess.read(pid), actual.birth == expected,
+            actual.isCurrent, peer == nil || actual == peer
+        else {
+            try check(deadline: deadline)
+            ExtensionPeerFailureDiagnostics.report(.clientAuthentication)
+            throw ExtensionPeerError.unavailable
+        }
+        try check(deadline: deadline)
+        return actual
+    }
+
+    func writeFrame(_ frame: Data, deadline: DispatchTime) throws {
+        guard frame.count > 4, frame.count <= ExtensionPeerEndpoint.maximumMessageBytes + 4
+        else { throw ExtensionPeerError.invalidRequest }
+        try frame.withUnsafeBytes { bytes in
+            var offset = 0
+            while offset < bytes.count {
+                try check(deadline: deadline)
+                let sent = Darwin.write(
+                    descriptor, bytes.baseAddress!.advanced(by: offset),
+                    bytes.count - offset)
+                let error = errno
+                try check(deadline: deadline)
+                if sent < 0, error == EINTR { continue }
+                if sent < 0, error == EAGAIN || error == EWOULDBLOCK {
+                    try wait(for: Int16(POLLOUT), deadline: deadline)
+                    continue
+                }
+                guard sent > 0 else {
+                    ExtensionPeerFailureDiagnostics.report(.sendFailed, errorNumber: error)
+                    throw ExtensionPeerError.unavailable
+                }
+                offset += sent
+            }
+        }
+    }
+
+    func readFrame(deadline: DispatchTime) throws -> Data {
+        let header = try readBytes(4, deadline: deadline)
+        let count = header.reduce(0) { ($0 << 8) | Int($1) }
+        guard count > 0, count <= ExtensionPeerEndpoint.maximumMessageBytes else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        return try readBytes(count, deadline: deadline)
+    }
+
+    private func readBytes(_ count: Int, deadline: DispatchTime) throws -> Data {
+        var data = Data(count: count)
+        try data.withUnsafeMutableBytes { bytes in
+            var offset = 0
+            while offset < count {
+                try check(deadline: deadline)
+                let received = Darwin.read(
+                    descriptor, bytes.baseAddress!.advanced(by: offset),
+                    count - offset)
+                let error = errno
+                try check(deadline: deadline)
+                if received < 0, error == EINTR { continue }
+                if received < 0, error == EAGAIN || error == EWOULDBLOCK {
+                    try wait(for: Int16(POLLIN), deadline: deadline)
+                    continue
+                }
+                guard received > 0 else {
+                    ExtensionPeerFailureDiagnostics.report(
+                        .responseReadUnavailable,
+                        errorNumber: received < 0 ? error : nil)
+                    throw ExtensionPeerError.unavailable
+                }
+                offset += received
+            }
+        }
+        return data
     }
 }
 
@@ -166,10 +330,8 @@ private final class ExtensionPeerCall: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Data, any Error>?
     private var result: Result<Data, any Error>?
-    private var connection: NWConnection?
-    private var timer: DispatchSourceTimer?
+    private var connection: ExtensionPeerSocketConnection?
     private let work = ExtensionPeerWork()
-    private var connectionRetired = false
 
     init(
         endpoint: ExtensionPeerEndpoint, command: String, payload: Data, timeout: TimeInterval,
@@ -177,7 +339,8 @@ private final class ExtensionPeerCall: @unchecked Sendable {
     ) {
         self.endpoint = endpoint
         request = ExtensionPeerRequest(
-            token: token, command: command, payload: payload, timeout: timeout)
+            token: token, command: command, payload: payload,
+            timeout: timeout)
     }
 
     func run() async throws -> Data {
@@ -195,13 +358,7 @@ private final class ExtensionPeerCall: @unchecked Sendable {
             outcome = .success(payload)
         } catch { outcome = .failure(error) }
         await work.closeAndWait()
-        let retired = lock.withLock { () -> NWConnection? in
-            let retired = connection
-            connection = nil
-            timer = nil
-            return retired
-        }
-        retired?.stateUpdateHandler = nil
+        lock.withLock { connection = nil }
         return try outcome.get()
     }
 
@@ -212,79 +369,49 @@ private final class ExtensionPeerCall: @unchecked Sendable {
         do {
             guard
                 let registration = ExtensionPeerRegistration.read(
-                    at: endpoint.registrationURL, logicalName: endpoint.name, reportFailures: true)
+                    at: endpoint.registrationURL,
+                    logicalName: endpoint.name, reportFailures: true)
             else { throw ExtensionPeerError.unavailable }
             let frame = try ExtensionPeerFrame.encode(request)
-            let connection = NWConnection(
-                to: .unix(path: ExtensionPeerSocket.path(registration.physicalName)), using: .tcp)
-            let timer = DispatchSource.makeTimerSource(queue: queue)
-            timer.schedule(deadline: .now() + request.timeout)
-            let started = lock.withLock { () -> Bool in
-                guard result == nil else { return false }
-                self.connection = connection
-                self.timer = timer
-                work.begin()
-                timer.setEventHandler { [weak self] in
-                    self?.finish(.failure(ExtensionPeerError.timedOut))
-                }
-                timer.setCancelHandler { [work, queue] in
-                    work.schedule(on: queue) { work.end() }
-                }
-                work.begin()
-                connection.stateUpdateHandler = { [weak self] state in
-                    guard let self else { return }
-                    if case let .failed(error) = state {
-                        self.reportFailure(.connectionFailed, networkError: error)
-                        self.finish(.failure(ExtensionPeerError.unavailable))
-                    }
-                    if case .cancelled = state {
-                        let first = self.lock.withLock {
-                            guard !self.connectionRetired else { return false }
-                            self.connectionRetired = true
-                            return true
-                        }
-                        if first { self.work.schedule(on: self.queue) { self.work.end() } }
-                    }
-                }
-                timer.activate()
-                connection.start(queue: queue)
-                work.begin()
-                connection.send(
-                    content: frame,
-                    completion: .contentProcessed { [weak self, work, queue] error in
-                        defer { work.schedule(on: queue) { work.end() } }
-                        if error != nil {
-                            self?.reportFailure(.sendFailed, networkError: error)
-                            self?.finish(.failure(ExtensionPeerError.unavailable))
-                        }
-                    })
-                work.begin()
-                ExtensionPeerFrame.receive(from: connection) { [weak self, work, queue] result in
-                    defer { work.schedule(on: queue) { work.end() } }
-                    guard let self else { return }
-                    switch result {
-                    case let .failure(error):
-                        self.reportFailure(.responseReadUnavailable)
-                        self.finish(.failure(error))
-                    case let .success(data): self.receive(data)
-                    }
-                }
-                return true
-            }
-            if !started { timer.activate(); timer.cancel(); connection.cancel() }
+            let connection = try ExtensionPeerSocketConnection()
+            defer { connection.close() }
+            guard
+                lock.withLock({
+                    guard result == nil else { return false }
+                    self.connection = connection
+                    return true
+                })
+            else { return }
+            let deadline = DispatchTime.now() + request.timeout
+            let path = ExtensionPeerSocket.path(registration.physicalName)
+            var parent = stat()
+            var socket = stat()
+            guard lstat(ExtensionPeerSocket.directory.path, &parent) == 0,
+                parent.st_mode & S_IFMT == S_IFDIR, parent.st_uid == getuid(),
+                parent.st_mode & 0o777 == 0o700, lstat(path, &socket) == 0,
+                socket.st_mode & S_IFMT == S_IFSOCK, socket.st_uid == getuid(),
+                socket.st_mode & 0o777 == 0o600
+            else { throw ExtensionPeerError.unavailable }
+            try connection.connect(path: path, deadline: deadline)
+            let peer = try connection.authenticate(
+                expected: registration.process, deadline: deadline)
+            try connection.writeFrame(frame, deadline: deadline)
+            _ = try connection.authenticate(
+                expected: registration.process, peer: peer, deadline: deadline)
+            let data = try connection.readFrame(deadline: deadline)
+            _ = try connection.authenticate(
+                expected: registration.process, peer: peer, deadline: deadline)
+            try connection.check(deadline: deadline)
+            try receive(data, connection: connection, deadline: deadline)
         } catch { finish(.failure(error)) }
     }
 
-    private func reportFailure(
-        _ stage: ExtensionPeerFailureDiagnostics.Stage, networkError: NWError? = nil
-    ) {
-        guard lock.withLock({ result == nil }) else { return }
-        ExtensionPeerFailureDiagnostics.report(stage, networkError: networkError)
-    }
-
-    private func receive(_ data: Data) {
-        guard let response = try? JSONDecoder().decode(ExtensionPeerResponse.self, from: data),
-            response.token == request.token
+    private func receive(
+        _ data: Data, connection: ExtensionPeerSocketConnection, deadline: DispatchTime
+    ) throws {
+        let decoded = try? JSONDecoder().decode(ExtensionPeerResponse.self, from: data)
+        try connection.check(deadline: deadline)
+        guard let response = decoded, response.token == request.token
         else { finish(.failure(ExtensionPeerError.invalidRequest)); return }
         if let payload = response.payload,
             payload.count <= ExtensionPeerEndpoint.maximumPayloadBytes
@@ -300,16 +427,15 @@ private final class ExtensionPeerCall: @unchecked Sendable {
 
     private func finish(_ result: Result<Data, any Error>) {
         let resources = lock.withLock {
-            () -> (CheckedContinuation<Data, any Error>?, NWConnection?, DispatchSourceTimer?)? in
+            () -> (CheckedContinuation<Data, any Error>?, ExtensionPeerSocketConnection?)? in
             guard self.result == nil else { return nil }
             self.result = result
-            let resources = (continuation, connection, timer)
+            let resources = (continuation, connection)
             continuation = nil
             return resources
         }
         guard let resources else { return }
         resources.1?.cancel()
-        resources.2?.cancel()
         resources.0?.resume(with: result)
     }
 }

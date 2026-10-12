@@ -266,6 +266,67 @@ console.log(JSON.stringify({steps: workflow.jobs.tests.steps, required: contract
         self.assertLess(names.index(name), names.index("Verify Keep Awake peer rejection contracts"))
         self.assertLess(names.index(name), names.index("Validate the shipping extension and marketplace"))
 
+    def test_peer_transport_reuse_isolation_and_only_select_socket_and_existing_peer_suites(self):
+        original = recipe("ci-extension-keep-awake").splitlines()
+        focused = recipe("ci-extension-keep-awake-peer-transport").splitlines()
+        self.assertEqual(len(focused), 2)
+        self.assertEqual(focused[0], original[0])
+        marker = "/usr/bin/time -p swift test "
+        self.assertEqual(focused[1].split(marker)[0], original[2].split(marker)[0])
+        expected = original[2].split(marker)[1].replace(
+            "--package-path Extensions/keepAwake",
+            "--package-path Packages/ExtensionSupport --filter 'ExtensionPeerSocketTests|ExtensionPeerTests'",
+        )
+        self.assertEqual(focused[1].split(marker)[1], expected)
+        self.assertNotIn("--filter", original[2])
+        for override in ["--skip", "$(FILTER)", "$(SKIP)"]:
+            self.assertNotIn(override, focused[1])
+        gate = runpy.run_path(str(ROOT / "scripts/make-resource-gate.py"))
+        self.assertEqual(gate["profile_for"]("ci-extension-keep-awake-peer-transport")[:2], (2.5, 2560.0))
+        tests = (ROOT / "Packages/ExtensionSupport/Tests/EdithExtensionSupportTests/ExtensionPeerSocketTests.swift").read_text()
+        self.assertEqual(len(re.findall(r"@Test\b", tests)), 7)
+        existing = (ROOT / "Packages/ExtensionSupport/Tests/EdithExtensionSupportTests/ExtensionPeerTests.swift").read_text()
+        for name in ["staleIdentitiesAndLinkedRegistrationFilesCannotSelectAPeer", "restartWaitsForTheRetiredGenerationBeforeAdmittingCommands", "commandCapacityAndShutdownReleaseEveryRequest"]:
+            self.assertIn(name, existing)
+
+    def test_peer_transport_reject_nonhosted_or_nonmac_execution_before_swift(self):
+        guard = recipe("ci-extension-keep-awake-peer-transport").splitlines()[0].removeprefix("\t@")
+        for key, value in [("GITHUB_ACTIONS", "false"), ("RUNNER_ENVIRONMENT", "self-hosted"), ("RUNNER_OS", "Linux")]:
+            with self.subTest(key=key):
+                environment = {"GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted", "RUNNER_OS": "macOS"}
+                environment[key] = value
+                result = subprocess.run(["/bin/sh", "-c", guard], env=environment, capture_output=True, timeout=10)
+                self.assertNotEqual(result.returncode, 0)
+
+    def test_peer_transport_canonicalize_and_remove_fresh_private_storage(self):
+        for trailing in [False, True]:
+            for alias in [False, True]:
+                with self.subTest(trailing=trailing, alias=alias):
+                    self.check_fixture_paths(trailing, alias, "ci-extension-keep-awake-peer-transport")
+
+    def test_shipping_requires_transport_success_before_original_native_controls(self):
+        script = '''const fs = require("node:fs");
+const workflow = Bun.YAML.parse(fs.readFileSync(".github/workflows/extensions.yml", "utf8"));
+const contract = await import("./scripts/hosted-managed-views/native-ci-contract.mjs");
+console.log(JSON.stringify({steps: workflow.jobs.tests.steps, required: contract.shippingNativeTestSteps}));'''
+        data = json.loads(subprocess.check_output(["bun", "-e", script], cwd=ROOT, timeout=10))
+        name = "Verify authenticated peer transport and lifecycle"
+        matches = [step for step in data["steps"] if step.get("name") == name]
+        self.assertEqual(len(matches), 1)
+        step = matches[0]
+        self.assertEqual(step["run"], "make ci-extension-keep-awake-peer-transport")
+        self.assertEqual(step["if"], "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'")
+        self.assertEqual(data["required"].count(name), 1)
+        names = [step.get("name") for step in data["steps"]]
+        self.assertLess(names.index("Verify lifecycle tools and their frozen index"), names.index(name))
+        copies = [index for index, step in enumerate(data["steps"])
+                  if "cp local/extension-tools/MarketplaceHarness" in step.get("run", "")]
+        self.assertEqual(len(copies), 1)
+        self.assertLess(copies[0], names.index(name))
+        self.assertLess(names.index(name), names.index("Exercise original Keep Awake controls and native lifecycle"))
+        self.assertLess(names.index(name), names.index("Verify Keep Awake peer rejection contracts"))
+        self.assertLess(names.index(name), names.index("Validate the shipping extension and marketplace"))
+
     def test_peer_contracts_reuse_isolation_and_only_select_the_rejection_suite(self):
         original = recipe("ci-extension-keep-awake").splitlines()
         focused = recipe("ci-extension-keep-awake-peer-contracts").splitlines()
