@@ -4,6 +4,7 @@ import EdithHostCore
 import SwiftUI
 import EdithExtensionSupport
 import Foundation
+import HostAccessibilityFixtureSupport
 import Testing
 
 @testable import EdithHost
@@ -41,15 +42,9 @@ struct HostNotchCompactCardTests {
         async throws
     {
         _ = TestWindowHost.application
-        let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
-            NSAccessibility.Attribute(rawValue: $0)
-        }
-        let oldAccessibility = attributes.map { NSApp.accessibilityAttributeValue($0) }
-        for attribute in attributes { NSApp.accessibilitySetValue(true, forAttribute: attribute) }
+        let accessibility = try HostAccessibilityFixture.enable()
         defer {
-            for (attribute, old) in zip(attributes, oldAccessibility) {
-                NSApp.accessibilitySetValue(old ?? false, forAttribute: attribute)
-            }
+            for error in accessibility.restore() { Issue.record(error) }
         }
         let previous = UIScale.current
         defer { UIScale.apply(previous) }

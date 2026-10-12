@@ -3,6 +3,7 @@ import EdithExtensionSupport
 import EdithExtensionUI
 import EdithHostCore
 import Foundation
+import HostAccessibilityFixtureSupport
 import SwiftUI
 import Testing
 
@@ -81,15 +82,9 @@ import Testing
         async throws
     {
         _ = TestWindowHost.application
-        let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
-            NSAccessibility.Attribute(rawValue: $0)
-        }
-        let old = attributes.map { NSApp.accessibilityAttributeValue($0) }
-        for attribute in attributes { NSApp.accessibilitySetValue(true, forAttribute: attribute) }
+        let accessibility = try HostAccessibilityFixture.enable()
         defer {
-            for (attribute, value) in zip(attributes, old) {
-                NSApp.accessibilitySetValue(value ?? false, forAttribute: attribute)
-            }
+            for error in accessibility.restore() { Issue.record(error) }
         }
         let scale = UIScale.current
         defer { UIScale.apply(scale) }
@@ -412,4 +407,197 @@ private actor CustomCardGate {
         }
     }
     return Array(Dictionary(grouping: result, by: ObjectIdentifier.init).values.compactMap(\.first))
+}
+
+@MainActor @Suite(.serialized) struct HostAccessibilityFixtureTests {
+    @Test(arguments: [[false, false], [false, true], [true, false], [true, true]])
+    func snapshotsBothAttributesBeforeMutationAndRestoresExactValues(originals: [Bool]) throws {
+        let memory = MemoryAccess(originals: originals)
+        let fixture = try HostAccessibilityFixture(access: memory.access)
+        #expect(
+            Array(memory.operations.prefix(2))
+                == HostAccessibilityFixture.attributes.map { "copy:" + $0 })
+        #expect(memory.values.values.allSatisfy { CFEqual($0, kCFBooleanTrue) })
+        #expect(fixture.restore().isEmpty)
+        #expect(memory.matchesOriginals)
+        #expect(Array(memory.writes.suffix(2)) == HostAccessibilityFixture.attributes.reversed())
+        let count = memory.operations.count
+        #expect(fixture.restore().isEmpty)
+        #expect(memory.operations.count == count)
+    }
+
+    @Test(arguments: [1, 2])
+    func failedSnapshotNeverMutatesEitherAttribute(copy: Int) {
+        let memory = MemoryAccess()
+        memory.failedCopies = [copy]
+        #expect(throws: InjectedFailure.copy(copy)) {
+            try HostAccessibilityFixture(access: memory.access)
+        }
+        #expect(memory.writes.isEmpty && memory.matchesOriginals)
+    }
+
+    @Test(arguments: [1, 2])
+    func failingSetAfterMutationRestoresEveryAttemptedAttribute(set: Int) throws {
+        let memory = MemoryAccess()
+        memory.failedAfterMutation = [set]
+        do {
+            _ = try HostAccessibilityFixture(access: memory.access)
+            Issue.record("Expected the injected set failure")
+        } catch let error as HostAccessibilityFixture.ActivationFailure {
+            #expect(error.primary as? InjectedFailure == .set(set))
+            #expect(error.restoration.isEmpty)
+        }
+        #expect(memory.matchesOriginals)
+        #expect(
+            Array(memory.writes.suffix(set))
+                == Array(HostAccessibilityFixture.attributes.prefix(set).reversed()))
+    }
+
+    @Test func successfulSetWithWrongReadbackFailsAndRollsBack() throws {
+        let memory = MemoryAccess()
+        memory.ignoredSets = [1]
+        do {
+            _ = try HostAccessibilityFixture(access: memory.access)
+            Issue.record("Expected a failed enable readback")
+        } catch let error as HostAccessibilityFixture.ActivationFailure {
+            guard
+                case .mismatch(let operation, let attribute) = error.primary
+                    as? HostAccessibilityFixture.Failure
+            else {
+                Issue.record("Expected the enable mismatch error")
+                return
+            }
+            #expect(operation == "enable" && attribute == HostAccessibilityFixture.attributes[0])
+            #expect(error.restoration.isEmpty)
+        }
+        #expect(memory.matchesOriginals)
+    }
+
+    @Test func failedEnableReadbackRestoresTheAttemptedAttribute() throws {
+        let memory = MemoryAccess()
+        memory.failedCopies = [3]
+        do {
+            _ = try HostAccessibilityFixture(access: memory.access)
+            Issue.record("Expected the injected copy failure")
+        } catch let error as HostAccessibilityFixture.ActivationFailure {
+            #expect(error.primary as? InjectedFailure == .copy(3))
+            #expect(error.restoration.isEmpty)
+        }
+        #expect(memory.matchesOriginals)
+    }
+
+    @Test func restorationContinuesAfterFailureAndRetriesOnlyUnrestoredValues() throws {
+        let memory = MemoryAccess()
+        let fixture = try HostAccessibilityFixture(access: memory.access)
+        memory.failedSets = [3]
+        let failures = fixture.restore()
+        #expect(failures.count == 1 && failures.first as? InjectedFailure == .set(3))
+        #expect(CFEqual(memory.values[HostAccessibilityFixture.attributes[0]], kCFBooleanFalse))
+        #expect(CFEqual(memory.values[HostAccessibilityFixture.attributes[1]], kCFBooleanTrue))
+        #expect(memory.writes.count == 4)
+        #expect(fixture.restore().isEmpty && memory.matchesOriginals)
+        #expect(
+            memory.writes.count == 5 && memory.writes.last == HostAccessibilityFixture.attributes[1]
+        )
+        #expect(fixture.restore().isEmpty && memory.writes.count == 5)
+    }
+
+    @Test func restorationReadbackMismatchIsReportedAndRetainedForRetry() throws {
+        let memory = MemoryAccess()
+        let fixture = try HostAccessibilityFixture(access: memory.access)
+        memory.ignoredSets = [3]
+        let failures = fixture.restore()
+        #expect(failures.count == 1)
+        guard
+            case .mismatch(let operation, let attribute) = failures.first
+                as? HostAccessibilityFixture.Failure
+        else {
+            Issue.record("Expected the restore mismatch error")
+            return
+        }
+        #expect(operation == "restore" && attribute == HostAccessibilityFixture.attributes[1])
+        #expect(fixture.restore().isEmpty && memory.matchesOriginals)
+        #expect(memory.writes.count == 5)
+    }
+
+    @Test func activationFailureIncludesRollbackFailureWithoutSkippingOtherRestorations() throws {
+        let memory = MemoryAccess()
+        memory.failedAfterMutation = [2]
+        memory.failedSets = [3]
+        do {
+            _ = try HostAccessibilityFixture(access: memory.access)
+            Issue.record("Expected activation and rollback failures")
+        } catch let error as HostAccessibilityFixture.ActivationFailure {
+            #expect(error.primary as? InjectedFailure == .set(2))
+            #expect(
+                error.restoration.count == 1
+                    && error.restoration.first as? InjectedFailure == .set(3))
+        }
+        #expect(memory.writes.count == 4)
+        #expect(CFEqual(memory.values[HostAccessibilityFixture.attributes[0]], kCFBooleanFalse))
+        #expect(CFEqual(memory.values[HostAccessibilityFixture.attributes[1]], kCFBooleanTrue))
+    }
+
+    @Test func throwingBodyStillRestoresItsOwnedFixture() throws {
+        let memory = MemoryAccess()
+        #expect(throws: InjectedFailure.body) {
+            let fixture = try HostAccessibilityFixture(access: memory.access)
+            defer { #expect(fixture.restore().isEmpty) }
+            throw InjectedFailure.body
+        }
+        #expect(memory.matchesOriginals)
+    }
+
+    private enum InjectedFailure: Error, Equatable {
+        case copy(Int)
+        case set(Int)
+        case body
+    }
+
+    @MainActor private final class MemoryAccess {
+        var values: [String: CFTypeRef]
+        let originals: [String: CFTypeRef]
+        var operations: [String] = []
+        var writes: [String] = []
+        var failedCopies: Set<Int> = []
+        var failedSets: Set<Int> = []
+        var failedAfterMutation: Set<Int> = []
+        var ignoredSets: Set<Int> = []
+        private var copies = 0
+        private var sets = 0
+
+        init(originals: [Bool] = [false, false]) {
+            values = Dictionary(
+                uniqueKeysWithValues: zip(
+                    HostAccessibilityFixture.attributes,
+                    originals.map { $0 ? kCFBooleanTrue! : kCFBooleanFalse! }))
+            self.originals = values
+        }
+
+        var matchesOriginals: Bool {
+            originals.allSatisfy { CFEqual(values[$0.key], $0.value) }
+        }
+
+        var access: HostAccessibilityFixture.Access {
+            .init(
+                copy: { attribute in
+                    self.copies += 1
+                    self.operations.append("copy:" + attribute)
+                    if self.failedCopies.contains(self.copies) {
+                        throw InjectedFailure.copy(self.copies)
+                    }
+                    return try #require(self.values[attribute])
+                },
+                set: { attribute, value in
+                    self.sets += 1
+                    self.operations.append("set:" + attribute)
+                    self.writes.append(attribute)
+                    if self.failedSets.contains(self.sets) { throw InjectedFailure.set(self.sets) }
+                    if !self.ignoredSets.contains(self.sets) { self.values[attribute] = value }
+                    if self.failedAfterMutation.contains(self.sets) {
+                        throw InjectedFailure.set(self.sets)
+                    }
+                })
+        }
+    }
 }

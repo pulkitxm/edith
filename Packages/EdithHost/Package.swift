@@ -76,11 +76,17 @@ let package = Package(
         .executableTarget(
             name: "HostNativeTaskHarness", dependencies: ["EdithHostCore"],
             path: "Tests/NativeTaskHarness"),
+        .target(
+            name: "HostAccessibilityFixtureSupport", path: "Tests/HostAccessibilityFixtureSupport"),
         .testTarget(
-            name: "EdithHostCoreTests", dependencies: ["EdithHostCore"],
+            name: "EdithHostCoreTests",
+            dependencies: ["EdithHostCore", "HostAccessibilityFixtureSupport"],
             resources: [.copy("Fixtures")]),
         .testTarget(
-            name: "EdithHostUITests", dependencies: ["EdithHost", "WorkerLifecycleFixtureSupport"]),
+            name: "EdithHostUITests",
+            dependencies: [
+                "EdithHost", "WorkerLifecycleFixtureSupport", "HostAccessibilityFixtureSupport",
+            ]),
         .testTarget(
             name: "HostLifecycleHarnessTests",
             dependencies: ["HostLifecycleHarness", "WorkerLifecycleFixtureSupport"]),

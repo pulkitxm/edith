@@ -3,6 +3,7 @@ import EdithExtensionSupport
 import EdithExtensionUI
 import EdithHostCore
 import ExtensionMarketplace
+import HostAccessibilityFixtureSupport
 import SwiftUI
 import Testing
 
@@ -15,7 +16,7 @@ import Testing
         defer { fixture.clean() }
         await fixture.marketplace.enable(id: "calendar")
         #expect(fixture.marketplace.surfaceAvailability.activeIDs == ["calendar"])
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         var tile = SurfaceTile(.calendar)
         tile.title = "Synthetic customized calendar"
@@ -80,7 +81,7 @@ import Testing
         }
         #expect(HostMarketplaceArtwork.image("unknown") == nil)
         #expect(!HostExtensionPreviewMotionPolicy.animates(hovering: true, reduceMotion: true))
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         let host = NSHostingView(
             rootView: MarketplacePage(marketplace: fixture.marketplace)
@@ -150,7 +151,7 @@ import Testing
         defer { fixture.clean() }
         let defaults = try #require(
             UserDefaults(suiteName: fixture.marketplace.identity.defaultsSuite))
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         var openedPermissions = false
         var openedWelcome = false
@@ -196,7 +197,7 @@ import Testing
     {
         let fixture = try Fixture()
         defer { fixture.clean() }
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         let host = NSHostingView(
             rootView: HostAboutPage(identity: fixture.marketplace.identity)
@@ -253,7 +254,7 @@ import Testing
     @Test func permissionsUIKeepsOriginalFiltersAndInactiveExtensionDiscovery() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         var opened = false
         var requests = 0
@@ -434,7 +435,7 @@ import Testing
     {
         let fixture = try Fixture()
         defer { fixture.clean() }
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         let host = NSHostingView(
             rootView: HostWorkspace(
@@ -502,7 +503,7 @@ import Testing
         ) { AnyView(Text("Synthetic " + $0.title)) }
         defer { sections.closeAll() }
         let detached = try #require(sections.open("home"))
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         let host = NSHostingView(
             rootView: HostWorkspace(
@@ -540,7 +541,7 @@ import Testing
     {
         let fixture = try Fixture()
         defer { fixture.clean() }
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         fixture.marketplace.surfaceLayouts.update(.home) { $0.balancedRows = false }
         var editorOpened = false
@@ -577,7 +578,7 @@ import Testing
     @Test func originalHomeEditorEntryOverridesPreviousNotchSelectionAndPreservesLayouts()
         async throws
     {
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         for inspectingTile in [false, true] {
             let fixture = try Fixture()
@@ -622,7 +623,7 @@ import Testing
     @Test func emptyHomeRendersOnlyTheBuiltInClockAndOffersExtensionDiscovery() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         let host = NSHostingView(
             rootView: HostHomePage(
@@ -648,7 +649,7 @@ import Testing
     }
 
     @Test func sharedCardRendererShowsRealContractDataAndDispatchesOnlyItsActionID() async throws {
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         let action = SurfaceAction("join:synthetic-meeting", "Join", "video.fill", field: "join")
         let snapshot = SurfaceSnapshot(
@@ -688,7 +689,7 @@ import Testing
     @Test func selectingAWidgetRetainsCanvasGeometryAndNeverStartsAnExtension() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         let editor = HostSurfaceEditor(marketplace: fixture.marketplace)
         let host = NSHostingView(
@@ -718,7 +719,7 @@ import Testing
     @Test func addingADownloadableWidgetSavesItsLayoutWithoutDownloadingIt() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         fixture.marketplace.surfaceLayouts.update(.home) { $0.tiles = [] }
         let host = NSHostingView(
@@ -746,7 +747,7 @@ import Testing
     @Test func bothEditorsRenderAtCompactRegularAndZoomedSizes() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         let previousScale = UIScale.current
         defer { UIScale.apply(previousScale) }
@@ -814,7 +815,7 @@ import Testing
     {
         let fixture = try Fixture(pendingDisableID: "calendar")
         defer { fixture.clean() }
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         let host = NSHostingView(
             rootView: MarketplacePage(marketplace: fixture.marketplace)
@@ -860,7 +861,7 @@ import Testing
     ) async throws {
         let fixture = try Fixture(packageState: state)
         defer { fixture.clean() }
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         let host = NSHostingView(
             rootView: MarketplacePage(marketplace: fixture.marketplace)
@@ -927,7 +928,7 @@ import Testing
     }
 
     @Test func originalFooterButtonsRenderAndDispatchAtBothWidthsAndZoom() async throws {
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         let previousScale = UIScale.current
         defer { UIScale.apply(previousScale) }
@@ -974,7 +975,7 @@ import Testing
         defer { fixture.clean() }
         await fixture.marketplace.enable(id: "keepAwake")
         let pid = fixture.marketplace.sessions.processIdentifiers["keepAwake"]
-        let restore = enableAccessibility()
+        let restore = try enableAccessibility()
         defer { restore() }
         var opened: [String] = []
         let host = NSHostingView(
@@ -1049,17 +1050,11 @@ import Testing
         return nil
     }
 
-    private func enableAccessibility() -> () -> Void {
+    private func enableAccessibility() throws -> () -> Void {
         _ = TestWindowHost.application
-        let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
-            NSAccessibility.Attribute(rawValue: $0)
-        }
-        let previous = attributes.map { NSApp.accessibilityAttributeValue($0) }
-        for attribute in attributes { NSApp.accessibilitySetValue(true, forAttribute: attribute) }
+        let accessibility = try HostAccessibilityFixture.enable()
         return {
-            for (attribute, value) in zip(attributes, previous) {
-                NSApp.accessibilitySetValue(value ?? false, forAttribute: attribute)
-            }
+            for error in accessibility.restore() { Issue.record(error) }
         }
     }
 
