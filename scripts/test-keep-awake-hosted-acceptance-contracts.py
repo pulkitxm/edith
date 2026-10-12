@@ -123,6 +123,57 @@ class AcceptanceContracts(unittest.TestCase):
             ['Live owned process identity unavailable', 'Owned process birth or group changed'],
             passed=True), [])
 
+    def failure_observation(self):
+        return {
+            'kind': 'live_identity_unavailable', 'knownSeal': True,
+            'originalBirthMatches': None, 'originalGroupMatches': None,
+            'returnedBytes': 128, 'expectedBytes': 128, 'status': 5,
+            'pidMatches': True, 'birthMatches': True, 'groupMatches': True,
+            'uidMatches': True, 'realUIDMatches': True, 'probeFailed': False,
+        }
+
+    def observations_diagnostics(self, observations, errors=None, passed=False):
+        value = self.failed_runner()
+        value['passed'] = passed
+        value['ownershipFailureObservations'] = observations
+        value['cleanup']['ownershipErrors'] = errors or ['Live owned process identity unavailable']
+        captured = io.StringIO()
+        with redirect_stdout(captured):
+            acceptance.native_failure_diagnostics(value, Path('missing-tests.log'))
+        return captured.getvalue()
+
+    def test_known_numeric_observations_emit_after_unchanged_category_rows(self):
+        row = self.failure_observation()
+        text = self.observations_diagnostics([row])
+        rows = [json.loads(line) for line in text.splitlines()]
+        self.assertEqual(len(rows), 4)
+        self.assertEqual(rows[2], {'nativeOwnershipFailureKinds': ['live_identity_unavailable']})
+        self.assertEqual(rows[3], {'nativeOwnershipFailureObservations': [row]})
+        self.assertNotIn('private', text)
+
+    def test_numeric_observations_reject_unknown_fields_and_non_numeric_values(self):
+        for changes in [{'pid': 987}, {'path': '/fixture/private'}, {'status': 'private'},
+                        {'status': True}, {'kind': 'private'}, {'birthMatches': 1},
+                        {'returnedBytes': 2147483648}, {'expectedBytes': 4097},
+                        {'status': 4294967296}, {'knownSeal': 1}]:
+            with self.subTest(changes=changes):
+                row = {**self.failure_observation(), **changes}
+                text = self.observations_diagnostics([row])
+                self.assertEqual(len(text.splitlines()), 3)
+                self.assertNotIn('private', text)
+        text = self.observations_diagnostics([self.failure_observation()],
+                                             errors=['private ownership detail'])
+        self.assertEqual(len(text.splitlines()), 2)
+        self.assertNotIn('nativeOwnershipFailureObservations', text)
+
+    def test_numeric_observation_output_is_bounded_and_success_emits_nothing(self):
+        row = self.failure_observation()
+        text = self.observations_diagnostics([row] * 20)
+        rows = text.splitlines()
+        self.assertEqual(len(json.loads(rows[3])['nativeOwnershipFailureObservations']), 8)
+        self.assertLessEqual(len(rows[3].encode()), 4096)
+        self.assertEqual(self.observations_diagnostics([row], passed=True), '')
+
     def native(self):
         return {
             'schema': 1, 'sourceCommit': 'a' * 40, 'owner': 'keepAwake',
