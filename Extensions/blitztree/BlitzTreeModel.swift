@@ -254,7 +254,7 @@ final class BlitzTreeModel {
     }
 
     func finishWork() async {
-        while let current, let task = tasks[current.id] { await task.value }
+        while let task = tasks.values.first { await task.value }
     }
 
     private func track(_ work: @escaping @MainActor () async -> Void) -> Task<Void, Never>? {
