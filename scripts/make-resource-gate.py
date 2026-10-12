@@ -48,6 +48,8 @@ EXACT = {
     "ci-extension-accounts": "swift-test",
     "ci-extension-herdr-accounts": "swift-test",
     "ci-extension-usage-accounts": "swift-test",
+
+    "ci-extension-keep-awake-peer-diagnostics": "swift-test",
     "package-extension-keep-awake": "swift-test",
     "host": "swift-test",
     "ci-swift-test-batch": "swift-test",

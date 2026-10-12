@@ -212,7 +212,7 @@ private final class ExtensionPeerCall: @unchecked Sendable {
         do {
             guard
                 let registration = ExtensionPeerRegistration.read(
-                    at: endpoint.registrationURL, logicalName: endpoint.name)
+                    at: endpoint.registrationURL, logicalName: endpoint.name, reportFailures: true)
             else { throw ExtensionPeerError.unavailable }
             let frame = try ExtensionPeerFrame.encode(request)
             let connection = NWConnection(
@@ -233,7 +233,8 @@ private final class ExtensionPeerCall: @unchecked Sendable {
                 work.begin()
                 connection.stateUpdateHandler = { [weak self] state in
                     guard let self else { return }
-                    if case .failed = state {
+                    if case let .failed(error) = state {
+                        self.reportFailure(.connectionFailed, networkError: error)
                         self.finish(.failure(ExtensionPeerError.unavailable))
                     }
                     if case .cancelled = state {
@@ -253,6 +254,7 @@ private final class ExtensionPeerCall: @unchecked Sendable {
                     completion: .contentProcessed { [weak self, work, queue] error in
                         defer { work.schedule(on: queue) { work.end() } }
                         if error != nil {
+                            self?.reportFailure(.sendFailed, networkError: error)
                             self?.finish(.failure(ExtensionPeerError.unavailable))
                         }
                     })
@@ -261,7 +263,9 @@ private final class ExtensionPeerCall: @unchecked Sendable {
                     defer { work.schedule(on: queue) { work.end() } }
                     guard let self else { return }
                     switch result {
-                    case let .failure(error): self.finish(.failure(error))
+                    case let .failure(error):
+                        self.reportFailure(.responseReadUnavailable)
+                        self.finish(.failure(error))
                     case let .success(data): self.receive(data)
                     }
                 }
@@ -269,6 +273,13 @@ private final class ExtensionPeerCall: @unchecked Sendable {
             }
             if !started { timer.activate(); timer.cancel(); connection.cancel() }
         } catch { finish(.failure(error)) }
+    }
+
+    private func reportFailure(
+        _ stage: ExtensionPeerFailureDiagnostics.Stage, networkError: NWError? = nil
+    ) {
+        guard lock.withLock({ result == nil }) else { return }
+        ExtensionPeerFailureDiagnostics.report(stage, networkError: networkError)
     }
 
     private func receive(_ data: Data) {
@@ -341,10 +352,26 @@ public struct ExtensionPeerProcess: Codable, Equatable, Sendable {
         var gid: gid_t = 0
         var pid: Int32 = 0
         var size = socklen_t(MemoryLayout<Int32>.size)
-        guard getpeereid(descriptor, &uid, &gid) == 0, uid == getuid(),
-            getsockopt(descriptor, SOL_LOCAL, LOCAL_PEERPID, &pid, &size) == 0,
-            size == MemoryLayout<Int32>.size, let peer = read(pid)
-        else { throw ExtensionPeerError.unavailable }
+        guard getpeereid(descriptor, &uid, &gid) == 0 else {
+            ExtensionPeerFailureDiagnostics.report(.serverPeerCredentials, errorNumber: errno)
+            throw ExtensionPeerError.unavailable
+        }
+        guard uid == getuid() else {
+            ExtensionPeerFailureDiagnostics.report(.serverPeerUID)
+            throw ExtensionPeerError.unavailable
+        }
+        guard getsockopt(descriptor, SOL_LOCAL, LOCAL_PEERPID, &pid, &size) == 0 else {
+            ExtensionPeerFailureDiagnostics.report(.serverPeerPID, errorNumber: errno)
+            throw ExtensionPeerError.unavailable
+        }
+        guard size == MemoryLayout<Int32>.size else {
+            ExtensionPeerFailureDiagnostics.report(.serverPeerPIDSize)
+            throw ExtensionPeerError.unavailable
+        }
+        guard let peer = read(pid) else {
+            ExtensionPeerFailureDiagnostics.report(.serverPeerIdentity)
+            throw ExtensionPeerError.unavailable
+        }
         return peer
     }
 }
@@ -399,7 +426,10 @@ private final class ExtensionPeerConnection: @unchecked Sendable {
             setsockopt(
                 descriptor, SOL_SOCKET, SO_NOSIGPIPE, &noSignal, socklen_t(MemoryLayout<Int32>.size)
             ) == 0
-        else { throw ExtensionPeerError.unavailable }
+        else {
+            ExtensionPeerFailureDiagnostics.report(.serverSocketConfiguration, errorNumber: errno)
+            throw ExtensionPeerError.unavailable
+        }
         return ExtensionPeerConnection(descriptor, source: source)
     }
 
@@ -434,7 +464,12 @@ private final class ExtensionPeerConnection: @unchecked Sendable {
     func authenticate() throws {
         guard !lock.withLock({ cancelled }), source.isCurrent,
             try ExtensionPeerProcess.peer(descriptor) == source
-        else { throw ExtensionPeerError.unavailable }
+        else {
+            if !lock.withLock({ cancelled }) {
+                ExtensionPeerFailureDiagnostics.report(.serverAuthentication)
+            }
+            throw ExtensionPeerError.unavailable
+        }
     }
 
     func receive(_ completion: @escaping @Sendable (Result<Data, Error>) -> Void) {
@@ -702,14 +737,19 @@ public final class ExtensionPeerServer {
 
     private func receive(_ result: Result<Data, Error>, token: UUID) {
         guard var job = jobs[token] else { return }
-        guard case let .success(data) = result,
-            let request = try? JSONDecoder().decode(ExtensionPeerRequest.self, from: data),
+        guard case let .success(data) = result else { close(token); return }
+        guard let request = try? JSONDecoder().decode(ExtensionPeerRequest.self, from: data),
             !request.command.isEmpty, request.command.utf8.count <= 256,
             !request.command.utf8.contains(0),
             request.payload.count <= ExtensionPeerEndpoint.maximumPayloadBytes,
             request.timeout.isFinite, request.timeout > 0, request.timeout <= 1_800
-        else { close(token); return }
+        else {
+            ExtensionPeerFailureDiagnostics.report(.serverReceive)
+            close(token)
+            return
+        }
         guard admission == .open || controlsDuringDrain.contains(request.command) else {
+            ExtensionPeerFailureDiagnostics.report(.serverAdmission)
             close(token); return
         }
         job.deadline.cancel()
