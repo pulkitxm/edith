@@ -40,6 +40,9 @@ final class VideoEditorOpenBridge {
     private var timeoutTask: Task<Void, Never>?
     private var loadTask: Task<Void, Never>?
     private var ownedTasks: [UUID: Task<Void, Never>] = [:]
+    private var retiredModels: [UUID: Task<Void, Never>] = [:]
+    private var commandsSuspended = false
+    private nonisolated let callbacks = StudioTaskOwner()
     private let reply: @MainActor ([String: Any]) -> Void
     private let present: @MainActor () -> Void
 
@@ -54,7 +57,7 @@ final class VideoEditorOpenBridge {
     }
 
     func open(_ next: VideoEditorService.OpenRequest, timeout: Double) async throws {
-        guard request == nil, openWait == nil else {
+        guard !commandsSuspended, request == nil, openWait == nil else {
             throw VideoEditorService.Failure("editor_busy", "Another project is opening.")
         }
         try Task.checkCancellation()
@@ -64,9 +67,9 @@ final class VideoEditorOpenBridge {
                 receive(next, deadline: Date().addingTimeInterval(timeout))
             }
         } onCancel: {
-            Task { @MainActor in
-                guard self.request == next else { return }
-                self.pending?.model.close()
+            self.callbacks.enqueue {
+                guard !self.commandsSuspended, self.request == next else { return }
+                if let model = self.pending?.model { self.retire(model) }
                 let continuation = self.openWait
                 self.openWait = nil
                 self.clear()
@@ -76,7 +79,7 @@ final class VideoEditorOpenBridge {
     }
 
     func receive(_ next: VideoEditorService.OpenRequest, deadline: Date) {
-        guard request == nil else {
+        guard !commandsSuspended, request == nil else {
             fail(
                 next, code: "editor_busy",
                 message: "Another project is opening. Retry when it finishes.")
@@ -111,7 +114,9 @@ final class VideoEditorOpenBridge {
             do {
                 try await model.loadCommandProject(next)
                 try Task.checkCancellation()
-                guard self.request == next else { await model.stopAndWait(); return }
+                guard !commandsSuspended, self.request == next else {
+                    await model.stopAndWait(); return
+                }
                 guard activeEditor?.blocksCommandOpen != true else {
                     throw VideoEditorService.Failure(
                         "editor_busy", "The editor has unsaved changes or an active task.")
@@ -120,7 +125,7 @@ final class VideoEditorOpenBridge {
                 present()
             } catch {
                 await model.stopAndWait()
-                guard self.request == next else { return }
+                guard !commandsSuspended, self.request == next else { return }
                 finishFailure(
                     next, code: (error as? VideoEditorService.Failure)?.code ?? "open_failed",
                     message: error.localizedDescription)
@@ -130,7 +135,7 @@ final class VideoEditorOpenBridge {
 
     func mounted(_ presentation: Presentation) {
         let next = presentation.request
-        guard request == next, pending?.model === presentation.model else { return }
+        guard !commandsSuspended, request == next, pending?.model === presentation.model else { return }
         guard let deadline, deadline > Date() else {
             finishFailure(
                 next, code: "open_timeout",
@@ -156,26 +161,56 @@ final class VideoEditorOpenBridge {
     }
 
     func reject(_ requestID: String, message: String) {
-        guard let request, request.requestID == requestID else { return }
+        guard !commandsSuspended, let request, request.requestID == requestID else { return }
         finishFailure(request, code: "editor_busy", message: message)
     }
 
-    func shutdown() {
+    func suspendCommands() {
+        commandsSuspended = true
+        callbacks.shutdown()
+        for task in ownedTasks.values { task.cancel() }
+        pending?.model.suspendCommands()
+        activeEditor?.suspendCommands()
         openWait?.resume(throwing: CancellationError())
         openWait = nil
-        pending?.model.close()
-        activeEditor?.close()
+    }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        let tasks = Array(ownedTasks.values)
+        let retired = Array(retiredModels.values)
+        let models = [pending?.model, activeEditor].compactMap { $0 }
+        for model in models { await model.suspendCommandsAndWait() }
+        for task in tasks { await task.value }
+        for task in retired { await task.value }
+        await callbacks.shutdownAndWait()
+    }
+
+    func shutdown() {
+        suspendCommands()
+        openWait?.resume(throwing: CancellationError())
+        openWait = nil
+        if let model = pending?.model { retire(model) }
+        if let model = activeEditor { retire(model) }
         activeEditor = nil
         clear()
     }
 
     func stopAndWait() async {
-        let tasks = Array(ownedTasks.values)
-        let models = [pending?.model, activeEditor].compactMap { $0 }
-        for task in tasks { task.cancel() }
-        for model in models { await model.stopAndWait() }
+        await suspendCommandsAndWait()
         shutdown()
-        for task in tasks { await task.value }
+        let retired = Array(retiredModels.values)
+        for task in retired { await task.value }
+    }
+
+    private func retire(_ model: VideoEditorModel) {
+        model.close()
+        let token = UUID()
+        let task = Task { [weak self] in
+            await model.stopAndWait()
+            self?.retiredModels[token] = nil
+        }
+        retiredModels[token] = task
     }
 
     private func ownTask(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
@@ -201,7 +236,7 @@ final class VideoEditorOpenBridge {
     private func finishFailure(
         _ request: VideoEditorService.OpenRequest, code: String, message: String
     ) {
-        pending?.model.close()
+        if let model = pending?.model { retire(model) }
         clear()
         fail(request, code: code, message: message)
     }
