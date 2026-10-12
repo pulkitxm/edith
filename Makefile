@@ -170,6 +170,21 @@ host:
 extension-dev:
 	bun scripts/build-extension-package.mjs $(EXTENSION) --development
 
+.PHONY: ci-extension-keep-awake-compile ci-extension-keep-awake package-extension-keep-awake ci-extension-keep-awake-native
+ci-extension-keep-awake-compile:
+	/usr/bin/time -p swift build --package-path Extensions/keepAwake --target KeepAwakeExtensionTests --build-system native --jobs 1 -Xswiftc -j1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+ci-extension-keep-awake:
+	@test "$$GITHUB_ACTIONS" = true && test "$$RUNNER_ENVIRONMENT" = github-hosted && test "$$RUNNER_OS" = macOS
+	/usr/bin/time -p swift format lint --strict --recursive Extensions/keepAwake
+	@set -eu; umask 077; fixture=$$(mktemp -d "$${TMPDIR:-/tmp}/edith-keep-awake-tests.XXXXXX"); trap 'rm -rf "$$fixture"' EXIT; mkdir -p "$$fixture/tmp" "$$fixture/cache" "$$fixture/config" "$$fixture/data"; env -u EDITH_EXTENSION_TEST_SDK -u EDITH_TEST_VOICE_ENCODER -u EDITH_TEST_VOICE_MODEL HOME="$$fixture" CFFIXED_USER_HOME="$$fixture" TMPDIR="$$fixture/tmp" XDG_CACHE_HOME="$$fixture/cache" XDG_CONFIG_HOME="$$fixture/config" EDITH_TEST_NATIVE_CAPTURE=0 EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/data" EDITH_SHARED_DEFAULTS_SUITE="edith.keepAwake.tests.$$(basename "$$fixture")" /usr/bin/time -p swift test --package-path Extensions/keepAwake --build-system native --no-parallel --jobs 1 -Xswiftc -j1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+package-extension-keep-awake:
+	/usr/bin/time -p bun scripts/build-extension-package.mjs keepAwake
+
+ci-extension-keep-awake-native:
+	/usr/bin/time -p python3 -B scripts/test-keep-awake-hosted-acceptance.py
+
 ci-extension-support:
 	swift format lint --strict --parallel --recursive Packages/ExtensionSupport/Sources Packages/ExtensionSupport/Tests Packages/ExtensionSupport/Package.swift Extensions/keepAwake Extensions/focusDim Extensions/windowSweaters Extensions/colorPicker Extensions/keystrokeHighlight Extensions/systemStats Extensions/micMute Extensions/emoji Extensions/homebrew Extensions/calendar Extensions/jev Extensions/presenter Extensions/system Extensions/timeLapse Extensions/cleaner Extensions/appMaintenance Extensions/blitztree Extensions/plugins Extensions/notchShelf Extensions/clipboard Extensions/music Extensions/docs Extensions/latex Extensions/usage Extensions/companion Extensions/bifrost Extensions/lidAwake Extensions/downloads Extensions/seoAudit Extensions/fixtureSupport Extensions/Package.swift Packages/EdithDocsWorker/Sources Packages/EdithDocsWorker/Tests Packages/EdithDocsWorker/Package.swift
 	swift test --package-path Packages/ExtensionSupport --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"

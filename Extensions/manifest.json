@@ -30,6 +30,9 @@
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
     "surfaceContractVersion": 1,
+    "testTargets": [
+      "ci-extension-keep-awake"
+    ],
     "sameExecutableWorker": true
   },
   {
