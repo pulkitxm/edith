@@ -16,7 +16,11 @@ final class MusicTaskOwner {
     func shutdown() {
         stopped = true
         for task in tasks.values { task.cancel() }
-        tasks.removeAll()
+    }
+    func shutdownAndWait() async {
+        shutdown()
+        let pending = Array(tasks.values)
+        for task in pending { await task.value }
     }
     nonisolated static func detached<Value: Sendable>(
         _ operation: @escaping @Sendable () async -> Value

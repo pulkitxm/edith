@@ -289,6 +289,7 @@ final class MusicWorker {
 
     func shutdown() async {
         stop()
+        await tasks.shutdownAndWait()
         if !isInertFixture { await DownloadWorker.shared.stop() }
     }
 
