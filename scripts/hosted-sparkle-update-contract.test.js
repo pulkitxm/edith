@@ -7,6 +7,10 @@ import {
   validateSparkleOutcome,
   verifySparkleArchive,
 } from "./hosted-sparkle-update/contract.mjs";
+import {
+  historicalSparkleSource,
+  sparkleImplementationPaths,
+} from "./hosted-sparkle-update/implementations.mjs";
 
 function setup() {
   const archive = Buffer.from("Synthetic signed app archive");
@@ -18,6 +22,30 @@ function setup() {
   const fixture = {
     schema: 1,
     expectedUID: 501,
+    hostImplementations: {
+      composition: "current-base-with-historical-onboarding",
+      baseSourceCommit: "a".repeat(40),
+      previous: {
+        sourceCommit: historicalSparkleSource,
+        normalizedUnsignedSHA256: "1".repeat(64),
+        sources: Object.fromEntries(
+          Object.entries(sparkleImplementationPaths).map(([path, blob]) => [
+            path,
+            { blob, sha256: "3".repeat(64) },
+          ]),
+        ),
+      },
+      current: {
+        sourceCommit: "a".repeat(40),
+        normalizedUnsignedSHA256: "2".repeat(64),
+        sources: Object.fromEntries(
+          Object.keys(sparkleImplementationPaths).map((path) => [
+            path,
+            { blob: "b".repeat(40), sha256: "4".repeat(64) },
+          ]),
+        ),
+      },
+    },
     initialCodeSHA256: "c".repeat(64),
     initialMetadataSHA256: "1".repeat(64),
     installedMetadataSHA256: "2".repeat(64),
@@ -111,6 +139,7 @@ function setup() {
     installedResourcesSHA256: fixture.installedResourcesSHA256,
     signingRequirementSHA256: fixture.signingRequirementSHA256,
     installedSignatureVerified: true,
+    hostImplementations: fixture.hostImplementations,
     initialMetadataSHA256: fixture.initialMetadataSHA256,
     installedMetadataSHA256: fixture.installedMetadataSHA256,
   };
@@ -241,15 +270,23 @@ test("only actual Sparkle download install native relaunch and retained data can
     ).toThrow();
 });
 
-test("same-source full updates retain executable code but replace signed metadata", () => {
+test("copied implementations cannot qualify even with fresh signatures metadata and process births", () => {
   const { fixture, outcome } = setup();
-  fixture.installedCodeSHA256 = fixture.initialCodeSHA256;
-  outcome.installedCodeSHA256 = fixture.initialCodeSHA256;
-  outcome.newHost.executableSHA256 = fixture.initialCodeSHA256;
-  expect(validateSparkleOutcome(outcome, fixture)).toBe(outcome);
+  const copied = structuredClone(outcome.hostImplementations);
+  copied.current.normalizedUnsignedSHA256 =
+    copied.previous.normalizedUnsignedSHA256;
   expect(() =>
     validateSparkleOutcome(
-      { ...outcome, installedMetadataSHA256: outcome.initialMetadataSHA256 },
+      { ...outcome, hostImplementations: copied },
+      fixture,
+    ),
+  ).toThrow();
+  const foreign = structuredClone(outcome.hostImplementations);
+  foreign.current.sources[Object.keys(sparkleImplementationPaths)[0]].sha256 =
+    "9".repeat(64);
+  expect(() =>
+    validateSparkleOutcome(
+      { ...outcome, hostImplementations: foreign },
       fixture,
     ),
   ).toThrow();

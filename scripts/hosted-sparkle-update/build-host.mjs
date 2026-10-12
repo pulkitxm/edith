@@ -20,11 +20,20 @@ import {
   originalShellFixtureOverlay,
 } from "../hosted-original-shell/source-overlay.mjs";
 import {
+  readSparkleImplementation,
+  sparkleChildEnvironment,
+  sparkleExecutableIdentity,
+  verifySparkleImplementationCopy,
+} from "./implementations.mjs";
+import {
   sparkleEntryOverlay,
   sparkleUpdaterOverlay,
 } from "./source-overlay.mjs";
 
-export function requireCleanSparkleSources(execute = execFileSync) {
+export function requireCleanSparkleSources(
+  execute = execFileSync,
+  environment,
+) {
   assert.equal(
     execute(
       "git",
@@ -38,19 +47,53 @@ export function requireCleanSparkleSources(execute = execFileSync) {
         "scripts",
         "Tests",
       ],
-      { encoding: "utf8" },
+      { encoding: "utf8", env: environment },
     ),
     "",
     "Reviewed fixture inputs must be committed and unchanged before compilation",
   );
 }
 
+export async function compileSparkleImplementation({
+  packageDirectory,
+  implementation,
+  sourceCommit,
+  builderPath,
+  environment,
+  execute = execFileSync,
+}) {
+  const childEnvironment = sparkleChildEnvironment(environment);
+  const verify = async () => {
+    requireCleanSparkleSources(execute, childEnvironment);
+    assert.equal(
+      execute("git", ["rev-parse", "HEAD"], {
+        encoding: "utf8",
+        env: childEnvironment,
+      }).trim(),
+      sourceCommit,
+    );
+    await verifySparkleImplementationCopy(packageDirectory, implementation);
+  };
+  await verify();
+  execute(process.execPath, [builderPath], {
+    stdio: "inherit",
+    env: { ...childEnvironment, EXTENSION_SWIFT_JOBS: "1" },
+  });
+  await verify();
+}
+
 export async function buildSparkleHost({
   sourceCommit,
   issuerPublicKey,
   signingRequirement,
+  generation,
+  environment,
   execute = execFileSync,
 }) {
+  const childEnvironment = sparkleChildEnvironment(environment);
+  const childExecute = execute;
+  execute = (command, arguments_, options = {}) =>
+    childExecute(command, arguments_, { ...options, env: childEnvironment });
   requireCleanSparkleSources(execute);
   const root = await realpath(process.cwd());
   assert(
@@ -62,9 +105,20 @@ export async function buildSparkleHost({
     execute("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
     sourceCommit,
   );
-  const output = resolve("local/hosted-sparkle-update");
+  const implementation = readSparkleImplementation(
+    generation,
+    sourceCommit,
+    execute,
+  );
+  const sharedOutput = resolve("local/hosted-sparkle-update");
+  const output = join(sharedOutput, generation);
   const packageDirectory = join(output, "HostPackage");
-  for (const path of [join(root, "local"), output, packageDirectory]) {
+  for (const path of [
+    join(root, "local"),
+    sharedOutput,
+    output,
+    packageDirectory,
+  ]) {
     await mkdir(path, { recursive: false, mode: 0o700 }).catch((error) => {
       assert.equal(error.code, "EEXIST");
     });
@@ -101,6 +155,12 @@ export async function buildSparkleHost({
       root,
     ),
   );
+  for (const [path, bytes] of Object.entries(implementation.sources)) {
+    await writeFile(
+      join(packageDirectory, path.slice("Packages/EdithHost/".length)),
+      bytes,
+    );
+  }
   const sources = join(packageDirectory, "Sources/EdithHost");
   const hash = (data) => createHash("sha256").update(data).digest("hex");
   const overlays = {};
@@ -167,9 +227,13 @@ export async function buildSparkleHost({
   }
   const builderPath = join(output, "build-host.mjs");
   await writeFile(builderPath, builder);
-  execute(process.execPath, [builderPath], {
-    stdio: "inherit",
-    env: { ...process.env, EXTENSION_SWIFT_JOBS: "1" },
+  await compileSparkleImplementation({
+    packageDirectory,
+    implementation,
+    sourceCommit,
+    builderPath,
+    environment,
+    execute: childExecute,
   });
   const receipt = {
     schema: 1,
@@ -181,6 +245,16 @@ export async function buildSparkleHost({
     overlays,
     additions,
     issuerPublicKey,
+    implementation: {
+      sourceCommit: implementation.sourceCommit,
+      sources: implementation.metadata,
+      normalizedUnsignedSHA256: sparkleExecutableIdentity(
+        root,
+        join(output, "frozen/Edith.app"),
+        environment,
+        execute,
+      ).normalizedUnsignedSHA256,
+    },
     signingRequirementSHA256: hash(signingRequirement),
     productionExecutableUnchangedProof: false,
     actualSparkleInstallValidated: false,

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, createPublicKey, verify } from "node:crypto";
+import { validateSparkleImplementations } from "./implementations.mjs";
 
 const sha = (value) =>
   typeof value === "string" &&
@@ -27,12 +28,14 @@ export function validateSparkleFixture(value, environment, accountHome) {
     "signingRequirementSHA256",
     "producer",
     "expectedUID",
+    "hostImplementations",
     "initialCodeSHA256",
     "initialMetadataSHA256",
     "installedMetadataSHA256",
     "ownedRolePaths",
   ]);
   assert.equal(value.schema, 1);
+  validateSparkleImplementations(value.hostImplementations, value.sourceCommit);
   assert(Number.isInteger(value.expectedUID) && value.expectedUID > 0);
   assert(
     typeof value.session === "string" &&
@@ -208,6 +211,7 @@ export function validateSparkleOutcome(value, fixture) {
     "installedSignatureVerified",
     "initialMetadataSHA256",
     "installedMetadataSHA256",
+    "hostImplementations",
     "oldRoles",
     "oldRolesAfterInstall",
     "reopenedRoles",
@@ -218,6 +222,11 @@ export function validateSparkleOutcome(value, fixture) {
   assert.equal(value.session, fixture.session);
   assert.equal(value.identifier, fixture.identifier);
   assert.equal(value.outcome, "passed");
+  validateSparkleImplementations(
+    value.hostImplementations,
+    fixture.sourceCommit,
+  );
+  assert.deepEqual(value.hostImplementations, fixture.hostImplementations);
   assert.deepEqual(value.versions, fixture.versions);
   assert.equal(value.archiveSHA256, fixture.archiveSHA256);
   assert.equal(value.downloadedBytes, fixture.archiveBytes);

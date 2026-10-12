@@ -17,6 +17,11 @@ import {
   prepareJourney,
 } from "../hosted-original-shell/prepare-journey.mjs";
 import { sparkleURL, validateSparkleFixture } from "./contract.mjs";
+import {
+  sparkleChildEnvironment,
+  sparkleExecutableIdentity,
+  validateSparkleImplementations,
+} from "./implementations.mjs";
 
 export const sparkleLoopbackTransport = Object.freeze({
   NSExceptionDomains: {
@@ -145,6 +150,7 @@ export async function inventorySparkleApp(
 export async function prepareSparkleUpdate({
   root,
   buildReceipt,
+  replacementReceipt,
   session,
   directory,
   identifier,
@@ -155,8 +161,13 @@ export async function prepareSparkleUpdate({
   signingIdentity,
   requirement,
   accountHome,
+  environment,
   execute = execFileSync,
 }) {
+  const childEnvironment = sparkleChildEnvironment(environment);
+  const childExecute = execute;
+  execute = (command, arguments_, options = {}) =>
+    childExecute(command, arguments_, { ...options, env: childEnvironment });
   assert.equal(process.env.EDITH_HOSTED_SPARKLE_UPDATE, "1");
   assert.equal(process.env.GITHUB_SHA, buildReceipt.sourceCommit);
   assert.equal(
@@ -167,6 +178,37 @@ export async function prepareSparkleUpdate({
     buildReceipt.issuerPublicKey,
   );
   assert.equal(hash(requirement), buildReceipt.signingRequirementSHA256);
+  assert.equal(replacementReceipt.sourceCommit, buildReceipt.sourceCommit);
+  assert.equal(
+    replacementReceipt.issuerPublicKey,
+    buildReceipt.issuerPublicKey,
+  );
+  assert.equal(
+    replacementReceipt.signingRequirementSHA256,
+    buildReceipt.signingRequirementSHA256,
+  );
+  const hostImplementations = validateSparkleImplementations(
+    {
+      composition: "current-base-with-historical-onboarding",
+      baseSourceCommit: buildReceipt.sourceCommit,
+      previous: buildReceipt.implementation,
+      current: replacementReceipt.implementation,
+    },
+    buildReceipt.sourceCommit,
+  );
+  for (const receipt of [buildReceipt, replacementReceipt]) {
+    const actual = sparkleExecutableIdentity(
+      root,
+      receipt.frozenHost,
+      environment,
+      execute,
+    );
+    assert.equal(actual.signedSHA256, receipt.fixtureExecutableSHA256);
+    assert.equal(
+      actual.normalizedUnsignedSHA256,
+      receipt.implementation.normalizedUnsignedSHA256,
+    );
+  }
   assert.equal(session.length, 36);
   assert.equal(identifier, `com.pulkit.edith.tests.remote-${session}`);
   assert.equal(producer.pid, process.pid);
@@ -190,6 +232,7 @@ export async function prepareSparkleUpdate({
     frozenHost: buildReceipt.frozenHost,
     sourceCommit: buildReceipt.sourceCommit,
     executableSHA256: buildReceipt.fixtureExecutableSHA256,
+    replacementHost: replacementReceipt.frozenHost,
   });
   const publicKey = updateKeys.publicKey
     .export({ format: "der", type: "spki" })
@@ -278,6 +321,13 @@ export async function prepareSparkleUpdate({
     requirement,
     execute,
   });
+  for (const [index, generation] of ["previous", "current"].entries()) {
+    assert.equal(
+      sparkleExecutableIdentity(root, applications[index], environment, execute)
+        .normalizedUnsignedSHA256,
+      hostImplementations[generation].normalizedUnsignedSHA256,
+    );
+  }
   journey.executableSHA256 = {
     "1.0.0": initial.executableSHA256,
     "2.0.0": installed.executableSHA256,
@@ -317,6 +367,7 @@ export async function prepareSparkleUpdate({
     producer,
     expectedUID: producer.uid,
     initialCodeSHA256: initial.executableSHA256,
+    hostImplementations,
     installedCodeSHA256: installed.executableSHA256,
     initialMetadataSHA256: initial.metadataSHA256,
     installedMetadataSHA256: installed.metadataSHA256,

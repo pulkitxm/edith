@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
 import {
+  historicalSparkleSource,
+  sparkleImplementationPaths,
+} from "./hosted-sparkle-update/implementations.mjs";
+import {
   assembleSparkleOutcome,
   cleanupSparkleCaptured,
   observeSparkleNaturalExit,
@@ -16,8 +20,32 @@ function fixture(index) {
     identifier: `com.pulkit.edith.tests.remote-${session}`,
     directory,
     expectedUID: 501,
+    hostImplementations: {
+      composition: "current-base-with-historical-onboarding",
+      baseSourceCommit: "a".repeat(40),
+      previous: {
+        sourceCommit: historicalSparkleSource,
+        normalizedUnsignedSHA256: "1".repeat(64),
+        sources: Object.fromEntries(
+          Object.entries(sparkleImplementationPaths).map(([path, blob]) => [
+            path,
+            { blob, sha256: "3".repeat(64) },
+          ]),
+        ),
+      },
+      current: {
+        sourceCommit: "a".repeat(40),
+        normalizedUnsignedSHA256: "2".repeat(64),
+        sources: Object.fromEntries(
+          Object.keys(sparkleImplementationPaths).map((path) => [
+            path,
+            { blob: "b".repeat(40), sha256: "4".repeat(64) },
+          ]),
+        ),
+      },
+    },
     initialCodeSHA256: "c".repeat(64),
-    installedCodeSHA256: "c".repeat(64),
+    installedCodeSHA256: "d".repeat(64),
     initialMetadataSHA256: "1".repeat(64),
     installedMetadataSHA256: "2".repeat(64),
     installedResourcesSHA256: "e".repeat(64),
@@ -128,13 +156,16 @@ function proofs() {
   return [valid, ...negatives];
 }
 
-test("final construction keeps native updated-role drain and two fresh actual rejection cases with same-code full updates", () => {
+test("final construction keeps native updated-role drain and two fresh actual rejection cases with different compiled implementations", () => {
   const values = proofs();
   const outcome = assembleSparkleOutcome(...values);
   expect(outcome.naturalUpdatedDisableValidated).toBe(true);
   expect(outcome.updatedDisabledRoles.every((row) => !row.running)).toBe(true);
-  expect(outcome.oldHost.executableSHA256).toBe(
+  expect(outcome.oldHost.executableSHA256).not.toBe(
     outcome.newHost.executableSHA256,
+  );
+  expect(outcome.hostImplementations).toEqual(
+    values[0].fixture.hostImplementations,
   );
   for (const change of [
     (values) => {

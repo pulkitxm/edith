@@ -43,6 +43,7 @@ import {
   validateSparkleEvents,
 } from "./control.mjs";
 import { createSparkleCatalogSwitch } from "./fixed-files.mjs";
+import { sparkleChildEnvironment } from "./implementations.mjs";
 import {
   bindSparkleProtectedState,
   inventorySparkleApp,
@@ -291,6 +292,7 @@ export function assembleSparkleOutcome(control, wrong, tampered) {
       wrongSignatureRejected: true,
       tamperedArchiveRejected: true,
       productionGateUnchanged: true,
+      hostImplementations: fixture.hostImplementations,
       installedCodeSHA256: fixture.installedCodeSHA256,
       installedResourcesSHA256: fixture.installedResourcesSHA256,
       signingRequirementSHA256: fixture.signingRequirementSHA256,
@@ -375,7 +377,9 @@ export async function runSparkleUpdates() {
   for (const key of ["GITHUB_TOKEN", "GH_TOKEN", "SSH_AUTH_SOCK"])
     delete process.env[key];
   process.env.EDITH_HOSTED_SHELL_JOURNEY = "1";
-  const environment = sparkleCompilerEnvironment(process.env);
+  const environment = sparkleCompilerEnvironment(
+    sparkleChildEnvironment(process.env),
+  );
   const root = await realpath(process.cwd());
   const output = resolve("local/hosted-sparkle-update");
   await mkdir(join(root, "local"), { mode: 0o700 }).catch((error) =>
@@ -431,10 +435,19 @@ export async function runSparkleUpdates() {
         sourceCommit,
         issuerPublicKey,
         signingRequirement: requirement,
+        generation: "previous",
+        environment,
+      });
+      const replacementReceipt = await buildSparkleHost({
+        sourceCommit,
+        issuerPublicKey,
+        signingRequirement: requirement,
+        generation: "current",
+        environment,
       });
       await writeFile(
         join(caseOutput, "build-receipt.json"),
-        JSON.stringify(buildReceipt),
+        JSON.stringify({ previous: buildReceipt, current: replacementReceipt }),
         { mode: 0o600 },
       );
       const probe = await compileSparkleProbe({
@@ -445,6 +458,7 @@ export async function runSparkleUpdates() {
       preparation = await prepareSparkleUpdate({
         root,
         buildReceipt,
+        replacementReceipt,
         session,
         directory,
         identifier,
@@ -455,6 +469,7 @@ export async function runSparkleUpdates() {
         signingIdentity,
         requirement,
         accountHome,
+        environment,
       });
       server.configure({ ...preparation, recipe });
       const variables = sparkleVariables(preparation.journey, accountHome);
@@ -709,6 +724,7 @@ export async function runSparkleUpdates() {
         results[2].control,
       ),
       deltaUpdateValidated: false,
+      composedHostImplementationUpdateValidated: true,
       historicalBinaryCompatibilityValidated: false,
       productionPublicReleaseValidated: false,
     };

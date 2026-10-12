@@ -114,6 +114,7 @@ export async function prepareJourney({
   frozenHost,
   sourceCommit,
   executableSHA256: expectedExecutableSHA256,
+  replacementHost,
 }) {
   admitHostedJourney(process.env, directory, identifier, homedir());
   assert.equal(process.arch, "arm64");
@@ -204,12 +205,20 @@ export async function prepareJourney({
   };
   const replacement = join(directory, "replacement/Host.payload");
   await mkdir(dirname(replacement), { recursive: true, mode: 0o700 });
-  await copyJourneyApplication(app, replacement);
+  await copyJourneyApplication(replacementHost ?? app, replacement);
   plist(join(replacement, "Contents/Info.plist"), {
     ...info(join(replacement, "Contents/Info.plist")),
+    CFBundleIdentifier: identifier,
+    CFBundleName: "Edith",
+    CFBundleDisplayName: "Edith",
     CFBundleShortVersionString: "2.0.0",
     CFBundleVersion: "2",
   });
+  plist(
+    join(replacement, "Contents/Extensions/ExtensionUI.appextensionpoints"),
+    extensionUIExtensionPoint(identifier),
+  );
+  await signRuntime(join(replacement, "Contents/Frameworks"));
   signPath(replacement);
   run("codesign", ["--verify", "--deep", "--strict", replacement]);
   executableSHA256["2.0.0"] = hash(

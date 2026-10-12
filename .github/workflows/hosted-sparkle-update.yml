@@ -58,7 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           swift test --package-path Tests/HostedSparkleUpdate --jobs 1
-          bun test scripts/hosted-sparkle-update-contract.test.js scripts/hosted-sparkle-update-server.test.js scripts/hosted-sparkle-update-overlay.test.js scripts/hosted-sparkle-update-build.test.js scripts/hosted-sparkle-process-ledger.test.js scripts/hosted-sparkle-preparation.test.js scripts/hosted-sparkle-producer.test.js scripts/hosted-sparkle-control.test.js scripts/hosted-sparkle-fixed-files.test.js scripts/hosted-sparkle-ui.test.js scripts/hosted-sparkle-runner.test.js scripts/hosted-sparkle-workflow.test.js
+          bun test scripts/hosted-sparkle-implementations.test.js scripts/hosted-sparkle-update-contract.test.js scripts/hosted-sparkle-update-server.test.js scripts/hosted-sparkle-update-overlay.test.js scripts/hosted-sparkle-update-build.test.js scripts/hosted-sparkle-process-ledger.test.js scripts/hosted-sparkle-preparation.test.js scripts/hosted-sparkle-producer.test.js scripts/hosted-sparkle-control.test.js scripts/hosted-sparkle-fixed-files.test.js scripts/hosted-sparkle-ui.test.js scripts/hosted-sparkle-runner.test.js scripts/hosted-sparkle-workflow.test.js
           bun scripts/hosted-host-manifest-cold.mjs
       - name: Import signing into an owned disposable keychain
         env:
