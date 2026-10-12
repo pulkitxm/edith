@@ -1,7 +1,7 @@
 import Foundation
 
 public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
-    public enum Authentication: String, Codable, CaseIterable, Identifiable {
+    public enum Authentication: String, Codable, CaseIterable, Identifiable, Sendable {
         case oauthToken
         case apiKey
         case browserLogin
