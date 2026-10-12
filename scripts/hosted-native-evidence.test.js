@@ -196,7 +196,8 @@ test("shipping evidence requires one successful authenticated peer transport ste
   for (const mutation of [
     (steps) =>
       steps.filter(
-        ({ name }) => name !== "Verify authenticated peer transport and lifecycle",
+        ({ name }) =>
+          name !== "Verify authenticated peer transport and lifecycle",
       ),
     (steps) =>
       steps.map((step) =>
@@ -213,7 +214,8 @@ test("shipping evidence requires one successful authenticated peer transport ste
     (steps) => [
       ...steps,
       steps.find(
-        ({ name }) => name === "Verify authenticated peer transport and lifecycle",
+        ({ name }) =>
+          name === "Verify authenticated peer transport and lifecycle",
       ),
     ],
   ]) {
