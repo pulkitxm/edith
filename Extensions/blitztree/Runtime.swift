@@ -120,7 +120,9 @@ final class ExtensionRuntime: NSObject {
         let uiOwner = uiModel
         commandsSuspended = true
         #if EDITH_FUNCTIONAL_FIXTURE
+        let admission = signedFixture
         let files = fixtureFiles
+        admission?.closeNamespaceAdmission()
         files?.closeAdmission()
         #endif
         _ = commands.suspend()
@@ -135,6 +137,7 @@ final class ExtensionRuntime: NSObject {
             while let task = uiDrains.values.first { await task.value }
             #if EDITH_FUNCTIONAL_FIXTURE
             await files?.closeAndWait()
+            await admission?.closeNamespaceAndWait()
             #endif
         }
         commandDrain = task
