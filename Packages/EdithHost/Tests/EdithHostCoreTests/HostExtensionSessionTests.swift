@@ -225,7 +225,10 @@ import Testing
         #expect(restarted.sessions.enabledIDs.isEmpty)
         #expect(restarted.sessions.processIdentifiers.isEmpty)
         #expect(restarted.sessions.states["sample"] == .disabled)
+        #expect(!(await original.sessions.shutdown()))
+        #expect(original.sessions.pendingDisableIDs == ["sample"])
         #expect(await original.sessions.shutdown())
+        #expect(original.sessions.pendingDisableIDs.isEmpty)
     }
 
     @Test func failedRecoveryRetainsIntentUntilConfirmedRetry() async throws {
@@ -366,6 +369,8 @@ import Testing
             try await rejected.sessions.disable(id: "sample")
         }
         #expect(rejected.sessions.pendingDisableIDs == ["sample"])
+        #expect(rejected.records.workers.last?.requiresRecovery == true)
+        #expect(rejected.records.workers.last?.isStopped == true)
         let recovered = try Fixture(suite: fixture.suite, mode: "require-recovery")
         await recovered.sessions.restore(packages: ["sample": fixture.package("1.1.0")])
         #expect(recovered.sessions.pendingDisableIDs.isEmpty)
