@@ -32,6 +32,30 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
         self.credential = credential
     }
 
+    private static let inheritedAuthenticationVariables = [
+        "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN",
+        "CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "CLAUDE_CODE_OAUTH_SCOPES", "ANTHROPIC_BASE_URL",
+        "ANTHROPIC_PROFILE", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
+        "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CONFIG_DIR", "CLAUDE_SECURESTORAGE_CONFIG_DIR",
+    ]
+
+    public static func currentCLIEnvironment(
+        shell: URL = UserShellEnvironment.loginShell(),
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        base: [String: String] = ProcessInfo.processInfo.environment
+    ) async throws -> [String: String] {
+        var environment = base
+        for name in inheritedAuthenticationVariables { environment.removeValue(forKey: name) }
+        guard
+            let captured = await UserShellEnvironment.captureLoginEnvironment(
+                shell: shell, home: home, base: environment)
+        else {
+            throw ClaudeAccountError.rejected(
+                "Could not read the current CLI login from a fresh shell. Try again.")
+        }
+        return captured
+    }
+
     public static func currentCLIAccount(
         environment: [String: String], savedLoginData: Data? = nil
     ) throws -> ClaudeAccount {
@@ -66,7 +90,10 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
             throw ClaudeAccountError.rejected(
                 "CLI account import requires a POSIX shell on this machine.")
         }
-        let result = try await connection.run("\"${SHELL:-/bin/sh}\" -lic env", timeout: 15)
+        let cleanEnvironment = inheritedAuthenticationVariables.map { "-u " + $0 }.joined(
+            separator: " ")
+        let result = try await connection.run(
+            "env " + cleanEnvironment + " \"${SHELL:-/bin/sh}\" -lic env", timeout: 15)
         guard result.succeeded else { throw HerdrCommandError.commandFailed(result.stderrText) }
         let environment = Dictionary(
             result.stdoutText.split(separator: "\n").compactMap { line -> (String, String)? in
@@ -80,8 +107,10 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
         {
             return try currentCLIAccount(environment: environment)
         }
+        let folder =
+            environment["CLAUDE_CONFIG_DIR"] ?? (environment["HOME", default: ""] + "/.claude")
         let saved = try await connection.run(
-            "head -c 65537 \"$HOME/.claude/.credentials.json\"", timeout: 5)
+            "head -c 65537 " + ShellQuote.quote(folder + "/.credentials.json"), timeout: 5)
         return try currentCLIAccount(
             environment: environment, savedLoginData: saved.succeeded ? saved.stdout : nil)
     }

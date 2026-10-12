@@ -6,6 +6,43 @@ import Testing
 @testable import Edith
 
 @Suite struct ClaudeAccountTests {
+    @Test func CLIImportReloadsShellCredentialsWithoutInheritingOldAuthentication() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let startup = root.appendingPathComponent(".zshrc")
+        let base = [
+            "PATH": "/usr/bin:/bin", "ZDOTDIR": root.path,
+            "ANTHROPIC_API_KEY": "synthetic-old-api-key",
+            "CLAUDE_CODE_OAUTH_TOKEN": "synthetic-old-token",
+            "CLAUDE_CONFIG_DIR": root.appendingPathComponent("old-profile").path,
+        ]
+        try Data("export CLAUDE_CODE_OAUTH_TOKEN=synthetic-fresh-token\n".utf8).write(to: startup)
+        let first = try await ClaudeAccount.currentCLIEnvironment(
+            shell: URL(fileURLWithPath: "/bin/zsh"), home: root, base: base)
+        #expect(first["ANTHROPIC_API_KEY"] == nil)
+        #expect(first["CLAUDE_CONFIG_DIR"] == nil)
+        #expect(
+            try ClaudeAccount.currentCLIAccount(environment: first).credential
+                == "synthetic-fresh-token")
+        try Data("export ANTHROPIC_API_KEY=synthetic-new-api-key\n".utf8).write(to: startup)
+        let second = try await ClaudeAccount.currentCLIEnvironment(
+            shell: URL(fileURLWithPath: "/bin/zsh"), home: root, base: base)
+        #expect(second["CLAUDE_CODE_OAUTH_TOKEN"] == nil)
+        #expect(
+            try ClaudeAccount.currentCLIAccount(environment: second).credential
+                == "synthetic-new-api-key")
+        try Data().write(to: startup)
+        let third = try await ClaudeAccount.currentCLIEnvironment(
+            shell: URL(fileURLWithPath: "/bin/zsh"), home: root, base: base)
+        let saved = Data(
+            "{\"claudeAiOauth\":{\"accessToken\":\"synthetic-login-token\",\"subscriptionType\":\"max\"}}"
+                .utf8)
+        let account = try ClaudeAccount.currentCLIAccount(environment: third, savedLoginData: saved)
+        #expect(account.authentication == .browserLogin)
+        #expect(account.loginData == String(data: saved, encoding: .utf8))
+    }
+
     @Test @MainActor func shellEditorPreservesTypedHyphensAndQuotes() throws {
         var value = ""
         let host = NSHostingView(

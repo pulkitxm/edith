@@ -49,9 +49,7 @@ import Observation
             if let machine {
                 account = try await ClaudeAccount.currentCLIAccount(on: machine)
             } else {
-                UserShellEnvironment.shared.enable()
-                await UserShellEnvironment.shared.refreshIfEnabled()
-                let environment = UserShellEnvironment.userEnvironment()
+                let environment = try await ClaudeAccount.currentCLIEnvironment()
                 account = try await Task.detached {
                     try ClaudeAccount.currentCLIAccount(
                         environment: environment,
