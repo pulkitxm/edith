@@ -51,6 +51,8 @@ class BoundedOwnership(watchdog.OwnedProcesses):
     def snapshot(self, pid):
         value = super().snapshot(pid)
         if value is None:
+            if self.sealed_zombie(pid):
+                return None
             try:
                 os.kill(pid, 0)
             except ProcessLookupError:
@@ -58,6 +60,21 @@ class BoundedOwnership(watchdog.OwnedProcesses):
             self.observe_failure(pid, 'live_identity_unavailable')
             raise RuntimeError('Live owned process identity unavailable')
         return value
+
+    def sealed_zombie(self, pid):
+        identity = self.known.get(pid)
+        seal = self.seals.get(pid)
+        if seal is None or (identity is not None and identity[:3] + identity[4:5] != seal):
+            return False
+        try:
+            info = watchdog.ProcessInfo()
+            result = self.library.proc_pidinfo(pid, 3, 1, ctypes.byref(info), ctypes.sizeof(info))
+        except OSError:
+            return False
+        return (type(result) is int and result == ctypes.sizeof(info)
+                and info.status == 5 and info.pid == pid
+                and info.uid == self.uid and info.ruid == self.uid
+                and (pid, info.seconds, info.microseconds, info.pgid) == seal)
 
     def observe_failure(self, pid, kind, current=None):
         key = (pid, kind)
