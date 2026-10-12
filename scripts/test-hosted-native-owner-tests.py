@@ -147,24 +147,114 @@ class OriginalNativeOwnerTests(unittest.TestCase):
         self.assertEqual(runner.original_command('virtualCamera', definitions), [
             'make', 'ci-extension-camera', 'ci-extension-camera-carrier', 'ci-extension-camera-voice'])
 
-    def run_fixture(self, text, process, ownership, sample=None):
+    def run_fixture(self, text, process, ownership, sample=None, selection=None):
         clock = Clock()
+        command = ['make', *runner.TARGETS[selection]] if selection else ['make', 'ci-extension-attention']
         with tempfile.TemporaryDirectory() as fixture:
             output = Path(fixture)
 
             def launch(arguments, **kwargs):
                 self.assertTrue(kwargs['start_new_session'])
-                self.assertEqual(arguments, ['make', 'ci-extension-attention'])
+                self.assertEqual(arguments, command)
                 kwargs['stdout'].write(text.encode())
                 kwargs['stdout'].flush()
                 return process
 
             with patch.object(runner.watchdog, 'owned_crash_reports', return_value=[]):
                 result = runner.run_original(
-                    ['make', 'ci-extension-attention'], output, {}, output, deadline=1,
+                    command, output, {}, output, deadline=1,
                     process_factory=launch, ownership_factory=lambda pid, uid: ownership,
-                    clock=clock.now, sleep=clock.sleep, sample=sample or (lambda *args, **kwargs: None))
+                    clock=clock.now, sleep=clock.sleep, sample=sample or (lambda *args, **kwargs: None),
+                    selection=selection)
             return result, (output / 'tests.log').read_text(), (output / 'processes.jsonl').read_text()
+
+    def database_log(self, method='mutationPreviewNormalizesWithoutExecuting'):
+        return ('◇ Suite DatabaseExecutorTests started.\n'
+                f'◇ Test {method}() started.\n'
+                f'✔ Test {method}() passed after 0.001 seconds.\n'
+                '✔ Suite DatabaseExecutorTests passed after 0.002 seconds.\n'
+                '✔ Test run with 1 test in 1 suite passed after 0.003 seconds.\n')
+
+    def test_database_diagnostics_keep_the_original_manifest_contract(self):
+        definitions = [{'id': 'database', 'testTargets': ['ci-extension-database']}]
+        for owner in runner.DATABASE_DIAGNOSTICS:
+            self.assertEqual(runner.original_command(owner, definitions), ['make', *runner.TARGETS[owner]])
+            for invalid in ([], definitions * 2,
+                            [{'id': owner, 'testTargets': runner.TARGETS[owner]}],
+                            [{'id': 'database', 'testTargets': runner.TARGETS[owner]}]):
+                with self.subTest(owner=owner, invalid=invalid), self.assertRaises(ValueError):
+                    runner.original_command(owner, invalid)
+
+    def test_database_recipes_have_fixed_filters_jobs_and_resource_profiles(self):
+        root = Path(__file__).parent.parent
+        source = (root / 'Makefile').read_text()
+        gate_spec = importlib.util.spec_from_file_location('database_gate', root / 'scripts/make-resource-gate.py')
+        gate = importlib.util.module_from_spec(gate_spec)
+        gate_spec.loader.exec_module(gate)
+        for suffix, selected in [('mutation', 'mutationPreviewNormalizesWithoutExecuting'),
+                                 ('executor', 'DatabaseExecutorTests')]:
+            target = 'ci-extension-database-' + suffix
+            recipe = re.search(r'^' + target + r':\n((?:\t.*\n)+)', source, re.MULTILINE).group(1)
+            self.assertEqual(shlex.split(recipe), [
+                'env', '-u', 'EDITH_DATABASE_POSTGRESQL_HOST', 'swift', 'test', '--package-path',
+                'Extensions/database/DatabaseEngine', '--no-parallel', '--jobs', '1', '--filter', selected])
+            self.assertEqual(gate.profile_for(target), gate.PROFILES['swift-test'])
+        original = re.search(r'^ci-extension-database:\n((?:\t.*\n)+)', source, re.MULTILINE).group(1)
+        self.assertEqual(original, '\tswift format lint --strict --recursive Extensions/database\n'
+                         '\tenv -u EDITH_DATABASE_POSTGRESQL_HOST swift test --package-path Extensions/database/DatabaseEngine --no-parallel --jobs $(EXTENSION_SWIFT_JOBS)\n'
+                         "\tcd Extensions/database && env -u EDITH_DATABASE_POSTGRESQL_HOST EDITH_DATABASE_RELATION_FILTERS=0 node test.mjs $(if $(FILTER),'$(FILTER)')\n")
+
+    def test_database_mutation_requires_its_exact_started_passed_and_summary_rows(self):
+        text = self.database_log()
+        self.assertTrue(runner.database_completed(text, 'database-mutation'))
+        invalid = [
+            text.replace('mutationPreviewNormalizesWithoutExecuting', 'differentMethod'),
+            text.replace('DatabaseExecutorTests', 'DifferentSuite'),
+            text.replace('1 test in 1 suite', '0 tests in 0 suites'),
+            text.replace('◇ Test mutationPreviewNormalizesWithoutExecuting() started.\n', ''),
+            text.replace('✔ Suite DatabaseExecutorTests passed after 0.002 seconds.\n', ''),
+            text.replace('◇ Suite DatabaseExecutorTests started.\n', ''),
+            text + '✘ Test differentMethod() failed after 0.001 seconds.\n',
+            text.replace('1 test in 1 suite', '2 tests in 1 suite'),
+            text.replace('✔ Test run', 'synthetic message: ✔ Test run'),
+        ]
+        for value in invalid:
+            with self.subTest(text=value):
+                self.assertFalse(runner.database_completed(value, 'database-mutation'))
+        with self.assertRaises(ValueError):
+            runner.database_completed(text, 'database --filter arbitrary')
+
+    def test_database_suite_requires_selected_suite_completion_not_an_unrelated_pass(self):
+        text = self.database_log('mutationPreviewRejectsAPlanForADifferentRequest')
+        self.assertTrue(runner.database_completed(text, 'database-executor'))
+        parameterized = text.replace('() passed after', '(value:) with 2 test cases passed after')
+        self.assertTrue(runner.database_completed(parameterized, 'database-executor'))
+        for value in [text.replace('✔ Suite DatabaseExecutorTests passed after 0.002 seconds.', ''),
+                      text.replace('✔ Test mutationPreviewRejectsAPlanForADifferentRequest() passed after 0.001 seconds.', ''),
+                      text.replace('◇ Test mutationPreviewRejectsAPlanForADifferentRequest() started.', ''),
+                      text.replace('DatabaseExecutorTests', 'UnrelatedTests')]:
+            self.assertFalse(runner.database_completed(value, 'database-executor'))
+
+    def test_database_runtime_zero_match_and_faked_rows_fail_closed_with_clean_ownership(self):
+        for text in ['Test run with 0 tests passed.\n',
+                     'Test run with 1 test passed.\n',
+                     self.database_log('unrelatedMethod')]:
+            process = Process(0)
+            result, _, _ = self.run_fixture(text, process, Ownership(process), selection='database-mutation')
+            self.assertFalse(result['passed'])
+            self.assertFalse(result['testsCompleted'])
+            self.assertEqual(result['exitCode'], 0)
+            self.assertEqual(result['cleanup']['remainingOwnedProcesses'], 0)
+        process = Process(0)
+        result, _, _ = self.run_fixture(self.database_log(), process, Ownership(process), selection='database-mutation')
+        self.assertTrue(result['passed'])
+        self.assertTrue(result['testsCompleted'])
+
+    def test_unknown_database_selection_rejects_before_any_process_launch(self):
+        with self.assertRaises(ValueError):
+            runner.run_original([], Path('/synthetic'), {}, Path('/synthetic'),
+                                selection='database-arbitrary',
+                                process_factory=lambda *args, **kwargs: self.fail('Unexpected process launch'))
 
     def test_success_requires_real_nonempty_completion_and_natural_retirement(self):
         process = Process(0)

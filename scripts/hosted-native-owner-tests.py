@@ -27,7 +27,10 @@ TARGETS = {
     'virtualCamera': [
         'ci-extension-camera', 'ci-extension-camera-carrier', 'ci-extension-camera-voice'],
     'feature-models': ['ci-extension-support', 'ci-extension-docs'],
+    'database-mutation': ['ci-extension-database-mutation'],
+    'database-executor': ['ci-extension-database-executor'],
 }
+DATABASE_DIAGNOSTICS = {'database-mutation', 'database-executor'}
 TEST_DEADLINE = 2400
 LOG_BOUND = 16_777_216
 
@@ -220,10 +223,44 @@ def admit(environment, source):
 def original_command(owner, definitions):
     targets = TARGETS[owner]
     if owner != 'feature-models':
-        selected = [definition for definition in definitions if definition.get('id') == owner]
-        if len(selected) != 1 or selected[0].get('testTargets') != targets:
+        original_owner = 'database' if owner in DATABASE_DIAGNOSTICS else owner
+        original_targets = ['ci-extension-database'] if owner in DATABASE_DIAGNOSTICS else targets
+        selected = [definition for definition in definitions if definition.get('id') == original_owner]
+        if len(selected) != 1 or selected[0].get('testTargets') != original_targets:
             raise ValueError('Original owner test target contract changed')
     return ['make', *targets]
+
+
+def database_completed(text, owner):
+    if owner not in DATABASE_DIAGNOSTICS:
+        raise ValueError('Unknown database diagnostic selection')
+    duration = r'[0-9]+(?:\.[0-9]+)?'
+    start = re.search(r'^◇ Suite DatabaseExecutorTests started\.$', text, re.MULTILINE)
+    if start is None:
+        return False
+    end = re.search(
+        r'^✔ Suite DatabaseExecutorTests passed after ' + duration + r' seconds?\.$',
+        text[start.end():], re.MULTILINE)
+    if end is None:
+        return False
+    suite = text[start.end():start.end() + end.start()]
+    if re.search(r'^[✘✗]|^.*(?:Issue recorded|failed after)', text, re.MULTILINE):
+        return False
+    summary = re.search(
+        r'^✔ Test run with ([1-9][0-9]*) tests? in [1-9][0-9]* suites? passed after '
+        + duration + r' seconds?\.$', text, re.MULTILINE)
+    if summary is None or summary.start() <= start.end() + end.end():
+        return False
+    if owner == 'database-mutation':
+        name = 'mutationPreviewNormalizesWithoutExecuting'
+        starts = re.findall(r'^◇ Test ([A-Za-z0-9_]+)\(\) started\.$', suite, re.MULTILINE)
+        passes = re.findall(
+            r'^✔ Test ([A-Za-z0-9_]+)\(\) passed after ' + duration + r' seconds?\.$',
+            suite, re.MULTILINE)
+        return starts == [name] and passes == [name] and int(summary.group(1)) == 1
+    return bool(re.search(r'^◇ Test .+ started\.$', suite, re.MULTILINE)
+                and re.search(r'^✔ Test .+ passed after ' + duration + r' seconds?\.$',
+                              suite, re.MULTILINE))
 
 
 def testing_process(path):
@@ -262,7 +299,9 @@ def retire(process, ownership, clock, sleep):
 
 def run_original(arguments, root, environment, output, deadline=TEST_DEADLINE,
                  process_factory=subprocess.Popen, ownership_factory=BoundedOwnership,
-                 clock=time.monotonic, sleep=time.sleep, sample=subprocess.run):
+                 clock=time.monotonic, sleep=time.sleep, sample=subprocess.run, selection=None):
+    if selection is not None and selection not in DATABASE_DIAGNOSTICS:
+        raise ValueError('Unknown database diagnostic selection')
     started = clock()
     wall_start = time.time()
     log_path = output / 'tests.log'
@@ -329,6 +368,8 @@ def run_original(arguments, root, environment, output, deadline=TEST_DEADLINE,
     completed = bool(re.search(
         r'Test run with [1-9][0-9]* tests? (?:in [1-9][0-9]* suites? )?passed|Executed [1-9][0-9]* tests?, with 0 failures',
         text))
+    if selection is not None:
+        completed = completed and database_completed(text, selection)
     code = 124 if timed_out else 1 if overflow or failure else process.returncode
     observed_testing = any(testing_process(item[3]) for item in observed)
     passed = (code == 0 and completed and observed_testing and cleanup['naturalSurvivorCount'] == 0
@@ -388,7 +429,9 @@ def main():
         }
         environment['DEVELOPER_DIR'] = subprocess.check_output(
             ['xcode-select', '-p'], text=True, timeout=30).strip()
-        outcome['result'] = run_original(command, root, environment, output)
+        outcome['result'] = run_original(
+            command, root, environment, output,
+            selection=owner if owner in DATABASE_DIAGNOSTICS else None)
         outcome['passed'] = outcome['result']['passed']
     except Exception as error:
         outcome['failure'] = str(error)
