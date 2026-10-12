@@ -660,3 +660,37 @@ test("all extension pipeline ABI preflights validate committed source without ge
     frozen.steps.findIndex((step) => step.run === "make ci-host host"),
   );
 });
+
+test("shipping tests exclude unrelated native models while all-extension validation retains them", () => {
+  const checks = workflow.jobs.tests;
+  expect(checks.needs).toContain("plan");
+  const shipping = checks.steps.find(
+    (step) => step.name === "Validate the shipping extension and marketplace",
+  );
+  expect(shipping.if).toBe("needs.plan.outputs.mode != 'validation'");
+  expect(shipping.run).toBe(
+    "make ci-marketplace-runtime ci-extension-keep-awake ci-comments",
+  );
+  const allModels = checks.steps.find(
+    (step) =>
+      step.name ===
+      "Run make ci-marketplace-runtime ci-extension-support ci-extension-docs ci-extension-commands ci-comments",
+  );
+  expect(allModels.if).toBe("needs.plan.outputs.mode == 'validation'");
+  expect(allModels.run).toContain(
+    "ci-extension-support ci-extension-docs ci-extension-commands",
+  );
+  const cache = checks.steps.find(
+    (step) =>
+      step.name === "Verify native cache integrity and private SDK composition",
+  );
+  expect(cache.if).toBe(allModels.if);
+  expect(
+    build.steps.find(
+      (step) => step.name === "Exercise this worker against the frozen host",
+    ).run,
+  ).toContain("matrix.id");
+  expect(frozen.steps.some((step) => step.run === "make ci-host host")).toBe(
+    true,
+  );
+});

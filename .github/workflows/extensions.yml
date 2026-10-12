@@ -166,6 +166,7 @@ jobs:
       - name: Verify lifecycle tools and their frozen index
         run: python3 scripts/package_extension_lifecycle_tools.py --verify --host local/minimal-host/Edith.app --output local/extension-tools
       - name: Verify native cache integrity and private SDK composition
+        if: "needs.plan.outputs.mode == 'validation'"
         timeout-minutes: 20
         env:
           EXTENSION_SUPPORT_NATIVE_TESTS: "1"
@@ -174,7 +175,12 @@ jobs:
           command -v zig >/dev/null 2>&1 || brew install zig
           test "$(zig version)" = "0.16.0"
           bun test scripts/extension-ghostty-native.test.js scripts/build-extension-support.native.test.js
-      - run: make ci-marketplace-runtime ci-extension-support ci-extension-docs ci-extension-commands ci-comments
+      - name: Run make ci-marketplace-runtime ci-extension-support ci-extension-docs ci-extension-commands ci-comments
+        if: "needs.plan.outputs.mode == 'validation'"
+        run: make ci-marketplace-runtime ci-extension-support ci-extension-docs ci-extension-commands ci-comments
+      - name: Validate the shipping extension and marketplace
+        if: "needs.plan.outputs.mode != 'validation'"
+        run: make ci-marketplace-runtime ci-extension-keep-awake ci-comments
       - run: |
           mkdir -p Packages/ExtensionMarketplace/.build/debug
           cp local/extension-tools/MarketplaceHarness Packages/ExtensionMarketplace/.build/debug/MarketplaceHarness
@@ -182,6 +188,7 @@ jobs:
       - run: bun scripts/test-extension-marketplace.mjs
     needs:
       - frozen-host
+      - plan
   plan:
     runs-on: ubuntu-latest
     outputs:

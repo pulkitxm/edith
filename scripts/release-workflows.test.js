@@ -157,44 +157,42 @@ test("automated commits do not re-run CI", () => {
   expect(ciWorkflow).toContain("github.event_name != 'push'");
 });
 
-test("publication depends directly on every required check in the current run", () => {
-  expect([...publish.needs].sort()).toEqual([
-    "checks",
-    "companion",
-    "dmg",
-    "music-player",
-    "promo-video",
-    "swift-build",
-    "swift-test",
-    "version",
-  ]);
+test("publication requires the host build and verified shipping catalog while unrelated checks remain visible", () => {
+  expect([...publish.needs].sort()).toEqual(["dmg", "version"]);
   expect(publish.if).toContain("!cancelled()");
   expect(condition(publish.if, publicationContext())).toBe(true);
   for (const name of publish.needs) {
-    for (const result of ["failure", "cancelled"]) {
+    for (const result of ["failure", "cancelled", "skipped"]) {
       const context = publicationContext();
       context.needs[name].result = result;
       expect(condition(publish.if, context)).toBe(false);
     }
   }
-  for (const name of ["version", "dmg", "checks"]) {
-    const context = publicationContext();
-    context.needs[name].result = "skipped";
-    expect(condition(publish.if, context)).toBe(false);
-  }
-  const optional = [
+  for (const name of [
+    "checks",
     "swift-test",
     "companion",
     "music-player",
     "promo-video",
     "swift-build",
-  ];
-  for (let mask = 0; mask < 2 ** optional.length; mask += 1) {
+  ]) {
+    expect(workflow.jobs[name]).toBeDefined();
     const context = publicationContext();
-    optional.forEach((name, index) => {
-      context.needs[name].result = mask & (1 << index) ? "skipped" : "success";
-    });
+    context.needs[name] = { result: "failure" };
     expect(condition(publish.if, context)).toBe(true);
+  }
+  const steps = publish.steps;
+  const readiness = steps.findIndex(
+    (step) => step.name === "Wait for compatible extension releases",
+  );
+  expect(readiness).toBeGreaterThan(-1);
+  expect(steps[readiness].run).toContain(
+    "extension-release-ready.mjs release-source",
+  );
+  for (const name of ["Commit and tag the release", "Publish the release"]) {
+    expect(readiness).toBeLessThan(
+      steps.findIndex((step) => step.name === name),
+    );
   }
   const superseded = publicationContext();
   superseded.needs.dmg.outputs.superseded = "true";
