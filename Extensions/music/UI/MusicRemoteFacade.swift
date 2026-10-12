@@ -33,6 +33,8 @@ import Observation
     @ObservationIgnored private var levelGeneration: UInt64 = 0
     @ObservationIgnored private var readTask: Task<Void, Never>?
     @ObservationIgnored private var tasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var ownedTasks: [UUID: Task<Void, Never>] = [:]
+    private var suspended = false
     private var generation: UInt64 = 0
     private var query = ""
     private var lifecycle: UInt64 = 0
@@ -48,6 +50,7 @@ import Observation
     var progress: Double { duration > 0 ? elapsed / duration : 0 }
 
     func configure(_ client: ExtensionEngineClient) {
+        guard !suspended else { return }
         clients[ObjectIdentifier(client)] = client
         invoke = { [weak self] operation, payload in
             guard let client = self?.clients.values.first else {
@@ -65,10 +68,43 @@ import Observation
     }
 
     func configure(invoke: @escaping (String, Data) async throws -> Data) {
+        guard !suspended else { return }
         stop(); self.invoke = invoke; installLevelDemand()
     }
 
     func start() { rescan() }
+
+    private func ownedTask(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never>
+    {
+        let id = UUID()
+        let task = Task { [weak self] in
+            defer { self?.ownedTasks[id] = nil }
+            guard !Task.isCancelled else { return }
+            await operation()
+        }
+        ownedTasks[id] = task
+        return task
+    }
+
+    func suspendCommands() {
+        suspended = true
+        generation &+= 1; lifecycle &+= 1; levelGeneration &+= 1
+        EmbeddedPlaybackLevel.shared.onViewersChange = nil
+        for task in ownedTasks.values { task.cancel() }
+    }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        let owned = Array(ownedTasks.values)
+        for task in owned { await task.value }
+    }
+
+    func stopAndWait() async {
+        suspendCommands()
+        stop()
+        let owned = Array(ownedTasks.values)
+        for task in owned { await task.value }
+    }
 
     func stop() {
         EmbeddedMusicBrowserSession.stopAll()
@@ -79,7 +115,7 @@ import Observation
         levelGeneration &+= 1; levelTask?.cancel(); levelTask = nil
         EmbeddedPlaybackLevel.shared.onViewersChange = nil
         EmbeddedPlaybackLevel.shared.reset()
-        for task in tasks.values { task.cancel() }
+        for task in ownedTasks.values { task.cancel() }
         tasks.removeAll()
         for client in clients.values { client.invalidate() }
         clients.removeAll(); invoke = nil
@@ -103,14 +139,14 @@ import Observation
     }
 
     private func refreshLevels() {
-        guard invoke != nil, EmbeddedPlaybackLevel.shared.viewers > 0 else {
+        guard !suspended, invoke != nil, EmbeddedPlaybackLevel.shared.viewers > 0 else {
             levelGeneration &+= 1; levelTask?.cancel(); levelTask = nil
             return
         }
         guard levelTask == nil else { return }
         levelGeneration &+= 1
         let token = levelGeneration
-        levelTask = Task { [weak self] in
+        levelTask = ownedTask { [weak self] in
             defer { if self?.levelGeneration == token { self?.levelTask = nil } }
             while !Task.isCancelled, let self, self.levelGeneration == token,
                 EmbeddedPlaybackLevel.shared.viewers > 0
@@ -134,13 +170,13 @@ import Observation
     }
 
     func rescan(force: Bool = false) {
-        guard let invoke else { return }
+        guard !suspended, let invoke else { return }
         let request = EmbeddedMusicUIQuery(path: folderPath, search: query, cursor: cursor)
         if !force, readTask != nil, readQuery == request { return }
         readTask?.cancel(); generation &+= 1
         let token = generation
         readQuery = request
-        readTask = Task { [weak self] in
+        readTask = ownedTask { [weak self] in
             defer {
                 if let self, self.generation == token { self.readTask = nil; self.readQuery = nil }
             }
@@ -219,7 +255,7 @@ import Observation
     }
 
     func dataRequest(_ operation: String, payload: Data = Data("{}".utf8)) async throws -> Data {
-        guard let invoke else { throw ExtensionPeerError.unavailable }
+        guard !suspended, let invoke else { throw ExtensionPeerError.unavailable }
         let token = lifecycle
         let result = try await invoke(operation, payload)
         try Task.checkCancellation()
@@ -228,7 +264,7 @@ import Observation
     }
 
     func request(_ operation: String, action: EmbeddedMusicUIAction) async throws -> Data {
-        guard let invoke else { throw ExtensionPeerError.unavailable }
+        guard !suspended, let invoke else { throw ExtensionPeerError.unavailable }
         try action.validate()
         let token = lifecycle
         let result = try await invoke(operation, JSONEncoder().encode(action))
@@ -241,9 +277,9 @@ import Observation
         _ kind: EmbeddedMusicUIActionKind, path: String = "", target: String = "",
         value: Double? = nil
     ) {
-        guard invoke != nil else { return }
+        guard !suspended, invoke != nil else { return }
         let id = UUID()
-        tasks[id] = Task { [weak self] in
+        tasks[id] = ownedTask { [weak self] in
             guard let self else { return }
             defer { self.tasks[id] = nil }
             do {
@@ -259,12 +295,14 @@ import Observation
 
     func streaming(_ action: String) { spotify(["action": action]) }
     func spotify(_ command: [String: Any]) {
-        guard let invoke, let payload = try? JSONSerialization.data(withJSONObject: command) else {
+        guard !suspended, let invoke,
+            let payload = try? JSONSerialization.data(withJSONObject: command)
+        else {
             return
         }
         let id = UUID()
         let token = lifecycle
-        tasks[id] = Task { [weak self] in
+        tasks[id] = ownedTask { [weak self] in
             defer { self?.tasks[id] = nil }
             do {
                 _ = try await invoke("music.ui.spotify", payload)
@@ -278,7 +316,7 @@ import Observation
         }
     }
     func streamingArtwork(_ url: URL) async throws -> Data {
-        guard let invoke else { throw ExtensionPeerError.unavailable }
+        guard !suspended, let invoke else { throw ExtensionPeerError.unavailable }
         let token = lifecycle
         let data = try await invoke("music.ui.streamingArtwork", JSONEncoder().encode(url))
         try Task.checkCancellation()
@@ -287,7 +325,7 @@ import Observation
     }
 
     func profiles() async throws -> [EmbeddedChromeProfile] {
-        guard let invoke else { throw ExtensionPeerError.unavailable }
+        guard !suspended, let invoke else { throw ExtensionPeerError.unavailable }
         let token = lifecycle
         let data = try await invoke("music.ui.profiles", Data("{}".utf8))
         try Task.checkCancellation()

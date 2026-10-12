@@ -95,10 +95,27 @@ struct StudioUIResource: Codable, Equatable, Sendable {
         return Data("{}".utf8)
     }
 
+    func suspend() {
+        stopped = true
+        timer?.cancel()
+    }
+
+    func suspendAndWait() async {
+        suspend()
+        let owned = timer
+        await owned?.value
+        timer = nil
+    }
+
+    func shutdownAndWait() async {
+        await suspendAndWait()
+        shutdown()
+    }
+
     func shutdown() {
         stopped = true
         timer?.cancel()
-        timer = nil
+        for entry in Array(entries.values) { remove(entry.handle) }
         entries.removeAll()
         if let directory { try? FileManager.default.removeItem(at: directory) }
         directory = nil
@@ -116,22 +133,24 @@ struct StudioUIResource: Codable, Equatable, Sendable {
                 at: root, withIntermediateDirectories: false,
                 attributes: [.posixPermissions: 0o700])
             directory = root
-            timer = Task { [weak self] in
-                while !Task.isCancelled {
-                    do { try await Task.sleep(for: .seconds(10)) } catch { return }
-                    self?.expire()
-                }
-            }
         }
         guard let directory else { throw ExtensionPeerError.unavailable }
         let handle = StudioUIResource(token: UUID(), length: length)
         let url = directory.appendingPathComponent(handle.token.uuidString)
         guard
             FileManager.default.createFile(
-                atPath: url.path, contents: Data(),
-                attributes: [.posixPermissions: 0o600])
+                atPath: url.path, contents: Data(), attributes: [.posixPermissions: 0o600])
         else { throw ExtensionPeerError.unavailable }
         entries[handle.token] = Entry(handle: handle, url: url, written: 0, accessed: .now)
+        if timer == nil {
+            timer = Task { [weak self] in
+                while !Task.isCancelled {
+                    do { try await Task.sleep(for: .seconds(10)) } catch { return }
+                    guard let self, !self.stopped else { return }
+                    self.expire()
+                }
+            }
+        }
         return handle
     }
 

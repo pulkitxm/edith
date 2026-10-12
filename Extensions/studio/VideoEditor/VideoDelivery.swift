@@ -362,11 +362,16 @@ private final class VideoWriterReadiness: @unchecked Sendable {
     }
 }
 
+struct VideoDeliveryNativeOutput: Sendable {
+    let resolve: @MainActor @Sendable () throws -> URL
+}
+
 extension VideoRenderPipeline {
     func export(
         to destination: URL, settings: VideoDeliverySettings = .init(), overwrite: Bool = false,
         range: VideoDeliveryFrameRange? = nil,
         includeAudio: Bool = true,
+        nativeOutput: VideoDeliveryNativeOutput? = nil,
         progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws -> VideoDeliveryReport {
         var settings = settings
@@ -408,11 +413,24 @@ extension VideoRenderPipeline {
         }
         let selection = try VideoDeliverySelection(
             range, duration: composition.duration, frameDuration: videoComposition.frameDuration)
-        let temporary = destination.deletingLastPathComponent().appendingPathComponent(
-            ".\(UUID().uuidString).partial.\(settings.codec.fileExtension)")
-        defer { try? FileManager.default.removeItem(at: temporary) }
+        let temporary: URL
+        if nativeOutput != nil {
+            guard !overwrite else { throw VideoDeliveryError.destinationExists }
+            temporary = destination
+        } else {
+            temporary = destination.deletingLastPathComponent().appendingPathComponent(
+                ".\(UUID().uuidString).partial.\(settings.codec.fileExtension)")
+        }
+        defer {
+            if nativeOutput == nil { try? FileManager.default.removeItem(at: temporary) }
+        }
         let reader = try AVAssetReader(asset: composition)
         reader.timeRange = selection.timeRange
+        if let nativeOutput {
+            guard try await nativeOutput.resolve() == temporary else {
+                throw VideoDeliveryError.invalidSettings("The native export stage does not match.")
+            }
+        }
         let writer = try AVAssetWriter(
             outputURL: temporary, fileType: settings.codec.isMaster ? .mov : .mp4)
         writer.movieTimeScale =
@@ -423,7 +441,10 @@ extension VideoRenderPipeline {
             videoSettings: [
                 kCVPixelBufferPixelFormatTypeKey as String:
                     settings.codec.highPrecision
-                    ? kCVPixelFormatType_64RGBAHalf : kCVPixelFormatType_32BGRA,
+                    ? kCVPixelFormatType_64RGBAHalf
+                    : (settings.codec == .h264 && color == .rec709
+                        ? kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+                        : kCVPixelFormatType_32BGRA),
                 AVVideoAllowWideColorKey: color == .displayP3,
             ])
         let deliveryComposition = videoComposition.mutableCopy() as! AVMutableVideoComposition
@@ -516,6 +537,10 @@ extension VideoRenderPipeline {
                     "Export verification did not match the project canvas or frame count.")
             }
             try Task.checkCancellation()
+            if nativeOutput != nil {
+                progress(1)
+                return report
+            }
             if overwrite {
                 guard rename(temporary.path, destination.path) == 0 else {
                     throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)

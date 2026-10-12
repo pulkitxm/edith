@@ -20,28 +20,44 @@ struct EmbeddedMusicUISettings: Codable, Sendable {
     typealias Invoke = @MainActor (String, Data) async throws -> Data
     private let expectedVersion: String?
     @ObservationIgnored private var invoke: Invoke?
+    @ObservationIgnored private let applyReadback: (EmbeddedMusicUIPreferences) -> Void
+    @ObservationIgnored private let didSave: () -> Void
     @ObservationIgnored private var readTask: Task<Void, Never>?
     @ObservationIgnored private var writeTask: Task<Void, Never>?
+    @ObservationIgnored private var ownedTasks: [UUID: Task<Void, Never>] = [:]
     private var lifecycle: UInt64 = 0
     private var revision: UInt64 = 0
     private var pending: [EmbeddedMusicUIActionKind: Double] = [:]
     private var order: [EmbeddedMusicUIActionKind] = []
     private var requested: [EmbeddedMusicUIActionKind: Double] = [:]
+    private var activeWrite: (kind: EmbeddedMusicUIActionKind, value: Double)?
     private(set) var preferences = EmbeddedMusicUIPreferences()
     private(set) var loaded = false
     private(set) var closed = false
     private(set) var error: String?
 
-    init(expectedVersion: String? = nil, invoke: @escaping Invoke) {
+    init(
+        expectedVersion: String? = nil,
+        applyReadback: ((EmbeddedMusicUIPreferences) -> Void)? = nil,
+        didSave: (() -> Void)? = nil,
+        invoke: @escaping Invoke
+    ) {
         self.expectedVersion = expectedVersion; self.invoke = invoke
+        self.applyReadback = applyReadback ?? { EmbeddedMusicRemote.shared.applyPreferences($0) }
+        self.didSave = didSave ?? { EmbeddedMusicRemote.shared.rescan(force: true) }
     }
 
     func refresh() async {
         guard !closed, writeTask == nil, let invoke else { return }
+        if !pending.isEmpty {
+            let task = startWrite()
+            await task.value
+            return
+        }
         revision &+= 1; readTask?.cancel()
         let token = lifecycle
         let currentRevision = revision
-        let task = Task { [weak self] in
+        let task = ownedTask { [weak self] in
             guard let self else { return }
             do {
                 let value = try await read(invoke)
@@ -92,17 +108,64 @@ struct EmbeddedMusicUISettings: Codable, Sendable {
         if pending[kind] == nil { order.append(kind) }
         pending[kind] = value; requested[kind] = value
         guard writeTask == nil else { return }
+        startWrite()
+    }
+
+    @discardableResult private func startWrite() -> Task<Void, Never> {
         let token = lifecycle
-        writeTask = Task { [weak self] in
+        let task = ownedTask { [weak self] in
             guard let self else { return }; await self.write(token: token)
         }
+        writeTask = task
+        return task
+    }
+
+    func suspendCommands() {
+        lifecycle &+= 1; revision &+= 1; closed = true
+        for task in ownedTasks.values { task.cancel() }
+        readTask = nil; writeTask = nil
+    }
+
+    func prepareToClose() async throws {
+        while let writeTask {
+            await writeTask.value
+            try Task.checkCancellation()
+        }
+        guard pending.isEmpty, requested.isEmpty, activeWrite == nil else {
+            throw ExtensionPeerError.rejected(error ?? "Music settings still have pending changes.")
+        }
+        await suspendCommandsAndWait()
+    }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        let tasks = Array(ownedTasks.values)
+        for task in tasks { await task.value }
     }
 
     func stop() {
-        lifecycle &+= 1; revision &+= 1; closed = true
-        readTask?.cancel(); readTask = nil; writeTask?.cancel(); writeTask = nil
-        invoke = nil; pending = [:]; requested = [:]; order = []
+        suspendCommands()
+        invoke = nil
+        pending = [:]; requested = [:]; order = []; activeWrite = nil
         preferences = EmbeddedMusicUIPreferences(); loaded = false; error = nil
+    }
+
+    func stopAndWait() async {
+        stop()
+        let tasks = Array(ownedTasks.values)
+        for task in tasks { await task.value }
+    }
+
+    private func ownedTask(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never>
+    {
+        let id = UUID()
+        let task = Task { [weak self] in
+            defer { self?.ownedTasks[id] = nil }
+            guard !Task.isCancelled else { return }
+            await operation()
+        }
+        ownedTasks[id] = task
+        return task
     }
 
     private func write(token: UInt64) async {
@@ -114,6 +177,7 @@ struct EmbeddedMusicUISettings: Codable, Sendable {
                 guard lifecycle == token, !closed else { return }
                 let kind = order.removeFirst()
                 guard let value = pending.removeValue(forKey: kind) else { continue }
+                activeWrite = (kind, value)
                 _ = try await invoke(
                     "music.ui.action",
                     JSONEncoder().encode(EmbeddedMusicUIAction(kind: kind, value: value)))
@@ -124,14 +188,21 @@ struct EmbeddedMusicUISettings: Codable, Sendable {
                 guard lifecycle == token, !closed else { return }
                 if revision == currentRevision {
                     apply(settings)
-                    EmbeddedMusicRemote.shared.rescan(force: true)
+                    didSave()
                     if pending[kind] == nil { requested[kind] = nil }
                 }
+                activeWrite = nil
             }
             requested = [:]
         } catch {
             guard !Task.isCancelled, lifecycle == token, !closed else { return }
-            pending = [:]; requested = [:]; order = []; self.error = error.localizedDescription
+            if let activeWrite, pending[activeWrite.kind] == nil {
+                pending[activeWrite.kind] = activeWrite.value
+                order.insert(activeWrite.kind, at: 0)
+            }
+            activeWrite = nil
+            requested = [:]
+            self.error = error.localizedDescription
         }
     }
 
@@ -146,6 +217,6 @@ struct EmbeddedMusicUISettings: Codable, Sendable {
 
     private func apply(_ value: EmbeddedMusicUISettings) {
         preferences = value.preferences; loaded = true; error = nil
-        EmbeddedMusicRemote.shared.applyPreferences(value.preferences)
+        applyReadback(value.preferences)
     }
 }

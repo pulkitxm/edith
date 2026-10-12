@@ -372,10 +372,20 @@ import Foundation
         return try snapshot(session, resources: resources)
     }
 
+    func suspend() {
+        stopped = true
+        timer?.cancel()
+        for session in sessions.values { session.cancelFrames() }
+    }
+
     func stopAndWait() async {
-        stopped = true; timer?.cancel(); timer = nil
-        let owned = Array(sessions.values); sessions.removeAll()
-        for session in owned { session.cancelFrames(); await session.model.stopAndWait() }
+        suspend()
+        let clock = timer
+        let owned = Array(sessions.values)
+        for session in owned { await session.model.stopAndWait() }
+        await clock?.value
+        timer = nil
+        sessions.removeAll()
     }
 
     private func snapshot(_ session: Session, resources: StudioUIResources) throws -> Data {
@@ -402,7 +412,7 @@ import Foundation
         timer = Task { [weak self] in
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .seconds(10)) } catch { return }
-                guard let self else { return }
+                guard let self, !self.stopped else { return }
                 for (id, session) in self.sessions
                 where session.accessed.duration(to: .now) >= .seconds(60) {
                     self.sessions[id] = nil; session.cancelFrames();

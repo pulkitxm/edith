@@ -15,21 +15,6 @@ enum StudioUIOperationContext {
 
 @MainActor final class StudioUILongOperations {
     @MainActor private final class Attempt {}
-    @MainActor private final class ProgressSink {
-        private weak var owner: StudioUILongOperations?
-        private let token: UUID
-        private let attempt: Attempt
-
-        init(owner: StudioUILongOperations, token: UUID, attempt: Attempt) {
-            self.owner = owner
-            self.token = token
-            self.attempt = attempt
-        }
-
-        nonisolated func report(_ fraction: Double) {
-            Task { @MainActor [self] in owner?.progress(token, attempt: attempt, fraction) }
-        }
-    }
     var onChange: ((StudioUIOperationState) -> Void)?
     private var cancelled: [UUID: ContinuousClock.Instant] = [:]
 
@@ -87,24 +72,34 @@ enum StudioUIOperationContext {
             token: token, phase: "running", progress: 0,
             result: nil, failure: nil)
         let attempt = Attempt()
-        let sink = ProgressSink(owner: self, token: token, attempt: attempt)
-        let progress: @Sendable (Double) -> Void = { sink.report($0) }
+        let updates = AsyncStream.makeStream(of: Double.self, bufferingPolicy: .bufferingNewest(1))
+        let progress: @Sendable (Double) -> Void = { updates.continuation.yield($0) }
         let task = Task { [weak self] in
+            let owner = self
+            async let reporting: Void = Self.reportProgress(
+                updates.stream, owner: owner, token: token, attempt: attempt)
+            let final: StudioUIOperationState
             do {
                 let result = try await work(progress)
                 try Task.checkCancellation()
                 guard result.count <= ExtensionEngineWire.maximumPayloadBytes else {
                     throw ExtensionPeerError.invalidRequest
                 }
-                self?.finish(
-                    token, attempt: attempt, phase: "completed", result: result, failure: nil)
+                final = StudioUIOperationState(
+                    token: token, phase: "completed", progress: 1, result: result, failure: nil)
             } catch is CancellationError {
-                self?.finish(token, attempt: attempt, phase: "cancelled", result: nil, failure: nil)
+                final = StudioUIOperationState(
+                    token: token, phase: "cancelled", progress: 0, result: nil, failure: nil)
             } catch {
-                self?.finish(
-                    token, attempt: attempt, phase: "failed", result: nil,
+                final = StudioUIOperationState(
+                    token: token, phase: "failed", progress: 0, result: nil,
                     failure: error.localizedDescription)
             }
+            updates.continuation.finish()
+            await reporting
+            owner?.finish(
+                token, attempt: attempt, phase: final.phase, result: final.result,
+                failure: final.failure)
         }
         entries[token] = Entry(
             attempt: attempt, task: task, state: state, retained: retained, started: .now,
@@ -113,7 +108,7 @@ enum StudioUIOperationContext {
             timer = Task { [weak self] in
                 while !Task.isCancelled {
                     do { try await Task.sleep(for: .seconds(10)) } catch { return }
-                    guard let self else { return }
+                    guard let self, !self.stopped else { return }
                     self.pruneCancelled()
                     for (token, entry) in self.entries
                     where (!entry.retained && entry.accessed.duration(to: .now) >= .seconds(60))
@@ -168,14 +163,33 @@ enum StudioUIOperationContext {
         cancelled = cancelled.filter { $0.value.duration(to: .now) < .seconds(60) }
     }
 
-    func stopAndWait() async {
+    func suspend() {
         stopped = true
         timer?.cancel()
-        timer = nil
+        for entry in entries.values { entry.task.cancel() }
+    }
+
+    func suspendAndWait() async {
+        suspend()
         let owned = entries.values.map(\.task)
-        for token in Array(entries.keys) { end(token) }
+        let clock = timer
         for task in owned { await task.value }
+        await clock?.value
+        timer = nil
+    }
+
+    func stopAndWait() async {
+        await suspendAndWait()
         entries.removeAll(); cancelled.removeAll()
+    }
+
+    private static func reportProgress(
+        _ updates: AsyncStream<Double>, owner: StudioUILongOperations?, token: UUID,
+        attempt: Attempt
+    ) async {
+        for await fraction in updates {
+            owner?.progress(token, attempt: attempt, fraction)
+        }
     }
 
     private func progress(_ token: UUID, attempt: Attempt, _ fraction: Double) {

@@ -12,6 +12,9 @@ import Observation
     private let presentationID: UUID?
     private let invalidate: @MainActor () -> Void
     private var tasks: [UUID: Task<Void, Never>] = [:]
+    private let owned = StudioTaskOwner()
+    private let cleanupOwned = StudioTaskOwner()
+    private nonisolated let callbacks = StudioTaskOwner()
     var activeWork: Set<UUID> = []
     var retainedWork: Set<UUID> = []
     let exporter = VideoExporter()
@@ -22,6 +25,7 @@ import Observation
     private var invalidationDeadline: Task<Void, Never>?
     private var invalidationTask: Task<Void, Never>?
     private var invalidated = false
+    private var commandsSuspended = false
     private var versions: [String: UUID] = [:]
     var onState: (@MainActor (StudioUIState) -> Void)?
     var onFailure: (@MainActor (String) -> Void)?
@@ -180,7 +184,7 @@ import Observation
     func read<Value: Decodable>(_ operation: String, object: [String: Any] = [:]) async throws
         -> Value
     {
-        guard !isStopped else { throw ExtensionEngineError.unavailable }
+        guard !isStopped, !commandsSuspended else { throw ExtensionEngineError.unavailable }
         let payload = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         guard payload.count <= StudioCommands.maximumRequestBytes else {
             throw ExtensionEngineError.rejected
@@ -190,7 +194,8 @@ import Observation
         try Task.checkCancellation()
         let data = try await invoke(operation, payload)
         try Task.checkCancellation()
-        guard !isStopped, data.count <= ExtensionEngineWire.maximumPayloadBytes else {
+        guard !isStopped, !commandsSuspended, data.count <= ExtensionEngineWire.maximumPayloadBytes
+        else {
             throw ExtensionEngineError.unavailable
         }
         if let failure = try? JSONDecoder().decode(StudioUIFailure.self, from: data) {
@@ -205,7 +210,11 @@ import Observation
     func stop() {
         guard !isStopped else { return }
         isStopped = true
-        exporter.cancel()
+        if let token = exporter.detach() {
+            queueCleanup("studio.ui.work.detach", object: ["token": token.uuidString])
+        }
+        owned.shutdown()
+        callbacks.shutdown()
         for task in tasks.values { task.cancel() }
         tasks.removeAll()
         versions.removeAll()
@@ -213,18 +222,18 @@ import Observation
         waiting.removeAll()
         for token in activeWork {
             if retainedWork.contains(token) {
-                cleanup("studio.ui.work.detach", object: ["token": token.uuidString])
+                queueCleanup("studio.ui.work.detach", object: ["token": token.uuidString])
             } else {
-                cleanup("studio.ui.work.cancel", object: ["token": token.uuidString])
-                cleanup("studio.ui.work.end", object: ["token": token.uuidString])
+                queueCleanup("studio.ui.work.cancel", object: ["token": token.uuidString])
+                queueCleanup("studio.ui.work.end", object: ["token": token.uuidString])
             }
         }
         if let cleanupTask {
-            invalidationTask = Task { [weak self] in
+            invalidationTask = cleanupOwned.start { [weak self] in
                 await cleanupTask.value
                 self?.finishInvalidation()
             }
-            invalidationDeadline = Task { [weak self] in
+            invalidationDeadline = cleanupOwned.start { [weak self] in
                 do { try await Task.sleep(for: .seconds(1)) } catch { return }
                 self?.cleanupTask?.cancel()
                 self?.finishInvalidation()
@@ -234,7 +243,40 @@ import Observation
         }
     }
 
+    func suspendCommands() {
+        guard !commandsSuspended else { return }
+        commandsSuspended = true
+        owned.shutdown()
+        callbacks.shutdown()
+        exporter.suspendCommands()
+        cleanupTask?.cancel()
+        for (_, continuation) in waiting { continuation.resume(throwing: CancellationError()) }
+        waiting.removeAll()
+    }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        await exporter.suspendCommandsAndWait()
+        await owned.shutdownAndWait()
+        await callbacks.shutdownAndWait()
+        await cleanupOwned.waitForPendingWork()
+    }
+
+    func stopAndWait() async {
+        stop()
+        await exporter.waitForPendingWork()
+        await owned.shutdownAndWait()
+        await callbacks.shutdownAndWait()
+        await cleanupOwned.waitForPendingWork()
+        await cleanupOwned.shutdownAndWait()
+    }
+
     func cleanup(_ operation: String, object: [String: Any]) {
+        guard !commandsSuspended else { return }
+        queueCleanup(operation, object: object)
+    }
+
+    private func queueCleanup(_ operation: String, object: [String: Any]) {
         guard !invalidated, cleanupQueue.count < 128,
             let payload = try? JSONSerialization.data(
                 withJSONObject: object, options: [.withoutEscapingSlashes]),
@@ -242,7 +284,7 @@ import Observation
         else { return }
         cleanupQueue.append((operation, payload))
         guard cleanupTask == nil else { return }
-        cleanupTask = Task { [weak self] in
+        cleanupTask = cleanupOwned.start { [weak self] in
             guard let self else { return }
             defer { self.cleanupTask = nil }
             while !self.cleanupQueue.isEmpty, !Task.isCancelled, !self.invalidated {
@@ -263,7 +305,7 @@ import Observation
 
     private func acquire() async throws {
         try Task.checkCancellation()
-        guard !isStopped else { throw ExtensionEngineError.unavailable }
+        guard !isStopped, !commandsSuspended else { throw ExtensionEngineError.unavailable }
         if activeRequests < 6 { activeRequests += 1; return }
         let id = UUID()
         try await withTaskCancellationHandler {
@@ -272,7 +314,7 @@ import Observation
                 if Task.isCancelled { cancelWaiting(id) }
             }
         } onCancel: {
-            Task { @MainActor [weak self] in self?.cancelWaiting(id) }
+            callbacks.enqueue { [weak self] in self?.cancelWaiting(id) }
         }
     }
 
@@ -300,11 +342,11 @@ import Observation
     private func submit(
         _ key: String, work: @escaping @MainActor () async throws -> (@MainActor () -> Void)?
     ) {
-        guard !isStopped else { return }
+        guard !isStopped, !commandsSuspended else { return }
         let version = UUID()
         if let previous = versions[key] { tasks[previous]?.cancel(); tasks[previous] = nil }
         versions[key] = version
-        tasks[version] = Task { [weak self] in
+        tasks[version] = owned.start { [weak self] in
             defer {
                 self?.tasks[version] = nil
                 if self?.versions[key] == version { self?.versions[key] = nil }

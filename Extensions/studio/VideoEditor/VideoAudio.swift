@@ -189,7 +189,7 @@ extension VideoEditorModel {
             let source = project.assets.first(where: { $0.id == assetID })
         else { return }
         audioStatus = denoise ? "Reducing noise and normalizing…" : "Normalizing to -16 LUFS…"
-        audioTask = Task {
+        audioTask = startWork { [self] in
             defer { audioTask = nil; audioStatus = nil }
             do {
                 let url = try await VideoAudioProcessing.clean(source.url, denoise: denoise)
@@ -216,7 +216,7 @@ extension VideoEditorModel {
             let source = project.assets.first(where: { $0.id == clip.assetID })
         else { return }
         audioStatus = "Finding quiet sections…"
-        audioTask = Task {
+        audioTask = startWork { [self] in
             defer { audioTask = nil; audioStatus = nil }
             do {
                 let envelope = try await VideoWaveformCache.shared.envelope(source.url)

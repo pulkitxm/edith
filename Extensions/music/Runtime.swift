@@ -13,6 +13,7 @@ final class ExtensionRuntime: NSObject {
     private let embeddedUI = MusicEmbeddedRuntime()
     private var backup: MusicBackupLifecycle?
     private let commands = ExtensionCommandRegistry()
+    private var stopTask: Task<Void, Never>?
     private var inertFixture = false
     private let fixtureAdmission: (NSDictionary) throws -> WorkerFixtureAdmission?
 
@@ -54,31 +55,9 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        if inertFixture {
-            commands.shutdown()
-            Task {
-                await commands.shutdownAndWait()
-                await worker?.shutdown(); worker = nil
-                completion()
-            }
-            return
-        }
-        embeddedUI.stop()
-        uiService?.stop()
-        navigation?.invalidate(); MusicHostNavigation.navigate = nil; MusicHostNavigation.reset()
-        commands.shutdown()
-        backup?.beginShutdown()
+        let pending = beginShutdown()
         Task {
-            await EmbeddedMusicVideoSession.drainAll()
-            await EmbeddedMusicBrowserSession.drainAll()
-            await uiService?.drain()
-            await backup?.shutdown()
-            await commands.shutdownAndWait()
-            await navigation?.stopAndWait(); navigation = nil
-            await worker?.shutdown()
-            backup = nil; worker = nil; surface = nil; uiService = nil
-            TextEditingCommands.shutdown(); InputFocus.uninstall()
-            completion()
+            await pending.value; completion()
         }
     }
 
@@ -88,12 +67,18 @@ final class ExtensionRuntime: NSObject {
             completion("Invalid Music presentation."); return
         }
         Task {
-            await embeddedUI.prepareToClose(id)
-            completion(nil)
+            let failure = await embeddedUI.prepareToClose(id)
+            completion(failure.map { $0 as NSString })
         }
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
+        if stopTask != nil,
+            !["describe", "status", "stop", "stopUI", "releaseUI", "cancelCommand"].contains(
+                input["operation"] as? String ?? "")
+        {
+            return ["ok": false] as NSDictionary
+        }
         if inertFixture,
             !["describe", "start", "stop", "status", "cancelCommand", "synchronize"].contains(
                 input["operation"] as? String ?? "")
@@ -164,23 +149,53 @@ final class ExtensionRuntime: NSObject {
         case "stopUI": embeddedUI.stop()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": backup?.preferencesChanged()
-        case "stop":
-            if inertFixture {
-                commands.shutdown(); worker?.stop(); worker = nil
-                return ["ok": true] as NSDictionary
-            }
-            embeddedUI.stop()
-            navigation?.invalidate(); navigation = nil; MusicHostNavigation.navigate = nil;
-            MusicHostNavigation.reset()
-            backup?.beginShutdown()
-            uiService?.stop(); commands.shutdown(); worker?.stop(); worker = nil; surface = nil;
-            uiService = nil
-            TextEditingCommands.shutdown(); InputFocus.uninstall()
-        case "status": return ["ok": true, "running": worker != nil] as NSDictionary
+        case "stop": _ = beginShutdown()
+        case "status":
+            return ["ok": true, "running": stopTask == nil && worker != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
     }
+    private func beginShutdown() -> Task<Void, Never> {
+        if let stopTask { return stopTask }
+        let ownedWorker = worker
+        let ownedService = uiService
+        let ownedBackup = backup
+        let ownedNavigation = navigation
+        let hadLiveEngine = ownedWorker?.isInertFixture == false
+        let hadUI = embeddedUI.presentationCount > 0
+        commands.shutdown()
+        embeddedUI.stop()
+        ownedService?.stop()
+        ownedWorker?.stop()
+        ownedBackup?.beginShutdown()
+        ownedNavigation?.invalidate()
+        if hadLiveEngine {
+            MusicHostNavigation.navigate = nil; MusicHostNavigation.reset()
+        }
+        if hadUI {
+            EmbeddedMusicVideoSession.stopAll(); EmbeddedMusicBrowserSession.stopAll()
+        }
+        let task = Task {
+            await commands.shutdownAndWait()
+            await embeddedUI.stopAndWait()
+            if hadUI {
+                await EmbeddedMusicVideoSession.drainAll()
+                await EmbeddedMusicBrowserSession.drainAll()
+            }
+            await ownedService?.drain()
+            await ownedBackup?.shutdown()
+            await ownedNavigation?.stopAndWait()
+            await ownedWorker?.shutdown()
+            navigation = nil; backup = nil; worker = nil; surface = nil; uiService = nil
+            if hadLiveEngine || hadUI {
+                TextEditingCommands.shutdown(); InputFocus.uninstall()
+            }
+        }
+        stopTask = task
+        return task
+    }
+
 }
 
 @_cdecl("edith_extension_create")

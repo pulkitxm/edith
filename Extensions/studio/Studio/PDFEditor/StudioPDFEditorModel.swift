@@ -166,6 +166,7 @@ final class StudioPDFEditorModel {
     private var undoStack: [PDFEditSession.Snapshot] = []
     private var redoStack: [PDFEditSession.Snapshot] = []
     private var saveTask: Task<Void, Never>?
+    @ObservationIgnored private let work = StudioTaskOwner()
     private var signaturesTask: Task<Void, Never>?
     private var mutationTask: Task<Void, Never>?
     private var loadTask: Task<Void, Never>?
@@ -203,7 +204,7 @@ final class StudioPDFEditorModel {
         let generation = loading.begin(preservingContent: session != nil)
         let url = url
         let password = password.isEmpty ? nil : password
-        loadTask = Task { [weak self] in
+        loadTask = work.start { [weak self] in
             do {
                 let loaded: LoadedSession
                 if let facade = self?.facade {
@@ -254,6 +255,21 @@ final class StudioPDFEditorModel {
             }
         }
         loadSignatures()
+    }
+
+    func waitForPendingWork() async { await work.waitForPendingWork() }
+
+    func suspendCommands() { work.shutdown() }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        await work.shutdownAndWait()
+    }
+
+    func stopAndWait() async {
+        suspendCommands()
+        cancelLoading()
+        await work.shutdownAndWait()
     }
 
     func cancelLoading() {
@@ -544,7 +560,7 @@ final class StudioPDFEditorModel {
         guard panel.runModal() == .OK, let file = panel.url else { return }
         if let facade {
             mutationTask?.cancel()
-            mutationTask = Task { [weak self] in
+            mutationTask = work.start { [weak self] in
                 do {
                     let handle: StudioUIResource = try await facade.read(
                         "studio.ui.image.load", object: ["path": file.path, "size": 2400])
@@ -573,7 +589,7 @@ final class StudioPDFEditorModel {
 
     func loadSignatures() {
         signaturesTask?.cancel()
-        signaturesTask = Task { [weak self] in
+        signaturesTask = work.start { [weak self] in
             if let facade = self?.facade {
                 do {
                     let handle: StudioUIResource = try await facade.read(
@@ -596,7 +612,7 @@ final class StudioPDFEditorModel {
     func saveSignature(_ image: CGImage) {
         if let facade {
             mutationTask?.cancel()
-            mutationTask = Task { [weak self] in
+            mutationTask = work.start { [weak self] in
                 do {
                     let handle = try await facade.upload(StudioUIImageData(image))
                     let value: StudioUISignature = try await facade.read(
@@ -624,7 +640,7 @@ final class StudioPDFEditorModel {
     func deleteSignature(_ signature: StudioSavedSignature) {
         if let facade {
             mutationTask?.cancel()
-            mutationTask = Task { [weak self] in
+            mutationTask = work.start { [weak self] in
                 do {
                     let _: [String: String] = try await facade.read(
                         "studio.ui.pdf.signatures.remove", object: ["path": signature.url.path])
@@ -648,7 +664,7 @@ final class StudioPDFEditorModel {
         }
         if let facade {
             isSaving = true; saveProgress = 0
-            saveTask = Task { [weak self] in
+            saveTask = work.start { [weak self] in
                 do {
                     let handle = try await facade.upload(snapshot)
                     var object: [String: Any] = [
@@ -678,7 +694,7 @@ final class StudioPDFEditorModel {
         let flatten = mode == .sign
         isSaving = true
         saveProgress = 0
-        saveTask = Task { [weak self] in
+        saveTask = work.start { [weak self] in
             let failure = await StudioPDFEditorText.export(
                 snapshot, source: source, to: target, flatten: flatten)
             guard let self, !Task.isCancelled else { return }
@@ -708,7 +724,7 @@ final class StudioPDFEditorModel {
         guard !isWorking, let facade, let session, let snapshot = session.snapshot() else { return }
         let version = revision
         isWorking = true
-        mutationTask = Task { [weak self] in
+        mutationTask = work.start { [weak self] in
             defer { self?.isWorking = false }
             do {
                 let uploaded = try await facade.upload(snapshot)

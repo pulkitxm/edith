@@ -8,9 +8,14 @@ import SwiftUI
     private(set) var configured = false
     private var presentations: [UUID: MusicEmbeddedPresentation] = [:]
     private var closing: [UUID: MusicEmbeddedPresentation] = [:]
+    private var closingTasks: [UUID: Task<Void, Never>] = [:]
+    private var retired: [UUID: MusicEmbeddedPresentation] = [:]
+    private var hasRemoteWork = false
+    private var stopping = false
     static let presentationLimit = 16
 
     func configure(_ input: NSDictionary) -> NSDictionary {
+        guard !stopping else { return ["ok": false] as NSDictionary }
         guard let configuration = ExtensionUIConfiguration(context: input),
             configuration.extensionID == "music",
             let version = Bundle(for: MusicEmbeddedRuntime.self).object(
@@ -27,16 +32,18 @@ import SwiftUI
     var presentationCount: Int { presentations.count + closing.count }
 
     func install(_ scene: MusicEmbeddedPresentation, id: UUID) -> Bool {
+        guard !stopping else { retire(scene); return false }
         for key in Array(presentations.keys) where presentations[key]?.isRetained == false {
-            presentations.removeValue(forKey: key)?.shutdown()
+            if let scene = presentations.removeValue(forKey: key) { retire(scene) }
         }
         guard closing[id] == nil,
             presentationCount < Self.presentationLimit || presentations[id] != nil
         else {
-            scene.shutdown(); return false
+            retire(scene); return false
         }
-        presentations.removeValue(forKey: id)?.shutdown()
+        if let previous = presentations.removeValue(forKey: id) { retire(previous) }
         presentations[id] = scene
+        hasRemoteWork = hasRemoteWork || scene.usesRemoteClient
         scene.attach()
         configured = true
         return true
@@ -53,28 +60,81 @@ import SwiftUI
         guard let value = input["presentationID"] as? String, let id = UUID(uuidString: value),
             let scene = presentations.removeValue(forKey: id)
         else { return false }
-        scene.shutdown(); configured = !presentations.isEmpty
+        retire(scene); configured = !presentations.isEmpty
         return true
     }
 
-    func prepareToClose(_ id: UUID) async {
-        guard let scene = presentations.removeValue(forKey: id) else { return }
-        closing[id] = scene
+    func prepareToClose(_ id: UUID) async -> String? {
+        guard let scene = presentations[id] else { return nil }
+        do {
+            try await scene.prepareToClose()
+            try Task.checkCancellation()
+            guard presentations[id] === scene else { throw ExtensionPeerError.unavailable }
+        } catch { return error.localizedDescription }
+        presentations[id] = nil
         scene.beginShutdown()
         if scene.isMain { EmbeddedMusicVideoSession.stopAll() }
         if presentations.isEmpty {
             EmbeddedMusicVideoSession.stopAll(); EmbeddedMusicBrowserSession.stopAll()
         }
-        await EmbeddedMusicVideoSession.drainAll()
-        await EmbeddedMusicBrowserSession.drainAll()
-        scene.shutdown(); closing[id] = nil; configured = !presentations.isEmpty
+        await retire(scene, id: id, drainAuxiliary: true).value
+        configured = !presentations.isEmpty
+        return nil
+    }
+
+    func suspendCommands() {
+        if hasRemoteWork { EmbeddedMusicRemote.shared.suspendCommands() }
+        for scene in presentations.values { scene.suspendCommands() }
+        for scene in closing.values { scene.suspendCommands() }
+        for scene in retired.values { scene.suspendCommands() }
+    }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        let scenes = Array(presentations.values) + Array(closing.values) + Array(retired.values)
+        let tasks = Array(closingTasks.values)
+        for scene in scenes { await scene.suspendCommandsAndWait() }
+        for task in tasks { await task.value }
+        if hasRemoteWork { await EmbeddedMusicRemote.shared.suspendCommandsAndWait() }
     }
 
     func stop() {
-        for scene in presentations.values { scene.shutdown() }
-        for scene in closing.values { scene.shutdown() }
-        presentations.removeAll(); closing.removeAll(); configured = false
+        let scenes = Array(presentations.values)
+        presentations.removeAll(); configured = false
+        for scene in scenes { retire(scene) }
+        for scene in closing.values { scene.beginShutdown() }
     }
+
+    func stopAndWait() async {
+        stopping = true
+        suspendCommands()
+        let remote = hasRemoteWork ? EmbeddedMusicRemote.shared : nil
+        stop()
+        let tasks = Array(closingTasks.values)
+        for task in tasks { await task.value }
+        await remote?.stopAndWait()
+        hasRemoteWork = false
+    }
+
+    @discardableResult
+    private func retire(
+        _ scene: MusicEmbeddedPresentation, id: UUID = UUID(), drainAuxiliary: Bool = false
+    ) -> Task<Void, Never> {
+        if let pending = closingTasks[id] { return pending }
+        if drainAuxiliary { scene.beginShutdown(); closing[id] = scene } else { scene.shutdown() }
+        retired[id] = scene
+        let task = Task { [weak self] in
+            defer { self?.closing[id] = nil; self?.closingTasks[id] = nil; self?.retired[id] = nil }
+            if drainAuxiliary {
+                await EmbeddedMusicVideoSession.drainAll()
+                await EmbeddedMusicBrowserSession.drainAll()
+            }
+            await scene.stopAndWait()
+        }
+        closingTasks[id] = task
+        return task
+    }
+
 }
 
 @MainActor final class MusicEmbeddedPresentation {
@@ -92,6 +152,7 @@ import SwiftUI
     private var closed = false
     private var detached = false
     var isMain: Bool { location == "main" }
+    var usesRemoteClient: Bool { client != nil }
     var isRetained: Bool { !closed && (pending || presentedController != nil) }
 
     init?(
@@ -192,6 +253,20 @@ import SwiftUI
         }
         if let controller { presentedController = controller; pending = false }
         return controller
+    }
+
+    func prepareToClose() async throws {
+        try await settingsModel?.prepareToClose()
+    }
+
+    func suspendCommands() { settingsModel?.suspendCommands() }
+
+    func suspendCommandsAndWait() async { await settingsModel?.suspendCommandsAndWait() }
+
+    func stopAndWait() async {
+        beginShutdown()
+        await settingsModel?.stopAndWait()
+        shutdown()
     }
 
     func beginShutdown() {

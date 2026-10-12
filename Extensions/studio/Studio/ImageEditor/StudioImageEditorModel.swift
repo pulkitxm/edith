@@ -91,6 +91,7 @@ final class StudioImageEditorModel {
     private var undoStack: [ImageEditDocument] = []
     private var redoStack: [ImageEditDocument] = []
     private var renderTask: Task<Void, Never>?
+    @ObservationIgnored private let work = StudioTaskOwner()
     @ObservationIgnored private var renderingFast = false
     private var loadTask: Task<Void, Never>?
     private var saveTask: Task<Void, Never>?
@@ -132,7 +133,7 @@ final class StudioImageEditorModel {
         loadError = nil
         let url = self.url
         let previewSize = Self.previewSize
-        loadTask = Task { [weak self] in
+        loadTask = work.start { [weak self] in
             let loaded: Result<StudioImageSource, Error>
             if let facade = self?.facade {
                 do {
@@ -162,6 +163,21 @@ final class StudioImageEditorModel {
                 self.loading.fail(request, error: error)
             }
         }
+    }
+
+    func waitForPendingWork() async { await work.waitForPendingWork() }
+
+    func suspendCommands() { work.shutdown() }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        await work.shutdownAndWait()
+    }
+
+    func stopAndWait() async {
+        suspendCommands()
+        close()
+        await work.shutdownAndWait()
     }
 
     func close() {
@@ -225,7 +241,7 @@ final class StudioImageEditorModel {
         let request = rendering.begin(preservingContent: preview != nil)
         let size = fast ? 900 : Self.previewSize
         let wantsGeometry = panel == .crop
-        renderTask = Task { [weak self] in
+        renderTask = work.start { [weak self] in
             if fast {
                 try? await Task.sleep(for: .milliseconds(32))
             }
@@ -282,7 +298,7 @@ final class StudioImageEditorModel {
         guard let source else { return }
         thumbnailTask?.cancel()
         let document = self.document
-        thumbnailTask = Task { [weak self] in
+        thumbnailTask = work.start { [weak self] in
             let thumbnails: [ImageFilterPreset: CGImage]
             if let facade = self?.facade {
                 do {
@@ -358,7 +374,7 @@ final class StudioImageEditorModel {
         guard panel.runModal() == .OK, let file = panel.url else { return }
         if let facade {
             layerTask?.cancel()
-            layerTask = Task { [weak self] in
+            layerTask = work.start { [weak self] in
                 do {
                     let handle: StudioUIResource = try await facade.read(
                         "studio.ui.image.load", object: ["path": file.path])
@@ -441,7 +457,7 @@ final class StudioImageEditorModel {
         let style = redactStyle
         let strength = redactStrength
         let image = StudioImageSource(image: preview)
-        faceTask = Task { [weak self] in
+        faceTask = work.start { [weak self] in
             let faces: [StudioRect]
             if let facade = self?.facade, let document = self?.document {
                 do {
@@ -539,7 +555,7 @@ final class StudioImageEditorModel {
         let document = self.document
         if let facade {
             isSaving = true
-            saveTask = Task { [weak self] in
+            saveTask = work.start { [weak self] in
                 do {
                     let uploaded = try await facade.upload(document)
                     var object: [String: Any] = ["document": try facade.object(uploaded)]
@@ -566,7 +582,7 @@ final class StudioImageEditorModel {
             ?? StudioImageEditorWork.defaultOutput(
                 for: url, ext: format.fileExtension, destination: studio.destination)
         isSaving = true
-        saveTask = Task { [weak self] in
+        saveTask = work.start { [weak self] in
             let failure = await Task.detached(priority: .userInitiated) {
                 StudioImageEditorWork.export(document, to: target)
             }.value

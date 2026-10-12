@@ -1,6 +1,8 @@
 import AppKit
+import Foundation
 import Observation
 import UserNotifications
+import WorkerFixtureSupport
 
 @MainActor
 @Observable
@@ -37,6 +39,8 @@ final class VideoExporter {
 
     private(set) var job: Job?
     private var task: Task<Void, Never>?
+    private let owned = StudioTaskOwner()
+    private var suspended = false
     private var remoteToken: UUID?
     var remoteCancel: ((UUID) -> Void)?
     var remoteClear: ((UUID) -> Void)?
@@ -49,26 +53,103 @@ final class VideoExporter {
 
     var isExporting: Bool { job?.phase == .exporting }
 
-    func start(to destination: URL, work: @escaping Work) {
-        guard !isExporting else { return }
+    @discardableResult
+    func start(to destination: URL, work: @escaping Work) -> Bool {
+        guard !suspended, !isExporting else { return false }
         task?.cancel(); remoteToken = nil
         let started = Job(destination: destination)
         job = started
-        task = Task { [weak self] in
-            guard let self else { return }
-            let outcome: Phase?
-            do {
-                try await work { [weak self] value in
-                    Task { @MainActor in self?.report(value, for: started.id) }
+        let updates = AsyncStream.makeStream(of: Double.self, bufferingPolicy: .bufferingNewest(1))
+        task = owned.enqueue(
+            { [weak self] in
+                guard let self else { updates.continuation.finish(); return }
+                async let progressUpdates: Void = Self.consumeProgress(
+                    updates.stream, exporter: self, id: started.id)
+                let outcome: Phase?
+                do {
+                    try Task.checkCancellation()
+                    try await work { updates.continuation.yield($0) }
+                    try Task.checkCancellation()
+                    outcome = .finished
+                } catch is CancellationError {
+                    outcome = nil
+                } catch {
+                    outcome = Task.isCancelled ? nil : .failed(error.localizedDescription)
                 }
-                outcome = .finished
-            } catch is CancellationError {
-                outcome = nil
-            } catch {
-                outcome = Task.isCancelled ? nil : .failed(error.localizedDescription)
+                updates.continuation.finish()
+                await progressUpdates
+                await finish(started.id, outcome)
+            }, runsWhenCancelled: true)
+        return task != nil
+    }
+
+    @discardableResult
+    func startNativeExport(
+        admission: WorkerFixtureEngineAdmission,
+        work:
+            @escaping (
+                WorkerFixtureNativeExportLease, WorkerFixtureNamespaceAction, URL,
+                @escaping @Sendable (Double) -> Void
+            ) async throws -> Void
+    ) throws -> Bool {
+        guard !suspended, !isExporting else { return false }
+        try admission.requireCurrent()
+        guard admission.descriptor.owner == "studio", admission.descriptor.role == "app",
+            let publication = admission.descriptor.outputs.first(where: {
+                $0.name == "exported-video"
+            })
+        else { throw WorkerFixtureError.invalid }
+        guard
+            let staging = admission.descriptor.outputs.first(where: {
+                $0.name == "export-staging"
+            })
+        else { throw WorkerFixtureError.invalid }
+        let destination = URL(fileURLWithPath: publication.path)
+        let stage = URL(fileURLWithPath: staging.path)
+        let lease = try admission.nativeExportLease(
+            stageNamed: "export-staging", publicationNamed: "exported-video",
+            inputsNamed: ["studio-project", "studio-source-video"])
+        return start(to: destination) { progress in
+            try await lease.withAction { action in
+                try await work(lease, action, stage, progress)
+                try Task.checkCancellation()
+                guard try lease.publish(action) == destination else {
+                    throw WorkerFixtureError.invalid
+                }
             }
-            await finish(started.id, outcome)
         }
+    }
+
+    private static func consumeProgress(
+        _ updates: AsyncStream<Double>, exporter: VideoExporter, id: UUID
+    ) async {
+        for await value in updates { exporter.report(value, for: id) }
+    }
+
+    func suspendCommands() {
+        suspended = true
+        owned.shutdown()
+        task?.cancel()
+    }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        await owned.shutdownAndWait()
+    }
+
+    func waitForPendingWork() async { await owned.waitForPendingWork() }
+
+    func pendingWorkCancellation() -> @Sendable () -> Void {
+        let pending = task
+        return { pending?.cancel() }
+    }
+
+    @discardableResult
+    func detach() -> UUID? {
+        let token = remoteToken
+        task?.cancel()
+        remoteToken = nil
+        return token
     }
 
     func cancel() {

@@ -14,10 +14,49 @@ final class StudioRecordBridge {
     private var finishedURL: URL?
     private var stopWait: CheckedContinuation<Void, Never>?
     private var settled = false
+    private var commandsSuspended = false
+    private var shutdownTask: Task<Void, Never>?
+    private let owned = StudioTaskOwner()
+    private nonisolated let callbacks = StudioTaskOwner()
 
     func shutdown() async {
-        await recorder.shutdown()
+        await beginShutdown().value
+    }
+
+    func stopAndWait() async {
+        await suspendCommandsAndWait()
+        await beginShutdown().value
+    }
+
+    private func beginShutdown() -> Task<Void, Never> {
+        if let shutdownTask { return shutdownTask }
         complete(nil)
+        let task = Task {
+            await recorder.shutdown()
+            await owned.waitForPendingWork()
+            await callbacks.waitForPendingWork()
+            complete(nil)
+        }
+        shutdownTask = task
+        return task
+    }
+
+    func suspendCommands() {
+        commandsSuspended = true
+        callbacks.shutdown()
+        owned.shutdown()
+        recorder.suspendCommands()
+        stopWait?.resume()
+        stopWait = nil
+    }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        await owned.shutdownAndWait()
+        await callbacks.shutdownAndWait()
+        let cleanup = shutdownTask
+        await cleanup?.value
+        await recorder.suspendCommandsAndWait()
     }
 
     func perform(
@@ -25,9 +64,18 @@ final class StudioRecordBridge {
         microphone: Bool = false, showCursor: Bool = true
     ) async throws -> StudioRecordSnapshot {
         try Task.checkCancellation()
+        guard !commandsSuspended else { throw CancellationError() }
+        if let shutdownTask {
+            await shutdownTask.value
+            self.shutdownTask = nil
+            try Task.checkCancellation()
+            guard !commandsSuspended else { throw CancellationError() }
+        }
         switch request {
         case .sources:
             await recorder.loadSources()
+            try Task.checkCancellation()
+            guard !commandsSuspended else { throw CancellationError() }
             if let error = recorder.error { throw CLIFailure(error) }
             return snapshot(changed: false)
         case .status:
@@ -40,6 +88,7 @@ final class StudioRecordBridge {
                 await recorder.loadSources()
             }
             try Task.checkCancellation()
+            guard !commandsSuspended else { throw CancellationError() }
             recorder.systemAudio = systemAudio
             recorder.microphone = microphone
             recorder.showCursor = showCursor
@@ -54,6 +103,7 @@ final class StudioRecordBridge {
                 complete(nil)
                 throw CancellationError()
             }
+            guard !commandsSuspended else { throw CancellationError() }
             guard recorder.recording, recorder.error == nil else {
                 throw CLIFailure(recorder.error ?? "The recording did not start.")
             }
@@ -64,15 +114,16 @@ final class StudioRecordBridge {
             await withTaskCancellationHandler {
                 await withCheckedContinuation { continuation in
                     stopWait = continuation
-                    Task { @MainActor in
+                    owned.start {
                         await self.recorder.stop()
                         if self.recorder.error != nil { self.complete(nil) }
                     }
                 }
             } onCancel: {
-                Task { @MainActor in await self.shutdown() }
+                self.callbacks.enqueue { _ = self.beginShutdown() }
             }
             try Task.checkCancellation()
+            guard !commandsSuspended else { throw CancellationError() }
             guard finishedURL != nil else {
                 throw CLIFailure(recorder.error ?? "The recording did not finish.")
             }

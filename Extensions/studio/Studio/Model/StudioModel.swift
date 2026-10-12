@@ -120,6 +120,7 @@ final class StudioModel {
     var exportState: StudioUIVideoExport?
     var remoteCommandRequest: VideoEditorService.OpenRequest?
     private(set) var remoteCommandEditor: VideoEditorModel?
+    @ObservationIgnored private nonisolated let work = StudioTaskOwner()
     private var commandAttachTask: Task<Void, Never>?
     private var commandAttachID: String?
     var workflows: [StudioWorkflow] = []
@@ -127,6 +128,10 @@ final class StudioModel {
     private(set) var isStopped = false
     private var projectRemovalTasks: [UUID: Task<Void, Never>] = [:]
     private var workflowsTask: Task<Void, Never>?
+    @ObservationIgnored private var retiredImages: [UUID: StudioImageEditorModel] = [:]
+    @ObservationIgnored private var retiredPDFs: [UUID: StudioPDFEditorModel] = [:]
+    @ObservationIgnored private var retiredVideos: [UUID: VideoEditorModel] = [:]
+    @ObservationIgnored private var retiredJobs: [UUID: StudioJob] = [:]
     @ObservationIgnored private var imageEditors: [URL: StudioImageEditorModel] = [:]
     @ObservationIgnored private var pdfEditors: [URL: StudioPDFEditorModel] = [:]
     @ObservationIgnored private var videoEditors: [String: VideoEditorModel] = [:]
@@ -223,6 +228,7 @@ final class StudioModel {
     func shutdown() {
         guard !isStopped else { return }
         isStopped = true
+        work.shutdown()
         for task in projectRemovalTasks.values { task.cancel() }
         projectRemovalTasks.removeAll()
         engineTask?.cancel()
@@ -261,22 +267,22 @@ final class StudioModel {
         guard librarySubscriptions.isEmpty else { return }
         NotificationCenter.default.publisher(for: IPC.Name.studioWorkflowsChanged)
             .sink { [weak self] _ in
-                Task { @MainActor [weak self] in self?.loadWorkflows() }
+                self?.work.enqueue { [weak self] in self?.loadWorkflows() }
             }.store(in: &librarySubscriptions)
         NotificationCenter.default.publisher(for: IPC.Name.studioMediaLibraryChanged)
             .sink { [weak self] _ in
-                Task { @MainActor [weak self] in
+                self?.work.enqueue { [weak self] in
                     self?.refreshLibrary()
                     self?.loadRecent()
                 }
             }.store(in: &librarySubscriptions)
         NotificationCenter.default.publisher(for: IPC.Name.videoProjectLibraryChanged)
             .sink { [weak self] _ in
-                Task { @MainActor [weak self] in self?.refreshProjects() }
+                self?.work.enqueue { [weak self] in self?.refreshProjects() }
             }.store(in: &librarySubscriptions)
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .sink { [weak self] _ in
-                Task { @MainActor [weak self] in self?.refreshLibrary() }
+                self?.work.enqueue { [weak self] in self?.refreshLibrary() }
             }.store(in: &librarySubscriptions)
     }
 
@@ -314,7 +320,7 @@ final class StudioModel {
         for path in unique { directories.append(URL(fileURLWithPath: path, isDirectory: true)) }
         libraryWatcher = FileSystemWatcher(paths: directories, debounce: 0.05, eventLatency: 0.05) {
             [weak self] in
-            Task { @MainActor [weak self] in
+            self?.work.enqueue { [weak self] in
                 self?.refreshLibrary()
                 self?.refreshProjects()
                 self?.loadRecent()
@@ -327,7 +333,7 @@ final class StudioModel {
         guard !isStopped else { return }
         if let facade { facade.refresh(); return }
         workflowsTask?.cancel()
-        workflowsTask = Task { [weak self] in
+        workflowsTask = work.start { [weak self] in
             let loaded = await Task.detached(priority: .utility) { StudioWorkflowStore.load() }
                 .value
             guard let self, !self.isStopped, !Task.isCancelled else { return }
@@ -395,7 +401,7 @@ final class StudioModel {
         if let facade { facade.refresh(); return }
         engineTask?.cancel()
         let detect = detectEnvironment
-        engineTask = Task { [weak self] in
+        engineTask = work.start { [weak self] in
             let detected = await Task.detached(priority: .utility) {
                 detect()
             }.value
@@ -408,7 +414,7 @@ final class StudioModel {
         guard !isStopped else { return }
         if let facade { facade.refresh(); return }
         projectsTask?.cancel()
-        projectsTask = Task { [weak self] in
+        projectsTask = work.start { [weak self] in
             let listings = await Task.detached(priority: .utility) {
                 VideoProject.listProjects()
             }.value
@@ -422,7 +428,7 @@ final class StudioModel {
         guard !isStopped else { return }
         if let facade { facade.refresh(); return }
         recentTask?.cancel()
-        recentTask = Task { [weak self] in
+        recentTask = work.start { [weak self] in
             let runs = await Task.detached(priority: .utility) {
                 StudioLibraryStore.loadRecent()
             }.value
@@ -574,9 +580,14 @@ final class StudioModel {
 
     func goHome() {
         switch route {
-        case let .imageEditor(url): imageEditors.removeValue(forKey: url)?.close()
-        case let .pdfEditor(url, _): pdfEditors.removeValue(forKey: url)?.cancelLoading()
-        case .videoEditor: videoEditors.removeValue(forKey: route.navigationToken)?.close()
+        case let .imageEditor(url):
+            if let editor = imageEditors.removeValue(forKey: url) { retire(editor) }
+        case let .pdfEditor(url, _):
+            if let editor = pdfEditors.removeValue(forKey: url) { retire(editor) }
+        case .videoEditor:
+            if let editor = videoEditors.removeValue(forKey: route.navigationToken) {
+                retire(editor)
+            }
         case .commandVideoEditor:
             commandEditor?.close(for: self)
             commandEditor = nil
@@ -607,10 +618,40 @@ final class StudioModel {
         return editor
     }
 
+    private func retire(_ editor: StudioImageEditorModel) {
+        editor.close()
+        let id = UUID()
+        retiredImages[id] = editor
+        work.start { [weak self] in
+            await editor.waitForPendingWork()
+            self?.retiredImages[id] = nil
+        }
+    }
+
+    private func retire(_ editor: StudioPDFEditorModel) {
+        editor.cancelLoading()
+        let id = UUID()
+        retiredPDFs[id] = editor
+        work.start { [weak self] in
+            await editor.waitForPendingWork()
+            self?.retiredPDFs[id] = nil
+        }
+    }
+
+    private func retire(_ editor: VideoEditorModel) {
+        editor.close()
+        let id = UUID()
+        retiredVideos[id] = editor
+        work.start { [weak self] in
+            await editor.waitForPendingWork()
+            self?.retiredVideos[id] = nil
+        }
+    }
+
     func closeEditors() {
-        for editor in imageEditors.values { editor.close() }
-        for editor in pdfEditors.values { editor.cancelLoading() }
-        for editor in videoEditors.values { editor.close() }
+        for editor in imageEditors.values { retire(editor) }
+        for editor in pdfEditors.values { retire(editor) }
+        for editor in videoEditors.values { retire(editor) }
         commandEditor?.close(for: self)
         imageEditors.removeAll()
         pdfEditors.removeAll()
@@ -641,7 +682,7 @@ final class StudioModel {
             facade.action("studio.ui.project.trash", object: ["path": project.url.path]); return
         }
         let id = UUID()
-        projectRemovalTasks[id] = Task { [weak self] in
+        projectRemovalTasks[id] = work.start { [weak self] in
             defer { self?.projectRemovalTasks[id] = nil }
             do {
                 _ = try await VideoEditorService.trashProject(project.url)
@@ -687,13 +728,13 @@ final class StudioModel {
         installing = engine
         installLog = nil
         let log: @Sendable (String) -> Void = { [weak self] line in
-            Task { @MainActor [weak self] in
+            self?.work.enqueue { [weak self] in
                 guard let self, !self.isStopped else { return }
                 self.installLog = line
             }
         }
         let install = installEngine
-        installTask = Task { [weak self] in
+        installTask = work.start { [weak self] in
             let failure = await install(engine, log)
             guard let self, !self.isStopped, !Task.isCancelled else { return }
             self.installing = nil
@@ -759,7 +800,7 @@ final class StudioModel {
         if let pending = state.pendingOpen, pending.requestID != commandAttachID, let facade {
             commandAttachID = pending.requestID
             commandAttachTask?.cancel()
-            commandAttachTask = Task { [weak self] in
+            commandAttachTask = work.start { [weak self] in
                 guard let self, !isStopped else { return }
                 do {
                     guard !videoEditors.values.contains(where: { $0.blocksCommandOpen }),
@@ -808,22 +849,123 @@ final class StudioModel {
         destinationFolder = folder
     }
 
-    func stopAndWait() async {
-        let owned = jobs
-        let tasks =
-            [engineTask, installTask, projectsTask, recentTask, workflowsTask, commandAttachTask]
-            .compactMap { $0 } + Array(projectRemovalTasks.values)
-        shutdown()
+    func suspendCommands() {
+        facade?.suspendCommands()
+        work.shutdown()
+        for job in jobs + Array(retiredJobs.values) { job.cancel(); job.preview.suspendCommands() }
+        for editor in Array(imageEditors.values) + Array(retiredImages.values) {
+            editor.suspendCommands()
+        }
+        for editor in Array(pdfEditors.values) + Array(retiredPDFs.values) {
+            editor.suspendCommands()
+        }
+        for editor in Array(videoEditors.values) + Array(retiredVideos.values) {
+            editor.suspendCommands()
+        }
+    }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        await work.shutdownAndWait()
+        await drainEditors()
+        let owned = jobs + Array(retiredJobs.values)
         for job in owned { await job.stopAndWait() }
-        for task in tasks { await task.value }
+        await facade?.suspendCommandsAndWait()
+        await StudioRecentWriter.shared.drain()
+    }
+
+    func stopAndWait() async {
+        suspendCommands()
+        shutdown()
+        await work.shutdownAndWait()
+        await drainEditors()
+        let owned = jobs + Array(retiredJobs.values)
+        for job in owned { await job.stopAndWait() }
+        await facade?.stopAndWait()
+        await StudioRecentWriter.shared.drain()
+        retiredImages.removeAll(); retiredPDFs.removeAll(); retiredVideos.removeAll();
+        retiredJobs.removeAll()
+    }
+
+    private func drainEditors() async {
+        let images = Array(imageEditors.values) + Array(retiredImages.values)
+        let pdfs = Array(pdfEditors.values) + Array(retiredPDFs.values)
+        let videos = Array(videoEditors.values) + Array(retiredVideos.values)
+        for editor in images { await editor.suspendCommandsAndWait() }
+        for editor in pdfs { await editor.suspendCommandsAndWait() }
+        for editor in videos { await editor.suspendCommandsAndWait() }
     }
 
     private func trimJobs() {
         guard jobs.count > 12 else { return }
         var kept: [StudioJob] = []
         for job in jobs where kept.count < 12 || job.isRunning { kept.append(job) }
+        let retained = Set(kept.map(\.id))
+        for job in jobs where !retained.contains(job.id) {
+            retiredJobs[job.id] = job
+            work.start { [weak self] in
+                await job.waitForPendingWork()
+                self?.retiredJobs[job.id] = nil
+            }
+        }
         jobs = kept
     }
+}
+
+final class StudioTaskOwner: Sendable {
+    private final class State: @unchecked Sendable {
+        let lock = NSLock()
+        var tasks: [UUID: Task<Void, Never>] = [:]
+        var stopped = false
+
+        func remove(_ id: UUID) { lock.withLock { _ = tasks.removeValue(forKey: id) } }
+        func snapshot() -> [Task<Void, Never>] { lock.withLock { Array(tasks.values) } }
+        func close() -> [Task<Void, Never>] {
+            lock.withLock {
+                stopped = true
+                return Array(tasks.values)
+            }
+        }
+    }
+    private let state = State()
+
+    @discardableResult
+    func start(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never>? {
+        enqueue(operation)
+    }
+
+    @discardableResult
+    func enqueue(
+        _ operation: @escaping @MainActor () async -> Void, runsWhenCancelled: Bool = false
+    ) -> Task<Void, Never>? {
+        state.lock.withLock {
+            guard !state.stopped else { return nil }
+            let id = UUID()
+            let task = Task { @MainActor [state] in
+                defer { state.remove(id) }
+                guard runsWhenCancelled || !Task.isCancelled else { return }
+                await operation()
+            }
+            state.tasks[id] = task
+            return task
+        }
+    }
+
+    @MainActor func shutdown() {
+        let owned = state.close()
+        for task in owned { task.cancel() }
+    }
+
+    @MainActor func shutdownAndWait() async {
+        shutdown()
+        await waitForPendingWork()
+    }
+
+    @MainActor func waitForPendingWork() async {
+        let owned = state.snapshot()
+        for task in owned { await task.value }
+    }
+
 }
 
 final class StudioRecentWriter: @unchecked Sendable {
@@ -833,6 +975,12 @@ final class StudioRecentWriter: @unchecked Sendable {
 
     func write(_ runs: [StudioRecentRun]) {
         queue.async { StudioLibraryStore.saveRecent(runs) }
+    }
+
+    func drain() async {
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume() }
+        }
     }
 }
 

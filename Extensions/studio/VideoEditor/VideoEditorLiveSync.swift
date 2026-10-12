@@ -8,6 +8,9 @@ final class VideoEditorLiveSync {
     private weak var model: VideoEditorModel?
     private var url: URL?
     private var watcher: FileSystemWatcher?
+    private var callbacks: StudioTaskOwner?
+    private var callbackJoins: [UUID: Task<Void, Never>] = [:]
+    private var suspended = false
     private var task: Task<Void, Never>?
     private var ownedTasks: [UUID: Task<Void, Never>] = [:]
     private var generation = 0
@@ -18,16 +21,19 @@ final class VideoEditorLiveSync {
     }
 
     func watch(_ next: URL?) {
+        guard !suspended else { return }
         let next = next?.resolvingSymlinksInPath().standardizedFileURL
         guard next != url else { return }
         stop()
         url = next
         model?.externalSyncMessage = nil
         guard let next else { return }
+        let callbacks = StudioTaskOwner()
+        self.callbacks = callbacks
         watcher = FileSystemWatcher(
             paths: [next.deletingLastPathComponent()], debounce: 0.05, eventLatency: 0.05
-        ) { [weak self] in
-            Task { @MainActor [weak self] in self?.schedule() }
+        ) { [weak self, callbacks] in
+            callbacks.enqueue { [weak self] in self?.schedule() }
         }
         watcher?.start()
         schedule()
@@ -36,6 +42,15 @@ final class VideoEditorLiveSync {
     @discardableResult
     func stop() -> [Task<Void, Never>] {
         let owned = Array(ownedTasks.values)
+        if let callbacks {
+            callbacks.shutdown()
+            let id = UUID()
+            callbackJoins[id] = Task { [weak self] in
+                defer { self?.callbackJoins[id] = nil }
+                await callbacks.shutdownAndWait()
+            }
+            self.callbacks = nil
+        }
         generation += 1
         for task in owned { task.cancel() }
         needsRefresh = false
@@ -43,7 +58,12 @@ final class VideoEditorLiveSync {
         watcher?.stop()
         watcher = nil
         url = nil
-        return owned
+        return owned + Array(callbackJoins.values)
+    }
+
+    func suspendCommands() -> [Task<Void, Never>] {
+        suspended = true
+        return stop()
     }
 
     func stopAndWait() async {
@@ -56,6 +76,7 @@ final class VideoEditorLiveSync {
     }
 
     private func schedule() {
+        guard !suspended else { return }
         task?.cancel()
         generation += 1
         let version = generation

@@ -51,6 +51,15 @@ import SwiftUI
         if route == .settings { model.facade?.refresh() }
     }
 
+    func suspendCommands() { model.suspendCommands() }
+
+    func suspendCommandsAndWait() async { await model.suspendCommandsAndWait() }
+
+    func stopAndWait() async {
+        stop()
+        await model.stopAndWait()
+    }
+
     func stop() {
         model.shutdown()
         privacy?.shutdown()

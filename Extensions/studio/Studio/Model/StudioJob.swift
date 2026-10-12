@@ -99,18 +99,15 @@ final class StudioJob: Identifiable {
         status = nil
         result = nil
         startedAt = Date()
-        let report: @Sendable (StudioProgress) -> Void = { [weak self] progress in
-            Task { @MainActor [weak self] in
-                guard let self, self.phase == .running else { return }
-                self.progress = progress.fraction
-                self.unit = progress.unit
-                self.units = progress.units
-                if let status = progress.status { self.status = status }
-            }
-        }
+        let updates = AsyncStream.makeStream(
+            of: StudioProgress.self, bufferingPolicy: .bufferingNewest(1))
+        let report: @Sendable (StudioProgress) -> Void = { updates.continuation.yield($0) }
         StudioRunRegistry.track(self)
         task = Task { [weak self] in
+            let progressOwner = self
             defer { if let self { self.task = nil; StudioRunRegistry.release(self) } }
+            async let progressUpdates: Void = Self.consumeProgress(
+                updates.stream, job: progressOwner)
             let outcome: Result<StudioRunResult, Error>
             do {
                 let value = try await StudioRunner.run(
@@ -120,6 +117,8 @@ final class StudioJob: Identifiable {
             } catch {
                 outcome = .failure(error)
             }
+            updates.continuation.finish()
+            await progressUpdates
             guard let self, !Task.isCancelled else { return }
             StudioRunRegistry.release(self)
             self.task = nil
@@ -135,6 +134,18 @@ final class StudioJob: Identifiable {
         }
     }
 
+    private static func consumeProgress(_ updates: AsyncStream<StudioProgress>, job: StudioJob?)
+        async
+    {
+        for await progress in updates {
+            guard let job, job.phase == .running else { continue }
+            job.progress = progress.fraction
+            job.unit = progress.unit
+            job.units = progress.units
+            if let status = progress.status { job.status = status }
+        }
+    }
+
     func cancel() {
         facade?.cancel(self)
         task?.cancel()
@@ -142,10 +153,18 @@ final class StudioJob: Identifiable {
         StudioRunRegistry.release(self)
     }
 
+    func waitForPendingWork() async {
+        let pending = task
+        await pending?.value
+        await preview.waitForPendingWork()
+    }
+
     func stopAndWait() async {
         let pending = task
         cancel()
+        preview.suspendCommands()
         await pending?.value
+        await preview.suspendCommandsAndWait()
     }
 
     func apply(_ state: StudioUIJobState) {

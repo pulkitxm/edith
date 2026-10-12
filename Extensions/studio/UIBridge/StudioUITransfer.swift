@@ -35,10 +35,7 @@ extension StudioUIFacade {
         } catch {
             let value = try? object(handle)
             if let value {
-                Task {
-                    let _: [String: String]? = try? await self.read(
-                        "studio.ui.blob.end", object: ["handle": value])
-                }
+                cleanup("studio.ui.blob.end", object: ["handle": value])
             }
             throw error
         }
@@ -69,10 +66,7 @@ extension StudioUIFacade {
             return handle
         } catch {
             if let value = try? object(handle) {
-                Task {
-                    let _: [String: String]? = try? await self.read(
-                        "studio.ui.blob.end", object: ["handle": value])
-                }
+                cleanup("studio.ui.blob.end", object: ["handle": value])
             }
             throw error
         }

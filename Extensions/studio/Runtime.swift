@@ -16,6 +16,7 @@ final class ExtensionRuntime: NSObject {
     private let fixtureDefaults: (String) -> UserDefaults?
     private var model: StudioModel?
     private var uiScenes: [UUID: StudioUIScene] = [:]
+    private var retiringScenes: [UUID: Task<Void, Never>] = [:]
     private var navigation: StudioSettingsNavigation?
     private let uiConfiguration: (NSDictionary) -> ExtensionUIConfiguration?
     private var privacy: SurfacePrivacyState?
@@ -25,6 +26,8 @@ final class ExtensionRuntime: NSObject {
     private let resources = StudioUIResources()
     private let work = StudioUILongOperations()
     private var streams: ExtensionCLIStreams?
+    private var stopping = false
+    private var stopTask: Task<Void, Never>?
 
     override convenience init() {
         self.init(uiConfiguration: { ExtensionUIConfiguration(context: $0) })
@@ -49,7 +52,34 @@ final class ExtensionRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let model = self.model else { throw ExtensionPeerError.unavailable }
-            if self.fixture != nil {
+            if let fixture = self.fixture {
+                if let admission = fixture.engineAdmission {
+                    guard let text = request["token"] as? String, let token = UUID(uuidString: text)
+                    else {
+                        throw WorkerFixtureError.invalid
+                    }
+                    let receipt = try admission.beginRequest(
+                        token: token, operation: command, payload: payload)
+                    defer { admission.cancelRequest(receipt) }
+                    let result: Data
+                    if command == "studio.ui.video.export" {
+                        result = try await StudioUILongOperations.scoped(payload: payload) { body in
+                            try JSONEncoder().encode(
+                                self.work.start(retained: true) { progress in
+                                    try JSONEncoder().encode(
+                                        try await fixture.renderNativeExport(
+                                            payload: body, progress: progress))
+                                })
+                        }
+                    } else if command == "studio.ui.work.read" || command == "studio.ui.work.cancel"
+                    {
+                        result = try self.work.invoke(command, payload: payload)
+                    } else {
+                        throw WorkerFixtureError.invalid
+                    }
+                    try admission.completeRequest(receipt)
+                    return result
+                }
                 if command == "surface.snapshot" {
                     return try await SurfaceCommandService.execute(
                         providerID: "studio", command: command,
@@ -142,20 +172,9 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        let hadEngine = model != nil && fixture == nil
-        commands.shutdown()
-        streams?.stop()
+        let actual = beginShutdown()
         Task {
-            await streams?.stopAndWait()
-            await work.stopAndWait()
-            await videoSessions.stopAndWait()
-            await commands.shutdownAndWait()
-            if hadEngine { await VideoEditorOpenBridge.shared.stopAndWait() }
-            await model?.stopAndWait()
-            shutdown()
-            if hadEngine, #available(macOS 15.0, *) {
-                await StudioRecordBridge.shared.shutdown(); await VideoRecorder.shutdownAll()
-            }
+            await actual.value
             completion()
         }
     }
@@ -171,11 +190,27 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard Bundle.main.bundleURL.pathExtension != "appex",
+            guard !stopping, Bundle.main.bundleURL.pathExtension != "appex",
                 input["remoteUI"] as? Bool != true,
                 let suite = input["defaultsSuite"] as? String
             else { return ["ok": false] as NSDictionary }
             do {
+                #if EDITH_FUNCTIONAL_FIXTURE
+                if let engineAdmission = try WorkerFixtureEngineAdmission.current(
+                    extensionID: "studio", context: input,
+                    roleBundle: Bundle(for: ExtensionRuntime.self))
+                {
+                    guard model == nil,
+                        suite == (input["hostIdentifier"] as? String ?? "") + ".extensions.studio",
+                        suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
+                        let defaults = fixtureDefaults(suite)
+                    else { throw WorkerFixtureError.invalid }
+                    let tools = try StudioFixtureTools(engineAdmission: engineAdmission)
+                    model = tools.makeModel(defaults: defaults)
+                    fixture = tools
+                    return ["ok": true] as NSDictionary
+                }
+                #endif
                 let admission = try admitFixture(input)
                 guard
                     admission != nil
@@ -207,7 +242,7 @@ final class ExtensionRuntime: NSObject {
             do {
                 guard try admitFixture(input) == nil else { return ["ok": false] as NSDictionary }
             } catch { return ["ok": false] as NSDictionary }
-            guard let configuration = uiConfiguration(input),
+            guard !stopping, let configuration = uiConfiguration(input),
                 configuration.extensionID == "studio", !configuration.uiOnly,
                 configuration.defaultsSuite
                     == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
@@ -215,12 +250,12 @@ final class ExtensionRuntime: NSObject {
                 let route = StudioUIScene.Route(context: input),
                 uiScenes.count < 16 || uiScenes[client.presentationID] != nil
             else { return ["ok": false] as NSDictionary }
-            uiScenes[client.presentationID]?.stop()
+            if let previous = uiScenes[client.presentationID] { retire(previous) }
             uiScenes[client.presentationID] = StudioUIScene(client: client, route: route)
         case "stopUI":
             if input["presentationID"] == nil {
                 let hadUI = !uiScenes.isEmpty
-                for scene in uiScenes.values { scene.stop() }
+                for scene in uiScenes.values { retire(scene) }
                 uiScenes.removeAll()
                 if hadUI { TextEditingCommands.shutdown() }
                 return ["ok": true] as NSDictionary
@@ -228,7 +263,7 @@ final class ExtensionRuntime: NSObject {
             guard let value = input["presentationID"] as? String,
                 let id = UUID(uuidString: value), let scene = uiScenes.removeValue(forKey: id)
             else { return ["ok": false] as NSDictionary }
-            scene.stop()
+            retire(scene)
             if !uiScenes.values.contains(where: { $0.route == .main }) {
                 TextEditingCommands.shutdown()
             }
@@ -253,25 +288,61 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
 
-    private func shutdown() {
-        let hadEngine = model != nil && fixture == nil
-        streams?.stop()
-        resources.shutdown()
-        Task {
-            await work.stopAndWait(); await videoSessions.stopAndWait()
+    private func retire(_ scene: StudioUIScene) {
+        scene.stop()
+        let id = UUID()
+        retiringScenes[id] = Task { [weak self] in
+            await scene.stopAndWait()
+            self?.retiringScenes[id] = nil
         }
+    }
+
+    private func shutdown() { _ = beginShutdown() }
+
+    private func beginShutdown() -> Task<Void, Never> {
+        if let stopTask { return stopTask }
+        stopping = true
+        let ownedModel = model
+        let ownedFixture = fixture
+        let ownedStreams = streams
+        let hadEngine = ownedModel != nil && fixture == nil
+        let ownedScenes = Array(uiScenes.values)
+        let hadUI = !ownedScenes.isEmpty
+        ownedFixture?.engineAdmission?.closeAdmission()
+        ownedFixture?.nativeExporter?.suspendCommands()
         commands.shutdown()
-        if hadEngine || !uiScenes.isEmpty { TextEditingCommands.shutdown() }
-        for scene in uiScenes.values { scene.stop() }
+        work.suspend()
+        videoSessions.suspend()
+        resources.suspend()
+        ownedStreams?.stop()
+        for scene in ownedScenes { scene.suspendCommands(); retire(scene) }
+        let closingScenes = Array(retiringScenes.values)
         uiScenes.removeAll()
         navigation?.invalidate()
         navigation = nil
-        model?.shutdown()
-        model = nil
-        privacy?.shutdown()
-        privacy = nil
-        if hadEngine { VideoEditorOpenBridge.shared.shutdown() }
-        fixture = nil
+        if hadEngine || hadUI { TextEditingCommands.shutdown() }
+        let task = Task {
+            for scene in closingScenes { await scene.value }
+            await ownedStreams?.stopAndWait()
+            await work.stopAndWait()
+            await videoSessions.stopAndWait()
+            await resources.shutdownAndWait()
+            await commands.shutdownAndWait()
+            await ownedFixture?.stopNativeExportAndWait()
+            if hadEngine { await VideoEditorOpenBridge.shared.stopAndWait() }
+            await ownedModel?.stopAndWait()
+            if hadEngine { await VideoExporter.shared.suspendCommandsAndWait() }
+            if hadEngine, #available(macOS 15.0, *) {
+                await StudioRecordBridge.shared.stopAndWait()
+                await VideoRecorder.shutdownAll()
+            }
+            model = nil
+            privacy?.shutdown()
+            privacy = nil
+            fixture = nil
+        }
+        stopTask = task
+        return task
     }
 }
 
