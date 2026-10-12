@@ -69,6 +69,60 @@ class AcceptanceContracts(unittest.TestCase):
             acceptance.native_failure_diagnostics({'passed': True}, Path('missing-tests.log'))
         self.assertEqual(captured.getvalue(), '')
 
+    def ownership_diagnostics(self, errors, passed=False):
+        value = self.failed_runner()
+        value['passed'] = passed
+        value['cleanup']['ownershipErrors'] = errors
+        captured = io.StringIO()
+        with redirect_stdout(captured):
+            acceptance.native_failure_diagnostics(value, Path('missing-tests.log'))
+        return [json.loads(line) for line in captured.getvalue().splitlines()]
+
+    def test_known_live_identity_failure_emits_only_closed_category(self):
+        rows = self.ownership_diagnostics(['Live owned process identity unavailable'])
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0]['nativeFailure']['cleanup']['ownershipErrorCount'], 1)
+        self.assertEqual(rows[1], {'nativeLogTail': ''})
+        self.assertEqual(rows[2], {'nativeOwnershipFailureKinds': ['live_identity_unavailable']})
+        self.assertNotIn('Live owned process', json.dumps(rows))
+
+    def test_known_birth_and_group_failures_keep_distinct_categories(self):
+        rows = self.ownership_diagnostics(['Owned process birth or group changed',
+                                          'Owned leader group changed'])
+        self.assertEqual(rows[0]['nativeFailure']['cleanup']['ownershipErrorCount'], 2)
+        self.assertEqual(rows[2], {'nativeOwnershipFailureKinds':
+                         ['birth_or_group_changed', 'leader_group_changed']})
+
+    def test_unknown_errors_are_filtered_and_known_categories_are_deduplicated(self):
+        private = '/fixture/private-home/secret-token pid=987 environment=private'
+        known = ['Live owned process identity unavailable',
+                 'Owned process birth or group changed',
+                 'Owned leader group changed',
+                 'Owned descendant parent changed',
+                 'Owned parent identity changed before admission',
+                 'Owned lifetime process bound exceeded',
+                 'Owned executable transition bound exceeded',
+                 'Owned concurrent descendant bound exceeded',
+                 'Invalid owned child enumeration',
+                 'Owned identity changed before signal']
+        rows = self.ownership_diagnostics(known * 4 + [private, known[0] + private, None, {}])
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0]['nativeFailure']['cleanup']['ownershipErrorCount'], 44)
+        self.assertEqual(rows[2], {'nativeOwnershipFailureKinds': sorted([
+            'live_identity_unavailable', 'birth_or_group_changed', 'leader_group_changed',
+            'descendant_parent_changed', 'parent_identity_changed',
+            'lifetime_process_bound_exceeded', 'executable_transition_bound_exceeded',
+            'concurrent_descendant_bound_exceeded', 'child_enumeration_invalid',
+            'identity_changed_before_signal'])})
+        self.assertEqual(len(rows[2]['nativeOwnershipFailureKinds']), 10)
+        self.assertNotIn(private, json.dumps(rows))
+        self.assertEqual(len(self.ownership_diagnostics([private, known[0] + private])), 2)
+
+    def test_success_with_known_ownership_errors_emits_nothing(self):
+        self.assertEqual(self.ownership_diagnostics(
+            ['Live owned process identity unavailable', 'Owned process birth or group changed'],
+            passed=True), [])
+
     def native(self):
         return {
             'schema': 1, 'sourceCommit': 'a' * 40, 'owner': 'keepAwake',

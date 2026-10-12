@@ -8,7 +8,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   managedNativeBuildSteps,
-  managedNativeTestSteps,
+  shippingNativeTestSteps,
 } from "./hosted-managed-views/native-ci-contract.mjs";
 import {
   nativeLineage,
@@ -95,7 +95,7 @@ if (mode === "resign") {
         id: index + 1,
         name,
         steps: (name === "tests"
-          ? managedNativeTestSteps
+          ? shippingNativeTestSteps
           : name.startsWith("build (")
             ? managedNativeBuildSteps
             : name === "publish"
