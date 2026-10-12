@@ -101,12 +101,18 @@ import WorkerFixtureSupport
             ])
         #expect(commands.contains { $0["route"] as? [String] == ["browser", "navigate"] })
         #expect(commands.contains { $0["route"] as? [String] == ["shelf", "ls"] })
-        for payload in [Data("{\"activate\":true}".utf8), Data(repeating: 32, count: 262_144)] {
+        for payload in [
+            Data(), Data("[]".utf8), Data("{ }".utf8), Data(" {}".utf8),
+            Data("{\"activate\":true}".utf8), Data(repeating: 32, count: 262_144),
+        ] {
             let rejected = await invoke(runtime, "notchShelf.cli.catalog", payload: payload)
             #expect(rejected.data == nil)
             #expect(rejected.error != nil)
         }
         await stop(runtime)
+        let stopped = await invoke(runtime, "notchShelf.cli.catalog")
+        #expect(stopped.data == nil)
+        #expect(stopped.error == ExtensionPeerError.unavailable.localizedDescription)
         #expect(probe.dependencies == 0)
     }
 
