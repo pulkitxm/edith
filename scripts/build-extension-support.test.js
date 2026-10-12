@@ -211,3 +211,39 @@ test("private parser migration leaves other declarations and text unchanged", ()
     'import ArgumentParserToolInfo_fixture_app\nlet value = "_errorLabel customDeprecated"\n',
   );
 });
+
+test("account code is an optional dependency isolated from the empty host products", () => {
+  expect(supportProducts("EdithExtensionAccounts")).toEqual([
+    "EdithExtensionSupport",
+    "EdithExtensionAccounts",
+  ]);
+  for (const product of ["EdithExtensionSupport", "EdithExtensionUI"]) {
+    expect(supportProducts(product)).not.toContain("EdithExtensionAccounts");
+    expect(supportSourceInputs(product)).not.toContain(
+      "Packages/ExtensionSupport/Sources/EdithExtensionAccounts",
+    );
+  }
+  const selection = ["EdithExtensionUI", "EdithExtensionAccounts"];
+  expect(supportProducts(selection)).toEqual([
+    "EdithExtensionSupport",
+    "EdithExtensionUI",
+    "EdithExtensionAccounts",
+  ]);
+  expect(supportProducts(selection.toReversed())).toEqual(
+    supportProducts(selection),
+  );
+  expect(supportSourceInputs(selection)).toContain(
+    "Packages/ExtensionSupport/Sources/EdithExtensionAccounts",
+  );
+});
+
+test("account imports remain private to each independently loaded extension", () => {
+  const source =
+    '@testable import EdithExtensionAccounts\nlet text = "EdithExtensionAccounts"\n';
+  expect(rewriteSupportImports(source, supportModules("herdr_app"))).toBe(
+    '@testable import EdithExtensionAccounts_herdr_app\nlet text = "EdithExtensionAccounts"\n',
+  );
+  expect(rewriteSupportImports(source, supportModules("usage_app"))).toBe(
+    '@testable import EdithExtensionAccounts_usage_app\nlet text = "EdithExtensionAccounts"\n',
+  );
+});

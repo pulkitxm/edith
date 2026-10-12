@@ -5,6 +5,8 @@ let package = Package(
     name: "ExtensionSupport",
     platforms: [.macOS(.v14)],
     products: [
+        .library(
+            name: "EdithExtensionAccounts", type: .static, targets: ["EdithExtensionAccounts"]),
         .library(name: "EdithExtensionSupport", type: .static, targets: ["EdithExtensionSupport"]),
         .library(name: "EdithExtensionUI", type: .static, targets: ["EdithExtensionUI"]),
         .library(
@@ -18,6 +20,10 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.8.2"),
     ],
     targets: [
+        .target(name: "EdithExtensionAccounts", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "EdithExtensionAccountsTests", dependencies: ["EdithExtensionAccounts"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "EdithExtensionArchive",
             dependencies: [
