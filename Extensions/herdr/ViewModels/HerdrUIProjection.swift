@@ -76,6 +76,7 @@ struct HerdrUIState: Codable {
     let activitySettings: AgentActivitySettings
     let attention: HerdrAttentionSettings
     let discovery: Bool
+    var accountSessions: [String: String] = [:]
 
     func validate() throws {
         guard owner == "herdr", sequence > 0, hosts.count <= 1025,
@@ -414,7 +415,7 @@ final class HerdrUIDefaults: UserDefaults {
         case "herdr.ui.launch":
             guard
                 Set(object.keys).isSubset(of: [
-                    "kind", "machineID", "workspaceID", "label", "beside",
+                    "kind", "machineID", "workspaceID", "label", "beside", "accountID",
                 ]),
                 let kind = object["kind"] as? String, HerdrKind.filterLabels.contains(kind),
                 let id = object["machineID"] as? String,
@@ -430,6 +431,10 @@ final class HerdrUIDefaults: UserDefaults {
                 workspace = try await store.listWorkspaces(for: host).first(where: { $0.id == id })
                 guard workspace != nil else { throw ExtensionPeerError.invalidRequest }
             }
+            let accountID = object["accountID"] as? String
+            guard object["accountID"] == nil || accountID.map({
+                $0 == "cli" || $0 == "default" || UUID(uuidString: $0) != nil
+            }) == true else { throw ExtensionPeerError.invalidRequest }
             let label = object["label"] as? String
             guard
                 object["label"] == nil
@@ -438,7 +443,7 @@ final class HerdrUIDefaults: UserDefaults {
             else { throw ExtensionPeerError.invalidRequest }
             try await store.launchNewAgent(
                 kind: kind, host: host, existingSpace: workspace, newSpaceLabel: label,
-                openBeside: beside.boolValue)
+                openBeside: beside.boolValue, accountID: accountID)
         case "herdr.ui.search":
             guard Set(object.keys) == ["query", "machineID", "agentIDs"],
                 let query = object["query"] as? String, query.utf8.count <= 4096,
@@ -583,7 +588,7 @@ final class HerdrUIDefaults: UserDefaults {
             preferences: store.uiPreferences, activity: worker.activity.activity,
             activitySettings: worker.activity.settings,
             attention: HerdrAttentionSettings(defaults: store.uiDefaults),
-            discovery: worker.activity.discoversTerminals)
+            discovery: worker.activity.discoversTerminals, accountSessions: store.accountSessions)
         try value.validate()
         let data = try JSONEncoder().encode(value)
         guard data.count <= 1_048_576 else { throw ExtensionPeerError.invalidRequest }

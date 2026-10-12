@@ -47,6 +47,7 @@ final class HerdrNewAgentPopupModel {
     private let onLayoutChange: (LayoutChoice) -> Void
     var kindQuery = ""
     var selectedKind: String?
+    var selectedAccountID = "default"
     var machineQuery = ""
     var selectedHost: HerdrHostSnapshot?
     var spaceQuery = ""
@@ -93,7 +94,8 @@ final class HerdrNewAgentPopupModel {
             throw LaunchError.spaceUnavailable
         }
         try await store.launchNewAgent(
-            kind: kind, host: host, existingSpace: workspace, newSpaceLabel: nil)
+            kind: kind, host: host, existingSpace: workspace, newSpaceLabel: nil,
+            accountID: kind == "Claude Code" ? selectedAccountID : nil)
     }
 
     nonisolated static func matchingKinds(_ query: String) -> [String] {

@@ -39,6 +39,12 @@ struct HerdrNewAgentPopup: View {
             header
             Divider()
             field
+            if model.selectedKind == "Claude Code" || model.space != nil {
+                ClaudeAccountLaunchPicker(
+                    accounts: store.claudeAccounts, selection: $model.selectedAccountID)
+                    .disabled(model.launching)
+                    .padding(UIScale.pt(12))
+            }
             Divider()
             if let errorMessage = model.errorMessage {
                 Text(errorMessage)
@@ -396,7 +402,8 @@ struct HerdrNewAgentPopup: View {
             do {
                 try await store.launchNewAgent(
                     kind: kind, host: host, existingSpace: space, newSpaceLabel: newLabel,
-                    openBeside: model.layoutChoice == .sideBySide)
+                    openBeside: model.layoutChoice == .sideBySide,
+                    accountID: kind == "Claude Code" ? model.selectedAccountID : nil)
                 model.launching = false
                 dismiss()
             } catch {
