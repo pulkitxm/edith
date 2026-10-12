@@ -30,7 +30,7 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
     private let operations = StudioTaskOwner()
     private var shutdownTask: Task<Void, Never>?
     private var captureStopTask: Task<Void, Never>?
-    private var nativeStarted = false
+    private var captureSubmitted = false
     private var nativeFinished = true
     private var nativeWaiters: [CheckedContinuation<Void, Never>] = []
     private var cursorSamples: [[String: Any]] = []
@@ -148,13 +148,13 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
             self.output = output
             self.stream = stream
             captureStopTask = nil
-            nativeStarted = false
+            captureSubmitted = false
             nativeFinished = false
             destination = url
             self.finished = finished
             cursorSamples.removeAll()
+            captureSubmitted = true
             try await stream.startCapture()
-            nativeStarted = true
             try Task.checkCancellation()
             guard !commandsSuspended, !resetting else { throw CancellationError() }
             recording = true
@@ -305,7 +305,7 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
     private func stopNativeCapture() async {
         if let captureStopTask { await captureStopTask.value; return }
         let task = Task {
-            if let active = stream, nativeStarted {
+            if let active = stream, captureSubmitted {
                 do { try await active.stopCapture() } catch { self.error = error.localizedDescription }
                 if !nativeFinished {
                     await withCheckedContinuation { nativeWaiters.append($0) }
@@ -336,7 +336,7 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
         cursorTask?.cancel()
         cursorTask = nil
         cursorSamples.removeAll()
-        nativeStarted = false
+        captureSubmitted = false
         nativeFinished = true
         captureStopTask = nil
         stream = nil
