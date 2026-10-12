@@ -35,8 +35,11 @@ struct HerdrFilterButton: View {
         }
         .buttonStyle(.edith(.borderless))
         .accessibilityLabel("Filter sessions")
-        .accessibilityValue(HerdrSessionFilters.summary(of: chips) + (store.accountFilter == nil ? "" : ", Claude account filter active"))
-        .help("Filter by machine, agent, or space (⇧⌘F)")
+        .accessibilityValue(
+            HerdrSessionFilters.summary(of: chips)
+                + (store.accountFilter == nil ? "" : ", Claude account filter active")
+        )
+        .help("Filter by machine, agent, Claude account, or space (⇧⌘F)")
         .popover(isPresented: popoverPresented, arrowEdge: .top) {
             HerdrFilterMenu(
                 store: store, hideAgents: hideAgents, onOpenSpace: onOpenSpace,
@@ -122,9 +125,13 @@ private struct HerdrFilterMenu: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            Picker("Claude account", selection: Binding(
-                get: { store.accountFilter }, set: { store.accountFilter = $0 })) {
+            Picker(
+                "Claude account",
+                selection: Binding(
+                    get: { store.accountFilter }, set: { store.accountFilter = $0 })
+            ) {
                 Text("All accounts").tag(String?.none)
+                Text("Existing CLI login").tag(Optional("cli"))
                 ForEach(store.claudeAccounts.state.accounts) { account in
                     Text(account.name).tag(Optional(account.id.uuidString))
                 }

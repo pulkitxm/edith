@@ -17,6 +17,7 @@ import Observation
     }
 
     func read() async {
+        guard !saving else { return }
         do {
             if let client {
                 state = try JSONDecoder().decode(

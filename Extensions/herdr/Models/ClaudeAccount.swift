@@ -39,6 +39,9 @@ struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
 
     func launcher(command: String, arguments: [String], directory: URL) throws -> URL {
         try validateLaunch()
+        guard !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ExtensionPeerError.rejected("Enter a Claude launch command in launch settings.")
+        }
         let folder = directory.appendingPathComponent(id.uuidString, isDirectory: true)
         try FileManager.default.createDirectory(
             at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -72,5 +75,8 @@ struct ClaudeAccountsState: Codable, Equatable {
             defaultID == nil || accounts.contains(where: { $0.id == defaultID })
         else { throw ExtensionPeerError.invalidRequest }
         for account in accounts { try account.validate() }
+        guard try JSONEncoder().encode(self).count <= 60_000 else {
+            throw ExtensionPeerError.rejected("The saved account credentials are too large.")
+        }
     }
 }

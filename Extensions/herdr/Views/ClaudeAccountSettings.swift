@@ -9,71 +9,83 @@ struct ClaudeAccountSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            Text("Claude accounts").font(.edithText(.headline))
-            HStack {
-                Picker(
-                    "Account",
-                    selection: Binding(
-                        get: { draft?.id },
-                        set: { draft = accounts.account($0) })
-                ) {
-                    Text("Choose an account").tag(UUID?.none)
+            Group {
+                Text("Claude accounts").font(.edithText(.headline))
+                HStack {
+                    Picker(
+                        "Account",
+                        selection: Binding(
+                            get: { draft?.id },
+                            set: { draft = accounts.account($0) })
+                    ) {
+                        Text("Choose an account").tag(UUID?.none)
+                        ForEach(accounts.state.accounts) { account in
+                            Text(account.name).tag(Optional(account.id))
+                        }
+                        if let draft,
+                            !accounts.state.accounts.contains(where: { $0.id == draft.id })
+                        {
+                            Text("New account").tag(Optional(draft.id))
+                        }
+                    }
+                    Button("Add account") { draft = ClaudeAccount(name: "New account") }
+                }
+                if draft != nil {
+                    Text("Account name").font(.edithText(.caption))
+                    TextField("Account name", text: binding(\.name))
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Account name")
+                    Picker("Authentication", selection: binding(\.authentication)) {
+                        ForEach(ClaudeAccount.Authentication.allCases) { method in
+                            Text(method.title).tag(method)
+                        }
+                    }
+                    if draft?.authentication != .browserLogin {
+                        Text(draft?.authentication == .apiKey ? "Full API key" : "Full OAuth token")
+                            .font(.edithText(.caption))
+                        TextEditor(text: binding(\.credential))
+                            .font(.system(size: UIScale.pt(11), design: .monospaced))
+                            .frame(height: UIScale.pt(64))
+                            .accessibilityLabel("Full credential")
+                        if draft?.authentication == .oauthToken {
+                            Text(
+                                "Generate a token for the desired account with claude setup-token."
+                            )
+                            .font(.edithText(.caption)).foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text(
+                            "The first launch opens Claude's login flow. Each account keeps its own login and settings."
+                        )
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Button("Save account") { saveDraft() }
+                            .buttonStyle(.edith(.toolbar))
+                        if let draft, accounts.state.accounts.contains(where: { $0.id == draft.id })
+                        {
+                            Button("Remove account", role: .destructive) { removeDraft() }
+                        }
+                        Spacer()
+                    }
+                }
+                Picker("Default for new Claude sessions", selection: $defaultID) {
+                    Text("Existing CLI login").tag(UUID?.none)
                     ForEach(accounts.state.accounts) { account in
                         Text(account.name).tag(Optional(account.id))
                     }
-                    if let draft, !accounts.state.accounts.contains(where: { $0.id == draft.id }) {
-                        Text("New account").tag(Optional(draft.id))
+                }
+                .onChange(of: defaultID) { _, value in
+                    guard accounts.ready, value != accounts.state.defaultID else { return }
+                    var next = accounts.state
+                    next.defaultID = value
+                    HerdrWorkOwnership.start {
+                        await accounts.save(next)
+                        if accounts.error != nil { defaultID = accounts.state.defaultID }
                     }
                 }
-                Button("Add account") { draft = ClaudeAccount(name: "New account") }
             }
-            if draft != nil {
-                TextField("Account name", text: binding(\.name))
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityLabel("Account name")
-                Picker("Authentication", selection: binding(\.authentication)) {
-                    ForEach(ClaudeAccount.Authentication.allCases) { method in
-                        Text(method.title).tag(method)
-                    }
-                }
-                if draft?.authentication != .browserLogin {
-                    Text(draft?.authentication == .apiKey ? "Full API key" : "Full OAuth token")
-                        .font(.edithText(.caption))
-                    TextEditor(text: binding(\.credential))
-                        .font(.system(size: UIScale.pt(11), design: .monospaced))
-                        .frame(height: UIScale.pt(64))
-                        .accessibilityLabel("Full credential")
-                    if draft?.authentication == .oauthToken {
-                        Text("Generate a token for the desired account with claude setup-token.")
-                            .font(.edithText(.caption)).foregroundStyle(.secondary)
-                    }
-                } else {
-                    Text(
-                        "The first launch opens Claude's login flow. Each account keeps its own login and settings."
-                    )
-                    .font(.edithText(.caption)).foregroundStyle(.secondary)
-                }
-                HStack {
-                    Button("Save account") { saveDraft() }
-                        .buttonStyle(.edith(.toolbar))
-                    if let draft, accounts.state.accounts.contains(where: { $0.id == draft.id }) {
-                        Button("Remove account", role: .destructive) { removeDraft() }
-                    }
-                    Spacer()
-                }
-            }
-            Picker("Default for new Claude sessions", selection: $defaultID) {
-                Text("Existing CLI login").tag(UUID?.none)
-                ForEach(accounts.state.accounts) { account in
-                    Text(account.name).tag(Optional(account.id))
-                }
-            }
-            .onChange(of: defaultID) { _, value in
-                guard accounts.ready, value != accounts.state.defaultID else { return }
-                var next = accounts.state
-                next.defaultID = value
-                HerdrWorkOwnership.start { await accounts.save(next) }
-            }
+            .disabled(!accounts.ready || accounts.saving)
             if let error = accounts.error {
                 HStack {
                     Text(error).foregroundStyle(.red)
@@ -81,7 +93,6 @@ struct ClaudeAccountSettings: View {
                 }.font(.edithText(.caption))
             }
         }
-        .disabled(!accounts.ready || accounts.saving)
         .pageTask {
             await accounts.read()
             defaultID = accounts.state.defaultID
@@ -132,7 +143,10 @@ struct ClaudeAccountLaunchPicker: View {
     var body: some View {
         HStack {
             Picker("Claude account", selection: $selection) {
-                Text("Launch default").tag("default")
+                Text(
+                    "Launch default: \(accounts.account(accounts.state.defaultID)?.name ?? "Existing CLI login")"
+                )
+                .tag("default")
                 Text("Existing CLI login").tag("cli")
                 ForEach(accounts.state.accounts) { account in
                     Text("\(account.name) (\(account.authentication.title))").tag(
