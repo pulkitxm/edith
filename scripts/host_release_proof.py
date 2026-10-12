@@ -148,7 +148,9 @@ def collect_proof(bundle, dmg, appcast, metadata, pinned_info, expected_index, s
     require(len(categories) == 1, 'Unsupported or unsigned certificate category')
     requirement = f'identifier "com.pulkit.edith" and anchor apple generic and certificate leaf[subject.OU] = "{teams[0]}"'
     designated = run(['codesign', '-d', '-r-', str(bundle)])
-    require(re.findall(r'^designated => (.+)$', designated, re.M) == [requirement], 'Host designated requirement differs')
+    rendered = re.findall(r'^designated => (.+)$', designated, re.M)
+    unquoted = requirement.replace(f'"{teams[0]}"', teams[0])
+    require(rendered in ([requirement], [unquoted]), 'Host designated requirement differs')
     run(['codesign', '--verify', '--strict', '-R=' + requirement, str(bundle)])
     dmg_status = dmg.lstat()
     require(stat.S_ISREG(dmg_status.st_mode) and dmg_status.st_nlink == 1 and 0 < dmg_status.st_size <= 1024 ** 3, 'Invalid DMG file')

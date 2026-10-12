@@ -21,7 +21,10 @@ def unpack_frozen_host(archive, output, tree="minimal-host"):
         raise ValueError('Frozen artifact must be a bounded owned regular file')
     if not stat.S_ISDIR(root.st_mode) or root.st_uid != os.getuid() or stat.S_IMODE(root.st_mode) != 0o700 or any(output.iterdir()):
         raise ValueError('Frozen artifact output must be fresh owned0700')
-    seen, total, selected = set(), 0, []
+    seen, total, selected, links = {}, 0, [], []
+    parents = set()
+    launcher = 'local/extension-release-host/Edith.app/Contents/MacOS/ed'
+    launcher_target = 'local/extension-release-host/Edith.app/Contents/Resources/ed-launcher'
     with zipfile.ZipFile(archive) as container:
         entries = container.infolist()
         if len(entries) != 1 or entries[0].filename != 'host.tar.gz' or entries[0].file_size > 2 * 1024**3:
@@ -38,9 +41,20 @@ def unpack_frozen_host(archive, output, tree="minimal-host"):
                     raise ValueError('Frozen tar path escapes its boundary')
                 if name in seen or len(seen) >= 100000:
                     raise ValueError('Frozen tar contains duplicate or excessive paths')
-                seen.add(name)
-                if not (entry.isdir() or entry.isfile()) or entry.mode & 0o7000:
+                if any(seen.get(str(parent)) in ('file', 'link') for parent in PurePosixPath(name).parents):
+                    raise ValueError('Frozen tar places an entry below a file or link')
+                if name in parents and not entry.isdir():
+                    raise ValueError('Frozen tar replaces a parent directory with a file or link')
+                if entry.issym():
+                    if name != launcher or entry.linkname != '../Resources/ed-launcher' or entry.size != 0:
+                        raise ValueError('Frozen tar contains an unexpected symbolic link')
+                    links.append(name)
+                elif not (entry.isdir() or entry.isfile()):
+                    raise ValueError('Frozen tar contains an unsupported entry type')
+                if entry.mode & 0o7000:
                     raise ValueError('Frozen tar contains a link or unsafe mode')
+                seen[name] = 'link' if entry.issym() else 'file' if entry.isfile() else 'directory'
+                parents.update(str(parent) for parent in PurePosixPath(name).parents)
                 if entry.size < 0 or entry.size > 2 * 1024**3:
                     raise ValueError('Frozen tar entry exceeds its bound')
                 total += entry.size
@@ -53,6 +67,8 @@ def unpack_frozen_host(archive, output, tree="minimal-host"):
                 if len(parts) < 2 or parts[0] != 'local' or parts[1] not in ('minimal-host', 'extension-tools', 'extension-release-host'):
                     raise ValueError('Frozen tar contains an unexpected source tree')
                 if parts[1] != tree:
+                    continue
+                if entry.issym():
                     continue
                 destination = output.joinpath(*parts[2:])
                 if destination == output:
@@ -82,6 +98,20 @@ def unpack_frozen_host(archive, output, tree="minimal-host"):
                             remaining -= len(chunk)
                     destination.chmod(entry.mode & 0o777)
                     selected.append(name)
+    if links:
+        if seen.get(launcher_target) != 'file':
+            raise ValueError('Frozen launcher target is not an archived regular file')
+        if tree == 'extension-release-host':
+            destination = output.joinpath(*PurePosixPath(launcher).parts[2:])
+            target = output.joinpath(*PurePosixPath(launcher_target).parts[2:])
+            target_info = target.lstat()
+            bundle = output / 'Edith.app'
+            if not stat.S_ISREG(target_info.st_mode) or target_info.st_uid != os.getuid() or target.resolve() != target.absolute() or bundle not in target.parents:
+                raise ValueError('Frozen launcher target is not an owned in-bundle regular file')
+            destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            if destination.parent.resolve() != destination.parent or destination.exists() or destination.is_symlink():
+                raise ValueError('Frozen launcher destination is not a fresh canonical path')
+            destination.symlink_to('../Resources/ed-launcher')
     host = output / 'Edith.app'
     metadata = output / 'build-metadata.json'
     if not (host / 'Contents/MacOS/Edith').is_file() or not (host / 'Contents/Info.plist').is_file() or not metadata.is_file():
