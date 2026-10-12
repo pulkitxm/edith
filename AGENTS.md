@@ -78,6 +78,15 @@ LaunchServices cleanup work.
 
 ## Make resource gate
 
+For the account SDK, use `make ci-extension-accounts-local` with
+`EDITH_LOCAL_CI_ROOT` set to the external volume containing this checkout and
+`EDITH_MAKE_GATE_DIR` set to the shared resource-gate directory on that volume.
+The target copies the exact account sources and tests into a dependency-free
+package, keeps compiler caches in `local/account-contracts`, and uses fresh
+private HOME, temporary storage, configuration, and account state for each run.
+It uses one compiler job and opens no application windows. Run
+`python3 -B scripts/test-account-sdk-local.test.py` for its isolation contracts.
+
 Heavy `make` targets share one machine-wide budget: app builds, Ghostty,
 Swift and Cargo test builds, security scans, and the JS tool targets. A
 light target such as `make ci-comments` does not take a slot. Before a heavy

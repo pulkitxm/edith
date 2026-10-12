@@ -8,6 +8,8 @@ name: Extension accounts
       - Packages/ExtensionSupport/**
       - scripts/build-extension-support.*
       - scripts/account-focused-targets.test.py
+      - scripts/test-account-sdk-local.py
+      - scripts/test-account-sdk-local.test.py
       - Makefile
       - .github/workflows/extension-accounts.yml
 permissions:
@@ -51,6 +53,9 @@ jobs:
           key: "ghostty-extension-${{ runner.os }}-${{ runner.arch }}-${{ steps.ghostty-toolchain.outputs.fingerprint }}-${{ hashFiles('scripts/build-ghostty.sh', 'scripts/patches/ghostty-external-io.patch', 'scripts/extension-ghostty-native.mjs', 'Extensions/terminal/Native/Package.swift') }}"
       - name: Verify focused fixture isolation
         run: python3 -B scripts/account-focused-targets.test.py
+      - name: Verify local SDK isolation contracts
+        if: "matrix.target == 'ci-extension-accounts'"
+        run: python3 -B scripts/test-account-sdk-local.test.py
       - name: Run account contracts with synthetic data
         env:
           ACCOUNT_TEST_TARGET: "${{ matrix.target }}"
