@@ -95,6 +95,7 @@ final class UsageStore: FeatureModule {
     private(set) var limitsError: String?
     private(set) var limitsUpdatedAt: Date?
     private(set) var refreshingLimits = false
+    private(set) var claudeAccounts: [ClaudeAccountLimits] = []
 
     private var claudeUnavailable = false
     private var launchObserver: NSObjectProtocol?
@@ -274,6 +275,7 @@ final class UsageStore: FeatureModule {
 
     func receiveLimitsSnapshot(_ snapshot: LimitsTopicSnapshot) async {
         guard !terminating else { return }
+        claudeAccounts = providerEnabled(.claude) ? snapshot.claudeAccounts : []
         if let claude = snapshot.providers.first(where: { $0.provider == .claude }) {
             claudeUnavailable = claude.error != nil && claude.session == nil
             session = Self.fresh(claude.session)
@@ -281,7 +283,11 @@ final class UsageStore: FeatureModule {
             fableWeek = Self.fresh(claude.fable)
         }
         await reloadLimitsFromHistory()
-        limitsError = snapshot.failure ?? snapshot.providers.compactMap(\.error).first
+        limitsError =
+            snapshot.failure
+            ?? snapshot.providers.first {
+                (claudeAccounts.isEmpty || $0.provider != .claude) && $0.error != nil
+            }?.error
         refreshingLimits = false
         limitsRequestTask?.cancel()
         limitsRequestTask = nil

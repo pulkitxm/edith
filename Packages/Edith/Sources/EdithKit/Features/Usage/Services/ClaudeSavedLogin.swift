@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import LocalAuthentication
 import Security
@@ -20,7 +21,22 @@ enum ClaudeSavedLogin {
         }
     ) -> String? {
         let data: Data?
-        if let directory = environment["CLAUDE_CONFIG_DIR"], !directory.isEmpty {
+        if let directory = environment["CLAUDE_SECURESTORAGE_CONFIG_DIR"], !directory.isEmpty {
+            let hash = SHA256.hash(data: Data(directory.utf8)).map { String(format: "%02x", $0) }
+                .joined().prefix(8)
+            let context = LAContext()
+            context.interactionNotAllowed = true
+            data =
+                readKeychain([
+                    kSecClass as String: kSecClassGenericPassword,
+                    kSecAttrService as String: "Claude Code-credentials-" + hash,
+                    kSecReturnData as String: true,
+                    kSecMatchLimit as String: kSecMatchLimitOne,
+                    kSecUseAuthenticationContext as String: context,
+                ])
+                ?? readFile(
+                    URL(fileURLWithPath: directory).appendingPathComponent(".credentials.json"))
+        } else if let directory = environment["CLAUDE_CONFIG_DIR"], !directory.isEmpty {
             let url = URL(
                 fileURLWithPath: (directory as NSString).expandingTildeInPath, isDirectory: true
             )

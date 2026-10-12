@@ -58,6 +58,7 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
             "#!/bin/sh",
             "unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_PROFILE CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY",
             "export CLAUDE_CONFIG_DIR=" + ShellQuote.quote(folder.path),
+            "export CLAUDE_SECURESTORAGE_CONFIG_DIR=" + ShellQuote.quote(folder.path),
         ]
         switch authentication {
         case .oauthToken:

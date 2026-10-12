@@ -55,6 +55,32 @@ public enum ClaudeLimitsReader {
         }
     }
 
+    public static func fetch(account: ClaudeAccount, directory: URL) async throws
+        -> LimitsProviderSnapshot
+    {
+        let token: String
+        switch account.authentication {
+        case .apiKey:
+            throw ClaudeAccountError.rejected(
+                "Subscription limits are unavailable for API-key accounts.")
+        case .oauthToken:
+            token = try validatedToken(account.credential)
+        case .browserLogin:
+            let folder = directory.appendingPathComponent(account.id.uuidString).path
+            guard
+                let saved = ClaudeSavedLogin.token(environment: [
+                    "CLAUDE_CONFIG_DIR": folder, "CLAUDE_SECURESTORAGE_CONFIG_DIR": folder,
+                ])
+            else { throw Failure.missingToken }
+            token = saved
+        }
+        return try await fetch(token: token) { request in
+            let (data, response) = try await session.data(for: request)
+            guard let response = response as? HTTPURLResponse else { throw Failure.unavailable }
+            return (data, response)
+        }
+    }
+
     static func resolveUsageToken(
         savedLogin: () -> String?, shellToken: () async throws -> String
     ) async throws -> String {

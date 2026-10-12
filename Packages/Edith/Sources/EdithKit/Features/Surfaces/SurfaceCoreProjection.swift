@@ -27,7 +27,37 @@ public enum SurfaceCoreProjection {
         }
         var rows: [SurfaceDataRow] = []
         var remaining: [Int] = []
-        for provider in providers {
+        let accounts =
+            tile.sourceIDs?.contains("claude") == false
+            ? [] : snapshot.claudeAccounts
+        for account in accounts {
+            let session = SurfaceQuotaValue(account.limits.session, now: now)
+            let week = SurfaceQuotaValue(account.limits.week, now: now)
+            let quotas = [session, week].compactMap(\.remaining)
+            remaining.append(contentsOf: quotas)
+            if accounts.count <= 2 {
+                for (field, title, quota) in [
+                    ("session", "5h", session), ("weekly", "7d", week),
+                ] {
+                    rows.append(
+                        .init(
+                            account.id.uuidString + ":" + field, source: "claude",
+                            title: account.name + " · " + title, detail: account.limits.error ?? "",
+                            value: quota.text, icon: "gauge", progress: quota.fraction, field: field
+                        ))
+                }
+            } else {
+                rows.append(
+                    .init(
+                        account.id.uuidString, source: "claude", title: account.name,
+                        detail: account.limits.error
+                            ?? ("5h: " + session.text + " · 7d: " + week.text),
+                        value: quotas.min().map { "\($0)% left" } ?? "Unavailable", icon: "gauge",
+                        progress: [session.fraction, week.fraction].compactMap { $0 }.max(),
+                        field: "weekly"))
+            }
+        }
+        for provider in providers where accounts.isEmpty || provider.provider != .claude {
             let windows: [(String, String, LimitWindow?)] = [
                 (
                     "session", provider.provider == .cursor ? "Cursor models" : "Session (5h)",
@@ -74,6 +104,7 @@ public enum SurfaceCoreProjection {
         return .init(
             metrics: [
                 .init("providers", "Providers", "\(providers.count)"),
+                .init("accounts", "Claude accounts", "\(accounts.count)"),
                 .init(
                     "remaining", "Lowest remaining",
                     remaining.min().map { "\($0)%" } ?? "Unavailable"),

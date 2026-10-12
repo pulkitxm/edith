@@ -36,11 +36,16 @@ public struct LimitsTopicSnapshot: Codable, Equatable, Sendable {
     public let refreshedAt: Date
     public let providers: [LimitsProviderSnapshot]
     public let failure: String?
+    public let claudeAccounts: [ClaudeAccountLimits]
 
-    public init(refreshedAt: Date, providers: [LimitsProviderSnapshot], failure: String?) {
+    public init(
+        refreshedAt: Date, providers: [LimitsProviderSnapshot], failure: String?,
+        claudeAccounts: [ClaudeAccountLimits] = []
+    ) {
         self.refreshedAt = refreshedAt
         self.providers = providers
         self.failure = failure
+        self.claudeAccounts = claudeAccounts
     }
 }
 
@@ -77,9 +82,10 @@ public enum LimitsCollector {
         connectClaude: @Sendable () -> Void = { LimitsCollector.connectClaudeStatusLine() },
         announce: @Sendable (Notification.Name) -> Void = { IPC.post($0) }
     ) async -> LimitsTopicSnapshot {
-        await collect(
-            providers: enabledProviders(defaults: defaults), force: force,
-            refreshSession: refreshSession, announce: announce
+        let providers = enabledProviders(defaults: defaults)
+        let snapshot = await collect(
+            providers: providers, force: force,
+            refreshSession: refreshSession, announce: { _ in }
         ) { provider in
             switch provider {
             case .claude:
@@ -93,6 +99,21 @@ public enum LimitsCollector {
                 return await fetchGrok()
             }
         }
+        var accounts: [ClaudeAccountLimits] = []
+        if providers.contains(.claude) {
+            do {
+                let state = try await ClaudeAccountStorage().load()
+                accounts = await ClaudeAccountLimitsCollector.shared.refresh(
+                    accounts: state.accounts)
+            } catch {
+                logger.error("Account limits configuration could not be loaded.")
+            }
+        }
+        announce(IPC.Name.limitsUpdated)
+        return LimitsTopicSnapshot(
+            refreshedAt: snapshot.refreshedAt, providers: snapshot.providers,
+            failure: snapshot.providers.filter { accounts.isEmpty || $0.provider != .claude }
+                .compactMap(\.error).first, claudeAccounts: accounts)
     }
 
     public static func connectClaudeStatusLine() {
