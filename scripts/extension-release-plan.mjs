@@ -5,6 +5,7 @@ import { relative, resolve } from "node:path";
 import { supportSourceInputs } from "./build-extension-support.mjs";
 import { ghosttyNativeInputs } from "./extension-ghostty-native.mjs";
 import { writeHostABI } from "./extension-host-abi.mjs";
+import { shippingDefinitions } from "./shipping-extension-policy.mjs";
 
 export const workerRuntimeInputs = [
   "Packages/EdithHost/Package.swift",
@@ -526,8 +527,8 @@ if (import.meta.main) {
       );
     await writeHostABI();
     const root = process.cwd();
-    const definitions = JSON.parse(
-      await readFile("Extensions/manifest.json", "utf8"),
+    const definitions = shippingDefinitions(
+      JSON.parse(await readFile("Extensions/manifest.json", "utf8")),
     );
     let include;
     if (pullRequest) {

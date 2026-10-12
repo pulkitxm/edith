@@ -15,6 +15,7 @@ import {
   compareSystemVersions,
   validateMinimumSystemVersion,
 } from "./extension-system-version.mjs";
+import { shippingDefinitions } from "./shipping-extension-policy.mjs";
 import { verifiedCatalogPayload } from "./verify-extension-catalog.mjs";
 
 export function verifyCatalog(envelope, publicKey) {
@@ -67,8 +68,10 @@ export function missingPackages(expected, catalog) {
 
 export async function expectedPackages(root) {
   await writeHostABI(root);
-  const definitions = JSON.parse(
-    await readFile(resolve(root, "Extensions/manifest.json"), "utf8"),
+  const definitions = shippingDefinitions(
+    JSON.parse(
+      await readFile(resolve(root, "Extensions/manifest.json"), "utf8"),
+    ),
   );
   return Promise.all(
     definitions.map(async (entry) => ({

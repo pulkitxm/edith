@@ -43,6 +43,10 @@ import {
   preflightReleaseAsset,
 } from "./release-asset-upload.mjs";
 import { lookupRelease } from "./release-lookup.mjs";
+import {
+  assertShippingExtensions,
+  shippingDefinitions,
+} from "./shipping-extension-policy.mjs";
 
 export async function readEvidenceAPI(
   path,
@@ -292,6 +296,7 @@ export async function publishNativeEvidence({
     await readFile(join(root, "Extensions/manifest.json"), "utf8"),
     1024 ** 2,
   );
+  assertShippingExtensions(include);
   const fingerprints = Object.fromEntries(
     await Promise.all(
       definitions.map(async (definition) => [
@@ -388,7 +393,11 @@ export async function publishNativeEvidence({
   }
   assert.deepEqual(
     include,
-    await planUnpublishedExtensions(root, definitions, previous.packages),
+    await planUnpublishedExtensions(
+      root,
+      shippingDefinitions(definitions),
+      previous.packages,
+    ),
   );
   const hostDirectory = join(work, "host");
   command("mkdir", ["-m", "700", hostDirectory]);

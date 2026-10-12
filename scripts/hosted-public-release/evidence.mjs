@@ -396,10 +396,11 @@ export function publicationComposition(
   fingerprints,
 ) {
   evidenceTag(source, runID, attempt);
-  assert.equal(packages.length, 39);
+  assert(packages.length > 0 && packages.length <= 39);
+  assert.equal(packages.length, Object.keys(fingerprints).length);
   assert.equal(
     new Set(packages.map(({ package: record }) => record.id)).size,
-    39,
+    packages.length,
   );
   assert.deepEqual(
     packages.map(({ package: record }) => record.id).sort(),
@@ -459,7 +460,7 @@ export function verifiedComposition(
       fingerprints,
     ),
   );
-  assert.equal(records.length, 39);
+  assert.equal(records.length, payload.packages.length);
   for (const row of payload.packages) {
     const matches = records.filter(({ id }) => id === row.package.id);
     assert.equal(matches.length, 1);

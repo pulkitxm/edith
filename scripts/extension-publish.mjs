@@ -37,6 +37,10 @@ export { publishExtensionAssets } from "./immutable-release-assets.mjs";
 
 import { lookupRelease } from "./release-lookup.mjs";
 import {
+  assertShippingExtensions,
+  shippingDefinitions,
+} from "./shipping-extension-policy.mjs";
+import {
   maximumCatalogPackages,
   maximumEnvelopeBytes,
   validateCatalog,
@@ -471,8 +475,11 @@ export async function publishNativeComposition({
     await readFile(resolve(directory, "native-evidence.json")),
     publicKey,
   );
-  const definitions = JSON.parse(
-    await readFile(resolve("Extensions/manifest.json"), "utf8"),
+  const definitions = shippingDefinitions(
+    JSON.parse(await readFile(resolve("Extensions/manifest.json"), "utf8")),
+  );
+  const shippingFingerprints = Object.fromEntries(
+    definitions.map(({ id }) => [id, evidencePayload.fingerprints[id]]),
   );
   const current = currentPackages(
     next,
@@ -553,7 +560,7 @@ export async function publishNativeComposition({
         evidencePayload.runID,
         evidencePayload.runAttempt,
         origins,
-        evidencePayload.fingerprints,
+        shippingFingerprints,
       ),
     ),
   );
@@ -573,7 +580,7 @@ export async function publishNativeComposition({
     runID: evidencePayload.runID,
     attempt: evidencePayload.runAttempt,
     records: current,
-    fingerprints: evidencePayload.fingerprints,
+    fingerprints: shippingFingerprints,
   });
   const snapshotRoot = await mkdtemp(
     resolve(tmpdir(), "extension-composition-"),
@@ -683,6 +690,7 @@ export async function publishExtensions({
   const { include } = JSON.parse(
     await readFile(resolve(directory, "plan.json"), "utf8"),
   );
+  assertShippingExtensions(include);
   const verifyState = async () => {
     const current = await verifiedPublicationState({
       ref,
