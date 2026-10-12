@@ -144,10 +144,10 @@ enum HostNavigationCatalog {
         "agents": ["usage", "herdr", "quinjet", "companion", "plugins", "jev"],
         "maintenance": ["appMaintenance", "homebrew", "cleaner", "blitztree"],
         "system": [
-            "system", "keepAwake", "lidAwake", "keyboardClean", "systemStats", "micMute", "bifrost",
+            "system", "keepAwake", "lidAwake", "systemStats", "micMute",
         ],
         "desk": [
-            "launcher", "clipboard", "colorPicker", "emoji", "keystrokeHighlight", "focusDim",
+            "bifrost", "clipboard", "colorPicker", "emoji", "keystrokeHighlight", "focusDim",
             "presenter", "windowSweaters",
         ],
         "media": [
