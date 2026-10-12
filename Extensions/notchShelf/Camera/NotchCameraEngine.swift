@@ -47,6 +47,7 @@ struct NotchCameraRequest: Codable, Sendable {
     private var failure: String?
     private var stopTask: Task<Void, Never>?
     private var startTask: Task<Void, Error>?
+    private var frameDelivery: NotchCameraFrameDelivery?
     var changed: (() -> Void)?
     init(hardware: any NotchCameraHardware) { self.hardware = hardware }
     func execute(_ request: NotchCameraRequest) async throws -> Data {
@@ -85,10 +86,12 @@ struct NotchCameraRequest: Codable, Sendable {
         running = true
         let selectedHardware = hardware
         let selectedID = selectedID
+        let delivery = NotchCameraFrameDelivery()
+        frameDelivery = delivery
         let task = Task { [weak self] in
             try await selectedHardware.start(deviceID: selectedID) { [weak self] bytes in
                 guard bytes.count <= 524288 else { return }
-                Task { @MainActor [weak self] in
+                delivery.submit { [weak self] in
                     guard let self, !stopped, running, generation == token else { return }
                     frame = bytes; changed?()
                 }
@@ -117,7 +120,10 @@ struct NotchCameraRequest: Codable, Sendable {
     }
     func stopCapture() {
         generation = UUID()
-        guard running || startTask != nil else { return }
+        let delivery = frameDelivery
+        delivery?.close()
+        frameDelivery = nil
+        guard running || startTask != nil || delivery != nil else { return }
         running = false; frame = nil
         startTask?.cancel()
         let previous = stopTask
@@ -128,10 +134,36 @@ struct NotchCameraRequest: Codable, Sendable {
             await previous?.value
             _ = try? await start?.value
             await hardware.stop()
+            await delivery?.drain()
         }
     }
     func shutdown() { stopped = true; changed = nil; stopCapture() }
     func shutdownAndWait() async { shutdown(); await stopTask?.value }
+}
+
+private final class NotchCameraFrameDelivery: @unchecked Sendable {
+    private let lock = NSLock()
+    private var accepting = true
+    private var pending = 0
+    private var tail: Task<Void, Never>?
+    func submit(_ operation: @escaping @MainActor @Sendable () -> Void) {
+        lock.lock()
+        guard accepting, pending < 32 else { lock.unlock(); return }
+        pending += 1
+        let previous = tail
+        tail = Task { @MainActor [self] in
+            await previous?.value
+            operation()
+            lock.withLock { pending -= 1 }
+        }
+        lock.unlock()
+    }
+    func close() { lock.withLock { accepting = false } }
+    func drain() async {
+        let task = lock.withLock { tail }
+        await task?.value
+        lock.withLock { tail = nil }
+    }
 }
 
 @MainActor final class NativeNotchCameraHardware: NotchCameraHardware {
