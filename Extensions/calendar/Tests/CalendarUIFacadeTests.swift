@@ -84,6 +84,25 @@ import Testing
         #expect(facade.events.isEmpty && !facade.loaded && !facade.authorized && facade.blurEvents)
     }
 
+    @Test func repeatedStopAndDrainInvalidateOnceAndJoinIgnoringWork() async throws {
+        let gate = CalendarFacadeReadGate()
+        var invalidated = 0
+        let facade = CalendarUIFacade(
+            invoke: { _, _ in await gate.wait() }, invalidate: { invalidated += 1 })
+        let task = Task { await facade.refreshAndWait() }
+        await gate.entered()
+        facade.stop()
+        facade.stop()
+        let drain = Task { await facade.stopAndWait() }
+        #expect(invalidated == 1)
+        gate.release(Data("{}".utf8))
+        await task.value
+        await drain.value
+        await facade.stopAndWait()
+        facade.shutdown()
+        #expect(invalidated == 1 && !facade.loaded && facade.events.isEmpty)
+    }
+
     @Test func aReplyFromAnotherClientRequestIsRejectedBeforeRendering() async throws {
         let bridge = CalendarDelayedBridge()
         let facade = CalendarUIFacade(

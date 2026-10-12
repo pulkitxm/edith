@@ -116,6 +116,7 @@ final class CalendarUIFacade {
     }
 
     func stop() {
+        guard !stopped else { return }
         stopped = true
         suspend()
         commandTasks.cancel()

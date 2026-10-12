@@ -124,6 +124,65 @@ import Testing
         #expect(released == nil && scene?.isRetained == false && invalidated == 1)
     }
 
+    @Test func controllerReleaseCancelsAndJoinsWorkThatRetainsItsFacade() async throws {
+        let gate = CalendarControllerReadGate()
+        var invalidated = 0
+        weak var released: CalendarUIFacade?
+        var task: Task<Void, Never>?
+        var controller: NSViewController?
+        var scene: CalendarUIPresentation?
+        do {
+            let facade = CalendarUIFacade(
+                invoke: { _, _ in await gate.hold() },
+                invalidate: {
+                    invalidated += 1
+                    gate.release()
+                })
+            released = facade
+            scene = CalendarUIPresentation(facade: facade, route: .init(location: .main))
+            controller = scene?.controller()
+            task = Task { await facade.refreshAndWait() }
+        }
+        defer { gate.release(); task?.cancel(); scene?.shutdown() }
+        do {
+            try await waitForControllerCleanup { gate.entered }
+            #expect(controller != nil && released != nil && scene?.isRetained == true)
+            controller = nil
+            try await waitForControllerCleanup { invalidated == 1 && gate.returned }
+            await task?.value
+            task = nil
+            try await waitForControllerCleanup { released == nil && scene?.isRetained == false }
+            scene?.shutdown()
+            #expect(invalidated == 1 && gate.cancelled)
+        } catch {
+            controller = nil
+            scene?.shutdown()
+            gate.release()
+            task?.cancel()
+            await task?.value
+            await scene?.stopAndWait()
+            throw error
+        }
+    }
+
+    @Test func controllerFixtureReleaseBeforeEntryStillJoinsCancelledWork() async {
+        let gate = CalendarControllerReadGate()
+        gate.release()
+        let task = Task { await gate.hold() }
+        task.cancel()
+        #expect(await task.value == Data("{}".utf8))
+        #expect(gate.entered && gate.returned && gate.cancelled)
+    }
+
+    private func waitForControllerCleanup(_ predicate: () -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(3)
+        while !predicate() {
+            try Task.checkCancellation()
+            guard ContinuousClock.now < deadline else { throw ExtensionEngineError.timedOut }
+            await Task.yield()
+        }
+    }
+
     @Test(arguments: [320.0, 640.0], [false, true])
     func originalNotchRendersScopedUpcomingMeetingsAndInjectedActions(width: Double, dark: Bool)
         async throws
@@ -251,5 +310,34 @@ private final class UnorderedCalendarWindow {
 private final class UnorderedCalendarTestWindow: NSWindow {
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
         frameRect
+    }
+}
+
+@MainActor
+private final class CalendarControllerReadGate {
+    private var continuation: CheckedContinuation<Data, Never>?
+    private var released = false
+    private(set) var entered = false
+    private(set) var returned = false
+    private(set) var cancelled = false
+
+    func hold() async -> Data {
+        entered = true
+        let data: Data
+        if released {
+            data = Data("{}".utf8)
+        } else {
+            data = await withCheckedContinuation { continuation = $0 }
+        }
+        cancelled = Task.isCancelled
+        returned = true
+        return data
+    }
+
+    func release() {
+        released = true
+        let pending = continuation
+        continuation = nil
+        pending?.resume(returning: Data("{}".utf8))
     }
 }

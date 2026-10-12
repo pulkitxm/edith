@@ -83,16 +83,19 @@ final class CalendarUIPresentation {
         pendingFacade = nil
         switch route.location {
         case .main:
-            return NSHostingController(rootView: ExtensionPageHost { CalendarPage(store: facade) })
+            return CalendarPresentationController(
+                facade: facade, rootView: ExtensionPageHost { CalendarPage(store: facade) })
         case .home:
             guard let tile = route.tile else { return nil }
-            return NSHostingController(
+            return CalendarPresentationController(
+                facade: facade,
                 rootView: ExtensionPageHost {
                     CalendarHomeScene(tile: tile, store: facade, open: facade.openPage)
                 })
         case .notch:
             guard let tile = route.tile else { return nil }
-            return NSHostingController(
+            return CalendarPresentationController(
+                facade: facade,
                 rootView: ExtensionPageHost {
                     CalendarNotchScene(tile: tile, store: facade, open: facade.openPage)
                 })
@@ -113,5 +116,25 @@ final class CalendarUIPresentation {
         (pendingFacade ?? presentedFacade)?.shutdown()
         pendingFacade = nil
         presentedFacade = nil
+    }
+}
+
+@MainActor
+private final class CalendarPresentationController<Content: View>: NSHostingController<Content> {
+    private let facade: CalendarUIFacade
+
+    init(facade: CalendarUIFacade, rootView: Content) {
+        self.facade = facade
+        super.init(rootView: rootView)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError()
+    }
+
+    deinit {
+        let facade = facade
+        Task { @MainActor [facade] in await facade.stopAndWait() }
     }
 }
