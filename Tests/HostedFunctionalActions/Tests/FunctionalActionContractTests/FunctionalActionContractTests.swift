@@ -103,6 +103,52 @@ struct FunctionalActionContractTests {
         #expect(throws: (any Error).self) { try decode(value) }
     }
 
+    @Test func calendarLocalControlRetainsExactOriginalReadonlyOperations() throws {
+        let operations = ["calendar.ui.metadata", "calendar.ui.list", "calendar.ui.loadMore"]
+        var value = object()
+        let root = "/private/synthetic/functional-fixture-" + session
+        value["owner"] = "calendar"
+        value["home"] = root + "/calendar-home"
+        value["dataDirectory"] = root + "/data/calendar"
+        value["activationOperation"] = NSNull()
+        value["operations"] = operations
+        value["ownedPaths"] = [] as [[String: String]]
+        func requireCalendar(_ input: [String: Any]) throws -> HostedFunctionalActionContext {
+            let context = try decode(input)
+            try context.validate(
+                source: source, owner: "calendar", session: session, uid: 501,
+                root: root, caseSHA256: hash, operations: operations,
+                engine: .init(
+                    pid: 10, birthSeconds: 1000, birthMicroseconds: 10, uid: 501,
+                    executableSHA256: hash),
+                ui: .init(
+                    pid: 11, birthSeconds: 1000, birthMicroseconds: 11, uid: 501,
+                    executableSHA256: hash))
+            return context
+        }
+        let context = try requireCalendar(value)
+        #expect(context.activationOperation == nil)
+        for operation in operations { try context.requireOperation(operation) }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        #expect(
+            try encoder.encode(context)
+                == JSONSerialization.data(
+                    withJSONObject: value, options: [.sortedKeys, .withoutEscapingSlashes]))
+        for mutation: [String: Any] in [
+            ["activationOperation": "calendar.ui.list"],
+            ["operations": ["calendar.ui.list"]],
+            ["operations": operations + ["calendar.ui.update"]],
+            ["owner": "audioMixer"],
+        ] {
+            var rejected = value
+            rejected.merge(mutation) { _, new in new }
+            #expect(throws: (any Error).self) { try requireCalendar(rejected) }
+        }
+        value.removeValue(forKey: "activationOperation")
+        #expect(throws: (any Error).self) { try decode(value) }
+    }
+
     @Test func sourceOwnerSessionIdentityAndPathNegatives() throws {
         let mutations: [[String: Any]] = [
             ["sourceCommit": String(repeating: "c", count: 40)], ["owner": "music"],

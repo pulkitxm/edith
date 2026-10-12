@@ -84,7 +84,10 @@ final class FunctionalRequestJournal {
     func requireLocalControlRetired(joinedEngineTokens: Set<String>) throws {
         guard held.capability.owner == "calendar", !failed, pending.isEmpty,
             joinedEngineTokens.isSubset(of: engineAdmissions),
-            records.allSatisfy({ $0.operation == "calendar.ui.list" })
+            records.allSatisfy({
+                ["calendar.ui.metadata", "calendar.ui.list", "calendar.ui.loadMore"].contains(
+                    $0.operation)
+            })
         else {
             throw FunctionalFailure.invalid("actual original Calendar readonly retirement")
         }

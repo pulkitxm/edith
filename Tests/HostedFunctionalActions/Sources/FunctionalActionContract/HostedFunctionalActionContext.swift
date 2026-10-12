@@ -156,7 +156,10 @@ public struct HostedFunctionalActionContext: Codable, Equatable, Sendable {
             !operations.isEmpty, operations.count <= 16,
             Set(operations).count == operations.count,
             (owner == "calendar"
-                ? activationOperation == nil && operations == ["calendar.ui.list"]
+                ? activationOperation == nil
+                    && operations == [
+                        "calendar.ui.metadata", "calendar.ui.list", "calendar.ui.loadMore",
+                    ]
                 : activationOperation.map({ operations.contains($0) }) == true),
             operations.allSatisfy(Self.operation), ownedPaths.count <= 32,
             Set(ownedPaths.map(\.name)).count == ownedPaths.count,
