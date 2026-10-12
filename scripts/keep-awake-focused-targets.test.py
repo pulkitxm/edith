@@ -205,6 +205,19 @@ print(json.dumps([{'path': raw, 'canonical': str(path.resolve()),
         keep_awake = next(value for value in definitions if value["id"] == "keepAwake")
         self.assertEqual(keep_awake["testTargets"], ["ci-extension-keep-awake"])
 
+    def test_native_acceptance_receives_explicit_publication_state(self):
+        script = '''const fs = require("node:fs");
+const workflow = Bun.YAML.parse(fs.readFileSync(".github/workflows/extensions.yml", "utf8"));
+const step = workflow.jobs.tests.steps.find(value => value.name === "Exercise original Keep Awake controls and native lifecycle");
+console.log(JSON.stringify(step));'''
+        step = json.loads(subprocess.check_output(["bun", "-e", script], cwd=ROOT, timeout=10))
+        self.assertEqual(step["env"]["EXTENSION_PUBLISH"],
+                         "${{ inputs.publish == true && 'true' || 'false' }}")
+        self.assertEqual(step["env"]["EXPECTED_SOURCE_SHA"], "${{ github.sha }}")
+        self.assertEqual(step["if"],
+                         "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'")
+        self.assertEqual(step["run"], "make ci-extension-keep-awake-native")
+
     def test_native_journey_delegates_the_scoped_hosted_acceptance_driver(self):
         self.assertEqual(recipe("ci-extension-keep-awake-native").strip(), "/usr/bin/time -p python3 -B scripts/test-keep-awake-hosted-acceptance.py")
 

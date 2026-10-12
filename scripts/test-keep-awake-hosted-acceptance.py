@@ -117,25 +117,34 @@ def private_directory(path, private=False):
         require(attributes.st_mode & 0o777 == 0o700, 'Acceptance directory is not private')
 
 
-def main():
-    require(not sys.argv[1:], 'Unexpected acceptance arguments')
-    environment = os.environ
+def admit_source(environment, root):
     required = {'GITHUB_ACTIONS': 'true', 'RUNNER_ENVIRONMENT': 'github-hosted',
                 'RUNNER_OS': 'macOS', 'GITHUB_REPOSITORY': 'pulkitxm/edith',
                 'GITHUB_REPOSITORY_ID': '1289153439'}
     require(all(environment.get(key) == value for key, value in required.items()),
             'Keep Awake acceptance requires a disposable hosted Mac')
     require(environment.get('GITHUB_ACTOR_ID') in ['65671483', '320458784'], 'Unreviewed actor')
-    require(environment.get('GITHUB_REF') in ['refs/heads/main', 'refs/heads/feat/extension-marketplace'],
-            'Unreviewed source ref')
+    preview = (environment.get('GITHUB_REF')
+               == 'refs/heads/fix/keep-awake-accessibility-action'
+               and environment.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
+               and environment.get('EXTENSION_PUBLISH') == 'false')
+    require(environment.get('GITHUB_REF') in ['refs/heads/main', 'refs/heads/feat/extension-marketplace']
+            or preview, 'Unreviewed source ref')
     source = environment.get('EXPECTED_SOURCE_SHA', '')
     require(re.fullmatch('[0-9a-f]{40}', source) is not None
             and source == environment.get('GITHUB_SHA'), 'Source identity mismatch')
-    root = Path(__file__).resolve().parents[1]
     require(subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip() == source,
             'Checkout source mismatch')
     require(not subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=no'],
                                         cwd=root, text=True).strip(), 'Tracked source is dirty')
+    return source
+
+
+def main():
+    require(not sys.argv[1:], 'Unexpected acceptance arguments')
+    environment = os.environ
+    root = Path(__file__).resolve().parents[1]
+    source = admit_source(environment, root)
     paths = ['Makefile', 'Extensions/manifest.json', 'Extensions/keepAwake/Package.swift',
              'scripts/test-keep-awake-hosted-acceptance.py', 'scripts/test-extension-workers.mjs',
              'scripts/hosted-native-owner-tests.py', 'scripts/hosted-host-tests/watchdog.py']

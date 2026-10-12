@@ -109,9 +109,25 @@ import Testing
             diagnostic: { accessibilityDiagnostic(in: host) }
         ) { checkbox(in: host) != nil }
         var transitions: [Bool] = []
+        var pressObservations: [[String: Bool]] = []
         for requested in [true, false, true] {
             let control = try #require(checkbox(in: host))
-            try #require((control as AnyObject).accessibilityPerformPress?() == true)
+            let pressed = control.accessibilityPerformPress?() == true
+            if pressObservations.count < 8 {
+                pressObservations.append([
+                    "roleMatched": control.accessibilityRole?() == .checkBox,
+                    "labelMatched": control.accessibilityLabel?() == "Keep awake",
+                    "identifierMatched": control.accessibilityIdentifier?()
+                        == "keepAwake.preventSleep",
+                    "enabled": control.isAccessibilityEnabled?() == true,
+                    "element": control.isAccessibilityElement?() == true,
+                    "pressAccepted": pressed,
+                ])
+            }
+            try #require(
+                pressed,
+                "Original checkbox press rejected: \(diagnosticJSON(["pressObservations": pressObservations]))"
+            )
             try await wait(
                 "Apply original Keep awake preference \(requested)",
                 diagnostic: {
@@ -125,9 +141,11 @@ import Testing
                     ])
                 }
             ) {
-                engine.bool(forKey: "preventSleep") == requested
-                    && ((runtime.execute(["operation": "status"]) as? NSDictionary)?[
+                guard engine.bool(forKey: "preventSleep") == requested,
+                    ((runtime.execute(["operation": "status"]) as? NSDictionary)?[
                         "preventingSleep"] as? Bool) == requested
+                else { return false }
+                return try assertionCount() == (requested ? 1 : 0)
             }
             try #require(try assertionCount() == (requested ? 1 : 0))
             try #require(operations.contains("keepAwake.ui.update"))
@@ -158,10 +176,10 @@ import Testing
     }
 
     private func wait(
-        _ phase: String, diagnostic: (() -> String)? = nil, _ condition: () -> Bool
+        _ phase: String, diagnostic: (() -> String)? = nil, _ condition: () throws -> Bool
     ) async throws {
         let deadline = ContinuousClock.now + .seconds(5)
-        while !condition() {
+        while try !condition() {
             let beforeDeadline = ContinuousClock.now < deadline
             if !beforeDeadline {
                 let details = diagnostic?() ?? "{}"
@@ -221,21 +239,26 @@ import Testing
     private func checkbox(in root: Any) -> AnyObject? {
         var pending: [Any] = [root]
         var visited: Set<ObjectIdentifier> = []
+        var matches: [AnyObject] = []
+        var examinedNodes = 0
         while let value = pending.popLast() {
+            guard examinedNodes < 4096 else { return nil }
+            examinedNodes += 1
             let object = value as AnyObject
             guard visited.insert(ObjectIdentifier(object)).inserted else { continue }
             if object.accessibilityRole?() == .checkBox,
-                object.accessibilityLabel?() == "Keep awake"
+                object.accessibilityLabel?() == "Keep awake",
+                object.accessibilityIdentifier?() == "keepAwake.preventSleep"
             {
-                return object
+                matches.append(object)
+                guard matches.count == 1 else { return nil }
             }
             if let children = object.accessibilityChildren?() {
                 pending.append(contentsOf: children)
             }
             if let view = value as? NSView { pending.append(contentsOf: view.subviews) }
-            if visited.count > 4096 { return nil }
         }
-        return nil
+        return matches.count == 1 ? matches[0] : nil
     }
 
     private func assertionCount() throws -> Int {
