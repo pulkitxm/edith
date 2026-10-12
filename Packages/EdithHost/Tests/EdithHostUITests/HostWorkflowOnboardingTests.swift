@@ -7,6 +7,88 @@ import Testing
 @testable import EdithHost
 
 @Suite @MainActor struct HostWorkflowOnboardingTests {
+    @Test func reviewShowsEachPackagesOwnSignedCatalogVersionAndSizes() {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        fixture.available = [
+            "usage": package("usage", bytes: 100),
+            "herdr": package("herdr", bytes: 300),
+        ]
+        let model = fixture.model()
+        model.present()
+        model.choose(.agentic)
+        let usage = model.reviewMetadata(for: "usage")
+        let herdr = model.reviewMetadata(for: "herdr")
+        #expect(usage.version == "1.0.0")
+        #expect(usage.downloadBytes == 100 && usage.installedBytes == 200)
+        #expect(herdr.downloadBytes == 300 && herdr.installedBytes == 600)
+        #expect(usage.summary.contains("Catalog version 1.0.0"))
+        #expect(usage.summary.contains("download") && usage.summary.contains("unpacked"))
+        #expect(!usage.summary.contains("unknown"))
+        #expect(usage.summary != herdr.summary)
+        #expect(fixture.installs.isEmpty && fixture.active.isEmpty)
+    }
+
+    @Test func downloadedPackageWithoutCatalogMetadataDoesNotInventVersionOrZeroSizes() {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        fixture.available = [:]
+        fixture.installed = ["usage"]
+        let model = fixture.model()
+        model.present()
+        model.choose(.agentic)
+        let review = model.reviewMetadata(for: "usage")
+        #expect(model.visibleEntries.map(\.id) == ["usage"])
+        #expect(
+            review.version == nil && review.downloadBytes == nil && review.installedBytes == nil)
+        #expect(
+            review.summary
+                == "Catalog version unavailable · Download size unknown · Unpacked size unknown")
+        #expect(fixture.installs.isEmpty && fixture.active.isEmpty)
+    }
+
+    @Test func reviewKeepsKnownMetadataWhenOnlyOneSizeIsUnavailable() {
+        let package = ExtensionPackage(
+            id: "usage", version: "2.0.0", hostABI: HostContract.compatibility,
+            downloadURL: URL(string: "https://example.invalid/usage.zip")!,
+            sha256: String(repeating: "b", count: 64), downloadBytes: 123, installedBytes: 0)
+        let review = HostWorkflowPackageReview(package: package)
+        #expect(review.version == "2.0.0" && review.downloadBytes == 123)
+        #expect(review.installedBytes == nil)
+        #expect(review.summary.contains("Catalog version 2.0.0"))
+        #expect(review.summary.contains("Unpacked size unknown"))
+        #expect(!review.summary.contains("Download size unknown"))
+        let missing = HostWorkflowPackageReview(
+            package: Self.package("usage", bytes: 0))
+        #expect(missing.downloadBytes == nil && missing.installedBytes == nil)
+        #expect(missing.version == "1.0.0")
+    }
+
+    @Test func staleReviewUpdatesVisibleMetadataBeforeAllowingAnotherInstallAttempt() async {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        fixture.refresh = {
+            fixture.available["usage"] = ExtensionPackage(
+                id: "usage", version: "2.0.0", hostABI: HostContract.compatibility,
+                downloadURL: URL(string: "https://example.invalid/usage-v2.zip")!,
+                sha256: String(repeating: "b", count: 64),
+                downloadBytes: 500, installedBytes: 1000)
+        }
+        let model = fixture.model()
+        model.present()
+        model.choose(.custom)
+        model.toggle("usage")
+        #expect(model.reviewMetadata(for: "usage").version == "1.0.0")
+        model.installSelection()
+        await finish(model)
+        #expect(fixture.installs.isEmpty)
+        #expect(model.stage == .review && model.selected == ["usage"])
+        #expect(model.reviewMetadata(for: "usage").version == "2.0.0")
+        #expect(model.reviewMetadata(for: "usage").downloadBytes == 500)
+        #expect(model.reviewMetadata(for: "usage").installedBytes == 1000)
+        #expect(model.incomplete)
+    }
+
     @Test func firstShippingCatalogOffersOnlyKeepAwakeWithoutStartingIt() throws {
         let fixture = Fixture()
         defer { fixture.remove() }

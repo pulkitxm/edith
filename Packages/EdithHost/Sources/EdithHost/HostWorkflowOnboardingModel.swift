@@ -14,6 +14,32 @@ import Observation
     let changed: () -> Void
 }
 
+struct HostWorkflowPackageReview: Equatable {
+    let version: String?
+    let downloadBytes: Int64?
+    let installedBytes: Int64?
+
+    init(package: ExtensionPackage?) {
+        let version = package?.version.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.version = version?.isEmpty == false ? version : nil
+        downloadBytes = package.flatMap { $0.downloadBytes > 0 ? $0.downloadBytes : nil }
+        installedBytes = package.flatMap { $0.installedBytes > 0 ? $0.installedBytes : nil }
+    }
+
+    var summary: String {
+        let version = version.map { "Catalog version \($0)" } ?? "Catalog version unavailable"
+        let download =
+            downloadBytes.map {
+                "\(ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)) download"
+            } ?? "Download size unknown"
+        let installed =
+            installedBytes.map {
+                "\(ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)) unpacked"
+            } ?? "Unpacked size unknown"
+        return [version, download, installed].joined(separator: " · ")
+    }
+}
+
 @MainActor @Observable final class HostWorkflowOnboardingModel {
     enum Stage: Equatable { case workflows, review, installing, finished }
     enum InstallState: Equatable { case waiting, installing, ready, failed(String) }
@@ -63,6 +89,11 @@ import Observation
         let visible = offeredIDs.union(selected)
         return entries.filter { visible.contains($0.id) }
     }
+    func reviewMetadata(for id: String) -> HostWorkflowPackageReview {
+        _ = catalogRevision
+        return HostWorkflowPackageReview(package: environment.available()[id])
+    }
+
     var canInstall: Bool { !busy && cost.complete && !selected.isEmpty }
 
     func present() {
