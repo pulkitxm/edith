@@ -237,7 +237,7 @@ import Foundation
         guard !isStopped else { return }
         isStopped = true
         polling?.cancel()
-        files.beginSuspension()
+        files.stop()
         for tab in tabs { retire(tab.terminal) }
     }
 

@@ -34,8 +34,9 @@ import GhosttyTerminal
     private let open: @MainActor (URL) -> Bool
     private let handler: @MainActor (URL) -> String
     private let root: URL
+    private let copy: @Sendable (URL, URL) async throws -> Void
     private var stopped = false
-    private var copies: [UUID: (session: UUID, task: Task<Void, Error>)] = [:]
+    private var imports: [UUID: (session: UUID, task: Task<Void, Error>)] = [:]
     private var cleanups: [UUID: Task<Void, Never>] = [:]
 
     init(
@@ -44,14 +45,17 @@ import GhosttyTerminal
         handler: @escaping @MainActor (URL) -> String = {
             NSWorkspace.shared.urlForApplication(toOpen: $0)?.deletingPathExtension()
                 .lastPathComponent ?? "the default application"
+        },
+        copy: @escaping @Sendable (URL, URL) async throws -> Void = {
+            try TerminalEngineFiles.copy($0, to: $1)
         }
     ) {
-        self.root = root; self.open = open; self.handler = handler
+        self.root = root; self.open = open; self.handler = handler; self.copy = copy
     }
 
     func execute(
         _ command: String, payload: Data, session: TerminalEngine.SessionRequest, directory: String,
-        input: @MainActor (Data) throws -> Void
+        input: @escaping @MainActor (Data) throws -> Void
     ) async throws -> Data {
         guard !stopped else { throw ExtensionPeerError.unavailable }
         expire()
@@ -118,39 +122,17 @@ import GhosttyTerminal
                         && !$0.path.utf8.contains(0)
                 })
             else { throw ExtensionPeerError.invalidRequest }
-            var paths: [String] = []
-            var imported: [URL] = []
-            var delivered = false
-            defer {
-                if !delivered {
-                    for directory in imported { remove(directory, session: session.id) }
-                }
+            let id = UUID()
+            let task = Task {
+                try await importPaths(request, session: session, input: input)
             }
-            for item in request.items {
-                try Task.checkCancellation()
-                if !item.temporary { paths.append(item.path); continue }
-                let destination = try ownedDirectory(session.id)
-                imported.append(destination)
-                let target = destination.appendingPathComponent(
-                    URL(fileURLWithPath: item.path).lastPathComponent)
-                let id = UUID()
-                let copy = Task.detached {
-                    try Self.copy(URL(fileURLWithPath: item.path), to: target)
-                }
-                copies[id] = (session.id, copy)
-                defer { copies[id] = nil }
-                do {
-                    try await withTaskCancellationHandler {
-                        try await copy.value
-                    } onCancel: {
-                        copy.cancel()
-                    }
-                    try Task.checkCancellation()
-                    paths.append(target.path)
-                } catch { remove(destination, session: session.id); throw error }
+            imports[id] = (session.id, task)
+            defer { imports[id] = nil }
+            try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
             }
-            try input(Data(paths.map(GhosttyTerminalView.quotePath).joined(separator: " ").utf8))
-            delivered = true
         case "terminal.resolveLink":
             let request = try decoder.decode(Link.self, from: payload)
             guard request.value.utf8.count <= 4_096, !request.value.utf8.contains(0),
@@ -183,20 +165,24 @@ import GhosttyTerminal
         for token in writers.keys { uploads[token] = nil }
         targets = targets.filter { $0.value.handle.session.id != id }
         let directories = directories.removeValue(forKey: id) ?? []
-        let pending = copies.values.filter { $0.session == id }.map(\.task)
+        let pending = imports.values.filter { $0.session == id }.map(\.task)
+        for upload in writers.values { try? upload.writer.close() }
+        if pending.isEmpty {
+            for directory in directories { try? FileManager.default.removeItem(at: directory) }
+            return
+        }
         for task in pending { task.cancel() }
         let token = UUID()
         cleanups[token] = Task { [self] in
             defer { cleanups[token] = nil }
             for task in pending { _ = await task.result }
-            for upload in writers.values { try? upload.writer.close() }
             for directory in directories { try? FileManager.default.removeItem(at: directory) }
         }
     }
 
     func beginSuspension() {
         stopped = true
-        for copy in copies.values { copy.task.cancel() }
+        for operation in imports.values { operation.task.cancel() }
     }
 
     func stop() {
@@ -207,7 +193,7 @@ import GhosttyTerminal
 
     func stopAndWait() async {
         beginSuspension()
-        let pending = copies.values.map(\.task)
+        let pending = imports.values.map(\.task)
         for task in pending { _ = await task.result }
         stop()
         let cleanups = Array(cleanups.values)
@@ -239,6 +225,44 @@ import GhosttyTerminal
     }
     private func remove(_ directory: URL, session: UUID) {
         directories[session]?.remove(directory); try? FileManager.default.removeItem(at: directory)
+    }
+
+    private func importPaths(
+        _ request: Paths, session: TerminalEngine.SessionRequest,
+        input: @MainActor (Data) throws -> Void
+    ) async throws {
+        var paths: [String] = []
+        var imported: [URL] = []
+        var delivered = false
+        defer {
+            if !delivered {
+                for directory in imported { remove(directory, session: session.id) }
+            }
+        }
+        for item in request.items {
+            try Task.checkCancellation()
+            guard !stopped else { throw ExtensionPeerError.unavailable }
+            if !item.temporary { paths.append(item.path); continue }
+            let destination = try ownedDirectory(session.id)
+            imported.append(destination)
+            let target = destination.appendingPathComponent(
+                URL(fileURLWithPath: item.path).lastPathComponent)
+            let copy = copy
+            let task = Task.detached {
+                try await copy(URL(fileURLWithPath: item.path), target)
+            }
+            try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
+            try Task.checkCancellation()
+            paths.append(target.path)
+        }
+        try Task.checkCancellation()
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        try input(Data(paths.map(GhosttyTerminalView.quotePath).joined(separator: " ").utf8))
+        delivered = true
     }
 
     nonisolated private static func copy(_ source: URL, to target: URL) throws {
