@@ -135,25 +135,39 @@ final class ExtensionRuntime: NSObject {
             #if EDITH_FUNCTIONAL_FIXTURE
             if fixtureActive {
                 guard startRequested, let preferences = fixturePreferences,
-                    ["notch.settings.read", "notch.settings.write"].contains(command)
+                    ["notch.settings.read", "notch.settings.write", "notchShelf.cli.catalog"]
+                        .contains(
+                            command)
                 else { throw ExtensionPeerError.unavailable }
                 do {
                     guard let token = (request["token"] as? String).flatMap(UUID.init(uuidString:)),
                         let fixture
                     else { throw WorkerFixtureError.invalid }
-                    try NotchFixturePreferences.validate(
-                        command, payload: payload, schema: NotchSettingsSchema.defaults,
-                        accepts: NotchSettingsSchema.accepts)
+                    if command == "notchShelf.cli.catalog" {
+                        guard payload == Data("{}".utf8) else {
+                            throw ExtensionPeerError.invalidRequest
+                        }
+                    } else {
+                        try NotchFixturePreferences.validate(
+                            command, payload: payload, schema: NotchSettingsSchema.defaults,
+                            accepts: NotchSettingsSchema.accepts)
+                    }
                     let ticket = try fixture.beginRequest(
                         token: token, operation: command, payload: payload)
                     defer { fixture.cancelRequest(ticket) }
-                    let values = try preferences.execute(command, payload: payload)
-                    let snapshot = NotchSettingsSnapshot(
-                        preferences: values, activeIDs: [], browserProfile: nil,
-                        bluetoothPrivacyRequired: false)
-                    try snapshot.validate()
-                    try requireCurrentFixture()
-                    let response = try JSONEncoder().encode(snapshot)
+                    let response: Data
+                    if command == "notchShelf.cli.catalog" {
+                        try requireCurrentFixture()
+                        response = try NotchCLIProviderCatalog.encode(payload)
+                    } else {
+                        let values = try preferences.execute(command, payload: payload)
+                        let snapshot = NotchSettingsSnapshot(
+                            preferences: values, activeIDs: [], browserProfile: nil,
+                            bluetoothPrivacyRequired: false)
+                        try snapshot.validate()
+                        try requireCurrentFixture()
+                        response = try JSONEncoder().encode(snapshot)
+                    }
                     try fixture.completeRequest(ticket)
                     return response
                 } catch NotchFixturePreferencesError.invalid {
