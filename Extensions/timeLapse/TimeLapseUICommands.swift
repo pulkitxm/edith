@@ -41,12 +41,23 @@ struct TimeLapseUIImage: Codable { let image: Data? }
     private var previewLease: Task<Void, Never>?
     private var action: Task<Void, Never>?
     private var stopped = false
+    private var tasks: [UUID: Task<Void, Never>] = [:]
+    private var actionEpoch = UUID()
     private var exportTask: Task<Void, Never>?
     private var exportLease: Task<Void, Never>?
     private var exportStatus: TimeLapseUIExportStatus?
     init(recorder: TimeLapseRecorder) { self.recorder = recorder }
     func execute(_ command: String, payload: Data) async throws -> Data {
         guard !stopped else { throw ExtensionPeerError.unavailable }
+        try recorder.requireExportLibraryCurrent()
+        if recorder.exportOnly {
+            guard
+                [
+                    "recording.ui.snapshot", "recording.ui.sources", "recording.ui.library",
+                    "recording.ui.export", "recording.ui.exportPoll", "recording.ui.exportCancel",
+                ].contains(command)
+            else { throw ExtensionPeerError.invalidRequest }
+        }
         switch command {
         case "recording.ui.snapshot":
             let values = try JSONDecoder().decode([String: Bool].self, from: payload)
@@ -82,15 +93,19 @@ struct TimeLapseUIImage: Codable { let image: Data? }
             recorder.selectedDisplays = input.displays; recorder.selectedWindows = input.windows
             recorder.microphone = input.microphone
             guard recorder.canStart else { throw ExtensionPeerError.invalidRequest }
-            action = Task {
-                await recorder.start(); action = nil
+            let epoch = UUID(); actionEpoch = epoch
+            action = launch { [self] in
+                await recorder.start()
+                if actionEpoch == epoch { action = nil }
             }
             await Task.yield()
         case "recording.ui.stop":
             try empty(payload)
             action?.cancel()
-            action = Task {
-                await recorder.stop(); action = nil
+            let epoch = UUID(); actionEpoch = epoch
+            action = launch { [self] in
+                await recorder.stop()
+                if actionEpoch == epoch { action = nil }
             }
             await Task.yield()
         case "recording.ui.permission":
@@ -98,18 +113,13 @@ struct TimeLapseUIImage: Codable { let image: Data? }
             _ = CGRequestScreenCaptureAccess()
         case "recording.ui.library":
             try empty(payload)
-            let root = TimeLapseRecorder.libraryURL
-            return try JSONEncoder().encode(
-                try await BlockingWork.perform { try TimeLapseRecording.load(in: root) })
+            return try JSONEncoder().encode(try await recorder.readRecordings())
         case "recording.ui.export":
             let input = try JSONDecoder().decode(TimeLapseUIExport.self, from: payload)
             guard input.destination.hasPrefix("/"), !input.destination.utf8.contains(0) else {
                 throw ExtensionPeerError.invalidRequest
             }
-            let root = TimeLapseRecorder.libraryURL
-            let recordings = try await BlockingWork.perform {
-                try TimeLapseRecording.load(in: root)
-            }
+            let recordings = try await recorder.readRecordings()
             guard let recording = recordings.first(where: { $0.id == input.id }),
                 recording.directory != recorder.lastDirectory || !recorder.recording
             else { throw ExtensionPeerError.invalidRequest }
@@ -118,9 +128,9 @@ struct TimeLapseUIImage: Codable { let image: Data? }
             }
             let token = UUID()
             exportStatus = .init(token: token, complete: false, error: nil)
-            exportTask = Task {
+            exportTask = launch { [self] in
                 do {
-                    try await TimeLapseExporter.export(
+                    try await recorder.exportRecording(
                         recording, quality: input.quality,
                         to: URL(fileURLWithPath: input.destination))
                     if !stopped { exportStatus = .init(token: token, complete: true, error: nil) }
@@ -140,11 +150,14 @@ struct TimeLapseUIImage: Codable { let image: Data? }
                 values["token"] == status.token
             else { throw ExtensionPeerError.invalidRequest }
             if command == "recording.ui.exportCancel" {
-                exportTask?.cancel()
+                let pending = exportTask
+                pending?.cancel()
+                await pending?.value
             } else if !status.complete {
                 renewExportLease(status.token)
             }
-            return try JSONEncoder().encode(status)
+            try recorder.requireExportLibraryCurrent()
+            return try JSONEncoder().encode(exportStatus)
         default: throw ExtensionPeerError.invalidRequest
         }
         try Task.checkCancellation()
@@ -157,14 +170,14 @@ struct TimeLapseUIImage: Codable { let image: Data? }
     private func renewPreviewLease() {
         recorder.showPreview(true, consumer: previewConsumer)
         previewLease?.cancel()
-        previewLease = Task {
+        previewLease = launch { [self] in
             do { try await Task.sleep(for: .seconds(5)) } catch { return }
             recorder.showPreview(false, consumer: previewConsumer)
         }
     }
     private func renewExportLease(_ token: UUID) {
         exportLease?.cancel()
-        exportLease = Task {
+        exportLease = launch { [self] in
             do { try await Task.sleep(for: .seconds(10)) } catch { return }
             if exportStatus?.token == token && exportStatus?.complete == false {
                 exportTask?.cancel()
@@ -172,11 +185,23 @@ struct TimeLapseUIImage: Codable { let image: Data? }
         }
     }
     func shutdownAndWait() async {
-        let pending = [action, exportTask, exportLease, previewLease].compactMap { $0 }
+        let pending = Array(tasks.values)
         shutdown()
         for task in pending { await task.value }
     }
+    private func launch(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
+        let id = UUID()
+        let task = Task { [self] in
+            defer { tasks[id] = nil }
+            guard !stopped, !Task.isCancelled else { return }
+            await operation()
+        }
+        tasks[id] = task
+        return task
+    }
+
     func shutdown() {
+        for task in tasks.values { task.cancel() }
         exportTask?.cancel(); exportLease?.cancel()
         stopped = true; action?.cancel(); action = nil
         previewLease?.cancel(); previewLease = nil

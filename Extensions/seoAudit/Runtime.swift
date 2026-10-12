@@ -16,6 +16,8 @@ final class ExtensionRuntime: NSObject {
     private var startup: Task<Void, Never>?
     private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
+    private var draining = false
+    private var uiStops: [UUID: Task<Void, Never>] = [:]
     private var fixture: Bool {
         ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
     }
@@ -50,22 +52,54 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        _ = commands.suspend()
+        draining = true
+        let service = service, uiService = uiService, startup = startup, streams = cliStreams
+        let model = SEOAuditModel.shared, engine = uiEngine
+        engine?.shutdown()
+        startup?.cancel()
+        streams?.stop()
+        service?.beginSuspension()
+        uiService?.beginSuspension()
+        model.shutdown()
+        Task { [self, service, uiService, startup, streams, model, engine] in
+            _ = await commands.suspendAndWait()
+            await startup?.value
+            await streams?.stopAndWait()
+            await service?.suspendAndWait()
+            await uiService?.suspendAndWait()
+            await model.suspendAndWait()
+            await engine?.suspendAndWait()
+            for task in Array(uiStops.values) { await task.value }
+            completion()
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        draining = true
+        stopUI()
         let streams = cliStreams; cliStreams = nil; streams?.stop()
         commands.shutdown(); startup?.cancel()
-        uiEngine?.shutdown(); uiEngine = nil
+        let engine = uiEngine
+        engine?.shutdown(); uiEngine = nil
         SEOAuditModel.shared.shutdown(); SEOAuditPrivacyState.shared.shutdown()
         SEOSnapshotCache.shared.shutdown(); SEOAuditWorkerOperations.service = nil
         operations?.shutdown(); operations = nil; surface = nil
         let service = service; self.service = nil
+        service?.beginSuspension()
+        let model = SEOAuditModel.shared
         let startup = startup; self.startup = nil
-        Task {
+        Task { [self, service, startup, streams, model, engine] in
             await service?.shutdown()
             await startup?.value
-            await SEOAuditModel.shared.drain()
+            await model.drain()
+            await engine?.shutdownAndWait()
             await streams?.stopAndWait()
             await commands.shutdownAndWait()
+            for task in Array(uiStops.values) { await task.value }
             completion()
         }
     }
@@ -81,7 +115,8 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
-            guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
+            guard !draining, uiStops.isEmpty, engineClient == nil,
+                let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "seoAudit", let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
             engineClient = client
@@ -92,14 +127,9 @@ final class ExtensionRuntime: NSObject {
             SEOSnapshotCache.shared.configureRemote {
                 try await bridge.call("image", url: $0, as: Data?.self)
             }
-        case "stopUI":
-            engineClient?.invalidate(); engineClient = nil
-            SEOAuditModel.shared.shutdown()
-            SEOSnapshotCache.shared.shutdown()
-            let service = uiService; uiService = nil
-            Task { await service?.shutdown() }
+        case "stopUI": stopUI()
         case "start":
-            guard let suite = input["defaultsSuite"] as? String,
+            guard !draining, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             guard service == nil else { return ["ok": true] as NSDictionary }
@@ -130,6 +160,24 @@ final class ExtensionRuntime: NSObject {
         }
         return ["ok": true] as NSDictionary
     }
+    private func stopUI() {
+        let client = engineClient; engineClient = nil
+        let service = uiService, model = SEOAuditModel.shared
+        service?.beginSuspension()
+        model.shutdown()
+        SEOSnapshotCache.shared.shutdown()
+        uiService = nil
+        if service != nil {
+            let id = UUID()
+            uiStops[id] = Task { [self, service, model, client] in
+                defer { client?.invalidate(); uiStops[id] = nil }
+                await service?.shutdown()
+                await model.drain()
+            }
+        }
+        if service == nil { client?.invalidate() }
+    }
+
 }
 
 @_cdecl("edith_extension_create")

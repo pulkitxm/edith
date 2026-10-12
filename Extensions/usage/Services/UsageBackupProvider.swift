@@ -7,6 +7,7 @@ import IOKit.ps
     private let cloud: URL
     private let defaults: UserDefaults
     private var work: Task<Bool, Never>?
+    private var deadlines: [UUID: Task<Void, Never>] = [:]
     private var cancellation: UsageBackupCancellation?
     private var restoreToken: UsageBackupRestoreToken?
     private var stopping = false
@@ -171,13 +172,25 @@ import IOKit.ps
         events?.changed()
     }
 
-    func shutdown() async {
+    func beginSuspension() {
         stopping = true
+        bootstrapCancelled = true
+        ownedCancelled = true
+        restoreToken?.invalidate()
+        cancellation?.cancel()
+        work?.cancel()
+        for task in deadlines.values { task.cancel() }
+    }
+
+    func shutdown() async {
+        beginSuspension()
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         observers.removeAll()
         await events?.shutdown()
         events = nil
         await cancel()
+        let pending = Array(deadlines.values)
+        for task in pending { await task.value }
     }
 
     private func exportCurrent() async throws -> Data {
@@ -232,16 +245,20 @@ import IOKit.ps
             }
         }
         self.work = work
-        let deadline = Task {
+        let id = UUID()
+        let deadline = Task { [self] in
+            defer { deadlines[id] = nil }
             do { try await Task.sleep(for: .seconds(60)) } catch { return }
             token.invalidate(); cancellation.cancel(); work.cancel()
         }
-        defer { deadline.cancel() }
+        deadlines[id] = deadline
         let completed = await withTaskCancellationHandler {
             await work.value
         } onCancel: {
             token.invalidate(); cancellation.cancel(); work.cancel()
         }
+        deadline.cancel()
+        await deadline.value
         self.work = nil; self.cancellation = nil; restoreToken = nil
         failure =
             completed || ownedCancelled || Task.isCancelled ? nil : "Usage backup could not finish."
@@ -335,8 +352,14 @@ import IOKit.ps
         cancelling = false
     }
 
-    func shutdown() async {
+    func beginSuspension() {
         stopping = true
+        pending = false
+        task?.cancel()
+    }
+
+    func shutdown() async {
+        beginSuspension()
         await cancel()
     }
 }

@@ -17,12 +17,17 @@ import Foundation
         tasks[id] = task
         return task
     }
-    static func enable() { stopped = false }
-    static func shutdown() async {
+    static func enable() {
+        guard tasks.isEmpty else { return }
+        stopped = false
+    }
+    static func beginSuspension() {
         stopped = true
-        let pending = tasks.values
-        tasks.removeAll()
-        for task in pending { task.cancel() }
+        for task in tasks.values { task.cancel() }
+    }
+    static func shutdown() async {
+        beginSuspension()
+        let pending = Array(tasks.values)
         for task in pending { await task.value }
     }
 }

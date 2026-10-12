@@ -100,10 +100,34 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        _ = commands.suspend()
+        let cleaning = cleaning, model = model, uiModel = uiModel
+        cleaning?.shutdown()
+        model?.beginSuspension()
+        uiModel?.beginSuspension()
+        Task { [self, cleaning, model, uiModel] in
+            _ = await commands.suspendAndWait()
+            await cleaning?.shutdownAndWait()
+            await model?.suspendAndWait()
+            await uiModel?.suspendAndWait()
+            completion()
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        Task {
+        let cleaning = cleaning, model = model, uiModel = uiModel
+        commands.shutdown()
+        cleaning?.shutdown()
+        model?.beginSuspension()
+        uiModel?.beginSuspension()
+        Task { [self, cleaning, model, uiModel] in
             await commands.shutdownAndWait()
+            await cleaning?.shutdownAndWait()
+            await model?.suspendAndWait()
+            await uiModel?.suspendAndWait()
             cleaning?.shutdown()
             model?.shutdown()
             presentation?.shutdown()

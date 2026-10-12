@@ -12,6 +12,7 @@ final class SweaterEngine: FeatureModule {
     private var tracker: SweaterWindowTracker?
     private var reconciler: SweaterReconciler?
     private var current = SweaterSettings()
+    private var draining = false
 
     private let fixture: WorkerFixtureAdmission?
     var systemResourceCount: Int { (tracker == nil ? 0 : 1) + (reconciler == nil ? 0 : 1) }
@@ -41,15 +42,28 @@ final class SweaterEngine: FeatureModule {
         reconciler.start()
     }
 
-    func shutdown() {
+    func suspendWork() {
+        draining = true
         reconciler?.stop()
-        reconciler = nil
+        tracker?.suspendWork()
+    }
+
+    func suspendAndWait() async {
+        suspendWork()
+        let reconciler = reconciler
+        let tracker = tracker
+        await reconciler?.stopAndWait()
+        await tracker?.suspendAndWait()
+    }
+
+    func shutdown() {
+        suspendWork()
         tracker?.shutDown()
-        tracker = nil
         renderer.flushCache()
     }
 
     func applySettings() {
+        guard !draining else { return }
         if fixture != nil { current = SweaterState.settings(); return }
         guard let tracker else { return }
         let updated = SweaterState.settings()

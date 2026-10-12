@@ -57,12 +57,20 @@ actor UsageMachinesProjection {
         self.currentMachine = currentMachine; self.now = now; self.collector = collector
     }
 
-    func shutdown() async {
+    func beginSuspension() {
         stopped = true
-        entries = [:]
+        for job in jobs.values { job.task.cancel() }
+    }
+
+    func suspendAndWait() async {
+        beginSuspension()
         let pending = Array(jobs.values)
-        for job in pending { job.task.cancel() }
-        for job in pending { _ = try? await job.task.value }
+        for job in pending { _ = await job.task.result }
+    }
+
+    func shutdown() async {
+        await suspendAndWait()
+        entries = [:]
         jobs = [:]
     }
 

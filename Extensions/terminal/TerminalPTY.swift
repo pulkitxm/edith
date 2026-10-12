@@ -7,6 +7,8 @@ final class TerminalPTY {
     static let maximumInputBytes = 16_384
     private let descriptor: Int32
     private let pid: pid_t
+    private let group: ExtensionOwnedProcessGroup
+    private var closing: TerminalProcessRetirement?
     private var closed = false
     private var pendingInput = Data()
     private var output = Data()
@@ -29,10 +31,14 @@ final class TerminalPTY {
         let spawned = try Self.spawn(launch, columns: columns, rows: rows)
         descriptor = spawned.master
         pid = spawned.pid
+        group = spawned.group
+        defer { Darwin.close(spawned.permit) }
         _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
         _ = fcntl(descriptor, F_SETFL, O_NONBLOCK)
         do {
             try ExtensionCommandOwnership.register(pid)
+            var permit: UInt8 = 1
+            guard Darwin.write(spawned.permit, &permit, 1) == 1 else { throw Self.error() }
         } catch {
             close()
             throw error
@@ -82,20 +88,34 @@ final class TerminalPTY {
         pendingInput.removeAll()
         output.removeAll()
         reap()
-        ExtensionCommandOwnership.release(pid)
-        guard exitCode == nil else { return }
-        _ = kill(-pid, SIGHUP)
-        _ = kill(pid, SIGHUP)
-        _ = kill(-pid, SIGKILL)
-        _ = kill(pid, SIGKILL)
+        try? group.signal(SIGHUP)
+        try? group.signal(SIGKILL)
         let identifier = pid
-        DispatchQueue.global(qos: .utility).async {
+        let reaped = exitCode != nil
+        let owner = Task.detached(priority: .utility) {
+            guard !reaped else { return }
             var status: Int32 = 0
-            while waitpid(identifier, &status, 0) < 0 && errno == EINTR {}
+            while true {
+                let result = waitpid(identifier, &status, 0)
+                if result == identifier || (result < 0 && errno == ECHILD) { return }
+                if result < 0 && errno == EINTR { continue }
+                throw Self.error()
+            }
+        }
+        let group = group
+        closing = TerminalProcessRetirement(owner: owner) { join in
+            try await group.retire(after: join)
         }
     }
 
+    func closeAndWait() async throws {
+        close()
+        try await closing?.wait()
+    }
+
     func poll() throws {
+        guard !closed else { throw POSIXError(.EINVAL) }
+        _ = try group.refreshObserved()
         reap()
         if exitCode == nil { try flushInput() } else { pendingInput.removeAll() }
         var buffer = [UInt8](repeating: 0, count: 8_192)
@@ -155,7 +175,7 @@ final class TerminalPTY {
     }
 
     private static func spawn(_ launch: TerminalLaunch, columns: UInt16, rows: UInt16) throws
-        -> (pid: pid_t, master: Int32)
+        -> (pid: pid_t, master: Int32, permit: Int32, group: ExtensionOwnedProcessGroup)
     {
         let argv = ([launch.executable] + launch.arguments).map { strdup($0) }
         let env = launch.environment.map { strdup($0) }
@@ -176,6 +196,20 @@ final class TerminalPTY {
         sigemptyset(&mask)
         var action = sigaction()
         action.__sigaction_u.__sa_handler = SIG_DFL
+        var ready: [Int32] = [-1, -1]
+        var permit: [Int32] = [-1, -1]
+        guard pipe(&ready) == 0 else { throw error() }
+        guard pipe(&permit) == 0 else {
+            for descriptor in ready { Darwin.close(descriptor) }
+            throw error()
+        }
+        var transferred = false
+        defer {
+            for descriptor in ready { Darwin.close(descriptor) }
+            Darwin.close(permit[0])
+            if !transferred { Darwin.close(permit[1]) }
+        }
+        guard fcntl(permit[1], F_SETNOSIGPIPE, 1) == 0 else { throw error() }
         let maximumDescriptor = getdtablesize()
         let pid = launch.executable.withCString { executable in
             launch.currentDirectory.withCString { directory in
@@ -183,6 +217,17 @@ final class TerminalPTY {
                     variables.withUnsafeMutableBufferPointer { variables in
                         let pid = forkpty(&master, nil, &raw, &size)
                         if pid == 0 {
+                            Darwin.close(ready[0])
+                            Darwin.close(permit[1])
+                            var byte: UInt8 = 1
+                            guard Darwin.write(ready[1], &byte, 1) == 1 else { _exit(126) }
+                            Darwin.close(ready[1])
+                            var accepted: ssize_t
+                            repeat {
+                                accepted = Darwin.read(permit[0], &byte, 1)
+                            } while accepted < 0 && errno == EINTR
+                            guard accepted == 1, byte == 1 else { _exit(126) }
+                            Darwin.close(permit[0])
                             sigprocmask(SIG_SETMASK, &mask, nil)
                             sigaction(SIGHUP, &action, nil)
                             sigaction(SIGINT, &action, nil)
@@ -204,6 +249,68 @@ final class TerminalPTY {
             }
         }
         guard pid > 0 else { throw error() }
-        return (pid, master)
+        Darwin.close(ready[1])
+        ready[1] = -1
+        var byte: UInt8 = 0
+        var received: ssize_t
+        repeat { received = Darwin.read(ready[0], &byte, 1) } while received < 0 && errno == EINTR
+        do {
+            guard received == 1, byte == 1 else { throw error() }
+            let group = try ExtensionCommandOwnership.captureGroup(pid: pid)
+            transferred = true
+            return (pid, master, permit[1], group)
+        } catch {
+            Darwin.close(permit[1])
+            permit[1] = -1
+            Darwin.close(master)
+            var status: Int32 = 0
+            while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
+            throw error
+        }
+    }
+}
+
+final class TerminalProcessRetirement: @unchecked Sendable {
+    typealias Join = @Sendable () async throws -> Void
+    private let owner: Task<Void, Error>
+    private let retire: @Sendable (@escaping Join) async throws -> Void
+    private let lock = NSLock()
+    private var draining: (id: UUID, task: Task<Void, Error>)?
+
+    init(
+        owner: Task<Void, Error>,
+        retire: @escaping @Sendable (@escaping Join) async throws -> Void
+    ) {
+        self.owner = owner
+        self.retire = retire
+        draining = (
+            id: UUID(),
+            task: Task {
+                try await retire { try await owner.value }
+            }
+        )
+    }
+
+    func wait() async throws {
+        let pending = lock.withLock { () -> (id: UUID, task: Task<Void, Error>) in
+            if let draining { return draining }
+            let owner = owner, retire = retire
+            let pending = (
+                id: UUID(),
+                task: Task {
+                    try await retire { try await owner.value }
+                }
+            )
+            draining = pending
+            return pending
+        }
+        do {
+            try await pending.task.value
+        } catch {
+            lock.withLock {
+                if draining?.id == pending.id { draining = nil }
+            }
+            throw error
+        }
     }
 }

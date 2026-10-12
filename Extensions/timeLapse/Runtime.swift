@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
@@ -11,6 +14,8 @@ final class ExtensionRuntime: NSObject {
     private var uiRecorder: NSObject?
     private var uiClient: ExtensionEngineClient?
     private var uiOperations: NSObject?
+    private var draining = false
+    private var uiStops: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -22,8 +27,19 @@ final class ExtensionRuntime: NSObject {
             if command.hasPrefix("recording.ui."),
                 let operations = self?.uiOperations as? TimeLapseUICommands
             {
+                if recorder.exportOnly {
+                    guard let value = request["token"] as? String,
+                        let token = UUID(uuidString: value)
+                    else { throw ExtensionPeerError.invalidRequest }
+                    return try await recorder.performExportRequest(
+                        token: token, command: command, payload: payload
+                    ) {
+                        try await operations.execute(command, payload: payload)
+                    }
+                }
                 return try await operations.execute(command, payload: payload)
             }
+            guard !recorder.exportOnly else { throw ExtensionPeerError.invalidRequest }
             if command == "surface.snapshot" || command == "surface.perform" {
                 return try await SurfaceCommandService.execute(
                     providerID: "timeLapse", command: command, payload: payload,
@@ -71,16 +87,42 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        draining = true
+        let recorder = recorder, operations = uiOperations
+        if #available(macOS 15.0, *) { (recorder as? TimeLapseRecorder)?.beginSuspension() }
+        _ = commands.suspend()
+        stopUI()
+        if #available(macOS 15.0, *) { (operations as? TimeLapseUICommands)?.shutdown() }
+        Task { [self, recorder, operations] in
+            _ = await commands.suspendAndWait()
+            if #available(macOS 15.0, *) {
+                await (operations as? TimeLapseUICommands)?.shutdownAndWait()
+                await (recorder as? TimeLapseRecorder)?.suspendAndWait()
+            }
+            for task in Array(uiStops.values) { await task.value }
+            completion()
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        Task {
+        draining = true
+        let recorder = recorder, operations = uiOperations
+        if #available(macOS 15.0, *) { (recorder as? TimeLapseRecorder)?.beginSuspension() }
+        commands.shutdown()
+        stopUI()
+        if #available(macOS 15.0, *) { (operations as? TimeLapseUICommands)?.shutdown() }
+        Task { [self, recorder, operations] in
             await commands.shutdownAndWait()
             if #available(macOS 15.0, *) {
-                await (uiOperations as? TimeLapseUICommands)?.shutdownAndWait()
+                await (operations as? TimeLapseUICommands)?.shutdownAndWait()
             }
             if #available(macOS 15.0, *), let recorder = recorder as? TimeLapseRecorder {
                 await recorder.shutdown()
             }
+            for task in Array(uiStops.values) { await task.value }
             completion()
         }
     }
@@ -96,17 +138,39 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard #available(macOS 15.0, *), let suite = input["defaultsSuite"] as? String,
+            guard !draining, #available(macOS 15.0, *),
+                let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else {
                 return ["ok": false] as NSDictionary
             }
             if recorder == nil {
-                let created = TimeLapseRecorder(); recorder = created;
-                uiOperations = TimeLapseUICommands(recorder: created)
+                do {
+                    let created: TimeLapseRecorder
+                    #if canImport(WorkerFixtureSupport)
+                    if let library = try TimeLapseExportLibrary.signed(
+                        context: input, roleBundle: Bundle(for: ExtensionRuntime.self))
+                    {
+                        created = TimeLapseRecorder(exportLibrary: library)
+                    } else {
+                        guard !TimeLapseExportIntent.present(input) else {
+                            return ["ok": false] as NSDictionary
+                        }
+                        created = TimeLapseRecorder()
+                    }
+                    #else
+                    guard !TimeLapseExportIntent.present(input) else {
+                        return ["ok": false] as NSDictionary
+                    }
+                    created = TimeLapseRecorder()
+                    #endif
+                    recorder = created
+                    uiOperations = TimeLapseUICommands(recorder: created)
+                } catch { return ["ok": false] as NSDictionary }
             }
         case "configureUI":
-            guard let configuration = ExtensionUIConfiguration(context: input),
+            guard !draining, uiStops.isEmpty,
+                let configuration = ExtensionUIConfiguration(context: input),
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
             stopUI(); uiClient = client
@@ -129,19 +193,26 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
-            commands.shutdown()
-            if #available(macOS 15.0, *) { (uiOperations as? TimeLapseUICommands)?.shutdown() }
-            uiOperations = nil
-            recorder = nil
+            prepareToStop { [self] in
+                uiOperations = nil; recorder = nil
+            }
         case "status": return ["ok": true, "running": recorder != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
     }
     private func stopUI() {
+        let client = uiClient; uiClient = nil
         let recorder = uiRecorder; uiRecorder = nil
-        uiClient?.invalidate(); uiClient = nil
-        Task { if #available(macOS 15.0, *) { await (recorder as? TimeLapseRecorder)?.shutdown() } }
+        if #available(macOS 15.0, *) { (recorder as? TimeLapseRecorder)?.beginSuspension() }
+        if let recorder {
+            let id = UUID()
+            uiStops[id] = Task { [self, recorder, client] in
+                defer { client?.invalidate(); uiStops[id] = nil }
+                if #available(macOS 15.0, *) { await (recorder as? TimeLapseRecorder)?.shutdown() }
+            }
+        }
+        if recorder == nil { client?.invalidate() }
     }
 }
 
@@ -151,4 +222,19 @@ public func createExtension() -> UnsafeMutableRawPointer? {
         bitPattern: MainActor.assumeIsolated {
             UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
         })
+}
+
+private enum TimeLapseExportIntent {
+    static func present(_ context: NSDictionary) -> Bool {
+        let environment = ProcessInfo.processInfo.environment
+        return environment["EDITH_FUNCTIONAL_FIXTURE"] != nil
+            || context["hostedFunctionalFixture"] != nil
+            || environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+            || (context["hostIdentifier"] as? String)?.hasPrefix("com.pulkit.edith.tests.") == true
+            || Bundle.main.bundleIdentifier?.hasPrefix("com.pulkit.edith.tests.") == true
+            || environment["EDITH_APPLICATION_IDENTIFIER"]?.hasPrefix("com.pulkit.edith.tests.")
+                == true
+            || environment["EDITH_SHARED_DEFAULTS_SUITE"]?.hasPrefix("com.pulkit.edith.tests.")
+                == true
+    }
 }

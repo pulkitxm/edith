@@ -16,6 +16,9 @@ final class ExtensionRuntime: NSObject {
     private let commands = ExtensionCommandRegistry()
     private let cliStreams = try? ExtensionCLIStreams(owner: "virtualCamera")
     private var disable: Task<Void, Error>?
+    private var stopError: NSError?
+    private var draining = false
+    private var uiStops: [UUID: Task<Void, Never>] = [:]
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -78,20 +81,43 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        _ = commands.suspend()
+        draining = true
+        stopUI()
+        let worker = worker, streams = cliStreams
+        worker?.beginDrain()
+        streams?.stop()
+        Task { [self, worker, streams] in
+            _ = await commands.suspendAndWait()
+            await worker?.drain()
+            await streams?.stopAndWait()
+            let stops = Array(uiStops.values)
+            for task in stops { await task.value }
+            completion()
+        }
+    }
+
     @objc(prepareDisableWithCompletion:)
     func prepareDisable(completion: @escaping (NSError?) -> Void) {
-        worker?.markDraining()
+        commands.shutdown()
+        draining = true
+        stopUI()
+        cliStreams?.stop()
+        let worker = worker
+        worker?.beginDrain()
         if disable == nil {
-            disable = Task { [weak self] in
-                guard let self, let worker else { return }
+            disable = Task { [self, worker] in
                 await commands.shutdownAndWait()
                 await cliStreams?.stopAndWait()
-                try await worker.prepareDisable()
+                try await worker?.prepareDisable()
             }
         }
-        Task { [weak self] in
-            do { try await self?.disable?.value; completion(nil) } catch {
-                self?.disable = nil; completion(error as NSError)
+        let disable = disable
+        Task { [self, disable] in
+            do { try await disable?.value; completion(nil) } catch {
+                self.disable = nil; completion(error as NSError)
             }
         }
     }
@@ -99,11 +125,29 @@ final class ExtensionRuntime: NSObject {
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         stopUI()
-        worker?.markDraining()
-        Task { [weak self] in
-            await self?.commands.shutdownAndWait()
-            await self?.cliStreams?.stopAndWait()
-            try? await self?.worker?.prepareDisable(); completion()
+        commands.shutdown()
+        draining = true
+        stopUI()
+        cliStreams?.stop()
+        let worker = worker, streams = cliStreams, disable = disable
+        worker?.beginDrain()
+        Task { [self, worker, streams, disable] in
+            await commands.shutdownAndWait()
+            await worker?.drain()
+            await streams?.stopAndWait()
+            let stops = Array(uiStops.values)
+            for task in stops { await task.value }
+            do {
+                if let disable {
+                    try await disable.value
+                } else {
+                    try await worker?.prepareDisable()
+                }
+                stopError = nil
+                completion()
+            } catch {
+                stopError = error as NSError
+            }
         }
     }
 
@@ -118,7 +162,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard worker == nil, let suite = input["defaultsSuite"] as? String,
+            guard !draining, worker == nil, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
                 let host = input["hostIdentifier"] as? String,
                 host == ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"],
@@ -128,7 +172,8 @@ final class ExtensionRuntime: NSObject {
                 return ["ok": false] as NSDictionary
             }
         case "configureUI":
-            guard let configuration = ExtensionUIConfiguration(context: input),
+            guard !draining, uiStops.isEmpty,
+                let configuration = ExtensionUIConfiguration(context: input),
                 let defaults = UserDefaults(suiteName: configuration.defaultsSuite),
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
@@ -159,9 +204,19 @@ final class ExtensionRuntime: NSObject {
     }
     private func stopUI() {
         TextEditingCommands.shutdown()
-        let model = uiModel; uiModel = nil
-        uiClient?.invalidate(); uiClient = nil
-        if let model { Task { await model.shutdown() } }
+        let client = uiClient; uiClient = nil
+        let model = uiModel
+        model?.beginSuspension()
+        uiModel = nil
+        if let model {
+            let id = UUID()
+            uiStops[id] = Task { [self, model, client] in
+                defer { client?.invalidate(); uiStops[id] = nil }
+                await model.shutdown()
+            }
+        } else {
+            client?.invalidate()
+        }
     }
 }
 
@@ -376,8 +431,12 @@ enum CameraCarrierLaunchEnvironment {
 
     func markDraining() { draining = true }
 
-    func drain() async {
+    func beginDrain() {
         draining = true
+        ui.beginSuspension()
+        model.beginSuspension()
+        manager.beginSuspension()
+        engine.beginSuspension()
         if drainTask == nil {
             drainTask = Task { [self] in
                 CameraExtensionBridge.shutdown()
@@ -390,6 +449,10 @@ enum CameraCarrierLaunchEnvironment {
                 CameraPrivacy.shared.shutdown()
             }
         }
+    }
+
+    func drain() async {
+        beginDrain()
         await drainTask?.value
     }
 

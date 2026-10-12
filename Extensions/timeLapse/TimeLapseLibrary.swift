@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AVFoundation
 import EdithExtensionSupport
 import Foundation
@@ -196,7 +199,12 @@ enum TimeLapseExporter {
             exporter.audioTimePitchAlgorithm = .timeDomain
             let url = directory.appendingPathComponent(".\(UUID().uuidString).m4a")
             temporary.append(url)
-            try await exporter.export(to: url, as: .m4a)
+            try await withTaskCancellationHandler {
+                try Task.checkCancellation()
+                try await exporter.export(to: url, as: .m4a)
+            } onCancel: {
+                exporter.cancelExport()
+            }
             let asset = AVURLAsset(url: url)
             guard let mixed = try await asset.loadTracks(withMediaType: .audio).first else {
                 throw TimeLapseError.empty
@@ -228,9 +236,55 @@ enum TimeLapseExporter {
     }
 
     @available(macOS 15.0, *)
-    static func export(
+    @MainActor static func export(
         _ recording: TimeLapseRecording, quality: TimeLapseExportQuality,
         to destination: URL
+    ) async throws {
+        try await performExport(recording, quality: quality, to: destination)
+    }
+
+    #if canImport(WorkerFixtureSupport)
+    @available(macOS 15.0, *)
+    @MainActor static func export(
+        _ recording: TimeLapseRecording, quality: TimeLapseExportQuality,
+        to destination: URL, lease: WorkerFixtureNativeExportLease
+    ) async throws {
+        try await lease.withAction { action in
+            guard quality == .original,
+                recording.session.settings.mode == .standard,
+                recording.session.settings.speed == 1,
+                !recording.session.settings.systemAudio,
+                recording.session.settings.microphoneID == nil,
+                recording.session.segments.count == 1,
+                recording.session.segments[0].kind == "video",
+                recording.session.segments[0].file == "video.mp4"
+            else { throw TimeLapseError.invalidSession }
+            try await performExport(
+                recording, quality: quality, to: destination,
+                staging: {
+                    let url = try lease.stageURL(action)
+                    guard
+                        url
+                            == destination.deletingLastPathComponent()
+                            .appendingPathComponent("Recording.partial.mp4")
+                    else { throw TimeLapseError.invalidSession }
+                    return url
+                },
+                requireCurrent: { try lease.requireCurrent(action) },
+                publish: {
+                    guard try lease.publish(action) == destination else {
+                        throw TimeLapseError.invalidSession
+                    }
+                })
+        }
+    }
+    #endif
+
+    @available(macOS 15.0, *)
+    @MainActor private static func performExport(
+        _ recording: TimeLapseRecording, quality: TimeLapseExportQuality,
+        to destination: URL, staging: (() throws -> URL)? = nil,
+        requireCurrent: () throws -> Void = {}, publish: (() throws -> Void)? = nil
     ) async throws {
         let composition = try await composition(recording)
         let mixedAudio = try await mixAudio(
@@ -243,12 +297,25 @@ enum TimeLapseExporter {
             throw TimeLapseError.encoding("This Mac does not support the selected export quality.")
         }
         let fileType = quality.fileType
-        let temporary = destination.deletingLastPathComponent().appendingPathComponent(
-            ".\(UUID().uuidString).partial")
-        defer { try? FileManager.default.removeItem(at: temporary) }
+        let temporary =
+            try staging?()
+            ?? destination.deletingLastPathComponent().appendingPathComponent(
+                ".\(UUID().uuidString).partial")
+        defer { if staging == nil { try? FileManager.default.removeItem(at: temporary) } }
         export.shouldOptimizeForNetworkUse = true
-        try await export.export(to: temporary, as: fileType)
+        try requireCurrent()
+        try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            try await export.export(to: temporary, as: fileType)
+        } onCancel: {
+            export.cancelExport()
+        }
         try Task.checkCancellation()
+        if let publish {
+            try requireCurrent()
+            try publish()
+            return
+        }
         if FileManager.default.fileExists(atPath: destination.path) {
             _ = try FileManager.default.replaceItemAt(destination, withItemAt: temporary)
         } else {

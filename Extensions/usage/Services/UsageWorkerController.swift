@@ -177,7 +177,7 @@ public final class UsageWorkerController {
                 limitsWaiters[token] = continuation
             }
         } onCancel: {
-            Task { @MainActor [weak self] in
+            DispatchQueue.main.async { [weak self] in
                 self?.limitsWaiters.removeValue(forKey: token)?.resume()
             }
         }
@@ -301,7 +301,7 @@ public final class UsageWorkerController {
                 refreshWaiters[token] = continuation
             }
         } onCancel: {
-            Task { @MainActor [weak self] in
+            DispatchQueue.main.async { [weak self] in
                 self?.refreshWaiters.removeValue(forKey: token)?.resume()
             }
         }
@@ -347,8 +347,21 @@ public final class UsageWorkerController {
         finishLimitsWaiters()
     }
 
-    public func shutdown() async {
+    public func suspendAndWait() async {
         beginShutdown()
+        let background = backgroundTask, sleeper = backgroundSleepTask
+        let usage = usageTask, limits = limitsTask
+        await background?.value
+        await sleeper?.value
+        await usage?.value
+        await limits?.value
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+
+    public func shutdown() async {
+        await suspendAndWait()
         await backgroundTask?.value
         await backgroundSleepTask?.value
         backgroundSleepTask = nil

@@ -52,6 +52,10 @@ final class VirtualCameraEngine {
     private(set) var route: VirtualCameraRoute?
     private(set) var streamingRoute: VirtualCameraRoute?
     private var stopWork: DispatchWorkItem?
+    private let stopWorkReturns = DispatchGroup()
+    private let callbacks = VirtualCameraEngineCallbacks()
+    private var draining = false
+    private var shutdownTask: Task<Void, Never>?
     private var stateToken: NSObjectProtocol?
     private var workspaceTokens: [NSObjectProtocol] = []
     private var workspaceCenter: NotificationCenter?
@@ -70,6 +74,7 @@ final class VirtualCameraEngine {
     private var microphonePreparation: Task<Void, Error>?
     private var microphonePreparationID: UUID?
     private var audioStartup: Task<Void, Never>?
+    private var audioStarting = false
     private var microphonePrepared = false
     private var audioPreparationFailure: String?
 
@@ -104,15 +109,16 @@ final class VirtualCameraEngine {
     }
 
     func start() {
-        guard !isStopped, stateToken == nil else { return }
+        guard !isStopped, !draining, stateToken == nil else { return }
         configureAudio()
+        let callbacks = callbacks
         stateToken = IPC.observe(
             IPC.Name.virtualCameraStateChanged,
             info: { [weak self] info in
                 guard info[VirtualCameraIPC.originKey] as? String != "helper" else { return }
-                let announced = VirtualCameraStore.announcedState(info)
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated { self?.syncSettings(announced) }
+                callbacks.perform {
+                    let announced = VirtualCameraStore.announcedState(info)
+                    callbacks.submit { [weak self] in self?.syncSettings(announced) }
                 }
             })
         if let center = environment.applicationNotifications() {
@@ -125,12 +131,16 @@ final class VirtualCameraEngine {
                     let app =
                         note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
                     let pid = app?.processIdentifier
-                    MainActor.assumeIsolated { self?.applicationQuit(pid) }
+                    callbacks.perform {
+                        MainActor.assumeIsolated { self?.applicationQuit(pid) }
+                    }
                 },
                 center.addObserver(
                     forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main
                 ) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.refreshExtension() }
+                    callbacks.perform {
+                        MainActor.assumeIsolated { self?.refreshExtension() }
+                    }
                 },
             ]
         }
@@ -138,40 +148,58 @@ final class VirtualCameraEngine {
         refreshExtension()
     }
 
-    func shutdown() {
-        isStopped = true
+    func beginSuspension() {
+        guard !draining else { return }
+        draining = true
+        callbacks.close()
         audioStartup?.cancel()
         microphonePreparation?.cancel()
-        audioMixer.shutdown()
-        if recordingPath != nil {
-            recordingShutdown = Task { [pipeline] in _ = try? await pipeline.stopRecording() }
-            recordingPath = nil
-        }
         stopWork?.cancel()
-        stopWork = nil
         if let stateToken { IPC.stopObserving(stateToken) }
         stateToken = nil
         if let workspaceCenter { workspaceTokens.forEach { workspaceCenter.removeObserver($0) } }
         workspaceTokens = []; workspaceCenter = nil
         edithSink.stopObserving()
         obsSink.stopObserving()
+    }
+
+    func shutdown() {
+        beginSuspension()
+        guard !isStopped else { return }
+        isStopped = true
+        audioMixer.shutdown()
+        if recordingPath != nil {
+            recordingShutdown = Task { [pipeline] in _ = try? await pipeline.stopRecording() }
+            recordingPath = nil
+        }
         stopStreaming()
     }
 
     func finishShutdown() async {
+        if let shutdownTask { await shutdownTask.value; return }
         shutdown()
-        await recordingShutdown?.value
-        recordingShutdown = nil
-        await audioStartup?.value
-        _ = try? await microphonePreparation?.value
-        audioStartup = nil; microphonePreparation = nil; microphonePreparationID = nil
-        await pipeline.stopAndDrain()
-        await audioMixer.shutdownAndWait()
-        previewBus.close()
+        let recording = recordingShutdown, audio = audioStartup, microphone = microphonePreparation
+        let task = Task { [self, recording, audio, microphone] in
+            await recording?.value
+            await audio?.value
+            _ = try? await microphone?.value
+            await callbacks.wait()
+            await withCheckedContinuation { continuation in
+                stopWorkReturns.notify(queue: .main) { continuation.resume() }
+            }
+            await pipeline.stopAndDrain()
+            await audioMixer.shutdownAndWait()
+            recordingShutdown = nil
+            audioStartup = nil; microphonePreparation = nil; microphonePreparationID = nil
+            stopWork = nil
+            previewBus.close()
+        }
+        shutdownTask = task
+        await task.value
     }
 
     func syncSettings(_ announced: VirtualCameraState? = nil) {
-        guard !isStopped else { return }
+        guard !isStopped, !draining else { return }
         let next = announced ?? VirtualCameraStore.load()
         guard next != state else { return }
         let outputChanged = next.output != state.output
@@ -187,7 +215,7 @@ final class VirtualCameraEngine {
     }
 
     func perform(_ request: VirtualCameraRequest) throws -> VirtualCameraSnapshot {
-        guard !isStopped else { throw ExtensionPeerError.unavailable }
+        guard !isStopped, !draining else { throw ExtensionPeerError.unavailable }
         guard request.changesState else { return snapshot() }
         if case .pause(.stopped, _) = request, recordingPath != nil {
             throw MeetingAudioLibrary.error("Stop the recording before stopping the camera.")
@@ -215,7 +243,7 @@ final class VirtualCameraEngine {
     }
 
     func performRecording(_ request: VirtualCameraRequest) async throws -> VirtualCameraSnapshot {
-        guard !isStopped else { throw ExtensionPeerError.unavailable }
+        guard !isStopped, !draining else { throw ExtensionPeerError.unavailable }
         if case .audio(let request) = request {
             guard !audioBusy else {
                 throw MeetingAudioLibrary.error("An audio change is still in progress.")
@@ -236,9 +264,9 @@ final class VirtualCameraEngine {
             }
             if needsMicrophone { try await prepareMicrophone() }
             try Task.checkCancellation()
-            guard !isStopped else { throw ExtensionPeerError.unavailable }
+            guard !isStopped, !draining else { throw ExtensionPeerError.unavailable }
             let updated = try await audioMixer.perform(request, state: state.audio)
-            guard !isStopped else { throw ExtensionPeerError.unavailable }
+            guard !isStopped, !draining else { throw ExtensionPeerError.unavailable }
             try Task.checkCancellation()
             state.audio = updated
             VirtualCameraStore.save(state)
@@ -289,18 +317,21 @@ final class VirtualCameraEngine {
             && (audio.outputID == nil || audio.outputID == MeetingMicrophone.id)
         if needsMicrophone, environment.prepareMicrophone != nil, !microphonePrepared {
             audio.enabled = false
-            if audioStartup == nil {
-                audioStartup = Task { [weak self] in
-                    guard let self else { return }
-                    defer { audioStartup = nil }
+            if !audioStarting {
+                audioStarting = true
+                let previous = audioStartup
+                audioStartup = Task { [self, previous] in
+                    defer { audioStarting = false }
+                    await previous?.value
+                    guard !isStopped, !draining, !Task.isCancelled else { return }
                     do {
                         try await prepareMicrophone()
                         try Task.checkCancellation()
-                        guard !isStopped else { return }
+                        guard !isStopped, !draining else { return }
                         audioMixer.configure(state.audio)
                         publishIfChanged()
                     } catch {
-                        guard !isStopped else { return }
+                        guard !isStopped, !draining else { return }
                         audioPreparationFailure = String(error.localizedDescription.prefix(1024))
                         publishIfChanged()
                     }
@@ -321,7 +352,7 @@ final class VirtualCameraEngine {
         do {
             try await pending.value
             try Task.checkCancellation()
-            guard !isStopped else { throw ExtensionPeerError.unavailable }
+            guard !isStopped, !draining else { throw ExtensionPeerError.unavailable }
             microphonePrepared = true
             audioPreparationFailure = nil
         } catch {
@@ -391,17 +422,18 @@ final class VirtualCameraEngine {
 
     private func observeDevices() {
         observedDevices = [edithSink.isInstalled, obsSink.isInstalled]
+        let callbacks = callbacks
         for sink in [edithSink, obsSink] {
             sink.observe { [weak self] in
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated { self?.refreshExtension() }
+                callbacks.perform {
+                    callbacks.submit { [weak self] in self?.refreshExtension() }
                 }
             }
         }
     }
 
     func refreshExtension() {
-        guard !isStopped else { return }
+        guard !isStopped, !draining else { return }
         edithInstalled = edithSink.isInstalled
         obsInstalled = obsSink.isInstalled
         extensionStatus = edithInstalled ? edithSink.status() : nil
@@ -427,6 +459,7 @@ final class VirtualCameraEngine {
     }
 
     private func evaluate() {
+        guard !isStopped, !draining else { return }
         guard state.privacy != .stopped else {
             stopWork?.cancel()
             stopWork = nil
@@ -452,13 +485,16 @@ final class VirtualCameraEngine {
         case .scheduleStop:
             let work = DispatchWorkItem { [weak self] in
                 MainActor.assumeIsolated {
-                    guard let self else { return }
+                    guard let self, !self.isStopped, !self.draining else { return }
                     self.stopWork = nil
                     guard self.extensionStatus?.isInUse != true else { return }
                     self.stopStreaming()
                     self.publishIfChanged()
                 }
             }
+            stopWorkReturns.enter()
+            let returns = stopWorkReturns
+            work.notify(queue: .main) { returns.leave() }
             stopWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.idleGrace, execute: work)
         case .waitForStop, .idle:
@@ -534,5 +570,41 @@ final class VirtualCameraEngine {
         guard let encoded = current.encoded else { return }
         IPC.post(
             IPC.Name.virtualCameraStatusChanged, userInfo: [VirtualCameraIPC.snapshotKey: encoded])
+    }
+}
+
+private final class VirtualCameraEngineCallbacks: @unchecked Sendable {
+    private let lock = NSLock()
+    private let pending = DispatchGroup()
+    private var closed = false
+
+    func perform(_ operation: () -> Void) {
+        let admitted = lock.withLock {
+            guard !closed else { return false }
+            pending.enter()
+            return true
+        }
+        guard admitted else { return }
+        defer { pending.leave() }
+        operation()
+    }
+
+    func submit(_ operation: @escaping @MainActor @Sendable () -> Void) {
+        lock.withLock {
+            guard !closed else { return }
+            pending.enter()
+            DispatchQueue.main.async { [self] in
+                defer { pending.leave() }
+                operation()
+            }
+        }
+    }
+
+    func close() { lock.withLock { closed = true } }
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            pending.notify(queue: .global(qos: .utility)) { continuation.resume() }
+        }
     }
 }

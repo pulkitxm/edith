@@ -90,6 +90,7 @@ final class RunningAppsModel {
     private var presentation: SystemPresentationState?
     private var remoteTasks: [UUID: Task<Void, Never>] = [:]
     private var stopped = false
+    private var refreshTasks: [UUID: Task<Void, Never>] = [:]
     private var resourceBaseline: RunningAppResourceBaseline?
     private let operations: RunningAppOperationCenter
     private let defaults: UserDefaults
@@ -195,6 +196,19 @@ final class RunningAppsModel {
 
     func refresh() async {
         guard !stopped else { return }
+        let id = UUID()
+        let task = Task { await refreshOwned() }
+        refreshTasks[id] = task
+        defer { refreshTasks[id] = nil }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func refreshOwned() async {
+        guard !stopped else { return }
         if let engineClient {
             await loading.perform(operation: {
                 let data = try await engineClient.invoke("system.apps.snapshot")
@@ -228,11 +242,21 @@ final class RunningAppsModel {
         }
     }
 
-    func shutdown() {
+    func beginSuspension() {
         stopped = true
         for task in remoteTasks.values { task.cancel() }
-        remoteTasks.removeAll()
+        for task in refreshTasks.values { task.cancel() }
         loading.cancel()
+    }
+
+    func suspendAndWait() async {
+        beginSuspension()
+        let pending = Array(remoteTasks.values) + Array(refreshTasks.values)
+        for task in pending { await task.value }
+    }
+
+    func shutdown() {
+        beginSuspension()
         resourceBaseline = nil
         apps = []
         totalMemoryMB = 0
@@ -326,6 +350,7 @@ final class RunningAppsModel {
     }
 
     private func launchRemote(_ operation: @escaping @MainActor () async throws -> Void) {
+        guard !stopped else { return }
         let id = UUID()
         remoteTasks[id] = Task {
             defer { remoteTasks[id] = nil }

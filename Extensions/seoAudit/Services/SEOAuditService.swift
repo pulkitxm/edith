@@ -55,44 +55,45 @@ enum SEOAuditEvent: Sendable {
     case draft(UUID, SEOAuditDraft)
 }
 
-actor SEOAuditGate {
+final class SEOAuditGate: @unchecked Sendable {
+    private let lock = NSLock()
     private var busy = false
     private var waiters: [(id: UUID, continuation: CheckedContinuation<Void, Error>)] = []
 
     func acquire() async throws {
-        try Task.checkCancellation()
-        guard busy else {
-            busy = true
-            return
-        }
         let id = UUID()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation {
                 (continuation: CheckedContinuation<Void, Error>) in
-                if Task.isCancelled {
-                    continuation.resume(throwing: CancellationError())
-                } else {
-                    waiters.append((id, continuation))
+                lock.withLock {
+                    if Task.isCancelled {
+                        continuation.resume(throwing: CancellationError())
+                    } else if !busy {
+                        busy = true; continuation.resume()
+                    } else {
+                        waiters.append((id, continuation))
+                    }
                 }
             }
         } onCancel: {
-            Task { await self.abandon(id) }
+            self.abandon(id)
         }
     }
 
     func release() {
-        guard !waiters.isEmpty else {
-            busy = false
-            return
+        lock.withLock {
+            guard !waiters.isEmpty else { busy = false; return }
+            waiters.removeFirst().continuation.resume()
         }
-        waiters.removeFirst().continuation.resume()
     }
 
-    var waiting: Int { waiters.count }
+    var waiting: Int { lock.withLock { waiters.count } }
 
     private func abandon(_ id: UUID) {
-        guard let index = waiters.firstIndex(where: { $0.id == id }) else { return }
-        waiters.remove(at: index).continuation.resume(throwing: CancellationError())
+        lock.withLock {
+            guard let index = waiters.firstIndex(where: { $0.id == id }) else { return }
+            waiters.remove(at: index).continuation.resume(throwing: CancellationError())
+        }
     }
 }
 
@@ -108,6 +109,8 @@ final class SEOAuditService {
     @ObservationIgnored private let gate = SEOAuditGate()
     @ObservationIgnored private let remote: SEOAuditUIBridge?
     @ObservationIgnored private var remoteObservation: Task<Void, Never>?
+    @ObservationIgnored private var tasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private let callbacks = SEOAuditCallbacks()
 
     init(workflow: SEOAuditWorkflow = SEOAuditWorkflow(), remote: SEOAuditUIBridge? = nil) {
         self.workflow = workflow
@@ -121,6 +124,7 @@ final class SEOAuditService {
 
     func observe(_ listener: @escaping (SEOAuditEvent) -> Void) -> UUID {
         let id = UUID()
+        guard !isStopped else { return id }
         listeners[id] = listener
         if let remote, remoteObservation == nil {
             remoteObservation = Task { [weak self] in
@@ -246,7 +250,7 @@ final class SEOAuditService {
     func discover(_ id: UUID) async throws -> SEOAuditJob {
         if let remote {
             let launch: SEOAuditUIJob = try await remote.call("discover", id: id);
-            return remote.job(launch)
+            return retainRemote(remote.job(launch))
         }
         try await ready()
         let project = try await workflow.project(id)
@@ -273,7 +277,8 @@ final class SEOAuditService {
         if let remote {
             let launch: SEOAuditUIJob = try await remote.call("start", id: id, enabled: lighthouse);
             guard let request = launch.request else { throw ExtensionPeerError.invalidRequest };
-            return .init(request: request, job: remote.job(launch), state: launch.state)
+            return .init(
+                request: request, job: retainRemote(remote.job(launch)), state: launch.state)
         }
         try await ready()
         _ = try await workflow.project(id)
@@ -297,7 +302,8 @@ final class SEOAuditService {
                 "lighthouse", id: id, runID: runID, url: url)
                 ;
             guard let request = launch.request else { throw ExtensionPeerError.invalidRequest };
-            return .init(request: request, job: remote.job(launch), state: launch.state)
+            return .init(
+                request: request, job: retainRemote(remote.job(launch)), state: launch.state)
         }
         try await ready()
         let project = try await workflow.project(id)
@@ -325,7 +331,7 @@ final class SEOAuditService {
     @discardableResult
     func cancel(_ taskID: UUID) -> Bool {
         if let remote {
-            Task { let _: Bool? = try? await remote.call("cancel", id: taskID) }
+            launch { let _: Bool? = try? await remote.call("cancel", id: taskID) }
             return true
         }
         guard let job = jobs[taskID] else { return false }
@@ -342,20 +348,47 @@ final class SEOAuditService {
         return run
     }
 
-    func shutdown() async {
-        guard !isStopped else { return }
+    func beginSuspension() {
         isStopped = true
-        remoteObservation?.cancel(); remoteObservation = nil
+        callbacks.close()
+        remoteObservation?.cancel()
         recovery?.cancel()
-        listeners.removeAll()
+        for job in jobs.values { job.task.cancel() }
+        for task in tasks.values { task.cancel() }
+    }
+
+    func suspendAndWait() async {
+        beginSuspension()
         let pending = Array(jobs.values)
-        for job in pending { job.task.cancel() }
-        for job in pending { _ = try? await job.task.value }
+        let callbacksTasks = Array(tasks.values)
+        let observation = remoteObservation, recovery = recovery
+        for job in pending { _ = await job.task.result }
+        for task in callbacksTasks { await task.value }
+        await observation?.value
+        await recovery?.value
+        await callbacks.wait()
+        await remote?.drain()
+    }
+
+    func shutdown() async {
+        await suspendAndWait()
+        listeners.removeAll()
+        remoteObservation = nil
         jobs.removeAll()
         activities.removeAll()
         await recovery?.value
         recovery = nil
         if remote == nil { await workflow.shutdown() }
+    }
+
+    private func retainRemote(_ job: SEOAuditJob) -> SEOAuditJob {
+        jobs[job.id] = job
+        if isStopped { job.task.cancel() }
+        launch { [self] in
+            _ = await job.task.result
+            jobs[job.id] = nil
+        }
+        return job
     }
 
     private func ready() async throws {
@@ -365,6 +398,7 @@ final class SEOAuditService {
     }
 
     private func requireIdle(_ id: UUID) throws {
+        guard !isStopped else { throw ExtensionPeerError.unavailable }
         guard activities[id] == nil else {
             throw SEOAuditInputError("Wait for this project's audit to finish or cancel it first.")
         }
@@ -376,6 +410,7 @@ final class SEOAuditService {
         let total = request.urls.count
         let url = request.urls.first?.absoluteString ?? ""
         let owner = self
+        let callbacks = callbacks
         let job = submit(
             projectID: request.projectID, kind: scoresOnly ? .lighthouse : .audit,
             stage: scoresOnly
@@ -387,7 +422,7 @@ final class SEOAuditService {
                 await owner.markRunning(request.projectID)
                 let project = try await workflow.run(request, scoresOnly: scoresOnly) {
                     progress in
-                    Task { @MainActor [weak owner] in
+                    callbacks.submit { [weak owner] in
                         owner?.report(progress, scoresOnly: scoresOnly)
                     }
                 }
@@ -407,13 +442,17 @@ final class SEOAuditService {
         body: @escaping @Sendable () async throws -> SEOAuditJobResult
     ) -> SEOAuditJob {
         let id = runID.flatMap { kind == .audit ? $0 : nil } ?? UUID()
-        let task = Task<SEOAuditJobResult, Error> { try await body() }
+        let task = Task<SEOAuditJobResult, Error> {
+            try Task.checkCancellation()
+            return try await body()
+        }
+        if isStopped { task.cancel() }
         let job = SEOAuditJob(id: id, projectID: projectID, kind: kind, task: task)
         jobs[id] = job
         activities[projectID] = SEOAuditActivity(
             taskID: id, kind: kind, state: state, stage: stage, runID: runID,
             total: kind == .audit ? (stage.total ?? 0) : 0)
-        Task { [weak self] in
+        launch { [weak self] in
             let result = await task.result
             self?.finish(job, result: result)
         }
@@ -446,6 +485,7 @@ final class SEOAuditService {
         guard jobs[job.id] != nil else { return }
         jobs[job.id] = nil
         if activities[job.projectID]?.taskID == job.id { activities[job.projectID] = nil }
+        guard !isStopped else { return }
         switch result {
         case .success(.project(let project)): publish(.project(project))
         case .success(.draft(let draft)): publish(.draft(job.projectID, draft))
@@ -453,7 +493,7 @@ final class SEOAuditService {
             guard job.kind != .discover else { return }
             let workflow = workflow
             let projectID = job.projectID
-            Task { [weak self] in
+            launch { [weak self] in
                 guard let project = try? await workflow.project(projectID), let self,
                     !self.isStopped, self.activities[projectID] == nil
                 else { return }
@@ -462,7 +502,17 @@ final class SEOAuditService {
         }
     }
 
+    private func launch(_ operation: @escaping @MainActor () async -> Void) {
+        guard !isStopped else { return }
+        let id = UUID()
+        tasks[id] = Task { [self] in
+            defer { tasks[id] = nil }
+            await operation()
+        }
+    }
+
     private func publish(_ event: SEOAuditEvent) {
+        guard !isStopped else { return }
         for listener in listeners.values { listener(event) }
     }
 }
@@ -471,5 +521,30 @@ extension SEOAuditStage {
     var total: Int? {
         if case .auditing(_, let total, _) = self { return total }
         return nil
+    }
+}
+
+private final class SEOAuditCallbacks: @unchecked Sendable {
+    private let lock = NSLock()
+    private let pending = DispatchGroup()
+    private var closed = false
+
+    func submit(_ operation: @escaping @MainActor @Sendable () -> Void) {
+        lock.withLock {
+            guard !closed else { return }
+            pending.enter()
+            DispatchQueue.main.async { [self] in
+                defer { pending.leave() }
+                operation()
+            }
+        }
+    }
+
+    func close() { lock.withLock { closed = true } }
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            pending.notify(queue: .global(qos: .utility)) { continuation.resume() }
+        }
     }
 }

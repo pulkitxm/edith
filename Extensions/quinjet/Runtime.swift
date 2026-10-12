@@ -15,6 +15,8 @@ final class ExtensionRuntime: NSObject {
     private var worker: QuinjetWorker?
     private var surface: QuinjetSurface?
     private var startup: Task<Void, Never>?
+    private var draining = false
+    private var uiStops: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -34,18 +36,44 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        _ = commands.suspend()
+        draining = true
+        QuinjetWorkOwnership.beginSuspension()
+        retireUI()
+        let startup = startup, worker = worker
+        startup?.cancel()
+        worker?.beginSuspension()
+        Task { [self, startup, worker] in
+            _ = await commands.suspendAndWait()
+            await startup?.value
+            await worker?.cancelPendingWork()
+            for task in Array(uiStops.values) { await task.value }
+            await QuinjetWorkOwnership.shutdown()
+            completion()
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        draining = true
+        QuinjetWorkOwnership.beginSuspension()
+        retireUI()
         startup?.cancel()
         commands.shutdown()
-        Task {
+        let startup = startup, worker = worker
+        worker?.beginSuspension()
+        Task { [self, startup, worker] in
             await worker?.cancelPendingWork()
             await commands.shutdownAndWait()
             await startup?.value
             await worker?.shutdown()
-            worker = nil
+            self.worker = nil
             surface = nil
-            startup = nil
+            self.startup = nil
+            for task in Array(uiStops.values) { await task.value }
+            await QuinjetWorkOwnership.shutdown()
             completion()
         }
     }
@@ -61,7 +89,8 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
-            guard worker == nil, let location = input["location"] as? String,
+            guard !draining, uiStops.isEmpty, worker == nil,
+                let location = input["location"] as? String,
                 ["main", "settings"].contains(location),
                 location != "settings" || input["section"] as? String == "extension",
                 let configuration = ExtensionUIConfiguration(context: input),
@@ -70,11 +99,7 @@ final class ExtensionRuntime: NSObject {
                 let presentationID = UUID(uuidString: rawID),
                 location == "settings" || configuration.engineClient != nil
             else { return ["ok": false] as NSDictionary }
-            settingsModel?.shutdown(); settingsModel = nil
-            if let previous = uiModel {
-                previous.stopRendering(); Task { await previous.shutdown() }
-            }
-            uiClient?.invalidate()
+            retireUI()
             uiClient = configuration.engineClient
             uiLocation = location
             if location == "settings" {
@@ -113,16 +138,9 @@ final class ExtensionRuntime: NSObject {
         case "terminalUI", "terminalUIStatus":
             guard let binding = uiModel?.terminalUI else { return ["ok": false] as NSDictionary }
             return binding.execute(input)
-        case "stopUI":
-            settingsModel?.shutdown(); settingsModel = nil
-            uiLocation = nil
-            if let model = uiModel { model.stopRendering(); Task { await model.shutdown() } }
-            uiClient?.invalidate()
-            uiClient = nil
-            uiModel = nil
-            uiController = nil
+        case "stopUI": retireUI()
         case "start":
-            guard uiLocation == nil, Bundle.main.bundleURL.pathExtension != "appex",
+            guard !draining, uiLocation == nil, Bundle.main.bundleURL.pathExtension != "appex",
                 let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -137,13 +155,28 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "status": return ["ok": true, "running": worker?.isStopped == false] as NSDictionary
-        case "stop":
-            commands.shutdown()
-            startup?.cancel()
+        case "stop": prepareToStop(completion: {})
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
     }
+    private func retireUI() {
+        let model = uiModel, settings = settingsModel, client = uiClient
+        model?.stopRendering()
+        settings?.shutdown()
+        uiModel = nil; settingsModel = nil; uiClient = nil; uiLocation = nil; uiController = nil
+        if model != nil || settings != nil {
+            let id = UUID()
+            uiStops[id] = Task { [self, model, settings, client] in
+                defer { client?.invalidate(); uiStops[id] = nil }
+                await model?.shutdown()
+                await settings?.shutdownAndWait()
+            }
+        } else {
+            client?.invalidate()
+        }
+    }
+
 }
 
 @_cdecl("edith_extension_create")

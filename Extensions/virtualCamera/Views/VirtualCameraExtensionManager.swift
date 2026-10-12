@@ -103,6 +103,9 @@ final class VirtualCameraExtensionManager: NSObject, ObservableObject {
     private var operationTask: Task<Void, Never>?
     private var stopped = false
     private var refreshTask: Task<Void, Never>?
+    private var refreshing = false
+    private var operating = false
+    private var shutdownTask: Task<Void, Never>?
 
     init(
         environment: VirtualCameraExtensionEnvironment = .live,
@@ -161,22 +164,35 @@ final class VirtualCameraExtensionManager: NSObject, ObservableObject {
         default:
             break
         }
-        guard refreshTask == nil else { return }
+        guard !refreshing else { return }
         let visibleProbe = environment.deviceVisible
         let entitledProbe = environment.hasInstallEntitlement
         let extensionPath = extensionBundleURL.path
         let inApplications = inApplicationsFolder
-        refreshTask = Task.detached {
-            let visible = visibleProbe()
-            let next = VirtualCameraExtensionManager.phase(
-                bundleContainsExtension: FileManager.default.fileExists(atPath: extensionPath),
-                entitled: entitledProbe(), inApplications: inApplications, deviceVisible: visible)
-            await self.completeRefresh(next, deviceVisible: visible)
+        refreshing = true
+        let previous = refreshTask
+        refreshTask = Task { [self, previous] in
+            defer { refreshing = false }
+            await previous?.value
+            guard !stopped, !Task.isCancelled else { return }
+            let probe = Task.detached {
+                let visible = visibleProbe()
+                let next = VirtualCameraExtensionManager.phase(
+                    bundleContainsExtension: FileManager.default.fileExists(atPath: extensionPath),
+                    entitled: entitledProbe(), inApplications: inApplications,
+                    deviceVisible: visible)
+                return (next, visible)
+            }
+            let result = await withTaskCancellationHandler {
+                await probe.value
+            } onCancel: {
+                probe.cancel()
+            }
+            completeRefresh(result.0, deviceVisible: result.1)
         }
     }
 
     private func completeRefresh(_ next: VirtualCameraExtensionPhase, deviceVisible: Bool) {
-        refreshTask = nil
         guard !stopped else { return }
         switch phase {
         case .installing, .removing, .restartRequired:
@@ -191,13 +207,13 @@ final class VirtualCameraExtensionManager: NSObject, ObservableObject {
 
     func install() {
         refresh()
-        guard phase.canInstall, !stopped, operationTask == nil else { return }
+        guard phase.canInstall, !stopped, !operating else { return }
         phase = .installing
         perform { try await $0.activate() }
     }
 
     func uninstall() {
-        guard !stopped, operationTask == nil, phase == .installed || phase == .awaitingApproval
+        guard !stopped, !operating, phase == .installed || phase == .awaitingApproval
         else { return }
         phase = .removing
         perform { try await $0.deactivate() }
@@ -207,9 +223,12 @@ final class VirtualCameraExtensionManager: NSObject, ObservableObject {
         _ operation: @escaping @MainActor (any CameraCarrierControlling) async throws -> Void
     ) {
         guard let client else { phase = .missingFromBundle; return }
-        operationTask = Task { [weak self] in
-            guard let self else { return }
-            defer { operationTask = nil }
+        operating = true
+        let previous = operationTask
+        operationTask = Task { [self, previous, client] in
+            defer { operating = false }
+            await previous?.value
+            guard !stopped, !Task.isCancelled else { return }
             do {
                 try await operation(client)
                 guard !stopped else { return }
@@ -239,14 +258,23 @@ final class VirtualCameraExtensionManager: NSObject, ObservableObject {
             }
     }
 
-    func shutdown() async {
-        guard !stopped else { return }
+    func beginSuspension() {
         stopped = true
         client?.changed = nil
         operationTask?.cancel(); refreshTask?.cancel()
-        let pending = [operationTask, refreshTask].compactMap { $0 }
-        for task in pending { await task.value }
-        operationTask = nil; refreshTask = nil
+    }
+
+    func shutdown() async {
+        if let shutdownTask { await shutdownTask.value; return }
+        beginSuspension()
+        let operation = operationTask, refresh = refreshTask
+        let task = Task { [self, operation, refresh] in
+            await operation?.value
+            await refresh?.value
+            operationTask = nil; refreshTask = nil
+        }
+        shutdownTask = task
+        await task.value
     }
 
     func openSystemSettings() {

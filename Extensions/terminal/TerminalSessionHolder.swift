@@ -23,6 +23,7 @@ import Observation
     private var stopped = false
     private var readTask: Task<Void, Never>?
     private var deliveryTask: Task<Void, Never>?
+    private var retirement: Task<Void, Never>?
     private var events: [Event] = []
     private var queuedBytes = 0
     private var offset: UInt64 = 0
@@ -54,16 +55,29 @@ import Observation
     }
 
     func stop() {
-        guard !stopped else { return }
+        guard retirement == nil else { return }
         stopped = true
-        readTask?.cancel()
-        readTask = nil
-        deliveryTask?.cancel()
-        deliveryTask = nil
+        let reading = readTask, delivery = deliveryTask, view = ghosttyView
+        reading?.cancel()
+        delivery?.cancel()
         events.removeAll()
         queuedBytes = 0
-        ghosttyView?.shutdown()
-        ghosttyView = nil
+        let completion = closeCompletion
+        closeCompletion = nil
+        retirement = Task { [self, reading, delivery, view] in
+            await reading?.value
+            await delivery?.value
+            readTask = nil
+            deliveryTask = nil
+            view?.shutdown()
+            ghosttyView = nil
+        }
+        completion?(false)
+    }
+
+    func stopAndWait() async {
+        stop()
+        await retirement?.value
     }
 
     func requestUserClose(_ completion: @escaping @MainActor (Bool) -> Void) {
@@ -75,7 +89,11 @@ import Observation
     private var closeCompletion: (@MainActor (Bool) -> Void)?
 
     func retainedGhosttyView(theme: GhosttyTheme) -> GhosttyTerminalView {
-        if let ghosttyView { ghosttyView.apply(theme: theme); return ghosttyView }
+        if let ghosttyView {
+            if !stopped { ghosttyView.apply(theme: theme) }
+            return ghosttyView
+        }
+        precondition(!stopped && error == nil)
         let generation = session.generation
         let io = GhosttyExternalIO(
             write: { [weak self] bytes in
@@ -134,6 +152,7 @@ import Observation
     }
 
     func setHostWindowState(active: Bool, key: Bool) {
+        guard !stopped else { return }
         hostWindowState = (active, key)
         ghosttyView?.setHostWindowState(active: active, key: key)
     }
@@ -246,12 +265,7 @@ import Observation
     private func fail(_ message: String) {
         guard !stopped else { return }
         error = message
-        readTask?.cancel()
-        deliveryTask?.cancel()
-        events.removeAll()
-        queuedBytes = 0
-        ghosttyView?.shutdown()
-        ghosttyView = nil
+        stop()
     }
 
     static func exitMessage(_ exitCode: Int32?) -> String {

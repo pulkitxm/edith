@@ -32,6 +32,8 @@ final class TimeLapseWriter: @unchecked Sendable {
     private var storedBytes: Int64 = 0
     private var previewEnabled = false
     private var previewPending = false
+    private var previewTask: Task<Void, Never>?
+    private let callbackLifetimes = DispatchGroup()
     private let preview: (@Sendable (CGImage) async -> Void)?
     private let availableBytes: @Sendable (URL) throws -> Int64
 
@@ -99,6 +101,9 @@ final class TimeLapseWriter: @unchecked Sendable {
             timer.schedule(
                 deadline: .now(), repeating: session.settings.captureInterval,
                 leeway: .milliseconds(session.settings.mode == .standard ? 1 : 50))
+            let lifetimes = callbackLifetimes
+            lifetimes.enter()
+            timer.setCancelHandler { lifetimes.leave() }
             timer.setEventHandler { [weak self] in
                 self?.capture(at: ProcessInfo.processInfo.systemUptime)
             }
@@ -202,10 +207,16 @@ final class TimeLapseWriter: @unchecked Sendable {
                 {
                     lastPreview = uptime
                     previewPending = true
-                    Task { [weak self] in
+                    let previous = previewTask
+                    previewTask = Task { [self, previous] in
+                        await previous?.value
                         await preview(image)
-                        guard let self else { return }
-                        self.queue.async { [weak self] in self?.previewPending = false }
+                        await withCheckedContinuation { continuation in
+                            queue.async { [self] in
+                                previewPending = false
+                                continuation.resume()
+                            }
+                        }
                     }
                 }
             }
@@ -393,7 +404,9 @@ final class TimeLapseWriter: @unchecked Sendable {
         pending += 1
         chunk.writer.endSession(atSourceTime: chunk.end)
         chunk.input.markAsFinished()
+        callbackLifetimes.enter()
         chunk.writer.finishWriting { [self] in
+            defer { callbackLifetimes.leave() }
             queue.async { [self] in
                 pending -= 1
                 if chunk.writer.status == .completed {
@@ -416,7 +429,7 @@ final class TimeLapseWriter: @unchecked Sendable {
     }
 
     func stop(reason: String? = nil) async -> TimeLapseSession {
-        await withCheckedContinuation { continuation in
+        let result: TimeLapseSession = await withCheckedContinuation { continuation in
             queue.async { [self] in
                 if let finishedSession { continuation.resume(returning: finishedSession); return }
                 completions.append { continuation.resume(returning: $0) }
@@ -445,6 +458,17 @@ final class TimeLapseWriter: @unchecked Sendable {
                 completeIfReady()
             }
         }
+        await withCheckedContinuation { continuation in
+            callbackLifetimes.notify(queue: queue) { continuation.resume() }
+        }
+        let preview: Task<Void, Never>? = await withCheckedContinuation { continuation in
+            queue.async { [self] in continuation.resume(returning: previewTask) }
+        }
+        await preview?.value
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume() }
+        }
+        return result
     }
 
     private func completeIfReady() {

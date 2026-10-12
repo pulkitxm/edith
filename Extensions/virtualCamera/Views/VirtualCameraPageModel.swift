@@ -97,6 +97,8 @@ final class VirtualCameraPageModel: ObservableObject {
     private let defaults: UserDefaults
     private var engineClient: ExtensionEngineClient?
     private var stopped = false
+    private var tasks: [UUID: Task<Void, Never>] = [:]
+    private let callbacks = DispatchGroup()
     private var remotePoll: Task<Void, Never>?
     private var localRequests: [UUID: Task<Void, Never>] = [:]
     private let requestHandler: ((VirtualCameraRequest) async throws -> VirtualCameraSnapshot)?
@@ -104,6 +106,7 @@ final class VirtualCameraPageModel: ObservableObject {
     private var pipelineTask: Task<Void, Never>?
     private var pipelineGeneration = 0
     private var sourceTask: Task<Void, Never>?
+    private var sourceRefreshQueued = false
     private let accessProvider: () -> AVAuthorizationStatus
     private let clock: () -> TimeInterval
     private let sourceProvider: (() -> [VirtualCameraSource])?
@@ -115,6 +118,7 @@ final class VirtualCameraPageModel: ObservableObject {
     private var statusToken: NSObjectProtocol?
     private var stateToken: NSObjectProtocol?
     private var statusTask: Task<Void, Never>?
+    private var pendingStatus: VirtualCameraRequest?
     private var statsTimer: Timer?
     private var helperPreviewTimer: DispatchSourceTimer?
     private var visible = false
@@ -204,6 +208,16 @@ final class VirtualCameraPageModel: ObservableObject {
         return try await VirtualCameraOperationExecution.request(request, timeout: timeout)
     }
 
+    private func launch(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
+        let id = UUID()
+        let task = Task { [self] in
+            defer { tasks[id] = nil }
+            await operation()
+        }
+        tasks[id] = task
+        return task
+    }
+
     func runAction(_ action: @escaping @MainActor () async throws -> Void) {
         guard !stopped else { return }
         let id = UUID()
@@ -216,7 +230,30 @@ final class VirtualCameraPageModel: ObservableObject {
         }
     }
 
+    private func read<Value>(_ operation: @escaping @MainActor () async -> Value) async -> Value? {
+        guard !stopped else { return nil }
+        let id = UUID()
+        let task = Task { await operation() }
+        localRequests[id] = Task { [self] in
+            defer { localRequests[id] = nil }
+            await withTaskCancellationHandler {
+                _ = await task.value
+            } onCancel: {
+                task.cancel()
+            }
+        }
+        return await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
     func loadAudioDevices() async -> [MeetingAudioDevice] {
+        await read { [self] in await loadAudioDevicesOwned() } ?? []
+    }
+
+    private func loadAudioDevicesOwned() async -> [MeetingAudioDevice] {
         if let engineClient {
             guard let data = try? await engineClient.invoke("camera.ui.devices"), !stopped,
                 !Task.isCancelled
@@ -231,6 +268,10 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func assetThumbnail(_ url: URL) async -> NSImage? {
+        await read { [self] in await assetThumbnailOwned(url) } ?? nil
+    }
+
+    private func assetThumbnailOwned(_ url: URL) async -> NSImage? {
         if let engineClient {
             guard let payload = try? JSONEncoder().encode(["path": url.path]),
                 let data = try? await engineClient.invoke("camera.ui.asset", payload: payload),
@@ -253,6 +294,16 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func refreshRemote() async {
+        guard !stopped else { return }
+        let task = launch { [self] in await refreshRemoteOwned() }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func refreshRemoteOwned() async {
         guard let engineClient, !stopped else { return }
         do {
             let data = try await engineClient.invoke("camera.ui.snapshot")
@@ -401,7 +452,9 @@ final class VirtualCameraPageModel: ObservableObject {
         visible = true
         statusPending = true
         if engineClient != nil {
-            remotePoll = Task { [weak self] in
+            guard remotePoll == nil else { return }
+            remotePoll = launch { [weak self] in
+                defer { self?.remotePoll = nil }
                 while !Task.isCancelled {
                     guard let self, visible, !stopped else { return }
                     await refreshRemote()
@@ -445,19 +498,16 @@ final class VirtualCameraPageModel: ObservableObject {
         guard visible, attachments == 0 else { return }
         visible = false
         if engineClient != nil {
-            remotePoll?.cancel(); remotePoll = nil; statusTask?.cancel(); saveTimer?.invalidate();
+            remotePoll?.cancel(); statusTask?.cancel(); saveTimer?.invalidate();
             saveTimer = nil; stopPreview(); return
         }
         setPreviewWanted(false)
         flushSave()
         statusTask?.cancel()
-        statusTask = nil
         statsTimer?.invalidate()
         statsTimer = nil
         sourceTask?.cancel()
-        sourceTask = nil
         thumbnailTask?.cancel()
-        thumbnailTask = nil
         if let statusToken { IPC.stopObserving(statusToken) }
         if let stateToken { IPC.stopObserving(stateToken) }
         statusToken = nil
@@ -465,18 +515,32 @@ final class VirtualCameraPageModel: ObservableObject {
         stopPreview()
     }
 
-    func shutdown() async {
+    func beginSuspension() {
+        guard !stopped else { return }
+        flushSave()
         stopped = true
-        remotePoll?.cancel(); await remotePoll?.value; remotePoll = nil
-        let requests = Array(localRequests.values); for task in requests { task.cancel() };
-        for task in requests { await task.value }; localRequests.removeAll()
-        let pending = [statusTask, sourceTask, thumbnailTask, pipelineTask].compactMap { $0 }
-        for task in pending { task.cancel() }
+        extensionManager.beginSuspension()
+        for task in tasks.values { task.cancel() }
+        for task in localRequests.values { task.cancel() }
         attachments = 1
         if visible { disappear() }
-        flushSave()
+        saveTimer?.invalidate(); saveTimer = nil
+        stopPreview()
+    }
+
+    func shutdown() async {
+        beginSuspension()
+        let pending = Array(tasks.values), requests = Array(localRequests.values)
         for task in pending { await task.value }
+        for task in requests { await task.value }
+        await withCheckedContinuation { continuation in
+            callbacks.notify(queue: .main) { continuation.resume() }
+        }
+        await withCheckedContinuation { continuation in
+            previewBusQueue.async { DispatchQueue.main.async { continuation.resume() } }
+        }
         await pipeline?.stopAndDrain()
+        await extensionManager.shutdown()
         previewBus.close()
         display.onAvailabilityChanged = nil
     }
@@ -510,13 +574,15 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func updateLookThumbnails(from reference: CGImage) {
-        guard thumbnailTask == nil else { return }
+        guard !stopped, thumbnailTask == nil else { return }
         thumbnailSource = reference
-        thumbnailTask = Task { [weak self] in
+        thumbnailTask = launch { [weak self] in
+            defer { self?.thumbnailTask = nil }
+            guard let self, !stopped, !Task.isCancelled else { return }
             let thumbnails = await Task.detached(priority: .utility) {
                 VirtualCameraLooks.thumbnails(from: reference, renderer: Self.thumbnailRenderer)
             }.value
-            guard !Task.isCancelled, let self else { return }
+            guard !Task.isCancelled else { return }
             self.lookThumbnails = thumbnails
             self.thumbnailTask = nil
         }
@@ -554,7 +620,6 @@ final class VirtualCameraPageModel: ObservableObject {
     func receive(_ decoded: VirtualCameraSnapshot?) {
         guard !stopped, let decoded else { return }
         statusTask?.cancel()
-        statusTask = nil
         statusPending = false
         if snapshot != decoded { snapshot = decoded }
         helperReachable = true
@@ -568,25 +633,39 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func requestStatus(_ request: VirtualCameraRequest = .status) {
-        statusTask?.cancel()
+        guard !stopped else { return }
+        if statusTask != nil {
+            pendingStatus = request
+            statusTask?.cancel()
+            return
+        }
         statusPending = true
         let timeout: Duration = snapshot == nil ? .milliseconds(500) : .seconds(3)
-        statusTask = Task { [weak self] in
+        statusTask = launch { [weak self] in
+            defer {
+                self?.statusTask = nil
+                if let self, !stopped, let pendingStatus {
+                    self.pendingStatus = nil
+                    requestStatus(pendingStatus)
+                }
+            }
+            guard let self, !stopped, !Task.isCancelled else { return }
             do {
-                let snapshot = try await self?.performRequest(request, timeout: timeout)
+                let snapshot = try await self.performRequest(request, timeout: timeout)
                 guard !Task.isCancelled else { return }
-                self?.statusPending = false
-                self?.receive(snapshot)
+                self.statusPending = false
+                self.receive(snapshot)
             } catch {
                 guard !Task.isCancelled else { return }
-                self?.statusPending = false
-                self?.helperReachable = false
-                self?.syncPreviewFeed()
+                self.statusPending = false
+                self.helperReachable = false
+                self.syncPreviewFeed()
             }
         }
     }
 
     func reloadState(_ announced: VirtualCameraState? = nil) {
+        guard !stopped else { return }
         if announced != nil { awaitingHelperState = nil }
         if engineClient != nil && announced == nil { return }
         let stored = announced ?? VirtualCameraStore.load(defaults)
@@ -597,18 +676,31 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func refreshSources() {
+        guard !stopped else { return }
         if engineClient != nil { return }
         if let sourceProvider {
             sources = sourceProvider()
             sourcesLoaded = true
             return
         }
-        sourceTask?.cancel()
-        sourceTask = Task { [weak self] in
+        guard sourceTask == nil else {
+            sourceRefreshQueued = true
+            sourceTask?.cancel()
+            return
+        }
+        sourceTask = launch { [weak self] in
+            defer {
+                self?.sourceTask = nil
+                if let self, !stopped, visible, sourceRefreshQueued {
+                    sourceRefreshQueued = false
+                    refreshSources()
+                }
+            }
+            guard let self, !stopped, !Task.isCancelled else { return }
             let sources = await Task.detached(priority: .userInitiated) {
                 VirtualCameraDevices.sources()
             }.value
-            guard !Task.isCancelled, let self else { return }
+            guard !Task.isCancelled else { return }
             self.sources = sources
             self.sourcesLoaded = true
             self.syncPreviewFeed()
@@ -617,7 +709,7 @@ final class VirtualCameraPageModel: ObservableObject {
 
     func syncPreviewFeed() {
         if engineClient != nil { return }
-        guard visible else { return }
+        guard !stopped, visible else { return }
         setPreviewWanted(state.privacy != .stopped)
         guard state.privacy != .stopped else {
             stopPreview()
@@ -649,16 +741,23 @@ final class VirtualCameraPageModel: ObservableObject {
         let generation = pipelineGeneration
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .userInteractive))
         timer.schedule(deadline: .now(), repeating: .milliseconds(33), leeway: .milliseconds(4))
+        let callbacks = callbacks
+        callbacks.enter()
+        timer.setCancelHandler { callbacks.leave() }
         timer.setEventHandler { [weak self] in
             if let buffer = bus.latest() { display.push(buffer) }
             if let reference = bus.latestReference() {
-                Task { @MainActor [weak self] in
-                    guard let self, self.visible, self.previewFeed == .helper,
-                        self.pipelineGeneration == generation
-                    else { return }
-                    self.helperReference = reference
-                    if self.expandedInspectorSections.contains(.look) {
-                        self.updateLookThumbnails(from: reference)
+                callbacks.enter()
+                DispatchQueue.main.async { [weak self] in
+                    defer { callbacks.leave() }
+                    MainActor.assumeIsolated {
+                        guard let self, !self.stopped, self.visible, self.previewFeed == .helper,
+                            self.pipelineGeneration == generation
+                        else { return }
+                        self.helperReference = reference
+                        if self.expandedInspectorSections.contains(.look) {
+                            self.updateLookThumbnails(from: reference)
+                        }
                     }
                 }
             }
@@ -700,11 +799,16 @@ final class VirtualCameraPageModel: ObservableObject {
         let generation = pipelineGeneration
         let state = state
         let size = Self.previewSize
-        pipelineTask = Task { [weak self] in
+        pipelineTask = launch { [weak self] in
+            defer {
+                self?.pipelineTask = nil
+                if let self, !stopped, visible { syncPreviewFeed() }
+            }
+            guard let self, !stopped, !Task.isCancelled else { return }
             let prepared = await Task.detached(priority: .userInitiated) {
                 VirtualCameraPipeline(state: state, outputSize: size)
             }.value
-            guard !Task.isCancelled, let self, generation == self.pipelineGeneration,
+            guard !Task.isCancelled, generation == self.pipelineGeneration,
                 self.visible, self.state.privacy != .stopped
             else { return }
             self.pipeline = prepared
@@ -716,7 +820,6 @@ final class VirtualCameraPageModel: ObservableObject {
     func stopPreview() {
         pipelineGeneration += 1
         pipelineTask?.cancel()
-        pipelineTask = nil
         hideHelperPreview()
         if previewFeed == .local { pipeline?.stop() }
         previewFeed = .idle
@@ -728,6 +831,7 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func requestCameraAccess() {
+        guard !stopped else { return }
         if let engineClient {
             runAction { _ = try await engineClient.invoke("camera.ui.permission") }; return
         }
@@ -744,10 +848,13 @@ final class VirtualCameraPageModel: ObservableObject {
             }
             return
         }
+        let callbacks = callbacks
+        callbacks.enter()
         AVCaptureDevice.requestAccess(for: .video) { [weak self] _ in
             DispatchQueue.main.async {
+                defer { callbacks.leave() }
                 MainActor.assumeIsolated {
-                    guard let self else { return }
+                    guard let self, !self.stopped else { return }
                     self.cameraAccess = self.accessProvider()
                     self.syncPreviewFeed()
                     self.refreshSources()
@@ -757,6 +864,7 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func update(_ change: (inout VirtualCameraState) -> Void) {
+        guard !stopped else { return }
         var next = state
         change(&next)
         next = next.sanitized()

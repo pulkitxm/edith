@@ -40,6 +40,8 @@ final class SEOAuditModel {
     @ObservationIgnored private let service: SEOAuditService
     @ObservationIgnored private var observerID: UUID?
     @ObservationIgnored private var draftTask: Task<Void, Never>?
+    @ObservationIgnored private var ownedTasks: [UUID: Task<Void, Never>] = [:]
+    private var stopped = false
     private(set) var lighthouseAvailable = false
     @ObservationIgnored private var auditTask: Task<Void, Never>?
     @ObservationIgnored private var projectRequestID = UUID()
@@ -105,6 +107,16 @@ final class SEOAuditModel {
     }
 
     func beginNewProject() async {
+        guard !stopped else { return }
+        let task = launch { [self] in await beginNewProjectOwned() }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func beginNewProjectOwned() async {
         guard !isRunning else { return }
         let project: SEOAuditProject
         do {
@@ -148,6 +160,16 @@ final class SEOAuditModel {
     }
 
     func selectProject(id: UUID) async {
+        guard !stopped else { return }
+        let task = launch { [self] in await selectProjectOwned(id: id) }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func selectProjectOwned(id: UUID) async {
         if isRunning {
             guard selectedProject?.id == id else { return }
             projectDetailPresented = true
@@ -171,7 +193,7 @@ final class SEOAuditModel {
                 stage = .auditing(
                     current: run.pages.count, total: run.discoveredPageCount,
                     url: "Running in background")
-                auditTask = Task { [weak self] in
+                auditTask = launch { [weak self] in
                     await self?.resumeProject(project.id, runID: run.id)
                 }
             }
@@ -181,6 +203,16 @@ final class SEOAuditModel {
     }
 
     func renameProject(id: UUID, to value: String) async {
+        guard !stopped else { return }
+        let task = launch { [self] in await renameProjectOwned(id: id, to: value) }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func renameProjectOwned(id: UUID, to value: String) async {
         guard !isRunning else { return }
         let name = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
@@ -202,6 +234,16 @@ final class SEOAuditModel {
     }
 
     func deleteProject(id: UUID) async {
+        guard !stopped else { return }
+        let task = launch { [self] in await deleteProjectOwned(id: id) }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func deleteProjectOwned(id: UUID) async {
         guard !isRunning else { return }
         isMutatingProject = true
         defer { isMutatingProject = false }
@@ -240,7 +282,7 @@ final class SEOAuditModel {
         else { return }
         stage = .discovering
         auditTask?.cancel()
-        auditTask = Task { [weak self] in
+        auditTask = launch { [weak self] in
             guard let self else { return }
             await executeDiscovery(startURL: url)
         }
@@ -291,7 +333,7 @@ final class SEOAuditModel {
         auditTask?.cancel()
         let taskID = UUID()
         activeTaskID = taskID
-        auditTask = Task {
+        auditTask = launch { [self] in
             defer {
                 activeTaskID = nil
                 activeLighthouseURL = nil
@@ -322,21 +364,40 @@ final class SEOAuditModel {
     }
 
     func shutdown() {
+        stopped = true
+        for task in ownedTasks.values { task.cancel() }
         service.stopObserving(observerID); observerID = nil
         projectsLoad.cancel(); auditTask?.cancel(); progressTask?.cancel()
         indexTask?.cancel(); filterTask?.cancel(); draftTask?.cancel()
         projectRequestID = UUID(); indexGeneration += 1; filterGeneration += 1
     }
 
+    func suspendAndWait() async {
+        shutdown()
+        while !ownedTasks.isEmpty {
+            let pending = Array(ownedTasks.values)
+            for task in pending { await task.value }
+        }
+    }
+
     func drain() async {
-        let pending = [auditTask, progressTask, indexTask, filterTask, draftTask]
-        for task in pending { await task?.value }
+        await suspendAndWait()
         auditTask = nil; progressTask = nil; indexTask = nil; filterTask = nil; draftTask = nil
         selectedProject = nil; projects = []; visiblePages = []; historyByURL = [:]
         pagesByID = [:]; filterEntries = []; discoveredPageURLs = []; selectedPageURLs = []
     }
 
     func deleteSelectedProject() async {
+        guard !stopped else { return }
+        let task = launch { [self] in await deleteSelectedProjectOwned() }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func deleteSelectedProjectOwned() async {
         guard let project = selectedProject, !isRunning else { return }
         await deleteProject(id: project.id)
     }
@@ -349,6 +410,16 @@ final class SEOAuditModel {
     }
 
     func open(_ project: SEOAuditProject) async {
+        guard !stopped else { return }
+        let task = launch { [self] in await openOwned(project) }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func openOwned(_ project: SEOAuditProject) async {
         selectedProject = project
         selectedRunID = project.latestRun?.id
         query = ""
@@ -360,12 +431,24 @@ final class SEOAuditModel {
         historyByURL[page.url] ?? []
     }
 
+    private func launch(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
+        let id = UUID()
+        let task = Task { [self] in
+            defer { ownedTasks[id] = nil }
+            guard !stopped, !Task.isCancelled else { return }
+            await operation()
+        }
+        ownedTasks[id] = task
+        if stopped { task.cancel() }
+        return task
+    }
+
     private func scheduleIndexRebuild() {
         indexTask?.cancel()
         let generation = beginIndexBuild()
         let project = selectedProject
         let runID = selectedRun?.id
-        indexTask = Task { [weak self] in
+        indexTask = launch { [weak self] in
             let built = await SEOPageIndex.work {
                 SEOPageIndex.build(project: project, runID: runID)
             }
@@ -413,7 +496,7 @@ final class SEOAuditModel {
         let severity = severity
         let entries = filterEntries
         let pages = pagesByID
-        filterTask = Task { [weak self] in
+        filterTask = launch { [weak self] in
             try? await Task.sleep(nanoseconds: 150_000_000)
             guard !Task.isCancelled, let self else { return }
             let ids = await SEOPageIndex.work {
@@ -430,7 +513,7 @@ final class SEOAuditModel {
             projectID: project.id, runID: runID, urls: urls, lighthouse: lighthouseEnabled)
         stage = .auditing(current: 0, total: urls.count, url: "Queued in background")
         auditTask?.cancel()
-        auditTask = Task { [weak self] in
+        auditTask = launch { [weak self] in
             guard let self else { return }
             await execute(request, projectName: project.name)
         }
@@ -480,7 +563,7 @@ final class SEOAuditModel {
             if selectedProject?.id == projectID { selectedRunID = launch.request.runID }
             activeTaskID = launch.job.id
             progressTask?.cancel()
-            progressTask = Task { [weak self] in await self?.observeProject(launch.request) }
+            progressTask = self.launch { [weak self] in await self?.observeProject(launch.request) }
             guard
                 case .project(let completed) = try await launch.job.value(cancellingOnCancel: false)
             else { throw SEOAuditInputError("Audit returned no project.") }
@@ -576,7 +659,7 @@ final class SEOAuditModel {
         let selected = discovered.filter { selectedPageURLs.contains($0) }
         let lighthouse = lighthouseEnabled
         draftTask?.cancel()
-        draftTask = Task { [service] in
+        draftTask = launch { [service] in
             guard var draft = try? await service.draft(id) else { return }
             draft.discoveredPageURLs = discovered
             draft.selectedPageURLs = selected
@@ -587,6 +670,16 @@ final class SEOAuditModel {
     }
 
     func refreshProjects() async {
+        guard !stopped else { return }
+        let task = launch { [self] in await refreshProjectsOwned() }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func refreshProjectsOwned() async {
         guard !loadingProjects else { return }
         let request = projectsLoad.begin()
         defer { if Task.isCancelled { projectsLoad.cancel(request) } }

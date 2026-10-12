@@ -7,6 +7,7 @@ import Observation
     private let client: ExtensionEngineClient
     private var revision = 0
     private var tasks: [UUID: Task<Data, any Error>] = [:]
+    private var retirement: Task<Void, Never>?
     private(set) var snapshot = TerminalEngine.Snapshot(sessions: [], broadcast: false)
     private(set) var error: String?
     private(set) var isStopped = false
@@ -198,10 +199,18 @@ import Observation
         guard !isStopped else { return }
         isStopped = true
         revision += 1
-        for task in tasks.values { task.cancel() }
-        tasks.removeAll()
-        client.invalidate()
+        let pending = Array(tasks.values)
+        for task in pending { task.cancel() }
+        retirement = Task { [self, pending] in
+            for task in pending { _ = try? await task.value }
+            client.invalidate()
+        }
         snapshot = TerminalEngine.Snapshot(sessions: [], broadcast: false)
+    }
+
+    func stopAndWait() async {
+        stop()
+        await retirement?.value
     }
 
     private func update(_ operation: String, payload: Data = Data("{}".utf8)) async {

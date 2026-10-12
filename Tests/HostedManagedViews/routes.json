@@ -82,11 +82,11 @@
       "sources": [
         {
           "path": "Extensions/windowSweaters/Runtime.swift",
-          "sha256": "b2475c90e6b508b276529556e42017ae4af602e6be78223fe500ca536fee6b88"
+          "sha256": "348607868e39e12d712fbc87e3b9fdfa50b9668272d0567121fa8430b7bc15f5"
         },
         {
           "path": "Extensions/windowSweaters/Presentation.swift",
-          "sha256": "a37280f12ca4d4fe97052d8239b815c73468fb7b28517de78063011951a8ed2e"
+          "sha256": "66045cb995f19a287db80dcd24e105c8f3d1792b0d1e80abae114d11138fed27"
         }
       ]
     },
@@ -104,11 +104,11 @@
       "sources": [
         {
           "path": "Extensions/micMute/Runtime.swift",
-          "sha256": "d920701566afdf6eb8aa928b6be4543f08442efdac74819b3c0987259ce8c762"
+          "sha256": "8b5e13edc637c07a310fba75c45fcb1d41a71a0248d3626d8119c1a9d227016b"
         },
         {
           "path": "Extensions/micMute/Presentation.swift",
-          "sha256": "caa997b5e007e256cd2f7e317f146fa3bacba91bb88cb3e58bfbf6792c44e899"
+          "sha256": "eab418d7081377258304ddfc9cd969993460169eb0375603c0abf7bbdcf8986d"
         }
       ]
     },
@@ -148,11 +148,11 @@
       "sources": [
         {
           "path": "Extensions/presenter/Runtime.swift",
-          "sha256": "9236b3353c0e027b4a6a5bd72f0f7baebe2bbb492bb3a25a68ed67e16e5ff09d"
+          "sha256": "00850203f06dac9081e1387d5de0b89b9f75b06b845980fef2857d96466a6a38"
         },
         {
           "path": "Extensions/presenter/Presentation.swift",
-          "sha256": "1fad15508b62b77953092c0a2f357612fd16381aa6d9673efc72efa56b1bfb67"
+          "sha256": "5645ff8ed62bdc6775cc41e4016d1b70f3dcd64ba8cf7492796c19e53c7f9465"
         }
       ]
     },
@@ -192,11 +192,11 @@
       "sources": [
         {
           "path": "Extensions/systemStats/Runtime.swift",
-          "sha256": "7659768886bc0e62657ab1bad9969078430b86b5777a5a95dcda200742abe66d"
+          "sha256": "b67a261cef4cd9a2386f48fb58ffc0395f893b3db04d2d39d543d79883ffed80"
         },
         {
           "path": "Extensions/systemStats/Presentation.swift",
-          "sha256": "121182b9795b26df378ce6ceec3b32129a0b37c7ea0f6c63f903392db46daaa1"
+          "sha256": "5bcd3570281b006709a5faff1ac3b7034fc062ecb7d9265580ad0813b5008c81"
         }
       ]
     },
@@ -302,11 +302,11 @@
       "sources": [
         {
           "path": "Extensions/system/Runtime.swift",
-          "sha256": "fc79c5af93448a5ee9fe1f7b0701a72a2d8d432224b79822df0950fa05b19d1b"
+          "sha256": "d28d68283976a2ef9b052bcd4761774c46050a7bc35177efff3d9accb25a436d"
         },
         {
           "path": "Extensions/system/ViewModels/RunningAppsModel.swift",
-          "sha256": "79c357d4d5ad3db88ffcf3fdfda0f0a98169d0c462998f10975102e3838b72e3"
+          "sha256": "1847d958e8524c3e9de6869de6ab527511d6faebba8bc181b9406ce257bff9a1"
         }
       ]
     },
@@ -324,11 +324,11 @@
       "sources": [
         {
           "path": "Extensions/timeLapse/Runtime.swift",
-          "sha256": "168a74137e1effdf56eb69c6511b4f034ffcd28550fa4bb9745cd2645039c7dc"
+          "sha256": "ad8d66a0abba0e3b38c9107c64d10372c30f086df052426999e3bf48f29a9908"
         },
         {
           "path": "Extensions/timeLapse/TimeLapseRecorder.swift",
-          "sha256": "af675d5c8d19d4d0031827e67766402d0ac95d13591cdb397b156ddf7a3dde13"
+          "sha256": "ea8d756725a2cede5175df365818a15c4445874aaea6f46c7192f1e213edb7e3"
         }
       ]
     },
@@ -566,11 +566,11 @@
       "sources": [
         {
           "path": "Extensions/terminal/Runtime.swift",
-          "sha256": "68a359b9a63734524ffbce57fe4d5a9d20f1227c8b0dec988a1237e1f4b9af47"
+          "sha256": "a2282336ac21704241f6c35ecc875602a3ad90f437dbda71d18691bd33ffd52d"
         },
         {
           "path": "Extensions/terminal/TerminalTabsModel.swift",
-          "sha256": "8cd38f5eb74fbf579a66e86256578f7a4455abac123b8395da9df5f2161ae168"
+          "sha256": "7a7a9cc0aaa0686e72ed3abddea4a88200ceb27c41aa8cb6f3f9781acf1536a9"
         }
       ]
     },
@@ -610,7 +610,7 @@
       "sources": [
         {
           "path": "Extensions/usage/Runtime.swift",
-          "sha256": "ea4e7f11920d2c08547454b3df5c1470bd61146a480d10b8c676e8274e2696ab"
+          "sha256": "ba91a539d1bae7c9df46a050ceac3c99f2380b81129af746554004d3f62a0cf9"
         },
         {
           "path": "Extensions/usage/Views/UsageUIPresentation.swift",
@@ -738,11 +738,11 @@
       "sources": [
         {
           "path": "Extensions/seoAudit/Runtime.swift",
-          "sha256": "92e4407bc6b7bff5af862bc775ae749372ba7a5fe69563bda16a9dbf5034b4cf"
+          "sha256": "b95281f4aa7f71a1708ee6456e57f398d5898e5f7bc2f3622a4c2b704935c220"
         },
         {
           "path": "Extensions/seoAudit/ViewModels/SEOAuditModel.swift",
-          "sha256": "ebc591d8248421a15d3144789ee4dea621b76310c2c7bf01899ff51ae2c3f0f2"
+          "sha256": "a9a945cc7995c73afba2bb23acd6e88427b42e88933de2dc7e05f91dc47ff2d0"
         }
       ]
     },
@@ -760,11 +760,11 @@
       "sources": [
         {
           "path": "Extensions/virtualCamera/Runtime.swift",
-          "sha256": "e0941a130bb41e6270d0ddb1c7842bae11755712d6074280cb94836c32d9b32a"
+          "sha256": "b782562942070b8caa682b0484ddb27e80c520148559637ac8c2b86785f2cc3c"
         },
         {
           "path": "Extensions/virtualCamera/Views/VirtualCameraPageModel.swift",
-          "sha256": "8b78c043c8a996a4b4bd2ca8cc6f1291a3901881ed7f3eab1aff1618271bd7b3"
+          "sha256": "9e0eedeca249edeefd1f22cc1e3017dcd8c5ea4de47bed662ea24d45a582025e"
         }
       ]
     },
@@ -826,11 +826,11 @@
       "sources": [
         {
           "path": "Extensions/quinjet/Runtime.swift",
-          "sha256": "21534550c6ada5f22ec3a9fa02559e65fb467b614094043e62345c85ca685375"
+          "sha256": "ea86a2ff091ce88b19ef23c05b447a9d1ef0eb55d28b7cacbe626a0705bd5f66"
         },
         {
           "path": "Extensions/quinjet/ViewModels/QuinjetPageModel.swift",
-          "sha256": "18f15e66aa52dca14ae2b66098cdfb539406e9d1df8c11a5b54c354dd7aa1cea"
+          "sha256": "6daf87b36478773cc7ba04cd998105bf6943d0a9203d727d11abc4d35d294ff6"
         }
       ]
     },
