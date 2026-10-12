@@ -128,6 +128,7 @@ test("actual contained runtime copy preserves executable bytes and mode without 
     join(import.meta.dir, "build-contained-host-runtime.mjs"),
     "utf8",
   );
+  const environment = Object.freeze({});
   const context = vm.createContext({ Buffer });
   const module = new vm.SourceTextModule(source, { context });
   const calls = [];
@@ -141,8 +142,10 @@ test("actual contained runtime copy preserves executable bytes and mode without 
     const namespace =
       specifier === "node:child_process"
         ? {
-            execFileSync(file, args) {
+            execFileSync(file, args, options) {
               expect(file).toBe("otool");
+              expect(options.env).toBe(environment);
+              expect(options.encoding).toBe("utf8");
               expect(args).toEqual(["-L", value.executable]);
               calls.push([file, args]);
               return `${value.executable}:\n /usr/lib/libSystem.B.dylib (compatibility version 1.0.0)\n`;
@@ -166,6 +169,7 @@ test("actual contained runtime copy preserves executable bytes and mode without 
     {
       identity: "synthetic identity",
       development: false,
+      environment,
     },
   );
   expect(calls.length).toBe(1);
