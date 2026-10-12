@@ -1,9 +1,42 @@
+import AppKit
 import EdithKit
+import SwiftUI
 import Foundation
 import Testing
 @testable import Edith
 
 @Suite struct ClaudeAccountTests {
+    @Test @MainActor func shellEditorPreservesTypedHyphensAndQuotes() throws {
+        var value = ""
+        let host = NSHostingView(
+            rootView: ShellInputEditor(
+                text: Binding(get: { value }, set: { value = $0 }), label: "Launch settings"
+            )
+            .disabled(false).frame(width: 440, height: 48))
+        host.layoutSubtreeIfNeeded()
+        func findEditor(_ view: NSView) -> NSTextView? {
+            if let editor = view as? NSTextView { return editor }
+            return view.subviews.compactMap(findEditor).first
+        }
+        let editor = try #require(findEditor(host))
+        #expect(!editor.isAutomaticDashSubstitutionEnabled)
+        #expect(!editor.isAutomaticQuoteSubstitutionEnabled)
+        #expect(!editor.isAutomaticTextReplacementEnabled)
+        let input = "--dangerously-skip-permissions\nIS_DEMO='1'"
+        for character in input {
+            editor.insertText(
+                String(character), replacementRange: NSRange(location: NSNotFound, length: 0))
+        }
+        #expect(editor.string == input)
+        #expect(value == input)
+        host.rootView = ShellInputEditor(
+            text: Binding(get: { value }, set: { value = $0 }), label: "Launch settings"
+        )
+        .disabled(true).frame(width: 440, height: 48)
+        host.layoutSubtreeIfNeeded()
+        #expect(!editor.isEditable)
+    }
+
     @Test func sharedLaunchOptionsApplyToEveryAccountAndPreserveLiteralValues() throws {
         let defaults = UserDefaults(suiteName: "test.shared-launch." + UUID().uuidString)!
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

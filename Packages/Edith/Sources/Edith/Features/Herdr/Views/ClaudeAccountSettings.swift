@@ -96,8 +96,7 @@ struct ClaudeAccountSettings: View {
                     if draft?.authentication != .browserLogin {
                         Text(draft?.authentication == .apiKey ? "Full API key" : "Full OAuth token")
                             .font(.edithText(.caption))
-                        TextEditor(text: binding(\.credential))
-                            .font(.system(size: UIScale.pt(11), design: .monospaced))
+                        ShellInputEditor(text: binding(\.credential), label: "Full credential")
                             .frame(height: UIScale.pt(64))
                             .accessibilityLabel("Full credential")
                         if draft?.authentication == .oauthToken {

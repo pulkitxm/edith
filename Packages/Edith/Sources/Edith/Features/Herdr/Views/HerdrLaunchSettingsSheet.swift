@@ -1,3 +1,4 @@
+import AppKit
 import EdithKit
 import SwiftUI
 
@@ -235,13 +236,11 @@ struct ClaudeSharedLaunchSettings: View {
             .font(.edithText(.caption)).foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             Text("Additional arguments, one per line").font(.edithText(.caption))
-            TextEditor(text: $arguments)
-                .font(.system(size: UIScale.pt(11), design: .monospaced))
+            ShellInputEditor(text: $arguments, label: "Shared Claude launch arguments")
                 .frame(height: UIScale.pt(48))
                 .accessibilityLabel("Shared Claude launch arguments")
             Text("Environment variables, NAME=value per line").font(.edithText(.caption))
-            TextEditor(text: $environment)
-                .font(.system(size: UIScale.pt(11), design: .monospaced))
+            ShellInputEditor(text: $environment, label: "Shared Claude launch environment")
                 .frame(height: UIScale.pt(48))
                 .accessibilityLabel("Shared Claude launch environment")
             Text(
@@ -263,6 +262,56 @@ struct ClaudeSharedLaunchSettings: View {
         .onAppear {
             arguments = HerdrLaunchSettings.sharedArguments(in: defaults)
             environment = HerdrLaunchSettings.sharedEnvironment(in: defaults)
+        }
+    }
+}
+
+struct ShellInputEditor: NSViewRepresentable {
+    @Environment(\.isEnabled) private var isEnabled
+    @Binding var text: String
+    let label: String
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSTextView.scrollableTextView()
+        let editor = scrollView.documentView as! NSTextView
+        editor.isRichText = false
+        editor.allowsUndo = true
+        editor.isAutomaticDashSubstitutionEnabled = false
+        editor.isAutomaticQuoteSubstitutionEnabled = false
+        editor.isAutomaticTextReplacementEnabled = false
+        editor.isAutomaticSpellingCorrectionEnabled = false
+        editor.isContinuousSpellCheckingEnabled = false
+        editor.isGrammarCheckingEnabled = false
+        editor.isAutomaticLinkDetectionEnabled = false
+        editor.textContainerInset = NSSize(width: 5, height: 4)
+        editor.delegate = context.coordinator
+        configure(editor)
+        return scrollView
+    }
+
+    func updateNSView(_ view: NSScrollView, context: Context) {
+        context.coordinator.text = $text
+        configure(view.documentView as! NSTextView)
+    }
+
+    private func configure(_ editor: NSTextView) {
+        editor.isEditable = isEnabled
+        editor.font = .monospacedSystemFont(ofSize: UIScale.pt(11), weight: .regular)
+        editor.textColor = .labelColor
+        editor.setAccessibilityLabel(label)
+        if editor.string != text { editor.string = text }
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var text: Binding<String>
+
+        init(text: Binding<String>) { self.text = text }
+
+        func textDidChange(_ notification: Notification) {
+            guard let editor = notification.object as? NSTextView else { return }
+            text.wrappedValue = editor.string
         }
     }
 }
