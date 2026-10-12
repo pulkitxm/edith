@@ -75,7 +75,10 @@ public actor ClaudeAccountLimitsCollector {
         let keyed = accounts.map { (Self.cacheKey($0), $0) }
         let keys = Set(keyed.map { $0.0 })
         cached = cached.filter { keys.contains($0.key) }
-        let pending = keyed.filter { cached[$0.0].map { $0.retryAt <= now } ?? true }
+        var scheduled = Set<String>()
+        let pending = keyed.filter {
+            scheduled.insert($0.0).inserted && (cached[$0.0].map { $0.retryAt <= now } ?? true)
+        }
         let id = UUID()
         activeID = id
         let task = Task {
@@ -178,8 +181,11 @@ public actor ClaudeAccountLimitsCollector {
     }
 
     private static func cacheKey(_ account: ClaudeAccount) -> String {
+        let scope =
+            account.authentication == .browserLogin || account.isLoggedOut
+            ? account.id.uuidString : ""
         let value =
-            account.id.uuidString + "\0" + account.authentication.rawValue + "\0"
+            scope + "\0" + account.authentication.rawValue + "\0"
             + account.credential + "\0" + (account.loginData ?? "") + "\0"
             + (account.remoteMachineID ?? "") + "\0" + String(account.isLoggedOut)
         return SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
