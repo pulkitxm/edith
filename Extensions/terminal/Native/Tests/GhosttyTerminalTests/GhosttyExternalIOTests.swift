@@ -120,7 +120,7 @@ import Testing
         var actions: [GhosttyPaneAction] = []
         let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400))
         var io: GhosttyExternalIO? = TestWindowHost.inertIO()
-        weak var releasedIO = io
+        weak let releasedIO = io
         let view = GhosttyTerminalView(externalIO: try #require(io))
         io = nil
         view.onPaneAction = { actions.append($0) }

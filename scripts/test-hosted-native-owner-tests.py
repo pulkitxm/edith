@@ -1,6 +1,8 @@
 from pathlib import Path
 import importlib.util
 import json
+import re
+import shlex
 import signal
 import subprocess
 import tempfile
@@ -123,6 +125,21 @@ class OriginalNativeOwnerTests(unittest.TestCase):
                             [{'id': 'attention', 'testTargets': ['ci-extension-attention']}] * 2):
             with self.assertRaises(ValueError):
                 runner.original_command('attention', definitions)
+
+    def test_original_camera_command_enforces_privileged_lockfile_without_skipping_targets(self):
+        root = Path(__file__).resolve().parent.parent
+        text = (root / 'Makefile').read_text()
+        recipe = re.search(r'^ci-extension-camera:\n((?:\t.*\n)+)', text, re.MULTILINE).group(1)
+        lines = recipe.splitlines()
+        privileged = shlex.split(lines[0].replace('$(EXTENSION_SWIFT_JOBS)', '1'))
+        self.assertEqual(privileged, [
+            'swift', 'test', '--package-path', 'Extensions/virtualCamera/Privileged',
+            '--build-system', 'native', '--jobs', '1', '--no-parallel', '--force-resolved-versions'])
+        self.assertEqual(lines[1].strip(), '$(call UTILITY_EXTENSION_NATIVE_TEST,virtualCamera)')
+        self.assertTrue(lines[2].strip().startswith('swiftc -typecheck '))
+        definitions = json.loads((root / 'Extensions/manifest.json').read_text())
+        self.assertEqual(runner.original_command('virtualCamera', definitions), [
+            'make', 'ci-extension-camera', 'ci-extension-camera-carrier', 'ci-extension-camera-voice'])
 
     def run_fixture(self, text, process, ownership, sample=None):
         clock = Clock()
