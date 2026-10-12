@@ -37,7 +37,8 @@ struct MarketplacePage: View {
     private var filtered: [HostExtension] {
         HostMarketplaceCatalog.filter(
             marketplace.entries.filter {
-                marketplace.available[$0.id] != nil || marketplace.downloadedIDs.contains($0.id)
+                marketplace.available[$0.id] != nil
+                    || marketplace.installedVersions[$0.id]?.isEmpty == false
             }, query: search, category: category)
     }
     private var dark: Bool { scheme == .dark }

@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import EdithExtensionSupport
 import EdithExtensionUI
 import EdithHostCore
@@ -61,6 +62,7 @@ import Testing
     {
         let fixture = try Fixture()
         defer { fixture.clean() }
+        await fixture.marketplace.loadCachedCatalog()
         let entries = fixture.marketplace.entries
         #expect(
             HostMarketplaceCatalog.suites.map(\.id) == [
@@ -100,6 +102,56 @@ import Testing
         #expect(
             find(host, label: "Claude, Codex and Cursor limits, usage stats, and alerts.") != nil)
         #expect(find(host, label: "Download") != nil)
+        #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(await fixture.requests.count == 0)
+    }
+
+    @Test func firstShippingMarketplaceShowsOnlyItsOfferedPackageWithoutStartingWorkers()
+        async throws
+    {
+        let fixture = try Fixture(catalogIDs: ["keepAwake"])
+        defer { fixture.clean() }
+        await fixture.marketplace.loadCachedCatalog()
+        #expect(Set(fixture.marketplace.available.keys) == ["keepAwake"])
+        let restore = try enableAccessibility()
+        defer { restore() }
+        let host = NSHostingView(
+            rootView: MarketplacePage(marketplace: fixture.marketplace)
+                .environment(\.compactLayout, false).environment(
+                    \.automaticViewActionsEnabled, false))
+        host.frame = CGRect(x: 0, y: 0, width: 1100, height: 850)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        #expect(find(host, label: "Keep Awake") != nil)
+        #expect(find(host, label: "Calendar") == nil)
+        #expect(find(host, label: "Usage") == nil)
+        #expect(find(host, label: "Download") != nil)
+        #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(await fixture.requests.count == 0)
+    }
+
+    @Test func unpublishedPendingRemovalKeepsItsCleanupControlsVisible() async throws {
+        let fixture = try Fixture(packageState: "removal", catalogIDs: [])
+        defer { fixture.clean() }
+        await fixture.marketplace.loadCachedCatalog()
+        #expect(fixture.marketplace.available.isEmpty)
+        #expect(fixture.marketplace.pendingRemovalIDs == ["calendar"])
+        #expect(!fixture.marketplace.downloadedIDs.contains("calendar"))
+        let restore = try enableAccessibility()
+        defer { restore() }
+        let host = NSHostingView(
+            rootView: MarketplacePage(marketplace: fixture.marketplace)
+                .environment(\.compactLayout, false).environment(
+                    \.automaticViewActionsEnabled, false))
+        host.frame = CGRect(x: 0, y: 0, width: 1100, height: 850)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        #expect(find(host, label: "Removal pending") != nil)
+        #expect(find(host, label: "Remove") != nil)
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.requests.count == 0)
     }
@@ -861,6 +913,7 @@ import Testing
     ) async throws {
         let fixture = try Fixture(packageState: state)
         defer { fixture.clean() }
+        await fixture.marketplace.loadCachedCatalog()
         let restore = try enableAccessibility()
         defer { restore() }
         let host = NSHostingView(
@@ -1159,7 +1212,7 @@ import Testing
 
         init(
             pendingDisableID: String? = nil, packageState: String? = nil,
-            activeIDs: Set<String> = []
+            activeIDs: Set<String> = [], catalogIDs: Set<String>? = nil
         ) throws {
             directory = FileManager.default.temporaryDirectory.appendingPathComponent(
                 UUID().uuidString)
@@ -1214,20 +1267,38 @@ import Testing
                     executable: URL(fileURLWithPath: "/usr/bin/python3"),
                     arguments: [script.path, "normal"], requestTimeout: .seconds(2))
             }
+            let entries = try HostIndex.bundled().filter {
+                fixtureID == nil || $0.id == fixtureID
+            }
+            let key = Curve25519.Signing.PrivateKey()
+            let cache = directory.appendingPathComponent("catalog.json")
+            let packages = entries.filter { catalogIDs?.contains($0.id) ?? true }.map { entry in
+                ExtensionPackage(
+                    id: entry.id, version: "1.1.0", hostABI: HostContract.compatibility,
+                    downloadURL: URL(
+                        string:
+                            "https://github.com/pulkitxm/edith/releases/download/synthetic/\(entry.id).zip"
+                    )!, sha256: String(repeating: "a", count: 64), downloadBytes: 128,
+                    installedBytes: 128)
+            }
+            let payload = try JSONEncoder().encode(
+                ExtensionCatalog(revision: 1, packages: packages))
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true)
+            try JSONEncoder().encode(
+                SignedExtensionCatalog(payload: payload, signature: key.signature(for: payload))
+            ).write(to: cache)
             let client = ExtensionCatalogClient(
                 url: URL(string: "https://github.com/pulkitxm/edith/catalog")!,
-                publicKey: Data(repeating: 0, count: 32),
-                repository: MarketplaceConfiguration.repository,
-                cache: directory.appendingPathComponent("catalog.json"),
+                publicKey: key.publicKey.rawRepresentation,
+                repository: MarketplaceConfiguration.repository, cache: cache,
                 fetch: { [requests] _ in try await requests.reject() })
             let installer = ExtensionPackageInstaller(
                 store: store, download: { _, _ in throw MarketplaceError.downloadFailed },
                 verify: { _ in throw MarketplaceError.invalidSignature })
             marketplace = try HostMarketplace(
                 identity: identity,
-                entries: try HostIndex.bundled().filter {
-                    fixtureID == nil || $0.id == fixtureID
-                }, store: store,
+                entries: entries, store: store,
                 catalogClient: client, installer: installer, sessions: sessions)
         }
 
