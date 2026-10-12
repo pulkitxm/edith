@@ -39,7 +39,9 @@ import Testing
                     caseSHA256: hash),
                 try WorkerFixtureRolePolicy(
                     owner: "notchShelf", primaryRole: .helper,
-                    operations: ["notch.settings.read", "notch.settings.write"],
+                    operations: [
+                        "notch.settings.read", "notch.settings.write", "notchShelf.cli.catalog",
+                    ],
                     presentations: [
                         try WorkerFixturePresentationScope(
                             location: "settings", section: "extension")
@@ -233,7 +235,9 @@ import Testing
                 value["location"] = "settings"; value["section"] = "extension"
             } else {
                 value["role"] = "helper";
-                value["operations"] = ["notch.settings.read", "notch.settings.write"]
+                value["operations"] = [
+                    "notch.settings.read", "notch.settings.write", "notchShelf.cli.catalog",
+                ]
             }
             return value
         }
@@ -351,7 +355,11 @@ import Testing
         let key = Curve25519.Signing.PrivateKey()
         for owner in WorkerFixtureUIContract.helperOwners.sorted() {
             let policy = try WorkerFixtureRolePolicy(
-                owner: owner, primaryRole: .helper, operations: [owner + ".probe"],
+                owner: owner, primaryRole: .helper,
+                operations: owner == "notchShelf"
+                    ? [
+                        "notch.settings.read", "notch.settings.write", "notchShelf.cli.catalog",
+                    ] : [owner + ".probe"],
                 presentations: [
                     try WorkerFixturePresentationScope(location: "main", section: owner)
                 ], inputs: [], outputs: [], fileScopes: [], manifestSHA256: hash, caseSHA256: hash)

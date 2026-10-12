@@ -36,12 +36,14 @@ public enum WorkerFixtureFileRoot: String, Sendable {
     case ownerInputs = "owner-inputs", ownerOutputs = "owner-outputs"
 }
 public enum WorkerFixtureUUIDSpelling: String, Sendable { case lowercase, uppercase }
+public enum WorkerFixtureDefaultsDomain: String, Sendable { case engine, ui }
 public enum WorkerFixtureFilePhase: String, Sendable { case initial, updated, reinstalled }
 public enum WorkerFixtureFilePresence: String, Hashable, Sendable { case present, absent }
 
 public enum WorkerFixtureFileComponent: Equatable, Sendable {
     case literal(String)
     case sessionUUID(WorkerFixtureUUIDSpelling)
+    case workerDefaultsPlist(WorkerFixtureDefaultsDomain)
     case phase
 }
 
@@ -112,6 +114,17 @@ public struct WorkerFixtureFileScope: Equatable, Sendable {
                 if case .sessionUUID = $0 { return true }; return false
             }).count <= 1
         else { throw WorkerFixtureError.invalid }
+        if components.contains(where: {
+            if case .workerDefaultsPlist = $0 { return true }; return false
+        }) {
+            guard kind == .file, purpose == .mutableState, root == .ownerHome,
+                components.count == 3, components[0] == .literal("Library"),
+                components[1] == .literal("Preferences"),
+                {
+                    if case .workerDefaultsPlist = components[2] { return true }; return false
+                }()
+            else { throw WorkerFixtureError.invalid }
+        }
         try Self.validateStates(initialState, allowedStates)
         if kind == .file {
             guard maximumBytes > 0, maximumEntries == 1,
@@ -228,6 +241,11 @@ public struct WorkerFixtureFileScope: Equatable, Sendable {
             case .literal(let value): return value
             case .sessionUUID(let spelling):
                 return spelling == .lowercase ? session : session.uppercased()
+            case .workerDefaultsPlist(let domain):
+                let host = "com.pulkit.edith.tests.worker-" + session
+                return host
+                    + (domain == .engine
+                        ? ".extensions." + owner : ".extension." + owner + ".worker") + ".plist"
             case .phase: return phase.rawValue
             }
         }.joined(separator: "/")
@@ -296,10 +314,30 @@ public struct WorkerFixtureRolePolicy: Equatable, Sendable {
             WorkerFixtureUIContract.hex(manifestSHA256, count: 64),
             WorkerFixtureUIContract.hex(caseSHA256, count: 64)
         else { throw WorkerFixtureError.invalid }
+        if owner == "notchShelf" {
+            guard
+                operations == [
+                    "notch.settings.read", "notch.settings.write", "notchShelf.cli.catalog",
+                ]
+            else { throw WorkerFixtureError.invalid }
+        }
         self.owner = owner; self.primaryRole = primaryRole; self.operations = operations
         self.presentations = presentations; self.inputs = inputs; self.outputs = outputs
         self.fileScopes = fileScopes
         self.manifestSHA256 = manifestSHA256; self.caseSHA256 = caseSHA256
+    }
+
+    public func resolvedOwnedPaths(
+        root: String, session: String, phase: WorkerFixtureFilePhase
+    ) throws -> [WorkerFixtureResolvedFileScope] {
+        let claims = try fileScopes.map { scope in
+            WorkerFixtureOwnedPathClaim(
+                name: scope.name,
+                path: try scope.path(owner: owner, root: root, session: session, phase: phase),
+                kind: scope.kind)
+        }
+        return try validateOwnedPaths(
+            claims, owner: owner, root: root, session: session, phase: phase)
     }
 
     public func validateOwnedPaths(

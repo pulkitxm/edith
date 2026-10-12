@@ -31,7 +31,9 @@ import Testing
                     outputs: ["movie"], fileScopes: [], manifestSHA256: hash, caseSHA256: hash),
                 try WorkerFixtureRolePolicy(
                     owner: "notchShelf", primaryRole: .helper,
-                    operations: ["notch.settings.read", "notch.settings.write"],
+                    operations: [
+                        "notch.settings.read", "notch.settings.write", "notchShelf.cli.catalog",
+                    ],
                     presentations: [
                         try WorkerFixturePresentationScope(
                             location: "settings", section: "extension")
@@ -157,7 +159,9 @@ import Testing
             of: "studio", with: "notchShelf")
         value["engine"] = engine
         value["role"] = "helper"
-        value["operations"] = ["notch.settings.read", "notch.settings.write"]
+        value["operations"] = [
+            "notch.settings.read", "notch.settings.write", "notchShelf.cli.catalog",
+        ]
         value["inputs"] = [[String: Any]](); value["outputs"] = [[String: Any]]()
         let descriptor = try WorkerFixtureEngineContract.verify(
             seal(value, key), issuerKey: key.publicKey.rawRepresentation)

@@ -33,7 +33,11 @@ struct WorkerFixtureRolePolicyTests {
         _ owner: String, role: WorkerFixtureRole, fileScopes: [WorkerFixtureFileScope] = []
     ) throws -> WorkerFixtureRolePolicy {
         try WorkerFixtureRolePolicy(
-            owner: owner, primaryRole: role, operations: [owner + ".probe"],
+            owner: owner, primaryRole: role,
+            operations: owner == "notchShelf"
+                ? [
+                    "notch.settings.read", "notch.settings.write", "notchShelf.cli.catalog",
+                ] : [owner + ".probe"],
             presentations: [try WorkerFixturePresentationScope(location: "main", section: owner)],
             inputs: [], outputs: [], fileScopes: fileScopes, manifestSHA256: hash, caseSHA256: hash)
     }
@@ -290,6 +294,101 @@ struct WorkerFixtureRolePolicyTests {
                 root: .ownerData, components: [.literal("tree")], maximumBytes: 2,
                 maximumEntries: 4, initialState: .present, allowedStates: [.present],
                 immutableFiles: inventory, mutableFiles: [])
+        }
+    }
+
+    @Test func originalNotchOperationsStayExactAndCannotBecomeGenericCatalogAuthority() throws {
+        let actual = try policy("notchShelf", role: .helper)
+        #expect(
+            actual.operations == [
+                "notch.settings.read", "notch.settings.write", "notchShelf.cli.catalog",
+            ])
+        for operations in [
+            ["notchShelf.probe"], ["notchShelf.cli.catalog"],
+            ["notch.settings.read", "notch.settings.write"],
+            actual.operations + ["notch.customize"], actual.operations.reversed().map { $0 },
+        ] {
+            #expect(throws: (any Error).self) {
+                try WorkerFixtureRolePolicy(
+                    owner: "notchShelf", primaryRole: .helper, operations: operations,
+                    presentations: actual.presentations, inputs: [], outputs: [], fileScopes: [],
+                    manifestSHA256: hash, caseSHA256: hash)
+            }
+        }
+    }
+
+    @Test func workerDefaultsFilenameIsDerivedFromActualSessionOwnerAndOriginalDomain() throws {
+        for domain in [WorkerFixtureDefaultsDomain.engine, .ui] {
+            let scope = try file(
+                "preferences",
+                components: [
+                    .literal("Library"), .literal("Preferences"), .workerDefaultsPlist(domain),
+                ],
+                purpose: .mutableState, root: .ownerHome, initial: .absent,
+                states: [.absent, .present])
+            let policy = try policy("codeStats", role: .app, fileScopes: [scope])
+            let resolved = try policy.resolvedOwnedPaths(
+                root: root, session: session, phase: .updated)
+            let suite =
+                "com.pulkit.edith.tests.worker-" + session
+                + (domain == .engine ? ".extensions.codeStats" : ".extension.codeStats.worker")
+            #expect(
+                resolved[0].path == root + "/codeStats-home/Library/Preferences/" + suite + ".plist"
+            )
+            #expect(throws: (any Error).self) {
+                try policy.validateOwnedPaths(
+                    [
+                        WorkerFixtureOwnedPathClaim(
+                            name: "preferences",
+                            path: root + "/codeStats-home/Library/Preferences/foreign.plist",
+                            kind: .file)
+                    ],
+                    owner: "codeStats", root: root, session: session, phase: .updated)
+            }
+            for invalid in [
+                resolved[0].path.replacingOccurrences(of: ".codeStats", with: ".foreign"),
+                resolved[0].path.replacingOccurrences(
+                    of: session, with: "22345678-1234-4123-8123-123456789abc"),
+                resolved[0].path.replacingOccurrences(of: ".extensions.", with: ".extension."),
+            ].filter({ $0 != resolved[0].path }) {
+                #expect(throws: (any Error).self) {
+                    try policy.validateOwnedPaths(
+                        [
+                            WorkerFixtureOwnedPathClaim(
+                                name: "preferences", path: invalid, kind: .file)
+                        ],
+                        owner: "codeStats", root: root, session: session, phase: .updated)
+                }
+            }
+
+        }
+        for (components, purpose, fileRoot) in [
+            (
+                [WorkerFixtureFileComponent.workerDefaultsPlist(.engine)],
+                WorkerFixtureFilePurpose.mutableState, WorkerFixtureFileRoot.ownerHome
+            ),
+            (
+                [.literal("Library"), .literal("Other"), .workerDefaultsPlist(.ui)], .mutableState,
+                .ownerHome
+            ),
+            (
+                [.literal("Library"), .literal("Preferences"), .workerDefaultsPlist(.ui)],
+                .immutableInput, .ownerHome
+            ),
+            (
+                [.literal("Library"), .literal("Preferences"), .workerDefaultsPlist(.ui)],
+                .mutableState, .ownerOutputs
+            ),
+            (
+                [.literal("Library"), .literal("Preferences"), .workerDefaultsPlist(.ui), .phase],
+                .mutableState, .ownerHome
+            ),
+        ] {
+            #expect(throws: (any Error).self) {
+                try file(
+                    "preferences", components: components, purpose: purpose, root: fileRoot,
+                    initial: .absent, states: [.absent, .present])
+            }
         }
     }
 
