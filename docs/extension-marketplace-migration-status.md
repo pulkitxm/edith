@@ -89,6 +89,13 @@ The harness compiler setting has since been corrected and the actual native
 harness compiled successfully. The generated host ABI was renewed, and its
 47 focused ABI/release-planning tests passed with 931 expectation calls.
 
+The coherent hosted producer, regular evidence models, owned socket cleanup
+and source normalizer are now integrated. Their complete package and test
+targets compile with warnings treated as errors and pass strict formatting.
+The finite Calendar Context, RequestJournal and contract-test supplement is
+also integrated and compiled. The original Calendar action and downstream
+receipt consumers remain incomplete.
+
 Focused lifecycle, settings, saved-state, parser and release tests cover scoped
 behavior. Module compilation and pure model tests do not establish the complete
 39-extension native journey or publication.
@@ -101,7 +108,7 @@ not used for this verification.
 
 | Area | Outstanding result | Required correction |
 | --- | --- | --- |
-| Attention | Implementation-only compiler feature mismatch | Correct the target contract while preserving the original Home card |
+| Attention | Target feature corrected; native and test-target compilation passed | Verify current hosted original tests and archives |
 | Machines | Expected usage completion receipt absent at the original timeout | Diagnose completion and ownership, preserve timing |
 | Camera | Native tests passed, then a generated lockfile failed source admission | Account for legitimate dependency inputs without weakening admission |
 | Terminal | Upload files remained after disable | Restore actual owner cleanup and join active copies |
@@ -114,15 +121,21 @@ not used for this verification.
 The AppMaintenance ownership assertions have a scoped correction for the current
 joined stop helper. Its actual current native result still needs requalification.
 A later feature-models run also failed three admission/roundtrip cases with
-invalidRequest. Additional current CI logs remain part of final verification.
+invalidRequest. The integrated Peer correction now joins retired generations
+before reopening command admission and adds a held-work restart regression.
+Both complete package configurations compile, while the original three hosted
+restart tests and the new regression still require current runtime verification.
+Additional current CI logs remain part of final verification.
 
 ArgumentParser deprecations originate in pinned support source copied into each
 namespaced extension module. The integrated generator correction targets the deprecated
 prefix and completion mapping while retaining current custom-prefix behavior.
 The 19 focused regression tests passed. All 53 transformed parser sources
 compiled with warnings treated as errors.
-The complete warning inventory and final extension archive builds remain to be
-qualified. No warning suppression or removal of original tests is an acceptance
+Remaining warning migrations include deprecated AppKit accessibility helpers
+in tests, unused weak variables, redundant optional/effect markers and supported
+SwiftPM build-system configuration. The complete warning inventory and final
+extension archive builds remain to be qualified. No warning suppression or removal of original tests is an acceptance
 substitute.
 
 ## Original time foundations
