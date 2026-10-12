@@ -2,6 +2,7 @@ import EdithKit
 import SwiftUI
 
 struct HerdrLaunchSettingsSheet: View {
+    var accounts = ClaudeAccountsModel.shared
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -10,6 +11,8 @@ struct HerdrLaunchSettingsSheet: View {
             Divider()
             ScrollView {
                 VStack(spacing: 0) {
+                    ClaudeAccountSettings(accounts: accounts).padding(UIScale.pt(18))
+                    Divider()
                     ForEach(HerdrLaunchSettings.kinds, id: \.self) { kind in
                         HerdrLaunchKindRow(kind: kind)
                         if kind != HerdrLaunchSettings.kinds.last { Divider() }

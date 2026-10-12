@@ -7,6 +7,13 @@ public struct HerdrAgentLaunch: Sendable {
 }
 
 public enum HerdrLaunchOperations {
+    public static func launchLocalAccount(launcher: URL, pane: String) async throws {
+        _ = try await HerdrCommand.run(
+            HerdrSessionCommand.scoped(
+                HerdrPaneRunCommand.arguments(pane: pane, command: ShellQuote.quote(launcher.path)),
+                session: HerdrTerminalSpace.defaultSession), timeout: 15, on: nil)
+    }
+
     private static let defaultTimeout: TimeInterval = 15
     private static let agentStartTimeoutMS = 30_000
 

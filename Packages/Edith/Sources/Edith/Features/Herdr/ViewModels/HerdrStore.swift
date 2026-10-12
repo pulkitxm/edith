@@ -120,6 +120,13 @@ final class HerdrStore {
         }
     }
 
+    var claudeAccounts = ClaudeAccountsModel.shared
+    var accountFilter: String? {
+        didSet { reconcileCollapseCountsIfReady() }
+    }
+    var accountSessions: [String: String] = [:]
+    private var accountSessionIdentities: [String: HerdrNativeSession] = [:]
+
     var machineFilter = "all" {
         didSet {
             guard machineFilter != oldValue else { return }
@@ -245,6 +252,7 @@ final class HerdrStore {
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
+    private let accountAgentStarter: @Sendable (URL, String) async throws -> Void
     private let newAgentPaneCreator: HerdrNewAgentPaneCreator
     private let agentStarter: @Sendable (String, String, Machine?) async throws -> Void
     private(set) var agentStartupMessages: [String: String] = [:]
@@ -288,6 +296,9 @@ final class HerdrStore {
                 name: HerdrLaunchSettings.defaultHerdrSlug(for: kind) ?? kind.lowercased(),
                 pane: pane, on: machine)
         },
+        accountAgentStarter: @escaping @Sendable (URL, String) async throws -> Void = { launcher, pane in
+            try await HerdrLaunchOperations.launchLocalAccount(launcher: launcher, pane: pane)
+        },
         terminalIDResolver: @escaping @Sendable (String, String, Machine?) async throws -> String =
             {
                 try await HerdrPaneOperations.terminalID(session: $0, pane: $1, on: $2)
@@ -304,6 +315,10 @@ final class HerdrStore {
         workspacePresenter: @escaping @MainActor () -> Void = {}
     ) {
         self.defaults = defaults
+        accountSessions = defaults.dictionary(forKey: "herdr.claudeAccountSessions") as? [String: String] ?? [:]
+        if let data = defaults.data(forKey: "herdr.claudeAccountSessionIdentities") {
+            accountSessionIdentities = (try? JSONDecoder().decode([String: HerdrNativeSession].self, from: data)) ?? [:]
+        }
         sidebarAgentOrder = HerdrSidebarOrder(
             defaults.stringArray(forKey: AppStorageKeys.Herdr.sidebarAgentOrder) ?? [])
         sidebarSpaceOrder = HerdrSidebarOrder(
@@ -315,6 +330,7 @@ final class HerdrStore {
         self.agentCloser = agentCloser
         self.newAgentPaneCreator = newAgentPaneCreator
         self.agentStarter = agentStarter
+        self.accountAgentStarter = accountAgentStarter
         self.terminalIDResolver = terminalIDResolver
         self.agentFocuser = agentFocuser
         self.workspacePresenter = workspacePresenter
@@ -473,6 +489,11 @@ final class HerdrStore {
                 if agent.machineID != machineFilter { return false }
             }
             if !kindFilter.isEmpty, !kindFilter.contains(agent.kind) { return false }
+            if let accountFilter {
+                guard agent.kind == "Claude Code",
+                    (accountFilter == "cli" ? accountSessions[agent.id] == nil : accountSessions[agent.id] == accountFilter)
+                else { return false }
+            }
             return true
         }
     }
@@ -502,6 +523,7 @@ final class HerdrStore {
     }
 
     func clearSessionFilters() {
+        accountFilter = nil
         machineFilter = "all"
         kindFilter = []
         spaceGroupingEnabled = false
@@ -631,6 +653,16 @@ final class HerdrStore {
 
     private func apply(_ snapshots: [HerdrHostSnapshot], collapseSnapshotComplete: Bool) {
         inventoryReceived = true
+        for agent in snapshots.flatMap(\.agents) where accountSessions[agent.id] != nil {
+            guard let identity = agent.nativeSession else { continue }
+            if let previous = accountSessionIdentities[agent.id], previous != identity {
+                accountSessions.removeValue(forKey: agent.id)
+                accountSessionIdentities.removeValue(forKey: agent.id)
+            } else {
+                accountSessionIdentities[agent.id] = identity
+            }
+        }
+        persistAccountSessions()
         if hosts != snapshots { hosts = snapshots }
         for index in sessions.indices {
             if let updated = agents.first(where: { $0.id == sessions[index].id }),
@@ -1930,32 +1962,85 @@ final class HerdrStore {
 
     func launchNewAgent(
         kind: String, host: HerdrHostSnapshot, existingSpace: HerdrWorkspaceSummary?,
-        newSpaceLabel: String?, openBeside: Bool = false
+        newSpaceLabel: String?, openBeside: Bool = false, accountID: String? = nil
     ) async throws {
         let machine = machine(for: host)
         guard host.isLocal || machine != nil else { throw HerdrQuinjetError.machineUnavailable }
-        let created = try await newAgentPaneCreator(
-            kind, machine, existingSpace, newSpaceLabel)
+        var account: ClaudeAccount?
+        if kind == "Claude Code" {
+            try claudeAccounts.load()
+            let chosen = accountID == nil || accountID == "default"
+                ? claudeAccounts.state.defaultID?.uuidString : accountID
+            if let chosen, chosen != "cli" {
+                guard let id = UUID(uuidString: chosen), let saved = claudeAccounts.account(id) else {
+                    throw ClaudeAccountError.rejected("This account was removed. Choose another account.")
+                }
+                guard host.isLocal else {
+                    throw ClaudeAccountError.rejected("Saved Claude accounts are available for local sessions.")
+                }
+                try saved.validateLaunch()
+                account = saved
+            }
+        } else if accountID != nil {
+            throw ClaudeAccountError.invalidRequest
+        }
+        let accountLauncher: URL?
+        if let account {
+            let arguments = AgentLaunchArguments.launchArguments(
+                kind: kind, options: HerdrLaunchSettings.options(for: kind, in: defaults))
+            accountLauncher = try account.launcher(
+                command: HerdrLaunchSettings.command(for: kind, in: defaults),
+                arguments: arguments, directory: claudeAccounts.directory)
+        } else {
+            accountLauncher = nil
+        }
+        let created: HerdrCreatedPane
+        do {
+            created = try await newAgentPaneCreator(kind, machine, existingSpace, newSpaceLabel)
+        } catch {
+            if let accountLauncher { try? FileManager.default.removeItem(at: accountLauncher) }
+            throw error
+        }
         let placeholder = HerdrAgent.make(
             machineID: host.id, machineName: host.name, machineIsLocal: host.isLocal,
             sshTarget: host.sshTarget, session: "default", pane: created.paneID, kind: kind,
             status: .unknown, title: kind,
             workspace: existingSpace?.label ?? newSpaceLabel ?? "", cwd: "")
+        accountSessions[placeholder.id] = account?.id.uuidString
+        accountSessionIdentities.removeValue(forKey: placeholder.id)
+        persistAccountSessions()
         if openBeside {
             open(placeholder, beside: .right)
         } else {
             open(placeholder)
         }
         let start = agentStarter
+        let startAccount = accountAgentStarter
         let id = placeholder.id
         agentStartupTasks[id] = Task { [weak self] in
             do {
-                try await start(kind, created.paneID, machine)
+                if let accountLauncher {
+                    do {
+                        try await startAccount(accountLauncher, created.paneID)
+                    } catch {
+                        try? FileManager.default.removeItem(at: accountLauncher)
+                        throw error
+                    }
+                } else {
+                    try await start(kind, created.paneID, machine)
+                }
             } catch {
                 guard !Task.isCancelled else { return }
                 self?.agentStartupMessages[id] = HerdrLaunchOperations.startupMessage(for: error)
             }
             self?.agentStartupTasks[id] = nil
+        }
+    }
+
+    private func persistAccountSessions() {
+        defaults.set(accountSessions, forKey: "herdr.claudeAccountSessions")
+        if let data = try? JSONEncoder().encode(accountSessionIdentities) {
+            defaults.set(data, forKey: "herdr.claudeAccountSessionIdentities")
         }
     }
 
