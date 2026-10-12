@@ -1038,3 +1038,97 @@ test("empty case paths preserve admission and cannot carry untyped claims or aut
     );
   }
 });
+
+const finiteCalendarDefinition = {
+  ...definition,
+  owner: "calendar",
+  activation: {
+    kind: "original-calendar-details",
+    control: "Details",
+    operation: null,
+    sources: [
+      {
+        path: "Extensions/calendar/UI/CalendarAgendaView.swift",
+        sha256: digest("a"),
+      },
+    ],
+    mutation: { kind: "local-control", payloadKeys: [] },
+  },
+  operations: [
+    "calendar.ui.metadata",
+    "calendar.ui.list",
+    "calendar.ui.loadMore",
+  ],
+  observation: {
+    kind: "checked-engine-readback",
+    name: "original Details visibility with independently read agenda notes",
+  },
+  persistence: { applicable: false, name: "no-owned-persistent-record" },
+};
+
+test("Calendar source admits only the original local Details control with nil activation", () => {
+  assert.equal(
+    validateFunctionalCaseDefinition(finiteCalendarDefinition),
+    finiteCalendarDefinition,
+  );
+  for (const edit of [
+    (value) => {
+      value.owner = "audioMixer";
+    },
+    (value) => {
+      value.activation.operation = "calendar.ui.action";
+    },
+    (value) => {
+      value.activation.control = "Refresh";
+    },
+    (value) => {
+      value.activation.mutation.kind = "state-transition";
+    },
+    (value) => {
+      value.activation.mutation.payloadKeys = ["enabled"];
+    },
+    (value) => {
+      value.operations.pop();
+    },
+    (value) => {
+      value.persistence.applicable = true;
+    },
+  ]) {
+    const changed = structuredClone(finiteCalendarDefinition);
+    edit(changed);
+    assert.throws(() => validateFunctionalCaseDefinition(changed));
+  }
+});
+
+test("Calendar capabilities preserve a present nil activation and exact readonly operation inventory", () => {
+  const original = capability("initial", 0);
+  const value = {
+    ...original,
+    owner: "calendar",
+    home: `${root}/calendar-home`,
+    dataDirectory: `${root}/data/calendar`,
+    caseSHA256: functionalDigest(finiteCalendarDefinition),
+    activationOperation: null,
+    operations: finiteCalendarDefinition.operations,
+  };
+  value.ownedPaths = original.ownedPaths.map((scope) => ({
+    ...scope,
+    path: scope.path.replaceAll("keepAwake", "calendar"),
+  }));
+  assert.equal(
+    validateFunctionalCapability(value, finiteCalendarDefinition),
+    value,
+  );
+  for (const operation of [
+    "calendar.ui.action",
+    "calendar.ui.list",
+    undefined,
+  ]) {
+    assert.throws(() =>
+      validateFunctionalCapability(
+        { ...value, activationOperation: operation },
+        finiteCalendarDefinition,
+      ),
+    );
+  }
+});

@@ -1,4 +1,11 @@
 import assert from "node:assert/strict";
+import { validateFunctionalCalendarJournal } from "./shared-proof.mjs";
+
+export {
+  validateFunctionalCalendarJournal,
+  validateFunctionalCalendarSnapshot,
+} from "./shared-proof.mjs";
+
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { isAbsolute, posix } from "node:path";
 import { parseExpression } from "@babel/parser";
@@ -184,11 +191,33 @@ export function validateFunctionalCaseDefinition(value) {
     "sources",
     "mutation",
   ]);
+  const calendar = value.activation.kind === "original-calendar-details";
   assert(
-    ["original-control-callback", "native-accessibility"].includes(
-      value.activation.kind,
-    ),
+    calendar ||
+      ["original-control-callback", "native-accessibility"].includes(
+        value.activation.kind,
+      ),
   );
+  if (calendar) {
+    assert.equal(value.owner, "calendar");
+    assert.equal(value.activation.control, "Details");
+    assert.equal(value.activation.operation, null);
+    assert.deepEqual(value.operations, [
+      "calendar.ui.metadata",
+      "calendar.ui.list",
+      "calendar.ui.loadMore",
+    ]);
+    assert.deepEqual(value.activation.mutation, {
+      kind: "local-control",
+      payloadKeys: [],
+    });
+    assert.equal(value.observation.kind, "checked-engine-readback");
+    assert.deepEqual(value.persistence, {
+      applicable: false,
+      name: "no-owned-persistent-record",
+    });
+  }
+
   text(value.activation.control);
   assert(
     value.activation.sources.length >= 1 &&
@@ -207,32 +236,40 @@ export function validateFunctionalCaseDefinition(value) {
     );
   }
   assert.equal(new Set(value.operations).size, value.operations.length);
-  assert(value.operations.includes(value.activation.operation));
-  assert(
-    !value.activation.operation
-      .split(".")
-      .some((part) =>
-        ["read", "snapshot", "state", "list", "schema", "get", "poll"].includes(
-          part,
+  if (!calendar) {
+    assert(value.operations.includes(value.activation.operation));
+    assert(
+      !value.activation.operation
+        .split(".")
+        .some((part) =>
+          [
+            "read",
+            "snapshot",
+            "state",
+            "list",
+            "schema",
+            "get",
+            "poll",
+          ].includes(part),
         ),
+    );
+    keys(value.activation.mutation, ["kind", "payloadKeys"]);
+    assert(
+      ["state-transition", "owned-output"].includes(
+        value.activation.mutation.kind,
       ),
-  );
-  keys(value.activation.mutation, ["kind", "payloadKeys"]);
-  assert(
-    ["state-transition", "owned-output"].includes(
-      value.activation.mutation.kind,
-    ),
-  );
-  const fields = value.activation.mutation.payloadKeys;
-  assert(Array.isArray(fields) && fields.length <= 32);
-  assert(
-    fields.length > 0 ||
-      (value.owner === "terminal" &&
-        value.activation.operation === "terminal.open"),
-  );
-  for (const field of fields)
-    assert.match(field, /^[A-Za-z][A-Za-z0-9_]{0,63}$/);
-  assert.equal(new Set(fields).size, fields.length);
+    );
+    const fields = value.activation.mutation.payloadKeys;
+    assert(Array.isArray(fields) && fields.length <= 32);
+    assert(
+      fields.length > 0 ||
+        (value.owner === "terminal" &&
+          value.activation.operation === "terminal.open"),
+    );
+    for (const field of fields)
+      assert.match(field, /^[A-Za-z][A-Za-z0-9_]{0,63}$/);
+    assert.equal(new Set(fields).size, fields.length);
+  }
   keys(value.observation, ["kind", "name"]);
   assert(
     [
@@ -537,8 +574,10 @@ export function validateFunctionalActionProof(
   compiledIssuerPublicKeyDER,
   admittedPublicPair,
   admittedPresentations,
+  calendarAdmission,
 ) {
   validateFunctionalCaseDefinition(definition);
+  const calendar = definition.activation.kind === "original-calendar-details";
   const observed = verifyFunctionalEnvelope(
     signedObservation,
     compiledIssuerPublicKeyDER,
@@ -593,21 +632,36 @@ export function validateFunctionalActionProof(
   assert.equal(observed.stages.length, 3);
   assert.equal(proof.stages.length, 3);
   const requests = new Set(),
-    processes = new Set();
+    processes = new Set(),
+    eventSequences = new Set();
   for (let index = 0; index < phases.length; index++) {
     const stage = observed.stages[index],
       claim = proof.stages[index];
-    keys(stage, [
-      "capability",
-      "admission",
-      "activation",
-      "acknowledgement",
-      "authoritative",
-      "retired",
-      "persistence",
-      "transition",
-      "mutationJournal",
-    ]);
+    keys(
+      stage,
+      calendar
+        ? [
+            "capability",
+            "admission",
+            "localControl",
+            "authoritative",
+            "retired",
+            "persistence",
+            "transition",
+            "localControlJournal",
+          ]
+        : [
+            "capability",
+            "admission",
+            "activation",
+            "acknowledgement",
+            "authoritative",
+            "retired",
+            "persistence",
+            "transition",
+            "mutationJournal",
+          ],
+    );
     const capability = validateFunctionalCapability(
       stage.capability,
       definition,
@@ -653,130 +707,148 @@ export function validateFunctionalActionProof(
     ]);
     for (const result of Object.values(stage.admission))
       assert.equal(result, true);
-    keys(stage.activation, [
-      "kind",
-      "control",
-      "operation",
-      "sources",
-      "ui",
-      "request",
-      "payload",
-      "sequence",
-      "mutation",
-    ]);
-    assert.equal(stage.activation.kind, definition.activation.kind);
-    assert.equal(stage.activation.control, definition.activation.control);
-    assert.equal(stage.activation.operation, definition.activation.operation);
-    assert.deepEqual(stage.activation.sources, definition.activation.sources);
-    assert.deepEqual(stage.activation.mutation, definition.activation.mutation);
-    assert.deepEqual(stage.activation.ui, capability.ui);
-    validateFunctionalRequest(stage.activation.request, capability);
-    assert.equal(
-      stage.activation.request.operation,
-      definition.activation.operation,
-    );
-    assert(!requests.has(stage.activation.request.requestID));
-    requests.add(stage.activation.request.requestID);
-    mutationPayload(
-      stage.activation.payload,
-      stage.activation.request,
-      definition.activation.mutation.payloadKeys,
-    );
-    const journal = validateFunctionalMutationJournal(
-      stage.mutationJournal,
-      capability,
-      definition,
-      compiledIssuerPublicKeyDER,
-      stage,
-      admittedPresentations.presentations[capability.phase],
-    );
-    positiveSequence(stage.activation.sequence);
-    keys(stage.acknowledgement, [
-      "request",
-      "engine",
-      "success",
-      "responseSHA256",
-      "sequence",
-    ]);
-    assert.deepEqual(stage.acknowledgement.request, stage.activation.request);
-    assert.deepEqual(stage.acknowledgement.engine, capability.engine);
-    assert.equal(stage.acknowledgement.success, true);
-    assert.match(stage.acknowledgement.responseSHA256, hash);
-    positiveSequence(stage.acknowledgement.sequence);
-    assert(stage.acknowledgement.sequence > stage.activation.sequence);
-    keys(stage.authoritative, [
-      "kind",
-      "name",
-      "reader",
-      "observationID",
-      "afterAcknowledgement",
-      "observationSHA256",
-      "expectedSHA256",
-      "sequence",
-    ]);
-    assert.equal(stage.authoritative.kind, definition.observation.kind);
-    assert.equal(stage.authoritative.name, definition.observation.name);
-    assert.equal(stage.authoritative.reader, "independent-hosted-producer");
-    assert.match(stage.authoritative.observationSHA256, hash);
-    assert.equal(
-      stage.authoritative.observationSHA256,
-      stage.authoritative.expectedSHA256,
-    );
-    assert.match(stage.authoritative.observationID, uuid);
-    assert(!requests.has(stage.authoritative.observationID));
-    requests.add(stage.authoritative.observationID);
-    assert.equal(stage.authoritative.afterAcknowledgement, true);
-    positiveSequence(stage.authoritative.sequence);
-    assert(stage.authoritative.sequence > stage.acknowledgement.sequence);
-    keys(stage.transition, [
-      "kind",
-      "reader",
-      "capabilitySHA256",
-      "requestID",
-      "before",
-      "after",
-    ]);
-    assert.equal(stage.transition.kind, definition.activation.mutation.kind);
-    assert.equal(stage.transition.reader, "independent-hosted-producer");
-    assert.equal(
-      stage.transition.capabilitySHA256,
-      functionalDigest(capability),
-    );
-    assert.equal(
-      stage.transition.requestID,
-      stage.activation.request.requestID,
-    );
-    for (const [name, record] of Object.entries({
-      before: stage.transition.before,
-      after: stage.transition.after,
-    })) {
-      keys(record, [
-        "observationID",
+    let journal;
+    if (calendar) {
+      journal = validateFunctionalCalendarJournal(
+        stage.localControlJournal,
+        capability,
+        definition,
+        compiledIssuerPublicKeyDER,
+        stage,
+        admittedPresentations.presentations[capability.phase],
+        calendarAdmission,
+        requests,
+        eventSequences,
+      );
+    } else {
+      keys(stage.activation, [
+        "kind",
+        "control",
+        "operation",
+        "sources",
+        "ui",
+        "request",
+        "payload",
         "sequence",
+        "mutation",
+      ]);
+      assert.equal(stage.activation.kind, definition.activation.kind);
+      assert.equal(stage.activation.control, definition.activation.control);
+      assert.equal(stage.activation.operation, definition.activation.operation);
+      assert.deepEqual(stage.activation.sources, definition.activation.sources);
+      assert.deepEqual(
+        stage.activation.mutation,
+        definition.activation.mutation,
+      );
+      assert.deepEqual(stage.activation.ui, capability.ui);
+      validateFunctionalRequest(stage.activation.request, capability);
+      assert.equal(
+        stage.activation.request.operation,
+        definition.activation.operation,
+      );
+      assert(!requests.has(stage.activation.request.requestID));
+      requests.add(stage.activation.request.requestID);
+      mutationPayload(
+        stage.activation.payload,
+        stage.activation.request,
+        definition.activation.mutation.payloadKeys,
+      );
+      journal = validateFunctionalMutationJournal(
+        stage.mutationJournal,
+        capability,
+        definition,
+        compiledIssuerPublicKeyDER,
+        stage,
+        admittedPresentations.presentations[capability.phase],
+      );
+      positiveSequence(stage.activation.sequence);
+      keys(stage.acknowledgement, [
+        "request",
+        "engine",
+        "success",
+        "responseSHA256",
+        "sequence",
+      ]);
+      assert.deepEqual(stage.acknowledgement.request, stage.activation.request);
+      assert.deepEqual(stage.acknowledgement.engine, capability.engine);
+      assert.equal(stage.acknowledgement.success, true);
+      assert.match(stage.acknowledgement.responseSHA256, hash);
+      positiveSequence(stage.acknowledgement.sequence);
+      assert(stage.acknowledgement.sequence > stage.activation.sequence);
+      keys(stage.authoritative, [
+        "kind",
+        "name",
+        "reader",
+        "observationID",
+        "afterAcknowledgement",
         "observationSHA256",
         "expectedSHA256",
+        "sequence",
       ]);
-      assert.match(record.observationID, uuid);
-      assert(!requests.has(record.observationID));
-      requests.add(record.observationID);
-      assert.match(record.observationSHA256, hash);
-      assert.equal(record.observationSHA256, record.expectedSHA256);
-      positiveSequence(record.sequence);
-      assert(
-        name === "before"
-          ? record.sequence < stage.activation.sequence
-          : record.sequence > stage.acknowledgement.sequence,
+      assert.equal(stage.authoritative.kind, definition.observation.kind);
+      assert.equal(stage.authoritative.name, definition.observation.name);
+      assert.equal(stage.authoritative.reader, "independent-hosted-producer");
+      assert.match(stage.authoritative.observationSHA256, hash);
+      assert.equal(
+        stage.authoritative.observationSHA256,
+        stage.authoritative.expectedSHA256,
+      );
+      assert.match(stage.authoritative.observationID, uuid);
+      assert(!requests.has(stage.authoritative.observationID));
+      requests.add(stage.authoritative.observationID);
+      assert.equal(stage.authoritative.afterAcknowledgement, true);
+      positiveSequence(stage.authoritative.sequence);
+      assert(stage.authoritative.sequence > stage.acknowledgement.sequence);
+      keys(stage.transition, [
+        "kind",
+        "reader",
+        "capabilitySHA256",
+        "requestID",
+        "before",
+        "after",
+      ]);
+      assert.equal(stage.transition.kind, definition.activation.mutation.kind);
+      assert.equal(stage.transition.reader, "independent-hosted-producer");
+      assert.equal(
+        stage.transition.capabilitySHA256,
+        functionalDigest(capability),
+      );
+      assert.equal(
+        stage.transition.requestID,
+        stage.activation.request.requestID,
+      );
+      for (const [name, record] of Object.entries({
+        before: stage.transition.before,
+        after: stage.transition.after,
+      })) {
+        keys(record, [
+          "observationID",
+          "sequence",
+          "observationSHA256",
+          "expectedSHA256",
+        ]);
+        assert.match(record.observationID, uuid);
+        assert(!requests.has(record.observationID));
+        requests.add(record.observationID);
+        assert.match(record.observationSHA256, hash);
+        assert.equal(record.observationSHA256, record.expectedSHA256);
+        positiveSequence(record.sequence);
+        assert(
+          name === "before"
+            ? record.sequence < stage.activation.sequence
+            : record.sequence > stage.acknowledgement.sequence,
+        );
+      }
+      assert.notEqual(
+        stage.transition.before.observationSHA256,
+        stage.transition.after.observationSHA256,
+        "An independently observed action effect is required",
+      );
+      assert.equal(
+        stage.transition.after.observationSHA256,
+        stage.authoritative.observationSHA256,
       );
     }
-    assert.notEqual(
-      stage.transition.before.observationSHA256,
-      stage.transition.after.observationSHA256,
-      "An independently observed action effect is required",
-    );
-    assert.equal(
-      stage.transition.after.observationSHA256,
-      stage.authoritative.observationSHA256,
-    );
     keys(stage.persistence, [
       "name",
       "readbackSHA256",
@@ -842,14 +914,17 @@ export function validateFunctionalActionProof(
       assert.equal(stage.persistence.expectedSHA256, null);
       assert.equal(stage.persistence.beforeActivation, null);
     }
-    keys(claim, [
-      "phase",
-      "requestID",
-      "capabilitySHA256",
-      "observationSHA256",
-    ]);
+    keys(
+      claim,
+      calendar
+        ? ["phase", "kind", "actionID", "capabilitySHA256", "observationSHA256"]
+        : ["phase", "requestID", "capabilitySHA256", "observationSHA256"],
+    );
     assert.equal(claim.phase, capability.phase);
-    assert.equal(claim.requestID, stage.activation.request.requestID);
+    if (calendar) {
+      assert.equal(claim.kind, "original-calendar-details");
+      assert.equal(claim.actionID, stage.localControl.actionID);
+    } else assert.equal(claim.requestID, stage.activation.request.requestID);
     assert.equal(claim.capabilitySHA256, functionalDigest(capability));
     assert.equal(
       claim.observationSHA256,
@@ -929,7 +1004,9 @@ export function validateFunctionalActionProof(
     session: observed.session,
     functionalActionsValidated: true,
     activationKind: definition.activation.kind,
-    actionDeliveryScope: "source-original-control-to-installed-engine",
+    actionDeliveryScope: calendar
+      ? "source-original-calendar-details-local-control"
+      : "source-original-control-to-installed-engine",
     downloadedUIBinaryActionsValidated: false,
     packagePairScope: first.pairScope,
     publicUpdateValidated: first.pairScope === "public-signed-pair",
