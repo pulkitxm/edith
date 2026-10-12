@@ -39,9 +39,11 @@ struct HerdrNewAgentPopup: View {
             Divider()
             field
             if model.selectedKind == "Claude Code" || model.space != nil {
-                ClaudeAccountLaunchPicker(accounts: store.claudeAccounts, selection: $model.selectedAccountID)
-                    .disabled(model.launching)
-                    .padding(UIScale.pt(12))
+                ClaudeAccountLaunchPicker(
+                    accounts: store.claudeAccounts, selection: $model.selectedAccountID
+                )
+                .disabled(model.launching)
+                .padding(UIScale.pt(12))
             }
             Divider()
             if let errorMessage = model.errorMessage {

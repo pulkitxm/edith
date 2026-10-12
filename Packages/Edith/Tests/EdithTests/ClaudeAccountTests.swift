@@ -1,3 +1,4 @@
+import EdithKit
 import Foundation
 import Testing
 @testable import Edith

@@ -1,14 +1,13 @@
-import EdithKit
 import Foundation
 
-struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
-    enum Authentication: String, Codable, CaseIterable, Identifiable {
+public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
+    public enum Authentication: String, Codable, CaseIterable, Identifiable {
         case oauthToken
         case apiKey
         case browserLogin
 
-        var id: String { rawValue }
-        var title: String {
+        public var id: String { rawValue }
+        public var title: String {
             switch self {
             case .oauthToken: "OAuth token"
             case .apiKey: "API key"
@@ -17,19 +16,29 @@ struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
         }
     }
 
-    var id = UUID()
-    var name: String
-    var authentication: Authentication = .oauthToken
-    var credential = ""
+    public var id = UUID()
+    public var name: String
+    public var authentication: Authentication = .oauthToken
+    public var credential = ""
 
-    func validate() throws {
+    public init(
+        id: UUID = UUID(), name: String, authentication: Authentication = .oauthToken,
+        credential: String = ""
+    ) {
+        self.id = id
+        self.name = name
+        self.authentication = authentication
+        self.credential = credential
+    }
+
+    public func validate() throws {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             name.utf8.count <= 128, credential.utf8.count <= 8192,
             !name.utf8.contains(0), !credential.utf8.contains(0)
         else { throw ClaudeAccountError.rejected("Enter a valid account name and credential.") }
     }
 
-    func validateLaunch() throws {
+    public func validateLaunch() throws {
         try validate()
         guard authentication == .browserLogin || !credential.isEmpty else {
             throw ClaudeAccountError.rejected(
@@ -37,7 +46,7 @@ struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
         }
     }
 
-    func launcher(command: String, arguments: [String], directory: URL) throws -> URL {
+    public func launcher(command: String, arguments: [String], directory: URL) throws -> URL {
         try validateLaunch()
         guard !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ClaudeAccountError.rejected("Enter a Claude launch command in launch settings.")
@@ -66,11 +75,16 @@ struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
-struct ClaudeAccountsState: Codable, Equatable {
-    var accounts: [ClaudeAccount] = []
-    var defaultID: UUID?
+public struct ClaudeAccountsState: Codable, Equatable {
+    public var accounts: [ClaudeAccount] = []
+    public var defaultID: UUID?
 
-    func validate() throws {
+    public init(accounts: [ClaudeAccount] = [], defaultID: UUID? = nil) {
+        self.accounts = accounts
+        self.defaultID = defaultID
+    }
+
+    public func validate() throws {
         guard accounts.count <= 64, Set(accounts.map(\.id)).count == accounts.count,
             defaultID == nil || accounts.contains(where: { $0.id == defaultID })
         else { throw ClaudeAccountError.invalidRequest }
@@ -81,11 +95,11 @@ struct ClaudeAccountsState: Codable, Equatable {
     }
 }
 
-enum ClaudeAccountError: LocalizedError {
+public enum ClaudeAccountError: LocalizedError {
     case invalidRequest
     case rejected(String)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .invalidRequest: "The account settings are invalid."
         case .rejected(let reason): reason

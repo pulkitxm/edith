@@ -6,14 +6,14 @@ import Testing
 @testable import Edith
 
 @MainActor @Suite(.serialized) struct ClaudeAccountsModelTests {
-    @Test func persistenceKeepsNamesCredentialsAndDefaultsInPrivateFiles() throws {
+    @Test func persistenceKeepsNamesCredentialsAndDefaultsInPrivateFiles() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let model = ClaudeAccountsModel(directory: root)
         let account = ClaudeAccount(name: "Company", credential: "synthetic-token")
-        try model.persist(.init(accounts: [account], defaultID: account.id))
+        try await model.persist(.init(accounts: [account], defaultID: account.id))
         let restored = ClaudeAccountsModel(directory: root)
-        try restored.load()
+        try await restored.load()
         #expect(restored.state == model.state)
         let file = root.appendingPathComponent("accounts.json")
         #expect(
@@ -22,8 +22,8 @@ import Testing
         #expect(
             (try FileManager.default.attributesOfItem(atPath: root.path)[.posixPermissions]
                 as? NSNumber)?.intValue == 0o700)
-        try model.persist(.init())
-        try restored.load()
+        try await model.persist(.init())
+        try await restored.load()
         #expect(restored.state.accounts.isEmpty)
         #expect(restored.state.defaultID == nil)
     }
@@ -60,7 +60,7 @@ import Testing
         let personal = ClaudeAccount(name: "Personal", credential: "synthetic-personal-token")
         let company = ClaudeAccount(
             name: "Company", authentication: .apiKey, credential: "synthetic-company-key")
-        try store.claudeAccounts.persist(
+        try await store.claudeAccounts.persist(
             .init(accounts: [personal, company], defaultID: personal.id))
         let host = HerdrHostSnapshot(
             id: "local", name: "Synthetic Mac", isLocal: true,
@@ -133,11 +133,13 @@ import Testing
         defer { try? FileManager.default.removeItem(at: root) }
         let store = HerdrStore(
             defaults: scratchDefaults(), liveWatcher: { _ in },
-            newAgentPaneCreator: { _, _, _, _ in throw ClaudeAccountError.rejected("Synthetic pane creation failure") },
+            newAgentPaneCreator: { _, _, _, _ in
+                throw ClaudeAccountError.rejected("Synthetic pane creation failure")
+            },
             machinesProvider: { [] })
         store.claudeAccounts = ClaudeAccountsModel(directory: root)
         let account = ClaudeAccount(name: "Synthetic", credential: "synthetic-token")
-        try store.claudeAccounts.persist(.init(accounts: [account], defaultID: account.id))
+        try await store.claudeAccounts.persist(.init(accounts: [account], defaultID: account.id))
         let host = HerdrHostSnapshot(
             id: "local", name: "Synthetic Mac", isLocal: true,
             herdrPresent: true, reachable: true, agents: [])
@@ -186,7 +188,7 @@ import Testing
             defaults: scratchDefaults(), liveWatcher: { _ in }, machinesProvider: { [] })
         store.claudeAccounts = ClaudeAccountsModel(directory: root)
         let account = ClaudeAccount(name: "Company", credential: "synthetic-token")
-        try store.claudeAccounts.persist(.init(accounts: [account], defaultID: account.id))
+        try await store.claudeAccounts.persist(.init(accounts: [account], defaultID: account.id))
         let host = HerdrHostSnapshot(
             id: "local", name: "Synthetic Mac", isLocal: true,
             herdrPresent: true, reachable: true, agents: [])
@@ -233,7 +235,7 @@ import Testing
         let model = ClaudeAccountsModel(directory: root)
         let account = ClaudeAccount(
             name: "Company", credential: "synthetic-oauth-token-visible-in-full")
-        try model.persist(
+        try await model.persist(
             .init(
                 accounts: [
                     account,

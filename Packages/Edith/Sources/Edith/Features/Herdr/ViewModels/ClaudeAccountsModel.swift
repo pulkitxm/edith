@@ -9,27 +9,23 @@ import Observation
     private(set) var ready = false
     private(set) var saving = false
     let directory: URL
-    private var file: URL { directory.appendingPathComponent("accounts.json") }
+    private let storage: ClaudeAccountStorage
 
     init(directory: URL? = nil) {
-        self.directory = directory ?? DataRoot.support.appendingPathComponent("herdr/accounts")
+        self.directory = directory ?? ClaudeAccountStorage.directory
+        storage = ClaudeAccountStorage(directory: self.directory)
     }
 
     func read() async {
         guard !saving else { return }
         do {
-            try load()
+            try await load()
             error = nil
         } catch { self.error = error.localizedDescription }
     }
 
-    func load() throws {
-        if FileManager.default.fileExists(atPath: file.path) {
-            let next = try JSONDecoder().decode(
-                ClaudeAccountsState.self, from: Data(contentsOf: file))
-            try next.validate()
-            state = next
-        }
+    func load() async throws {
+        state = try await storage.load()
         ready = true
     }
 
@@ -38,18 +34,14 @@ import Observation
         saving = true
         defer { saving = false }
         do {
-            try persist(next)
+            try await persist(next)
+            try? UsageAgentOperations.requestLimitsRefresh()
             error = nil
         } catch { self.error = error.localizedDescription }
     }
 
-    func persist(_ next: ClaudeAccountsState) throws {
-        try next.validate()
-        try FileManager.default.createDirectory(
-            at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700]
-        )
-        try JSONEncoder().encode(next).write(to: file, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+    func persist(_ next: ClaudeAccountsState) async throws {
+        try await storage.save(next)
         state = next
         ready = true
     }

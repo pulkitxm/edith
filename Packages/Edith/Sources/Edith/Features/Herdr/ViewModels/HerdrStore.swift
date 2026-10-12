@@ -296,7 +296,8 @@ final class HerdrStore {
                 name: HerdrLaunchSettings.defaultHerdrSlug(for: kind) ?? kind.lowercased(),
                 pane: pane, on: machine)
         },
-        accountAgentStarter: @escaping @Sendable (URL, String) async throws -> Void = { launcher, pane in
+        accountAgentStarter: @escaping @Sendable (URL, String) async throws -> Void = {
+            launcher, pane in
             try await HerdrLaunchOperations.launchLocalAccount(launcher: launcher, pane: pane)
         },
         terminalIDResolver: @escaping @Sendable (String, String, Machine?) async throws -> String =
@@ -315,9 +316,11 @@ final class HerdrStore {
         workspacePresenter: @escaping @MainActor () -> Void = {}
     ) {
         self.defaults = defaults
-        accountSessions = defaults.dictionary(forKey: "herdr.claudeAccountSessions") as? [String: String] ?? [:]
+        accountSessions =
+            defaults.dictionary(forKey: "herdr.claudeAccountSessions") as? [String: String] ?? [:]
         if let data = defaults.data(forKey: "herdr.claudeAccountSessionIdentities") {
-            accountSessionIdentities = (try? JSONDecoder().decode([String: HerdrNativeSession].self, from: data)) ?? [:]
+            accountSessionIdentities =
+                (try? JSONDecoder().decode([String: HerdrNativeSession].self, from: data)) ?? [:]
         }
         sidebarAgentOrder = HerdrSidebarOrder(
             defaults.stringArray(forKey: AppStorageKeys.Herdr.sidebarAgentOrder) ?? [])
@@ -491,7 +494,9 @@ final class HerdrStore {
             if !kindFilter.isEmpty, !kindFilter.contains(agent.kind) { return false }
             if let accountFilter {
                 guard agent.kind == "Claude Code",
-                    (accountFilter == "cli" ? accountSessions[agent.id] == nil : accountSessions[agent.id] == accountFilter)
+                    (accountFilter == "cli"
+                        ? accountSessions[agent.id] == nil
+                        : accountSessions[agent.id] == accountFilter)
                 else { return false }
             }
             return true
@@ -1968,15 +1973,19 @@ final class HerdrStore {
         guard host.isLocal || machine != nil else { throw HerdrQuinjetError.machineUnavailable }
         var account: ClaudeAccount?
         if kind == "Claude Code" {
-            try claudeAccounts.load()
-            let chosen = accountID == nil || accountID == "default"
+            try await claudeAccounts.load()
+            let chosen =
+                accountID == nil || accountID == "default"
                 ? claudeAccounts.state.defaultID?.uuidString : accountID
             if let chosen, chosen != "cli" {
-                guard let id = UUID(uuidString: chosen), let saved = claudeAccounts.account(id) else {
-                    throw ClaudeAccountError.rejected("This account was removed. Choose another account.")
+                guard let id = UUID(uuidString: chosen), let saved = claudeAccounts.account(id)
+                else {
+                    throw ClaudeAccountError.rejected(
+                        "This account was removed. Choose another account.")
                 }
                 guard host.isLocal else {
-                    throw ClaudeAccountError.rejected("Saved Claude accounts are available for local sessions.")
+                    throw ClaudeAccountError.rejected(
+                        "Saved Claude accounts are available for local sessions.")
                 }
                 try saved.validateLaunch()
                 account = saved
@@ -1988,9 +1997,11 @@ final class HerdrStore {
         if let account {
             let arguments = AgentLaunchArguments.launchArguments(
                 kind: kind, options: HerdrLaunchSettings.options(for: kind, in: defaults))
-            accountLauncher = try account.launcher(
-                command: HerdrLaunchSettings.command(for: kind, in: defaults),
-                arguments: arguments, directory: claudeAccounts.directory)
+            let command = HerdrLaunchSettings.command(for: kind, in: defaults)
+            let directory = claudeAccounts.directory
+            accountLauncher = try await Task.detached {
+                try account.launcher(command: command, arguments: arguments, directory: directory)
+            }.value
         } else {
             accountLauncher = nil
         }

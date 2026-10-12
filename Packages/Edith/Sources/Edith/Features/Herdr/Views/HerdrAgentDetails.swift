@@ -85,9 +85,11 @@ struct HerdrAgentDetails: View {
                     if !agent.isTerminal { metaRow("Status", agent.status.title) }
                     if !agent.isTerminal { messageSection }
                     if let id = store.accountSessions[agent.id] {
-                        metaRow("Claude account", store.claudeAccounts.state.accounts.first {
-                            $0.id.uuidString == id
-                        }?.name ?? "Removed account", blur: hideAgents)
+                        metaRow(
+                            "Claude account",
+                            store.claudeAccounts.state.accounts.first {
+                                $0.id.uuidString == id
+                            }?.name ?? "Removed account", blur: hideAgents)
                     }
                     metaRow("Machine", agent.machineName)
                     if !agent.session.isEmpty {
