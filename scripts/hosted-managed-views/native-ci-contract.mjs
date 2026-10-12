@@ -21,6 +21,7 @@ export const shippingNativeTestSteps = [
   "Run bun scripts/test-extension-catalog-retention.mjs",
   "Run bun scripts/test-extension-marketplace.mjs",
   "Exercise original Keep Awake controls and native lifecycle",
+  "Verify Keep Awake peer rejection contracts",
 ];
 
 export function validateNonpublishingNativeJobs(jobs, definitions, runID) {

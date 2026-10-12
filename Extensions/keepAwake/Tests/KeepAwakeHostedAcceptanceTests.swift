@@ -94,15 +94,37 @@ import Testing
         host.frame = CGRect(x: 0, y: 0, width: 500, height: 400)
         let window = NSWindow(
             contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
         window.contentView = host
         window.orderBack(nil)
-        defer { window.orderOut(nil); window.close() }
-        try await wait { checkbox(in: host) != nil }
+        defer {
+            window.contentView = nil
+            window.orderOut(nil)
+            window.close()
+        }
+        window.layoutIfNeeded()
+        host.layoutSubtreeIfNeeded()
+        try await wait(
+            "Discover original Keep awake checkbox",
+            diagnostic: { accessibilityDiagnostic(in: host) }
+        ) { checkbox(in: host) != nil }
         var transitions: [Bool] = []
         for requested in [true, false, true] {
             let control = try #require(checkbox(in: host))
             try #require((control as AnyObject).accessibilityPerformPress?() == true)
-            try await wait {
+            try await wait(
+                "Apply original Keep awake preference \(requested)",
+                diagnostic: {
+                    let status = runtime.execute(["operation": "status"]) as? NSDictionary
+                    return diagnosticJSON([
+                        "enginePreventSleep": engine.bool(forKey: "preventSleep"),
+                        "runtimeStatusAvailable": status != nil,
+                        "runtimePreventingSleep": status?["preventingSleep"] as? Bool ?? false,
+                        "modelErrorPresent": model.error != nil,
+                        "operationCount": operations.count,
+                    ])
+                }
+            ) {
                 engine.bool(forKey: "preventSleep") == requested
                     && ((runtime.execute(["operation": "status"]) as? NSDictionary)?[
                         "preventingSleep"] as? Bool) == requested
@@ -135,13 +157,56 @@ import Testing
             [.posixPermissions: 0o600], ofItemAtPath: receipt.path)
     }
 
-    private func wait(_ condition: () -> Bool) async throws {
+    private func wait(
+        _ phase: String, diagnostic: (() -> String)? = nil, _ condition: () -> Bool
+    ) async throws {
         let deadline = ContinuousClock.now + .seconds(5)
         while !condition() {
-            try #require(ContinuousClock.now < deadline)
+            let beforeDeadline = ContinuousClock.now < deadline
+            if !beforeDeadline {
+                let details = diagnostic?() ?? "{}"
+                try #require(beforeDeadline, "\(phase): \(details)")
+            }
             advanceRunLoop()
             await Task.yield()
         }
+    }
+
+    private func accessibilityDiagnostic(in root: Any) -> String {
+        var pending: [Any] = [root]
+        var visited: Set<ObjectIdentifier> = []
+        var examinedNodes = 0
+        var checkboxRoles = 0
+        var exactLabelMatches = 0
+        var exactTitleMatches = 0
+        while !pending.isEmpty && examinedNodes < 4096 {
+            examinedNodes += 1
+            let value = pending.removeLast()
+            let object = value as AnyObject
+            guard visited.insert(ObjectIdentifier(object)).inserted else { continue }
+            if object.accessibilityRole?() == .checkBox { checkboxRoles += 1 }
+            if object.accessibilityLabel?() == "Keep awake" { exactLabelMatches += 1 }
+            if object.accessibilityTitle?() == "Keep awake" { exactTitleMatches += 1 }
+            if let children = object.accessibilityChildren?() {
+                pending.append(contentsOf: children)
+            }
+            if let view = value as? NSView { pending.append(contentsOf: view.subviews) }
+        }
+        return diagnosticJSON([
+            "visitedNodes": visited.count,
+            "examinedNodes": examinedNodes,
+            "checkboxRoles": checkboxRoles,
+            "exactLabelMatches": exactLabelMatches,
+            "exactTitleMatches": exactTitleMatches,
+            "traversalCapReached": !pending.isEmpty,
+        ])
+    }
+
+    private func diagnosticJSON(_ values: [String: Any]) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: values, options: .sortedKeys),
+            data.count <= 1024, let text = String(data: data, encoding: .utf8)
+        else { return "{\"diagnosticEncodingFailed\":true}" }
+        return text
     }
 
     private func advanceRunLoop() {

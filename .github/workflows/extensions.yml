@@ -179,6 +179,9 @@ jobs:
           EXPECTED_SOURCE_SHA: "${{ github.sha }}"
           EXTENSION_LIFECYCLE_HARNESS: local/extension-tools/HostLifecycleHarness
         run: make ci-extension-keep-awake-native
+      - name: Verify Keep Awake peer rejection contracts
+        if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
+        run: make ci-extension-keep-awake-peer-contracts
       - name: Verify native cache integrity and private SDK composition
         if: "needs.plan.outputs.mode == 'validation'"
         timeout-minutes: 20

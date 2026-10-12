@@ -39,6 +39,8 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         self.seals = {}
         self.transitions = []
         self.rejected = {}
+        self.failure_observations = []
+        self.failure_observation_keys = set()
         value = self.snapshot(leader)
         if value is None or value[4] != leader:
             raise RuntimeError('Owned leader identity unavailable')
@@ -53,8 +55,40 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                 os.kill(pid, 0)
             except ProcessLookupError:
                 return None
+            self.observe_failure(pid, 'live_identity_unavailable')
             raise RuntimeError('Live owned process identity unavailable')
         return value
+
+    def observe_failure(self, pid, kind, current=None):
+        key = (pid, kind)
+        if len(self.failure_observations) >= 8 or key in self.failure_observation_keys:
+            return
+        self.failure_observation_keys.add(key)
+        seal = self.seals.get(pid)
+        known = pid in self.known and seal is not None
+        row = {
+            'kind': kind, 'knownSeal': known,
+            'originalBirthMatches': current[:3] == seal[:3] if current and known else None,
+            'originalGroupMatches': current[4] == seal[3] if current and known else None,
+            'returnedBytes': None, 'expectedBytes': ctypes.sizeof(watchdog.ProcessInfo),
+            'status': None, 'pidMatches': None, 'birthMatches': None,
+            'groupMatches': None, 'uidMatches': None, 'realUIDMatches': None,
+            'probeFailed': False,
+        }
+        try:
+            info = watchdog.ProcessInfo()
+            result = self.library.proc_pidinfo(pid, 3, 1, ctypes.byref(info), ctypes.sizeof(info))
+            if type(result) is not int or not -2147483648 <= result <= 2147483647:
+                raise ValueError('Invalid diagnostic byte count')
+            row['returnedBytes'] = result
+            if result == ctypes.sizeof(info):
+                row.update(status=info.status, pidMatches=info.pid == pid,
+                           birthMatches=(pid, info.seconds, info.microseconds) == seal[:3] if known else None,
+                           groupMatches=info.pgid == seal[3] if known else None,
+                           uidMatches=info.uid == self.uid, realUIDMatches=info.ruid == self.uid)
+        except Exception:
+            row['probeFailed'] = True
+        self.failure_observations.append(row)
 
     def reject(self, pid, message):
         if message not in self.errors and len(self.errors) < 64:
@@ -80,6 +114,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                 seal = identity[:3] + identity[4:5]
                 previous = self.seals.get(pid)
                 if previous is not None and previous != seal:
+                    self.observe_failure(pid, 'birth_or_group_changed', identity)
                     raise RuntimeError('Owned process birth or group changed')
                 if previous is None:
                     if pid == self.leader:
@@ -288,6 +323,7 @@ def run_original(arguments, root, environment, output, deadline=TEST_DEADLINE,
         'testsCompleted': completed, 'durationSeconds': round(clock() - started, 3),
         'observedTestingProcess': observed_testing,
         'ownedExecutableTransitions': getattr(ownership, 'transitions', []),
+        'ownershipFailureObservations': getattr(ownership, 'failure_observations', []),
         'knownOwnedProcesses': list(observed), 'cleanup': cleanup,
         'logSHA256': hashlib.sha256(log_path.read_bytes()).hexdigest(),
         'ownedCrashReports': watchdog.owned_crash_reports(
