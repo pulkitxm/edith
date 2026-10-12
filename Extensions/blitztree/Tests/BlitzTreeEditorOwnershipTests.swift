@@ -13,20 +13,49 @@ import Testing
             configuration.range(of: "ExtensionUIConfiguration(context: input)"))
         let installation = try #require(configuration.range(of: "TextEditingCommands.install()"))
         let rejection = try #require(
-            configuration.range(of: "return [\"ok\": false] as NSDictionary"))
+            configuration.range(
+                of: "return [\"ok\": false] as NSDictionary",
+                range: admission.upperBound..<configuration.endIndex))
         #expect(admission.lowerBound < rejection.lowerBound)
         #expect(rejection.lowerBound < installation.lowerBound)
         #expect(source.components(separatedBy: "TextEditingCommands.install()").count == 2)
         #expect(try branch("stopUI", in: source).contains("stopUI()"))
-        #expect(try branch("stop", in: source).contains("stopUI()"))
-        let stop = try #require(source.range(of: "private func stopUI()"))
-        let teardown = source[stop.lowerBound...]
+        let suspended = try #require(configuration.range(of: "guard !commandsSuspended"))
+        let suspendedRejection = try #require(
+            configuration.range(of: "return [\"ok\": false] as NSDictionary"))
+        #expect(suspended.lowerBound < suspendedRejection.lowerBound)
+        #expect(suspendedRejection.lowerBound < admission.lowerBound)
+        #expect(try branch("stop", in: source).contains("beginResourceStop()"))
+        let teardown = try function("private func stopUI()", in: source)
         #expect(teardown.contains("TextEditingCommands.shutdown()"))
         #expect(teardown.contains("invalidate()"))
-        let preparation = try #require(source.range(of: "func prepareToStop(completion:"))
+        #expect(teardown.contains("await model?.shutdown()"))
+        let resourceStop = try function("private func beginResourceStop()", in: source)
+        let reuse = try #require(
+            resourceStop.range(of: "if let resourceStop { return resourceStop }"))
+        let drain = try #require(resourceStop.range(of: "let drain = beginCommandDrain()"))
+        let stopUI = try #require(resourceStop.range(of: "stopUI()"))
+        let awaitDrain = try #require(resourceStop.range(of: "await drain.value"))
+        let commands = try #require(resourceStop.range(of: "await commands.shutdownAndWait()"))
+        let owner = try #require(resourceStop.range(of: "await owner?.shutdown()"))
+        #expect(reuse.lowerBound < drain.lowerBound)
+        #expect(drain.lowerBound < stopUI.lowerBound)
+        #expect(stopUI.lowerBound < awaitDrain.lowerBound)
+        #expect(awaitDrain.lowerBound < commands.lowerBound)
+        #expect(commands.lowerBound < owner.lowerBound)
+        let preparation = try function("func prepareToStop(completion:", in: source)
+        let begin = try #require(preparation.range(of: "let stop = beginResourceStop()"))
+        let awaitStop = try #require(preparation.range(of: "await stop.value"))
+        let completion = try #require(preparation.range(of: "completion()"))
+        #expect(begin.lowerBound < awaitStop.lowerBound)
+        #expect(awaitStop.lowerBound < completion.lowerBound)
+    }
+
+    private func function(_ signature: String, in source: String) throws -> Substring {
+        let start = try #require(source.range(of: signature))
         let end = try #require(
-            source.range(of: "\n    }", range: preparation.upperBound..<source.endIndex))
-        #expect(source[preparation.upperBound..<end.lowerBound].contains("stopUI()"))
+            source.range(of: "\n    }", range: start.upperBound..<source.endIndex))
+        return source[start.upperBound..<end.lowerBound]
     }
 
     private func branch(_ operation: String, in source: String) throws -> Substring {
