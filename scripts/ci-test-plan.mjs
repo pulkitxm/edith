@@ -5,6 +5,10 @@ import {
   definitionSupportInputs,
   planExtensionBuilds,
 } from "./extension-release-plan.mjs";
+import {
+  shippingDefinitions,
+  shippingExtensionIDs,
+} from "./shipping-extension-policy.mjs";
 import { extensionTestTargets } from "./test-extension-package.mjs";
 
 const definitions = JSON.parse(
@@ -13,7 +17,7 @@ const definitions = JSON.parse(
 
 export function planSwiftTests(
   paths,
-  { all = false, extensions = definitions } = {},
+  { all = false, extensions = definitions, shipping = false } = {},
 ) {
   const force =
     all ||
@@ -53,13 +57,15 @@ export function planSwiftTests(
   if (matches(/^Extensions\/music\/Native\//)) {
     include.push({ lane: "native-music", targets: "ci-music-native" });
   }
-  const owners = extensions.map((definition) => ({
-    ...definition,
-    inputs: definition.inputs ?? [`Extensions/${definition.id}`],
-    sharedInputs: definition.sharedInputs ?? [],
-    dependencies: definition.dependencies ?? [],
-    sameExecutableWorker: false,
-  }));
+  const owners = (shipping ? shippingDefinitions(extensions) : extensions).map(
+    (definition) => ({
+      ...definition,
+      inputs: definition.inputs ?? [`Extensions/${definition.id}`],
+      sharedInputs: definition.sharedInputs ?? [],
+      dependencies: definition.dependencies ?? [],
+      sameExecutableWorker: false,
+    }),
+  );
   const supportPackageChanged = paths.some((path) =>
     /^Packages\/ExtensionSupport\/Package\.(swift|resolved)$/.test(path),
   );
@@ -108,7 +114,15 @@ export function planSwiftTests(
       lane: "feature-models",
       targets: targets.join(" "),
     });
-  return { include };
+  return {
+    include: shipping
+      ? include.filter(
+          (lane) =>
+            lane.lane === "host-runtime" ||
+            shippingExtensionIDs.includes(lane.extension),
+        )
+      : include,
+  };
 }
 
 if (
@@ -116,13 +130,18 @@ if (
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   const arguments_ = process.argv.slice(2);
-  if (arguments_.some((argument) => argument !== "--all")) {
-    throw new Error("Only --all is supported.");
+  if (
+    arguments_.some((argument) => !["--all", "--shipping"].includes(argument))
+  ) {
+    throw new Error("Only --all and --shipping are supported.");
   }
   const paths = readFileSync(0, "utf8").split("\n").filter(Boolean);
   process.stdout.write(
     JSON.stringify(
-      planSwiftTests(paths, { all: arguments_.includes("--all") }),
+      planSwiftTests(paths, {
+        all: arguments_.includes("--all"),
+        shipping: arguments_.includes("--shipping"),
+      }),
     ),
   );
 }

@@ -14,21 +14,6 @@ let package = Package(
             path: "fixtureSupport/Tests", exclude: ["Support"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
-            name: "KeepAwakeExtension",
-            dependencies: [
-                .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
-                .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
-            ],
-            path: "keepAwake", exclude: ["Tests"]),
-        .testTarget(
-            name: "KeepAwakeExtensionTests",
-            dependencies: [
-                .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
-                .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
-                "KeepAwakeExtension",
-            ],
-            path: "keepAwake/Tests"),
-        .target(
             name: "FocusDimExtension",
             dependencies: [
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),

@@ -30,8 +30,27 @@ def swift_target(source, name):
 
 class KeepAwakeFocusedTargetsTests(unittest.TestCase):
     def test_dedicated_package_retains_both_original_targets(self):
-        original = (ROOT / "Extensions/Package.swift").read_text()
+        original = '''
+        .target(
+            name: "KeepAwakeExtension",
+            dependencies: [
+                .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
+                .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
+            ],
+            path: "keepAwake", exclude: ["Tests"]),
+        .testTarget(
+            name: "KeepAwakeExtensionTests",
+            dependencies: [
+                .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
+                .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
+                "KeepAwakeExtension",
+            ],
+            path: "keepAwake/Tests"),
+        '''
         focused = (ROOT / "Extensions/keepAwake/Package.swift").read_text()
+        umbrella = (ROOT / "Extensions/Package.swift").read_text()
+        self.assertNotIn('name: "KeepAwakeExtension"', umbrella)
+        self.assertNotIn('name: "KeepAwakeExtensionTests"', umbrella)
         self.assertIn("platforms: [.macOS(.v14)]", focused)
         self.assertIn('.package(path: "../../Packages/ExtensionSupport")', focused)
         self.assertIn('.package(path: "../fixtureSupport")', focused)

@@ -530,6 +530,7 @@ test("a child behind its base routes the tested merge revision with the current 
       "scripts/build-extension-support.mjs",
       "scripts/extension-ghostty-native.mjs",
       "scripts/extension-host-abi.mjs",
+      "scripts/shipping-extension-policy.mjs",
     ])
       save(path, readFileSync(path));
     save("Extensions/manifest.json", readFileSync("Extensions/manifest.json"));
