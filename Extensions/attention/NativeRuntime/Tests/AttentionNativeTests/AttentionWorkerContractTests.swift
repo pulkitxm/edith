@@ -59,7 +59,7 @@ struct AttentionWorkerContractTests {
         }
         func render(visible: Bool) async {
             host.rootView = AnyView(
-                AttentionHomeFocusCard(
+                makeAttentionHomeFocusCard(
                     tile: tile,
                     repository: remote ? .init(root: deniedRoot) : fixture.repository,
                     uiClient: uiClient, open: { _ in opened += 1 }

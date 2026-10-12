@@ -3,6 +3,15 @@ internal import EdithExtensionUI_attention_native
 import Foundation
 import SwiftUI
 
+@MainActor func makeAttentionHomeFocusCard(
+    tile: SurfaceTile, repository: AttentionRepository, uiClient: AttentionUIClient? = nil,
+    open: @escaping (String) -> Void
+) -> AnyView {
+    AnyView(
+        AttentionHomeFocusCard(
+            tile: tile, repository: repository, uiClient: uiClient, open: open))
+}
+
 @_implementationOnly struct AttentionHomeFocusCard: View {
     let tile: SurfaceTile
     @Environment(\.automaticViewActionsEnabled) private var automaticActions
