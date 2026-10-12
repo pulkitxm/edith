@@ -434,7 +434,7 @@
       "sources": [
         {
           "path": "Extensions/notchShelf/Runtime.swift",
-          "sha256": "47da45d5486dd51554bd6135769f8abf5fb1b4cad3a59bf3a629078fef348299"
+          "sha256": "3afa836f18cc40b93c0322ad182bca506f7af5b781c3f8d7dc4450a324f18331"
         },
         {
           "path": "Extensions/notchShelf/Settings/NotchSettingsModel.swift",
@@ -676,7 +676,7 @@
       "sources": [
         {
           "path": "Extensions/attention/NativeRuntime/Sources/AttentionNative/AttentionExtensionController.swift",
-          "sha256": "01560e8071a7e72b1b837b649ab9e766f27cd99d0871a82159af877229849b9b"
+          "sha256": "083bb3a79e6a7da6b5d261787eec890c7ceac3d12c320c7a3a359f3d6248c1e4"
         }
       ]
     },

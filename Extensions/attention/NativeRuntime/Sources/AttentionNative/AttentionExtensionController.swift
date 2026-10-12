@@ -1,10 +1,10 @@
-@_implementationOnly import EdithExtensionSupport_attention_native
-@_implementationOnly import EdithExtensionUI_attention_native
+internal import EdithExtensionSupport_attention_native
+internal import EdithExtensionUI_attention_native
 import AppKit
 import CoreFoundation
 import Foundation
 import SwiftUI
-@_implementationOnly import WorkerFixtureSupport
+internal import WorkerFixtureSupport
 
 @MainActor
 @objc(EdithAttentionExtensionController)

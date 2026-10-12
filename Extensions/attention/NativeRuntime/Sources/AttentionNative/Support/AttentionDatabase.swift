@@ -1,4 +1,4 @@
-@_implementationOnly import GRDB
+internal import GRDB
 import Darwin
 import Foundation
 

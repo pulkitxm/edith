@@ -22,7 +22,7 @@ let package = Package(
             ],
             resources: [.copy("Resources/ChromeExtension")],
             swiftSettings: [
-                .swiftLanguageMode(.v5), .enableExperimentalFeature("CheckImplementationOnly"),
+                .swiftLanguageMode(.v5)
             ],
             linkerSettings: [
                 .unsafeFlags(["-Xlinker", "-u", "-Xlinker", "_edith_extension_presentation_create"])

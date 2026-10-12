@@ -130,6 +130,10 @@ final class ExtensionRuntime: NSObject {
 
     #endif
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
+        guard !stopped, !fixtureRejected else {
+            completion(nil, ExtensionPeerError.unavailable.localizedDescription as NSString)
+            return
+        }
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, !stopped, !fixtureRejected else { throw ExtensionPeerError.unavailable }
             #if EDITH_FUNCTIONAL_FIXTURE

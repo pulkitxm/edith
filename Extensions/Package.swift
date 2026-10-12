@@ -66,7 +66,7 @@ let package = Package(
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
             ],
-            path: "colorPicker", exclude: ["Tests", "Runtime.swift"],
+            path: "colorPicker", exclude: ["Tests"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "ColorPickerExtensionTests",

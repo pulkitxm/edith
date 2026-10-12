@@ -508,13 +508,13 @@ public final class YoutubeDownloader {
 
     @discardableResult
     public func openResult(_ item: DownloadItem) -> Bool {
-        if let remote { remoteResult(item.id, action: "open"); return true }
+        if remote != nil { remoteResult(item.id, action: "open"); return true }
         return (try? DownloadOperationExecution.open(id: item.id)) != nil
     }
 
     @discardableResult
     public func revealResult(_ item: DownloadItem) -> Bool {
-        if let remote { remoteResult(item.id, action: "reveal"); return true }
+        if remote != nil { remoteResult(item.id, action: "reveal"); return true }
         return (try? DownloadOperationExecution.reveal(id: item.id)) != nil
     }
 
@@ -536,7 +536,7 @@ public final class YoutubeDownloader {
 
     func setAudioDirectory(_ url: URL) {
         guard !stopped else { return }
-        if let remote {
+        if remote != nil {
             remoteResult(nil, action: "audioFolder", directory: url)
         } else {
             DownloadsStorage.setAudioDirectory(url)

@@ -50,13 +50,21 @@ import Foundation
     func perform(_ request: LidAwakeRequest, requiresConfirmation: Bool = false) async throws
         -> LidAwakeSnapshot
     {
-        guard !stopped, !commandWorkClosed, !recoveryOnly else {
-            throw ExtensionPeerError.unavailable
-        }
+        try requireCommandAdmission(request)
         if requiresConfirmation, !confirm() { throw CancellationError() }
         try Task.checkCancellation()
-        guard !commandWorkClosed else { throw ExtensionPeerError.unavailable }
+        try requireCommandAdmission(request)
         return try await Self.perform(request, engine: engine, defaults: defaults)
+    }
+
+    private func requireCommandAdmission(_ request: LidAwakeRequest) throws {
+        guard !stopped, !recoveryOnly else { throw ExtensionPeerError.unavailable }
+        guard commandWorkClosed else { return }
+        switch request {
+        case .status, .setBatteryThreshold, .setRestoreOnQuit: return
+        case .on, .off, .enableExtension, .disableExtension:
+            throw ExtensionPeerError.unavailable
+        }
     }
 
     private static func perform(

@@ -1,7 +1,7 @@
-@_implementationOnly import EdithExtensionSupport_attention_native
-@_implementationOnly import EdithExtensionUI_attention_native
+internal import EdithExtensionSupport_attention_native
+internal import EdithExtensionUI_attention_native
 import Foundation
-@_implementationOnly import GRDB
+internal import GRDB
 
 struct AttentionImportReport: Codable, Equatable, Sendable {
     let files: Int
