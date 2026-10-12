@@ -1,0 +1,51 @@
+{
+  "sourceCommit": "26a500e0421bf579473149e1fde2232841ff4c33",
+  "configuration": "Release/Osize/fullLTO/arm64",
+  "signature": "ad-hoc, verified by actual builder",
+  "logicalInstalledBytes": 9409404,
+  "allocatedRegularFileBytes": 9551872,
+  "directoryAllocationIncluded": false,
+  "regularFiles": 64,
+  "indexedExtensions": 39,
+  "extensionPayloadBytes": 0,
+  "baselineRecordedInstalledBytes": 131607239,
+  "reductionPercent": 92.85039024335127,
+  "appExecuted": false,
+  "current39ReleasePackageSizes": "Not measured for this source. Historical package table must not be relabelled current.",
+  "finalMigrationSource": "Pending later source checkpoints and hosted signing/public release",
+  "measuredDate": "2026-10-12",
+  "hostBuildMetadata": {
+    "sourceCommit": "26a500e0421bf579473149e1fde2232841ff4c33",
+    "sourceTreeDirty": false,
+    "configuration": "Release",
+    "optimization": "Osize",
+    "linkTimeOptimization": "full",
+    "architecture": "arm64",
+    "signature": "ad-hoc",
+    "xcode": "Xcode 27.0\nBuild version 27A266a",
+    "sdk": "27.0",
+    "hostExecutableSHA256": "ecb0747e1fda8a8492c6efb5423837561a5c96c28c1e2b623c208606abf2de2c"
+  },
+  "comparisonZIPBytes": 4900836,
+  "comparisonZIPSHA256": "976301b6cdced7de6b4cacb70fd4640dbeaf1653deee81bb3bfadadb6822f243",
+  "components": {
+    "hostAndCLI": 7527136,
+    "appUpdater": 1441041,
+    "resources": 434809,
+    "bundleMetadata": 6418
+  },
+  "comparisonArchiveDefinition": "Deflate level 9 over regular files, excluding symbolic links. Not a shipping DMG.",
+  "historicalAll39Measurement": {
+    "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+    "emptyHostBytes": 8845388,
+    "extensionZIPBytes": 468938701,
+    "expandedExtensionBytes": 951938618,
+    "metadataBytes": 20259,
+    "checksumBytes": 3094,
+    "completeReleaseAssetsBytes": 468962054,
+    "report": "extension-host-rebuild-size-report.json",
+    "currentSourceMeasurement": false,
+    "publishedReleaseVerification": false
+  },
+  "scope": "Measured clean development artifact only. Final shipping signature, DMG, all 39 current extension packages and published assets remain pending."
+}
