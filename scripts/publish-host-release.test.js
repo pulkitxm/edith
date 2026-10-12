@@ -2,12 +2,88 @@ import { expect, test } from "bun:test";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { preflightHostRelease } from "./publish-host-release.mjs";
+import {
+  hostReleasePrerelease,
+  preflightHostRelease,
+} from "./publish-host-release.mjs";
 
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 import { assetNames, fixture, publish } from "./host-release-test-fixture.mjs";
 import "./host-release-races.test.js";
+
+test("preview publication creates a genuine prerelease and never selects latest", async () => {
+  const value = fixture();
+  try {
+    await publish(value, { prerelease: true });
+    const mutations = value.calls.filter(
+      (args) => args[0] === "pukbot" && !args.includes("--dry-run"),
+    );
+    expect(mutations[0]).toContain("--prerelease");
+    const final = mutations.at(-1);
+    expect(final[final.indexOf("--prerelease") + 1]).toBe("true");
+    expect(final[final.indexOf("--make-latest") + 1]).toBe("false");
+    expect(value.release.prerelease).toBe(true);
+    expect(value.release.draft).toBe(false);
+  } finally {
+    value.clean();
+  }
+});
+
+test("existing host release cannot cross between stable and preview channels", async () => {
+  for (const prerelease of [false, true]) {
+    const value = fixture(true);
+    try {
+      value.release.prerelease = !prerelease;
+      await expect(publish(value, { prerelease })).rejects.toThrow("identity");
+      expect(
+        value.calls.filter(
+          (args) => args[0] === "pukbot" && !args.includes("--dry-run"),
+        ),
+      ).toEqual([]);
+    } finally {
+      value.clean();
+    }
+  }
+});
+
+test("preview channel renewal refuses a channel change before the next mutation", async () => {
+  const value = fixture(true);
+  value.release.prerelease = true;
+  let changed = false;
+  try {
+    await expect(
+      publish(value, {
+        prerelease: true,
+        execute(command, args, options) {
+          if (command === "pukbot" && args[1] === "upload-asset" && !changed) {
+            changed = true;
+            value.release.prerelease = false;
+          }
+          return value.execute(command, args, options);
+        },
+      }),
+    ).rejects.toThrow("identity");
+    expect(
+      value.calls.some(
+        (args) =>
+          args[0] === "pukbot" &&
+          args[2] === "edit" &&
+          !args.includes("--dry-run"),
+      ),
+    ).toBe(false);
+  } finally {
+    value.clean();
+  }
+});
+
+test("host preview channel is an explicit strict boolean policy", () => {
+  expect(hostReleasePrerelease()).toBe(false);
+  expect(hostReleasePrerelease("false")).toBe(false);
+  expect(hostReleasePrerelease("true")).toBe(true);
+  for (const value of ["", "yes", "0", true, null])
+    expect(() => hostReleasePrerelease(value)).toThrow("channel");
+});
 
 test("publishes the host DMG signed appcast and three closed receipts through the release client", async () => {
   const value = fixture();

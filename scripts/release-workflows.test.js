@@ -12,6 +12,8 @@ const workflow = Bun.YAML.parse(ciWorkflow);
 const { version, dmg, publish } = workflow.jobs;
 const releaseWorkflow = ciWorkflow;
 const releaseTagRef = ["$", "{RELEASE_TAG}"].join("");
+const releasePathsRef = ["$", "{release_paths[@]}"].join("");
+const testScopeRef = ["$", "{test_scope[@]}"].join("");
 const jobText = (job) => JSON.stringify(job).replaceAll("\\n", "\n");
 
 function condition(expression, context) {
@@ -22,6 +24,7 @@ function condition(expression, context) {
     "needs",
     "github",
     "inputs",
+    "env",
     "cancelled",
     "contains",
     "fromJSON",
@@ -30,6 +33,7 @@ function condition(expression, context) {
     context.needs,
     context.github,
     context.inputs,
+    context.env,
     () => context.cancelled ?? false,
     (values, value) => values.includes(value),
     JSON.parse,
@@ -326,14 +330,54 @@ test("release version commits and tags use the release client with source verifi
   expect(releaseStateScript).toContain("pukbot commit create");
   expect(releaseStateScript).toContain("pukbot tag create");
   expect(releaseStateScript).toContain(
-    "git add Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb",
+    "release_paths=(Resources/Info.plist Resources/HelperInfo.plist)",
   );
+  expect(releaseStateScript).toContain("release_paths+=(Casks/edith.rb)");
+  expect(releaseStateScript).toContain(`git add "${releasePathsRef}"`);
   expect(releaseStateScript).toContain(
     `--message "Release ${releaseTagRef} [skip ci]"`,
   );
   expect(releaseStateScript).toContain('git rev-parse "$RELEASE_SHA^"');
   expect(releaseStateScript).not.toContain("git push");
   expect(releaseStateScript).not.toContain("git reset --hard");
+});
+
+test("lightweight host previews leave the stable appcast and Homebrew channel unchanged", () => {
+  for (const job of [version, dmg, publish])
+    expect(job.env.RELEASE_PRERELEASE).toBe("true");
+  const checksum = publish.steps.find(
+    (step) => step.name === "Update the rebuilt release checksum",
+  );
+  const mirror = publish.steps.find(
+    (step) => step.name === "Mirror the cask to the tap repository",
+  );
+  for (const prerelease of ["true", "false"]) {
+    const context = {
+      env: { REBUILD: "v1.2.3", RELEASE_PRERELEASE: prerelease },
+      needs: {},
+    };
+    expect(condition(checksum.if, context)).toBe(prerelease === "false");
+    const expression = mirror.if.replace(
+      "steps.release_state.outputs.superseded",
+      '"false"',
+    );
+    expect(condition(expression, context)).toBe(prerelease === "false");
+  }
+  expect(readFileSync("Resources/Info.plist", "utf8")).toContain(
+    "https://github.com/pulkitxm/edith/releases/latest/download/appcast.xml",
+  );
+  expect(releaseWorkflow).not.toContain("Set :SUFeedURL");
+});
+
+test("main uses shipping CI scope while pull request routing retains the full scope", () => {
+  const changes = workflow.jobs.changes.steps.find(
+    (step) => step.id === "areas",
+  ).run;
+  expect(changes).toContain("test_scope=()");
+  expect(changes).toContain('if [ "$GITHUB_REF" = refs/heads/main ]; then');
+  expect(changes).toContain("test_scope=(--shipping)");
+  expect(changes).toContain(`ci-test-plan.mjs "${testScopeRef}" --all`);
+  expect(changes).toContain(`ci-test-plan.mjs "${testScopeRef}")`);
 });
 
 test("release publication can recover after a partial failure", () => {

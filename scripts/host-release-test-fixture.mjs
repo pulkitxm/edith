@@ -101,6 +101,7 @@ export function fixture(existing = false) {
         tag_name: "v1.2.3",
         target_commitish: "a".repeat(40),
         draft: true,
+        prerelease: false,
         assets: [],
       }
     : undefined;
@@ -138,6 +139,7 @@ export function fixture(existing = false) {
           tag_name: "v1.2.3",
           target_commitish: args[args.indexOf("--target") + 1],
           draft: true,
+          prerelease: args.includes("--prerelease"),
           assets: [],
         };
       if (args[1] === "upload-asset") {
@@ -149,7 +151,11 @@ export function fixture(existing = false) {
         );
       }
     }
-    if (command === "pukbot" && args[1] === "edit") release.draft = false;
+    if (command === "pukbot" && args[1] === "edit") {
+      release.draft = false;
+      if (args.includes("--prerelease"))
+        release.prerelease = args[args.indexOf("--prerelease") + 1] === "true";
+    }
     if (command === "gh" && args[0] === "api")
       throw new Error("Unexpected synthetic API request");
     return "{}";

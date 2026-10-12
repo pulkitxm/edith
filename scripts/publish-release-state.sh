@@ -3,6 +3,9 @@
 set -euo pipefail
 
 MODE="${1:-}"
+RELEASE_PRERELEASE="${RELEASE_PRERELEASE:-false}"
+[[ "$RELEASE_PRERELEASE" == true || "$RELEASE_PRERELEASE" == false ]] \
+  || { echo "release blocked: invalid host release channel" >&2; exit 1; }
 REPO="${GITHUB_REPOSITORY:-pulkitxm/edith}"
 : "${RELEASE_TAG:?RELEASE_TAG is required}"
 : "${RELEASE_VERSION:?RELEASE_VERSION is required}"
@@ -27,6 +30,11 @@ rewrite_cask() {
 }
 
 verify_cask() {
+  if [[ "$RELEASE_PRERELEASE" == true ]]; then
+    git diff --quiet "$BUILT_SHA" -- Casks/edith.rb \
+      || { echo "release blocked: preview changed the stable cask" >&2; exit 1; }
+    return
+  fi
   grep -qx "  version \"$RELEASE_VERSION\"" Casks/edith.rb \
     || { echo "release blocked: the cask version does not match" >&2; exit 1; }
   grep -qx "  sha256 \"$RELEASE_SHA256\"" Casks/edith.rb \
@@ -54,12 +62,21 @@ release_superseded() {
   exit 75
 }
 
+if [[ "$RELEASE_PRERELEASE" == true && "$MODE" == rebuild ]]; then
+  echo "preview rebuild leaves the stable cask unchanged"
+  exit 0
+fi
+
 git fetch origin main --tags
 
 case "$MODE" in
   cut)
     : "${BUILT_SHA:?BUILT_SHA is required}"
     : "${RELEASE_PLISTS_DIR:?RELEASE_PLISTS_DIR is required}"
+    release_paths=(Resources/Info.plist Resources/HelperInfo.plist)
+    if [[ "$RELEASE_PRERELEASE" != true ]]; then
+      release_paths+=(Casks/edith.rb)
+    fi
 
     REMOTE_TAG_SHA="$(remote_tag_sha)"
     if [[ -n "$REMOTE_TAG_SHA" ]]; then
@@ -87,12 +104,12 @@ case "$MODE" in
         || { echo "release blocked: release plists are missing" >&2; exit 1; }
       cp "$RELEASE_PLISTS_DIR/Info.plist" Resources/Info.plist
       cp "$RELEASE_PLISTS_DIR/HelperInfo.plist" Resources/HelperInfo.plist
-      rewrite_cask
+      if [[ "$RELEASE_PRERELEASE" != true ]]; then rewrite_cask; fi
       verify_cask
-      git add Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb
+      git add "${release_paths[@]}"
       RESULT="$(pukbot commit create --repo "$REPO" --branch main \
         --message "Release ${RELEASE_TAG} [skip ci]" \
-        Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb --json)" \
+        "${release_paths[@]}" --json)" \
         || {
           git fetch origin main --tags
           [[ "$(git rev-parse origin/main)" == "$BUILT_SHA" ]] || release_superseded
@@ -107,7 +124,7 @@ case "$MODE" in
         || release_superseded
       [[ "$(git rev-parse origin/main)" == "$RELEASE_SHA" ]] \
         || release_superseded
-      git restore --source="$RELEASE_SHA" --staged --worktree -- Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb
+      git restore --source="$RELEASE_SHA" --staged --worktree -- "${release_paths[@]}"
       git switch --detach "$RELEASE_SHA"
       verify_cask
     fi

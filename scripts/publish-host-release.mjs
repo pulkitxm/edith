@@ -18,6 +18,12 @@ import {
 } from "./release-asset-upload.mjs";
 import { lookupRelease } from "./release-lookup.mjs";
 
+export function hostReleasePrerelease(value = "false") {
+  if (!["true", "false"].includes(value))
+    throw new Error("Invalid host release channel");
+  return value === "true";
+}
+
 function releaseInventory(release) {
   const names = new Set();
   const ids = new Set();
@@ -116,6 +122,7 @@ export async function publishHostRelease({
   target,
   rebuild = false,
   sourceTarget = target,
+  prerelease = false,
   execute = execFileSync,
   matchesAsset = releaseAssetMatchesFile,
   verifySource = async () => {
@@ -137,6 +144,8 @@ export async function publishHostRelease({
   },
 }) {
   if (!/^[0-9a-f]{40}$/.test(target)) throw new Error("Invalid release target");
+  if (typeof prerelease !== "boolean")
+    throw new Error("Invalid host release channel");
   const copies = privateHostAssets(directory);
   try {
     const assets = preflightHostRelease({
@@ -205,7 +214,8 @@ export async function publishHostRelease({
         value.id !== id ||
         value.tag_name !== tag ||
         value.target_commitish !== target ||
-        value.draft !== draft
+        value.draft !== draft ||
+        value.prerelease !== prerelease
       )
         throw new Error("Host release identity or draft state changed");
       releaseInventory(value);
@@ -259,6 +269,7 @@ export async function publishHostRelease({
           "--target",
           target,
           "--draft",
+          ...(prerelease ? ["--prerelease"] : []),
           "--generate-notes",
           "--repo",
           repository,
@@ -357,8 +368,10 @@ export async function publishHostRelease({
         String(release.id),
         "--draft",
         "false",
+        "--prerelease",
+        String(prerelease),
         "--make-latest",
-        "true",
+        String(!prerelease),
         "--repo",
         repository,
       ],
@@ -401,6 +414,7 @@ if (
     tag: process.env.RELEASE_TAG,
     source: process.env.BUILT_SHA,
     rebuild: Boolean(process.env.REBUILD),
+    prerelease: hostReleasePrerelease(process.env.RELEASE_PRERELEASE),
   };
   if (preflight) {
     preflightHostRelease(configuration);

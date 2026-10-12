@@ -228,10 +228,14 @@ jobs:
           area companion '^apps/companion/'
           area companion_runtime '^apps/companion/(Dockerfile|compose(\.[^/]+)?\.yaml)$'
           area music_player '^(apps/music-player/|build\.sh$|\.github/workflows/)'
+          test_scope=()
+          if [ "$GITHUB_REF" = refs/heads/main ]; then
+            test_scope=(--shipping)
+          fi
           if [ -z "$base" ]; then
-            test_plan="$(printf '%s\n' "$changed" | node scripts/ci-test-plan.mjs --all)"
+            test_plan="$(printf '%s\n' "$changed" | node scripts/ci-test-plan.mjs "${test_scope[@]}" --all)"
           else
-            test_plan="$(printf '%s\n' "$changed" | node scripts/ci-test-plan.mjs)"
+            test_plan="$(printf '%s\n' "$changed" | node scripts/ci-test-plan.mjs "${test_scope[@]}")"
           fi
           echo "swift_matrix=$test_plan" >> "$GITHUB_OUTPUT"
           printf '%s' "$test_plan" | node -e 'const fs=require("node:fs"); const plan=JSON.parse(fs.readFileSync(0,"utf8")); console.log("swift_tests="+(plan.include.length > 0));' >> "$GITHUB_OUTPUT"
@@ -486,6 +490,7 @@ jobs:
     env:
       REBUILD: ${{ inputs.rebuild }}
       CUT_RELEASE: ${{ inputs.release || github.event_name == 'push' }}
+      RELEASE_PRERELEASE: "true"
       SOURCE_SHA: ${{ github.sha }}
       WORKFLOW_REF: ${{ github.ref }}
       HAS_SIGNING: ${{ secrets.MACOS_CERT_P12 != '' }}
@@ -523,8 +528,10 @@ jobs:
             || { echo "release blocked: SPARKLE_PRIVATE_KEY is required" >&2; exit 1; }
           test "$HAS_PUSH_TOKEN" = true \
             || { echo "release blocked: RELEASE_PUSH_TOKEN is required" >&2; exit 1; }
-          test "$HAS_TAP_TOKEN" = true \
-            || { echo "release blocked: TAP_PUSH_TOKEN is required" >&2; exit 1; }
+          if [ "$RELEASE_PRERELEASE" != true ]; then
+            test "$HAS_TAP_TOKEN" = true \
+              || { echo "release blocked: TAP_PUSH_TOKEN is required" >&2; exit 1; }
+          fi
 
       - name: Resolve the version to release
         id: resolve
@@ -545,6 +552,7 @@ jobs:
       RELEASE_VERSION: ${{ needs.version.outputs.version }}
       RELEASE_BUILD: ${{ needs.version.outputs.build }}
       BUILT_SHA: ${{ needs.version.outputs.sha }}
+      RELEASE_PRERELEASE: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -730,6 +738,7 @@ jobs:
       RELEASE_BUILD: ${{ needs.version.outputs.build }}
       BUILT_SHA: ${{ needs.version.outputs.sha }}
       GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
+      RELEASE_PRERELEASE: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -803,7 +812,7 @@ jobs:
         run: node scripts/publish-host-release.mjs release-assets
 
       - name: Update the rebuilt release checksum
-        if: env.REBUILD != ''
+        if: env.REBUILD != '' && env.RELEASE_PRERELEASE != 'true'
         working-directory: release-source
         run: |
           RELEASE_SHA256="$(sha256sum ../release-assets/Edith.dmg | cut -d' ' -f1)"
@@ -811,7 +820,7 @@ jobs:
           bash ../scripts/publish-release-state.sh rebuild
 
       - name: Mirror the cask to the tap repository
-        if: steps.release_state.outputs.superseded != 'true'
+        if: steps.release_state.outputs.superseded != 'true' && env.RELEASE_PRERELEASE != 'true'
         env:
           TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
         run: |

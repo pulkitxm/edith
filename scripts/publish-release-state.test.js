@@ -206,6 +206,61 @@ test("a release cut publishes one version commit through the release client and 
   expect(git(fixture.remote, "rev-parse", "refs/heads/main")).toBe(main);
 });
 
+test("a preview cut stamps and tags only host plists while preserving the stable cask on retry", () => {
+  const fixture = createFixture();
+  const original = git(fixture.remote, "show", "main:Casks/edith.rb");
+  const environment = {
+    ...releaseEnvironment(fixture),
+    RELEASE_PRERELEASE: "true",
+  };
+  const cut = command(fixture.checkout, "bash", [script, "cut"], environment);
+  expect(cut.exitCode, cut.stderr).toBe(0);
+  const main = git(fixture.remote, "rev-parse", "refs/heads/main");
+  expect(git(fixture.remote, "show", "main:Casks/edith.rb")).toBe(original);
+  expect(
+    git(fixture.remote, "diff", "--name-only", fixture.builtSha, main)
+      .split("\n")
+      .sort(),
+  ).toEqual(["Resources/HelperInfo.plist", "Resources/Info.plist"]);
+  expect(git(fixture.remote, "rev-parse", "refs/tags/v0.0.80^{commit}")).toBe(
+    main,
+  );
+  expect(git(fixture.remote, "show", "main:Resources/Info.plist")).toBe(
+    "new app plist",
+  );
+  expect(
+    command(fixture.checkout, "bash", [script, "cut"], environment).exitCode,
+  ).toBe(0);
+  expect(git(fixture.remote, "rev-parse", "refs/heads/main")).toBe(main);
+});
+
+test("preview rebuild cannot rewrite the stable cask or publish a checksum commit", () => {
+  const fixture = createFixture();
+  const original = git(fixture.remote, "show", "main:Casks/edith.rb");
+  const result = command(fixture.checkout, "bash", [script, "rebuild"], {
+    ...releaseEnvironment(fixture, secondChecksum),
+    RELEASE_PRERELEASE: "true",
+  });
+  expect(result.exitCode, result.stderr).toBe(0);
+  expect(git(fixture.remote, "rev-parse", "refs/heads/main")).toBe(
+    fixture.builtSha,
+  );
+  expect(git(fixture.remote, "show", "main:Casks/edith.rb")).toBe(original);
+});
+
+test("invalid preview policy fails before any release-state mutation", () => {
+  const fixture = createFixture();
+  const result = command(fixture.checkout, "bash", [script, "cut"], {
+    ...releaseEnvironment(fixture),
+    RELEASE_PRERELEASE: "yes",
+  });
+  expect(result.exitCode).toBe(1);
+  expect(result.stderr).toContain("channel");
+  expect(git(fixture.remote, "rev-parse", "refs/heads/main")).toBe(
+    fixture.builtSha,
+  );
+});
+
 test("a release cut reports a superseded build without publishing", () => {
   const fixture = createFixture();
   const mover = join(fixture.root, "mover");

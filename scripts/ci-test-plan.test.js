@@ -484,97 +484,110 @@ test("every extension test directory selects a deduplicated executable lane", ()
   }
 });
 
-test("a child behind its base routes the tested merge revision with the current planner", () => {
-  const workflow = Bun.YAML.parse(
-    readFileSync(".github/workflows/ci.yml", "utf8"),
-  );
-  const job = workflow.jobs.changes;
-  const checkout = job.steps.find((step) =>
-    step.uses?.startsWith("actions/checkout@"),
-  );
-  expect(checkout.with.ref).toBe(["$", "{{ github.sha }}"].join(""));
-  const root = mkdtempSync(join(tmpdir(), "edith-routing-"));
-  const git = (...args) =>
-    execFileSync("git", ["-c", "core.hooksPath=/dev/null", ...args], {
-      cwd: root,
-      encoding: "utf8",
-      stdio: "pipe",
-    });
-  const save = (path, contents) => {
-    const target = join(root, path);
-    mkdirSync(join(target, ".."), { recursive: true });
-    writeFileSync(target, contents);
-  };
-  const commit = (message) => {
-    git("add", ".");
-    git("-c", "commit.gpgsign=false", "commit", "-m", message);
-  };
-  try {
-    git("init", "--initial-branch=base");
-    git("config", "user.name", "Fixture");
-    git("config", "user.email", "fixture@example.invalid");
-    save("Extensions/calendar/Runtime.swift", "initial\n");
-    commit("Initial fixture");
-    git("switch", "-c", "feature");
-    save("Extensions/calendar/Runtime.swift", "changed\n");
-    commit("Change Calendar fixture");
-    const head = git("rev-parse", "HEAD").trim();
-    git("switch", "base");
-    save("scripts/ci-test-plan.mjs", readFileSync("scripts/ci-test-plan.mjs"));
-    save(
-      "scripts/test-extension-package.mjs",
-      readFileSync("scripts/test-extension-package.mjs"),
+test.each(["refs/pull/1/merge", "refs/heads/main"])(
+  "a child behind its base routes the tested merge revision with the current planner (%s)",
+  (ref) => {
+    const workflow = Bun.YAML.parse(
+      readFileSync(".github/workflows/ci.yml", "utf8"),
     );
-    for (const path of [
-      "scripts/extension-release-plan.mjs",
-      "scripts/build-extension-support.mjs",
-      "scripts/extension-ghostty-native.mjs",
-      "scripts/extension-host-abi.mjs",
-      "scripts/shipping-extension-policy.mjs",
-    ])
-      save(path, readFileSync(path));
-    save("Extensions/manifest.json", readFileSync("Extensions/manifest.json"));
-    commit("Add planner fixture");
-    git("update-ref", "refs/remotes/origin/base", "HEAD");
-    git("merge", "--no-edit", "feature");
-    const merge = git("rev-parse", "HEAD").trim();
-    expect(merge).not.toBe(head);
-    const output = join(root, "routing-output");
-    execFileSync(
-      "bash",
-      ["-e", "-c", job.steps.find((step) => step.id === "areas").run],
-      {
+    const job = workflow.jobs.changes;
+    const checkout = job.steps.find((step) =>
+      step.uses?.startsWith("actions/checkout@"),
+    );
+    expect(checkout.with.ref).toBe(["$", "{{ github.sha }}"].join(""));
+    const root = mkdtempSync(join(tmpdir(), "edith-routing-"));
+    const git = (...args) =>
+      execFileSync("git", ["-c", "core.hooksPath=/dev/null", ...args], {
         cwd: root,
+        encoding: "utf8",
         stdio: "pipe",
-        env: {
-          ...process.env,
-          BASE_REF: "base",
-          BEFORE: "",
-          GITHUB_OUTPUT: output,
+      });
+    const save = (path, contents) => {
+      const target = join(root, path);
+      mkdirSync(join(target, ".."), { recursive: true });
+      writeFileSync(target, contents);
+    };
+    const commit = (message) => {
+      git("add", ".");
+      git("-c", "commit.gpgsign=false", "commit", "-m", message);
+    };
+    try {
+      git("init", "--initial-branch=base");
+      git("config", "user.name", "Fixture");
+      git("config", "user.email", "fixture@example.invalid");
+      save("Extensions/calendar/Runtime.swift", "initial\n");
+      commit("Initial fixture");
+      git("switch", "-c", "feature");
+      save("Extensions/calendar/Runtime.swift", "changed\n");
+      commit("Change Calendar fixture");
+      const head = git("rev-parse", "HEAD").trim();
+      git("switch", "base");
+      save(
+        "scripts/ci-test-plan.mjs",
+        readFileSync("scripts/ci-test-plan.mjs"),
+      );
+      save(
+        "scripts/test-extension-package.mjs",
+        readFileSync("scripts/test-extension-package.mjs"),
+      );
+      for (const path of [
+        "scripts/extension-release-plan.mjs",
+        "scripts/build-extension-support.mjs",
+        "scripts/extension-ghostty-native.mjs",
+        "scripts/extension-host-abi.mjs",
+        "scripts/shipping-extension-policy.mjs",
+      ])
+        save(path, readFileSync(path));
+      save(
+        "Extensions/manifest.json",
+        readFileSync("Extensions/manifest.json"),
+      );
+      commit("Add planner fixture");
+      git("update-ref", "refs/remotes/origin/base", "HEAD");
+      git("merge", "--no-edit", "feature");
+      const merge = git("rev-parse", "HEAD").trim();
+      expect(merge).not.toBe(head);
+      const output = join(root, "routing-output");
+      execFileSync(
+        "bash",
+        ["-e", "-c", job.steps.find((step) => step.id === "areas").run],
+        {
+          cwd: root,
+          stdio: "pipe",
+          env: {
+            ...process.env,
+            BASE_REF: "base",
+            BEFORE: "",
+            GITHUB_REF: ref,
+            GITHUB_OUTPUT: output,
+          },
         },
-      },
-    );
-    const values = new Map(
-      readFileSync(output, "utf8")
-        .trim()
-        .split("\n")
-        .map((line) => {
-          const split = line.indexOf("=");
-          return [line.slice(0, split), line.slice(split + 1)];
-        }),
-    );
-    expect(values.get("swift")).toBe("true");
-    expect(values.get("host")).toBe("false");
-    expect(values.get("scripts")).toBe("false");
-    expect(values.get("swift_tests")).toBe("true");
-    expect(JSON.parse(values.get("swift_matrix"))).toEqual({
-      include: [{ lane: "feature-models", targets: "ci-extension-support" }],
-    });
-    expect(() => git("show", `${head}:scripts/ci-test-plan.mjs`)).toThrow();
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
+      );
+      const values = new Map(
+        readFileSync(output, "utf8")
+          .trim()
+          .split("\n")
+          .map((line) => {
+            const split = line.indexOf("=");
+            return [line.slice(0, split), line.slice(split + 1)];
+          }),
+      );
+      expect(values.get("swift")).toBe("true");
+      expect(values.get("host")).toBe("false");
+      expect(values.get("scripts")).toBe("false");
+      const shipping = ref === "refs/heads/main";
+      expect(values.get("swift_tests")).toBe(String(!shipping));
+      expect(JSON.parse(values.get("swift_matrix"))).toEqual({
+        include: shipping
+          ? []
+          : [{ lane: "feature-models", targets: "ci-extension-support" }],
+      });
+      expect(() => git("show", `${head}:scripts/ci-test-plan.mjs`)).toThrow();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
 
 test("standalone owners keep their runtime tests outside the utility umbrella", () => {
   const umbrella = readFileSync("Extensions/Package.swift", "utf8");
