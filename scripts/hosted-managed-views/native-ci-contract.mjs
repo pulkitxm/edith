@@ -15,6 +15,13 @@ export const managedNativeTestSteps = [
   "Run bun scripts/test-extension-marketplace.mjs",
 ];
 
+export const shippingNativeTestSteps = [
+  "Verify lifecycle tools and their frozen index",
+  "Validate the shipping extension and marketplace",
+  "Run bun scripts/test-extension-catalog-retention.mjs",
+  "Run bun scripts/test-extension-marketplace.mjs",
+];
+
 export function validateNonpublishingNativeJobs(jobs, definitions, runID) {
   assert.equal(definitions.length, 39);
   assert.equal(new Set(definitions.map(({ id }) => id)).size, 39);

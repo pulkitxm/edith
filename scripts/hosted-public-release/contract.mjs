@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { parseExpression } from "@babel/parser";
 import {
   managedNativeBuildSteps,
-  managedNativeTestSteps,
+  shippingNativeTestSteps,
 } from "../hosted-managed-views/native-ci-contract.mjs";
 import { validateCIArtifactSet } from "../hosted-managed-views/package-preparation.mjs";
 import { validateCatalog } from "../verify-extension-catalog.mjs";
@@ -195,7 +195,7 @@ export function productionRun({
     );
     const names =
       job.name === "tests"
-        ? managedNativeTestSteps
+        ? shippingNativeTestSteps
         : job.name.startsWith("build (")
           ? managedNativeBuildSteps
           : job.name === "publish"

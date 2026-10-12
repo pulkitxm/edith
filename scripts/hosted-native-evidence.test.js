@@ -6,7 +6,7 @@ import {
 } from "./extension-native-evidence.mjs";
 import {
   managedNativeBuildSteps,
-  managedNativeTestSteps,
+  shippingNativeTestSteps,
 } from "./hosted-managed-views/native-ci-contract.mjs";
 import {
   digest,
@@ -72,7 +72,7 @@ function fixture() {
     status: name === "publish" ? "in_progress" : "completed",
     conclusion: name === "publish" ? null : "success",
     steps: (name === "tests"
-      ? managedNativeTestSteps
+      ? shippingNativeTestSteps
       : name.startsWith("build (")
         ? managedNativeBuildSteps
         : name === "publish"

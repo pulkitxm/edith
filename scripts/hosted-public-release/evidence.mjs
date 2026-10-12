@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createPublicKey, verify } from "node:crypto";
 import {
   managedNativeBuildSteps,
-  managedNativeTestSteps,
+  shippingNativeTestSteps,
 } from "../hosted-managed-views/native-ci-contract.mjs";
 import {
   artifact,
@@ -51,7 +51,7 @@ export const evidenceURL = (payload, name) =>
 
 function requiredSteps(name) {
   return name === "tests"
-    ? managedNativeTestSteps
+    ? shippingNativeTestSteps
     : name.startsWith("build (")
       ? managedNativeBuildSteps
       : name === "publish"
