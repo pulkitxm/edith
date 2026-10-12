@@ -522,9 +522,16 @@ public final class ExtensionPeerServer {
     private let endpoint: ExtensionPeerEndpoint
     private let execute: Execute
     private let controlsDuringDrain: Set<String>
-    private var draining = false
-    private let ownedCallbacks = ExtensionPeerWork()
-    private let listenerWork = ExtensionPeerWork()
+    private enum Admission: Equatable {
+        case open
+        case draining
+        case stopped
+        case starting(UUID)
+    }
+    private var admission = Admission.open
+    private var retirement: Task<Void, Never>?
+    private var ownedCallbacks = ExtensionPeerWork()
+    private var listenerWork = ExtensionPeerWork()
     private var ownedConnections: [UUID: ExtensionPeerConnection] = [:]
     private let queue = DispatchQueue(label: "edith.extension.commands", qos: .utility)
     private var listener: DispatchSourceRead?
@@ -544,7 +551,7 @@ public final class ExtensionPeerServer {
     }
 
     public func start() throws {
-        guard listener == nil, !draining, controlsDuringDrain.count <= 16,
+        guard listener == nil, admission != .draining, controlsDuringDrain.count <= 16,
             controlsDuringDrain.allSatisfy({
                 !$0.isEmpty && $0.utf8.count <= 256 && !$0.utf8.contains(0)
             })
@@ -577,6 +584,10 @@ public final class ExtensionPeerServer {
                 }) == 0, chmod(path, 0o600) == 0, Darwin.listen(descriptor, 8) == 0
         else { throw ExtensionPeerError.unavailable }
         let generation = UUID()
+        let previousRetirement = retirement
+        ownedCallbacks = ExtensionPeerWork()
+        let listenerWork = ExtensionPeerWork()
+        self.listenerWork = listenerWork
         let source = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: queue)
         listenerWork.begin()
         source.setEventHandler { [weak self, source, listenerWork] in
@@ -595,12 +606,22 @@ public final class ExtensionPeerServer {
         listenerGeneration = generation
         self.registration = registration
         handedOff = true
-        source.activate()
+        if let previousRetirement {
+            admission = .starting(generation)
+            Task { [weak self, source] in
+                await previousRetirement.value
+                if self?.admission == .starting(generation) { self?.admission = .open }
+                source.activate()
+            }
+        } else {
+            admission = .open
+            source.activate()
+        }
         do { try registration.publish() } catch { shutdown(); throw error }
     }
 
     public func shutdown() {
-        draining = true
+        admission = .stopped
         listener?.cancel()
         listener = nil
         listenerDescriptor = nil
@@ -611,12 +632,25 @@ public final class ExtensionPeerServer {
         }
         registration = nil
         for token in Array(jobs.keys) { close(token) }
+        let previousRetirement = retirement
+        let tasks = executing
+        let connections = Array(ownedConnections.values)
+        let listenerWork = self.listenerWork
+        let ownedCallbacks = self.ownedCallbacks
+        for task in tasks.values { task.cancel() }
+        retirement = Task {
+            await previousRetirement?.value
+            for task in tasks.values { await task.value }
+            for connection in connections { await connection.retire() }
+            await listenerWork.closeAndWait()
+            await ownedCallbacks.closeAndWait()
+        }
     }
 
-    public func closeMutationAdmission() { draining = true }
+    public func closeMutationAdmission() { admission = .draining }
 
     public func joinAdmittedRequests() async {
-        draining = true
+        admission = .draining
         let snapshot = executing
         for (token, task) in snapshot {
             await task.value
@@ -625,7 +659,7 @@ public final class ExtensionPeerServer {
     }
 
     public func cancelAndJoinRequests() async {
-        draining = true
+        admission = .draining
         let snapshot = executing
         for task in snapshot.values { task.cancel() }
         for (token, task) in snapshot {
@@ -636,11 +670,7 @@ public final class ExtensionPeerServer {
 
     public func shutdownAndWait() async {
         shutdown()
-        await cancelAndJoinRequests()
-        for connection in ownedConnections.values { await connection.retire() }
-        await listenerWork.closeAndWait()
-        await ownedCallbacks.closeAndWait()
-        ownedConnections.removeAll()
+        await retirement?.value
     }
 
     private func acceptAvailable(_ descriptor: Int32, generation: UUID) {
@@ -679,7 +709,7 @@ public final class ExtensionPeerServer {
             request.payload.count <= ExtensionPeerEndpoint.maximumPayloadBytes,
             request.timeout.isFinite, request.timeout > 0, request.timeout <= 1_800
         else { close(token); return }
-        guard !draining || controlsDuringDrain.contains(request.command) else {
+        guard admission == .open || controlsDuringDrain.contains(request.command) else {
             close(token); return
         }
         job.deadline.cancel()

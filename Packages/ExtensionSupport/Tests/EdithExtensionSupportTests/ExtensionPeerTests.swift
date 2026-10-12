@@ -152,6 +152,46 @@ import Testing
                 == Data("recovered".utf8))
     }
 
+    @MainActor @Test func restartWaitsForTheRetiredGenerationBeforeAdmittingCommands() async throws
+    {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let endpoint = try ExtensionPeerEndpoint(
+            namespace: UUID().uuidString, owner: "fixture", directory: directory)
+        let started = AsyncStream<Void>.makeStream()
+        var release: CheckedContinuation<Void, Never>?
+        var retired = false
+        let server = ExtensionPeerServer(endpoint: endpoint) { _, command, payload in
+            if command == "wait" {
+                await withCheckedContinuation { continuation in
+                    release = continuation
+                    started.continuation.yield(())
+                }
+                retired = true
+            } else {
+                #expect(retired)
+            }
+            return payload
+        }
+        try server.start()
+        defer { server.shutdown(); release?.resume() }
+        let old = Task { try await endpoint.invoke("wait") }
+        var iterator = started.stream.makeAsyncIterator()
+        _ = await iterator.next()
+        server.shutdown()
+        try server.start()
+        let fresh = Task { try await endpoint.invoke("echo", payload: Data("fresh".utf8)) }
+        try await Task.sleep(for: .milliseconds(20))
+        release?.resume()
+        release = nil
+        await #expect(throws: ExtensionPeerError.self) { try await old.value }
+        #expect(try await fresh.value == Data("fresh".utf8))
+        await server.shutdownAndWait()
+        try server.start()
+        #expect(
+            try await endpoint.invoke("echo", payload: Data("joined".utf8)) == Data("joined".utf8))
+        await server.shutdownAndWait()
+    }
+
     @MainActor @Test func shutdownDisconnectsAllPendingSocketCommands() async throws {
         defer { try? FileManager.default.removeItem(at: directory) }
         let endpoint = try ExtensionPeerEndpoint(
