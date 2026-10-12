@@ -12,7 +12,8 @@ struct ClaudeAccountSettings: View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             Group {
                 Text("Claude accounts").font(.edithText(.headline))
-                HStack {
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    Text("Account").font(.edithText(.caption))
                     Picker(
                         "Account",
                         selection: Binding(
@@ -29,30 +30,57 @@ struct ClaudeAccountSettings: View {
                             Text("New account").tag(Optional(draft.id))
                         }
                     }
-                    Button("Add account") { draft = ClaudeAccount(name: "New account") }
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                Button("Add current CLI account") {
-                    Task {
-                        if let account = await accounts.importCurrentCLIAccount(on: machine) {
-                            draft = account
-                            defaultID = account.id
-                            accountAdded(account)
+                HStack {
+                    Button("Add account") { draft = ClaudeAccount(name: "New account") }
+                    Button("Use current CLI account") {
+                        Task {
+                            if let account = await accounts.importCurrentCLIAccount(on: machine) {
+                                draft = account
+                                defaultID = account.id
+                                accountAdded(account)
+                            }
+                        }
+                    }
+                    .help(
+                        "Copy the current CLI credentials into a named account and use it for new sessions."
+                    )
+                }
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    Text("Default for new Claude sessions").font(.edithText(.caption))
+                    Picker("Default for new Claude sessions", selection: $defaultID) {
+                        Text("Existing CLI login").tag(UUID?.none)
+                        ForEach(accounts.state.accounts) { account in
+                            Text(account.name).tag(Optional(account.id))
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .onChange(of: defaultID) { _, value in
+                        guard accounts.ready, value != accounts.state.defaultID else { return }
+                        var next = accounts.state
+                        next.defaultID = value
+                        Task {
+                            await accounts.save(next)
+                            if accounts.error != nil { defaultID = accounts.state.defaultID }
                         }
                     }
                 }
-                .help(
-                    "Copy the current CLI credentials into a named account and use it for new sessions."
-                )
                 if draft != nil {
                     Text("Account name").font(.edithText(.caption))
                     TextField("Account name", text: binding(\.name))
                         .textFieldStyle(.roundedBorder)
                         .accessibilityLabel("Account name")
+                    Text("Authentication").font(.edithText(.caption))
                     Picker("Authentication", selection: authenticationBinding) {
                         ForEach(ClaudeAccount.Authentication.allCases) { method in
                             Text(method.title).tag(method)
                         }
                     }
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     if draft?.authentication == .browserLogin, draft?.loginData != nil {
                         Text("Full OAuth token").font(.edithText(.caption))
                         Text(draft?.credential ?? "")
@@ -88,21 +116,6 @@ struct ClaudeAccountSettings: View {
                         Spacer()
                     }
                 }
-                Picker("Default for new Claude sessions", selection: $defaultID) {
-                    Text("Existing CLI login").tag(UUID?.none)
-                    ForEach(accounts.state.accounts) { account in
-                        Text(account.name).tag(Optional(account.id))
-                    }
-                }
-                .onChange(of: defaultID) { _, value in
-                    guard accounts.ready, value != accounts.state.defaultID else { return }
-                    var next = accounts.state
-                    next.defaultID = value
-                    Task {
-                        await accounts.save(next)
-                        if accounts.error != nil { defaultID = accounts.state.defaultID }
-                    }
-                }
             }
             .disabled(!accounts.ready || accounts.saving)
             if let error = accounts.error {
@@ -115,9 +128,17 @@ struct ClaudeAccountSettings: View {
         .pageTask {
             await accounts.read()
             defaultID = accounts.state.defaultID
-            if draft == nil { draft = accounts.state.accounts.first }
+            selectAccountIfNeeded()
+        }
+        .onChange(of: accounts.state.accounts.map(\.id)) { _, _ in
+            selectAccountIfNeeded()
         }
         .onChange(of: accounts.state.defaultID) { _, value in defaultID = value }
+    }
+
+    private func selectAccountIfNeeded() {
+        guard draft == nil else { return }
+        draft = accounts.account(accounts.state.defaultID) ?? accounts.state.accounts.first
     }
 
     private var authenticationBinding: Binding<ClaudeAccount.Authentication> {
@@ -163,7 +184,10 @@ struct ClaudeAccountSettings: View {
         if next.defaultID == draft.id { next.defaultID = nil }
         Task {
             await accounts.save(next)
-            if accounts.error == nil { self.draft = nil }
+            if accounts.error == nil {
+                self.draft = nil
+                selectAccountIfNeeded()
+            }
         }
     }
 }
