@@ -13,9 +13,19 @@ import Testing
             configuration.range(of: "ExtensionUIConfiguration(context: input)"))
         let installation = try #require(configuration.range(of: "TextEditingCommands.install()"))
         let rejection = try #require(
-            configuration.range(of: "return [\"ok\": false] as NSDictionary"))
+            configuration.range(
+                of: "return [\"ok\": false] as NSDictionary",
+                range: admission.upperBound..<installation.lowerBound))
         #expect(admission.lowerBound < rejection.lowerBound)
         #expect(rejection.lowerBound < installation.lowerBound)
+        let validation = configuration[admission.upperBound..<rejection.lowerBound]
+        #expect(validation.contains("configuration.extensionID == \"latex\""))
+        #expect(validation.contains("let client = configuration.engineClient"))
+        #expect(validation.contains("Self.hasEditorResources"))
+        #expect(
+            configuration.components(separatedBy: "return [\"ok\": false] as NSDictionary")
+                .count == 3)
+        #expect(!configuration[installation.upperBound...].contains("return [\"ok\": false]"))
         #expect(source.components(separatedBy: "TextEditingCommands.install()").count == 2)
         #expect(try branch("stopUI", in: source).contains("stopUI()"))
         #expect(try branch("stop", in: source).contains("stopUI()"))

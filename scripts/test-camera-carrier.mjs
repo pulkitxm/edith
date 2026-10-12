@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildCameraCarrier } from "./build-camera-carrier.mjs";
 import { requireRegularTree } from "./build-contained-host-runtime.mjs";
+import { workerHostABI } from "./extension-host-abi.mjs";
 
 const root = await realpath(
   await mkdtemp(join(tmpdir(), "edith-camera-fixture-")),
@@ -34,7 +35,7 @@ import Sparkle
 @MainActor @objc final class FixtureRuntime: NSObject {
     @objc func execute(_ input: NSDictionary) -> NSObject {
         if input["operation"] as? String == "describe" {
-            return ["id": "virtualCamera", "role": "${role}", "version": "1.0.0", "hostABI": "edith-host-1"] as NSDictionary
+            return ["id": "virtualCamera", "role": "${role}", "version": "1.0.0", "hostABI": "${workerHostABI}"] as NSDictionary
         }
         let application = NSApplication.shared
         application.setActivationPolicy(.prohibited)
@@ -79,7 +80,7 @@ import Sparkle
       CFBundleExecutable: "Runtime",
       CFBundlePackageType: "BNDL",
       CFBundleShortVersionString: "1.0.0",
-      EdithHostABI: "edith-host-1",
+      EdithHostABI: workerHostABI,
     };
     const json = join(root, `${role}.json`);
     await writeFile(json, JSON.stringify(info));
@@ -104,7 +105,7 @@ import Sparkle
     payloadDirectory: payloads,
     output: join(root, "output"),
     version: "1.0.0",
-    hostABI: "edith-host-1",
+    hostABI: workerHostABI,
     development: true,
     definition: {
       role: "cameraCarrier",
