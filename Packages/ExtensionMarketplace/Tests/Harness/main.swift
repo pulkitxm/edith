@@ -12,6 +12,11 @@ struct MarketplaceHarness {
             try await verifyPublicRelease(arguments[1])
             return
         }
+        if arguments.first == "verify-public-keep-awake" {
+            guard arguments.count == 2 else { throw MarketplaceError.invalidCatalog }
+            try await verifyPublicRelease(arguments[1], keepAwakeOnly: true)
+            return
+        }
         if arguments.first == "verify-catalog-selection" {
             do {
                 guard arguments.count == 7, let publicKey = Data(base64Encoded: arguments[2]),

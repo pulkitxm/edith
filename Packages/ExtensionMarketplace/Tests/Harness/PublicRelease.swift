@@ -57,7 +57,7 @@ private func privatePublicData(_ path: String, maximum: Int) throws -> Data {
 }
 
 extension MarketplaceHarness {
-    static func verifyPublicRelease(_ path: String) async throws {
+    static func verifyPublicRelease(_ path: String, keepAwakeOnly: Bool = false) async throws {
         let environment = ProcessInfo.processInfo.environment
         for (key, value) in [
             "GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted",
@@ -130,9 +130,18 @@ extension MarketplaceHarness {
         }
         let catalog = try JSONDecoder().decode(SignedExtensionCatalog.self, from: envelope)
             .verified(publicKey: key, repository: MarketplaceConfiguration.repository)
-        try requirePublic(
-            request.current.count == 39 && request.previous.count == request.updateIDs.count)
-        try requirePublic(Set(request.current.map(\.id)).count == 39)
+        if keepAwakeOnly {
+            try requirePublic(
+                request.current.count == 1 && request.current.first?.id == "keepAwake"
+                    && request.previous.count == 1 && request.previous.first?.id == "keepAwake"
+                    && request.updateIDs == ["keepAwake"]
+                    && request.current.allSatisfy({ $0.dependencies.isEmpty })
+                    && request.previous.allSatisfy({ $0.dependencies.isEmpty }))
+        } else {
+            try requirePublic(
+                request.current.count == 39 && request.previous.count == request.updateIDs.count)
+            try requirePublic(Set(request.current.map(\.id)).count == 39)
+        }
         try requirePublic(
             Set(request.previous.map(\.id)) == Set(request.updateIDs)
                 && Set(request.updateIDs).isSubset(of: Set(request.current.map(\.id))))
@@ -320,7 +329,7 @@ extension MarketplaceHarness {
         try requirePublic(try store.installedPackages().sorted { $0.id < $1.id } == expectedCurrent)
         try preserve()
         let result: [String: Any] = [
-            "schema": 1, "sourceCommit": request.sourceCommit, "owners": 39,
+            "schema": 1, "sourceCommit": request.sourceCommit, "owners": request.current.count,
             "installationVerified": true, "publicVersionUpdateVerified": !request.updateIDs.isEmpty,
             "updatedIDs": request.updateIDs,
             "offlineCatalogAndSelectionVerified": true, "removalVerified": true,

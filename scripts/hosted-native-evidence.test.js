@@ -177,6 +177,18 @@ test("staging requires real source and attempt identity with all actual native p
       value.jobs[2].status = "queued";
     },
     (value) => {
+      value.jobs[2].steps = value.jobs[2].steps.filter(
+        ({ name }) =>
+          name !== "Exercise original Keep Awake controls and native lifecycle",
+      );
+    },
+    (value) => {
+      value.jobs[2].steps.find(
+        ({ name }) =>
+          name === "Exercise original Keep Awake controls and native lifecycle",
+      ).conclusion = "skipped";
+    },
+    (value) => {
       value.jobs[4].conclusion = "success";
     },
     (value) => {

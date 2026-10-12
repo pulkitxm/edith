@@ -20,6 +20,7 @@ export const shippingNativeTestSteps = [
   "Validate the shipping extension and marketplace",
   "Run bun scripts/test-extension-catalog-retention.mjs",
   "Run bun scripts/test-extension-marketplace.mjs",
+  "Exercise original Keep Awake controls and native lifecycle",
 ];
 
 export function validateNonpublishingNativeJobs(jobs, definitions, runID) {
