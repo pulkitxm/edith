@@ -218,12 +218,15 @@ final class ExtensionRuntime: NSObject {
                     extensionID: "music", context: input,
                     roleBundle: Bundle(for: ExtensionRuntime.self))
                 try admission?.requireCurrent()
-                let result = embeddedUI.configure(input)
-                if let admission, result["ok"] as? Bool == true,
-                    let value = input["presentationID"] as? String, let id = UUID(uuidString: value)
-                {
-                    admittedUI[id] = admission
+                guard let admission else { return embeddedUI.configure(input) }
+                guard let value = input["presentationID"] as? String,
+                    let id = UUID(uuidString: value)
+                else { throw WorkerFixtureError.invalid }
+                let result = embeddedUI.configure(input) { [weak self] in
+                    guard let self, self.admittedUI[id] === admission else { return }
+                    self.admittedUI[id] = nil
                 }
+                if result["ok"] as? Bool == true { admittedUI[id] = admission }
                 return result
             } catch { return ["ok": false] as NSDictionary }
             #else
