@@ -42,6 +42,26 @@ import Testing
         #expect(environment["ANTHROPIC_PROFILE"] == nil)
     }
 
+    @Test func shellAliasesRunAfterStartupWithoutUsingTheShellsCredentials() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data(
+            "export CLAUDE_CODE_OAUTH_TOKEN=wrong-startup-token\nalias cc='/usr/bin/env'\n".utf8
+        ).write(to: root.appendingPathComponent(".zshrc"))
+        let account = ClaudeAccount(name: "Work", credential: "synthetic-selected-token")
+        let file = try account.launcher(command: "cc", arguments: [], directory: root)
+        let environment = try run(file, shell: "/bin/zsh", startupDirectory: root)
+        #expect(environment["CLAUDE_CODE_OAUTH_TOKEN"] == account.credential)
+        #expect(environment["CLAUDE_CONFIG_DIR"] == file.deletingLastPathComponent().path)
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+        let login = ClaudeAccount(name: "Other", authentication: .browserLogin)
+        let second = try login.launcher(command: "cc", arguments: [], directory: root)
+        #expect(
+            try run(second, shell: "/bin/zsh", startupDirectory: root)["CLAUDE_CODE_OAUTH_TOKEN"]
+                == nil)
+    }
+
     @Test func invalidAndIncompleteAccountsCannotLaunch() throws {
         #expect(throws: (any Error).self) { try ClaudeAccount(name: "Work").validateLaunch() }
         #expect(throws: (any Error).self) { try ClaudeAccount(name: " ").validate() }
@@ -57,13 +77,18 @@ import Testing
         }
     }
 
-    private func run(_ launcher: URL) throws -> [String: String] {
+    private func run(
+        _ launcher: URL, shell: String = "/bin/sh", startupDirectory: URL? = nil
+    ) throws -> [String: String] {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = [launcher.path]
         process.currentDirectoryURL = launcher.deletingLastPathComponent()
         process.environment = [
-            "PATH": "/usr/bin:/bin", "ANTHROPIC_API_KEY": "wrong-api-key",
+            "PATH": "/usr/bin:/bin", "SHELL": shell,
+            "HOME": launcher.deletingLastPathComponent().path,
+            "ZDOTDIR": (startupDirectory ?? launcher.deletingLastPathComponent()).path,
+            "ANTHROPIC_API_KEY": "wrong-api-key",
             "CLAUDE_CODE_OAUTH_TOKEN": "wrong-token", "ANTHROPIC_AUTH_TOKEN": "wrong-auth",
             "ANTHROPIC_PROFILE": "wrong-profile", "CLAUDE_CODE_USE_BEDROCK": "1",
         ]

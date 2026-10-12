@@ -54,11 +54,31 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
         let folder = directory.appendingPathComponent(id.uuidString, isDirectory: true)
         try FileManager.default.createDirectory(
             at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let file = folder.appendingPathComponent("launch-\(UUID().uuidString).sh")
+        try launchScript(
+            command: command, arguments: arguments, configurationPath: folder.path,
+            launcherPath: file.path
+        ).write(to: file, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: file.path)
+        return file
+    }
+
+    public func launchScript(
+        command: String, arguments: [String], configurationPath: String, launcherPath: String
+    ) throws -> Data {
+        try validateLaunch()
+        guard !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ClaudeAccountError.rejected("Enter a Claude launch command in launch settings.")
+        }
+        let source = ". " + ShellQuote.quote(launcherPath) + " --account-environment"
         var lines = [
             "#!/bin/sh",
-            "unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_PROFILE CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY",
-            "export CLAUDE_CONFIG_DIR=" + ShellQuote.quote(folder.path),
-            "export CLAUDE_SECURESTORAGE_CONFIG_DIR=" + ShellQuote.quote(folder.path),
+            "if [ \"${1-}\" != --account-environment ]; then",
+            "  exec \"${SHELL:-/bin/sh}\" -lic " + ShellQuote.quote(source),
+            "fi",
+            "unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN CLAUDE_CODE_OAUTH_REFRESH_TOKEN CLAUDE_CODE_OAUTH_SCOPES ANTHROPIC_BASE_URL ANTHROPIC_PROFILE CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY",
+            "export CLAUDE_CONFIG_DIR=" + ShellQuote.quote(configurationPath),
+            "export CLAUDE_SECURESTORAGE_CONFIG_DIR=" + ShellQuote.quote(configurationPath),
         ]
         switch authentication {
         case .oauthToken:
@@ -67,12 +87,11 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
             lines.append("export ANTHROPIC_API_KEY=" + ShellQuote.quote(credential))
         case .browserLogin: break
         }
-        lines.append("/bin/rm -f -- \"$0\"")
-        lines.append("exec " + HerdrPaneRunCommand.commandText(command, appending: arguments))
-        let file = folder.appendingPathComponent("launch-\(UUID().uuidString).sh")
-        try Data((lines.joined(separator: "\n") + "\n").utf8).write(to: file, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: file.path)
-        return file
+        lines.append("/bin/rm -f -- " + ShellQuote.quote(launcherPath))
+        lines.append(
+            "eval "
+                + ShellQuote.quote(HerdrPaneRunCommand.commandText(command, appending: arguments)))
+        return Data((lines.joined(separator: "\n") + "\n").utf8)
     }
 }
 
