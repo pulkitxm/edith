@@ -307,8 +307,9 @@ class OwnedKernelContracts(unittest.TestCase):
         self.addCleanup(self.kill.stop)
         self.owner = runner.BoundedOwnership(123, 501)
 
-    def test_known_zombie_observation_keeps_original_rejection_and_sends_no_signal(self):
+    def test_sealed_zombie_retires_without_signals_and_retains_birth_history(self):
         self.owner.refresh()
+        seal = self.owner.seals[123]
         original = self.kernel.proc_pidinfo
 
         def zombie(pid, flavor, argument, pointer, size):
@@ -320,22 +321,125 @@ class OwnedKernelContracts(unittest.TestCase):
 
         with patch.object(self.kernel, 'proc_pidinfo', side_effect=zombie):
             self.assertEqual(self.owner.refresh(), [])
+            self.assertEqual(self.owner.refresh(), [])
             self.owner.terminate(signal.SIGTERM)
+        self.assertEqual(self.owner.errors, [])
+        self.assertEqual(self.owner.conflicts(), [])
+        self.assertNotIn(123, self.owner.known)
+        self.assertEqual(self.owner.seals[123], seal)
+        self.assertEqual(self.kernel.signals, [])
+        self.assertEqual(self.owner.failure_observations, [])
+        self.kernel.processes[123] = (123, 200, 7, '/fixture/reused', 123, 1, 501, 501)
+        self.owner.refresh()
+        self.assertEqual(self.owner.seals[123], seal)
+        self.assertTrue(self.owner.errors)
+        self.assertNotIn(123, self.owner.known)
+
+    def test_incomplete_live_or_mismatched_zombie_probe_remains_rejected(self):
+        for field, changed in [('status', 2), ('pid', 124), ('seconds', 200),
+                               ('microseconds', 9), ('pgid', 456), ('uid', 502),
+                               ('ruid', 502), ('short', 135), ('error', None)]:
+            with self.subTest(field=field):
+                owner = runner.BoundedOwnership(123, 501)
+                original = self.kernel.proc_pidinfo
+
+                def probe(pid, flavor, argument, pointer, size):
+                    if argument == 0:
+                        return 0
+                    result = original(pid, flavor, argument, pointer, size)
+                    pointer._obj.status = 5
+                    if field == 'error':
+                        raise OSError('synthetic probe failure')
+                    if field == 'short':
+                        return changed
+                    setattr(pointer._obj, field, changed)
+                    return result
+
+                with patch.object(self.kernel, 'proc_pidinfo', side_effect=probe):
+                    self.assertEqual(owner.refresh(), [])
+                    owner.terminate(signal.SIGKILL)
+                self.assertTrue(owner.errors)
+                self.assertEqual(len(owner.conflicts()), 1)
+                self.assertIn(123, owner.known)
+                self.assertEqual(self.kernel.signals, [])
+
+    def test_unknown_zombie_never_gains_a_seal_or_suppresses_failure(self):
+        self.kernel.processes[234] = (234, 101, 8, '/fixture/compiler', 123, 123, 501, 501)
+        original = self.kernel.proc_pidinfo
+
+        def zombie(pid, flavor, argument, pointer, size):
+            if pid == 234 and argument == 0:
+                return 0
+            result = original(pid, flavor, argument, pointer, size)
+            if pid == 234:
+                pointer._obj.status = 5
+            return result
+
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=zombie):
+            self.assertEqual({item[0] for item in self.owner.refresh()}, {123})
+        self.assertNotIn(234, self.owner.seals)
+        self.assertNotIn(234, self.owner.known)
+        self.assertEqual(self.owner.errors, ['Live owned process identity unavailable'])
+        self.assertIs(self.owner.failure_observations[0]['knownSeal'], False)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_later_zombie_proof_does_not_clear_an_existing_ownership_failure(self):
+        original = self.kernel.proc_pidinfo
+        status = 2
+
+        def probe(pid, flavor, argument, pointer, size):
+            if argument == 0:
+                return 0
+            result = original(pid, flavor, argument, pointer, size)
+            pointer._obj.status = status
+            return result
+
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=probe):
+            self.assertEqual(self.owner.refresh(), [])
+            status = 5
+            self.assertEqual(self.owner.refresh(), [])
         self.assertEqual(self.owner.errors, ['Live owned process identity unavailable'])
         self.assertEqual(len(self.owner.conflicts()), 1)
-        self.assertIn(123, self.owner.known)
         self.assertEqual(self.kernel.signals, [])
-        self.assertEqual(len(self.owner.failure_observations), 1)
-        row = self.owner.failure_observations[0]
-        self.assertEqual(row['status'], 5)
-        self.assertEqual(row['returnedBytes'], row['expectedBytes'])
-        for field in ['knownSeal', 'pidMatches', 'birthMatches', 'groupMatches',
-                      'uidMatches', 'realUIDMatches']:
-            self.assertIs(row[field], True)
-        self.assertIsNone(row['originalBirthMatches'])
-        self.assertIsNone(row['originalGroupMatches'])
-        self.assertNotIn('/usr/bin/make', json.dumps(row))
-        self.assertNotIn('123', json.dumps(row))
+
+    def test_sealed_zombie_cleanup_preserves_real_test_completion_and_exit_outcome(self):
+        self.kernel.processes[234] = (234, 101, 8, '/fixture/swiftpm-testing-helper', 123, 123, 501, 501)
+        for text, code, expected in [
+                ('Test run with 19 tests in 4 suites passed.\n', 0, True),
+                ('Test run with 29 tests in 7 suites failed with 1 issue.\n', 2, False)]:
+            with self.subTest(code=code):
+                owner = runner.BoundedOwnership(123, 501)
+                original = self.kernel.proc_pidinfo
+                original_refresh = owner.refresh
+                finished = False
+
+                def probe(pid, flavor, argument, pointer, size):
+                    if finished and argument == 0:
+                        return 0
+                    result = original(pid, flavor, argument, pointer, size)
+                    if finished:
+                        pointer._obj.status = 5
+                    return result
+
+                def refresh():
+                    nonlocal finished
+                    rows = original_refresh()
+                    finished = True
+                    return rows
+
+                with patch.object(self.kernel, 'proc_pidinfo', side_effect=probe), \
+                        patch.object(owner, 'refresh', side_effect=refresh):
+                    result, _, _ = OriginalNativeOwnerTests.run_fixture(
+                        self, text, Process(code), owner)
+                self.assertIs(result['passed'], expected)
+                self.assertIs(result['testsCompleted'], expected)
+                self.assertTrue(result['observedTestingProcess'])
+                self.assertEqual(result['exitCode'], code)
+                self.assertEqual(result['cleanup']['naturalSurvivorCount'], 0)
+                self.assertEqual(result['cleanup']['remainingOwnedProcesses'], 0)
+                self.assertEqual(result['cleanup']['unverifiedOwnedProcesses'], 0)
+                self.assertEqual(result['cleanup']['ownershipErrors'], [])
+                self.assertEqual(self.kernel.signals, [])
 
     def test_diagnostic_birth_group_and_uid_mismatches_never_change_rejection(self):
         for index, changed, field in [(1, 200, 'birthMatches'), (2, 9, 'birthMatches'),
