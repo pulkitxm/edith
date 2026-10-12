@@ -67,6 +67,23 @@ def native_failure_diagnostics(value, log_path):
         tail = ''
     print(json.dumps({'nativeLogTail': tail}), flush=True)
 
+    ownership_kinds = {
+        'Live owned process identity unavailable': 'live_identity_unavailable',
+        'Owned process birth or group changed': 'birth_or_group_changed',
+        'Owned leader group changed': 'leader_group_changed',
+        'Owned descendant parent changed': 'descendant_parent_changed',
+        'Owned parent identity changed before admission': 'parent_identity_changed',
+        'Owned lifetime process bound exceeded': 'lifetime_process_bound_exceeded',
+        'Owned executable transition bound exceeded': 'executable_transition_bound_exceeded',
+        'Owned concurrent descendant bound exceeded': 'concurrent_descendant_bound_exceeded',
+        'Invalid owned child enumeration': 'child_enumeration_invalid',
+        'Owned identity changed before signal': 'identity_changed_before_signal',
+    }
+    kinds = sorted({ownership_kinds[error] for error in cleanup['ownershipErrors']
+                    if isinstance(error, str) and error in ownership_kinds})
+    if kinds:
+        print(json.dumps({'nativeOwnershipFailureKinds': kinds}), flush=True)
+
 
 def private_directory(path, private=False):
     require(path.resolve() == path and not path.is_symlink(), 'Output path traverses a symlink')
