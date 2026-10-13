@@ -28,6 +28,11 @@ import {
   retireHostBootstrapIntent,
 } from "./production-bootstrap.mjs";
 import {
+  productionFixtureProcess as process,
+  productionFixtureGlobal,
+  withProductionFixtureRuntime,
+} from "./production-fixture-runtime.mjs";
+import {
   admitCurrentProductionNativeRun,
   boundedProductionFile,
   closedProductionAsset,
@@ -425,91 +430,96 @@ test("previous preparation rejects copied pending and completed-looking shells b
 });
 
 async function withPreviousFixture(action) {
-  const directory = await mkdtemp(
-    join(resolve(tmpdir()), "previous-inputs-pure-"),
-  );
-  await chmod(directory, 0o700);
-  const repository = join(directory, "repository");
-  await mkdir(repository, { mode: 0o700 });
-  const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-  const key = generateKeyPairSync("ed25519");
-  const publicKey = Buffer.from(
-    key.publicKey.export({ format: "jwk" }).x,
-    "base64url",
-  ).toString("base64");
-  const hash = (value) => createHash("sha256").update(value).digest("hex");
-  const envelope = (value) => {
-    const bytes = Buffer.from(JSON.stringify(value));
-    return Buffer.from(
-      JSON.stringify({
-        payload: bytes.toString("base64"),
-        signature: sign(null, bytes, key.privateKey).toString("base64"),
-      }),
-    );
-  };
-  const environment = {
-    HOME: process.env.HOME,
-    PATH: process.env.PATH,
-    TMPDIR: process.env.TMPDIR,
-    GITHUB_ACTIONS: "true",
-    RUNNER_ENVIRONMENT: "github-hosted",
-    RUNNER_OS: "macOS",
-    GITHUB_REPOSITORY: "pulkitxm/edith",
-    GITHUB_REPOSITORY_ID: "1289153439",
-    GITHUB_EVENT_NAME: "workflow_dispatch",
-    GITHUB_REF: "refs/heads/main",
-    GITHUB_RUN_ID: "13",
-    GITHUB_RUN_ATTEMPT: "1",
-    GITHUB_JOB: "publish",
-    GITHUB_ACTOR_ID: "65671483",
-    GITHUB_TOKEN: "synthetic-readonly-token",
-    GH_TOKEN: "synthetic-parent-write-token",
-    EXTENSION_CATALOG_PRIVATE_KEY: "synthetic-parent-private-key",
-    PUBLIC_RELEASE_VERIFICATION: "1",
-    PUBLISH: "true",
-    REBUILD: "",
-  };
-  const childEnvironment = {
-    PATH: process.env.PATH,
-    HOME: directory,
-    TMPDIR: tmpdir(),
-    PYTHONDONTWRITEBYTECODE: "1",
-  };
-  const git = (...args) =>
-    execFileSync("git", args, {
-      cwd: repository,
-      env: childEnvironment,
-      encoding: "utf8",
-      timeout: 10000,
-    }).trim();
-  const files = new Map();
-  const metadata = new Map();
-  let capability;
-  const previousEnvironment = Object.fromEntries(
-    Object.keys(environment).map((name) => [name, process.env[name]]),
-  );
-  const oldFetch = globalThis.fetch;
-  try {
-    for (const name of [
-      "scripts/hosted-public-release",
-      "Resources",
-      "Casks",
-      "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace",
-    ])
-      await mkdir(join(repository, name), { recursive: true, mode: 0o700 });
-    for (const name of ["production-cohort.py", "static-proof.py"])
-      await copyFile(
-        join(root, "scripts/hosted-public-release", name),
-        join(repository, "scripts/hosted-public-release", name),
+  return withProductionFixtureRuntime(
+    async () => {
+      const directory = await mkdtemp(
+        join(resolve(tmpdir()), "previous-inputs-pure-"),
       );
-    const nativeSource = await readFile(
-      join(root, "scripts/hosted-public-release/production-static-inputs.py"),
-      "utf8",
-    );
-    const start = nativeSource.indexOf("def inspect_host("),
-      end = nativeSource.indexOf("def completed_host_publication(", start);
-    assert(start > 0 && end > start);
-    const nativeHost = `def inspect_host(directory, expected, generation, release_channel, normalized):
+      await chmod(directory, 0o700);
+      const repository = join(directory, "repository");
+      await mkdir(repository, { mode: 0o700 });
+      const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+      const key = generateKeyPairSync("ed25519");
+      const publicKey = Buffer.from(
+        key.publicKey.export({ format: "jwk" }).x,
+        "base64url",
+      ).toString("base64");
+      const hash = (value) => createHash("sha256").update(value).digest("hex");
+      const envelope = (value) => {
+        const bytes = Buffer.from(JSON.stringify(value));
+        return Buffer.from(
+          JSON.stringify({
+            payload: bytes.toString("base64"),
+            signature: sign(null, bytes, key.privateKey).toString("base64"),
+          }),
+        );
+      };
+      const environment = {
+        HOME: process.env.HOME,
+        PATH: process.env.PATH,
+        TMPDIR: process.env.TMPDIR,
+        GITHUB_ACTIONS: "true",
+        RUNNER_ENVIRONMENT: "github-hosted",
+        RUNNER_OS: "macOS",
+        GITHUB_REPOSITORY: "pulkitxm/edith",
+        GITHUB_REPOSITORY_ID: "1289153439",
+        GITHUB_EVENT_NAME: "workflow_dispatch",
+        GITHUB_REF: "refs/heads/main",
+        GITHUB_RUN_ID: "13",
+        GITHUB_RUN_ATTEMPT: "1",
+        GITHUB_JOB: "publish",
+        GITHUB_ACTOR_ID: "65671483",
+        GITHUB_TOKEN: "synthetic-readonly-token",
+        GH_TOKEN: "synthetic-parent-write-token",
+        EXTENSION_CATALOG_PRIVATE_KEY: "synthetic-parent-private-key",
+        PUBLIC_RELEASE_VERIFICATION: "1",
+        PUBLISH: "true",
+        REBUILD: "",
+      };
+      const childEnvironment = {
+        PATH: process.env.PATH,
+        HOME: directory,
+        TMPDIR: tmpdir(),
+        PYTHONDONTWRITEBYTECODE: "1",
+      };
+      const git = (...args) =>
+        execFileSync("git", args, {
+          cwd: repository,
+          env: childEnvironment,
+          encoding: "utf8",
+          timeout: 10000,
+        }).trim();
+      const files = new Map();
+      const metadata = new Map();
+      let capability;
+      const previousEnvironment = Object.fromEntries(
+        Object.keys(environment).map((name) => [name, process.env[name]]),
+      );
+      const oldFetch = productionFixtureGlobal.fetch;
+      try {
+        for (const name of [
+          "scripts/hosted-public-release",
+          "Resources",
+          "Casks",
+          "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace",
+        ])
+          await mkdir(join(repository, name), { recursive: true, mode: 0o700 });
+        for (const name of ["production-cohort.py", "static-proof.py"])
+          await copyFile(
+            join(root, "scripts/hosted-public-release", name),
+            join(repository, "scripts/hosted-public-release", name),
+          );
+        const nativeSource = await readFile(
+          join(
+            root,
+            "scripts/hosted-public-release/production-static-inputs.py",
+          ),
+          "utf8",
+        );
+        const start = nativeSource.indexOf("def inspect_host("),
+          end = nativeSource.indexOf("def completed_host_publication(", start);
+        assert(start > 0 && end > start);
+        const nativeHost = `def inspect_host(directory, expected, generation, release_channel, normalized):
     assert os.environ['PUBLISH'] == 'false' and os.environ['REBUILD'] == ''
     assert 'GH_TOKEN' not in os.environ and 'EXTENSION_CATALOG_PRIVATE_KEY' not in os.environ
     identity = release_tag(ROOT, expected, generation, release_channel)
@@ -518,342 +528,371 @@ async function withPreviousFixture(action) {
 
 
 `;
-    let native =
-      nativeSource.slice(0, start) + nativeHost + nativeSource.slice(end);
-    const signingStart = native.indexOf("def signing("),
-      signingEnd = native.indexOf("def historical_tag(", signingStart);
-    assert(signingStart > 0 && signingEnd > signingStart);
-    native =
-      native.slice(0, signingStart) +
-      `def signing(path, expected_team, requirement=None):
+        let native =
+          nativeSource.slice(0, start) + nativeHost + nativeSource.slice(end);
+        const signingStart = native.indexOf("def signing("),
+          signingEnd = native.indexOf("def historical_tag(", signingStart);
+        assert(signingStart > 0 && signingEnd > signingStart);
+        native =
+          native.slice(0, signingStart) +
+          `def signing(path, expected_team, requirement=None):
     assert os.environ['PUBLISH'] == 'false' and os.environ['REBUILD'] == ''
     assert 'GH_TOKEN' not in os.environ and 'EXTENSION_CATALOG_PRIVATE_KEY' not in os.environ
     return {'codeHash': 'a' * 40, 'requirement': 'synthetic unexecuted native signature'}
 
 
 ` +
-      native.slice(signingEnd);
-    await writeFile(
-      join(
-        repository,
-        "scripts/hosted-public-release/production-static-inputs.py",
-      ),
-      native,
-    );
-    await writeFile(join(repository, ".gitignore"), "local/\n");
-    const info = `<plist version="1.0"><dict><key>CFBundleShortVersionString</key><string>0.0.401</string><key>CFBundleVersion</key><string>1</string></dict></plist>`;
-    for (const name of ["Info.plist", "HelperInfo.plist"])
-      await writeFile(join(repository, "Resources", name), info);
-    await writeFile(
-      join(repository, "Casks/edith.rb"),
-      '  version "0.0.318"\n',
-    );
-    await writeFile(
-      join(
-        repository,
-        "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift",
-      ),
-      `publicKey = Data(base64Encoded: "${publicKey}")`,
-    );
-    git("init", "--initial-branch=main");
-    git("add", ".");
-    const commit = (message, parent) =>
-      git(
-        "-c",
-        "user.name=Synthetic",
-        "-c",
-        "user.email=synthetic@example.invalid",
-        "commit-tree",
-        git("write-tree"),
-        ...(parent ? ["-p", parent] : []),
-        "-m",
-        message,
-      );
-    const sourceA = commit("Synthetic previous implementation");
-    git("update-ref", "refs/heads/main", sourceA);
-    git("tag", "v0.0.401", sourceA);
-    await writeFile(
-      join(repository, "Implementation.swift"),
-      "let syntheticImplementation = 2\n",
-    );
-    git("add", ".");
-    const source = commit("Synthetic current implementation", sourceA);
-    git("update-ref", "refs/heads/main", source);
-    git("remote", "add", "origin", repository);
-    const archiveDirectory = join(directory, "archive");
-    await mkdir(archiveDirectory, { mode: 0o700 });
-    const prepared = JSON.parse(
-      execFileSync(
-        "python3",
-        [
-          "-I",
-          "-B",
-          "-c",
-          "import importlib.util,json,pathlib,sys;s=importlib.util.spec_from_file_location('cases',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(json.dumps(m.synthetic_archive(pathlib.Path(sys.argv[2]))['request']))",
-          join(root, "scripts/test-production-static-inputs.py"),
-          archiveDirectory,
-        ],
-        { env: childEnvironment, timeout: 10000 },
-      ).toString(),
-    );
-    const host = prepared.hosts.previous;
-    Object.assign(host, {
-      source: sourceA,
-      dmgSHA256: hash(Buffer.from("synthetic unexecuted DMG")),
-      dmgBytes: 24,
-      appcastSHA256: hash(Buffer.from("synthetic unexecuted appcast")),
-    });
-    files.set("Edith.dmg", Buffer.from("synthetic unexecuted DMG"));
-    host.dmgBytes = files.get("Edith.dmg").length;
-    files.set("appcast.xml", Buffer.from("synthetic unexecuted appcast"));
-    const proof = Object.fromEntries(
-      Object.entries(host).map(([name, value]) => [
-        {
-          source: "sourceCommit",
-          designatedRequirement: "verifiedDesignatedRequirement",
-        }[name] ?? name,
-        value,
-      ]),
-    );
-    files.set("host-release-proof.json", Buffer.from(JSON.stringify(proof)));
-    host.proofSHA256 = hash(files.get("host-release-proof.json"));
-    files.set("build-metadata.json", Buffer.from("{}"));
-    files.set(
-      "toolchain-provenance.json",
-      Buffer.from(
-        JSON.stringify({
-          schema: 1,
-          sourceCommit: sourceA,
-          hostExecutableSHA256: host.hostExecutableSHA256,
-          xcode: "Xcode 16.0\nBuild version 16A242d",
-          sdk: "14.0",
-          builderSignature: "ad-hoc",
-        }),
-      ),
-    );
-    files.set(
-      "keepAwake.zip",
-      await readFile(join(archiveDirectory, "keepAwake.zip")),
-    );
-    const old = prepared.packages.previous;
-    const record = {
-      id: old.id,
-      version: old.version,
-      downloadURL: old.archiveURL,
-      sha256: old.archiveSHA256,
-      downloadBytes: old.downloadBytes,
-      installedBytes: old.installedBytes,
-      sourceFingerprint: old.sourceFingerprint,
-      hostABI: old.hostABI,
-      architecture: old.architecture,
-      minimumSystemVersion: old.minimumSystemVersion,
-      dependencies: old.dependencies,
-    };
-    files.set("keepAwake.json", Buffer.from(JSON.stringify(record)));
-    files.set(
-      "keepAwake.native-evidence.json",
-      envelope({
-        schema: 1,
-        kind: "extension-native-lineage",
-        repository: "pulkitxm/edith",
-        package: record,
-        sourceCommit: old.source,
-        runID: old.run,
-        runAttempt: 1,
-        evidenceTag: `extension-evidence/${old.source}/${old.run}-1`,
-        evidenceSHA256: "f".repeat(64),
-        evidenceBytes: 17,
-      }),
-    );
-    const catalogBytes = envelope({
-      schemaVersion: 1,
-      revision: 1,
-      packages: [record],
-    });
-    files.set("catalog-1.json", catalogBytes);
-    Object.assign(prepared.catalogs.previous, catalogPointer(catalogBytes, 1));
-    delete prepared.catalogs.previous.assetName;
-    delete prepared.catalogs.previous.schemaVersion;
-    const template = {
-      ...prepared,
-      schema: 2,
-      source,
-      hosts: {
-        previous: host,
-        current: {
-          kind: "pending-public-host",
-          source,
-          run: 12,
-          runAttempt: 1,
-          tag: "v0.0.402",
-          version: "0.0.402",
-          build: 2,
-        },
-      },
-      packages: { previous: old, current: null },
-      catalogs: { previous: prepared.catalogs.previous, current: null },
-    };
-    environment.GITHUB_SHA = source;
-    previousEnvironment.GITHUB_SHA = process.env.GITHUB_SHA;
-    const run = (id, sha, path, active = false) => ({
-      id,
-      run_attempt: 1,
-      repository: { full_name: "pulkitxm/edith", id: 1289153439 },
-      actor: { id: 65671483 },
-      head_sha: sha,
-      head_branch: "main",
-      event: "workflow_dispatch",
-      path,
-      status: active ? "in_progress" : "completed",
-      conclusion: active ? null : "success",
-    });
-    metadata.set(
-      "/actions/runs/12",
-      run(12, source, ".github/workflows/ci.yml", true),
-    );
-    metadata.set(
-      "/actions/runs/13",
-      run(13, source, ".github/workflows/extensions.yml", true),
-    );
-    metadata.set("/git/ref/heads/main", {
-      ref: "refs/heads/main",
-      object: { type: "commit", sha: source },
-    });
-    metadata.set(
-      "/actions/runs/1",
-      run(1, sourceA, ".github/workflows/ci.yml"),
-    );
-    metadata.set(
-      `/actions/runs/${old.run}`,
-      run(old.run, old.source, ".github/workflows/extensions.yml"),
-    );
-    metadata.set("/actions/runs/1/attempts/1/jobs?per_page=100", {
-      total_count: 2,
-      jobs: ["Build DMG", "Publish release"].map((name, index) => ({
-        id: 101 + index,
-        run_id: 1,
-        run_attempt: 1,
-        head_sha: sourceA,
-        name,
-        status: "completed",
-        conclusion: "success",
-      })),
-    });
-    const release = (tag, names, target) => ({
-      id: metadata.size + 100,
-      tag_name: tag,
-      target_commitish: target,
-      draft: false,
-      prerelease: true,
-      assets: names.map((name, index) => ({
-        id: metadata.size * 10 + index + 1,
-        name,
-        size: files.get(name).length,
-        digest: `sha256:${hash(files.get(name))}`,
-        state: "uploaded",
-        browser_download_url: `https://github.com/pulkitxm/edith/releases/download/${encodeURIComponent(tag)}/${name}`,
-        download_count: 0,
-      })),
-    });
-    metadata.set("/git/ref/tags/v0.0.401", {
-      object: { type: "commit", sha: sourceA },
-    });
-    metadata.set(
-      "/releases/tags/v0.0.401",
-      release(
-        "v0.0.401",
-        [
-          "Edith.dmg",
-          "appcast.xml",
-          "build-metadata.json",
-          "host-release-proof.json",
-          "toolchain-provenance.json",
-        ],
-        sourceA,
-      ),
-    );
-    metadata.set(
-      `/releases/tags/${encodeURIComponent(decodeURIComponent(new URL(old.archiveURL).pathname.split("/").at(-2)))}`,
-      release(
-        decodeURIComponent(new URL(old.archiveURL).pathname.split("/").at(-2)),
-        ["keepAwake.json", "keepAwake.native-evidence.json", "keepAwake.zip"],
-        old.source,
-      ),
-    );
-    metadata.set("/releases/tags/extension-catalog-v1", {
-      ...release("extension-catalog-v1", ["catalog-1.json"], source),
-      body: JSON.stringify(catalogPointer(catalogBytes, 1)),
-    });
-    const fetchMetadata = async (path) => {
-      assert(metadata.has(path), path);
-      return structuredClone(metadata.get(path));
-    };
-    capability = await admitHostBootstrapIntent(
-      JSON.stringify(template),
-      environment,
-      { fetchMetadata },
-    );
-    Object.assign(process.env, environment);
-    globalThis.fetch = async (url, options = {}) => {
-      const parsed = new URL(url);
-      if (parsed.origin === "https://api.github.com") {
-        assert.equal(
-          options.headers.Authorization,
-          "Bearer synthetic-readonly-token",
+          native.slice(signingEnd);
+        await writeFile(
+          join(
+            repository,
+            "scripts/hosted-public-release/production-static-inputs.py",
+          ),
+          native,
         );
-        return new Response(
-          JSON.stringify(
-            await fetchMetadata(
-              parsed.pathname.replace("/repos/pulkitxm/edith", "") +
-                parsed.search,
-            ),
+        await writeFile(join(repository, ".gitignore"), "local/\n");
+        const info = `<plist version="1.0"><dict><key>CFBundleShortVersionString</key><string>0.0.401</string><key>CFBundleVersion</key><string>1</string></dict></plist>`;
+        for (const name of ["Info.plist", "HelperInfo.plist"])
+          await writeFile(join(repository, "Resources", name), info);
+        await writeFile(
+          join(repository, "Casks/edith.rb"),
+          '  version "0.0.318"\n',
+        );
+        await writeFile(
+          join(
+            repository,
+            "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift",
+          ),
+          `publicKey = Data(base64Encoded: "${publicKey}")`,
+        );
+        git("init", "--initial-branch=main");
+        git("add", ".");
+        const commit = (message, parent) =>
+          git(
+            "-c",
+            "user.name=Synthetic",
+            "-c",
+            "user.email=synthetic@example.invalid",
+            "commit-tree",
+            git("write-tree"),
+            ...(parent ? ["-p", parent] : []),
+            "-m",
+            message,
+          );
+        const sourceA = commit("Synthetic previous implementation");
+        git("update-ref", "refs/heads/main", sourceA);
+        git("tag", "v0.0.401", sourceA);
+        await writeFile(
+          join(repository, "Implementation.swift"),
+          "let syntheticImplementation = 2\n",
+        );
+        git("add", ".");
+        const source = commit("Synthetic current implementation", sourceA);
+        git("update-ref", "refs/heads/main", source);
+        git("remote", "add", "origin", repository);
+        const archiveDirectory = join(directory, "archive");
+        await mkdir(archiveDirectory, { mode: 0o700 });
+        const prepared = JSON.parse(
+          execFileSync(
+            "python3",
+            [
+              "-I",
+              "-B",
+              "-c",
+              "import importlib.util,json,pathlib,sys;s=importlib.util.spec_from_file_location('cases',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(json.dumps(m.synthetic_archive(pathlib.Path(sys.argv[2]))['request']))",
+              join(root, "scripts/test-production-static-inputs.py"),
+              archiveDirectory,
+            ],
+            { env: childEnvironment, timeout: 10000 },
+          ).toString(),
+        );
+        const host = prepared.hosts.previous;
+        Object.assign(host, {
+          source: sourceA,
+          dmgSHA256: hash(Buffer.from("synthetic unexecuted DMG")),
+          dmgBytes: 24,
+          appcastSHA256: hash(Buffer.from("synthetic unexecuted appcast")),
+        });
+        files.set("Edith.dmg", Buffer.from("synthetic unexecuted DMG"));
+        host.dmgBytes = files.get("Edith.dmg").length;
+        files.set("appcast.xml", Buffer.from("synthetic unexecuted appcast"));
+        const proof = Object.fromEntries(
+          Object.entries(host).map(([name, value]) => [
+            {
+              source: "sourceCommit",
+              designatedRequirement: "verifiedDesignatedRequirement",
+            }[name] ?? name,
+            value,
+          ]),
+        );
+        files.set(
+          "host-release-proof.json",
+          Buffer.from(JSON.stringify(proof)),
+        );
+        host.proofSHA256 = hash(files.get("host-release-proof.json"));
+        files.set("build-metadata.json", Buffer.from("{}"));
+        files.set(
+          "toolchain-provenance.json",
+          Buffer.from(
+            JSON.stringify({
+              schema: 1,
+              sourceCommit: sourceA,
+              hostExecutableSHA256: host.hostExecutableSHA256,
+              xcode: "Xcode 16.0\nBuild version 16A242d",
+              sdk: "14.0",
+              builderSignature: "ad-hoc",
+            }),
           ),
         );
+        files.set(
+          "keepAwake.zip",
+          await readFile(join(archiveDirectory, "keepAwake.zip")),
+        );
+        const old = prepared.packages.previous;
+        const record = {
+          id: old.id,
+          version: old.version,
+          downloadURL: old.archiveURL,
+          sha256: old.archiveSHA256,
+          downloadBytes: old.downloadBytes,
+          installedBytes: old.installedBytes,
+          sourceFingerprint: old.sourceFingerprint,
+          hostABI: old.hostABI,
+          architecture: old.architecture,
+          minimumSystemVersion: old.minimumSystemVersion,
+          dependencies: old.dependencies,
+        };
+        files.set("keepAwake.json", Buffer.from(JSON.stringify(record)));
+        files.set(
+          "keepAwake.native-evidence.json",
+          envelope({
+            schema: 1,
+            kind: "extension-native-lineage",
+            repository: "pulkitxm/edith",
+            package: record,
+            sourceCommit: old.source,
+            runID: old.run,
+            runAttempt: 1,
+            evidenceTag: `extension-evidence/${old.source}/${old.run}-1`,
+            evidenceSHA256: "f".repeat(64),
+            evidenceBytes: 17,
+          }),
+        );
+        const catalogBytes = envelope({
+          schemaVersion: 1,
+          revision: 1,
+          packages: [record],
+        });
+        files.set("catalog-1.json", catalogBytes);
+        Object.assign(
+          prepared.catalogs.previous,
+          catalogPointer(catalogBytes, 1),
+        );
+        delete prepared.catalogs.previous.assetName;
+        delete prepared.catalogs.previous.schemaVersion;
+        const template = {
+          ...prepared,
+          schema: 2,
+          source,
+          hosts: {
+            previous: host,
+            current: {
+              kind: "pending-public-host",
+              source,
+              run: 12,
+              runAttempt: 1,
+              tag: "v0.0.402",
+              version: "0.0.402",
+              build: 2,
+            },
+          },
+          packages: { previous: old, current: null },
+          catalogs: { previous: prepared.catalogs.previous, current: null },
+        };
+        environment.GITHUB_SHA = source;
+        previousEnvironment.GITHUB_SHA = process.env.GITHUB_SHA;
+        const run = (id, sha, path, active = false) => ({
+          id,
+          run_attempt: 1,
+          repository: { full_name: "pulkitxm/edith", id: 1289153439 },
+          actor: { id: 65671483 },
+          head_sha: sha,
+          head_branch: "main",
+          event: "workflow_dispatch",
+          path,
+          status: active ? "in_progress" : "completed",
+          conclusion: active ? null : "success",
+        });
+        metadata.set(
+          "/actions/runs/12",
+          run(12, source, ".github/workflows/ci.yml", true),
+        );
+        metadata.set(
+          "/actions/runs/13",
+          run(13, source, ".github/workflows/extensions.yml", true),
+        );
+        metadata.set("/git/ref/heads/main", {
+          ref: "refs/heads/main",
+          object: { type: "commit", sha: source },
+        });
+        metadata.set(
+          "/actions/runs/1",
+          run(1, sourceA, ".github/workflows/ci.yml"),
+        );
+        metadata.set(
+          `/actions/runs/${old.run}`,
+          run(old.run, old.source, ".github/workflows/extensions.yml"),
+        );
+        metadata.set("/actions/runs/1/attempts/1/jobs?per_page=100", {
+          total_count: 2,
+          jobs: ["Build DMG", "Publish release"].map((name, index) => ({
+            id: 101 + index,
+            run_id: 1,
+            run_attempt: 1,
+            head_sha: sourceA,
+            name,
+            status: "completed",
+            conclusion: "success",
+          })),
+        });
+        const release = (tag, names, target) => ({
+          id: metadata.size + 100,
+          tag_name: tag,
+          target_commitish: target,
+          draft: false,
+          prerelease: true,
+          assets: names.map((name, index) => ({
+            id: metadata.size * 10 + index + 1,
+            name,
+            size: files.get(name).length,
+            digest: `sha256:${hash(files.get(name))}`,
+            state: "uploaded",
+            browser_download_url: `https://github.com/pulkitxm/edith/releases/download/${encodeURIComponent(tag)}/${name}`,
+            download_count: 0,
+          })),
+        });
+        metadata.set("/git/ref/tags/v0.0.401", {
+          object: { type: "commit", sha: sourceA },
+        });
+        metadata.set(
+          "/releases/tags/v0.0.401",
+          release(
+            "v0.0.401",
+            [
+              "Edith.dmg",
+              "appcast.xml",
+              "build-metadata.json",
+              "host-release-proof.json",
+              "toolchain-provenance.json",
+            ],
+            sourceA,
+          ),
+        );
+        metadata.set(
+          `/releases/tags/${encodeURIComponent(decodeURIComponent(new URL(old.archiveURL).pathname.split("/").at(-2)))}`,
+          release(
+            decodeURIComponent(
+              new URL(old.archiveURL).pathname.split("/").at(-2),
+            ),
+            [
+              "keepAwake.json",
+              "keepAwake.native-evidence.json",
+              "keepAwake.zip",
+            ],
+            old.source,
+          ),
+        );
+        metadata.set("/releases/tags/extension-catalog-v1", {
+          ...release("extension-catalog-v1", ["catalog-1.json"], source),
+          body: JSON.stringify(catalogPointer(catalogBytes, 1)),
+        });
+        const fetchMetadata = async (path) => {
+          assert(metadata.has(path), path);
+          return structuredClone(metadata.get(path));
+        };
+        capability = await admitHostBootstrapIntent(
+          JSON.stringify(template),
+          environment,
+          { fetchMetadata },
+        );
+        Object.assign(process.env, environment);
+        productionFixtureGlobal.fetch = async (url, options = {}) => {
+          const parsed = new URL(url);
+          if (parsed.origin === "https://api.github.com") {
+            assert.equal(
+              options.headers.Authorization,
+              "Bearer synthetic-readonly-token",
+            );
+            return new Response(
+              JSON.stringify(
+                await fetchMetadata(
+                  parsed.pathname.replace("/repos/pulkitxm/edith", "") +
+                    parsed.search,
+                ),
+              ),
+            );
+          }
+          assert.equal(parsed.origin, "https://github.com");
+          const name = parsed.pathname.split("/").at(-1);
+          assert(files.has(name), name);
+          return new Response(files.get(name));
+        };
+        const original = join(
+          root,
+          "scripts/hosted-public-release/production-inputs.mjs",
+        );
+        let code = await readFile(original, "utf8");
+        code = code.replace(
+          'const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");',
+          `const root = ${JSON.stringify(repository)};`,
+        );
+        code = code.replace(
+          '  assert.equal(process.platform, "darwin");\n  assert.equal(process.arch, "arm64");',
+          '  assert.equal(process.env.RUNNER_OS, "macOS");',
+        );
+        code = code.replace(/from "(\.[^"]+)"/g, (match, relative) =>
+          match.replace(
+            relative,
+            pathToFileURL(resolve(dirname(original), relative)).href,
+          ),
+        );
+        const snapshot = join(directory, "producer.mjs");
+        const realm = pathToFileURL(
+          join(
+            root,
+            "scripts/hosted-public-release/production-fixture-runtime.mjs",
+          ),
+        ).href;
+        const download =
+          "await downloadPublic({ ...asset, destination: target });";
+        assert.equal(code.split(download).length, 2);
+        code = code.replace(
+          download,
+          "await downloadPublic({ ...asset, destination: target, fetch });",
+        );
+        code = `import { productionFixtureProcess as process, productionFixtureFetch as fetch } from ${JSON.stringify(realm)};\n${code}`;
+        await writeFile(snapshot, code, { mode: 0o600 });
+        const producer = await import(pathToFileURL(snapshot).href);
+        await action({
+          producer,
+          capability,
+          metadata,
+          files,
+          repository,
+          template,
+        });
+      } finally {
+        if (capability) retireHostBootstrapIntent(capability);
+        productionFixtureGlobal.fetch = oldFetch;
+        for (const [name, value] of Object.entries(previousEnvironment)) {
+          if (value === undefined) delete process.env[name];
+          else process.env[name] = value;
+        }
+        await rm(directory, { recursive: true, force: true });
       }
-      assert.equal(parsed.origin, "https://github.com");
-      const name = parsed.pathname.split("/").at(-1);
-      assert(files.has(name), name);
-      return new Response(files.get(name));
-    };
-    const original = join(
-      root,
-      "scripts/hosted-public-release/production-inputs.mjs",
-    );
-    let code = await readFile(original, "utf8");
-    code = code.replace(
-      'const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");',
-      `const root = ${JSON.stringify(repository)};`,
-    );
-    code = code.replace(
-      '  assert.equal(process.platform, "darwin");\n  assert.equal(process.arch, "arm64");',
-      '  assert.equal(process.env.RUNNER_OS, "macOS");',
-    );
-    code = code.replace(/from "(\.[^"]+)"/g, (match, relative) =>
-      match.replace(
-        relative,
-        pathToFileURL(resolve(dirname(original), relative)).href,
-      ),
-    );
-    const snapshot = join(directory, "producer.mjs");
-    await writeFile(snapshot, code, { mode: 0o600 });
-    const producer = await import(pathToFileURL(snapshot).href);
-    await action({
-      producer,
-      capability,
-      metadata,
-      files,
-      repository,
-      template,
-    });
-  } finally {
-    if (capability) retireHostBootstrapIntent(capability);
-    globalThis.fetch = oldFetch;
-    for (const [name, value] of Object.entries(previousEnvironment)) {
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
-    }
-    await rm(directory, { recursive: true, force: true });
-  }
+    },
+    { ...process.env, PUBLIC_RELEASE_VERIFICATION: "1" },
+  );
 }
 
 test("actual previous opaque preparation verifies real API signed catalog and ZIP without current authority", async () => {
@@ -1209,4 +1248,118 @@ test("owned preparation retains same-run publication identity through actual sta
         ),
       );
   }
+});
+
+test("previous fixture projects hostile Make authority without changing the ambient process", async () => {
+  const ambient = JSON.stringify(globalThis.process.env);
+  const ambientFetch = globalThis.fetch;
+  const forbidden = {
+    EDITH_MAKE_GATE: "1",
+    EDITH_HOSTILE_CONTROL: "synthetic-control",
+    NODE_OPTIONS: "--require=/synthetic/preload.js",
+    NODE_PATH: "/synthetic/node",
+    PYTHONPATH: "/synthetic/python",
+    PYTHONHOME: "/synthetic/home",
+    CFFIXED_USER_HOME: "/synthetic/preferences",
+    SSH_AUTH_SOCK: "/synthetic/socket",
+  };
+  await withProductionFixtureRuntime(
+    async () => {
+      for (const name of Object.keys(forbidden))
+        assert.equal(process.env[name], undefined);
+      await withPreviousFixture(async ({ producer, capability, template }) => {
+        assert.equal(JSON.stringify(globalThis.process.env) === ambient, true);
+        assert.equal(globalThis.fetch === ambientFetch, true);
+        const partial =
+          await producer.preparePreviousHostBootstrapInputs(capability);
+        const value = producer.verifiedPreviousHostBootstrapInputs(partial);
+        assert.equal(value.environment.GITHUB_SHA, template.source);
+        assert.equal(value.environment.GITHUB_RUN_ID, "13");
+        assert.equal(value.environment.GITHUB_RUN_ATTEMPT, "1");
+        assert.equal(value.environment.GITHUB_JOB, "publish");
+        for (const name of Object.keys(forbidden))
+          assert.equal(value.environment[name], undefined);
+        await value.revalidate();
+        assert.equal((await value.catalog()).selectedVersion, "1.0.0");
+      });
+      for (const name of Object.keys(forbidden))
+        assert.equal(process.env[name], undefined);
+    },
+    {
+      ...globalThis.process.env,
+      ...forbidden,
+      PUBLIC_RELEASE_VERIFICATION: "1",
+    },
+  );
+  assert.equal(JSON.stringify(globalThis.process.env) === ambient, true);
+  assert.equal(globalThis.fetch === ambientFetch, true);
+});
+
+test("concurrent previous fixtures retain separate environments API responses and opaque admissions", async () => {
+  const ambient = JSON.stringify(globalThis.process.env);
+  const ambientFetch = globalThis.fetch;
+  const values = [];
+  let release;
+  let reject;
+  const ready = new Promise((resolve, reject_) => {
+    release = resolve;
+    reject = reject_;
+  });
+  void ready.catch(() => {});
+  await Promise.all(
+    [0, 1].map(() =>
+      withPreviousFixture(async (fixture) => {
+        const { producer, capability, template } = fixture;
+        const partial =
+          await producer.preparePreviousHostBootstrapInputs(capability);
+        const value = producer.verifiedPreviousHostBootstrapInputs(partial);
+        values.push({ producer, partial, source: template.source });
+        if (values.length === 2) release();
+        await ready;
+        assert.equal(process.env.GITHUB_SHA, template.source);
+        assert.equal(value.environment.GITHUB_SHA, template.source);
+        assert.equal(JSON.stringify(globalThis.process.env) === ambient, true);
+        assert.equal(globalThis.fetch === ambientFetch, true);
+        const other = values.find((entry) => entry.producer !== producer);
+        assert.notEqual(other.source, template.source);
+        assert.throws(() =>
+          producer.verifiedPreviousHostBootstrapInputs(other.partial),
+        );
+        await value.revalidate();
+        assert.equal((await value.catalog()).selectedVersion, "1.0.0");
+        assert.equal(process.env.GITHUB_SHA, template.source);
+      }).catch((error) => {
+        reject(error);
+        throw error;
+      }),
+    ),
+  );
+  assert.equal(JSON.stringify(globalThis.process.env) === ambient, true);
+  assert.equal(globalThis.fetch === ambientFetch, true);
+});
+
+test("failed previous fixture retires authority and restores its parent realm before reuse", async () => {
+  const ambient = JSON.stringify(globalThis.process.env);
+  const ambientFetch = globalThis.fetch;
+  const failure = new Error("synthetic fixture failure");
+  let failed;
+  await assert.rejects(
+    withPreviousFixture(async ({ producer, capability }) => {
+      const partial =
+        await producer.preparePreviousHostBootstrapInputs(capability);
+      failed = producer.verifiedPreviousHostBootstrapInputs(partial);
+      throw failure;
+    }),
+    (error) => error === failure,
+  );
+  await assert.rejects(failed.revalidate());
+  assert.equal(JSON.stringify(globalThis.process.env) === ambient, true);
+  assert.equal(globalThis.fetch === ambientFetch, true);
+  await withPreviousFixture(async ({ producer, capability }) => {
+    const partial =
+      await producer.preparePreviousHostBootstrapInputs(capability);
+    await producer.verifiedPreviousHostBootstrapInputs(partial).revalidate();
+  });
+  assert.equal(JSON.stringify(globalThis.process.env) === ambient, true);
+  assert.equal(globalThis.fetch === ambientFetch, true);
 });
