@@ -185,7 +185,8 @@ import Testing
             let values = try ControlPresentationContract.decode(
                 update.values, keys: ControlPresentationContract.writable)
             try #require(update.removed.isEmpty && Set(values.keys) == ["micMuteInMenuBar"])
-            updates.append(try #require((values["micMuteInMenuBar"] as? NSNumber)?.boolValue))
+            updates.append(
+                try #require((values["micMuteInMenuBar"] as? NSNumber)?.boolValue as Bool?))
             try ControlPresentationContract.update(payload, defaults: engine)
             if updates.count == 1 {
                 return try await withCheckedThrowingContinuation { pending = $0 }

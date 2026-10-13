@@ -186,7 +186,7 @@ import Testing
                 update.values, keys: ControlPresentationContract.writable)
             try #require(update.removed.isEmpty && Set(values.keys) == ["keystrokeHighlightActive"])
             updates.append(
-                try #require((values["keystrokeHighlightActive"] as? NSNumber)?.boolValue))
+                try #require((values["keystrokeHighlightActive"] as? NSNumber)?.boolValue as Bool?))
             try ControlPresentationContract.update(payload, defaults: engine)
             if updates.count == 1 {
                 return try await withCheckedThrowingContinuation { pending = $0 }

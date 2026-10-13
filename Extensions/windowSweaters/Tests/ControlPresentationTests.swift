@@ -185,7 +185,8 @@ import Testing
             let values = try ControlPresentationContract.decode(
                 update.values, keys: ControlPresentationContract.writable)
             try #require(update.removed.isEmpty && Set(values.keys) == ["windowSweatersActive"])
-            updates.append(try #require((values["windowSweatersActive"] as? NSNumber)?.boolValue))
+            updates.append(
+                try #require((values["windowSweatersActive"] as? NSNumber)?.boolValue as Bool?))
             try ControlPresentationContract.update(payload, defaults: engine)
             if updates.count == 1 {
                 return try await withCheckedThrowingContinuation { pending = $0 }
