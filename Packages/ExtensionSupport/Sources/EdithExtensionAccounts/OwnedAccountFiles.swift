@@ -62,6 +62,16 @@ enum OwnedAccountFiles {
         else { throw ClaudeAccountError.invalidRequest }
     }
 
+    static func createProfile(_ id: UUID, root: Int32) throws {
+        guard mkdirat(root, id.uuidString, 0o700) == 0 else {
+            throw ClaudeAccountError.invalidRequest
+        }
+        guard let descriptor = try profile(id, root: root, create: false) else {
+            throw ClaudeAccountError.invalidRequest
+        }
+        close(descriptor)
+    }
+
     static func profile(_ id: UUID, root: Int32, create: Bool) throws -> Int32? {
         let name = id.uuidString
         var descriptor = openat(root, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)

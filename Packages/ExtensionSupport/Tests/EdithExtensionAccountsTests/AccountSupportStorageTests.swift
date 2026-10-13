@@ -5,7 +5,8 @@ import Testing
 
 @Suite struct AccountSupportStorageTests {
     private func fixture() throws -> URL {
-        let physical = try #require(realpath(FileManager.default.temporaryDirectory.path, nil))
+        let temporary = try #require(ProcessInfo.processInfo.environment["TMPDIR"])
+        let physical = try #require(realpath(temporary, nil))
         defer { free(physical) }
         let root = URL(fileURLWithPath: String(cString: physical), isDirectory: true)
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -67,6 +68,82 @@ import Testing
         }
         await #expect(throws: ClaudeAccountError.self) { try await store.save(.init()) }
         #expect(try await store.load() == state)
+    }
+
+    @Test func rememberedSelectionUsesLatestFieldsAndRejectsStaleWholeState() async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        let editor = ClaudeAccountStorage(directory: directory)
+        let first = ClaudeAccount(name: "Synthetic first", credential: "synthetic-first")
+        let second = ClaudeAccount(name: "Synthetic second", credential: "synthetic-second")
+        let initial = ClaudeAccountsState(accounts: [first, second], defaultID: first.id)
+        try await store.save(initial, expected: .init())
+        var renamed = first
+        renamed.name = "Synthetic renamed"
+        let edited = ClaudeAccountsState(accounts: [renamed, second], defaultID: first.id)
+        try await editor.save(edited, expected: initial)
+        let selected = try await store.rememberLaunchAccount(second.id)
+        #expect(selected.accounts == edited.accounts)
+        #expect(selected.defaultID == second.id)
+        #expect(try await editor.load() == selected)
+        #expect(try mode(directory) == 0o700)
+        #expect(try mode(directory.appendingPathComponent("accounts.json")) == 0o600)
+        await #expect(throws: ClaudeAccountError.self) {
+            try await editor.save(edited, expected: edited)
+        }
+        #expect(try await store.load() == selected)
+    }
+
+    @Test func removedSelectionCannotRewriteAccountsOrChooseAnotherAccount() async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        let account = ClaudeAccount(name: "Synthetic retained", credential: "synthetic-token")
+        let state = ClaudeAccountsState(accounts: [account], defaultID: account.id)
+        try await store.save(state, expected: .init())
+        let file = directory.appendingPathComponent("accounts.json")
+        let before = try Data(contentsOf: file)
+        await #expect(throws: ClaudeAccountError.self) {
+            try await store.rememberLaunchAccount(UUID())
+        }
+        #expect(try Data(contentsOf: file) == before)
+        #expect(try await store.load() == state)
+    }
+
+    @Test(arguments: ["symlink", "hardlink", "public", "oversized"])
+    func rememberedSelectionRetainsOwnedStateFileAdmission(kind: String) async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        let first = ClaudeAccount(name: "Synthetic first", credential: "synthetic-first")
+        let second = ClaudeAccount(name: "Synthetic second", credential: "synthetic-second")
+        try await store.save(.init(accounts: [first, second], defaultID: first.id))
+        let file = directory.appendingPathComponent("accounts.json")
+        let outside = root.appendingPathComponent("synthetic-original-state")
+        let original = try Data(contentsOf: file)
+        if kind == "symlink" {
+            try FileManager.default.moveItem(at: file, to: outside)
+            try FileManager.default.createSymbolicLink(at: file, withDestinationURL: outside)
+        } else if kind == "hardlink" {
+            try FileManager.default.linkItem(at: file, to: outside)
+        } else if kind == "public" {
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o644], ofItemAtPath: file.path)
+        } else {
+            try Data(repeating: 0x78, count: 60_001).write(to: file)
+        }
+        let before = try Data(contentsOf: file)
+        await #expect(throws: ClaudeAccountError.self) {
+            try await store.rememberLaunchAccount(second.id)
+        }
+        #expect(try Data(contentsOf: file) == before)
+        if kind == "symlink" || kind == "hardlink" {
+            #expect(try Data(contentsOf: outside) == original)
+        }
     }
 
     @Test func launcherIsExclusivePrivateBoundedAndAccountScoped() async throws {
@@ -352,6 +429,423 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: launcher.path))
         #expect(try await store.load() == state)
     }
+
+    private func limitsFixture() throws -> URL {
+        let temporary = try #require(ProcessInfo.processInfo.environment["TMPDIR"])
+        let physical = try #require(realpath(temporary, nil))
+        defer { free(physical) }
+        let root = URL(fileURLWithPath: String(cString: physical), isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        return root
+    }
+
+    @Test func linkedLoginPreservesLaunchCredentialsForeignEditsAndSelectedDefault() async throws {
+        let root = try limitsFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        let first = ClaudeAccount(name: "Synthetic launch", credential: "synthetic-exact-launch")
+        let second = ClaudeAccount(name: "Synthetic other", credential: "synthetic-other")
+        let original = ClaudeAccountsState(accounts: [first, second], defaultID: first.id)
+        try await store.save(original)
+        let native = AccountSupportSecretRecorder()
+        let linked = try await store.connectLimitsLogin(
+            account: first,
+            startLogin: { id, folder in
+                #expect(id != first.id && folder.lastPathComponent == id.uuidString)
+                await #expect(throws: ClaudeAccountError.self) {
+                    _ = try await store.limitsLoginCredentials(account: first)
+                }
+                var changed = original
+                changed.accounts[1].name = "Synthetic foreign edit"
+                changed.defaultID = second.id
+                try await ClaudeAccountStorage(directory: directory).save(
+                    changed, expected: original)
+            }, eraseScopedSecret: { native.record($0) })
+        let account = try #require(linked.accounts.first)
+        var expected = first
+        expected.limitsProfileID = account.limitsProfileID
+        #expect(account == expected)
+        #expect(linked.defaultID == second.id)
+        #expect(linked.accounts[1].name == "Synthetic foreign edit")
+        let (folder, credentials) = try await store.limitsLoginCredentials(account: account)
+        #expect(credentials == nil)
+        #expect(try mode(folder) == 0o700)
+        #expect(native.values.isEmpty)
+        let data = Data("synthetic-private-login".utf8)
+        try await store.saveLimitsLoginCredentials(account: account, expected: nil, data: data)
+        #expect(try await store.limitsLoginCredentials(account: account).1 == data)
+        #expect(try mode(folder.appendingPathComponent(".credentials.json")) == 0o600)
+        await #expect(throws: ClaudeAccountError.self) {
+            try await store.saveLimitsLoginCredentials(
+                account: account, expected: nil, data: Data())
+        }
+        #expect(try await store.load() == linked)
+        let reconnected = try await store.connectLimitsLogin(
+            account: account,
+            startLogin: { id, reused in
+                #expect(id == account.limitsProfileID && reused == folder)
+            }, eraseScopedSecret: { native.record($0) })
+        #expect(reconnected == linked)
+    }
+
+    @Test func failedOrCancelledLinkedLoginJoinsCleanupWithoutChangingAccounts() async throws {
+        let root = try limitsFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        let account = ClaudeAccount(name: "Synthetic launch", credential: "synthetic-exact-launch")
+        let state = ClaudeAccountsState(accounts: [account], defaultID: account.id)
+        try await store.save(state)
+        let native = AccountSupportSecretRecorder()
+        for cancelled in [false, true] {
+            let task = Task {
+                try await store.connectLimitsLogin(
+                    account: account,
+                    startLogin: { _, _ in
+                        if cancelled {
+                            withUnsafeCurrentTask { $0?.cancel() }
+                        } else {
+                            throw ClaudeAccountError.invalidRequest
+                        }
+                    }, eraseScopedSecret: { native.record($0) })
+            }
+            await #expect(throws: (any Error).self) { _ = try await task.value }
+            #expect(try await store.load() == state)
+        }
+        #expect(native.values.count == 2)
+        for folder in native.values {
+            #expect(!FileManager.default.fileExists(atPath: folder.path))
+        }
+    }
+
+    @Test func linkedLoginRejectsStaleAccountAndUnownedProfileAssignments() async throws {
+        let root = try limitsFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        let account = ClaudeAccount(name: "Synthetic launch", credential: "synthetic-exact-launch")
+        let original = ClaudeAccountsState(accounts: [account], defaultID: account.id)
+        try await store.save(original)
+        var forged = original
+        forged.accounts[0].limitsProfileID = UUID()
+        await #expect(throws: ClaudeAccountError.self) { try await store.save(forged) }
+        let native = AccountSupportSecretRecorder()
+        await #expect(throws: ClaudeAccountError.self) {
+            _ = try await store.connectLimitsLogin(
+                account: account,
+                startLogin: { _, _ in
+                    var changed = original
+                    changed.accounts[0].credential = "synthetic-foreign-credential"
+                    try await ClaudeAccountStorage(directory: directory).save(
+                        changed, expected: original)
+                }, eraseScopedSecret: { native.record($0) })
+        }
+        #expect(try await store.load().accounts[0].credential == "synthetic-foreign-credential")
+        #expect(try await store.load().accounts[0].limitsProfileID == nil)
+        #expect(native.values.count == 1)
+        #expect(!FileManager.default.fileExists(atPath: try #require(native.values.first).path))
+    }
+
+    @Test func linkedLoginPrivateFilesRejectUnsafeCredentialEntries() async throws {
+        let root = try limitsFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        let first = ClaudeAccount(name: "Synthetic first", credential: "synthetic-launch")
+        try await store.save(.init(accounts: [first]))
+        let state = try await store.connectLimitsLogin(
+            account: first, startLogin: { _, _ in }, eraseScopedSecret: { _ in })
+        let account = try #require(state.accounts.first)
+        let (folder, _) = try await store.limitsLoginCredentials(account: account)
+        let file = folder.appendingPathComponent(".credentials.json")
+        let donor = root.appendingPathComponent("synthetic-donor")
+        try Data("synthetic-donor-data".utf8).write(to: donor)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: donor.path)
+        for kind in ["symlink", "hardlink", "public", "oversized"] {
+            switch kind {
+            case "symlink":
+                try FileManager.default.createSymbolicLink(at: file, withDestinationURL: donor)
+            case "hardlink": try FileManager.default.linkItem(at: donor, to: file)
+            case "public":
+                try Data("synthetic-public".utf8).write(to: file)
+                try FileManager.default.setAttributes(
+                    [.posixPermissions: 0o644], ofItemAtPath: file.path)
+            default:
+                try Data(repeating: 1, count: 65_537).write(to: file)
+                try FileManager.default.setAttributes(
+                    [.posixPermissions: 0o600], ofItemAtPath: file.path)
+            }
+            await #expect(throws: ClaudeAccountError.self) {
+                _ = try await store.limitsLoginCredentials(account: account)
+            }
+            await #expect(throws: ClaudeAccountError.self) {
+                try await store.saveLimitsLoginCredentials(
+                    account: account, expected: nil, data: Data())
+            }
+            try FileManager.default.removeItem(at: file)
+        }
+        #expect(try Data(contentsOf: donor) == Data("synthetic-donor-data".utf8))
+    }
+
+    @Test func linkedLoginLogoutRevokesReadAuthorityAndRetriesBothOwnedScopes() async throws {
+        let root = try limitsFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        let first = ClaudeAccount(name: "Synthetic launch", credential: "synthetic-exact-launch")
+        try await store.save(.init(accounts: [first]))
+        let state = try await store.connectLimitsLogin(
+            account: first, startLogin: { _, _ in }, eraseScopedSecret: { _ in })
+        let account = try #require(state.accounts.first)
+        let (folder, _) = try await store.limitsLoginCredentials(account: account)
+        await #expect(throws: ClaudeAccountError.self) {
+            _ = try await store.logout(
+                id: account.id,
+                eraseScopedSecret: { scope in
+                    if scope == folder { throw ClaudeAccountError.invalidRequest }
+                })
+        }
+        let revoked = try #require(try await store.load().accounts.first)
+        #expect(revoked.isLoggedOut && revoked.credential.isEmpty)
+        #expect(revoked.limitsProfileID == account.limitsProfileID)
+        await #expect(throws: ClaudeAccountError.self) {
+            _ = try await store.limitsLoginCredentials(account: revoked)
+        }
+        let native = AccountSupportSecretRecorder()
+        let loggedOut = try await store.logout(
+            id: account.id, eraseScopedSecret: { native.record($0) })
+        #expect(loggedOut.accounts.first?.limitsProfileID == nil)
+        #expect(
+            native.values.map(\.path) == [
+                directory.appendingPathComponent(account.id.uuidString).path, folder.path,
+            ])
+        #expect(!FileManager.default.fileExists(atPath: folder.path))
+    }
+
+    @Test func failedLinkedCleanupPreservesBothErrorsAndRetriesPersistedOwnershipAfterReload()
+        async throws
+    {
+        let root = try limitsFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        let account = ClaudeAccount(name: "Synthetic launch", credential: "synthetic-exact-launch")
+        let state = ClaudeAccountsState(accounts: [account], defaultID: account.id)
+        try await store.save(state)
+        let profiles = AccountSupportSecretRecorder()
+        do {
+            _ = try await store.connectLimitsLogin(
+                account: account,
+                startLogin: { _, folder in
+                    profiles.record(folder)
+                    throw AccountSupportLinkedFailure.startup
+                }, eraseScopedSecret: { _ in throw AccountSupportLinkedFailure.cleanup })
+            Issue.record("Failed cleanup was reported as a successful link")
+        } catch let failure as ClaudeLimitsLoginCleanupError {
+            #expect(failure.originalError as? AccountSupportLinkedFailure == .startup)
+            #expect(failure.cleanupError as? AccountSupportLinkedFailure == .cleanup)
+        }
+        #expect(try await store.load() == state)
+        let folder = try #require(profiles.values.first)
+        #expect(FileManager.default.fileExists(atPath: folder.path))
+        let journal = directory.appendingPathComponent("limits-cleanup.json")
+        #expect(try mode(journal) == 0o600)
+        let text = try String(contentsOf: journal, encoding: .utf8)
+        #expect(text.contains(account.id.uuidString) && text.contains(folder.lastPathComponent))
+        #expect(!text.contains(account.credential))
+        let restored = ClaudeAccountStorage(directory: directory)
+        let erased = AccountSupportSecretRecorder()
+        _ = try await restored.logout(id: account.id, eraseScopedSecret: { erased.record($0) })
+        #expect(
+            erased.values.map(\.path) == [
+                directory.appendingPathComponent(account.id.uuidString).path, folder.path,
+            ])
+        #expect(!FileManager.default.fileExists(atPath: folder.path))
+        #expect(
+            try JSONSerialization.jsonObject(with: Data(contentsOf: journal)) as? [[String: String]]
+                == [])
+    }
+
+    @Test func linkedProfileCollisionsRejectBeforeStartingLoginAndPreserveExistingScopes()
+        async throws
+    {
+        let root = try limitsFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        let first = ClaudeAccount(name: "Synthetic first", credential: "synthetic-first")
+        let second = ClaudeAccount(name: "Synthetic second", credential: "synthetic-second")
+        try await store.save(.init(accounts: [first, second], defaultID: first.id))
+        let linked = try await store.connectLimitsLogin(
+            account: second, startLogin: { _, _ in }, eraseScopedSecret: { _ in })
+        let limitsID = try #require(linked.accounts[1].limitsProfileID)
+        let (owned, _) = try await store.limitsLoginCredentials(account: linked.accounts[1])
+        for id in [first.id, second.id, limitsID] {
+            await #expect(throws: ClaudeAccountError.self) {
+                _ = try await store.connectLimitsLogin(
+                    account: first, newProfileID: id,
+                    startLogin: { _, _ in Issue.record("Colliding profile reached login") },
+                    eraseScopedSecret: { _ in Issue.record("Colliding profile erased a secret") })
+            }
+            #expect(try await store.load() == linked)
+            #expect(FileManager.default.fileExists(atPath: owned.path))
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func revocationJoinsHeldLimitsStartupBeforeRetiringItsLateWriter(forget: Bool) async throws {
+        let root = try limitsFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        let account = ClaudeAccount(name: "Synthetic launch", credential: "synthetic-launch")
+        try await store.save(.init(accounts: [account], defaultID: account.id))
+        let gate = AccountSupportLimitsGate()
+        let scopes = AccountSupportSecretRecorder()
+        let started = Task {
+            try await store.connectLimitsLogin(
+                account: account,
+                startLogin: { _, folder in
+                    scopes.record(folder)
+                    await gate.hold()
+                    if !FileManager.default.fileExists(atPath: folder.path) {
+                        try FileManager.default.createDirectory(
+                            at: folder, withIntermediateDirectories: false,
+                            attributes: [.posixPermissions: 0o700])
+                    }
+                    let file = folder.appendingPathComponent(".credentials.json")
+                    try Data("synthetic-late-login".utf8).write(to: file)
+                    try FileManager.default.setAttributes(
+                        [.posixPermissions: 0o600], ofItemAtPath: file.path)
+                }, eraseScopedSecret: { scopes.record($0) })
+        }
+        await gate.waitUntilHeld()
+        let finished = AccountSupportLimitsCompletion()
+        let revoked = Task {
+            let state =
+                try await
+                (forget
+                ? store.forget(id: account.id, eraseScopedSecret: { scopes.record($0) })
+                : store.logout(id: account.id, eraseScopedSecret: { scopes.record($0) }))
+            await finished.finish()
+            return state
+        }
+        do {
+            let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+            while try await store.load().accounts.first?.isLoggedOut != true {
+                try #require(ContinuousClock.now < deadline)
+                try await Task.sleep(for: .milliseconds(1))
+            }
+            #expect(await finished.isFinished == false)
+            let folder = try #require(scopes.values.first)
+            #expect(FileManager.default.fileExists(atPath: folder.path))
+            let journal = directory.appendingPathComponent("limits-cleanup.json")
+            #expect(try String(contentsOf: journal, encoding: .utf8).contains("true"))
+            await gate.release()
+            await #expect(throws: CancellationError.self) { _ = try await started.value }
+            let result = try await revoked.value
+            #expect(await finished.isFinished)
+            #expect(forget ? result.accounts.isEmpty : result.accounts.first?.isLoggedOut == true)
+            #expect(!FileManager.default.fileExists(atPath: folder.path))
+            #expect(try String(contentsOf: journal, encoding: .utf8) == "[]")
+        } catch {
+            await gate.release()
+            started.cancel()
+            revoked.cancel()
+            _ = try? await started.value
+            _ = try? await revoked.value
+            throw error
+        }
+    }
+
+    @Test func foreignRevocationKeepsActiveCleanupOwnershipUntilStartupJoins() async throws {
+        let root = try limitsFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        let account = ClaudeAccount(name: "Synthetic launch", credential: "synthetic-launch")
+        try await store.save(.init(accounts: [account]))
+        let gate = AccountSupportLimitsGate()
+        let scopes = AccountSupportSecretRecorder()
+        let startup = Task {
+            try await store.connectLimitsLogin(
+                account: account,
+                startLogin: { _, folder in
+                    scopes.record(folder)
+                    await gate.hold()
+                    let file = folder.appendingPathComponent(".credentials.json")
+                    try Data("synthetic-late-login".utf8).write(to: file)
+                    try FileManager.default.setAttributes(
+                        [.posixPermissions: 0o600], ofItemAtPath: file.path)
+                }, eraseScopedSecret: { scopes.record($0) })
+        }
+        await gate.waitUntilHeld()
+        do {
+            let foreign = ClaudeAccountStorage(directory: directory)
+            await #expect(throws: ClaudeAccountError.self) {
+                _ = try await foreign.forget(
+                    id: account.id,
+                    eraseScopedSecret: { _ in
+                        Issue.record("Foreign revocation erased before startup joined")
+                    })
+            }
+            #expect(try await foreign.load().accounts.first?.isLoggedOut == true)
+            let folder = try #require(scopes.values.first)
+            #expect(FileManager.default.fileExists(atPath: folder.path))
+            await gate.release()
+            await #expect(throws: ClaudeAccountError.self) { _ = try await startup.value }
+            #expect(!FileManager.default.fileExists(atPath: folder.path))
+            #expect(
+                try await foreign.forget(id: account.id, eraseScopedSecret: { _ in }).accounts
+                    .isEmpty)
+        } catch {
+            await gate.release()
+            startup.cancel()
+            _ = try? await startup.value
+            throw error
+        }
+    }
+
+    @Test func staleConnectingMarkerRecoversOnlyAfterAcquiringThePrivateStartupLease() async throws
+    {
+        let root = try limitsFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        let account = ClaudeAccount(name: "Synthetic launch", credential: "synthetic-launch")
+        try await store.save(.init(accounts: [account]))
+        let scopes = AccountSupportSecretRecorder()
+        await #expect(throws: ClaudeLimitsLoginCleanupError.self) {
+            _ = try await store.connectLimitsLogin(
+                account: account,
+                startLogin: { _, folder in
+                    scopes.record(folder)
+                    throw AccountSupportLinkedFailure.startup
+                }, eraseScopedSecret: { _ in throw AccountSupportLinkedFailure.cleanup })
+        }
+        let lease = directory.appendingPathComponent(".limits-start.lock")
+        #expect(try mode(lease) == 0o600)
+        let journal = directory.appendingPathComponent("limits-cleanup.json")
+        var entries = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: journal)) as? [[String: Any]])
+        try #require(entries.count == 1)
+        entries[0]["isConnecting"] = true
+        try JSONSerialization.data(withJSONObject: entries).write(to: journal)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600], ofItemAtPath: journal.path)
+        let restored = ClaudeAccountStorage(directory: directory)
+        let erased = AccountSupportSecretRecorder()
+        let revoked = try await restored.logout(
+            id: account.id, eraseScopedSecret: { erased.record($0) })
+        #expect(revoked.accounts.first?.isLoggedOut == true)
+        #expect(erased.values.contains { $0.path == scopes.values.first?.path })
+        #expect(!FileManager.default.fileExists(atPath: try #require(scopes.values.first).path))
+        #expect(try String(contentsOf: journal, encoding: .utf8) == "[]")
+    }
+
 }
 
 private final class AccountSupportSecretRecorder: @unchecked Sendable {
@@ -359,4 +853,34 @@ private final class AccountSupportSecretRecorder: @unchecked Sendable {
     private var stored: [URL] = []
     var values: [URL] { lock.withLock { stored } }
     func record(_ url: URL) { lock.withLock { stored.append(url) } }
+}
+
+private enum AccountSupportLinkedFailure: Error {
+    case startup
+    case cleanup
+}
+
+private actor AccountSupportLimitsGate {
+    private var held = false
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var waiting: CheckedContinuation<Void, Never>?
+    func hold() async {
+        held = true
+        waiting?.resume()
+        waiting = nil
+        await withCheckedContinuation { continuation = $0 }
+    }
+    func waitUntilHeld() async {
+        if held { return }
+        await withCheckedContinuation { waiting = $0 }
+    }
+    func release() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+private actor AccountSupportLimitsCompletion {
+    private(set) var isFinished = false
+    func finish() { isFinished = true }
 }

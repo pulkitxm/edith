@@ -22,6 +22,7 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
     public var credential = ""
     public var loginData: String?
     public var remoteMachineID: String?
+    public var limitsProfileID: UUID?
     public var isLoggedOut = false
 
     public init(
@@ -67,7 +68,9 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
             (loginData?.utf8.count ?? 0) <= 65_536,
             !name.utf8.contains(0), !credential.utf8.contains(0),
             remoteMachineID.map({ !$0.isEmpty && $0.utf8.count <= 256 && !$0.utf8.contains(0) })
-                ?? true
+                ?? true,
+            limitsProfileID == nil
+                || (authentication == .oauthToken && limitsProfileID != id)
         else { throw ClaudeAccountError.rejected("Enter a valid account name and credential.") }
     }
 
@@ -95,6 +98,10 @@ public struct ClaudeAccountsState: Codable, Equatable, Sendable {
             defaultID == nil || accounts.contains(where: { $0.id == defaultID })
         else { throw ClaudeAccountError.invalidRequest }
         for account in accounts { try account.validate() }
+        let limitsIDs = accounts.compactMap(\.limitsProfileID)
+        guard Set(limitsIDs).count == limitsIDs.count,
+            Set(limitsIDs).isDisjoint(with: Set(accounts.map(\.id)))
+        else { throw ClaudeAccountError.invalidRequest }
         guard try JSONEncoder().encode(self).count <= 60_000 else {
             throw ClaudeAccountError.rejected("The saved account credentials are too large.")
         }
@@ -110,5 +117,14 @@ public enum ClaudeAccountError: LocalizedError, Sendable {
         case .invalidRequest: "The account settings are invalid."
         case .rejected(let reason): reason
         }
+    }
+}
+
+public struct ClaudeLimitsLoginCleanupError: LocalizedError, Sendable {
+    public let originalError: any Error
+    public let cleanupError: any Error
+
+    public var errorDescription: String? {
+        "The limits login could not start and its private cleanup is pending. Retry account removal."
     }
 }

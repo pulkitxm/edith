@@ -41,7 +41,8 @@ import Testing
     }
 
     @Test func scopedLookupNeverUsesGlobalSecretsAndLogoutRejectsBeforeRead() async throws {
-        let physical = try #require(realpath(FileManager.default.temporaryDirectory.path, nil))
+        let temporary = try #require(ProcessInfo.processInfo.environment["TMPDIR"])
+        let physical = try #require(realpath(temporary, nil))
         defer { free(physical) }
         let fixtureRoot = URL(fileURLWithPath: String(cString: physical), isDirectory: true)
             .appendingPathComponent(UUID().uuidString)

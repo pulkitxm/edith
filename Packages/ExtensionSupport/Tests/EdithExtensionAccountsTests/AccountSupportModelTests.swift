@@ -61,4 +61,28 @@ import Testing
         account.remoteMachineID = ""
         #expect(throws: ClaudeAccountError.self) { try account.validate() }
     }
+
+    @Test func linkedLimitsIdentityCannotAliasAccountsOrOtherLimitsProfiles() throws {
+        var first = ClaudeAccount(name: "Synthetic first", credential: "synthetic-first")
+        var second = ClaudeAccount(name: "Synthetic second", credential: "synthetic-second")
+        first.limitsProfileID = UUID()
+        try ClaudeAccountsState(accounts: [first, second]).validate()
+        second.limitsProfileID = first.limitsProfileID
+        #expect(throws: ClaudeAccountError.self) {
+            try ClaudeAccountsState(accounts: [first, second]).validate()
+        }
+        second.limitsProfileID = nil
+        first.limitsProfileID = second.id
+        #expect(throws: ClaudeAccountError.self) {
+            try ClaudeAccountsState(accounts: [first, second]).validate()
+        }
+        first.limitsProfileID = first.id
+        #expect(throws: ClaudeAccountError.self) { try first.validate() }
+        first.limitsProfileID = UUID()
+        first.authentication = .apiKey
+        #expect(throws: ClaudeAccountError.self) { try first.validate() }
+        first.authentication = .browserLogin
+        #expect(throws: ClaudeAccountError.self) { try first.validate() }
+    }
+
 }
