@@ -110,15 +110,16 @@ import Testing
                         "refresh_token": "synthetic-refresh-" + String(index),
                     ])
             }
-            try ClaudeLimitsLogin.save(data, folder: folder)
+            try await ClaudeLimitsLogin.save(data, folder: folder)
         }
         let reader = ClaudeLimitsLogin()
         for (index, folder) in folders.enumerated() {
-            #expect(try await reader.token(folder: folder) == "synthetic-access-" + String(index))
             let file = folder.appendingPathComponent(".credentials.json")
             #expect(
                 (try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions]
                     as? NSNumber)?.intValue == 0o600)
+            try FileManager.default.removeItem(at: file)
+            #expect(try await reader.token(folder: folder) == "synthetic-access-" + String(index))
         }
     }
 
