@@ -277,6 +277,10 @@ int main(int argc, char **argv) {
           ],
           { stdio: "pipe" },
         );
+        await copyFile(
+          "Packages/EdithHost/Sources/EdithHostCore/Resources/index.json",
+          join(contents, "Resources/index.json"),
+        );
         execFileSync("codesign", ["--force", "--sign", "-", host], {
           stdio: "pipe",
         });
