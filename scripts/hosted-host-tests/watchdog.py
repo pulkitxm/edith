@@ -144,7 +144,9 @@ def canonical_path(path, directory=False):
     return path
 
 
-def runtime_contract(developer, bin_directory, package, environment):
+def runtime_contract(developer, bin_directory, package, environment, bundle_name='EdithHostPackageTests'):
+    if bundle_name not in {'EdithHostPackageTests', 'DatabaseEnginePackageTests'}:
+        raise ValueError('Unexpected diagnostic test bundle')
     developer = canonical_path(developer, directory=True)
     if developer.parts[-2:] != ('Contents', 'Developer'):
         raise ValueError('Unexpected selected developer layout')
@@ -155,8 +157,8 @@ def runtime_contract(developer, bin_directory, package, environment):
     bin_directory = canonical_path(bin_directory, directory=True)
     if not bin_directory.is_relative_to(build_root):
         raise ValueError('Native test bundle outside owning build directory')
-    bundle = canonical_path(bin_directory / 'EdithHostPackageTests.xctest', directory=True)
-    executable = canonical_path(bundle / 'Contents/MacOS/EdithHostPackageTests')
+    bundle = canonical_path(bin_directory / (bundle_name + '.xctest'), directory=True)
+    executable = canonical_path(bundle / 'Contents/MacOS' / bundle_name)
     result = dict(environment)
     result['NO_COLOR'] = '1'
     libraries = []

@@ -1,13 +1,17 @@
 from pathlib import Path
 import importlib.util
+import ctypes
 import json
+import os
 import re
 import shlex
 import signal
 import subprocess
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
+from unittest.mock import Mock
 
 
 spec = importlib.util.spec_from_file_location(
@@ -712,6 +716,260 @@ class OwnedKernelContracts(unittest.TestCase):
         owner.seals = {pid: (pid, 1, 1, 123) for pid in range(5000, 9096)}
         owner.refresh()
         self.assertIn('Owned lifetime process bound exceeded', owner.errors)
+
+
+class SelectedDatabaseCaptureContracts(unittest.TestCase):
+    def contract(self):
+        capture = runner.database_capture
+        with patch.object(capture.watchdog, 'canonical_path', side_effect=lambda path, **kwargs: Path(path)), \
+                patch.object(capture.driver_runtime, 'SelectedSwiftDriver'), \
+                patch.object(capture.watchdog, 'runtime_contract', return_value=(
+                    Path('/fixture/toolchain/swiftpm-testing-helper'),
+                    Path('/fixture/package/.build/debug/DatabaseEnginePackageTests.xctest'),
+                    Path('/fixture/package/.build/debug/DatabaseEnginePackageTests.xctest/Contents/MacOS/DatabaseEnginePackageTests'),
+                    {'HOME': '/fixture/home', 'EDITH_DATABASE_POSTGRESQL_HOST': 'ambient.invalid'})), \
+                patch.object(capture, 'file_seal', return_value=((1, 2), 'a' * 64)):
+            return capture.DatabaseTestContract(
+                '/fixture', '/fixture/developer', '/fixture/bin', {},
+                'database-mutation', time.monotonic() + 60)
+
+    def owner(self, contract):
+        identity = (123, 100, 7, str(contract.helper), 123)
+        owner = Mock()
+        owner.known = {123: identity}
+        owner.verified.return_value = True
+        def stopped(pid, flavor, argument, pointer, size):
+            info = pointer._obj
+            info.pid, info.seconds, info.microseconds, info.pgid = 123, 100, 7, 123
+            info.ppid = os.getpid()
+            info.status = 4
+            info.uid = info.ruid = os.getuid()
+            return size
+        owner.library.proc_pidinfo.side_effect = stopped
+        return owner, identity
+
+    def test_exact_fixed_helper_bundle_filter_and_isolated_environment(self):
+        contract = self.contract()
+        self.assertEqual(contract.arguments, [
+            str(contract.helper), '--test-bundle-path', str(contract.image), '--no-parallel',
+            '--filter', 'mutationPreviewNormalizesWithoutExecuting',
+            '--testing-library', 'swift-testing'])
+        self.assertNotIn('EDITH_DATABASE_POSTGRESQL_HOST', contract.environment)
+        self.assertFalse(runner.testing_process('/fixture/swiftpm-xctest-helper'))
+        with self.assertRaises(ValueError):
+            runner.watchdog.runtime_contract('/nonexistent', '/nonexistent', '/nonexistent', {},
+                                            bundle_name='ForeignPackageTests')
+
+    def test_current_private_native_image_seal_rejects_replacement_links_and_mutation(self):
+        with tempfile.TemporaryDirectory() as fixture:
+            image = Path(fixture).resolve() / 'image'
+            image.write_bytes(b'original synthetic image')
+            image.chmod(0o700)
+            before = runner.database_capture.file_seal(image)
+            image.write_bytes(b'changed synthetic image')
+            self.assertNotEqual(runner.database_capture.file_seal(image), before)
+            link = image.with_name('linked-image')
+            os.link(image, link)
+            with self.assertRaises(ValueError):
+                runner.database_capture.file_seal(image)
+            link.unlink()
+            alias = image.with_name('alias')
+            alias.symlink_to(image)
+            with self.assertRaises(ValueError):
+                runner.database_capture.file_seal(alias)
+            for mode, uid in [(0o100722, os.getuid()), (0o100700, os.getuid() + 1),
+                              (0o100600, os.getuid())]:
+                descriptor_metadata = Mock(st_mode=mode, st_uid=uid, st_nlink=1, st_size=24)
+                with self.subTest(mode=mode, uid=uid), \
+                        patch.object(runner.database_capture.os, 'fstat', return_value=descriptor_metadata), \
+                        self.assertRaises(ValueError):
+                    runner.database_capture.file_seal(image)
+            image.chmod(0o722)
+            with self.assertRaises(ValueError):
+                runner.database_capture.file_seal(image)
+
+    def test_swapped_runtime_or_expired_deadline_never_releases_test(self):
+        contract = self.contract()
+        with patch.object(runner.database_capture.watchdog, 'canonical_path', side_effect=lambda path, **kwargs: Path(path)), \
+                patch.object(runner.database_capture, 'file_seal', return_value=((1, 3), 'b' * 64)):
+            with self.assertRaisesRegex(ValueError, 'changed after admission'):
+                contract.validate()
+        contract.deadline = 0
+        with self.assertRaises(TimeoutError):
+            contract.validate()
+
+    def test_kernel_suspended_child_identity_must_match_every_field_before_continue(self):
+        contract = self.contract()
+        for field, wrong in [('pid', 124), ('seconds', 101), ('microseconds', 8),
+                             ('pgid', 124), ('ppid', os.getpid() + 1), ('status', 2),
+                             ('uid', os.getuid() + 1), ('ruid', os.getuid() + 1)]:
+            owner, identity = self.owner(contract)
+            read = owner.library.proc_pidinfo.side_effect
+            def changed(*arguments):
+                result = read(*arguments)
+                setattr(arguments[3]._obj, field, wrong)
+                return result
+            owner.library.proc_pidinfo.side_effect = changed
+            with self.subTest(field=field), patch.object(contract, 'validate'), \
+                    patch.object(runner.database_capture.os, 'kill') as kill:
+                with self.assertRaises(RuntimeError):
+                    contract.resume(Process(), owner, [identity])
+                kill.assert_not_called()
+
+    def test_unknown_foreign_changed_and_incomplete_identity_never_releases_test(self):
+        contract = self.contract()
+        for failure in ['unknown', 'foreign', 'unobserved', 'changed', 'short']:
+            owner, identity = self.owner(contract)
+            current = [identity]
+            if failure == 'unknown':
+                owner.known = {}
+            elif failure == 'foreign':
+                identity = (123, 100, 7, '/foreign/swiftpm-testing-helper', 123)
+                owner.known[123] = identity
+                current = [identity]
+            elif failure == 'unobserved':
+                current = []
+            elif failure == 'changed':
+                owner.verified.side_effect = [True, False]
+            else:
+                owner.library.proc_pidinfo.side_effect = lambda *args: ctypes.sizeof(runner.watchdog.ProcessInfo) - 1
+            with self.subTest(failure=failure), patch.object(contract, 'validate'), \
+                    patch.object(runner.database_capture.os, 'kill') as kill:
+                with self.assertRaises(RuntimeError):
+                    contract.resume(Process(), owner, current)
+                kill.assert_not_called()
+
+    def test_capture_validates_runtime_and_kernel_identity_before_continue(self):
+        contract = self.contract()
+        owner, identity = self.owner(contract)
+        events = []
+        owner.verified.side_effect = lambda value: events.append('kernel') or True
+        with patch.object(contract, 'validate', side_effect=lambda: events.append('runtime')), \
+                patch.object(runner.database_capture.os, 'kill', side_effect=lambda *args: events.append('continue')):
+            contract.resume(Process(), owner, [identity])
+        self.assertEqual(events, ['runtime', 'kernel', 'runtime', 'kernel', 'continue'])
+
+    def test_captured_fast_exit_is_observed_without_changing_sampling_or_completion_gate(self):
+        process = Process()
+        owner = Ownership(process)
+        events = []
+        def start(selected, ownership, current):
+            self.assertEqual(current, [owner.identity_value])
+            events.append('captured before execution')
+            selected.returncode = 0
+            ownership.active = False
+        clock = Clock()
+        with tempfile.TemporaryDirectory() as fixture:
+            output = Path(fixture)
+            def launch(arguments, **kwargs):
+                kwargs['stdout'].write(OriginalNativeOwnerTests().database_log().encode())
+                kwargs['stdout'].flush()
+                return process
+            with patch.object(runner.watchdog, 'owned_crash_reports', return_value=[]):
+                result = runner.run_original(
+                    ['/synthetic/helper'], output, {}, output, deadline=1,
+                    process_factory=launch, ownership_factory=lambda *args: owner,
+                    start=start, selection='database-mutation', clock=clock.now, sleep=clock.sleep)
+        self.assertTrue(result['passed'])
+        self.assertTrue(result['observedTestingProcess'])
+        self.assertEqual(events, ['captured before execution'])
+        self.assertEqual(clock.value, 0)
+
+    def test_failed_build_or_uncertain_cleanup_never_admits_a_selected_test(self):
+        clean = {'exitCode': 0, 'timedOut': False, 'logBoundExceeded': False, 'failure': None,
+                 'cleanup': {'naturalSurvivorCount': 0, 'reaped': True,
+                             'remainingOwnedProcesses': 0, 'unverifiedOwnedProcesses': 0, 'ownershipErrors': []}}
+        self.assertTrue(runner.clean_result(clean))
+        for key, value in [('exitCode', 1), ('timedOut', True), ('failure', 'uncertain identity')]:
+            self.assertFalse(runner.clean_result(dict(clean, **{key: value})))
+        for key, value in [('naturalSurvivorCount', 1), ('reaped', False),
+                           ('remainingOwnedProcesses', 1), ('unverifiedOwnedProcesses', 1),
+                           ('ownershipErrors', ['uncertain identity'])]:
+            self.assertFalse(runner.clean_result(dict(clean, cleanup=dict(clean['cleanup'], **{key: value}))))
+
+    def test_owned_spawn_failure_closes_actions_attributes_and_input_without_killing_any_pid(self):
+        class Function:
+            def __init__(self, function):
+                self.function = function
+            def __call__(self, *arguments):
+                return self.function(*arguments)
+        library = Mock()
+        calls = []
+        for name in ('posix_spawnattr_init', 'posix_spawnattr_destroy', 'posix_spawnattr_setflags',
+                     'posix_spawnattr_setsigmask', 'posix_spawnattr_setsigdefault',
+                     'posix_spawn_file_actions_init', 'posix_spawn_file_actions_destroy',
+                     'posix_spawn_file_actions_adddup2', 'posix_spawn_file_actions_addchdir_np'):
+            setattr(library, name, Function(lambda *args, name=name: calls.append((name, args)) or 0))
+        library.posix_spawn = Function(lambda *args: 2)
+        with patch.object(runner.database_capture.os, 'open', return_value=77), \
+                patch.object(runner.database_capture.os, 'close') as close, \
+                patch.object(runner.database_capture.os, 'kill') as kill:
+            with self.assertRaises(OSError):
+                runner.database_capture.SuspendedProcess(
+                    ['/synthetic/helper'], {'HOME': '/synthetic'}, 78, '/synthetic', library)
+            close.assert_called_once_with(77)
+            kill.assert_not_called()
+        flags = next(args[1] for name, args in calls if name == 'posix_spawnattr_setflags')
+        self.assertEqual(flags & 0x0080, 0x0080)
+        self.assertEqual(flags & 0x0400, 0x0400)
+        self.assertEqual(calls[-2][0], 'posix_spawn_file_actions_destroy')
+        self.assertEqual(calls[-1][0], 'posix_spawnattr_destroy')
+
+    def test_build_query_and_selected_execution_share_the_original_total_deadline(self):
+        clock = Clock()
+        clean = {'exitCode': 0, 'timedOut': False, 'logBoundExceeded': False, 'failure': None,
+                 'passed': False,
+                 'cleanup': {'naturalSurvivorCount': 0, 'reaped': True,
+                             'remainingOwnedProcesses': 0, 'unverifiedOwnedProcesses': 0, 'ownershipErrors': []}}
+        calls = []
+        contract = self.contract()
+        contract.validate = Mock()
+        def run(arguments, root, environment, output, **kwargs):
+            calls.append(kwargs['deadline'])
+            if len(calls) == 1:
+                clock.value = 900
+                return clean
+            self.assertEqual(kwargs['selection'], 'database-mutation')
+            self.assertEqual(kwargs['start'], contract.resume)
+            clock.value = 911
+            return dict(clean, passed=True)
+        def query(driver, root, environment, timeout):
+            self.assertEqual(timeout, 30)
+            self.assertNotIn('EDITH_DATABASE_POSTGRESQL_HOST', environment)
+            clock.value = 910
+            return '/synthetic/bin'
+        with tempfile.TemporaryDirectory() as fixture, \
+                patch.object(runner.time, 'monotonic', side_effect=clock.now), \
+                patch.object(runner.database_capture, 'build_arguments', return_value=(Mock(), ['/synthetic/swift', 'build'])), \
+                patch.object(runner.database_capture, 'binary_directory', side_effect=query), \
+                patch.object(runner.database_capture, 'DatabaseTestContract', return_value=contract) as create, \
+                patch.object(runner, 'run_original', side_effect=run):
+            result = runner.run_database(Path(fixture),
+                                         {'DEVELOPER_DIR': '/synthetic/developer', 'EDITH_DATABASE_POSTGRESQL_HOST': 'forbidden'},
+                                         Path(fixture), 'database-mutation')
+        self.assertEqual(calls, [2400, 1490])
+        self.assertEqual(create.call_args.args[-1], 2400)
+        self.assertTrue(result['passed'])
+        self.assertEqual(result['durationSeconds'], 911)
+
+    def test_failed_suspended_start_only_kills_and_reaps_its_unreaped_direct_child(self):
+        capture = runner.database_capture
+        child = capture.SuspendedProcess.__new__(capture.SuspendedProcess)
+        child.pid = 123
+        child.returncode = None
+        with patch.object(child, 'poll', return_value=None), \
+                patch.object(child, 'wait', return_value=-signal.SIGKILL) as wait, \
+                patch.object(capture.os, 'kill') as kill, \
+                patch.object(capture.os, 'killpg') as group:
+            runner.retire_unobserved(child)
+            kill.assert_called_once_with(123, signal.SIGKILL)
+            wait.assert_called_once_with(timeout=5)
+            group.assert_not_called()
+        with patch.object(child, 'poll', return_value=0), \
+                patch.object(child, 'wait', return_value=0), \
+                patch.object(capture.os, 'kill') as kill:
+            child.abort_suspended()
+            kill.assert_not_called()
 
 
 if __name__ == '__main__':

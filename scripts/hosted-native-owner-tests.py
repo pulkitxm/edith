@@ -18,6 +18,11 @@ spec = importlib.util.spec_from_file_location(
 watchdog = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(watchdog)
 
+capture_spec = importlib.util.spec_from_file_location(
+    'database_capture', Path(__file__).with_name('database_test_capture.py'))
+database_capture = importlib.util.module_from_spec(capture_spec)
+capture_spec.loader.exec_module(database_capture)
+
 TARGETS = {
     'attention': ['ci-extension-attention'],
     'terminal': ['ci-extension-terminal'],
@@ -190,6 +195,9 @@ class BoundedOwnership(watchdog.OwnedProcesses):
 
 
 def retire_unobserved(process):
+    if isinstance(process, database_capture.SuspendedProcess):
+        process.abort_suspended()
+        return
     for value in (signal.SIGTERM, signal.SIGKILL):
         try:
             if os.getpgid(process.pid) == process.pid:
@@ -299,7 +307,8 @@ def retire(process, ownership, clock, sleep):
 
 def run_original(arguments, root, environment, output, deadline=TEST_DEADLINE,
                  process_factory=subprocess.Popen, ownership_factory=BoundedOwnership,
-                 clock=time.monotonic, sleep=time.sleep, sample=subprocess.run, selection=None):
+                 clock=time.monotonic, sleep=time.sleep, sample=subprocess.run, selection=None,
+                 start=None):
     if selection is not None and selection not in DATABASE_DIAGNOSTICS:
         raise ValueError('Unknown database diagnostic selection')
     started = clock()
@@ -315,6 +324,10 @@ def run_original(arguments, root, environment, output, deadline=TEST_DEADLINE,
             stderr=subprocess.STDOUT, start_new_session=True)
         try:
             ownership = ownership_factory(process.pid, os.getuid())
+            if start is not None:
+                current = ownership.refresh()
+                start(process, ownership, current)
+                observed.update(current)
         except Exception:
             retire_unobserved(process)
             raise
@@ -389,6 +402,61 @@ def run_original(arguments, root, environment, output, deadline=TEST_DEADLINE,
     }
 
 
+def clean_result(result):
+    cleanup = result['cleanup']
+    return (result['exitCode'] == 0 and not result['timedOut']
+            and not result['logBoundExceeded'] and result['failure'] is None
+            and cleanup['naturalSurvivorCount'] == 0 and cleanup['reaped']
+            and cleanup['remainingOwnedProcesses'] == 0
+            and cleanup['unverifiedOwnedProcesses'] == 0 and not cleanup['ownershipErrors'])
+
+
+def run_database(root, environment, output, selection):
+    if selection not in DATABASE_DIAGNOSTICS:
+        raise ValueError('Unknown selected Database diagnostic')
+    started = time.monotonic()
+    deadline = started + TEST_DEADLINE
+    developer = environment['DEVELOPER_DIR']
+    driver, arguments = database_capture.build_arguments(root, developer)
+    build_environment = dict(environment)
+    build_environment.pop('EDITH_DATABASE_POSTGRESQL_HOST', None)
+    build_output = output / 'build'
+    build_output.mkdir(mode=0o700)
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError('Database test total deadline expired before build')
+    build = run_original(arguments, root, build_environment, build_output, deadline=remaining)
+    result = {'passed': False, 'build': build, 'testing': None}
+    if not clean_result(build):
+        return result
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError('Database test total deadline expired after build')
+    binary_directory = database_capture.binary_directory(
+        driver, root, build_environment, min(30, remaining))
+    contract = database_capture.DatabaseTestContract(
+        root, developer, binary_directory, build_environment, selection, deadline)
+    test_output = output / 'selected'
+    test_output.mkdir(mode=0o700)
+    contract.validate()
+    testing = run_original(
+        contract.arguments, root, contract.environment, test_output,
+        deadline=max(0, deadline - time.monotonic()), selection=selection,
+        process_factory=contract.launch, start=contract.resume)
+    result['testing'] = testing
+    contract.validate()
+    result['runtime'] = {
+        'helper': str(contract.helper), 'bundleExecutable': str(contract.image),
+        'helperSHA256': contract.seals[contract.helper][1],
+        'bundleExecutableSHA256': contract.seals[contract.image][1],
+        'selectedFilter': database_capture.FILTERS[selection],
+        'suspendedKernelAdmissionRequired': True,
+    }
+    result['durationSeconds'] = round(time.monotonic() - started, 3)
+    result['passed'] = testing['passed'] and clean_result(testing)
+    return result
+
+
 def interrupted(signum, frame):
     raise InterruptedError(f'Hosted native test runner received signal {signum}')
 
@@ -429,9 +497,9 @@ def main():
         }
         environment['DEVELOPER_DIR'] = subprocess.check_output(
             ['xcode-select', '-p'], text=True, timeout=30).strip()
-        outcome['result'] = run_original(
-            command, root, environment, output,
-            selection=owner if owner in DATABASE_DIAGNOSTICS else None)
+        outcome['result'] = (run_database(root, environment, output, owner)
+                             if owner in DATABASE_DIAGNOSTICS else
+                             run_original(command, root, environment, output))
         outcome['passed'] = outcome['result']['passed']
     except Exception as error:
         outcome['failure'] = str(error)
