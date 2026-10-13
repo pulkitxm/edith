@@ -254,3 +254,10 @@ export async function admitHostBootstrapIntent(
     throw error;
   }
 }
+
+export async function verifiedCompletedHostBootstrap(capability) {
+  const { completedHostBootstrap } = await import(
+    "./production-completed-host.mjs"
+  );
+  return completedHostBootstrap(capability);
+}
