@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import EdithExtensionSupport
 import Testing
 
 @testable import EdithHostCore
@@ -70,16 +71,18 @@ import Testing
         await #expect(throws: HostCLIError.self) { try await cli.execute(["verify"]) }
     }
 
-    @Test func missingLiveOriginalOwnerDiagnosticsReturnActionableUnavailability() async throws {
+    @Test(arguments: 0..<8)
+    func liveChildWithoutProtocolRequestsRetiresAndJoins(_ iteration: Int) throws {
         let owner = try CoreOwnerFixture()
-        defer { owner.stop() }
-        let hooks = HostCoreOwnerHooks(invoke: { request in
-            let data = try await owner.invoke(request)
-            guard request.operation == "usage.cli.catalog" else { return data }
-            var catalog = try #require(JSONDecoder().decode(HostCLIJSON.self, from: data).object)
-            catalog.removeValue(forKey: "coreOwner")
-            return try HostCLIJSON.object(catalog).encoded()
-        })
+        owner.stop()
+        #expect(!FileManager.default.fileExists(atPath: owner.root.path))
+    }
+
+    @Test func missingLiveOriginalOwnerDiagnosticsReturnActionableUnavailability() async throws {
+        let identity = try #require(ExtensionProcessIdentity.current)
+        #expect(identity.isAlive)
+        let owner = MissingCoreOwnerFixture(pid: identity.pid)
+        let hooks = HostCoreOwnerHooks(invoke: { try owner.invoke($0) })
         for operation in ["jobs", "events", "logs"] {
             do {
                 switch operation {
@@ -94,9 +97,11 @@ import Testing
                 #expect(error.hint?.contains("Update usage") == true)
             }
         }
+        #expect(identity.isAlive)
         #expect(
-            !FileManager.default.fileExists(atPath: owner.root.appendingPathComponent("trace").path)
-        )
+            owner.calls
+                == Array(repeating: ["ls", "usage.cli.catalog", "ls"], count: 3)
+                .flatMap { $0 })
     }
 
     @Test func ownerDisableAndWrongAcknowledgementCannotAcknowledgeWork() async throws {
@@ -118,6 +123,43 @@ import Testing
         try await hooks.control(job: "usage.refresh", cancel: true)
         owner.changeOnReply = true
         await #expect(throws: HostCoreCommandFailure.self) { try await hooks.jobs() }
+    }
+}
+
+private final class MissingCoreOwnerFixture: @unchecked Sendable {
+    private let pid: Int32
+    private let lock = NSLock()
+    private var callsValue: [String] = []
+    var calls: [String] { lock.withLock { callsValue } }
+
+    init(pid: Int32) { self.pid = pid }
+
+    func invoke(_ request: HostCLIRequest) throws -> Data {
+        try lock.withLock {
+            if request.action == .ls {
+                callsValue.append("ls")
+                return try HostCLIJSON.array([
+                    .object([
+                        "id": .string("usage"), "installed": .bool(true), "compatible": .bool(true),
+                        "enabled": .bool(true), "running": .bool(true), "version": .string("1"),
+                        "disablePending": .bool(false), "removalPending": .bool(false),
+                        "processIdentifier": .integer(Int64(pid)),
+                    ])
+                ]).encoded()
+            }
+            guard request.action == .invoke, request.id == "usage",
+                request.operation == "usage.cli.catalog"
+            else { throw HostCLIError.rejected("Unexpected original owner protocol invocation.") }
+            callsValue.append("usage.cli.catalog")
+            return try JSONEncoder().encode(
+                HostCLIProviderCatalog(
+                    owner: "usage",
+                    commands: [
+                        .init(
+                            route: ["usage", "ls"], operation: "usage.cli",
+                            summary: "Read original usage.")
+                    ]))
+        }
     }
 }
 
