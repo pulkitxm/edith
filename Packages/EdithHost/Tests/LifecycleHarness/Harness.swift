@@ -10,6 +10,41 @@ import WorkerLifecycleFixtureSupport
 
 @main
 struct HostLifecycleHarness {
+    private enum StartupStage: String {
+        case fixtureOwnerBegin
+        case fixtureOwnerComplete
+        case fixtureCopyBegin
+        case fixtureCopyComplete
+        case fixtureSignBegin
+        case fixtureSignComplete
+        case hostIdentityBegin
+        case hostIdentityComplete
+        case fixtureHomeBegin
+        case fixtureHomeComplete
+        case packageStoreBegin
+        case packageStoreComplete
+        case ownerDefaultsBegin
+        case ownerDefaultsComplete
+        case peerEndpointBegin
+        case peerEndpointComplete
+        case sessionsBegin
+        case sessionsComplete
+        case surfacesBegin
+        case surfacesComplete
+        case packageInstallBegin
+        case packageInstallComplete
+    }
+
+    private static func startupStage(_ stage: StartupStage) {
+        let row: [String: Any] = [
+            "lifecycleHarnessStage": stage.rawValue, "name": "HostLifecycleHarness",
+            "pid": getpid(),
+        ]
+        guard let bytes = try? JSONSerialization.data(withJSONObject: row, options: [.sortedKeys])
+        else { return }
+        FileHandle.standardError.write(bytes + Data([10]))
+    }
+
     @MainActor static func main() async throws {
         signal(SIGPIPE, SIG_IGN)
         let arguments = Array(CommandLine.arguments.dropFirst())
@@ -42,13 +77,17 @@ struct HostLifecycleHarness {
         let identifier =
             requestedIdentifier
             ?? "com.pulkit.edith.tests.\(extensionID == "calendar" ? "remote" : "worker")-\(UUID().uuidString)"
+        startupStage(.fixtureOwnerBegin)
         let workerFixture =
             extensionID == "calendar"
             ? nil
             : try WorkerLifecycleFixture(root: fixture, hostIdentifier: identifier)
+        startupStage(.fixtureOwnerComplete)
         let app = fixture.appendingPathComponent(
             extensionID == "calendar" ? "Host.app" : "Fixture.app")
+        startupStage(.fixtureCopyBegin)
         try FileManager.default.copyItem(at: sourceApp, to: app)
+        startupStage(.fixtureCopyComplete)
         if extensionID == "usage" {
             let launcher = app.appendingPathComponent("Contents/Resources/ed-launcher")
             try FileManager.default.createDirectory(
@@ -69,17 +108,22 @@ struct HostLifecycleHarness {
         plist["CFBundleName"] = "Extension Fixture"
         try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0).write(
             to: info)
+        startupStage(.fixtureSignBegin)
         let sign = Process()
         sign.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
         sign.arguments = ["--force", "--sign", "-", app.path]
         try sign.run()
         sign.waitUntilExit()
         guard sign.terminationStatus == 0 else { throw MarketplaceError.invalidSignature }
+        startupStage(.fixtureSignComplete)
         let executable = app.appendingPathComponent("Contents/MacOS/Edith")
+        startupStage(.hostIdentityBegin)
         let identity = try HostIdentity(
             identifier: identifier,
             supportDirectory: extensionID == "calendar"
                 ? fixture.appendingPathComponent("support") : fixture)
+        startupStage(.hostIdentityComplete)
+        startupStage(.fixtureHomeBegin)
         let calendarFixture =
             extensionID == "calendar"
             ? try CalendarLifecycleFixture(directory: fixture, identity: identity) : nil
@@ -89,13 +133,17 @@ struct HostLifecycleHarness {
         if let workerFixture {
             setenv("EDITH_EXTENSION_FIXTURE_HOME", try workerFixture.home(for: extensionID).path, 1)
         }
+        startupStage(.fixtureHomeComplete)
         var issuedFixtures: [String: WorkerLifecycleFixture.Selection] = [:]
         func removeWorkerFixtures() throws {
             for selection in issuedFixtures.values { try workerFixture?.remove(selection) }
             issuedFixtures.removeAll()
         }
         defer { try? removeWorkerFixtures() }
+        startupStage(.packageStoreBegin)
         let store = ExtensionPackageStore(root: identity.root.appendingPathComponent("Extensions"))
+        startupStage(.packageStoreComplete)
+        startupStage(.ownerDefaultsBegin)
         if extensionID == "machines" {
             try MachinesFixture.seed(
                 identity: identity, home: try workerFixture?.home(for: extensionID) ?? fixture)
@@ -139,13 +187,18 @@ struct HostLifecycleHarness {
             UserDefaults(suiteName: identity.extensionDefaultsSuite(extensionID))?
                 .removePersistentDomain(forName: identity.extensionDefaultsSuite(extensionID))
         }
+        startupStage(.ownerDefaultsComplete)
+        startupStage(.peerEndpointBegin)
         let endpoint = try ExtensionPeerEndpoint(
             namespace: identifier, owner: extensionID,
             directory: identity.root.appendingPathComponent("ExtensionState/Commands"))
+        startupStage(.peerEndpointComplete)
         var workerLogs: [URL] = []
         var logHandles: [FileHandle] = []
         func makeSessions(executable: URL) -> HostExtensionSessions {
-            HostExtensionSessions(defaults: UserDefaults(suiteName: suite)!) { package in
+            startupStage(.sessionsBegin)
+            let result = HostExtensionSessions(defaults: UserDefaults(suiteName: suite)!) {
+                package in
                 try WorkerLifecycleFixture.requireSupported(package.id)
                 try calendarFixture?.prepare(package: package, store: store)
                 if let workerFixture {
@@ -203,6 +256,8 @@ struct HostLifecycleHarness {
                             publicLauncher: publicLauncher),
                         executable: executable, errorOutput: handle)
             }
+            startupStage(.sessionsComplete)
+            return result
         }
         var sessions = makeSessions(executable: executable)
         func verifyMachines() async throws {
@@ -229,8 +284,10 @@ struct HostLifecycleHarness {
                 throw error
             }
         }
+        startupStage(.surfacesBegin)
         var surfaces = try HostSurfaces(
             identity: identity, entries: HostIndex.bundled(), sessions: sessions)
+        startupStage(.surfacesComplete)
         surfaces.layouts.update(.home) { $0.tiles = [.init(.ability(extensionID))] }
         guard surfaces.context.activeIDs.isEmpty else { throw HostWorkerError.rejected }
         defer { for handle in logHandles { try? handle.close() } }
@@ -427,8 +484,10 @@ struct HostLifecycleHarness {
             }
             sessions = makeSessions(
                 executable: replacementApp.appendingPathComponent("Contents/MacOS/Edith"))
+            startupStage(.surfacesBegin)
             surfaces = try HostSurfaces(
                 identity: identity, entries: HostIndex.bundled(), sessions: sessions)
+            startupStage(.surfacesComplete)
             guard sessions.processIdentifiers.isEmpty,
                 sessions.enabledIDs == [extensionID],
                 surfaces.layouts.home == savedSurface
@@ -552,8 +611,10 @@ struct HostLifecycleHarness {
             recoveryDefaults.set([extensionID], forKey: "pendingDisableExtensions")
             sessions = makeSessions(
                 executable: replacementApp.appendingPathComponent("Contents/MacOS/Edith"))
+            startupStage(.surfacesBegin)
             surfaces = try HostSurfaces(
                 identity: identity, entries: HostIndex.bundled(), sessions: sessions)
+            startupStage(.surfacesComplete)
             guard sessions.pendingDisableIDs == [extensionID], sessions.activeIDs.isEmpty,
                 surfaces.context.activeIDs.isEmpty
             else { throw HostWorkerError.invalidResponse }
@@ -1120,6 +1181,7 @@ struct HostLifecycleHarness {
     private static func install(
         _ package: ExtensionPackage, releases: URL, store: ExtensionPackageStore
     ) async throws {
+        startupStage(.packageInstallBegin)
         let installer = ExtensionPackageInstaller(
             store: store,
             download: { _, _ in
@@ -1145,6 +1207,7 @@ struct HostLifecycleHarness {
                 }
             })
         _ = try await installer.install([package], repository: MarketplaceConfiguration.repository)
+        startupStage(.packageInstallComplete)
     }
 }
 
