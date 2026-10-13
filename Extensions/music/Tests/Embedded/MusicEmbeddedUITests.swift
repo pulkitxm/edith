@@ -50,6 +50,135 @@ import Testing
         #expect(throws: (any Error).self) { try invalid.validate() }
     }
 
+    @Test func joinedStopBlocksConfigurationUntilEveryOldResponseAndFollowerCompletes() async throws
+    {
+        let remote = EmbeddedMusicRemote()
+        let old = try JSONEncoder().encode(state(title: "Mock Old"))
+        let fresh = try JSONEncoder().encode(state(title: "Mock Fresh"))
+        var pending: CheckedContinuation<Data, Error>?
+        var oldReads = 0
+        var blockedReads = 0
+        var completed: Set<Int> = []
+        var stopping = false
+        var following = false
+        var first: Task<Void, Never>?
+        var follower: Task<Void, Never>?
+        remote.configure { _, _ in
+            oldReads += 1
+            return try await withCheckedThrowingContinuation { pending = $0 }
+        }
+        do {
+            remote.rescan()
+            try await settle { pending != nil }
+            first = Task {
+                stopping = true; await remote.stopAndWait(); completed.insert(1)
+            }
+            try await settle { stopping }
+            follower = Task {
+                following = true; await remote.stopAndWait(); completed.insert(2)
+            }
+            try await settle { following }
+            remote.configure { _, _ in
+                blockedReads += 1; return fresh
+            }
+            remote.rescan()
+            #expect(completed.isEmpty && oldReads == 1 && blockedReads == 0)
+            let response = try #require(pending)
+            pending = nil
+            response.resume(returning: old)
+            await first?.value
+            await follower?.value
+            #expect(completed == [1, 2] && remote.tracks.isEmpty && !remote.entriesLoaded)
+            remote.rescan()
+            #expect(oldReads == 1 && blockedReads == 0)
+            remote.configure { _, _ in fresh }
+            remote.rescan()
+            try await settle { remote.entriesLoaded }
+            #expect(remote.current?.title == "Mock Fresh" && remote.libraryError == nil)
+            await remote.stopAndWait()
+        } catch {
+            let response = pending
+            pending = nil
+            response?.resume(throwing: CancellationError())
+            await first?.value
+            await follower?.value
+            await remote.stopAndWait()
+            throw error
+        }
+    }
+
+    @Test func aNewSuspensionCannotBeClearedByAnOlderJoinedStop() async throws {
+        let remote = EmbeddedMusicRemote()
+        let encoded = try JSONEncoder().encode(state())
+        var pending: CheckedContinuation<Data, Error>?
+        var freshReads = 0
+        var stopping = false
+        var stop: Task<Void, Never>?
+        remote.configure { _, _ in try await withCheckedThrowingContinuation { pending = $0 } }
+        do {
+            remote.rescan()
+            try await settle { pending != nil }
+            stop = Task {
+                stopping = true; await remote.stopAndWait()
+            }
+            try await settle { stopping }
+            remote.suspendCommands()
+            let response = try #require(pending)
+            pending = nil
+            response.resume(returning: encoded)
+            await stop?.value
+            remote.configure { _, _ in
+                freshReads += 1; return encoded
+            }
+            remote.rescan()
+            #expect(freshReads == 0 && !remote.entriesLoaded)
+            await remote.stopAndWait()
+            remote.configure { _, _ in
+                freshReads += 1; return encoded
+            }
+            remote.rescan()
+            try await settle { remote.entriesLoaded }
+            #expect(freshReads == 1)
+            await remote.stopAndWait()
+        } catch {
+            let response = pending
+            pending = nil
+            response?.resume(throwing: CancellationError())
+            await stop?.value
+            await remote.stopAndWait()
+            throw error
+        }
+    }
+
+    @Test func retiredClientCannotReopenOrDetachAFreshConfiguration() async throws {
+        let remote = EmbeddedMusicRemote()
+        defer { remote.stop() }
+        let oldBridge = MusicReconfigurationTestBridge()
+        let newBridge = MusicReconfigurationTestBridge()
+        let old = try #require(ExtensionEngineClient(bridge: oldBridge, presentationID: UUID()))
+        let fresh = try #require(ExtensionEngineClient(bridge: newBridge, presentationID: UUID()))
+        remote.configure(old)
+        _ = try await remote.dataRequest("music.ui.read")
+        await remote.stopAndWait()
+        remote.configure(old)
+        do {
+            _ = try await remote.dataRequest("music.ui.read")
+            Issue.record("A retired client admitted a new request")
+        } catch ExtensionPeerError.unavailable {} catch { throw error }
+        #expect(oldBridge.requests == 1 && newBridge.requests == 0)
+        remote.configure(fresh)
+        remote.detach(old)
+        #expect(try await remote.dataRequest("music.ui.read") == Data("{}".utf8))
+        #expect(oldBridge.requests == 1 && newBridge.requests == 1)
+        await remote.stopAndWait()
+    }
+
+    private func settle(_ ready: () -> Bool) async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while !ready() && ContinuousClock.now < deadline { await Task.yield() }
+        try #require(ready())
+    }
+
     private func state(title: String = "Mock Garden") -> EmbeddedMusicUIState {
         let root = URL(fileURLWithPath: "/tmp/mock-music-library")
         let entry = EmbeddedMusicUIEntry(
@@ -412,4 +541,21 @@ private final class MusicRenderFixtureView: NSView {
         }
     }
     return false
+}
+
+@MainActor private final class MusicReconfigurationTestBridge: NSObject {
+    private(set) var requests = 0
+
+    @objc func invoke(_ data: NSData, completion: @escaping (NSData) -> Void) {
+        guard
+            let request = try? ExtensionEngineWire.decode(
+                ExtensionEngineRequest.self, from: data as Data),
+            let reply = try? ExtensionEngineWire.encode(
+                ExtensionEngineReply(token: request.token, ok: true, payload: Data("{}".utf8)))
+        else { return }
+        requests += 1
+        completion(reply as NSData)
+    }
+
+    @objc func cancel(_ token: NSString) {}
 }
