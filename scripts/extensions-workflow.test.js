@@ -477,7 +477,7 @@ function routingContext(changes = {}) {
       ref: "refs/heads/main",
       ...changes.github,
     },
-    inputs: { publish: true, ...changes.inputs },
+    inputs: { publish: true, production_cohort: "", ...changes.inputs },
     cancelled: changes.cancelled ?? false,
   };
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { createReadStream, createWriteStream } from "node:fs";
+import { close, createWriteStream, read } from "node:fs";
+import { Readable } from "node:stream";
 import { validateCatalogPointer } from "../extension-catalog-pointer.mjs";
 
 const exact = (value, keys) => {
@@ -118,9 +119,43 @@ export function productionCatalogChannel(input, output) {
   });
 }
 export function inheritedProductionCatalogChannel() {
+  let reading = false;
+  let framed = false;
+  let destroyCallback;
+  const retire = (callback) => close(3, callback);
+  const input = new Readable({
+    read() {
+      if (reading || framed) return;
+      reading = true;
+      const bytes = Buffer.alloc(2048);
+      read(3, bytes, 0, bytes.length, null, (error, count) => {
+        reading = false;
+        if (destroyCallback) {
+          retire(destroyCallback);
+          return;
+        }
+        if (error) {
+          this.destroy(error);
+          return;
+        }
+        if (count === 0) {
+          this.push(null);
+          return;
+        }
+        const chunk = bytes.subarray(0, count);
+        framed = chunk.includes(10);
+        this.push(chunk);
+      });
+    },
+    destroy(error, callback) {
+      const finish = (closeError) => callback(error ?? closeError);
+      if (reading) destroyCallback = finish;
+      else retire(finish);
+    },
+  });
   return productionCatalogChannel(
-    createReadStream(null, { fd: 3, autoClose: false }),
-    createWriteStream(null, { fd: 4, autoClose: false }),
+    input,
+    createWriteStream(null, { fd: 4, autoClose: true }),
   );
 }
 export function productionReadonlyEnvironment(environment) {

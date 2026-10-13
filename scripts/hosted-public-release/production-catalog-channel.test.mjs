@@ -183,47 +183,76 @@ test("native observer child drops write, signing, interpreter, keychain, fixture
   assert(Object.isFrozen(environment));
 });
 
-test("actual inherited anonymous file descriptors round-trip the closed milestone without filesystem rendezvous", async () => {
-  const module = new URL("./production-catalog-channel.mjs", import.meta.url)
-    .href;
-  const code = `import { inheritedProductionCatalogChannel, productionCatalogMessage, validateProductionCatalogMessage } from ${JSON.stringify(module)};
+test.each(
+  [process.execPath, "node"].flatMap((executable) => [
+    { executable, acknowledge: true },
+    { executable, acknowledge: false },
+  ]),
+)(
+  "actual inherited anonymous descriptors join after promotion or missing acknowledgement: %j",
+  async ({ executable, acknowledge }) => {
+    const module = new URL("./production-catalog-channel.mjs", import.meta.url)
+      .href;
+    const code = `import assert from "node:assert/strict";
+import { inheritedProductionCatalogChannel, productionCatalogMessage, validateProductionCatalogMessage } from ${JSON.stringify(module)};
 const binding = ${JSON.stringify(binding)};
 const channel = inheritedProductionCatalogChannel();
-try { await channel.write(productionCatalogMessage("host-restored", binding)); validateProductionCatalogMessage(await channel.read(), "catalog-promoted", binding); } finally { channel.close(); }`;
-  const child = spawn(process.execPath, ["--eval", code], {
-    env: { PATH: process.env.PATH },
-    stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"],
-  });
-  const parent = productionCatalogChannel(child.stdio[4], child.stdio[3]);
-  const stderr = [];
-  child.stderr.on("data", (chunk) => stderr.push(chunk));
-  const joined = new Promise((resolve, reject) => {
-    child.once("error", reject);
-    child.once("close", (code, signal) => resolve({ code, signal }));
-  });
-  let retired = false;
-  const timer = setTimeout(() => {
-    retired = true;
-    child.kill("SIGKILL");
-  }, 3000);
-  try {
-    validateProductionCatalogMessage(
-      await parent.read(),
-      "host-restored",
-      binding,
-    );
-    await parent.write(productionCatalogMessage("catalog-promoted", binding));
-    assert.deepEqual(
-      await joined,
-      { code: 0, signal: null },
-      Buffer.concat(stderr).toString(),
-    );
-    assert.equal(retired, false);
-  } finally {
-    parent.close();
-    if (child.exitCode === null && child.signalCode === null)
+try {
+ await channel.write(productionCatalogMessage("host-restored", binding));
+ if (${JSON.stringify(acknowledge)}) validateProductionCatalogMessage(await channel.read(), "catalog-promoted", binding);
+ else await assert.rejects(channel.read(), {message: "Catalog channel closed"});
+} finally { channel.close(); }`;
+    const child = spawn(executable, ["--eval", code], {
+      env: { PATH: process.env.PATH },
+      stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"],
+    });
+    const parent = productionCatalogChannel(child.stdio[4], child.stdio[3]);
+    const stderr = [];
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    const joined = new Promise((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", (code, signal) => resolve({ code, signal }));
+    });
+    let retired = false;
+    const timer = setTimeout(() => {
+      retired = true;
       child.kill("SIGKILL");
-    await joined;
-    clearTimeout(timer);
-  }
-});
+    }, 3000);
+    try {
+      validateProductionCatalogMessage(
+        await parent.read(),
+        "host-restored",
+        binding,
+      );
+      if (acknowledge) {
+        const acknowledgement = Buffer.from(
+          `${JSON.stringify(productionCatalogMessage("catalog-promoted", binding))}\n`,
+        );
+        const split = Math.floor(acknowledgement.length / 2);
+        await new Promise((resolve, reject) =>
+          child.stdio[3].write(acknowledgement.subarray(0, split), (error) =>
+            error ? reject(error) : resolve(),
+          ),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        await new Promise((resolve, reject) =>
+          child.stdio[3].write(acknowledgement.subarray(split), (error) =>
+            error ? reject(error) : resolve(),
+          ),
+        );
+      } else child.stdio[3].end();
+      assert.deepEqual(
+        await joined,
+        { code: 0, signal: null },
+        Buffer.concat(stderr).toString(),
+      );
+      assert.equal(retired, false);
+    } finally {
+      parent.close();
+      if (child.exitCode === null && child.signalCode === null)
+        child.kill("SIGKILL");
+      await joined;
+      clearTimeout(timer);
+    }
+  },
+);
