@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { discoverHostSizeTests } from "./host-size-test-inventory.mjs";
 
 const build = readFileSync("build.sh", "utf8");
 const minimal = readFileSync("scripts/build-minimal-host.mjs", "utf8");
@@ -19,12 +20,24 @@ const run = (...args) =>
 
 test.each([
   "scripts/test-host-build-metadata.py",
-  "scripts/test-extension-host-size-report.py",
   "scripts/test-macho-code-identity.py",
 ])("packaging provenance and size accounting pass %s", (script) => {
   const result = run("python3", "-B", script);
   expect(result.exitCode, result.stderr.toString()).toBe(0);
 });
+
+test.each(discoverHostSizeTests())(
+  "size accounting passes %s",
+  (identifier) => {
+    const result = run(
+      "python3",
+      "-B",
+      "scripts/test-extension-host-size-report.py",
+      identifier,
+    );
+    expect(result.exitCode, result.stderr.toString()).toBe(0);
+  },
+);
 
 test("development and release builds route through the empty host", () => {
   expect(build).toContain("node scripts/build-minimal-host.mjs");
