@@ -192,6 +192,7 @@ public final class YoutubeDownloader {
     public private(set) var updateResult: Result<String, Error>? = nil
     public private(set) var estimates: [URL: DownloadEstimate] = [:]
 
+    @ObservationIgnored private let retiredTasks = MusicTaskOwner()
     @ObservationIgnored private var mutationTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var updateTask: Task<Void, Never>?
     public var errorMessage: String?
@@ -284,7 +285,11 @@ public final class YoutubeDownloader {
         guard start else { return }
         checkAvailability()
         streamTask = Task { [weak self, client] in
-            if let snapshot = try? await client.snapshot() { self?.apply(snapshot) }
+            guard !Task.isCancelled else { return }
+            if let snapshot = try? await client.snapshot(), !Task.isCancelled {
+                self?.apply(snapshot)
+            }
+            guard !Task.isCancelled else { return }
             guard let values = try? await client.values() else { return }
             for await snapshot in values {
                 guard !Task.isCancelled else { return }
@@ -321,12 +326,13 @@ public final class YoutubeDownloader {
     }
 
     public func checkAvailability() {
-        availabilityTask?.cancel()
+        retiredTasks.cancelAndRetain(availabilityTask)
         let generation = UUID()
         availabilityGeneration = generation
         availabilityTask = Task {
             defer { if generation == availabilityGeneration { availabilityTask = nil } }
             do {
+                try Task.checkCancellation()
                 let snapshot = try await client.snapshot()
                 try Task.checkCancellation()
                 apply(snapshot)
@@ -355,9 +361,12 @@ public final class YoutubeDownloader {
         mutationTasks[token] = Task {
             defer { mutationTasks.removeValue(forKey: token) }
             do {
+                try Task.checkCancellation()
                 _ = try await client.mutateAsync(request)
                 try Task.checkCancellation()
-                apply(try await client.snapshot())
+                let snapshot = try await client.snapshot()
+                try Task.checkCancellation()
+                apply(snapshot)
             } catch {
                 guard !Task.isCancelled else { return }
                 errorMessage = error.localizedDescription
@@ -369,9 +378,10 @@ public final class YoutubeDownloader {
         isUpdatingYTDLP = true
         updateResult = nil
         ytdlpUpdateMessage = nil
-        updateTask?.cancel()
+        retiredTasks.cancelAndRetain(updateTask)
         updateTask = Task {
             do {
+                try Task.checkCancellation()
                 let update = try await DownloadToolOperationExecution.update(
                     executable: CLIToolEnvironment.executable(named: "yt-dlp"))
                 try Task.checkCancellation()
@@ -478,13 +488,18 @@ public final class YoutubeDownloader {
 
     public func cancelAll() { mutate(.cancel(id: nil, includeQueued: true, reason: "Cancelled")) }
 
+    public func shutdownAndWait() async {
+        shutdown()
+        await retiredTasks.shutdownAndWait()
+    }
+
     public func shutdown() {
-        streamTask?.cancel(); streamTask = nil
-        availabilityTask?.cancel(); availabilityTask = nil
+        retiredTasks.cancelAndRetain(streamTask); streamTask = nil
+        retiredTasks.cancelAndRetain(availabilityTask); availabilityTask = nil
         availabilityGeneration = UUID()
-        for task in mutationTasks.values { task.cancel() }
+        for task in mutationTasks.values { retiredTasks.cancelAndRetain(task) }
         mutationTasks.removeAll()
-        updateTask?.cancel(); updateTask = nil
+        retiredTasks.cancelAndRetain(updateTask); updateTask = nil
         isRunning = false
     }
 

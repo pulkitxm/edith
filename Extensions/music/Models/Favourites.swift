@@ -50,6 +50,7 @@ public enum Favourites {
 
     public static func tracks() -> [Track] {
         paths.compactMap { path in
+            guard !Task.isCancelled else { return nil }
             let url = TrackMeta.url(for: path)
             guard FileManager.default.fileExists(atPath: url.path) else { return nil }
             return Track(url: url, relativePath: path)

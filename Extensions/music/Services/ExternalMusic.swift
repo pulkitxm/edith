@@ -127,6 +127,7 @@ final class ExternalMusic {
     private(set) var playback: ExternalPlayback?
     private(set) var lastError: String?
     @ObservationIgnored private let effects: ExternalMusicEffects
+    @ObservationIgnored private let retiredTasks = MusicTaskOwner()
     private var pollingTask: Task<Void, Never>?
     private var commandTask: Task<Void, Never>?
     private var observingPlayback = false
@@ -160,14 +161,19 @@ final class ExternalMusic {
         }
     }
 
+    func stopAndWait() async {
+        stop()
+        await retiredTasks.shutdownAndWait()
+    }
+
     func stop() {
         generation &+= 1; presentationSample = .distantPast
-        presentationTask?.cancel(); presentationTask = nil
+        retiredTasks.cancelAndRetain(presentationTask); presentationTask = nil
         for (_, observer) in observers { effects.removeExternal(observer) }
         observers.removeAll()
         current = nil; playback = nil
         observePlayback(false)
-        commandTask?.cancel(); commandTask = nil
+        retiredTasks.cancelAndRetain(commandTask); commandTask = nil
         if let commandObserver { effects.removeLocal(commandObserver) }
         if let stateObserver { effects.removeLocal(stateObserver) }
         commandObserver = nil; stateObserver = nil
@@ -179,7 +185,8 @@ final class ExternalMusic {
         else { return }
         let previous = commandTask
         commandTask = Task { [weak self] in
-            await previous?.value
+            await withTaskCancellationHandler(
+                operation: { await previous?.value }, onCancel: { previous?.cancel() })
             guard let self, !Task.isCancelled else { return }
             await refreshPlayback(app: app, command: command)
         }
@@ -188,7 +195,7 @@ final class ExternalMusic {
     func observePlayback(_ active: Bool) {
         guard !effects.isInert, active != observingPlayback else { return }
         observingPlayback = active
-        pollingTask?.cancel(); pollingTask = nil
+        retiredTasks.cancelAndRetain(pollingTask); pollingTask = nil
         guard active else { return }
         pollingTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -214,7 +221,7 @@ final class ExternalMusic {
         guard !effects.isInert else { return }
         lastError = nil
         guard let app = current?.app else { return }
-        commandTask?.cancel()
+        retiredTasks.cancelAndRetain(commandTask)
         commandTask = Task { [weak self] in await self?.refreshPlayback(app: app) }
     }
 
@@ -238,7 +245,7 @@ final class ExternalMusic {
     }
 
     private func refreshPlayback(app: ExternalApp, command: String? = nil) async {
-        guard !effects.isInert else { return }
+        guard !effects.isInert, !Task.isCancelled else { return }
         let token = generation
         guard effects.isRunning(app)
         else {
