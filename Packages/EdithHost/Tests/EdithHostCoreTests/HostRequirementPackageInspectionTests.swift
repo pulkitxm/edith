@@ -145,6 +145,7 @@ private struct RequirementPackageFixture {
             "EdithHostExecutablePath": "/tmp/synthetic/Host.app/Contents/MacOS/Edith",
             "EdithHostCodeRequirement": "identifier \"\(host)\"",
             "EdithExecutableProvenance": String(repeating: "a", count: 64),
+            "EdithCarrierExecutableProvenance": String(repeating: "b", count: 64),
             "EdithPayloadRelativePath": "Contents/Resources/Payload",
         ]
         var applicationInfo = shared;
