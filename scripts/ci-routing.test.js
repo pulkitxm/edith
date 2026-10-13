@@ -29,21 +29,34 @@ const matchesArea = (area, path) => areaPatterns.get(area)?.test(path) ?? false;
 function runAreas(paths, { all = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), "edith-security-routing-"));
   const output = join(root, "output");
+  const changedFile = join(root, "changed");
   const script = ciJobs.changes.steps.find((step) => step.id === "areas").run;
   const areas = script.slice(
     script.indexOf("area() {"),
     script.indexOf("test_scope=()"),
   );
   try {
-    execFileSync("bash", ["-e", "-o", "pipefail", "-c", areas], {
-      stdio: "pipe",
-      env: {
-        ...process.env,
-        base: all ? "" : "synthetic-base",
-        changed: paths.join("\n"),
-        GITHUB_OUTPUT: output,
+    writeFileSync(changedFile, paths.join("\n"));
+    execFileSync(
+      "bash",
+      [
+        "-e",
+        "-o",
+        "pipefail",
+        "-c",
+        `changed="$(cat "$1")"\n${areas}`,
+        "edith-area-fixture",
+        changedFile,
+      ],
+      {
+        stdio: "pipe",
+        env: {
+          ...process.env,
+          base: all ? "" : "synthetic-base",
+          GITHUB_OUTPUT: output,
+        },
       },
-    });
+    );
     return Object.fromEntries(
       readFileSync(output, "utf8")
         .trim()
