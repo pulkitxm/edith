@@ -187,7 +187,7 @@ final class LimitsStatusItem {
             ? nsColor(hex: defaults.string(forKey: AppStorageKeys.MenuBar.subColorHex)) : nil
         let labelColor = customText ?? .secondaryLabelColor
         let dimColor = customText ?? .tertiaryLabelColor
-        return accounts.map { account in
+        return accounts.enumerated().map { index, account in
             let columns = slots.map { slot in
                 let percent = SurfaceQuotaValue(account.limits.window(for: slot)).percent
                 let color: NSColor =
@@ -199,11 +199,14 @@ final class LimitsStatusItem {
                             defaults: defaults)
                     } ?? dimColor
                 return StackedLimitsView.Column(
-                    label: String(account.name.prefix(8)) + " " + slot.menuBarLabel,
+                    label: slot.menuBarLabel,
                     value: masked ? "·" : percent.map { "\(Int($0))" } ?? "?",
                     valueColor: color, labelColor: labelColor)
             }
-            return StackedLimitsView.Group(logo: nil, columns: columns)
+            return StackedLimitsView.Group(
+                logo: index == 0
+                    ? ProviderLogo.tintedImage(.claude, color: customText ?? .labelColor) : nil,
+                columns: columns, header: String(account.name.prefix(16)), headerColor: labelColor)
         }
     }
 
@@ -447,6 +450,8 @@ final class StackedLimitsView: NSView {
     struct Group {
         let logo: NSImage?
         let columns: [Column]
+        var header: String? = nil
+        var headerColor: NSColor = .secondaryLabelColor
     }
 
     var groups: [Group] = [] {
@@ -467,10 +472,7 @@ final class StackedLimitsView: NSView {
         for (index, group) in groups.enumerated() {
             if index > 0 { width += Self.groupGap }
             if group.logo != nil { width += Self.logoSize + Self.logoGap }
-            for (columnIndex, column) in group.columns.enumerated() {
-                if columnIndex > 0 { width += Self.columnGap }
-                width += Self.columnWidth(column)
-            }
+            width += Self.groupWidth(group)
         }
         return width.rounded(.up)
     }
@@ -497,6 +499,26 @@ final class StackedLimitsView: NSView {
                     from: .zero, operation: .sourceOver, fraction: 1)
                 x += Self.logoSize + Self.logoGap
             }
+            if let header = group.header {
+                let width = Self.groupWidth(group)
+                let title = Self.attributed(header, font: Self.labelFont, color: group.headerColor)
+                title.draw(
+                    at: NSPoint(x: x + (width - title.size().width) / 2, y: blockTop - labelHeight))
+                let rowWidth = Self.rowWidth(group)
+                var columnX = x + (width - rowWidth) / 2
+                let valueY = blockTop - labelHeight - Self.rowGap - valueHeight
+                for column in group.columns {
+                    let label = Self.attributed(
+                        column.label, font: Self.labelFont, color: column.labelColor)
+                    let value = Self.attributed(
+                        column.value, font: Self.valueFont, color: column.valueColor)
+                    label.draw(at: NSPoint(x: columnX, y: valueY - 1))
+                    value.draw(at: NSPoint(x: columnX + label.size().width + 3, y: valueY))
+                    columnX += label.size().width + 3 + value.size().width + Self.columnGap
+                }
+                x += width
+                continue
+            }
             for (columnIndex, column) in group.columns.enumerated() {
                 if columnIndex > 0 { x += Self.columnGap }
                 let width = Self.columnWidth(column)
@@ -513,6 +535,24 @@ final class StackedLimitsView: NSView {
                 x += width
             }
         }
+    }
+
+    private static func rowWidth(_ group: Group) -> CGFloat {
+        group.columns.reduce(CGFloat(0)) { width, column in
+            width + attributed(column.label, font: labelFont, color: .labelColor).size().width
+                + 3 + attributed(column.value, font: valueFont, color: .labelColor).size().width
+        } + CGFloat(max(group.columns.count - 1, 0)) * columnGap
+    }
+
+    private static func groupWidth(_ group: Group) -> CGFloat {
+        if let header = group.header {
+            return ceil(
+                max(
+                    rowWidth(group),
+                    attributed(header, font: labelFont, color: .labelColor).size().width))
+        }
+        return group.columns.reduce(CGFloat(0)) { $0 + columnWidth($1) }
+            + CGFloat(max(group.columns.count - 1, 0)) * columnGap
     }
 
     private static func columnWidth(_ column: Column) -> CGFloat {

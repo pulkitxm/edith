@@ -239,8 +239,11 @@ import Testing
         let accounts = fixtures(2)
         let groups = LimitsStatusItem.accountGroups(accounts, masked: false)
         #expect(groups.count == 2)
-        #expect(groups[0].columns[0].label.hasPrefix("Company"))
-        #expect(groups[1].columns[0].label.hasPrefix("Personal"))
+        #expect(groups[0].header == "Company")
+        #expect(groups[0].columns.map(\.label) == ["5h", "7d"])
+        #expect(groups[0].logo != nil)
+        #expect(groups[1].header == "Personal")
+        #expect(groups[1].logo == nil)
         #expect(
             LimitsStatusItem.accountGroups(accounts, masked: true).flatMap(\.columns).allSatisfy {
                 $0.value == "·"
