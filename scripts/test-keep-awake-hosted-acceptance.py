@@ -98,7 +98,7 @@ def native_failure_diagnostics(value, log_path):
     terminal_booleans = {
         'terminalParentPIDMatches', 'terminalParentGroupMatchesLeader',
         'terminalParentGroupMatchesSeal', 'terminalParentGroupIsSelf',
-        'terminalChildRecordComplete', 'terminalChildIsZombie',
+        'terminalChildRecordComplete', 'terminalChildIsZombie', 'terminalChildGroupIsSelf',
         'terminalChildGroupMatchesParent', 'terminalChildGroupMatchesLeader',
         'terminalChildParentMatches', 'terminalRawRecordsStable',
     }

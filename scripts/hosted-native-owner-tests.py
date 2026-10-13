@@ -258,6 +258,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                 'terminalParentGroupIsSelf': identity[4] == identity[0] if identity is not None else None,
                 'terminalChildRecordComplete': complete if info is not None else None,
                 'terminalChildIsZombie': info.status == 5 if complete else None,
+                'terminalChildGroupIsSelf': info.pgid == pid if complete else None,
                 'terminalChildGroupMatchesParent': info.pgid == identity[4] if complete and identity is not None else None,
                 'terminalChildGroupMatchesLeader': info.pgid == self.leader if complete else None,
                 'terminalChildParentMatches': info.ppid == parent if complete else None,

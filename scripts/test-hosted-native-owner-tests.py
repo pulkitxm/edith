@@ -1977,5 +1977,32 @@ class TerminalRefusalWitnessTests(unittest.TestCase):
         self.assertEqual(self.kernel.signals, [])
 
 
+class TerminalChildSelfGroupWitnessTests(unittest.TestCase):
+    def setUp(self):
+        TerminalRefusalWitnessTests.setUp(self)
+
+    def test_self_group_comparison_uses_only_the_existing_complete_child_record(self):
+        for group, complete, expected in [(234, True, True), (123, True, False),
+                                          (456, True, False), (234, False, None)]:
+            with self.subTest(group=group, complete=complete):
+                owner = runner.BoundedOwnership(123, 501)
+                self.kernel.processes[234] = (234, 101, 8, '/fixture/child', group, 123, 501, 501)
+                original = self.kernel.proc_pidinfo
+
+                def record(pid, flavor, argument, pointer, size):
+                    result = original(pid, flavor, argument, pointer, size)
+                    pointer._obj.status = 2
+                    return result if complete or pid != 234 else 0
+
+                with patch.object(self.kernel, 'proc_pidinfo', side_effect=record) as reads:
+                    self.assertFalse(owner.terminal_child(234, 123, owner.known[123]))
+                self.assertEqual([call.args[0] for call in reads.call_args_list], [123, 123, 234])
+                self.assertIs(owner.terminal_child_refusals[234]['terminalChildGroupIsSelf'], expected)
+                self.assertEqual(owner.terminal_children, {})
+                self.assertNotIn(234, owner.known)
+                self.assertNotIn(234, owner.seals)
+        self.assertEqual(self.kernel.signals, [])
+
+
 if __name__ == '__main__':
     unittest.main()
