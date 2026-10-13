@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 
 from verify_shipping_host import extension_point_descriptor, inspect_host, run
-from host_build_metadata import load_metadata, write_metadata
+from host_build_metadata import load_metadata, package_version, write_metadata
 
 parser = argparse.ArgumentParser()
 parser.add_argument('source', type=Path)
@@ -15,6 +15,8 @@ parser.add_argument('destination', type=Path)
 parser.add_argument('--identity', required=True)
 parser.add_argument('--slot')
 parser.add_argument('--release', action='store_true')
+parser.add_argument('--version')
+parser.add_argument('--build')
 args = parser.parse_args()
 if args.release == bool(args.slot):
     parser.error('choose --release or --slot')
@@ -24,9 +26,12 @@ if source == destination or source in destination.parents or destination in sour
     parser.error('source and destination must be separate bundles')
 if destination == Path('/Applications/Edith.app'):
     parser.error('use build.sh --release --install for production installation')
+try:
+    version = package_version(plistlib.loads(Path('Resources/Info.plist').read_bytes()), args.version, args.build, args.release)
+except ValueError as error:
+    parser.error(str(error))
 inspect_host(source, launcher_required=False)
 source_metadata = load_metadata(source)
-version = plistlib.loads(Path('Resources/Info.plist').read_bytes())
 identifier = 'com.pulkit.edith' if args.release else f'com.pulkit.edith.dev.{args.slot}'
 name = 'Edith' if args.release else f'Edith ({args.slot})'
 runtime = ['--options', 'runtime', '--timestamp'] if 'Developer ID Application' in args.identity else []
