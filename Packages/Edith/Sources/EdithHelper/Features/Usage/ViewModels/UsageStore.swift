@@ -97,6 +97,10 @@ final class UsageStore: FeatureModule {
     private(set) var refreshingLimits = false
     private(set) var claudeAccounts: [ClaudeAccountLimits] = []
 
+    private var initialLimitsLoaded = false
+    private var knownAccountConfiguration: [ClaudeAccount] = []
+    private let accountsStorage: ClaudeAccountStorage
+    private let accountLimits: ClaudeAccountLimitsCollector
     private var claudeUnavailable = false
     private var launchObserver: NSObjectProtocol?
     private var limitsUpdatedObserver: NSObjectProtocol?
@@ -153,11 +157,18 @@ final class UsageStore: FeatureModule {
         UsageLimitProviders.enabled(claude: claude, codex: codex, cursor: cursor, grok: grok)
     }
 
-    init() {
+    convenience init() {
+        self.init(accountsDirectory: ClaudeAccountStorage.directory)
+    }
+
+    init(
+        accountsDirectory: URL,
+        accountLimits: ClaudeAccountLimitsCollector = .shared
+    ) {
+        accountsStorage = ClaudeAccountStorage(directory: accountsDirectory)
+        self.accountLimits = accountLimits
         Task { @MainActor [weak self] in
-            let latest = await LimitsHistory.loadLatestProviders()
-            self?.seedFromHistory(latest)
-            self?.updateStatusItem()
+            await self?.reloadLimitsFromHistory()
         }
 
         if let app = NSApp, app.isRunning {
@@ -235,7 +246,7 @@ final class UsageStore: FeatureModule {
     }
 
     func syncStatusItem() {
-        guard NSApp != nil else { return }
+        guard initialLimitsLoaded, NSApp != nil else { return }
         let on =
             SharedDefaults.store.object(forKey: AppStorageKeys.Limits.inMenuBar) as? Bool ?? true
         if on, statusItem == nil {
@@ -275,14 +286,13 @@ final class UsageStore: FeatureModule {
 
     func receiveLimitsSnapshot(_ snapshot: LimitsTopicSnapshot) async {
         guard !terminating else { return }
-        claudeAccounts = providerEnabled(.claude) ? snapshot.claudeAccounts : []
         if let claude = snapshot.providers.first(where: { $0.provider == .claude }) {
             claudeUnavailable = claude.error != nil && claude.session == nil
             session = Self.fresh(claude.session)
             week = Self.fresh(claude.week)
             fableWeek = Self.fresh(claude.fable)
         }
-        await reloadLimitsFromHistory()
+        await reloadLimitsFromHistory(incomingAccounts: snapshot.claudeAccounts)
         limitsError =
             snapshot.failure
             ?? snapshot.providers.first {
@@ -293,9 +303,49 @@ final class UsageStore: FeatureModule {
         limitsRequestTask = nil
     }
 
-    func reloadLimitsFromHistory() async {
+    func reloadLimitsFromHistory(incomingAccounts: [ClaudeAccountLimits] = []) async {
         guard !terminating else { return }
+        let configured: [ClaudeAccount]
+        do {
+            configured = providerEnabled(.claude) ? try await accountsStorage.load().accounts : []
+        } catch {
+            limitsError = "Could not load saved Claude accounts."
+            return
+        }
+        let saved = await accountLimits.cachedSnapshots(accounts: configured)
+        guard !terminating else { return }
+        let incoming = Dictionary(
+            incomingAccounts.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+        let unchanged = Set(configured.filter { knownAccountConfiguration.contains($0) }.map(\.id))
+        let previous = Dictionary(
+            claudeAccounts.filter { unchanged.contains($0.id) }.map { ($0.id, $0) },
+            uniquingKeysWith: { _, last in last })
+        knownAccountConfiguration = configured
+        claudeAccounts = saved.map { account in
+            guard let received = incoming[account.id] ?? previous[account.id] else {
+                return account
+            }
+            let hasCachedReading =
+                account.limits.session != nil || account.limits.week != nil
+                || account.limits.fable != nil
+            if incoming[account.id] == nil, hasCachedReading,
+                account.refreshedAt > received.refreshedAt
+            {
+                return account
+            }
+            let limits = LimitsProviderSnapshot(
+                provider: .claude, session: Self.fresh(received.limits.session),
+                week: Self.fresh(received.limits.week), fable: Self.fresh(received.limits.fable),
+                error: received.limits.error)
+            return ClaudeAccountLimits(
+                id: account.id, name: account.name, limits: limits,
+                refreshedAt: received.refreshedAt, retryAt: received.retryAt)
+        }
+        initialLimitsLoaded = true
+        if NSApp?.isRunning == true { syncStatusItem() }
+        updateStatusItem()
         let latest = await LimitsHistory.loadLatestProviders()
+        guard !terminating else { return }
         seedFromHistory(latest)
         updateStatusItem()
     }

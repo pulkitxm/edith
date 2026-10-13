@@ -5,6 +5,51 @@ import Testing
 
 @MainActor
 @Suite struct LimitsStatusItemTests {
+    @Test func savedAccountNamesRemainStableAcrossEmptyAndPartialStartupSnapshots() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let accounts = [
+            ClaudeAccount(name: "Company", credential: "synthetic-company"),
+            ClaudeAccount(name: "Personal", credential: "synthetic-personal"),
+        ]
+        try await ClaudeAccountStorage(directory: root).save(.init(accounts: accounts))
+        let file = root.appendingPathComponent("limits-cache.json")
+        let producer = ClaudeAccountLimitsCollector(cacheFile: file)
+        let reader = ClaudeAccountLimitsCollector(cacheFile: file)
+        let store = UsageStore(accountsDirectory: root, accountLimits: reader)
+        defer { store.shutdown() }
+        await store.reloadLimitsFromHistory()
+        #expect(store.claudeAccounts.map(\.name) == ["Company", "Personal"])
+        #expect(store.claudeAccounts.allSatisfy { $0.limits.session == nil })
+        _ = await producer.refresh(accounts: accounts) { account, _ in
+            .init(
+                provider: .claude,
+                session: .init(percent: account.name == "Company" ? 12 : 25, resetsAt: nil),
+                week: nil)
+        }
+        await store.receiveLimitsSnapshot(
+            .init(
+                refreshedAt: Date(),
+                providers: [
+                    .init(provider: .claude, session: .init(percent: 99, resetsAt: nil), week: nil)
+                ], failure: nil))
+        #expect(store.claudeAccounts.map(\.id) == accounts.map(\.id))
+        #expect(store.claudeAccounts.map { $0.limits.session?.percent } == [12, 25])
+        let personal = ClaudeAccountLimits(
+            id: accounts[1].id, name: "Stale display name",
+            limits: .init(provider: .claude, session: .init(percent: 33, resetsAt: nil), week: nil),
+            refreshedAt: Date())
+        await store.receiveLimitsSnapshot(
+            .init(refreshedAt: Date(), providers: [], failure: nil, claudeAccounts: [personal]))
+        #expect(store.claudeAccounts.map(\.name) == ["Company", "Personal"])
+        #expect(store.claudeAccounts.map { $0.limits.session?.percent } == [12, 33])
+        await store.receiveLimitsSnapshot(.init(refreshedAt: Date(), providers: [], failure: nil))
+        #expect(store.claudeAccounts.map { $0.limits.session?.percent } == [12, 33])
+        try await ClaudeAccountStorage(directory: root).save(.init(accounts: [accounts[1]]))
+        await store.reloadLimitsFromHistory()
+        #expect(store.claudeAccounts.map(\.name) == ["Personal"])
+    }
+
     @Test func namedAccountsHonorCustomLabelAndRiskColors() {
         let domain = "test.account-colors." + UUID().uuidString
         let defaults = UserDefaults(suiteName: domain)!

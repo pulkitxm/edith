@@ -50,6 +50,34 @@ public actor ClaudeAccountLimitsCollector {
         }
     }
 
+    public func cachedSnapshots(accounts: [ClaudeAccount], now: Date = Date())
+        -> [ClaudeAccountLimits]
+    {
+        if let cacheFile {
+            if let handle = try? FileHandle(forReadingFrom: cacheFile) {
+                defer { try? handle.close() }
+                if let data = try? handle.read(upToCount: 1_048_577), data.count <= 1_048_576,
+                    let saved = try? JSONDecoder().decode([String: Cached].self, from: data)
+                {
+                    cached = saved
+                }
+            }
+        }
+        return accounts.map { account in
+            let snapshot = cached[cacheKey(account)]?.snapshot
+            func fresh(_ window: LimitWindow?) -> LimitWindow? {
+                window.flatMap { ($0.resetsAt ?? .distantFuture) > now ? $0 : nil }
+            }
+            let limits = LimitsProviderSnapshot(
+                provider: .claude, session: fresh(snapshot?.limits.session),
+                week: fresh(snapshot?.limits.week), fable: fresh(snapshot?.limits.fable),
+                error: snapshot?.limits.error ?? (snapshot == nil ? "Loading limits." : nil))
+            return ClaudeAccountLimits(
+                id: account.id, name: account.name, limits: limits,
+                refreshedAt: snapshot?.refreshedAt ?? now, retryAt: snapshot?.retryAt)
+        }
+    }
+
     public func refresh(
         accounts: [ClaudeAccount], directory: URL = ClaudeAccountStorage.directory,
         now: Date = Date(),
