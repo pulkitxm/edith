@@ -14,7 +14,7 @@ struct HerdrFilterButton: View {
 
     private var dark: Bool { scheme == .dark }
     private var chips: [HerdrSessionFilterChip] { currentChips }
-    private var active: Bool { !chips.isEmpty }
+    private var active: Bool { !chips.isEmpty || store.accountFilter != nil }
 
     var body: some View {
         Button(action: onPress) {
@@ -34,8 +34,11 @@ struct HerdrFilterButton: View {
         }
         .buttonStyle(.edith(.borderless))
         .accessibilityLabel("Filter sessions")
-        .accessibilityValue(HerdrSessionFilters.summary(of: chips))
-        .help("Filter by machine, agent, or space (⇧⌘F)")
+        .accessibilityValue(
+            HerdrSessionFilters.summary(of: chips)
+                + (store.accountFilter == nil ? "" : ", Claude account filter active")
+        )
+        .help("Filter by machine, agent, Claude account, or space (⇧⌘F)")
         .popover(isPresented: popoverPresented, arrowEdge: .top) {
             HerdrFilterMenu(
                 store: store, hideAgents: hideAgents, onOpenSpace: onOpenSpace,
@@ -59,7 +62,7 @@ struct HerdrFilterButton: View {
 
     @ViewBuilder private var badge: some View {
         if active {
-            Text(chips.count > 9 ? "9+" : "\(chips.count)")
+            Text("\(chips.count + (store.accountFilter == nil ? 0 : 1))")
                 .font(DashSkin.mono(8, weight: .bold))
                 .foregroundStyle(.white)
                 .padding(.horizontal, UIScale.pt(3))
@@ -109,6 +112,11 @@ private struct HerdrFilterMenu: View {
             spaces: store.agentSpaces.map { ($0.id, $0.title) })
     }
 
+    private var removedAccountIDs: [String] {
+        Set(store.accountSessions.values)
+            .subtracting(store.claudeAccounts.state.accounts.map { $0.id.uuidString }).sorted()
+    }
+
     private var resolvedHighlight: Int {
         guard !rows.isEmpty else { return 0 }
         return min(highlight, rows.count - 1)
@@ -116,6 +124,20 @@ private struct HerdrFilterMenu: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            Picker(
+                "Claude account",
+                selection: Binding(
+                    get: { store.accountFilter }, set: { store.accountFilter = $0 })
+            ) {
+                Text("All accounts").tag(String?.none)
+                Text("Existing CLI login").tag(Optional("cli"))
+                ForEach(store.claudeAccounts.state.accounts) { account in
+                    Text(account.name).tag(Optional(account.id.uuidString))
+                }
+                ForEach(removedAccountIDs, id: \.self) { id in
+                    Text("Removed account (\(id.prefix(8)))").tag(Optional(id))
+                }
+            }
             search
             if rows.isEmpty {
                 Text("No matching filters")
@@ -133,6 +155,7 @@ private struct HerdrFilterMenu: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Session filters")
         .onAppear { searchFocused = true }
+        .pageTask { await store.claudeAccounts.read() }
         .onChange(of: query) { _, _ in
             highlight = 0
             scrollToken += 1

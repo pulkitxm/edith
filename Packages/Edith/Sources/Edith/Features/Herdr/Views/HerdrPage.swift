@@ -157,7 +157,7 @@ struct HerdrPage: View {
             HerdrMessageSheet(messaging: store.messaging, draft: draft, hideAgents: hideAgents)
         }
         .edithSheet(isPresented: $launchSettingsPresented) {
-            HerdrLaunchSettingsSheet()
+            HerdrLaunchSettingsSheet(accounts: store.claudeAccounts)
         }
         .edithSheet(isPresented: $newAgentPopupPresented, dismissible: nil) {
             HerdrNewAgentPopup(store: store)

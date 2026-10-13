@@ -18,9 +18,9 @@ public enum ClaudeLimitsReader {
             case .invalidToken:
                 "CLAUDE_CODE_OAUTH_TOKEN is not a valid OAuth token value."
             case .unauthorized:
-                "The Claude login expired or was rejected. Sign in again with Claude Code or update CLAUDE_CODE_OAUTH_TOKEN."
+                "The Claude login expired or was rejected. Reconnect its subscription for limits, sign in again, or update its OAuth token."
             case .missingProfileScope:
-                "Sign in with Claude Code to read limits. The current OAuth token lacks user:profile scope."
+                "Connect this account's subscription for limits. Its OAuth token lacks user:profile scope."
             case .forbidden:
                 "The Claude OAuth token is not permitted to read usage limits."
             case .unavailable: "Claude did not return usage limits."
@@ -53,6 +53,52 @@ public enum ClaudeLimitsReader {
             guard let response = response as? HTTPURLResponse else { throw Failure.unavailable }
             return (data, response)
         }
+    }
+
+    public static func fetch(account: ClaudeAccount, directory: URL) async throws
+        -> LimitsProviderSnapshot
+    {
+        let token = try await resolveAccountUsageToken(account: account, directory: directory)
+        return try await fetch(token: token) { request in
+            let (data, response) = try await session.data(for: request)
+            guard let response = response as? HTTPURLResponse else { throw Failure.unavailable }
+            return (data, response)
+        }
+    }
+
+    static func resolveAccountUsageToken(
+        account: ClaudeAccount, directory: URL,
+        limitsLogin: (URL) async throws -> String = {
+            try await ClaudeLimitsLogin.shared.token(folder: $0)
+        },
+        subscriptionLogin: (ClaudeAccount, URL) async -> String? = {
+            await ClaudeSavedLogin.scopedToken(account: $0, directory: $1)
+        }
+    ) async throws -> String {
+        let token: String
+        if let profileID = account.limitsProfileID {
+            token = try await limitsLogin(
+                directory.appendingPathComponent(profileID.uuidString))
+        } else {
+            switch account.authentication {
+            case .apiKey:
+                throw ClaudeAccountError.rejected(
+                    "Subscription limits are unavailable for API-key accounts.")
+            case .oauthToken:
+                token = try validatedToken(account.credential)
+            case .browserLogin:
+                guard
+                    let saved = await subscriptionLogin(
+                        account, directory)
+                else {
+                    throw ClaudeAccountError.rejected(
+                        "Launch a session with this account and complete Claude's login to show its limits."
+                    )
+                }
+                token = saved
+            }
+        }
+        return token
     }
 
     static func resolveUsageToken(

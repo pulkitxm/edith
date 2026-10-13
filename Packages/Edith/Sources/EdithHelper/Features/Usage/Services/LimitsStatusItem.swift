@@ -52,11 +52,34 @@ final class LimitsStatusItem {
             PresenterState.shared.active
             && (defaults.object(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
                 as? Bool ?? false)
-        let source = Self.stableProviders(providers, defaults: defaults)
+        let accounts = store?.providerEnabled(.claude) == true ? store?.claudeAccounts ?? [] : []
+        let source = Self.stableProviders(providers, defaults: defaults).filter {
+            accounts.isEmpty || $0.provider != .claude
+        }
         let groups = MenuBarLimits.groups(
             providers: source,
             selection: { MenuBarLimits.selection(for: $0, defaults: defaults) },
             masked: masked)
+        if !accounts.isEmpty {
+            let visible = ClaudeAccountLimitsLayout.inlineAccounts(
+                accounts, selectedID: defaults.string(forKey: "menuBar.claudeAccount"))
+            var rendered = Self.accountGroups(
+                visible, masked: masked,
+                slots: MenuBarLimits.selection(for: .claude, defaults: defaults))
+            if accounts.count > 2 {
+                rendered.append(
+                    .init(
+                        logo: nil,
+                        columns: [
+                            .init(
+                                label: "accounts", value: "+\(accounts.count - 1)",
+                                valueColor: .secondaryLabelColor, labelColor: .secondaryLabelColor)
+                        ]))
+            }
+            renderStackedGroups(rendered + stackedGroups(groups))
+            item?.isVisible = true
+            return
+        }
         guard !groups.isEmpty else {
             item?.isVisible = false
             return
@@ -129,9 +152,12 @@ final class LimitsStatusItem {
     }
 
     private func renderStacked(_ groups: [MenuBarProviderGroup]) {
-        let renderedGroups = stackedGroups(groups)
+        renderStackedGroups(stackedGroups(groups))
+    }
+
+    private func renderStackedGroups(_ groups: [StackedLimitsView.Group]) {
         let view = stackedView ?? StackedLimitsView()
-        view.groups = renderedGroups
+        view.groups = groups
         let width = view.desiredWidth
         ensureStatusItem(length: width)
         guard let button = item?.button else { return }
@@ -146,6 +172,26 @@ final class LimitsStatusItem {
             x: 0, y: 0, width: width,
             height: max(button.bounds.height, NSStatusBar.system.thickness))
         view.needsDisplay = true
+    }
+
+    nonisolated static func accountGroups(
+        _ accounts: [ClaudeAccountLimits], masked: Bool,
+        slots: [LimitWindowSlot] = [.session, .week]
+    ) -> [StackedLimitsView.Group] {
+        accounts.map { account in
+            let columns = slots.map { slot in
+                let percent = SurfaceQuotaValue(account.limits.window(for: slot)).percent
+                let color: NSColor =
+                    masked || percent == nil
+                    ? .secondaryLabelColor
+                    : (percent! >= 85 ? .systemRed : percent! >= 60 ? .systemOrange : .labelColor)
+                return StackedLimitsView.Column(
+                    label: String(account.name.prefix(8)) + " " + slot.menuBarLabel,
+                    value: masked ? "·" : percent.map { "\(Int($0))" } ?? "?",
+                    valueColor: color, labelColor: .secondaryLabelColor)
+            }
+            return StackedLimitsView.Group(logo: nil, columns: columns)
+        }
     }
 
     private func ensureStatusItem(length: CGFloat) {
@@ -467,6 +513,8 @@ final class StackedLimitsView: NSView {
 
 struct LimitsMenuPanel: View {
     let store: UsageStore
+    @AppStorage("menuBar.claudeAccount", store: SharedDefaults.store) private var selectedAccount =
+        ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -475,7 +523,27 @@ struct LimitsMenuPanel: View {
             {
                 Text("Usage hidden during presentation").foregroundStyle(.secondary)
             } else {
-                ForEach(store.enabledProviders) { provider in
+                if !store.claudeAccounts.isEmpty {
+                    Text("Claude accounts").font(.edithText(.headline))
+                    if store.claudeAccounts.count > 2 {
+                        Picker("Show in menu bar", selection: $selectedAccount) {
+                            Text("First account").tag("")
+                            ForEach(store.claudeAccounts) { account in
+                                Text(account.name).tag(account.id.uuidString)
+                            }
+                        }
+                        .onChange(of: selectedAccount) { store.refreshMenuBarItem() }
+                    }
+                    ScrollView {
+                        ClaudeAccountLimitsView(accounts: store.claudeAccounts, compact: true)
+                    }
+                    .frame(maxHeight: store.claudeAccounts.count <= 2 ? 340 : 420)
+                }
+                ForEach(
+                    store.enabledProviders.filter {
+                        store.claudeAccounts.isEmpty || $0 != .claude
+                    }
+                ) { provider in
                     let limits = store.limits(for: provider)
                     Text(provider.label).font(.edithText(.headline))
                     let slots = MenuBarLimits.slots(for: provider).filter { slot in

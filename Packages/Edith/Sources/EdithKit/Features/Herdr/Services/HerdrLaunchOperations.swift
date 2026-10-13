@@ -7,6 +7,33 @@ public struct HerdrAgentLaunch: Sendable {
 }
 
 public enum HerdrLaunchOperations {
+    public static func launchAccount(
+        account: ClaudeAccount, command: String, arguments: [String], environment: String = "",
+        pane: String, on machine: Machine?, authenticationOnly: Bool = false
+    ) async throws {
+        try account.validateLaunch()
+        let configurationPath =
+            account.authentication == .browserLogin
+            ? try await ClaudeSubscriptionProfile.prepare(account: account, on: machine) : nil
+        let local = try account.launchCommand(
+            command: command, arguments: arguments, environment: environment,
+            configurationPath: configurationPath, authenticationOnly: authenticationOnly)
+        let windows = try account.launchCommand(
+            command: command, arguments: arguments, environment: environment, platform: .windows,
+            configurationPath: configurationPath, authenticationOnly: authenticationOnly)
+        _ = try await HerdrCommand.run(
+            local: HerdrSessionCommand.scoped(
+                HerdrPaneRunCommand.arguments(pane: pane, command: local),
+                session: HerdrTerminalSpace.defaultSession),
+            remote: { platform in
+                remoteHerdrCommand(
+                    arguments: HerdrSessionCommand.scoped(
+                        HerdrPaneRunCommand.arguments(
+                            pane: pane, command: platform == .windows ? windows : local),
+                        session: HerdrTerminalSpace.defaultSession), platform: platform)
+            }, timeout: 15, on: machine)
+    }
+
     private static let defaultTimeout: TimeInterval = 15
     private static let agentStartTimeoutMS = 30_000
 
@@ -97,8 +124,8 @@ public enum HerdrLaunchOperations {
         catalog: AgentLaunchCatalog? = nil, session: String = HerdrTerminalSpace.defaultSession,
         defaults: UserDefaults = SharedDefaults.store
     ) -> HerdrAgentLaunch {
-        let agentArguments = AgentLaunchArguments.launchArguments(
-            kind: kind, options: options, catalog: catalog)
+        let agentArguments = HerdrLaunchSettings.launchArguments(
+            kind: kind, options: options, catalog: catalog, in: defaults)
         if HerdrLaunchSettings.usesHerdrAgentStart(for: kind, in: defaults),
             let slug = HerdrLaunchSettings.defaultHerdrSlug(for: kind)
         {
@@ -117,7 +144,7 @@ public enum HerdrLaunchOperations {
                                 agentArguments: agentArguments), session: session), platform: $0)
                 }, timeout: TimeInterval(timeoutMS / 1_000) + 5)
         }
-        let command = HerdrLaunchSettings.command(for: kind, in: defaults)
+        let command = HerdrLaunchSettings.launchCommand(for: kind, in: defaults)
         return HerdrAgentLaunch(
             local: HerdrSessionCommand.scoped(
                 HerdrPaneRunCommand.arguments(

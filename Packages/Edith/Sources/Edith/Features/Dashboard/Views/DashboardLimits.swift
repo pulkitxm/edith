@@ -16,6 +16,7 @@ struct RateLimitsDialsView: View {
     @State private var point: LimitPoint?
     @State private var allowance: GrokAllowance?
     @State private var latestLimits: LimitsTopicSnapshot?
+    @Environment(\.compactLayout) private var compact
     @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
         var selectedRaw =
         LimitProvider.claude.rawValue
@@ -41,7 +42,10 @@ struct RateLimitsDialsView: View {
             await reloadLoad.perform(operation: { await LimitsHistory.loadLatestProviders() }) {
                 latest in
                 latestProviders = latest
-                let found = LimitProvider.allCases.filter { latest[$0] != nil }
+                let found = LimitProvider.allCases.filter {
+                    latest[$0] != nil
+                        || ($0 == .claude && latestLimits?.claudeAccounts.isEmpty == false)
+                }
                 providers = found
                 let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
                 let provider = found.contains(saved) ? saved : found.first ?? saved
@@ -73,7 +77,9 @@ struct RateLimitsDialsView: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 LimitsRefreshButton(dark: dark) { reload() }
             }
-            if showsJumpLink {
+            if selected == .claude, let accounts = latestLimits?.claudeAccounts, !accounts.isEmpty {
+                ClaudeAccountLimitsView(accounts: accounts, compact: compact)
+            } else if showsJumpLink {
                 providerOverview
             } else {
                 HStack(spacing: UIScale.pt(24)) {
