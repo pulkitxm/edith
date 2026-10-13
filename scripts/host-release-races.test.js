@@ -114,40 +114,43 @@ test("partial exact draft resumes only missing assets and exact public retry wri
   }
 });
 
-test("every existing asset is immutable on drafts public releases and rebuilds", async () => {
-  for (const draft of [true, false])
-    for (const rebuild of [false, true])
-      for (const name of assetNames) {
-        const value = fixture(true);
-        try {
-          if (rebuild) {
-            value.proof.sourceMode = "tag-rebuild";
-            writeFileSync(
-              join(value.directory, "host-release-proof.json"),
-              JSON.stringify(value.proof),
-            );
-          }
-          fill(value);
-          value.release.draft = draft;
-          const existing = value.release.assets.find(
-            (asset) => asset.name === name,
-          );
-          value.remoteBytes.set(existing.id, Buffer.alloc(existing.size, 65));
-          await expect(
-            publish(value, { rebuild, matchesAsset: matcher(value) }),
-          ).rejects.toThrow("Publish a new version");
-          expect(writes(value)).toEqual([]);
-          expect(value.calls.some((args) => args.includes("DELETE"))).toBe(
-            false,
-          );
-          expect(value.remoteBytes.get(existing.id)).toEqual(
-            Buffer.alloc(existing.size, 65),
-          );
-        } finally {
-          value.clean();
-        }
+const immutableAssetCases = [true, false].flatMap((draft) =>
+  [false, true].flatMap((rebuild) =>
+    assetNames.map((name) => [draft, rebuild, name]),
+  ),
+);
+
+test.each(immutableAssetCases)(
+  "every existing asset is immutable: draft %p rebuild %p asset %s",
+  async (draft, rebuild, name) => {
+    const value = fixture(true);
+    try {
+      if (rebuild) {
+        value.proof.sourceMode = "tag-rebuild";
+        writeFileSync(
+          join(value.directory, "host-release-proof.json"),
+          JSON.stringify(value.proof),
+        );
       }
-});
+      fill(value);
+      value.release.draft = draft;
+      const existing = value.release.assets.find(
+        (asset) => asset.name === name,
+      );
+      value.remoteBytes.set(existing.id, Buffer.alloc(existing.size, 65));
+      await expect(
+        publish(value, { rebuild, matchesAsset: matcher(value) }),
+      ).rejects.toThrow("Publish a new version");
+      expect(writes(value)).toEqual([]);
+      expect(value.calls.some((args) => args.includes("DELETE"))).toBe(false);
+      expect(value.remoteBytes.get(existing.id)).toEqual(
+        Buffer.alloc(existing.size, 65),
+      );
+    } finally {
+      value.clean();
+    }
+  },
+);
 
 test("publication during the last asset comparison fails closed without replacement", async () => {
   for (const mismatched of [false, true]) {
