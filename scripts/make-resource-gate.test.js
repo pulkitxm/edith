@@ -211,6 +211,17 @@ test("mixed goals take the heavier target", () => {
   expect(tests.profile).toBe("swift test");
 });
 
+test("filesystem local tests share the Swift resource budget", () => {
+  const goal = "ci-functional-filesystem-local";
+  const admitted = decide([goal], healthy, []);
+  expect(admitted.profile).toBe("swift test");
+  expect(admitted.need_threads).toBe(2.5);
+  expect(admitted.need_mem_mb).toBe(2560);
+  expect(decide([goal], { ...healthy, cpus: 6 }, [seated(0)]).action).toBe(
+    "wait",
+  );
+});
+
 for (const goal of [
   "ci-extension-keep-awake-compile",
   "ci-extension-keep-awake",
