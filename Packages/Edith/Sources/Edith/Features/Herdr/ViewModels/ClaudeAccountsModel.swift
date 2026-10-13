@@ -76,4 +76,16 @@ import Observation
     }
 
     func account(_ id: UUID?) -> ClaudeAccount? { state.accounts.first { $0.id == id } }
+
+    func rememberLaunchSelection(_ selection: String) async {
+        guard let id = UUID(uuidString: selection), account(id) != nil else { return }
+        var next = state
+        next.defaultID = id
+        await save(next)
+    }
+
+    func launchSelection(_ selection: String) -> String {
+        if let id = UUID(uuidString: selection), account(id) != nil { return selection }
+        return (account(state.defaultID) ?? state.accounts.first)?.id.uuidString ?? "cli"
+    }
 }

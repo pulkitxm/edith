@@ -6,6 +6,25 @@ import Testing
 @testable import Edith
 
 @MainActor @Suite(.serialized) struct ClaudeAccountsModelTests {
+    @Test func launchPickerSelectsTheNamedDefaultWithoutAnExtraEntry() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = ClaudeAccountsModel(directory: root)
+        let personal = ClaudeAccount(name: "Personal", credential: "synthetic-personal")
+        let company = ClaudeAccount(name: "Company", credential: "synthetic-company")
+        try await model.persist(.init(accounts: [personal, company], defaultID: company.id))
+        #expect(model.launchSelection("default") == company.id.uuidString)
+        #expect(model.launchSelection(personal.id.uuidString) == personal.id.uuidString)
+        await model.rememberLaunchSelection(personal.id.uuidString)
+        let restored = ClaudeAccountsModel(directory: root)
+        try await restored.load()
+        #expect(restored.launchSelection("default") == personal.id.uuidString)
+        try await model.persist(.init(accounts: [personal]))
+        #expect(model.launchSelection("default") == personal.id.uuidString)
+        try await model.persist(.init())
+        #expect(model.launchSelection("default") == "cli")
+    }
+
     @Test func persistenceKeepsNamesCredentialsAndDefaultsInPrivateFiles() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
