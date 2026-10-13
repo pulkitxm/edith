@@ -5,6 +5,7 @@ struct ClaudeAccountSettings: View {
     let accounts: ClaudeAccountsModel
     var machine: Machine? = nil
     var accountAdded: (ClaudeAccount) -> Void = { _ in }
+    @Environment(\.dismiss) private var dismiss
     @State private var draft: ClaudeAccount?
 
     var body: some View {
@@ -99,6 +100,7 @@ struct ClaudeAccountSettings: View {
                             Task {
                                 if let linked = await accounts.connectLimitsLogin(draft) {
                                     self.draft = linked
+                                    dismiss()
                                 }
                             }
                         }

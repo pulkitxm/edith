@@ -1,6 +1,5 @@
 import CryptoKit
 import Foundation
-import Security
 
 public actor ClaudeLimitsLogin {
     public static let shared = ClaudeLimitsLogin()
@@ -18,14 +17,14 @@ public actor ClaudeLimitsLogin {
     public func token(folder: URL) async throws -> String {
         if let task = pending[folder.path] { return try await task.value }
         let task = Task<String, Error> {
-            let environment = ["CLAUDE_SECURESTORAGE_CONFIG_DIR": folder.path]
-            guard let data = ClaudeSavedLogin.credentials(environment: environment) else {
+            guard let data = await Self.credentials(folder: folder) else {
                 throw ClaudeAccountError.rejected(
                     "Complete the subscription sign-in in the limits terminal, then refresh limits."
                 )
             }
             if let token = ClaudeSavedLogin.token(
-                environment: environment, now: Date().addingTimeInterval(60))
+                environment: ["CLAUDE_CONFIG_DIR": folder.path], now: Date().addingTimeInterval(60),
+                readFile: { _ in data })
             {
                 return token
             }
@@ -36,8 +35,11 @@ public actor ClaudeLimitsLogin {
                 }
                 return (data, response)
             }
-            try Self.save(updated, folder: folder)
-            guard let token = ClaudeSavedLogin.token(environment: environment) else {
+            try await Self.save(updated, folder: folder)
+            guard
+                let token = ClaudeSavedLogin.token(
+                    environment: ["CLAUDE_CONFIG_DIR": folder.path], readFile: { _ in updated })
+            else {
                 throw ClaudeLimitsReader.Failure.unauthorized
             }
             return token
@@ -96,22 +98,40 @@ public actor ClaudeLimitsLogin {
         return try JSONSerialization.data(withJSONObject: object)
     }
 
-    static func save(_ data: Data, folder: URL) throws {
+    private static func service(_ folder: URL) -> String {
         let hash = SHA256.hash(data: Data(folder.path.utf8)).map { String(format: "%02x", $0) }
             .joined().prefix(8)
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "Claude Code-credentials-" + hash,
-            kSecAttrAccount as String: NSUserName(),
-        ]
-        var status = SecItemUpdate(
-            query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-        if status == errSecItemNotFound {
-            var item = query
-            item[kSecValueData as String] = data
-            status = SecItemAdd(item as CFDictionary, nil)
+        return "Claude Code-credentials-" + hash
+    }
+
+    static func credentials(folder: URL) async -> Data? {
+        let request = CLICommandRequest(
+            executableURL: URL(fileURLWithPath: "/usr/bin/security"),
+            arguments: ["find-generic-password", "-a", NSUserName(), "-s", service(folder), "-w"],
+            environment: [:], timeout: 3, maximumOutputBytes: 65_537,
+            discardsStandardError: true)
+        if let result = try? await CLICommandRunner.runLocal(request, onLine: { _ in }),
+            result.terminationStatus == 0,
+            let object = try? JSONSerialization.jsonObject(with: result.standardOutputData),
+            let data = try? JSONSerialization.data(withJSONObject: object), data.count <= 65_536
+        {
+            return data
         }
-        guard status == errSecSuccess else {
+        return ClaudeSavedLogin.credentials(environment: ["CLAUDE_CONFIG_DIR": folder.path])
+    }
+
+    static func save(_ data: Data, folder: URL) async throws {
+        let hex = data.map { String(format: "%02x", $0) }.joined()
+        let input =
+            "add-generic-password -U -a " + ShellQuote.quote(NSUserName())
+            + " -s " + ShellQuote.quote(service(folder)) + " -X " + ShellQuote.quote(hex) + "\n"
+        let result = try await CLICommandRunner.runLocal(
+            CLICommandRequest(
+                executableURL: URL(fileURLWithPath: "/usr/bin/security"), arguments: ["-i"],
+                environment: [:], timeout: 3, maximumOutputBytes: 1024,
+                standardInputData: Data(input.utf8), discardsStandardError: true),
+            onLine: { _ in })
+        guard result.terminationStatus == 0 else {
             throw ClaudeAccountError.rejected("Could not save the renewed limits login.")
         }
         let file = folder.appendingPathComponent(".credentials.json")

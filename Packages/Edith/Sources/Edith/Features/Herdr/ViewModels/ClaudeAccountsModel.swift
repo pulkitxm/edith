@@ -81,6 +81,15 @@ import Observation
                     String.init),
                 environment: HerdrLaunchSettings.sharedEnvironment(), pane: pane.paneID, on: nil,
                 authenticationOnly: true)
+            let store = HerdrStore.shared
+            let host = store.hosts.first { $0.isLocal }
+            store.open(
+                HerdrAgent.make(
+                    machineID: host?.id ?? "local", machineName: host?.name ?? "This Mac",
+                    machineIsLocal: true, sshTarget: nil, session: "default", pane: pane.paneID,
+                    kind: "Claude Code", status: .unknown, title: "Limits: " + profile.name,
+                    workspace: "Limits: " + profile.name, cwd: ""))
+            store.revealWorkspaceWindow()
         }
     ) async -> ClaudeAccount? {
         guard ready, !saving, state.accounts.contains(where: { $0.id == account.id }),

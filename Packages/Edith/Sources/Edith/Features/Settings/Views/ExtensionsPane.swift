@@ -1884,7 +1884,7 @@ private struct UsageRows: View {
 
                     if isCustomColor {
                         ColorPicker(
-                            "Text (5h / 7d)",
+                            "Labels (account / 5h / 7d)",
                             selection: hexBinding(
                                 $subColorHex.configured(AppStorageKeys.MenuBar.subColorHex)),
                             supportsOpacity: false)

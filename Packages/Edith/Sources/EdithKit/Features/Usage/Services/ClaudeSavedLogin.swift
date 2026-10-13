@@ -6,9 +6,10 @@ import Security
 public enum ClaudeSavedLogin {
     static func scopedToken(account: ClaudeAccount, directory: URL) async -> String? {
         let folder = directory.appendingPathComponent(account.id.uuidString).path
-        if let local = token(environment: [
-            "CLAUDE_CONFIG_DIR": folder, "CLAUDE_SECURESTORAGE_CONFIG_DIR": folder,
-        ]) {
+        if let data = await ClaudeLimitsLogin.credentials(folder: URL(fileURLWithPath: folder)),
+            let local = token(
+                environment: ["CLAUDE_CONFIG_DIR": folder], readFile: { _ in data })
+        {
             return local
         }
         if let loginData = account.loginData,

@@ -5,6 +5,98 @@ import Testing
 
 @MainActor
 @Suite struct LimitsStatusItemTests {
+    @Test func namedAccountsHonorCustomLabelAndRiskColors() {
+        let domain = "test.account-colors." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: domain)!
+        defer { defaults.removePersistentDomain(forName: domain) }
+        defaults.set("custom", forKey: AppStorageKeys.MenuBar.colorMode)
+        defaults.set("#FFFFFF", forKey: AppStorageKeys.MenuBar.subColorHex)
+        defaults.set("#123456", forKey: AppStorageKeys.MenuBar.lowColorHex)
+        defaults.set("#654321", forKey: AppStorageKeys.MenuBar.midColorHex)
+        defaults.set("#FEDCBA", forKey: AppStorageKeys.MenuBar.highColorHex)
+        defaults.set(false, forKey: AppStorageKeys.General.smartColor)
+        let account = ClaudeAccountLimits(
+            id: UUID(), name: "Company",
+            limits: .init(
+                provider: .claude, session: .init(percent: 10, resetsAt: nil),
+                week: .init(percent: 95, resetsAt: nil)), refreshedAt: Date())
+        let columns = LimitsStatusItem.accountGroups([account], masked: false, defaults: defaults)[
+            0
+        ].columns
+        #expect(columns[0].labelColor == LimitsStatusItem.nsColor(hex: "FFFFFF"))
+        #expect(columns[0].valueColor == LimitsStatusItem.nsColor(hex: "123456"))
+        #expect(columns[1].valueColor == LimitsStatusItem.nsColor(hex: "FEDCBA"))
+        let hidden = LimitsStatusItem.accountGroups([account], masked: true, defaults: defaults)[0]
+            .columns
+        #expect(hidden.allSatisfy { $0.value == "·" && $0.valueColor == $0.labelColor })
+        defaults.set("auto", forKey: AppStorageKeys.MenuBar.colorMode)
+        let automatic = LimitsStatusItem.accountGroups(
+            [account], masked: false, defaults: defaults)[0].columns
+        #expect(automatic[0].labelColor == .secondaryLabelColor)
+        #expect(automatic[0].valueColor == .systemGreen)
+    }
+
+    @Test func renderNamedAccountCustomColorsWithSyntheticLimits() throws {
+        guard let output = ProcessInfo.processInfo.environment["EDITH_ACCOUNT_COLOR_EVIDENCE_DIR"]
+        else { return }
+        let domain = "test.account-color-render." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: domain)!
+        defer { defaults.removePersistentDomain(forName: domain) }
+        defaults.set("custom", forKey: AppStorageKeys.MenuBar.colorMode)
+        defaults.set("FFB8D2", forKey: AppStorageKeys.MenuBar.subColorHex)
+        defaults.set("61F5AA", forKey: AppStorageKeys.MenuBar.lowColorHex)
+        defaults.set("FFCA5D", forKey: AppStorageKeys.MenuBar.midColorHex)
+        defaults.set("FF6D8A", forKey: AppStorageKeys.MenuBar.highColorHex)
+        defaults.set(false, forKey: AppStorageKeys.General.smartColor)
+        let accounts = [
+            ClaudeAccountLimits(
+                id: UUID(), name: "Company",
+                limits: .init(
+                    provider: .claude, session: .init(percent: 12, resetsAt: nil),
+                    week: .init(percent: 68, resetsAt: nil)), refreshedAt: Date()),
+            ClaudeAccountLimits(
+                id: UUID(), name: "Personal",
+                limits: .init(
+                    provider: .claude, session: .init(percent: 25, resetsAt: nil),
+                    week: .init(percent: 95, resetsAt: nil)), refreshedAt: Date()),
+        ]
+        let view = StackedLimitsView()
+        view.groups = LimitsStatusItem.accountGroups(accounts, masked: false, defaults: defaults)
+        view.frame = NSRect(x: 12, y: 10, width: view.desiredWidth, height: 24)
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: view.desiredWidth + 24, height: 44))
+        host.appearance = NSAppearance(named: .darkAqua)
+        host.wantsLayer = true
+        host.layer?.backgroundColor = NSColor(calibratedWhite: 0.12, alpha: 1).cgColor
+        host.addSubview(view)
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        let data = try #require(bitmap.representation(using: .png, properties: [:]))
+        let root = URL(fileURLWithPath: output)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try data.write(to: root.appendingPathComponent("account-colors.png"))
+    }
+
+    @Test func namedAccountsUseResetTimeForSmartRiskColor() {
+        let domain = "test.account-smart-colors." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: domain)!
+        defer { defaults.removePersistentDomain(forName: domain) }
+        defaults.set("custom", forKey: AppStorageKeys.MenuBar.colorMode)
+        defaults.set("#123456", forKey: AppStorageKeys.MenuBar.lowColorHex)
+        defaults.set("#FEDCBA", forKey: AppStorageKeys.MenuBar.highColorHex)
+        defaults.set(true, forKey: AppStorageKeys.General.smartColor)
+        let account = ClaudeAccountLimits(
+            id: UUID(), name: "Company",
+            limits: .init(
+                provider: .claude,
+                session: .init(percent: 90, resetsAt: Date().addingTimeInterval(5 * 3600)),
+                week: nil),
+            refreshedAt: Date())
+        let smart = LimitsStatusItem.accountGroups([account], masked: false, defaults: defaults)[0]
+            .columns
+        #expect(smart[0].valueColor == LimitsStatusItem.nsColor(hex: "FEDCBA"))
+    }
+
     @Test func failedWebsiteRefreshCannotReloadTheOldWeeklyZeroIntoTheMenuBar() async throws {
         let url = LimitsHistory.url
         let previous = try? Data(contentsOf: url)
