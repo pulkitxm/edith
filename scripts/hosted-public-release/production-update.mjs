@@ -186,6 +186,7 @@ export async function executeProductionUpdate(text, { promoteCatalog } = {}) {
       (await boundedProductionFile(executable, 16777216, true)).sha256,
       verified.request.hosts.previous.hostExecutableSHA256,
     );
+    record("update-feed-route", await observer.prepareFeed());
     await runOwnedJourneyCommand("/usr/bin/open", ["-a", application], {
       env: verified.environment,
       timeoutMs: 120000,
@@ -294,6 +295,7 @@ export async function executeProductionUpdate(text, { promoteCatalog } = {}) {
       );
       assert.deepEqual(await observeRows(), []);
       record("natural-owned-host-engine-UI-drain", retired);
+      record("update-feed-restoration", await observer.restoreFeed());
     } catch (error) {
       cleanupFailure = error;
     }
