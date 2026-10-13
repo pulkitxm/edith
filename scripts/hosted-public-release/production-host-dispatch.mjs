@@ -10,9 +10,29 @@ export function validateHostReleaseDispatch(text, inputs, environment) {
       Buffer.byteLength(text) <= 65536,
   );
   assert(inputs && typeof inputs === "object" && !Array.isArray(inputs));
+  assert.deepEqual(
+    Object.keys(inputs).sort(),
+    [
+      "hosted_native_owner_tests_sha",
+      "hosted_native_owner",
+      "hosted_native_compile_sha",
+      "hosted_host_tests_sha",
+      "hosted_shell_journey_sha",
+      "hosted_managed_views_sha",
+      "hosted_managed_artifacts_run",
+      "hosted_managed_artifacts_sha",
+      "hosted_sparkle_update_sha",
+      "public_release_validation_sha",
+      "public_release_validation",
+      "release",
+      "coordinated_host_release",
+      "rebuild",
+    ].sort(),
+  );
   assert.equal(inputs.coordinated_host_release, text);
   assert.equal(inputs.release, true);
   assert.equal(inputs.rebuild, "");
+  assert.equal(environment.REBUILD ?? "", "");
   for (const [key, value] of Object.entries(inputs))
     if (!["coordinated_host_release", "release", "rebuild"].includes(key))
       assert.equal(value, "");

@@ -37,12 +37,15 @@ const template = {
   catalogs: { previous: original.catalogs.previous, current: null },
 };
 const text = JSON.stringify(template);
+const declaredInputs = Bun.YAML.parse(
+  readFileSync(".github/workflows/ci.yml", "utf8"),
+).on.workflow_dispatch.inputs;
 const inputs = {
+  ...Object.fromEntries(
+    Object.entries(declaredInputs).map(([key, value]) => [key, value.default]),
+  ),
   release: true,
-  rebuild: "",
   coordinated_host_release: text,
-  hosted_native_compile_sha: "",
-  public_release_validation: "",
 };
 const environment = {
   HOME: process.env.HOME,
@@ -65,6 +68,7 @@ test("dispatch validation retains the closed pending intent without granting rea
   assert.deepEqual(parsed, template);
   assert.equal(parsed.hosts.current.run, null);
   assert.throws(() => verifiedHostBootstrapIntent(parsed));
+  assert.equal(Object.keys(inputs).length, 14);
 });
 
 test("foreign dispatches diagnostics rebuilds and supplied current success never enter host publication", () => {
@@ -78,6 +82,7 @@ test("foreign dispatches diagnostics rebuilds and supplied current success never
     { PYTHONPATH: "/synthetic" },
     { NODE_OPTIONS: "--inspect" },
     { EDITH_FIXTURE: "1" },
+    { REBUILD: "v0.0.401" },
   ])
     assert.throws(() =>
       validateHostReleaseDispatch(text, inputs, { ...environment, ...change }),
@@ -89,10 +94,26 @@ test("foreign dispatches diagnostics rebuilds and supplied current success never
     { hosted_native_compile_sha: template.source },
     { public_release_validation: "{}" },
     { unknown_mode: true },
+    { unknown_mode: "" },
   ])
     assert.throws(() =>
       validateHostReleaseDispatch(text, { ...inputs, ...change }, environment),
     );
+  for (const key of Object.keys(declaredInputs)) {
+    const incomplete = { ...inputs };
+    delete incomplete[key];
+    assert.throws(() =>
+      validateHostReleaseDispatch(text, incomplete, environment),
+    );
+    if (!["release", "coordinated_host_release", "rebuild"].includes(key))
+      assert.throws(() =>
+        validateHostReleaseDispatch(
+          text,
+          { ...inputs, [key]: template.source },
+          environment,
+        ),
+      );
+  }
   for (const change of [
     { run: 12, runAttempt: 1 },
     { publicationVerified: true },
