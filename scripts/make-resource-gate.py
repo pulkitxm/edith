@@ -67,6 +67,7 @@ EXACT = {
     "icon": "node",
     "ci-extension-accounts": "swift-test",
     "ci-extension-accounts-local": "swift-test",
+    "ci-functional-filesystem-local": "swift-test",
     "ci-extension-herdr-accounts": "swift-test",
     "ci-extension-usage-accounts": "swift-test",
     "ci-security": "scan",

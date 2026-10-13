@@ -271,6 +271,11 @@ ci-extension-keep-awake-native:
 ci-extension-accounts-local:
 	python3 -B scripts/test-account-sdk-local.py
 
+.PHONY: ci-functional-filesystem-local
+ci-functional-filesystem-local:
+	python3 -I -B scripts/test-functional-filesystem-local.test.py
+	python3 -I -B scripts/test-functional-filesystem-local.py
+
 .PHONY: ci-extension-accounts
 ci-extension-accounts:
 	@test "$$GITHUB_ACTIONS" = true && test "$$RUNNER_ENVIRONMENT" = github-hosted && test "$$RUNNER_OS" = macOS
