@@ -1424,5 +1424,344 @@ class ChildSelfGroupContracts(unittest.TestCase):
         self.assertEqual(self.kernel.signals, [])
 
 
+class PendingKernelChildContracts(unittest.TestCase):
+    setUp = ChildSelfGroupContracts.setUp
+
+    def missing_child(self):
+        self.kernel.processes[234] = (234, 101, 8, '/fixture/compiler', 123, 123, 501, 501)
+        owner = runner.BoundedOwnership(123, 501)
+        original = self.kernel.proc_pidinfo
+
+        def unavailable(pid, flavor, argument, pointer, size):
+            return 0 if pid == 234 else original(pid, flavor, argument, pointer, size)
+
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=unavailable):
+            self.assertEqual(owner.refresh(), [self.kernel.processes[123][:5]])
+        self.assertEqual(owner.errors, [])
+        self.assertEqual(owner.pending_children, {234: self.kernel.processes[123]})
+        self.assertNotIn(234, owner.seals)
+        self.assertNotIn(234, owner.known)
+        return owner
+
+    def test_fresh_kernel_gap_waits_without_executable_or_signal_authority(self):
+        owner = self.missing_child()
+        original = self.kernel.proc_pidinfo
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=lambda pid, *args:
+                          0 if pid == 234 else original(pid, *args)):
+            owner.terminate(signal.SIGTERM)
+        self.assertEqual(self.kernel.signals, [(123, signal.SIGTERM)])
+        self.assertNotIn(234, owner.known)
+        self.assertEqual(owner.errors, [])
+
+    def test_complete_stable_parent_and_child_resolve_to_original_admission(self):
+        owner = self.missing_child()
+        leader_seal = owner.seals[123]
+        rows = owner.refresh()
+        self.assertIn(self.kernel.processes[234][:5], rows)
+        self.assertEqual(owner.pending_children, {})
+        self.assertEqual(owner.seals[123], leader_seal)
+        self.assertEqual(owner.seals[234], (234, 101, 8, 123))
+        self.assertEqual(owner.admission_parents[234], self.kernel.processes[123])
+        self.assertEqual(owner.errors, [])
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_non_kernel_failures_never_acquire_pending_authority(self):
+        for field in ['uid', 'ruid', 'path', 'group']:
+            with self.subTest(field=field):
+                self.kernel.processes[234] = (234, 101, 8, '/fixture/compiler', 123, 123, 501, 501)
+                original = self.kernel.proc_pidinfo
+                original_path = self.kernel.proc_pidpath
+
+                def record(pid, flavor, argument, pointer, size):
+                    result = original(pid, flavor, argument, pointer, size)
+                    if pid == 234 and field != 'path':
+                        setattr(pointer._obj, 'pgid' if field == 'group' else field,
+                                0 if field == 'group' else 502)
+                    return result
+
+                with patch.object(self.kernel, 'proc_pidinfo', side_effect=record), \
+                        patch.object(self.kernel, 'proc_pidpath', side_effect=lambda pid, *args:
+                                     0 if pid == 234 and field == 'path' else original_path(pid, *args)):
+                    owner = runner.BoundedOwnership(123, 501)
+                    owner.refresh()
+                self.assertEqual(owner.pending_children, {})
+                self.assertTrue(owner.errors)
+                self.assertNotIn(234, owner.seals)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_unknown_unenumerated_pid_and_leader_never_acquire_pending_status(self):
+        owner = runner.BoundedOwnership(123, 501)
+        self.kernel.processes[234] = (234, 101, 8, '/fixture/compiler', 123, 123, 501, 501)
+        with patch.object(self.kernel, 'proc_pidinfo', return_value=0):
+            for pid in [123, 234]:
+                with self.assertRaisesRegex(RuntimeError, 'Live owned process identity unavailable'):
+                    owner.snapshot(pid)
+        self.assertEqual(owner.pending_children, {})
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_pending_parent_cannot_change_birth_path_group_or_users(self):
+        for field in [1, 3, 4, 6, 7]:
+            with self.subTest(field=field):
+                self.kernel.processes[123] = (123, 100, 7, '/usr/bin/make', 123, 1, 501, 501)
+                owner = self.missing_child()
+                parent = list(self.kernel.processes[123])
+                parent[field] = '/fixture/changed-parent' if field == 3 else parent[field] + 1
+                self.kernel.processes[123] = tuple(parent)
+                owner.refresh()
+                self.assertTrue(owner.errors)
+                self.assertNotIn(234, owner.seals)
+                self.assertIn(234, owner.pending_failures)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_pending_child_requires_two_complete_equal_full_records(self):
+        for field in ['short', 'missing', 'pid', 'seconds', 'microseconds', 'pgid', 'ppid',
+                      'uid', 'ruid', 'status', 'nfiles']:
+            with self.subTest(field=field):
+                owner = self.missing_child()
+                original = self.kernel.proc_pidinfo
+                reads = 0
+
+                def record(pid, flavor, argument, pointer, size):
+                    nonlocal reads
+                    result = original(pid, flavor, argument, pointer, size)
+                    if pid == 234:
+                        reads += 1
+                        if reads == 3:
+                            if field in ['short', 'missing']:
+                                return size - 1 if field == 'short' else 0
+                            setattr(pointer._obj, field, getattr(pointer._obj, field) + 1)
+                    return result
+
+                with patch.object(self.kernel, 'proc_pidinfo', side_effect=record):
+                    owner.refresh()
+                self.assertTrue(owner.errors)
+                self.assertNotIn(234, owner.seals)
+                self.assertIn(234, owner.pending_failures)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_pending_child_changed_group_or_path_is_permanent_even_after_recovery(self):
+        for field in [3, 4, 5, 6, 7]:
+            with self.subTest(field=field):
+                owner = self.missing_child()
+                original = self.kernel.processes[234]
+                value = list(original)
+                value[field] = '/fixture/different' if field == 3 else value[field] + 1
+                self.kernel.processes[234] = tuple(value)
+                if field == 3:
+                    original_path = self.kernel.proc_pidpath
+                    reads = 0
+
+                    def path(pid, buffer, size):
+                        nonlocal reads
+                        result = original_path(pid, buffer, size)
+                        if pid == 234:
+                            reads += 1
+                            if reads == 3:
+                                buffer.value = b'/fixture/changed-again'
+                        return result
+
+                    with patch.object(self.kernel, 'proc_pidpath', side_effect=path):
+                        owner.refresh()
+                else:
+                    owner.refresh()
+                self.assertTrue(owner.errors)
+                errors = list(owner.errors)
+                self.kernel.processes[234] = original
+                owner.refresh()
+                self.assertNotIn(234, owner.known)
+                self.assertNotIn(234, owner.seals)
+                self.assertTrue(all(error in owner.errors for error in errors))
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_unresolved_live_pending_child_fails_after_join_and_stays_rejected(self):
+        owner = self.missing_child()
+        original = self.kernel.proc_pidinfo
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=lambda pid, *args:
+                          0 if pid == 234 else original(pid, *args)), \
+                patch.object(self.kernel, 'proc_pidpath', return_value=0):
+            owner.finalize_pending_children(True)
+        self.assertEqual(owner.errors, ['Pending owned child identity unresolved after join'])
+        self.assertIn(234, owner.pending_failures)
+        owner.refresh()
+        self.assertNotIn(234, owner.seals)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_absence_requires_join_two_zero_kernel_records_and_two_esrch_checks(self):
+        for reaped in [False, True]:
+            with self.subTest(reaped=reaped):
+                owner = self.missing_child()
+                self.kernel.processes.pop(234)
+                with patch.object(self.kernel, 'proc_pidinfo', wraps=self.kernel.proc_pidinfo) as info, \
+                        patch.object(runner.os, 'kill', side_effect=self.kernel.kill) as kills:
+                    owner.finalize_pending_children(reaped)
+                self.assertEqual(234 in owner.pending_children, not reaped)
+                self.assertEqual(bool(owner.errors), not reaped)
+                self.assertEqual(len(info.call_args_list), 2 if reaped else 0)
+                self.assertEqual(kills.call_args_list,
+                                 [unittest.mock.call(234, 0)] * 2 if reaped else [])
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_absence_never_accepts_partial_record_path_or_reused_live_pid(self):
+        for field in ['partial', 'path', 'alive', 'second-record']:
+            with self.subTest(field=field):
+                owner = self.missing_child()
+                self.kernel.processes.pop(234)
+                reads = 0
+
+                def record(pid, flavor, argument, pointer, size):
+                    nonlocal reads
+                    reads += 1
+                    return size - 1 if field == 'partial' or field == 'second-record' and reads == 2 else 0
+
+                with patch.object(self.kernel, 'proc_pidinfo', side_effect=record), \
+                        patch.object(self.kernel, 'proc_pidpath', return_value=1 if field == 'path' else 0), \
+                        patch.object(runner.os, 'kill', side_effect=None if field == 'alive' else ProcessLookupError()):
+                    owner.finalize_pending_children(True)
+                self.assertTrue(owner.errors)
+                self.assertIn(234, owner.pending_failures)
+                self.assertIn(234, owner.pending_children)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_pending_lifetime_and_concurrent_caps_never_expand(self):
+        for full in ['lifetime', 'concurrent']:
+            with self.subTest(full=full):
+                self.kernel.processes[234] = (234, 101, 8, '/fixture/compiler', 123, 123, 501, 501)
+                owner = runner.BoundedOwnership(123, 501)
+                if full == 'lifetime':
+                    owner.terminal_children = {pid: b'bounded' for pid in range(1000, 5095)}
+                else:
+                    owner.pending_children = {pid: self.kernel.processes[123] for pid in range(1000, 1063)}
+                original = self.kernel.proc_pidinfo
+                with patch.object(self.kernel, 'proc_pidinfo', side_effect=lambda pid, *args:
+                                  0 if pid == 234 else original(pid, *args)):
+                    owner.refresh()
+                self.assertNotIn(234, owner.pending_children)
+                self.assertTrue(owner.errors)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_gone_pending_resolution_does_not_clear_sticky_ownership_failures(self):
+        owner = self.missing_child()
+        owner.reject(123, 'Existing permanent failure')
+        self.kernel.processes.pop(234)
+        owner.finalize_pending_children(True)
+        self.assertEqual(owner.pending_children, {})
+        self.assertEqual(owner.errors, ['Existing permanent failure'])
+        self.assertEqual(owner.conflicts(), [self.kernel.processes[123][:5]])
+        self.assertEqual(self.kernel.signals, [])
+
+
+    def test_final_retirement_resolves_absence_only_after_actual_owned_wait(self):
+        owner = self.missing_child()
+        self.kernel.processes.clear()
+        process = Process(0)
+        waited = []
+        original_wait = process.wait
+
+        def wait(timeout):
+            waited.append(timeout)
+            self.assertIn(234, owner.pending_children)
+            return original_wait(timeout)
+
+        process.wait = wait
+        cleanup = runner.retire(process, owner, lambda: 0, lambda _: None)
+        self.assertEqual(waited, [5])
+        self.assertTrue(cleanup['reaped'])
+        self.assertEqual(cleanup['naturalSurvivorCount'], 0)
+        self.assertEqual(cleanup['remainingOwnedProcesses'], 0)
+        self.assertEqual(cleanup['ownershipErrors'], [])
+        self.assertEqual(owner.pending_children, {})
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_parent_complete_raw_record_must_stay_stable_across_pending_resolution(self):
+        owner = self.missing_child()
+        original = self.kernel.proc_pidinfo
+        reads = 0
+
+        def record(pid, flavor, argument, pointer, size):
+            nonlocal reads
+            result = original(pid, flavor, argument, pointer, size)
+            if pid == 123:
+                reads += 1
+                if reads == 3:
+                    pointer._obj.nfiles += 1
+            return result
+
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=record):
+            owner.refresh()
+        self.assertTrue(owner.errors)
+        self.assertNotIn(234, owner.known)
+        self.assertNotIn(234, owner.seals)
+        self.assertEqual(self.kernel.signals, [])
+
+
+    def test_unverifiable_absence_is_retained_as_failure_without_signals(self):
+        owner = self.missing_child()
+        self.kernel.processes.pop(234)
+        with patch.object(runner.os, 'kill', side_effect=PermissionError('synthetic unavailable')):
+            owner.finalize_pending_children(True)
+        self.assertEqual(owner.errors, ['Pending owned child identity unresolved after join'])
+        self.assertIn(234, owner.pending_failures)
+        self.assertIn(234, owner.pending_children)
+        self.assertEqual(self.kernel.signals, [])
+
+
+    def test_initial_partial_or_negative_kernel_results_never_defer_after_later_zeros(self):
+        for first in [-1, 135]:
+            with self.subTest(first=first):
+                self.kernel.processes[234] = (234, 101, 8, '/fixture/compiler', 123, 123, 501, 501)
+                owner = runner.BoundedOwnership(123, 501)
+                original = self.kernel.proc_pidinfo
+                reads = 0
+
+                def record(pid, flavor, argument, pointer, size):
+                    nonlocal reads
+                    if pid == 234:
+                        reads += 1
+                        return first if reads == 1 else 0
+                    return original(pid, flavor, argument, pointer, size)
+
+                with patch.object(self.kernel, 'proc_pidinfo', side_effect=record):
+                    owner.refresh()
+                self.assertEqual(owner.pending_children, {})
+                self.assertNotIn(234, owner.seals)
+                self.assertNotIn(234, owner.known)
+                self.assertEqual(owner.errors, ['Live owned process identity unavailable'])
+                self.assertEqual(owner.captured_snapshot_failures[0]['returnedBytes'], first)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_regular_fresh_admission_accounts_for_all_existing_pending_before_authority(self):
+        for bound in ['lifetime', 'concurrent']:
+            with self.subTest(bound=bound):
+                self.kernel.processes[234] = (234, 101, 8, '/fixture/compiler', 123, 123, 501, 501)
+                owner = runner.BoundedOwnership(123, 501)
+                if bound == 'lifetime':
+                    owner.terminal_children = {pid: b'bounded' for pid in range(1000, 5032)}
+                count = 63
+                owner.pending_children = {pid: self.kernel.processes[123] for pid in range(6000, 6000 + count)}
+                rows = owner.refresh()
+                self.assertNotIn(self.kernel.processes[234][:5], rows)
+                self.assertNotIn(234, owner.known)
+                self.assertNotIn(234, owner.seals)
+                self.assertNotIn(234, owner.admission_parents)
+                self.assertTrue(owner.errors)
+                self.assertIn('Owned ' + bound + ' process bound exceeded' if bound == 'lifetime'
+                              else 'Owned concurrent descendant bound exceeded', owner.errors)
+                self.assertEqual(len(owner.pending_children), count)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_pending_promotion_at_exact_combined_caps_never_double_counts_current_pid(self):
+        owner = self.missing_child()
+        owner.terminal_children = {pid: b'bounded' for pid in range(1000, 5032)}
+        owner.pending_children.update({pid: self.kernel.processes[123] for pid in range(6000, 6062)})
+        self.assertEqual(owner.lifetime_count(), 4096)
+        rows = owner.refresh()
+        self.assertIn(self.kernel.processes[234][:5], rows)
+        self.assertNotIn(234, owner.pending_children)
+        self.assertEqual(len(owner.pending_children), 62)
+        self.assertEqual(owner.lifetime_count(), 4096)
+        self.assertEqual(owner.errors, [])
+        self.assertEqual(self.kernel.signals, [])
+
+
 if __name__ == '__main__':
     unittest.main()

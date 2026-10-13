@@ -51,6 +51,8 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         self.child_self_groups = {}
         self.child_group_transitions = {}
         self.self_group_observations = {}
+        self.pending_children = {}
+        self.pending_failures = set()
         value = self.snapshot(leader)
         if value is None or value[4] != leader:
             raise RuntimeError('Owned leader identity unavailable')
@@ -59,6 +61,8 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         self.known[leader] = identity
 
     def snapshot(self, pid, parent=None, parent_identity=None):
+        if pid in self.pending_failures:
+            raise RuntimeError('Pending owned child identity permanently rejected')
         captured = None
 
         def capture(clause, result, info):
@@ -89,6 +93,8 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                 recovered = self.recover_snapshot(pid)
                 if recovered is not None:
                     return recovered
+                if captured['returnedBytes'] == 0 and self.defer_kernel_child(pid, parent, parent_identity):
+                    return None
             if self.sealed_zombie(pid):
                 return None
             try:
@@ -103,7 +109,83 @@ class BoundedOwnership(watchdog.OwnedProcesses):
             raise RuntimeError('Live owned process identity unavailable')
         if pid in self.terminal_children:
             raise RuntimeError('Terminal child identity became live')
+        if pid in self.pending_children:
+            value = self.resolve_pending_child(pid, value)
         return value
+
+    def defer_kernel_child(self, pid, parent, parent_identity):
+        if (type(pid) is not int or pid <= 0 or pid == self.leader
+                or pid in self.seals or pid in self.known or pid in self.terminal_children
+                or pid in self.rejected or type(parent) is not int or parent <= 0
+                or parent in self.rejected):
+            return False
+        retained = self.pending_children.get(pid)
+        if (parent_identity is None and (retained is None or retained[0] != parent)):
+            return False
+        if parent_identity is not None and parent_identity != self.known.get(parent):
+            return False
+        for _ in range(2):
+            info = watchdog.ProcessInfo()
+            result = self.library.proc_pidinfo(pid, 3, 1, ctypes.byref(info), ctypes.sizeof(info))
+            if type(result) is not int or result != 0:
+                return False
+        if retained is not None and parent_identity is None:
+            return True
+        before = self.complete_live_record(parent)
+        after = self.complete_live_record(parent)
+        if (before is None or before != after or before[1][:5] != parent_identity
+                or before[1][:3] + before[1][4:5] != self.current_seal(parent)):
+            return False
+        if retained is not None and retained != before[1]:
+            raise RuntimeError('Pending child parent identity changed')
+        if retained is None:
+            if self.lifetime_count() >= 4096:
+                raise RuntimeError('Owned lifetime process bound exceeded')
+            if len(self.known) + len(self.pending_children) >= 64:
+                raise RuntimeError('Owned concurrent descendant bound exceeded')
+            self.pending_children[pid] = before[1]
+        return True
+
+    def resolve_pending_child(self, pid, current):
+        parent = self.pending_children[pid]
+        before = self.complete_live_record(parent[0])
+        children = [self.complete_live_record(pid), self.complete_live_record(pid)]
+        after = self.complete_live_record(parent[0])
+        if (before is None or before != after or before[1] != parent
+                or before[1][:3] + before[1][4:5] != self.current_seal(parent[0])
+                or any(child is None for child in children) or children[0] != children[1]
+                or children[0][1][:6] != current or current[5] != parent[0]
+                or current[4] != parent[4]):
+            raise RuntimeError('Pending child identity could not be authenticated')
+        return current
+
+    def pending_child_absent(self, pid):
+        for _ in range(2):
+            info = watchdog.ProcessInfo()
+            result = self.library.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
+            if type(result) is not int or result != 0:
+                return False
+            path = ctypes.create_string_buffer(4096)
+            if self.library.proc_pidpath(pid, path, len(path)) != 0:
+                return False
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                continue
+            return False
+        return True
+
+    def finalize_pending_children(self, reaped):
+        for pid in list(self.pending_children):
+            try:
+                absent = reaped and self.pending_child_absent(pid)
+            except OSError:
+                absent = False
+            if absent:
+                self.pending_children.pop(pid)
+            else:
+                self.pending_failures.add(pid)
+                self.reject(pid, 'Pending owned child identity unresolved after join')
 
     def terminal_child(self, pid, parent, parent_identity):
         if (type(pid) is not int or pid <= 0 or type(parent) is not int or parent <= 0
@@ -133,7 +215,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         previous = self.terminal_children.get(pid)
         if previous is not None and previous != records[0]:
             raise RuntimeError('Terminal child kernel record changed')
-        if previous is None and len(self.terminal_children) + len(self.seals) >= 4096:
+        if previous is None and self.lifetime_count() - (pid in self.pending_children) >= 4096:
             raise RuntimeError('Owned lifetime process bound exceeded')
         self.terminal_children[pid] = records[0]
         return True
@@ -141,6 +223,9 @@ class BoundedOwnership(watchdog.OwnedProcesses):
     def current_seal(self, pid):
         original = self.seals.get(pid)
         return None if original is None else original[:3] + (self.child_self_groups.get(pid, original[3]),)
+
+    def lifetime_count(self):
+        return len(self.seals.keys() | self.terminal_children.keys() | self.pending_children.keys())
 
     def complete_live_record(self, pid):
         info = watchdog.ProcessInfo()
@@ -284,7 +369,8 @@ class BoundedOwnership(watchdog.OwnedProcesses):
             self.rejected[pid] = self.known[pid]
 
     def refresh(self):
-        pending = [(self.leader, None)] + [(pid, None) for pid in self.known]
+        pending = [(pid, parent[0]) for pid, parent in self.pending_children.items()]
+        pending += [(self.leader, None)] + [(pid, None) for pid in self.known]
         visited = set()
         active = {}
         while pending:
@@ -314,18 +400,21 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                         parent_snapshot = self.snapshot(parent)
                         if parent_snapshot is None or parent_snapshot[:5] != active[parent]:
                             raise RuntimeError('Owned parent identity changed before admission')
-                    if len(self.seals) + len(self.terminal_children) >= 4096:
+                    if self.lifetime_count() - (pid in self.pending_children) >= 4096:
                         raise RuntimeError('Owned lifetime process bound exceeded')
+                    if len(active) + len(self.pending_children) - (pid in self.pending_children) >= 64:
+                        raise RuntimeError('Owned concurrent descendant bound exceeded')
                     self.seals[pid] = seal
                     if pid != self.leader:
                         self.admission_parents[pid] = parent_snapshot + (self.uid, self.uid)
                         self.parents[pid] = parent
+                    self.pending_children.pop(pid, None)
                 prior = self.known.get(pid)
                 if prior is not None and prior[3] != identity[3]:
                     if len(self.transitions) >= 1024:
                         raise RuntimeError('Owned executable transition bound exceeded')
                     self.transitions.append({'previous': prior, 'current': identity})
-                if len(active) >= 64:
+                if len(active) + len(self.pending_children) >= 64:
                     raise RuntimeError('Owned concurrent descendant bound exceeded')
                 self.known[pid] = identity
                 active[pid] = identity
@@ -335,6 +424,8 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                     raise RuntimeError('Invalid owned child enumeration')
                 pending.extend((children[index], pid) for index in range(count))
             except (OSError, RuntimeError) as error:
+                if pid in self.pending_children:
+                    self.pending_failures.add(pid)
                 self.reject(pid, str(error))
         return list(active.values())
 
@@ -460,10 +551,15 @@ def retire(process, ownership, clock, sleep):
     deadline = clock() + 5
     while ownership.refresh() and clock() < deadline:
         sleep(0.1)
+    remaining = ownership.refresh()
+    finalize_pending = getattr(ownership, 'finalize_pending_children', None)
+    if finalize_pending is not None:
+        finalize_pending(reaped)
     return {
         'naturalSurvivorCount': len(natural_survivors), 'reaped': reaped,
-        'remainingOwnedProcesses': len(ownership.refresh()),
+        'remainingOwnedProcesses': len(remaining),
         'unverifiedOwnedProcesses': len(conflicts),
+        'pendingOwnedChildren': len(getattr(ownership, 'pending_children', {})),
         'ownershipErrors': getattr(ownership, 'errors', []),
     }
 
