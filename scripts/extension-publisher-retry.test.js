@@ -81,7 +81,9 @@ if (command === "swift") {
     const data = fs.readFileSync(args[3]);
     const asset = { id: state.next++, name, size: data.length, digest: "sha256:" + crypto.createHash("sha256").update(data).digest("hex") };
     item.assets.push(asset); state.bytes[asset.id] = data.toString("base64");
-    state.uploads.push(name); save();
+    state.uploads.push(name);
+    if (process.env.FIXTURE_CATALOG_PHASE === "catalog-drafted-stage" && name.startsWith("catalog-")) item.draft = true;
+    save();
     if (!state.interrupted && (state.interrupt === name || (state.interrupt === "catalog" && name.startsWith("catalog-")))) {
       state.interrupted = true; save(); process.stderr.write("synthetic upload response lost"); process.exit(1);
     }
@@ -160,15 +162,17 @@ function publisherFixture(interrupt) {
 import { readFileSync, writeFileSync } from "node:fs";
 import { sign } from "node:crypto";
 import { join } from "node:path";
-import { publishExtensions } from ${JSON.stringify(resolve("scripts/extension-publish.mjs"))};
+import { publishExtensions, stagedExtensionPublication, promoteStagedExtensionPublication } from ${JSON.stringify(resolve("scripts/extension-publish.mjs"))};
 const directory = process.env.EXTENSION_OUTPUT;
-const result = await publishExtensions({
+const phase = process.env.FIXTURE_CATALOG_PHASE;
+let result = await publishExtensions({
   directory,
   repository: process.env.GITHUB_REPOSITORY,
   target: process.env.GITHUB_SHA,
   ref: process.env.GITHUB_REF,
   catalogTag: process.env.EXTENSION_CATALOG_TAG,
   publicKey: process.env.EXTENSION_CATALOG_PUBLIC_KEY,
+  catalogPhase: phase ? "stage" : "complete",
   publishEvidence: async () => {
     if (process.env.FIXTURE_EMPTY_RESUME) return JSON.parse(readFileSync(join(directory, "native-evidence-preparation.json")));
     const packageRecord = JSON.parse(readFileSync(join(directory, "keepAwake.json")));
@@ -192,6 +196,30 @@ const result = await publishExtensions({
     fingerprints: process.env.FIXTURE_EMPTY_RESUME ? JSON.parse(readFileSync(join(directory, "native-evidence-preparation.json"))).fixtureFingerprints : { [origin.package.id]: origin.package.sourceFingerprint },
   } }),
 });
+if (result.catalogStage) {
+  const stage = result.catalogStage;
+  const identity = stagedExtensionPublication(stage);
+  const stateFile = process.env.FIXTURE_STATE;
+  const state = JSON.parse(readFileSync(stateFile));
+  const catalog = state.releases.find(item => item.tag_name === process.env.EXTENSION_CATALOG_TAG);
+  state.staged = { identity, pointerEdits: state.pointerEdits, pointer: JSON.parse(catalog.body), publicPackage: state.releases.find(item => item.tag_name !== process.env.EXTENSION_CATALOG_TAG).draft === false };
+  if (phase === "source-changed") state.target = "9".repeat(40);
+  if (phase === "catalog-changed") catalog.body = "";
+  if (phase === "catalog-drafted") catalog.draft = true;
+  if (phase === "candidate-changed") {
+    const asset = catalog.assets.find(item => item.name === identity.candidate.assetName);
+    state.bytes[asset.id] = Buffer.from("synthetic changed candidate").toString("base64");
+  }
+  if (phase === "asset-replaced") catalog.assets.find(item => item.name === identity.candidate.assetName).id = state.next++;
+  writeFileSync(stateFile, JSON.stringify(state));
+  let copiedRejected = false;
+  try { await promoteStagedExtensionPublication({ ...stage }); } catch { copiedRejected = true; }
+  if (!copiedRejected) throw new Error("Copied publication capability admitted");
+  result = await promoteStagedExtensionPublication(stage);
+  let replayRejected = false;
+  try { await promoteStagedExtensionPublication(stage); } catch { replayRejected = true; }
+  if (!replayRejected) throw new Error("Publication capability reused");
+}
 process.stdout.write(JSON.stringify(result));
 `,
   );
@@ -445,15 +473,90 @@ process.stdout.write(JSON.stringify(result));
       }
       writeFileSync(stateFile, JSON.stringify(current));
     },
-    run: () =>
+    run: (phase) =>
       spawnSync(process.execPath, [runner], {
-        env: environment,
+        env: { ...environment, FIXTURE_CATALOG_PHASE: phase },
         encoding: "utf8",
         timeout: 15_000,
       }),
     close: () => rmSync(directory, { recursive: true, force: true }),
   };
 }
+
+test("public packages stage before live catalog promotion with an exact single-use capability", () => {
+  const fixture = publisherFixture("");
+  try {
+    fixture.preparePublishedVersion({ version: "0.9.0" });
+    const previous = fixture.state().releases[0].body;
+    const result = fixture.run("promote");
+    expect(result.status, result.stderr).toBe(0);
+    const state = fixture.state();
+    expect(state.staged.pointerEdits).toBe(0);
+    expect(JSON.stringify(state.staged.pointer)).toBe(previous);
+    expect(state.staged.publicPackage).toBe(true);
+    expect(state.staged.identity.source).toBe(target);
+    expect(state.staged.identity.previous).toEqual(JSON.parse(previous));
+    expect(state.staged.identity.candidate.revision).toBeGreaterThan(1);
+    expect(state.pointerEdits).toBe(1);
+    expect(state.duplicateUploads).toBe(0);
+    expect(JSON.parse(state.releases[0].body)).toEqual(
+      state.staged.identity.candidate,
+    );
+  } finally {
+    fixture.close();
+  }
+}, 30_000);
+
+for (const phase of [
+  "source-changed",
+  "catalog-changed",
+  "catalog-drafted",
+  "candidate-changed",
+  "asset-replaced",
+]) {
+  test(`staged promotion rejects ${phase} before changing the public pointer`, () => {
+    const fixture = publisherFixture("");
+    try {
+      fixture.preparePublishedVersion({ version: "0.9.0" });
+      const result = fixture.run(phase);
+      expect(result.status).not.toBe(0);
+      expect(fixture.state().staged.pointerEdits).toBe(0);
+      expect(fixture.state().pointerEdits).toBe(0);
+      expect(fixture.state().duplicateUploads).toBe(0);
+    } finally {
+      fixture.close();
+    }
+  }, 30_000);
+}
+
+test("stage-only publication rejects a catalog drafted after candidate upload", () => {
+  const fixture = publisherFixture("");
+  try {
+    fixture.preparePublishedVersion({ version: "0.9.0" });
+    const previous = fixture.state().releases[0].body;
+    const result = fixture.run("catalog-drafted-stage");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("existing public catalog");
+    expect(fixture.state().staged).toBeUndefined();
+    expect(fixture.state().pointerEdits).toBe(0);
+    expect(fixture.state().releases[0].body).toBe(previous);
+  } finally {
+    fixture.close();
+  }
+}, 30_000);
+
+test("stage-only publication refuses an absent old catalog before package mutations", () => {
+  const fixture = publisherFixture("");
+  try {
+    const result = fixture.run("promote");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("existing public catalog");
+    expect(fixture.state().uploads).toEqual([]);
+    expect(fixture.state().releases).toEqual([]);
+  } finally {
+    fixture.close();
+  }
+}, 30_000);
 
 for (const change of [
   { sha256: "d".repeat(64) },
