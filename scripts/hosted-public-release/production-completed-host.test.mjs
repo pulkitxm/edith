@@ -15,6 +15,24 @@ import {
   completedHostPublication,
 } from "./production-completed-host.mjs";
 
+test("actual measurement publication and native-result counterexamples run with script CI", () => {
+  const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
+  execFileSync(
+    "python3",
+    ["-I", "-B", join(root, "scripts/test-production-measured-host.py")],
+    {
+      cwd: root,
+      env: {
+        PATH: process.env.PATH,
+        TMPDIR: tmpdir(),
+        PYTHONDONTWRITEBYTECODE: "1",
+      },
+      timeout: 30000,
+      maxBuffer: 65536,
+    },
+  );
+});
+
 const prepared = JSON.parse(
   execFileSync(
     "python3",

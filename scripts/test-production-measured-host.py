@@ -1,9 +1,12 @@
 import copy
+from contextlib import redirect_stdout
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -68,6 +71,40 @@ class MeasureHostTests(unittest.TestCase):
         self.assertIsNone(inspect.call_args.args[-1])
         INPUTS.COHORT.host(result['host'])
         self.assertEqual(result['qualification'], self.qualification)
+
+    def test_real_entry_requires_readonly_hosted_admission_and_actual_publication_context(self):
+        path = self.directory / 'context.json'
+        environment = {'GITHUB_ACTIONS': 'true', 'RUNNER_ENVIRONMENT': 'github-hosted', 'RUNNER_OS': 'macOS', 'GITHUB_REPOSITORY': 'pulkitxm/edith', 'GITHUB_REPOSITORY_ID': '1289153439', 'GITHUB_EVENT_NAME': 'workflow_dispatch', 'GITHUB_REF': 'refs/heads/main', 'GITHUB_SHA': self.context['template']['source'], 'PUBLIC_RELEASE_VERIFICATION': '1', 'PUBLISH': 'false', 'REBUILD': '', 'GITHUB_ACTOR_ID': '65671483'}
+        argv = ['production-static-inputs.py', 'measure-host', str(path)]
+        path.write_text(json.dumps(self.context))
+        path.chmod(0o600)
+        output = io.StringIO()
+        with patch.object(INPUTS, 'inspect_host', return_value=self.qualification) as inspect, patch.object(sys, 'argv', argv), patch.dict(os.environ, environment, clear=True), redirect_stdout(output):
+            INPUTS.main()
+        inspect.assert_called_once()
+        result = json.loads(output.getvalue())
+        INPUTS.COHORT.host(result['host'])
+        self.assertEqual(result['host']['run'], self.context['publication']['run']['id'])
+        self.assertEqual(result['qualification'], self.qualification)
+        for change in ['writable', 'missing-publication', 'extra-success', 'wrong-attempt', 'failed-run', 'substituted-asset']:
+            context = copy.deepcopy(self.context)
+            admitted = dict(environment)
+            if change == 'writable':
+                admitted['PUBLISH'] = 'true'
+            elif change == 'missing-publication':
+                del context['publication']
+            elif change == 'extra-success':
+                context['success'] = True
+            elif change == 'wrong-attempt':
+                context['publication']['run']['run_attempt'] += 1
+            elif change == 'failed-run':
+                context['publication']['run']['conclusion'] = 'failure'
+            else:
+                context['publication']['release']['assets'][0]['digest'] = 'sha256:' + 'f' * 64
+            path.write_text(json.dumps(context))
+            with self.subTest(change=change), patch.object(INPUTS, 'inspect_host') as inspect, patch.object(sys, 'argv', argv), patch.dict(os.environ, admitted, clear=True), redirect_stdout(io.StringIO()), self.assertRaises(ValueError):
+                INPUTS.main()
+            inspect.assert_not_called()
 
     def test_changed_source_version_build_or_signer_rejects_before_inspection(self):
         for name, value in [('sourceCommit', 'b' * 40), ('workflowSourceCommit', 'b' * 40), ('version', '0.0.403'), ('build', '3'), ('teamIdentifier', 'KLMNOPQRST')]:
