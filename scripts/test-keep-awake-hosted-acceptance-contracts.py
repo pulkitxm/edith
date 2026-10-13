@@ -373,5 +373,132 @@ class AcceptanceContracts(unittest.TestCase):
                 acceptance.private_directory(root, private=True)
 
 
+    def worker_runner(self):
+        value = self.failed_runner()
+        value.update(passed=False, exitCode=0, failure=None, testsCompleted=False,
+                     observedTestingProcess=False)
+        value['cleanup']['ownershipErrors'] = []
+        return value
+
+    def worker_diagnostics(self, value):
+        captured = io.StringIO()
+        with redirect_stdout(captured):
+            acceptance.worker_failure_diagnostics(value)
+        return captured.getvalue()
+
+    def test_clean_worker_emits_nothing_without_requiring_testing_process_or_test_markers(self):
+        self.assertEqual(self.worker_diagnostics(self.worker_runner()), '')
+
+    def test_each_worker_cleanup_rejection_emits_its_actual_condition_without_changing_outcome(self):
+        for field, value, nested in [
+            ('exitCode', 17, False), ('timedOut', True, False),
+            ('logBoundExceeded', True, False), ('failure', 'private secret', False),
+            ('naturalSurvivorCount', 1, True), ('reaped', False, True),
+            ('remainingOwnedProcesses', 1, True), ('unverifiedOwnedProcesses', 1, True),
+            ('ownershipErrors', ['Live owned process identity unavailable'], True),
+        ]:
+            with self.subTest(field=field):
+                result = self.worker_runner()
+                (result['cleanup'] if nested else result)[field] = value
+                before = json.dumps(result, sort_keys=True)
+                text = self.worker_diagnostics(result)
+                row = json.loads(text)['workerFailure']
+                self.assertEqual(json.dumps(result, sort_keys=True), before)
+                self.assertEqual(len(text.splitlines()), 1)
+                if field == 'failure':
+                    self.assertTrue(row['failurePresent'])
+                elif field == 'ownershipErrors':
+                    self.assertEqual(row['cleanup']['ownershipErrorCount'], 1)
+                    self.assertEqual(row['ownershipFailureKinds'], ['live_identity_unavailable'])
+                elif nested:
+                    self.assertEqual(row['cleanup'][field], value)
+                else:
+                    self.assertEqual(row[field], value)
+                self.assertNotIn('private', text)
+
+    def test_worker_failure_metadata_is_closed_bounded_and_cannot_expose_freeform_receipts(self):
+        result = self.worker_runner()
+        private = '/private/home/secret-token ::error::private'
+        result.update(failure=private * 10000, argv=[private], privateField=private,
+                      ownedExecutableTransitions=[private], knownOwnedProcesses=[private])
+        result['cleanup'].update(ownershipErrors=[private] * 4096 + [
+            'Owned process birth or group changed', 'Owned process birth or group changed'],
+            privateField=private)
+        text = self.worker_diagnostics(result)
+        row = json.loads(text)['workerFailure']
+        self.assertEqual(set(row), {'exitCode', 'timedOut', 'logBoundExceeded',
+                         'failurePresent', 'harnessSignal', 'harnessStage', 'testsCompleted',
+                         'observedTestingProcess', 'cleanup', 'ownershipFailureKinds'})
+        self.assertEqual(set(row['cleanup']), {'naturalSurvivorCount', 'reaped',
+                         'remainingOwnedProcesses', 'unverifiedOwnedProcesses', 'ownershipErrorCount'})
+        self.assertEqual(row['cleanup']['ownershipErrorCount'], 4098)
+        self.assertEqual(row['ownershipFailureKinds'], ['birth_or_group_changed'])
+        self.assertLess(len(text.encode()), 1024)
+        self.assertNotIn('private', text)
+        self.assertNotIn('secret-token', text)
+        self.assertNotIn('::error::', text)
+
+    def test_worker_diagnostics_filter_untyped_or_unbounded_fields(self):
+        result = self.worker_runner()
+        result.update(exitCode='private', timedOut='private', logBoundExceeded=1,
+                      testsCompleted='private', observedTestingProcess=1)
+        result['cleanup'].update(naturalSurvivorCount=True, reaped='private',
+                                remainingOwnedProcesses=2**32, unverifiedOwnedProcesses='private')
+        row = json.loads(self.worker_diagnostics(result))['workerFailure']
+        for field in ['exitCode', 'timedOut', 'logBoundExceeded',
+                      'testsCompleted', 'observedTestingProcess']:
+            self.assertIsNone(row[field])
+        for field in ['naturalSurvivorCount', 'reaped', 'remainingOwnedProcesses',
+                      'unverifiedOwnedProcesses']:
+            self.assertIsNone(row['cleanup'][field])
+        self.assertNotIn('private', json.dumps(row))
+
+    def test_actual_worker_diagnostic_call_precedes_unchanged_acceptance_rejection(self):
+        source = Path(acceptance.__file__).read_text()
+        call = source.index("        worker_failure_diagnostics(worker, work / 'worker/tests.log')")
+        rejection = source.index("        require(worker['exitCode'] == 0")
+        self.assertLess(call, rejection)
+        self.assertIn("and cleanup['unverifiedOwnedProcesses'] == 0 and not cleanup['ownershipErrors']", source)
+
+
+
+    def test_worker_harness_signal_projection_is_bounded_closed_and_omits_process_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / 'worker.log'
+            failure = {'signal': 'SIGBUS', 'pid': 987654, 'source': 'a' * 40,
+                       'stage': 'packageStoreBegin'}
+            valid = json.dumps({'lifecycleHarnessFailure': failure})
+            private = '/private/home/secret-token ::error::private'
+            log.write_text(private * 2000 + '\n' + valid + '\n' + json.dumps({
+                'lifecycleHarnessFailure': {**failure, 'stage': private}}) + '\n')
+            captured = io.StringIO()
+            result = self.worker_runner()
+            result['exitCode'] = 1
+            with redirect_stdout(captured):
+                acceptance.worker_failure_diagnostics(result, log)
+            text = captured.getvalue()
+            row = json.loads(text)['workerFailure']
+            self.assertEqual(row['harnessSignal'], 'SIGBUS')
+            self.assertEqual(row['harnessStage'], 'packageStoreBegin')
+            for value in [private, '987654', 'a' * 40, '::error::']:
+                self.assertNotIn(value, text)
+            self.assertLess(len(text.encode()), 1024)
+            for edit in [{'extra': private}, {'signal': private}, {'signal': {}},
+                         {'pid': True}, {'source': private}, {'stage': {}}]:
+                log.write_text(json.dumps({'lifecycleHarnessFailure': {**failure, **edit}}))
+                captured = io.StringIO()
+                with redirect_stdout(captured):
+                    acceptance.worker_failure_diagnostics(result, log)
+                row = json.loads(captured.getvalue())['workerFailure']
+                self.assertIsNone(row['harnessSignal'])
+                self.assertIsNone(row['harnessStage'])
+            captured = io.StringIO()
+            with patch.object(Path, 'open', side_effect=AssertionError('clean worker opened log')):
+                with redirect_stdout(captured):
+                    acceptance.worker_failure_diagnostics(self.worker_runner(), log)
+            self.assertEqual(captured.getvalue(), '')
+
+
+
 if __name__ == '__main__':
     unittest.main()
