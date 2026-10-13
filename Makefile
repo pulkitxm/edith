@@ -175,6 +175,11 @@ ci-host: ci-host-invocation
 ci-host-core:
 	bun scripts/test-host-core.mjs
 
+.PHONY: ci-codesign-requirements-local
+ci-codesign-requirements-local:
+	python3 -B scripts/test-codesign-requirement.py
+	bun test scripts/codesign-requirements.test.js
+
 host:
 	bun scripts/build-minimal-host.mjs
 
