@@ -147,6 +147,60 @@ class SwiftDriverAdmissionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "changed after admission"):
             runtime.binary_directory(driver, query)
 
+    def test_selected_test_alias_authenticates_the_canonical_immutable_package_image(self):
+        developer, directory, _, target = self.fixture("swift-package")
+        alias = directory / "swift-test"
+        target = directory / "swift-package"
+        target.write_bytes(b"synthetic executable")
+        target.chmod(0o755)
+        alias.symlink_to("swift-package")
+        def inspect(path):
+            value = path.lstat()
+            fields = {name: getattr(value, name) for name in dir(value) if name.startswith("st_")}
+            fields["st_uid"] = 0
+            return type("RootOwnedMetadata", (), fields)()
+        self.assertEqual(runtime.SelectedSwiftDriver(developer, entry="swift-test", inspect=inspect).validate(), alias)
+        self.assertNotEqual(runtime.SelectedSwiftDriver(developer, entry="swift-test", inspect=inspect).validate(), target)
+        for changed in [directory, alias, target]:
+            with self.subTest(unowned=changed.name):
+                def unowned(path):
+                    return path.lstat() if path == changed else inspect(path)
+                with self.assertRaises(ValueError):
+                    runtime.SelectedSwiftDriver(developer, entry="swift-test", inspect=unowned).validate()
+        for changed in [directory, target]:
+            with self.subTest(writable=changed.name):
+                mode = changed.stat().st_mode & 0o777
+                changed.chmod(0o777)
+                try:
+                    with self.assertRaises(ValueError):
+                        runtime.SelectedSwiftDriver(developer, entry="swift-test", inspect=inspect).validate()
+                finally:
+                    changed.chmod(mode)
+        for replacement in ["other-package", "../bin/swift-package"]:
+            with self.subTest(alias=replacement):
+                alias.unlink()
+                if replacement == "other-package":
+                    (directory / replacement).write_bytes(b"synthetic other image")
+                alias.symlink_to(replacement)
+                with self.assertRaises(ValueError):
+                    runtime.SelectedSwiftDriver(developer, entry="swift-test", inspect=inspect).validate()
+        alias.unlink()
+        alias.symlink_to("swift-package")
+        target.chmod(0o644)
+        with self.assertRaises(ValueError):
+            runtime.SelectedSwiftDriver(developer, entry="swift-test", inspect=inspect).validate()
+        target.chmod(0o755)
+        hardlink = directory / "synthetic-hardlink"
+        os.link(target, hardlink)
+        with self.assertRaises(ValueError):
+            runtime.SelectedSwiftDriver(developer, entry="swift-test", inspect=inspect).validate()
+
+        hardlink.unlink()
+        driver = runtime.SelectedSwiftDriver(developer, entry="swift-test", inspect=inspect)
+        target.write_bytes(b"changed synthetic package image")
+        with self.assertRaisesRegex(ValueError, "changed after admission"):
+            driver.validate()
+
 
 if __name__ == "__main__":
     unittest.main()
