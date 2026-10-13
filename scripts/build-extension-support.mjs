@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
+import { rewriteArgumentParserWarnings } from "./argument-parser-source.mjs";
 
 export function supportModules(scope) {
   if (!/^[A-Za-z][A-Za-z0-9_]{0,160}$/.test(scope))
@@ -36,24 +37,10 @@ export function rewriteSupportImports(source, modules) {
 }
 
 export function rewriteArgumentParserSource(source, modules, path) {
-  const replacements = {
-    "Parsable Types/ParsableArguments.swift": [
-      '  public static var _errorPrefix: String {\n    "\\(_errorLabel): "\n  }',
-      '  public static var _errorPrefix: String {\n    "Error: "\n  }',
-    ],
-    "Usage/DumpHelpGenerator.swift": [
-      "    case .customDeprecated(_):\n      self = .customDeprecated",
-      "    case .customDeprecated(_):\n      self = .custom",
-    ],
-  };
-  const replacement = replacements[path];
-  if (replacement) {
-    const [previous, current] = replacement;
-    if (source.split(previous).length !== 2)
-      throw new Error(`Unexpected pinned ArgumentParser source ${path}`);
-    source = source.replace(previous, current);
-  }
-  return rewriteSupportImports(source, modules);
+  return rewriteSupportImports(
+    rewriteArgumentParserWarnings(source, path),
+    modules,
+  );
 }
 
 export function supportProducts(product) {
@@ -97,6 +84,7 @@ export function supportSourceInputs(product) {
   if (supportProducts(product).includes("EdithExtensionCommands"))
     inputs.push(
       "Packages/ExtensionSupport/Licenses/swift-argument-parser-license.txt",
+      "scripts/argument-parser-source.mjs",
     );
   return inputs;
 }
@@ -135,6 +123,10 @@ export function buildExtensionSupport(
   hash.update(
     readFileSync(resolve(root, "scripts/build-extension-support.mjs")),
   );
+  if (selected.includes("EdithExtensionCommands"))
+    hash.update(
+      readFileSync(resolve(root, "scripts/argument-parser-source.mjs")),
+    );
   const sources = [];
   for (const [name, module] of Object.entries(modules)) {
     if (!selected.includes(name)) continue;

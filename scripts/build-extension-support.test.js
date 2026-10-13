@@ -275,3 +275,27 @@ test("account imports remain private to each independently loaded extension", ()
     '@testable import EdithExtensionAccounts_usage_app\nlet text = "EdithExtensionAccounts"\n',
   );
 });
+
+test("shared parser rewrite bytes belong only to command support source and cache inputs", () => {
+  expect(supportSourceInputs("EdithExtensionCommands")).toContain(
+    "scripts/argument-parser-source.mjs",
+  );
+  for (const product of [
+    "EdithExtensionSupport",
+    "EdithExtensionUI",
+    "EdithExtensionAccounts",
+  ])
+    expect(supportSourceInputs(product)).not.toContain(
+      "scripts/argument-parser-source.mjs",
+    );
+  const definitions = JSON.parse(
+    readFileSync("Extensions/manifest.json", "utf8"),
+  );
+  const selected = planExtensionBuilds(definitions, [
+    "scripts/argument-parser-source.mjs",
+  ]).map(({ id }) => id);
+  for (const owner of ["attention", "calendar", "herdr", "usage"])
+    expect(selected).toContain(owner);
+  for (const owner of ["keepAwake", "timeLapse", "blitztree"])
+    expect(selected).not.toContain(owner);
+});
