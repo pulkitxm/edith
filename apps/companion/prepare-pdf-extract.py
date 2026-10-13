@@ -47,6 +47,25 @@ WARNING_ADAPTATIONS = (
 )
 
 
+DEAD_CODE_ADAPTATIONS = (
+    ('src/lib.rs', 'fn get_catalog(doc: &Document) -> &Dictionary {\n    match doc.trailer.get(b"Root").unwrap() {\n        &Object::Reference(ref id) => {\n            match doc.get_object(*id) {\n                Ok(&Object::Dictionary(ref catalog)) => { return catalog; }\n                _ => {}\n            }\n        }\n        _ => {}\n    }\n    panic!();\n}\n\nfn get_pages(doc: &Document) -> &Dictionary {\n    let catalog = get_catalog(doc);\n    match catalog.get(b"Pages").unwrap() {\n        &Object::Reference(ref id) => {\n            match doc.get_object(*id) {\n                Ok(&Object::Dictionary(ref pages)) => { return pages; }\n                _other => {dlog!("pages: {:?}", _other)}\n            }\n        }\n        _other => { dlog!("pages: {:?}", _other)}\n    }\n    dlog!("catalog {:?}", catalog);\n    panic!();\n}\n\n', '', 1),
+    ('src/lib.rs', '    dlog!("Page count: {}", get::<i64>(&doc, &get_pages(&doc), b"Count"));\n', '', 1),
+    ('src/lib.rs', '    dlog!("Pages: {:?}", get_pages(&doc));\n', '', 1),
+    ('src/lib.rs', '    dlog!("Type: {:?}", get_pages(&doc).get(b"Type").and_then(|x| x.as_name()).unwrap());\n', '', 1),
+    ('src/lib.rs', "#[derive(Clone)]\nstruct PdfType3Font<'a> {\n    font: &'a Dictionary,\n    doc: &'a Document,\n", "#[derive(Clone)]\nstruct PdfType3Font<'a> {\n    font: &'a Dictionary,\n", 1),
+    ('src/lib.rs', 'PdfType3Font {doc, font, widths: width_map, encoding: encoding_table, unicode_map}', 'PdfType3Font {font, widths: width_map, encoding: encoding_table, unicode_map}', 1),
+    ('src/lib.rs', '    fn decode(&self, chars: &[u8]) -> String {\n        let strings = self.char_codes(chars).map(|x| self.decode_char(x.0)).collect::<Vec<_>>();\n        strings.join("")\n    }', '', 1),
+    ('src/lib.rs', '#[derive(Clone, Debug)]\nstruct Type0Func {\n    domain: Vec<f64>,\n    range: Vec<f64>,\n    contents: Vec<u8>,\n    size: Vec<i64>,\n    bits_per_sample: i64,\n    encode: Vec<f64>,\n    decode: Vec<f64>,\n}', '#[derive(Debug)]\nstruct Type0Func {\n    domain: Vec<f64>,\n    range: Vec<f64>,\n    contents: Vec<u8>,\n    size: Vec<i64>,\n    bits_per_sample: i64,\n    encode: Vec<f64>,\n    decode: Vec<f64>,\n}\n\nimpl Clone for Type0Func {\n    fn clone(&self) -> Self {\n        Self {\n            domain: self.domain.clone(),\n            range: self.range.clone(),\n            contents: self.contents.clone(),\n            size: self.size.clone(),\n            bits_per_sample: self.bits_per_sample,\n            encode: self.encode.clone(),\n            decode: self.decode.clone(),\n        }\n    }\n}', 1),
+    ('src/lib.rs', '#[derive(Clone, Debug)]\nstruct Type2Func {\n    c0: Option<Vec<f64>>,\n    c1: Option<Vec<f64>>,\n    n: f64,\n}', '#[derive(Debug)]\nstruct Type2Func {\n    c0: Option<Vec<f64>>,\n    c1: Option<Vec<f64>>,\n    n: f64,\n}\n\nimpl Clone for Type2Func {\n    fn clone(&self) -> Self {\n        Self {\n            c0: self.c0.clone(),\n            c1: self.c1.clone(),\n            n: self.n,\n        }\n    }\n}', 1),
+    ('src/lib.rs', '#[derive(Clone, Debug)]\npub struct CalGray {\n    white_point: [f64; 3],\n    black_point: Option<[f64; 3]>,\n    gamma: Option<f64>,\n}', '#[derive(Debug)]\npub struct CalGray {\n    white_point: [f64; 3],\n    black_point: Option<[f64; 3]>,\n    gamma: Option<f64>,\n}\n\nimpl Clone for CalGray {\n    fn clone(&self) -> Self {\n        Self {\n            white_point: self.white_point,\n            black_point: self.black_point,\n            gamma: self.gamma,\n        }\n    }\n}', 1),
+    ('src/lib.rs', '#[derive(Clone, Debug)]\npub struct CalRGB {\n    white_point: [f64; 3],\n    black_point: Option<[f64; 3]>,\n    gamma: Option<[f64; 3]>,\n    matrix: Option<Vec<f64>>\n}', '#[derive(Debug)]\npub struct CalRGB {\n    white_point: [f64; 3],\n    black_point: Option<[f64; 3]>,\n    gamma: Option<[f64; 3]>,\n    matrix: Option<Vec<f64>>\n}\n\nimpl Clone for CalRGB {\n    fn clone(&self) -> Self {\n        Self {\n            white_point: self.white_point,\n            black_point: self.black_point,\n            gamma: self.gamma,\n            matrix: self.matrix.clone(),\n        }\n    }\n}', 1),
+    ('src/lib.rs', '#[derive(Clone, Debug)]\npub struct Lab {\n    white_point: [f64; 3],\n    black_point: Option<[f64; 3]>,\n    range: Option<[f64; 4]>,\n}', '#[derive(Debug)]\npub struct Lab {\n    white_point: [f64; 3],\n    black_point: Option<[f64; 3]>,\n    range: Option<[f64; 4]>,\n}\n\nimpl Clone for Lab {\n    fn clone(&self) -> Self {\n        Self {\n            white_point: self.white_point,\n            black_point: self.black_point,\n            range: self.range,\n        }\n    }\n}', 1),
+    ('src/lib.rs', '#[derive(Clone)]\npub struct Separation {\n    name: String,\n    alternate_space: AlternateColorSpace,\n    tint_transform: Box<Function>,\n}', 'pub struct Separation {\n    name: String,\n    alternate_space: AlternateColorSpace,\n    tint_transform: Box<Function>,\n}\n\nimpl Clone for Separation {\n    fn clone(&self) -> Self {\n        Self {\n            name: self.name.clone(),\n            alternate_space: self.alternate_space.clone(),\n            tint_transform: self.tint_transform.clone(),\n        }\n    }\n}', 1),
+    ('src/lib.rs', '#[derive(Clone, Debug)]\nenum Function {', '#[derive(Debug)]\nenum Function {', 1),
+    ('src/lib.rs', 'impl Function {', 'impl Clone for Function {\n    fn clone(&self) -> Self {\n        match self {\n            Self::Type0(value) => Self::Type0(value.clone()),\n            Self::Type2(value) => Self::Type2(value.clone()),\n            Self::Type3 => Self::Type3,\n            Self::Type4(value) => Self::Type4(value.clone()),\n        }\n    }\n}\n\nimpl Function {', 1),
+)
+
+
 def require(condition, message):
     if not condition:
         raise ValueError(message)
@@ -83,6 +102,10 @@ def source_files(data, expected_sha256):
     for name, previous, current, count in WARNING_ADAPTATIONS:
         value = result[name].decode('utf8')
         require(value.count(previous) == count, 'Reviewed PDF warning adaptation no longer matches')
+        result[name] = value.replace(previous, current).encode('utf8')
+    for name, previous, current, count in DEAD_CODE_ADAPTATIONS:
+        value = result[name].decode('utf8')
+        require(value.count(previous) == count, 'Reviewed PDF value adaptation no longer matches')
         result[name] = value.replace(previous, current).encode('utf8')
     return result
 
