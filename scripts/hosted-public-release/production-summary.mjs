@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { boundedProductionFile } from "./production-inputs.mjs";
 
 const stages = [
+  "update-feed-route",
   "host-A-normal-launch",
   "previous-public-package-enabled",
   "original-UI-and-saved-layout",
@@ -12,6 +13,7 @@ const stages = [
   "public-package-restoration",
   "natural-Sparkle-service-drain",
   "natural-owned-host-engine-UI-drain",
+  "update-feed-restoration",
 ];
 export function sanitizeProductionResult(value, source) {
   assert.deepEqual(

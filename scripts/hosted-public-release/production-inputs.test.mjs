@@ -24,6 +24,7 @@ import {
   boundedProductionFile,
   closedProductionAsset,
   matchingProductionCatalogRecord,
+  productionInputEnvironment,
   productionVerifiedInputs,
 } from "./production-inputs.mjs";
 
@@ -398,5 +399,55 @@ test("current staging rejects another run source actor attempt, incomplete nativ
         value.environment,
       ),
     );
+  }
+});
+
+test("owned preparation retains same-run publication identity through actual staged-native admission", () => {
+  const value = currentNativeFacts();
+  const environment = productionInputEnvironment({
+    ...value.environment,
+    PUBLIC_RELEASE_VERIFICATION: "1",
+    GITHUB_TOKEN: "synthetic-read-token",
+    GH_TOKEN: "synthetic-write-token",
+    EXTENSION_CATALOG_PRIVATE_KEY: "synthetic-signing-key",
+    PRIVATE_FIELD: "synthetic-private",
+    PUBLISH: "false",
+    REBUILD: "",
+  });
+  admitCurrentProductionNativeRun(
+    value.lineage,
+    value.payload,
+    value.facts,
+    value.record,
+    environment,
+  );
+  for (const key of [
+    "GITHUB_TOKEN",
+    "GH_TOKEN",
+    "EXTENSION_CATALOG_PRIVATE_KEY",
+    "PRIVATE_FIELD",
+  ])
+    assert.equal(environment[key], undefined);
+  assert.throws(() => productionVerifiedInputs({ ...value, environment }));
+  for (const [key, wrong] of [
+    ["GITHUB_RUN_ID", "102"],
+    ["GITHUB_RUN_ATTEMPT", "2"],
+    ["GITHUB_JOB", "tests"],
+  ]) {
+    for (const changed of [
+      { ...value.environment, [key]: wrong },
+      Object.fromEntries(
+        Object.entries(value.environment).filter(([name]) => name !== key),
+      ),
+    ])
+      assert.throws(() =>
+        admitCurrentProductionNativeRun(
+          value.lineage,
+          value.payload,
+          value.facts,
+          value.record,
+          productionInputEnvironment(changed),
+        ),
+      );
   }
 });
