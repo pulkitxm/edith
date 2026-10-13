@@ -73,14 +73,24 @@ public actor ClaudeAccountStorage {
         startLogin: @escaping @Sendable (UUID, URL) async throws -> Void,
         eraseScopedSecret: @escaping @Sendable (URL) async throws -> Void
     ) async throws -> ClaudeAccountsState {
+        try await registerLimitsLogin(
+            account: account, profileID: newProfileID, createsProfile: true,
+            startLogin: startLogin, eraseScopedSecret: eraseScopedSecret)
+    }
+
+    private func registerLimitsLogin(
+        account: ClaudeAccount, profileID: UUID, createsProfile: Bool,
+        startLogin: @escaping @Sendable (UUID, URL) async throws -> Void,
+        eraseScopedSecret: @escaping @Sendable (URL) async throws -> Void
+    ) async throws -> ClaudeAccountsState {
         guard account.authentication == .oauthToken, !account.isLoggedOut,
             connectingLimits.count < 64, connectingLimits[account.id] == nil
         else { throw ClaudeAccountError.invalidRequest }
         let owner = UUID()
         let task = Task {
             try await self.connectLimitsLoginOwned(
-                account: account, newProfileID: newProfileID, startLogin: startLogin,
-                eraseScopedSecret: eraseScopedSecret)
+                account: account, id: profileID, createsProfile: createsProfile,
+                startLogin: startLogin, eraseScopedSecret: eraseScopedSecret)
         }
         connectingLimits[account.id] = LimitsConnection(id: owner, task: task)
         defer {
@@ -96,13 +106,12 @@ public actor ClaudeAccountStorage {
     }
 
     private func connectLimitsLoginOwned(
-        account: ClaudeAccount, newProfileID: UUID,
+        account: ClaudeAccount, id: UUID, createsProfile: Bool,
         startLogin: @Sendable (UUID, URL) async throws -> Void,
         eraseScopedSecret: @escaping @Sendable (URL) async throws -> Void
     ) async throws -> ClaudeAccountsState {
         let lease = try openLimitsLease()
         defer { flock(lease, LOCK_UN); close(lease) }
-        let id = account.limitsProfileID ?? newProfileID
         let folder = profileURL(id)
         try withRoot { root in
             try requireSaved(account, root: root)
@@ -111,7 +120,7 @@ public actor ClaudeAccountStorage {
                 for index in previousCleanup.indices { previousCleanup[index].isConnecting = false }
                 try writeLimitsCleanup(previousCleanup, root: root)
             }
-            if account.limitsProfileID == nil {
+            if createsProfile {
                 let state = try readState(root)
                 var cleanup = try readLimitsCleanup(root, state: state)
                 guard cleanup.count < 64,
@@ -144,11 +153,12 @@ public actor ClaudeAccountStorage {
                 try writeLimitsCleanup(cleanup, root: root)
             }
         }
+        let result: ClaudeAccountsState
         do {
             try await startLogin(id, folder)
             try await finishLimitsStart(accountID: account.id, id: id)
             try Task.checkCancellation()
-            return try withRoot { root in
+            result = try withRoot { root in
                 var state = try readState(root)
                 guard let index = state.accounts.firstIndex(of: account) else {
                     throw ClaudeAccountError.rejected(
@@ -169,7 +179,7 @@ public actor ClaudeAccountStorage {
             } catch {
                 throw ClaudeLimitsLoginCleanupError(originalError: original, cleanupError: error)
             }
-            if account.limitsProfileID == nil {
+            if createsProfile {
                 let cleanup = Task.detached {
                     guard try await self.pendingLimitsProfile(accountID: account.id, id: id) != nil
                     else { return }
@@ -184,6 +194,32 @@ public actor ClaudeAccountStorage {
                 }
             }
             throw original
+        }
+        if createsProfile {
+            let cleanup = Task.detached {
+                for retired in try await self.retiredLimitsProfiles(accountID: account.id) {
+                    guard
+                        let folder = try await self.pendingLimitsProfile(
+                            accountID: account.id, id: retired)
+                    else { continue }
+                    try await eraseScopedSecret(folder)
+                    try await self.discardLimitsProfile(accountID: account.id, id: retired)
+                }
+            }
+            try await cleanup.value
+        }
+        return result
+    }
+
+    private func retiredLimitsProfiles(accountID: UUID) throws -> [UUID] {
+        try withRoot(checkCancellation: false) { root in
+            let state = try readState(root)
+            return try readLimitsCleanup(root, state: state).filter { item in
+                item.accountID == accountID && !item.isConnecting
+                    && !state.accounts.contains(where: {
+                        $0.id == item.profileID || $0.limitsProfileID == item.profileID
+                    })
+            }.map(\.profileID)
         }
     }
 
@@ -260,11 +296,11 @@ public actor ClaudeAccountStorage {
         account: ClaudeAccount, expected: Data?, data: Data,
         writeScopedSecret: @escaping @Sendable (URL, Data) async throws -> Void
     ) async throws {
-        guard account.limitsProfileID != nil, data.count <= 65_536 else {
+        guard let profileID = account.limitsProfileID, data.count <= 65_536 else {
             throw ClaudeAccountError.invalidRequest
         }
-        _ = try await connectLimitsLogin(
-            account: account,
+        _ = try await registerLimitsLogin(
+            account: account, profileID: profileID, createsProfile: false,
             startLogin: { _, folder in
                 guard try await self.limitsLoginCredentials(account: account).1 == expected else {
                     throw ClaudeAccountError.rejected(
