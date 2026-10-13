@@ -63,7 +63,7 @@ def signing(path, expected_team, requirement=None):
 
 def historical_tag(root, expected):
     source, tag, version, build = expected['source'], expected['tag'], expected['version'], str(expected['build'])
-    COHORT.require(re.fullmatch('[0-9a-f]{40}', source) and tag == 'v' + version and re.fullmatch('v[0-9]+\.[0-9]+\.[0-9]+', tag) and re.fullmatch('[0-9]{1,20}', build), 'Invalid historical release identity')
+    COHORT.require(re.fullmatch('[0-9a-f]{40}', source) and tag == 'v' + version and re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', tag) and re.fullmatch('[0-9]{1,20}', build), 'Invalid historical release identity')
     def git(*args):
         return subprocess.check_output(['git', '-C', str(root), *args], timeout=60)
     COHORT.require(git('cat-file', '-t', 'refs/tags/' + tag).strip() == b'commit', 'Require raw historical lightweight tag')

@@ -104,7 +104,7 @@ def version_child(original, changed, parents, source, version, build, dmg_sha256
 
 
 def qualify_tag(root, source, tag, version, build, dmg_sha256):
-    require(re.fullmatch('[0-9a-f]{40}', source) and re.fullmatch('v[0-9]+\.[0-9]+\.[0-9]+', tag) and tag == 'v'+version and re.fullmatch('[0-9]{1,20}', build) and re.fullmatch('[0-9a-f]{64}', dmg_sha256), 'Invalid pinned release identity')
+    require(re.fullmatch('[0-9a-f]{40}', source) and re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', tag) and tag == 'v'+version and re.fullmatch('[0-9]{1,20}', build) and re.fullmatch('[0-9a-f]{64}', dmg_sha256), 'Invalid pinned release identity')
     def git(*args):
         return subprocess.check_output(['git', '-C', str(root), *args], timeout=60)
     require(git('cat-file', '-t', 'refs/tags/'+tag).strip() == b'commit', 'Require a raw lightweight commit tag')
