@@ -105,7 +105,7 @@ def run():
         try:
             driver = driver_api.SelectedSwiftDriver(os.environ['DEVELOPER_DIR'], entry='swift-test')
             image = native.watchdog.canonical_path(
-                driver.developer / 'Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/xctest')
+                driver.developer / 'Toolchains/XcodeDefault.xctoolchain/usr/libexec/swift/pm/swiftpm-xctest-helper')
             metadata = image_identity(image)
             environment = isolation.environment(fixture, modules)
             for key in list(environment):
