@@ -33,13 +33,11 @@ import Testing
             executableSHA256: String(repeating: "a", count: 64))
         var current = true
 
-        init(count: Int = 1) throws {
-            guard let physical = realpath(FileManager.default.temporaryDirectory.path, nil) else {
-                throw WorkerFixtureError.invalid
-            }
-            defer { free(physical) }
+        init(count: Int = 1, temporaryDirectory: URL = FileManager.default.temporaryDirectory)
+            throws
+        {
             let session = UUID().uuidString.lowercased()
-            root = URL(fileURLWithPath: String(cString: physical), isDirectory: true)
+            root = temporaryDirectory.resolvingSymlinksInPath()
                 .appendingPathComponent("functional-fixture-" + session)
             source = root.appendingPathComponent("outputs/blitztree/initial/scan")
             destination = root.appendingPathComponent("outputs/blitztree/initial/trash")
@@ -91,6 +89,27 @@ import Testing
                 requireAdmission: { [self] in
                     guard current else { throw WorkerFixtureError.invalid }
                 })
+        }
+    }
+
+    @Test func temporaryDirectorySpellingsResolveToStrictOwnedScopes() async throws {
+        let temporary = FileManager.default.temporaryDirectory
+        guard let physical = realpath(temporary.path, nil) else {
+            throw WorkerFixtureError.invalid
+        }
+        defer { free(physical) }
+        for directory in [
+            temporary, URL(fileURLWithPath: String(cString: physical), isDirectory: true),
+        ] {
+            let fixture = try Fixture(temporaryDirectory: directory)
+            #expect(fixture.source.path == fixture.sourceScope.path)
+            #expect(fixture.destination.path == fixture.destinationScope.path)
+            for url in [fixture.source, fixture.destination] {
+                #expect(url.path == url.standardizedFileURL.path)
+                #expect(url.path == url.resolvingSymlinksInPath().path)
+            }
+            let lease = try fixture.lease()
+            await lease.closeAndWait()
         }
     }
 
