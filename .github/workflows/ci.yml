@@ -186,6 +186,8 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.sha }}
           persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        if: github.event_name == 'pull_request'
       - id: areas
         name: Work out which areas changed
         env:
@@ -229,13 +231,18 @@ jobs:
           area companion_runtime '^apps/companion/(Dockerfile|compose(\.[^/]+)?\.yaml)$'
           area music_player '^(apps/music-player/|build\.sh$|\.github/workflows/)'
           test_scope=()
+          test_runner=node
+          if [ "${GITHUB_EVENT_NAME:-}" = pull_request ] && [ -n "$base" ]; then
+            test_scope+=("--pull-request-base=$base")
+            test_runner=bun
+          fi
           if [ "$GITHUB_REF" = refs/heads/main ]; then
             test_scope=(--shipping)
           fi
           if [ -z "$base" ]; then
-            test_plan="$(printf '%s\n' "$changed" | node scripts/ci-test-plan.mjs "${test_scope[@]}" --all)"
+            test_plan="$(printf '%s\n' "$changed" | "$test_runner" scripts/ci-test-plan.mjs "${test_scope[@]}" --all)"
           else
-            test_plan="$(printf '%s\n' "$changed" | node scripts/ci-test-plan.mjs "${test_scope[@]}")"
+            test_plan="$(printf '%s\n' "$changed" | "$test_runner" scripts/ci-test-plan.mjs "${test_scope[@]}")"
           fi
           echo "swift_matrix=$test_plan" >> "$GITHUB_OUTPUT"
           printf '%s' "$test_plan" | node -e 'const fs=require("node:fs"); const plan=JSON.parse(fs.readFileSync(0,"utf8")); console.log("swift_tests="+(plan.include.length > 0));' >> "$GITHUB_OUTPUT"

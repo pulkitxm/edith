@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { planSwiftTests } from "./ci-test-plan.mjs";
+import { nativeCIWorkflowsEqual, planSwiftTests } from "./ci-test-plan.mjs";
 import {
   extensionFingerprint,
   planExtensionBuilds,
@@ -789,4 +789,310 @@ test("Notch CLI and native browser edits select their standalone owner without r
         ghostty: false,
       },
     ]);
+});
+
+function nativeWorkflowFixture() {
+  return Bun.YAML.parse(`name: Synthetic CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      release:
+        type: boolean
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      swift_matrix: "synthetic-matrix"
+    steps:
+      - run: node scripts/ci-test-plan.mjs
+  swift-build:
+    needs: changes
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - run: make ci-host
+  swift-test:
+    needs: changes
+    runs-on: macos-latest
+    timeout-minutes: 90
+    strategy:
+      max-parallel: 2
+      matrix:
+        include: []
+    steps:
+      - run: make ci-extension-music
+  release:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - run: node scripts/publish-release-state.mjs
+`);
+}
+
+function releaseWorkflowChange() {
+  const previous = nativeWorkflowFixture();
+  const current = structuredClone(previous);
+  current.on.workflow_dispatch.inputs.coordinated_release = {
+    type: "string",
+    default: "",
+  };
+  current.jobs.release.steps.push({
+    run: "node scripts/validate-coordinated-release.mjs",
+  });
+  return { previous, current };
+}
+
+test("release-only pull request workflow edits keep native jobs and triggers identical", () => {
+  const ciWorkflow = releaseWorkflowChange();
+  expect(nativeCIWorkflowsEqual(ciWorkflow.previous, ciWorkflow.current)).toBe(
+    true,
+  );
+  expect(
+    planSwiftTests(
+      [".github/workflows/ci.yml", "scripts/publish-release-helper.mjs"],
+      { ciWorkflow },
+    ),
+  ).toEqual({ include: [] });
+  const paths = [
+    ".github/workflows/ci.yml",
+    "Extensions/music/Tests/PlaybackTests.swift",
+  ];
+  expect(planSwiftTests(paths, { ciWorkflow })).toEqual(
+    planSwiftTests(paths.slice(1)),
+  );
+});
+
+test("default full and shipping checks retain every original workflow lane", () => {
+  const ciWorkflow = releaseWorkflowChange();
+  const paths = [".github/workflows/ci.yml"];
+  for (const options of [
+    {},
+    { all: true },
+    { shipping: true },
+    { all: true, shipping: true },
+  ]) {
+    expect(
+      planSwiftTests(paths, {
+        ...options,
+        ciWorkflow: options.all || options.shipping ? ciWorkflow : undefined,
+      }),
+    ).toEqual(planSwiftTests(paths, options));
+  }
+  expect(
+    planSwiftTests([".github/actions/cache-swift/action.yml"], { ciWorkflow }),
+  ).toEqual(planSwiftTests([], { all: true }));
+  expect(
+    planSwiftTests([".github/workflows/new-native.yml"], { ciWorkflow }),
+  ).toEqual(planSwiftTests([], { all: true }));
+  expect(planSwiftTests(["Makefile"], { ciWorkflow })).toEqual(
+    planSwiftTests([], { all: true }),
+  );
+});
+
+test("native job budgets steps matrix and global execution changes retain full validation", () => {
+  for (const mutate of [
+    (workflow) => {
+      workflow.jobs["swift-test"]["timeout-minutes"] = 91;
+    },
+    (workflow) => {
+      workflow.jobs["swift-test"].strategy["max-parallel"] = 3;
+    },
+    (workflow) => {
+      workflow.jobs["swift-test"].steps[0].run = "make ci-extension-terminal";
+    },
+    (workflow) => {
+      workflow.jobs.changes.outputs.swift_matrix = "changed-matrix";
+    },
+    (workflow) => {
+      workflow.on.pull_request = { paths: ["Extensions/**"] };
+    },
+    (workflow) => {
+      workflow.on.push.branches = ["main", "release"];
+    },
+    (workflow) => {
+      workflow.permissions = { contents: "write" };
+    },
+    (workflow) => {
+      workflow.concurrency = { "cancel-in-progress": true };
+    },
+    (workflow) => {
+      workflow.jobs.additional = {
+        "runs-on": "ubuntu-latest",
+        steps: [{ run: "make ci-host" }],
+      };
+    },
+    (workflow) => {
+      delete workflow.jobs.release;
+    },
+  ]) {
+    const previous = nativeWorkflowFixture();
+    const current = structuredClone(previous);
+    mutate(current);
+    expect(nativeCIWorkflowsEqual(previous, current)).toBe(false);
+    expect(
+      planSwiftTests([".github/workflows/ci.yml"], {
+        ciWorkflow: { previous, current },
+      }),
+    ).toEqual(planSwiftTests([], { all: true }));
+  }
+});
+
+test("transitive native dependencies remain part of the exact workflow scope", () => {
+  const previous = nativeWorkflowFixture();
+  previous.jobs.generated = {
+    "runs-on": "ubuntu-latest",
+    steps: [{ run: "generate original native inputs" }],
+  };
+  previous.jobs["swift-test"].needs = ["changes", "generated"];
+  const current = structuredClone(previous);
+  current.jobs.generated.steps[0].run = "generate changed native inputs";
+  expect(nativeCIWorkflowsEqual(previous, current)).toBe(false);
+  expect(
+    planSwiftTests([".github/workflows/ci.yml"], {
+      ciWorkflow: { previous, current },
+    }),
+  ).toEqual(planSwiftTests([], { all: true }));
+});
+
+test("incomplete cyclic and unknown native workflow inputs fail closed", () => {
+  const original = nativeWorkflowFixture();
+  for (const current of [
+    undefined,
+    {},
+    { jobs: {} },
+    { ...original, on: "pull_request" },
+  ])
+    expect(nativeCIWorkflowsEqual(original, current)).toBe(false);
+  for (const mutate of [
+    (workflow) => {
+      delete workflow.jobs["swift-test"];
+    },
+    (workflow) => {
+      workflow.jobs["swift-test"].needs = ["missing"];
+    },
+    (workflow) => {
+      workflow.jobs.changes.needs = "swift-test";
+    },
+    (workflow) => {
+      workflow.jobs["swift-test"].needs = { unexpected: "changes" };
+    },
+  ]) {
+    const current = structuredClone(original);
+    mutate(current);
+    expect(nativeCIWorkflowsEqual(original, current)).toBe(false);
+  }
+});
+
+test("CLI absent base commits stay full and symbolic base arguments are rejected", () => {
+  const result = execFileSync(
+    "bun",
+    ["scripts/ci-test-plan.mjs", `--pull-request-base=${"0".repeat(40)}`],
+    { input: ".github/workflows/ci.yml\n", encoding: "utf8" },
+  );
+  expect(JSON.parse(result)).toEqual(planSwiftTests([], { all: true }));
+  expect(() =>
+    execFileSync(
+      "bun",
+      ["scripts/ci-test-plan.mjs", "--pull-request-base=HEAD"],
+      {
+        input: ".github/workflows/ci.yml\n",
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    ),
+  ).toThrow();
+});
+
+test("the actual change job scopes release-only PRs and preserves main shipping validation", () => {
+  const directory = mkdtempSync(join(tmpdir(), "native-workflow-route-"));
+  const git = (...args) =>
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "core.hooksPath=/dev/null",
+        ...args,
+      ],
+      { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    ).trim();
+  const save = (path, content) => {
+    const target = join(directory, path);
+    mkdirSync(join(target, ".."), { recursive: true });
+    writeFileSync(target, content);
+  };
+  try {
+    git("init", "-b", "main");
+    for (const path of [
+      "scripts/ci-test-plan.mjs",
+      "scripts/test-extension-package.mjs",
+      "scripts/extension-release-plan.mjs",
+      "scripts/build-extension-support.mjs",
+      "scripts/extension-ghostty-native.mjs",
+      "scripts/extension-host-abi.mjs",
+      "scripts/shipping-extension-policy.mjs",
+      "Extensions/manifest.json",
+    ])
+      save(path, readFileSync(path));
+    const ciWorkflow = releaseWorkflowChange();
+    save(".github/workflows/ci.yml", JSON.stringify(ciWorkflow.previous));
+    git("add", ".");
+    git("commit", "-m", "fixture native baseline");
+    const base = git("rev-parse", "HEAD");
+    git("update-ref", "refs/remotes/origin/main", base);
+    save(".github/workflows/ci.yml", JSON.stringify(ciWorkflow.current));
+    git("add", ".github/workflows/ci.yml");
+    git("commit", "-m", "fixture release workflow");
+    const workflow = Bun.YAML.parse(
+      readFileSync(".github/workflows/ci.yml", "utf8"),
+    );
+    const command = workflow.jobs.changes.steps.find(
+      (step) => step.id === "areas",
+    ).run;
+    for (const [event, ref, expected] of [
+      ["pull_request", "refs/pull/9/merge", { include: [] }],
+      [
+        "push",
+        "refs/heads/main",
+        planSwiftTests([".github/workflows/ci.yml"], { shipping: true }),
+      ],
+    ]) {
+      const output = join(directory, `output-${event}`);
+      execFileSync("bash", ["-e", "-o", "pipefail", "-c", command], {
+        cwd: directory,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          BASE_REF: "main",
+          BEFORE: "",
+          GITHUB_EVENT_NAME: event,
+          GITHUB_REF: ref,
+          GITHUB_OUTPUT: output,
+        },
+      });
+      const values = new Map(
+        readFileSync(output, "utf8")
+          .trim()
+          .split("\n")
+          .map((line) => {
+            const at = line.indexOf("=");
+            return [line.slice(0, at), line.slice(at + 1)];
+          }),
+      );
+      expect(JSON.parse(values.get("swift_matrix"))).toEqual(expected);
+      expect(values.get("swift_tests")).toBe(
+        String(expected.include.length > 0),
+      );
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
