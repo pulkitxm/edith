@@ -305,7 +305,7 @@ test("the publisher uses a token that clears the ruleset", () => {
 
 test("build jobs cannot retain write credentials", () => {
   expect(workflow.permissions).toEqual({ contents: "read" });
-  expect(publish.permissions).toEqual({ contents: "write" });
+  expect(publish.permissions).toEqual({ contents: "read", actions: "read" });
   for (const job of [version, dmg]) {
     expect(job.permissions?.contents).not.toBe("write");
     const checkouts = job.steps.filter((step) =>
