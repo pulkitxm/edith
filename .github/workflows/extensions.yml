@@ -457,7 +457,7 @@ jobs:
         if: inputs.production_cohort != ''
         run: |
           set -euo pipefail
-          bun test scripts/hosted-public-release/production-inputs.test.mjs scripts/hosted-public-release/production-observer.test.mjs scripts/hosted-public-release/production-summary.test.mjs scripts/hosted-public-release/production-catalog-channel.test.mjs scripts/hosted-public-release/production-publication-coordinator.test.mjs scripts/hosted-public-release/production-publication-workflow.test.mjs
+          bun test scripts/hosted-public-release/production-inputs.test.mjs scripts/hosted-public-release/production-observer.test.mjs scripts/hosted-public-release/production-summary.test.mjs scripts/hosted-public-release/production-catalog-channel.test.mjs scripts/hosted-public-release/production-publication-coordinator.test.mjs scripts/hosted-public-release/production-publication-workflow.test.mjs scripts/hosted-public-release/production-bootstrap.test.mjs scripts/hosted-public-release/production-host-readiness.test.mjs scripts/hosted-public-release/production-completed-host.test.mjs scripts/hosted-public-release/production-publication-budget.test.mjs scripts/hosted-public-release/production-pending-cohort.test.mjs
           python3 -I -B scripts/test-production-host-cohort.py
       - name: Preserve immutable native evidence before publication
         run: bun scripts/extension-native-evidence.mjs

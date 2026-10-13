@@ -35,6 +35,7 @@ export function completedProductionCohortRequest(
   record,
   measured,
 ) {
+  assert.equal(template.schema, 1);
   assert.equal(template.catalogs.current, null);
   assert.equal(template.source, identity.source);
   assert.equal(template.application, "/Applications/Edith.app");
@@ -160,14 +161,19 @@ export function parseProductionCohortTemplate(text, environment) {
       Buffer.byteLength(text) > 0 &&
       Buffer.byteLength(text) <= 65536,
   );
+  const parser =
+    JSON.parse(text).schema === 2
+      ? "bootstrap_template"
+      : "preparation_template";
   const parsed = execFileSync(
     "python3",
     [
       "-I",
       "-B",
       "-c",
-      "import importlib.util,json,sys;s=importlib.util.spec_from_file_location('cohort',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(json.dumps(m.preparation_template(sys.stdin.read())))",
+      "import importlib.util,json,sys;s=importlib.util.spec_from_file_location('cohort',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(json.dumps(getattr(m,sys.argv[2])(sys.stdin.read())))",
       join(root, "scripts/hosted-public-release/production-cohort.py"),
+      parser,
     ],
     {
       cwd: root,
@@ -236,7 +242,7 @@ export async function publishCoordinatedProductionUpdate(templateText) {
     typeof templateText === "string" &&
       Buffer.byteLength(templateText) <= 65536,
   );
-  const template = parseProductionCohortTemplate(templateText, process.env);
+  let template = parseProductionCohortTemplate(templateText, process.env);
   assert.equal(template.source, process.env.GITHUB_SHA);
   assert.match(template.source, /^[a-f0-9]{40}$/);
   assert.equal(template.catalogs.current, null);
@@ -259,114 +265,178 @@ export async function publishCoordinatedProductionUpdate(templateText) {
   };
   source();
   remaining();
-  const directory = join(root, "dist/extensions");
-  const { include } = JSON.parse(
-    await readFile(join(directory, "plan.json"), "utf8"),
-  );
-  assert.equal(include.length, 1);
-  assert.equal(include[0].id, "keepAwake");
-  assert.equal(include[0].version, "1.0.1");
-  const stage = await publication.publishExtensions({
-    directory,
-    repository: "pulkitxm/edith",
-    target: template.source,
-    ref: "refs/heads/main",
-    catalogTag: "extension-catalog-v1",
-    publicKey: process.env.EXTENSION_CATALOG_PUBLIC_KEY,
-    catalogPhase: "stage",
-  });
-  remaining();
-  const identity = publication.stagedExtensionPublication(stage.catalogStage);
-  const record = JSON.parse(
-    await readFile(join(directory, "keepAwake.json"), "utf8"),
-  );
-  const lineage = verifiedLineage(
-    await readFile(join(directory, "keepAwake.native-evidence.json")),
-    process.env.EXTENSION_CATALOG_PUBLIC_KEY,
-    record,
-  );
-  assert.equal(lineage.sourceCommit, template.source);
-  assert.equal(String(lineage.runID), process.env.GITHUB_RUN_ID);
-  assert.equal(String(lineage.runAttempt), process.env.GITHUB_RUN_ATTEMPT);
-  const measurement = join(directory, "production-cohort-current");
-  await mkdir(measurement, { mode: 0o700 });
-  const context = join(measurement, "context.json");
-  await writeFile(
-    context,
-    JSON.stringify({ template, record, lineage, directory }),
-    { mode: 0o600, flag: "wx" },
-  );
-  const measured = JSON.parse(
+  let bootstrap;
+  try {
+    if (template.schema === 2) {
+      for (const name of [
+        "publishStagedHostReadiness",
+        "bindStagedHostContinuation",
+      ])
+        assert.equal(
+          typeof publication[name],
+          "function",
+          "Reviewed pending publication APIs are required",
+        );
+      const { preparePendingProductionCohort } = await import(
+        "./production-pending-cohort.mjs"
+      );
+      bootstrap = await preparePendingProductionCohort(templateText, remaining);
+      const { verifiedPreviousHostBootstrapInputs } = await import(
+        "./production-inputs.mjs"
+      );
+      const previous = verifiedPreviousHostBootstrapInputs(bootstrap.previous);
+      await previous.revalidate();
+      await previous.catalog();
+      remaining();
+      source();
+    }
+    const directory = join(root, "dist/extensions");
+    const { include } = JSON.parse(
+      await readFile(join(directory, "plan.json"), "utf8"),
+    );
+    assert.equal(include.length, 1);
+    assert.equal(include[0].id, "keepAwake");
+    assert.equal(include[0].version, "1.0.1");
+    const stage = await publication.publishExtensions({
+      directory,
+      repository: "pulkitxm/edith",
+      target: template.source,
+      ref: "refs/heads/main",
+      catalogTag: "extension-catalog-v1",
+      publicKey: process.env.EXTENSION_CATALOG_PUBLIC_KEY,
+      catalogPhase: "stage",
+    });
+    remaining();
+    const identity = publication.stagedExtensionPublication(stage.catalogStage);
+    const record = JSON.parse(
+      await readFile(join(directory, "keepAwake.json"), "utf8"),
+    );
+    const lineage = verifiedLineage(
+      await readFile(join(directory, "keepAwake.native-evidence.json")),
+      process.env.EXTENSION_CATALOG_PUBLIC_KEY,
+      record,
+    );
+    assert.equal(lineage.sourceCommit, template.source);
+    assert.equal(String(lineage.runID), process.env.GITHUB_RUN_ID);
+    assert.equal(String(lineage.runAttempt), process.env.GITHUB_RUN_ATTEMPT);
+    if (bootstrap) {
+      remaining();
+      await publication.publishStagedHostReadiness(
+        stage.catalogStage,
+        bootstrap.pending,
+      );
+      remaining();
+      const { completePendingProductionCohort } = await import(
+        "./production-pending-cohort.mjs"
+      );
+      const completed = await completePendingProductionCohort(
+        bootstrap.pending,
+        remaining,
+      );
+      template = completed.template;
+      await publication.bindStagedHostContinuation(
+        stage.catalogStage,
+        completed.completed,
+      );
+      remaining();
+      source();
+    }
+    const measurement = join(directory, "production-cohort-current");
+    await mkdir(measurement, { mode: 0o700 });
+    const context = join(measurement, "context.json");
+    await writeFile(
+      context,
+      JSON.stringify({ template, record, lineage, directory }),
+      { mode: 0o600, flag: "wx" },
+    );
+    const measured = JSON.parse(
+      execFileSync(
+        "python3",
+        [
+          "-I",
+          "-B",
+          join(
+            root,
+            "scripts/hosted-public-release/production-static-inputs.py",
+          ),
+          "measure-package",
+          context,
+        ],
+        {
+          cwd: root,
+          env: {
+            ...productionReadonlyEnvironment(process.env),
+            PUBLISH: "false",
+            REBUILD: "",
+          },
+          timeout: 60000,
+          maxBuffer: 65536,
+        },
+      ).toString(),
+    );
+    remaining();
+    const text = completedProductionCohortRequest(
+      template,
+      identity,
+      record,
+      measured,
+    );
+    const binding = productionCatalogBinding(text, identity);
+    const environment = productionObserverEnvironment(
+      process.env,
+      text,
+      binding,
+    );
     execFileSync(
       "python3",
       [
         "-I",
         "-B",
-        join(root, "scripts/hosted-public-release/production-static-inputs.py"),
-        "measure-package",
-        context,
+        "-c",
+        "import importlib.util,sys;s=importlib.util.spec_from_file_location('cohort',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);m.request(sys.stdin.read())",
+        join(root, "scripts/hosted-public-release/production-cohort.py"),
       ],
       {
         cwd: root,
-        env: {
-          ...productionReadonlyEnvironment(process.env),
-          PUBLISH: "false",
-          REBUILD: "",
-        },
+        env: environment,
+        input: text,
         timeout: 60000,
         maxBuffer: 65536,
       },
-    ).toString(),
-  );
-  remaining();
-  const text = completedProductionCohortRequest(
-    template,
-    identity,
-    record,
-    measured,
-  );
-  const binding = productionCatalogBinding(text, identity);
-  const environment = productionObserverEnvironment(process.env, text, binding);
-  execFileSync(
-    "python3",
-    [
-      "-I",
-      "-B",
-      "-c",
-      "import importlib.util,sys;s=importlib.util.spec_from_file_location('cohort',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);m.request(sys.stdin.read())",
-      join(root, "scripts/hosted-public-release/production-cohort.py"),
-    ],
-    {
-      cwd: root,
-      env: environment,
-      input: text,
-      timeout: 60000,
-      maxBuffer: 65536,
-    },
-  );
-  source();
-  const observer = await runObserver(text, binding, remaining);
-  try {
-    await coordinateProductionCatalog(
-      observer.channel,
-      binding,
-      async () => {
-        remaining();
-        source();
-        await publication.promoteStagedExtensionPublication(stage.catalogStage);
-        remaining();
-        source();
-      },
-      observer.isActive,
     );
-    await observer.joined;
-    remaining();
-  } catch (error) {
-    observer.retire();
-    await observer.joined.catch(() => {});
-    throw error;
+    source();
+    const observer = await runObserver(text, binding, remaining);
+    try {
+      await coordinateProductionCatalog(
+        observer.channel,
+        binding,
+        async () => {
+          remaining();
+          source();
+          await publication.promoteStagedExtensionPublication(
+            stage.catalogStage,
+          );
+          remaining();
+          source();
+        },
+        observer.isActive,
+      );
+      await observer.joined;
+      remaining();
+    } catch (error) {
+      observer.retire();
+      await observer.joined.catch(() => {});
+      throw error;
+    } finally {
+      observer.channel.close();
+    }
   } finally {
-    observer.channel.close();
+    if (bootstrap) {
+      const { retireHostBootstrapIntent } = await import(
+        "./production-bootstrap.mjs"
+      );
+      retireHostBootstrapIntent(bootstrap.pending);
+    }
   }
 }
 if (import.meta.main) {

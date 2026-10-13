@@ -169,6 +169,14 @@ test("wrong request, early child retirement and failed promotion cannot produce 
 });
 
 test("current catalog metadata comes only from the actual staged candidate and exact package bytes", () => {
+  assert.throws(() =>
+    completedProductionCohortRequest(
+      { ...template, schema: 2 },
+      identity,
+      record,
+      measured,
+    ),
+  );
   const completed = JSON.parse(text);
   assert.deepEqual(completed.catalogs.current, {
     revision: 2,
