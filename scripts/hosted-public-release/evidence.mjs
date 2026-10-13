@@ -59,7 +59,13 @@ function requiredSteps(name) {
         : [];
 }
 
-function jobsIdentity(jobs, plannedIDs, runID, staging) {
+function jobsIdentity(
+  jobs,
+  plannedIDs,
+  runID,
+  staging,
+  publisherPhase = "preservation",
+) {
   const expected = [
     "plan",
     "frozen-host",
@@ -93,10 +99,19 @@ function jobsIdentity(jobs, plannedIDs, runID, staging) {
         assert.equal(found.length, 1);
         const step = found[0];
         integer(step.number);
-        assert.equal(step.status, active ? "in_progress" : "completed");
-        assert.equal(step.conclusion, active ? null : "success");
+        const preserving = active && publisherPhase === "preservation";
+        assert.equal(step.status, preserving ? "in_progress" : "completed");
+        assert.equal(step.conclusion, preserving ? null : "success");
         return { name, number: step.number };
       });
+      if (active && publisherPhase === "publication") {
+        const publication = job.steps.filter(
+          ({ name }) => name === publicationStep,
+        );
+        assert.equal(publication.length, 1);
+        assert.equal(publication[0].status, "in_progress");
+        assert.equal(publication[0].conclusion, null);
+      }
       return { id: job.id, name: job.name, steps };
     })
     .sort((left, right) => left.name.localeCompare(right.name));
@@ -199,7 +214,9 @@ export function stagedEvidence({
   fingerprints,
   environment,
   resume,
+  publisherPhase = "preservation",
 }) {
+  assert(["preservation", "publication"].includes(publisherPhase));
   assert.equal(environment.GITHUB_ACTIONS, "true");
   assert.equal(environment.RUNNER_ENVIRONMENT, "github-hosted");
   assert.equal(environment.RUNNER_OS, "macOS");
@@ -236,7 +253,7 @@ export function stagedEvidence({
     runAttempt: run.run_attempt,
     plannedIDs,
     fingerprints,
-    jobs: jobsIdentity(jobs, plannedIDs, run.id, true),
+    jobs: jobsIdentity(jobs, plannedIDs, run.id, true, publisherPhase),
     artifacts: names.map((name) => {
       const row = artifact(artifacts, name, run, source);
       return { name, ...row, assetName: `${name}-${row.artifactID}.zip` };

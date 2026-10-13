@@ -34,6 +34,25 @@ def observation(value):
 
 
 class ProductionCohortContracts(unittest.TestCase):
+    def test_unresolved_current_package_and_catalog_are_preparation_only(self):
+        value = synthetic_request()
+        previous = copy.deepcopy(value['packages']['previous'])
+        value['packages']['current'] = None
+        value['catalogs']['current'] = None
+        self.assertEqual(COHORT.preparation_template(json.dumps(value)), value)
+        self.assertEqual(value['packages']['previous'], previous)
+        with self.assertRaises(ValueError):
+            COHORT.request(json.dumps(value))
+        for key in ['packages', 'catalogs']:
+            substituted = copy.deepcopy(value)
+            substituted[key]['current'] = synthetic_request()[key]['current']
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                COHORT.preparation_template(json.dumps(substituted))
+        invalid = copy.deepcopy(value)
+        invalid['packages']['previous']['version'] = '1.0.1'
+        with self.assertRaises(ValueError):
+            COHORT.preparation_template(json.dumps(invalid))
+
     def test_supported_trust_classes_record_actual_notarization_without_claiming_execution(self):
         for trust, notarization in [("Apple Development", "skipped"), ("Developer ID Application", "verified"), ("Apple Distribution", "skipped")]:
             value = synthetic_request()

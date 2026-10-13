@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifiedLineage } from "./evidence.mjs";
 import {
   productionCatalogBinding,
   productionCatalogChannel,
@@ -26,22 +27,38 @@ export async function coordinateProductionCatalog(
   assert(isActive());
   await channel.write(productionCatalogMessage("catalog-promoted", binding));
 }
-export function completedProductionCohortRequest(template, identity, record) {
+export function completedProductionCohortRequest(
+  template,
+  identity,
+  record,
+  measured,
+) {
   assert.equal(template.catalogs.current, null);
   assert.equal(template.source, identity.source);
   assert.equal(template.application, "/Applications/Edith.app");
   assert.equal(record.id, "keepAwake");
   assert.equal(record.version, "1.0.1");
-  assert.equal(template.packages.current.version, record.version);
-  assert.equal(template.packages.current.archiveSHA256, record.sha256);
-  assert.equal(
-    template.packages.current.sourceFingerprint,
-    record.sourceFingerprint,
-  );
+  assert.equal(template.packages.current, null);
+  assert.equal(measured.source, template.source);
+  for (const [key, actual] of Object.entries({
+    id: record.id,
+    version: record.version,
+    archiveSHA256: record.sha256,
+    archiveURL: record.downloadURL,
+    sourceFingerprint: record.sourceFingerprint,
+    downloadBytes: record.downloadBytes,
+    installedBytes: record.installedBytes,
+    hostABI: record.hostABI,
+    architecture: record.architecture,
+    minimumSystemVersion: record.minimumSystemVersion,
+    dependencies: record.dependencies,
+  }))
+    assert.deepEqual(measured[key], actual);
   for (const key of ["revision", "sha256", "bytes"])
     assert.equal(template.catalogs.previous[key], identity.previous[key]);
   const request = {
     ...template,
+    packages: { previous: template.packages.previous, current: measured },
     catalogs: {
       previous: template.catalogs.previous,
       current: {
@@ -131,7 +148,7 @@ export function parseProductionCohortTemplate(text, environment) {
       "-I",
       "-B",
       "-c",
-      "import importlib.util,json,sys;s=importlib.util.spec_from_file_location('cohort',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);v=json.loads(sys.stdin.read(),object_pairs_hook=m.unique_object);m.exact(v,['schema','source','application','hosts','packages','catalogs']);m.require(v['schema']==1 and type(v['schema']) is int,'Invalid schema');m.source(v['source']);m.require(v['application']==m.APPLICATION,'Noncanonical application');m.exact(v['catalogs'],['previous','current']);m.require(v['catalogs']['current'] is None,'Current catalog must be measured by staging');print(json.dumps(v))",
+      "import importlib.util,json,sys;s=importlib.util.spec_from_file_location('cohort',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(json.dumps(m.preparation_template(sys.stdin.read())))",
       join(root, "scripts/hosted-public-release/production-cohort.py"),
     ],
     {
@@ -229,10 +246,6 @@ export async function publishCoordinatedProductionUpdate(templateText) {
   assert.equal(include.length, 1);
   assert.equal(include[0].id, "keepAwake");
   assert.equal(include[0].version, "1.0.1");
-  const record = JSON.parse(
-    await readFile(join(directory, "keepAwake.json"), "utf8"),
-  );
-  assert.equal(template.packages.current.archiveSHA256, record.sha256);
   const stage = await publication.publishExtensions({
     directory,
     repository: "pulkitxm/edith",
@@ -243,7 +256,53 @@ export async function publishCoordinatedProductionUpdate(templateText) {
     catalogPhase: "stage",
   });
   const identity = publication.stagedExtensionPublication(stage.catalogStage);
-  const text = completedProductionCohortRequest(template, identity, record);
+  const record = JSON.parse(
+    await readFile(join(directory, "keepAwake.json"), "utf8"),
+  );
+  const lineage = verifiedLineage(
+    await readFile(join(directory, "keepAwake.native-evidence.json")),
+    process.env.EXTENSION_CATALOG_PUBLIC_KEY,
+    record,
+  );
+  assert.equal(lineage.sourceCommit, template.source);
+  assert.equal(String(lineage.runID), process.env.GITHUB_RUN_ID);
+  assert.equal(String(lineage.runAttempt), process.env.GITHUB_RUN_ATTEMPT);
+  const measurement = join(directory, "production-cohort-current");
+  await mkdir(measurement, { mode: 0o700 });
+  const context = join(measurement, "context.json");
+  await writeFile(
+    context,
+    JSON.stringify({ template, record, lineage, directory }),
+    { mode: 0o600, flag: "wx" },
+  );
+  const measured = JSON.parse(
+    execFileSync(
+      "python3",
+      [
+        "-I",
+        "-B",
+        join(root, "scripts/hosted-public-release/production-static-inputs.py"),
+        "measure-package",
+        context,
+      ],
+      {
+        cwd: root,
+        env: {
+          ...productionReadonlyEnvironment(process.env),
+          PUBLISH: "false",
+          REBUILD: "",
+        },
+        timeout: 60000,
+        maxBuffer: 65536,
+      },
+    ).toString(),
+  );
+  const text = completedProductionCohortRequest(
+    template,
+    identity,
+    record,
+    measured,
+  );
   const binding = productionCatalogBinding(text, identity);
   const environment = productionObserverEnvironment(process.env, text, binding);
   execFileSync(

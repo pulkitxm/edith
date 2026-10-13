@@ -133,14 +133,7 @@ def host(context):
             command(['hdiutil', 'detach', str(mount)], 120)
 
 
-def package(context):
-    COHORT.exact(context, ['request', 'generation', 'directory'])
-    request = COHORT.request(json.dumps(context['request']))
-    generation = context['generation']
-    COHORT.require(generation in ['previous', 'current'], 'Wrong cohort generation')
-    expected = request['packages'][generation]
-    host_expected = request['hosts']['previous']
-    directory = Path(context['directory'])
+def extracted_package(directory, expected):
     archive = directory / 'keepAwake.zip'
     metrics = STATIC.archive_metrics(archive, 'keepAwake', expected['downloadBytes'], expected['archiveSHA256'])
     COHORT.require(metrics['installedBytes'] == expected['installedBytes'], 'Public package size differs')
@@ -167,6 +160,19 @@ def package(context):
         value = bounded_owned_bytes(path, maximum)
         pins[path] = (maximum, value)
         return value
+    return payload, metrics, pins, read
+
+
+def package(context):
+    COHORT.exact(context, ['request', 'generation', 'directory'])
+    request = COHORT.request(json.dumps(context['request']))
+    generation = context['generation']
+    COHORT.require(generation in ['previous', 'current'], 'Wrong cohort generation')
+    expected = request['packages'][generation]
+    host_expected = request['hosts']['previous']
+    directory = Path(context['directory'])
+    archive = directory / 'keepAwake.zip'
+    payload, metrics, pins, read = extracted_package(directory, expected)
     manifest = json.loads(read(payload / 'package.json', 65536), object_pairs_hook=STATIC.unique_object)
     for key in ['id', 'version', 'hostABI', 'architecture', 'minimumSystemVersion', 'dependencies']:
         COHORT.require(manifest[key] == expected[key], 'Installed package metadata differs')
@@ -195,14 +201,61 @@ def package(context):
     return {'generation': generation, 'version': expected['version'], 'archive': str(archive), 'metrics': metrics, 'managedUIRole': managed}
 
 
+
+def measure_package(context):
+    COHORT.exact(context, ['template', 'record', 'lineage', 'directory'])
+    template = COHORT.preparation_template(json.dumps(context['template']))
+    record = context['record']
+    COHORT.exact(record, ['id', 'version', 'hostABI', 'architecture', 'minimumSystemVersion', 'dependencies', 'downloadURL', 'sha256', 'downloadBytes', 'installedBytes', 'sourceFingerprint'])
+    lineage = context['lineage']
+    COHORT.require(lineage['package'] == record and lineage['sourceCommit'] == template['source'], 'Current package lineage differs')
+    COHORT.positive(lineage['runID'])
+    expected = {key: record[key] for key in ['id', 'version', 'hostABI', 'architecture', 'minimumSystemVersion', 'dependencies', 'downloadBytes', 'installedBytes', 'sourceFingerprint']}
+    expected.update(source=lineage['sourceCommit'], run=lineage['runID'], archiveURL=record['downloadURL'], archiveSHA256=record['sha256'])
+    COHORT.require(expected['id'] == 'keepAwake' and expected['version'] == '1.0.1', 'Wrong measured Keep generation')
+    directory = Path(context['directory'])
+    payload, metrics, pins, read = extracted_package(directory, expected)
+    manifest = json.loads(read(payload / 'package.json', 65536), object_pairs_hook=STATIC.unique_object)
+    for key in ['id', 'version', 'hostABI', 'architecture', 'minimumSystemVersion', 'dependencies']:
+        COHORT.require(manifest[key] == expected[key], 'Measured package metadata differs')
+    paths = {'engine': payload / 'ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/keepAwake/helper.bundle', 'managedUI': payload / 'ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex', 'carrier': payload / 'ExtensionCarrier.app'}
+    executables = {'engine': paths['engine'] / 'Contents/MacOS/Runtime', 'managedUI': paths['managedUI'] / 'Contents/MacOS/Edith', 'carrier': paths['carrier'] / 'Contents/MacOS/Edith'}
+    host = template['hosts']['previous']
+    worker = {'schema': 2, 'helperExecutable': 'ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/keepAwake/helper.bundle/Contents/MacOS/Runtime', 'uiExecutable': 'ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith'}
+    for role, bundle in paths.items():
+        field = {'engine': 'helperSHA256', 'managedUI': 'uiSHA256', 'carrier': 'carrierSHA256'}[role]
+        worker[field] = hashlib.sha256(read(executables[role], 16 * 1024**2)).hexdigest()
+        signing(bundle, host['teamIdentifier'])
+    for role in ['managedUI', 'carrier']:
+        info = plistlib.loads(read(paths[role] / 'Contents/Info.plist', 65536))
+        identifier = 'com.pulkit.edith.extension.keepAwake' + ('.worker' if role == 'managedUI' else '')
+        COHORT.require(info['CFBundleIdentifier'] == identifier, 'Wrong measured production identifier')
+        if role == 'managedUI':
+            COHORT.require(info['EXAppExtensionAttributes']['EXExtensionPointIdentifier'] == 'com.pulkit.edith.ExtensionUI', 'Wrong measured extension point')
+        values = {'carrierInputSHA256': info['EdithCarrierExecutableProvenance'], 'frozenHostSHA256': info['EdithExecutableProvenance'], 'packagedHostRequirement': info['EdithHostCodeRequirement']}
+        if role == 'carrier':
+            COHORT.require(all(worker[key] == value for key, value in values.items()), 'Measured worker provenance differs')
+        worker.update(values)
+        for key, value in {'EdithHostIdentifier': 'com.pulkit.edith', 'EdithExtensionID': 'keepAwake', 'EdithExtensionVersion': expected['version'], 'EdithHostABI': 'edith-host-2', 'EdithHostCodeRequirement': host['designatedRequirement'], 'EdithHostExecutablePath': COHORT.EXECUTABLE, 'EdithPayloadRelativePath': 'Contents/Resources/Payload'}.items():
+            COHORT.require(info[key] == value, 'Measured production worker contract differs')
+    worker['signatureVerified'] = True
+    expected['workerContract'] = worker
+    COHORT.package(expected, '1.0.1')
+    COHORT.require(STATIC.archive_metrics(directory / 'keepAwake.zip', 'keepAwake', expected['downloadBytes'], expected['archiveSHA256']) == metrics, 'Measured package archive changed')
+    for path, (maximum, value) in pins.items():
+        COHORT.require(bounded_owned_bytes(path, maximum) == value, 'Measured package input changed')
+    return expected
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('phase', choices=['host', 'package'])
+    parser.add_argument('phase', choices=['host', 'package', 'measure-package'])
     parser.add_argument('context')
     arguments = parser.parse_args()
     context = STATIC.document(arguments.context)
-    COHORT.hosted(os.environ, context['request']['source'])
-    print(json.dumps(host(context) if arguments.phase == 'host' else package(context)))
+    COHORT.hosted(os.environ, context['template' if arguments.phase == 'measure-package' else 'request']['source'])
+    handlers = {'host': host, 'package': package, 'measure-package': measure_package}
+    print(json.dumps(handlers[arguments.phase](context)))
 
 
 if __name__ == '__main__':

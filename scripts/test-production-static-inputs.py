@@ -65,6 +65,63 @@ class ProductionStaticInputTests(unittest.TestCase):
         with patch.object(INPUTS, 'signing', return_value={'codeHash': 'a' * 40, 'requirement': 'synthetic unexecuted designated requirement'}):
             return INPUTS.package(context)
 
+    def measured_context(self, directory, edit=lambda records: None):
+        def current(records):
+            manifest = json.loads(records['package.json'])
+            manifest['version'] = '1.0.1'
+            records['package.json'] = json.dumps(manifest).encode()
+            for name in ['ExtensionCarrier.app/Contents/Info.plist', 'ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Info.plist']:
+                info = plistlib.loads(records[name])
+                info['EdithExtensionVersion'] = '1.0.1'
+                records[name] = plistlib.dumps(info)
+            edit(records)
+        captured = synthetic_archive(directory, current)['request']['packages']['previous']
+        template = CASES.synthetic_request()
+        template['packages']['current'] = None
+        template['catalogs']['current'] = None
+        record = {key: captured[key] for key in ['id', 'hostABI', 'architecture', 'minimumSystemVersion', 'dependencies', 'downloadBytes', 'installedBytes']}
+        record.update(version='1.0.1', sourceFingerprint='4' * 64, sha256=captured['archiveSHA256'], downloadURL='https://github.com/pulkitxm/edith/releases/download/extensions%2FkeepAwake%2F1.0.1-' + '4' * 20 + '/keepAwake.zip')
+        lineage = {'package': record, 'sourceCommit': template['source'], 'runID': 99, 'runAttempt': 1}
+        return {'template': template, 'record': record, 'lineage': lineage, 'directory': str(directory)}
+
+    def test_current_package_facts_are_measured_from_actual_zip_after_preparation(self):
+        context = self.measured_context(self.directory)
+        with patch.object(INPUTS, 'signing', return_value={'codeHash': 'a' * 40, 'requirement': 'synthetic unexecuted designated requirement'}) as signing:
+            measured = INPUTS.measure_package(context)
+        self.assertEqual(signing.call_count, 3)
+        self.assertEqual(measured['archiveSHA256'], hashlib.sha256((self.directory / 'keepAwake.zip').read_bytes()).hexdigest())
+        self.assertEqual(measured['source'], context['template']['source'])
+        self.assertEqual(measured['run'], 99)
+        self.assertEqual(measured['version'], '1.0.1')
+        self.assertEqual(measured['workerContract']['helperSHA256'], hashlib.sha256(b'synthetic unexecuted native helper').hexdigest())
+        self.assertIs(context['template']['packages']['current'], None)
+        self.assertIs(context['template']['catalogs']['current'], None)
+        INPUTS.COHORT.package(measured, '1.0.1')
+
+    def test_measured_package_rejects_lineage_substitution_before_extraction(self):
+        context = self.measured_context(self.directory)
+        context['lineage']['sourceCommit'] = 'f' * 40
+        with self.assertRaisesRegex(ValueError, 'lineage differs'):
+            INPUTS.measure_package(context)
+        self.assertFalse((self.directory / 'extracted').exists())
+
+    def test_measured_package_cannot_claim_success_when_signature_or_worker_binding_fails(self):
+        context = self.measured_context(self.directory)
+        with patch.object(INPUTS, 'signing', side_effect=ValueError('synthetic signature failure')):
+            with self.assertRaisesRegex(ValueError, 'signature failure'):
+                INPUTS.measure_package(context)
+        directory = self.directory / 'wrong-worker'
+        directory.mkdir(mode=0o700)
+        def edit(records):
+            name = 'ExtensionCarrier.app/Contents/Info.plist'
+            info = plistlib.loads(records[name])
+            info['EdithHostExecutablePath'] = '/synthetic/foreign'
+            records[name] = plistlib.dumps(info)
+        context = self.measured_context(directory, edit)
+        with patch.object(INPUTS, 'signing', return_value={'codeHash': 'a' * 40, 'requirement': 'synthetic unexecuted designated requirement'}):
+            with self.assertRaisesRegex(ValueError, 'worker contract differs'):
+                INPUTS.measure_package(context)
+
     def historical_records(self, stamp=False):
         expected = CASES.synthetic_request()['hosts']['previous']
         source, tag = expected['source'], expected['tag']

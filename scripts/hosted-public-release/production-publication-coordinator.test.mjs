@@ -1,5 +1,6 @@
 import { test } from "bun:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { PassThrough } from "node:stream";
 import {
   productionCatalogBinding,
@@ -35,19 +36,49 @@ const record = {
   sha256: "d".repeat(64),
   sourceFingerprint: "e".repeat(64),
 };
-const template = {
+const prepared = JSON.parse(
+  execFileSync(
+    "python3",
+    [
+      "-I",
+      "-B",
+      "-c",
+      "import importlib.util,json;s=importlib.util.spec_from_file_location('cases','scripts/test-production-host-cohort.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(json.dumps(m.synthetic_request()))",
+    ],
+    { encoding: "utf8" },
+  ),
+);
+const measured = {
+  ...prepared.packages.current,
   source: identity.source,
-  application: "/Applications/Edith.app",
-  catalogs: { previous, current: null },
-  packages: {
-    current: {
-      version: record.version,
-      archiveSHA256: record.sha256,
-      sourceFingerprint: record.sourceFingerprint,
-    },
-  },
+  archiveSHA256: record.sha256,
+  sourceFingerprint: record.sourceFingerprint,
+  archiveURL: `https://github.com/pulkitxm/edith/releases/download/extensions%2FkeepAwake%2F1.0.1-${record.sourceFingerprint.slice(0, 20)}/keepAwake.zip`,
 };
-const text = completedProductionCohortRequest(template, identity, record);
+Object.assign(record, {
+  downloadURL: measured.archiveURL,
+  downloadBytes: measured.downloadBytes,
+  installedBytes: measured.installedBytes,
+  hostABI: measured.hostABI,
+  architecture: measured.architecture,
+  minimumSystemVersion: measured.minimumSystemVersion,
+  dependencies: measured.dependencies,
+});
+const template = {
+  ...prepared,
+  source: identity.source,
+  catalogs: {
+    previous: { ...prepared.catalogs.previous, sha256: previous.sha256 },
+    current: null,
+  },
+  packages: { previous: prepared.packages.previous, current: null },
+};
+const text = completedProductionCohortRequest(
+  template,
+  identity,
+  record,
+  measured,
+);
 const binding = productionCatalogBinding(text, identity);
 function pair() {
   const left = new PassThrough();
@@ -148,6 +179,9 @@ test("current catalog metadata comes only from the actual staged candidate and e
     selectedArchiveSHA256: record.sha256,
   });
   assert.equal(template.catalogs.current, null);
+  assert.equal(template.packages.current, null);
+  assert.deepEqual(completed.packages.previous, template.packages.previous);
+  assert.deepEqual(completed.packages.current, measured);
   for (const change of [
     { version: "1.0.0" },
     { sha256: "f".repeat(64) },
@@ -155,16 +189,22 @@ test("current catalog metadata comes only from the actual staged candidate and e
     { id: "calendar" },
   ])
     assert.throws(() =>
-      completedProductionCohortRequest(template, identity, {
-        ...record,
-        ...change,
-      }),
+      completedProductionCohortRequest(
+        template,
+        identity,
+        {
+          ...record,
+          ...change,
+        },
+        measured,
+      ),
     );
   assert.throws(() =>
     completedProductionCohortRequest(
       { ...template, catalogs: { ...template.catalogs, current: candidate } },
       identity,
       record,
+      measured,
     ),
   );
   assert.throws(() =>
@@ -172,6 +212,7 @@ test("current catalog metadata comes only from the actual staged candidate and e
       { ...template, source: "f".repeat(40) },
       identity,
       record,
+      measured,
     ),
   );
   assert.throws(() =>
@@ -179,6 +220,7 @@ test("current catalog metadata comes only from the actual staged candidate and e
       { ...template, application: "/synthetic/Edith.app" },
       identity,
       record,
+      measured,
     ),
   );
 });
@@ -225,7 +267,7 @@ test("cohort template parser rejects duplicate source and measured-pointer subst
     PATH: process.env.PATH,
     PUBLIC_RELEASE_VERIFICATION: "1",
   };
-  const request = { schema: 1, ...template, hosts: {} };
+  const request = { schema: 1, ...template };
   assert.deepEqual(
     parseProductionCohortTemplate(JSON.stringify(request), environment),
     request,
@@ -270,6 +312,47 @@ test("missing reviewed publication prerequisites fail before credential or artif
     assert.throws(
       () => admitStagedPublicationAPI({ ...namespace, [name]: true }),
       /Reviewed staged publication APIs/,
+    );
+  }
+});
+
+test("preparation cannot supply fabricated B package facts or weaken immutable A and host expectations", () => {
+  const environment = {
+    PATH: process.env.PATH,
+    PUBLIC_RELEASE_VERIFICATION: "1",
+  };
+  for (const change of [
+    { packages: { ...template.packages, current: measured } },
+    {
+      packages: {
+        ...template.packages,
+        previous: { ...template.packages.previous, version: "1.0.1" },
+      },
+    },
+    {
+      hosts: {
+        ...template.hosts,
+        current: {
+          ...template.hosts.current,
+          normalizedUnsignedSHA256:
+            template.hosts.previous.normalizedUnsignedSHA256,
+        },
+      },
+    },
+  ])
+    assert.throws(() =>
+      parseProductionCohortTemplate(
+        JSON.stringify({ ...template, ...change }),
+        environment,
+      ),
+    );
+  for (const change of [
+    { source: "f".repeat(40) },
+    { downloadBytes: measured.downloadBytes + 1 },
+  ]) {
+    const changed = { ...measured, ...change };
+    assert.throws(() =>
+      completedProductionCohortRequest(template, identity, record, changed),
     );
   }
 });
