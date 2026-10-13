@@ -105,6 +105,11 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                 if recovered is not None:
                     self.terminal_child_refusals.pop(pid, None)
                     return recovered
+                if captured['returnedBytes'] == 0:
+                    recovered = self.recover_unsealed_child(pid, parent, parent_identity)
+                    if recovered is not None:
+                        self.terminal_child_refusals.pop(pid, None)
+                        return recovered
                 if captured['returnedBytes'] == 0 and self.defer_kernel_child(pid, parent, parent_identity):
                     self.terminal_child_refusals.pop(pid, None)
                     return None
@@ -128,6 +133,28 @@ class BoundedOwnership(watchdog.OwnedProcesses):
             value = self.resolve_pending_child(pid, value)
         self.terminal_child_refusals.pop(pid, None)
         return value
+
+    def recover_unsealed_child(self, pid, parent, parent_identity):
+        if (type(pid) is not int or pid <= 0 or pid == self.leader
+                or pid in self.known or pid in self.seals or pid in self.terminal_children
+                or pid in self.pending_children or pid in self.rejected
+                or type(parent) is not int or parent <= 0 or parent in self.rejected
+                or parent_identity is None or parent_identity != self.known.get(parent)
+                or parent_identity[:3] + parent_identity[4:5] != self.current_seal(parent)):
+            return None
+        before = self.complete_live_record(parent)
+        if before is None or before[1][:5] != parent_identity:
+            return None
+        children = [self.complete_live_record(pid, 1), self.complete_live_record(pid, 1)]
+        if any(child is None for child in children) or children[0] != children[1]:
+            return None
+        child = children[0][1]
+        if not child[3] or child[5] != parent or child[4] not in (before[1][4], pid):
+            return None
+        after = self.complete_live_record(parent)
+        if after is None or before != after:
+            return None
+        return child[:6]
 
     def defer_kernel_child(self, pid, parent, parent_identity):
         if (type(pid) is not int or pid <= 0 or pid == self.leader
@@ -276,9 +303,9 @@ class BoundedOwnership(watchdog.OwnedProcesses):
     def lifetime_count(self):
         return len(self.seals.keys() | self.terminal_children.keys() | self.pending_children.keys())
 
-    def complete_live_record(self, pid):
+    def complete_live_record(self, pid, argument=0):
         info = watchdog.ProcessInfo()
-        result = self.library.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
+        result = self.library.proc_pidinfo(pid, 3, argument, ctypes.byref(info), ctypes.sizeof(info))
         if (type(result) is not int or result != ctypes.sizeof(info)
                 or info.pid != pid or info.status not in (1, 2, 3, 4)
                 or info.uid != self.uid or info.ruid != self.uid
