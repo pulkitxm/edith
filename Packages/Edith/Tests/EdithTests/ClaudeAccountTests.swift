@@ -278,7 +278,7 @@ import Testing
             command: "cc", arguments: [], platform: .windows,
             configurationPath: "C:\\profiles\\personal")
         #expect(windows.contains("'auth' 'login' '--claudeai'"))
-        #expect(windows.contains("$subscriptionLogin.authMethod -eq 'claude.ai'"))
+        #expect(windows.contains("$subscriptionLogin.authMethod -ceq 'claude.ai'"))
 
     }
 
