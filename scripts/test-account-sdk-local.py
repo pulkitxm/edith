@@ -2,6 +2,7 @@ import fcntl
 import hashlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -190,7 +191,13 @@ def ownership_metadata(process, ownership=None):
 
 
 def run_owned(command, root, environment, output, process_factory=subprocess.Popen,
-              ownership_factory=LocalOwnership, clock=time.monotonic, sleep=time.sleep):
+              ownership_factory=LocalOwnership, clock=time.monotonic, sleep=time.sleep,
+              deadline=360, cadence=0.1):
+    if (type(deadline) not in {int, float} or not math.isfinite(deadline)
+            or not 0 < deadline <= OWNERSHIP.TEST_DEADLINE
+            or type(cadence) not in {int, float} or not math.isfinite(cadence)
+            or not 0 < cadence <= 0.5):
+        raise ValueError("Invalid owned phase deadline or cadence")
     started = clock()
     timed_out = False
     overflow = False
@@ -209,10 +216,10 @@ def run_owned(command, root, environment, output, process_factory=subprocess.Pop
                 if ownership.errors:
                     raise RuntimeError("Owned process identity validation failed")
                 overflow = output.stat().st_size > OUTPUT_BOUND
-                timed_out = clock() - started >= 360
+                timed_out = clock() - started >= deadline
                 if process.poll() is not None or overflow or timed_out:
                     break
-                sleep(0.1)
+                sleep(cadence)
         except Exception as error:
             failure = type(error).__name__
         finally:
