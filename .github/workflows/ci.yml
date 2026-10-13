@@ -564,13 +564,6 @@ jobs:
       - name: Cache Swift build products
         uses: ./.github/actions/cache-host
 
-      - name: Stamp the release version
-        run: |
-          for plist in Resources/Info.plist Resources/HelperInfo.plist; do
-            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $RELEASE_VERSION" "$plist"
-            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $RELEASE_BUILD" "$plist"
-          done
-
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
 
       - name: Import signing certificate

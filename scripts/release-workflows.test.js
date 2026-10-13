@@ -458,3 +458,40 @@ test("release asset capacity is checked before any release commit", () => {
     local.indexOf("bash scripts/publish-release-state.sh cut"),
   );
 });
+
+test("DMG version preparation leaves frozen source clean and reaches the isolated package", () => {
+  expect(dmg.env.RELEASE_VERSION).toBe(
+    ["$", "{{ needs.version.outputs.version }}"].join(""),
+  );
+  expect(dmg.env.RELEASE_BUILD).toBe(
+    ["$", "{{ needs.version.outputs.build }}"].join(""),
+  );
+  expect(
+    dmg.steps.some((step) => step.name === "Stamp the release version"),
+  ).toBe(false);
+  expect(jobText(dmg)).not.toContain("Set :CFBundleShortVersionString");
+  expect(jobText(dmg)).not.toContain("Set :CFBundleVersion");
+  const local = readFileSync("scripts/release-local.sh", "utf8");
+  const buildStart = local.indexOf('echo "==> building the release app"');
+  const stampStart = local.indexOf("Set :CFBundleShortVersionString");
+  expect(local.indexOf("export RELEASE_VERSION RELEASE_BUILD")).toBeLessThan(
+    buildStart,
+  );
+  expect(stampStart).toBeGreaterThan(local.indexOf("make verify-bundle"));
+  expect(stampStart).toBeLessThan(
+    local.indexOf('echo "==> rewriting the cask"'),
+  );
+  expect(buildScript).toContain(
+    [
+      'PACKAGE_VERSION_ARGS=(--version "$',
+      '{RELEASE_VERSION:-}" --build "$',
+      '{RELEASE_BUILD:-}")',
+    ].join(""),
+  );
+  expect(buildScript).toContain(
+    ['--identity "$SIGN_IDENTITY" "$', '{PACKAGE_VERSION_ARGS[@]}"'].join(""),
+  );
+  expect(
+    readFileSync("scripts/package_extension_lifecycle_tools.py", "utf8"),
+  ).toContain("metadata.get('sourceTreeDirty') is not False");
+});

@@ -169,9 +169,14 @@ if [ "$RELEASE" != 1 ]; then
   echo "development slot $SLOT (com.pulkit.edith.dev.$SLOT)"
 fi
 
+PACKAGE_VERSION_ARGS=()
+if [ "$RELEASE" = 1 ] && [ -n "${RELEASE_VERSION:-}${RELEASE_BUILD:-}" ]; then
+  PACKAGE_VERSION_ARGS=(--version "${RELEASE_VERSION:-}" --build "${RELEASE_BUILD:-}")
+fi
+
 node scripts/build-minimal-host.mjs
 python3 scripts/package-shipping-host.py local/minimal-host/Edith.app dist/Edith.app \
-  --identity "$SIGN_IDENTITY" ${SLOT:+--slot "$SLOT"} \
+  --identity "$SIGN_IDENTITY" "${PACKAGE_VERSION_ARGS[@]}" ${SLOT:+--slot "$SLOT"} \
   $([ "$RELEASE" != 1 ] || printf '%s' '--release')
 APP="dist/Edith.app"
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister

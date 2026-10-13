@@ -100,10 +100,7 @@ security list-keychains -d user -s "$KEYCHAIN" $ORIG_KEYCHAINS >/dev/null
 security find-identity -v -p codesigning | grep -qF "$EDITH_SIGN_IDENTITY" \
   || { echo "release blocked: $EDITH_SIGN_IDENTITY is not a valid signing identity" >&2; exit 1; }
 
-for plist in Resources/Info.plist Resources/HelperInfo.plist; do
-  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $RELEASE_VERSION" "$plist"
-  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $RELEASE_BUILD" "$plist"
-done
+export RELEASE_VERSION RELEASE_BUILD
 
 echo "==> building the release app"
 if [ "$DRY_RUN" -eq 1 ]; then
@@ -134,6 +131,11 @@ grep -q "url=\"https://github.com/${REPO}/releases/download/${RELEASE_TAG}/Edith
   || { echo "release blocked: the appcast points at the wrong DMG" >&2; exit 1; }
 grep -q 'sparkle:edSignature=' dist/appcast/appcast.xml \
   || { echo "release blocked: the appcast is not signed" >&2; exit 1; }
+
+for plist in Resources/Info.plist Resources/HelperInfo.plist; do
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $RELEASE_VERSION" "$plist"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $RELEASE_BUILD" "$plist"
+done
 
 echo "==> rewriting the cask"
 RELEASE_SHA256="$(shasum -a 256 Edith.dmg | cut -d' ' -f1)"

@@ -17,6 +17,11 @@ const fixture = process.env.HOST_FIXTURE;
 const run = (...args) =>
   Bun.spawnSync(args, { stdout: "pipe", stderr: "pipe", timeout: 60000 });
 
+test("isolated release version packaging preserves source and certificate signing", () => {
+  const result = run("python3", "-B", "scripts/test-package-shipping-host.py");
+  expect(result.exitCode, result.stderr.toString()).toBe(0);
+});
+
 test.each([
   "scripts/test-host-build-metadata.py",
   "scripts/test-extension-host-size-report.py",
