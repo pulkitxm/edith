@@ -98,7 +98,10 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                 if self.terminal_child(pid, parent, parent_identity):
                     self.terminal_child_refusals.pop(pid, None)
                     return None
-                recovered = self.recover_snapshot(pid)
+                alternate = (type(captured['returnedBytes']) is int and captured['returnedBytes'] == 0
+                             and type(pid) is int and pid > 0 and pid != self.leader
+                             and pid in self.known and pid in self.seals and pid not in self.rejected)
+                recovered = self.recover_snapshot(pid, include_zombies=alternate)
                 if recovered is not None:
                     self.terminal_child_refusals.pop(pid, None)
                     return recovered
@@ -338,17 +341,21 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         row['transitionAdmitted'] = True
         return True
 
-    def recover_snapshot(self, pid):
+    def recover_snapshot(self, pid, include_zombies=False):
         self.last_recovery_failure = None
         self.recovery_failure_stages.pop(pid, None)
         identity = self.known.get(pid)
         seal = self.current_seal(pid)
         if identity is None or seal is None or identity[:3] + identity[4:5] != seal:
             return self.record_recovery_failure(pid, 'retained_identity')
+        if include_zombies and (type(pid) is not int or pid <= 0
+                                or pid == self.leader or pid in self.rejected):
+            return self.record_recovery_failure(pid, 'retained_identity')
         snapshots = []
         for _ in range(2):
             info = watchdog.ProcessInfo()
-            result = self.library.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
+            result = self.library.proc_pidinfo(
+                pid, 3, 1 if include_zombies else 0, ctypes.byref(info), ctypes.sizeof(info))
             if (type(result) is not int or result != ctypes.sizeof(info)
                     or info.pid != pid or info.status not in (1, 2, 3, 4)
                     or info.uid != self.uid or info.ruid != self.uid
