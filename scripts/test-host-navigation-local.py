@@ -5,8 +5,6 @@ import os
 from pathlib import Path
 import re
 import shutil
-import signal
-import subprocess
 import sys
 import tempfile
 import time
@@ -16,6 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('local_isolation', ROOT / 'scripts/test-account-sdk-local.py')
 isolation = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(isolation)
+driver_spec = importlib.util.spec_from_file_location('local_navigation_driver', ROOT / 'scripts/run-host-swift-testing.py')
+drivers = importlib.util.module_from_spec(driver_spec)
+driver_spec.loader.exec_module(drivers)
 SOURCES = {
     'Packages/ExtensionSupport/Sources/EdithExtensionSupport/AppStorageKeys.swift': 'Sources/EdithExtensionSupport/AppStorageKeys.swift',
     'Packages/EdithHost/Sources/EdithHost/HostNavigationCatalog.swift': 'Sources/EdithHost/HostNavigationCatalog.swift',
@@ -54,16 +55,10 @@ def prepare_package(package):
     return digests, count
 
 
-def retire_child(child):
-    if child.poll() is None:
-        try:
-            os.killpg(child.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-    child.communicate()
-
-
 def run():
+    if sys.argv[1:]:
+        raise ValueError('Unexpected local navigation arguments')
+    os.umask(0o077)
     allowed = Path(os.environ['EDITH_LOCAL_CI_ROOT'])
     if sys.platform != 'darwin' or not allowed.is_absolute() or allowed.resolve(strict=True) != allowed or not ROOT.is_relative_to(allowed):
         raise ValueError('Local host contracts require a macOS checkout inside EDITH_LOCAL_CI_ROOT')
@@ -72,33 +67,40 @@ def run():
     storage = isolation.private_directory(local / 'host-navigation-contracts')
     fixture = Path(tempfile.mkdtemp(prefix='fixture-', dir=storage))
     started = time.monotonic()
-    child = None
+    selected_driver_validated = False
     try:
         package = isolation.private_directory(fixture / 'package')
         digests, count = prepare_package(package)
         environment = isolation.environment(fixture)
-        command = ['/usr/sbin/taskpolicy', '-b', '/usr/bin/nice', '-n', '15', 'swift', 'test', '--package-path', str(package), '--scratch-path', str(fixture / 'build'), '--cache-path', str(fixture / 'cache'), '--config-path', str(fixture / 'config'), '--security-path', str(fixture / 'security'), '--filter', 'HostOptionalNavigationTests', '--build-system', 'swiftbuild', '--no-parallel', '--jobs', '1', '-Xswiftc', '-j1', '-Xswiftc', '-warnings-as-errors', '-Xswiftc', '-module-cache-path', '-Xswiftc', str(fixture / 'modules')]
-        child = subprocess.Popen(command, cwd=ROOT, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
+        driver = drivers.SelectedSwiftDriver(os.environ['DEVELOPER_DIR'], entry='swift-test')
+        command = [str(driver.validate()), '--package-path', str(package), '--scratch-path', str(fixture / 'build'), '--cache-path', str(fixture / 'cache'), '--config-path', str(fixture / 'config'), '--security-path', str(fixture / 'security'), '--filter', 'HostOptionalNavigationTests', '--build-system', 'swiftbuild', '--no-parallel', '--jobs', '1', '-Xswiftc', '-j1', '-Xswiftc', '-warnings-as-errors', '-Xswiftc', '-module-cache-path', '-Xswiftc', str(fixture / 'modules')]
+        owned = isolation.run_owned(command, ROOT, environment, fixture / 'tests.log')
         try:
-            output, _ = child.communicate(timeout=360)
-        except subprocess.TimeoutExpired:
-            os.killpg(child.pid, signal.SIGKILL)
-            output, _ = child.communicate()
+            driver.validate()
+            selected_driver_validated = True
+        except (ValueError, OSError) as error:
+            owned['exitCode'] = 1
+            owned['selectedDriverFailure'] = type(error).__name__
+        owned['selectedDriverValidated'] = selected_driver_validated
+        with (fixture / 'tests.log').open('rb') as log:
+            output = log.read(isolation.OUTPUT_BOUND)
         isolation.write_private(storage / 'last.log', output)
         sys.stdout.buffer.write(output)
-        status, passed, executed = isolation.test_result(child.returncode, output, count)
+        status, passed, executed = isolation.test_result(owned['exitCode'], output, count)
+        if not isolation.verified_cleanup(owned['cleanup']):
+            status = 1
         for source, digest in digests.items():
             isolation.verify_source(ROOT / source, ROOT)
             if hashlib.sha256((ROOT / source).read_bytes()).hexdigest() != digest:
                 status = 1
-        receipt = {'exit': status, 'elapsedSeconds': time.monotonic() - started, 'expectedTests': count, 'passedTests': passed, 'sourceSHA256': digests, 'outputSHA256': hashlib.sha256(output).hexdigest(), 'applicationExecution': False, 'navigationTestsExecuted': executed, 'nativeProductUIExecuted': False}
+        receipt = {'exit': status, 'elapsedSeconds': time.monotonic() - started, 'expectedTests': count, 'passedTests': passed, 'sourceSHA256': digests, 'outputSHA256': hashlib.sha256(output).hexdigest(), 'applicationExecution': False, 'navigationTestsExecuted': executed, 'nativeProductUIExecuted': False, 'ownership': owned}
         isolation.write_private(storage / 'receipt.json', (json.dumps(receipt, indent=2) + '\n').encode())
         print(json.dumps(receipt), flush=True)
-        return status
+        return status if status >= 0 else 1
     finally:
-        if child is not None:
-            retire_child(child)
-        shutil.rmtree(fixture)
+        if ('owned' in locals() and 'status' in locals() and status == 0
+                and selected_driver_validated and isolation.verified_cleanup(owned['cleanup'])):
+            shutil.rmtree(fixture)
 
 
 if __name__ == '__main__':
