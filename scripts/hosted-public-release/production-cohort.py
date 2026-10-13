@@ -48,6 +48,40 @@ def preparation_template(text):
     return validated_request(text, True)
 
 
+def bootstrap_template(text):
+    require(type(text) is str and 0 < len(text.encode()) <= 65536, "Unbounded bootstrap request")
+    value = json.loads(text, object_pairs_hook=unique_object)
+    exact(value, ["schema", "source", "application", "hosts", "packages", "catalogs"])
+    require(type(value["schema"]) is int and value["schema"] == 2, "Invalid bootstrap schema")
+    source(value["source"])
+    require(value["application"] == APPLICATION, "Wrong bootstrap application")
+    for kind in ["hosts", "packages", "catalogs"]:
+        exact(value[kind], ["previous", "current"])
+    require(value["packages"]["current"] is None and value["catalogs"]["current"] is None, "Bootstrap current inputs must remain pending")
+    previous = value["hosts"]["previous"]
+    current = value["hosts"]["current"]
+    host(previous)
+    package(value["packages"]["previous"], "1.0.0")
+    catalog(value["catalogs"]["previous"], value["packages"]["previous"])
+    exact(current, ["kind", "source", "run", "runAttempt", "tag", "version", "build"])
+    require(current["kind"] == "pending-public-host", "Bootstrap cannot admit a verified current host")
+    source(current["source"])
+    require(current["source"] == value["source"] and current["source"] != previous["source"], "Bootstrap source differs")
+    require(type(current["version"]) is str and VERSION.fullmatch(current["version"]) and current["tag"] == "v" + current["version"], "Wrong bootstrap release")
+    positive(current["build"])
+    require(current["build"] > previous["build"] and tuple(map(int, current["version"].split("."))) > tuple(map(int, previous["version"].split("."))), "Bootstrap host is not newer")
+    if current["run"] is None:
+        require(current["runAttempt"] is None, "Unbound bootstrap attempt")
+    else:
+        positive(current["run"])
+        positive(current["runAttempt"])
+    old = value["packages"]["previous"]
+    for key in ["hostABI", "architecture"]:
+        require(old[key] == previous[key], "Previous package is incompatible")
+    require(old["workerContract"]["packagedHostRequirement"] == previous["designatedRequirement"], "Previous package host trust differs")
+    return value
+
+
 def validated_request(text, preparation):
     require(type(text) is str and 0 < len(text.encode()) <= 65536, "Unbounded cohort request")
     value = json.loads(text, object_pairs_hook=unique_object)
