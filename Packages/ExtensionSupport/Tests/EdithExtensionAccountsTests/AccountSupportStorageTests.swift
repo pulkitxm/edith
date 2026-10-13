@@ -485,10 +485,153 @@ import Testing
         #expect(try await store.load() == linked)
         let reconnected = try await store.connectLimitsLogin(
             account: account,
-            startLogin: { id, reused in
-                #expect(id == account.limitsProfileID && reused == folder)
+            startLogin: { id, replacement in
+                #expect(id != account.limitsProfileID && replacement != folder)
+                #expect(try await store.load() == linked)
+                #expect(try await store.limitsLoginCredentials(account: account).1 == data)
             }, eraseScopedSecret: { native.record($0) })
-        #expect(reconnected == linked)
+        var reconnectedExpected = linked
+        reconnectedExpected.accounts[0].limitsProfileID = reconnected.accounts[0].limitsProfileID
+        #expect(reconnected == reconnectedExpected)
+        #expect(native.values == [folder])
+        #expect(!FileManager.default.fileExists(atPath: folder.path))
+        #expect(try await store.limitsLoginCredentials(account: reconnected.accounts[0]).1 == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func failedReconnectPreservesPreviousScopeUntilItsHeldWriterJoins(cancelled: Bool) async throws
+    {
+        let root = try limitsFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        let first = ClaudeAccount(name: "Synthetic launch", credential: "synthetic-exact-launch")
+        try await store.save(.init(accounts: [first], defaultID: first.id))
+        let linked = try await store.connectLimitsLogin(
+            account: first, startLogin: { _, _ in }, eraseScopedSecret: { _ in })
+        let account = try #require(linked.accounts.first)
+        let (oldFolder, _) = try await store.limitsLoginCredentials(account: account)
+        let oldData = Data("synthetic-old-subscription".utf8)
+        try await store.saveLimitsLoginCredentials(account: account, expected: nil, data: oldData)
+        let gate = AccountSupportLimitsGate()
+        let scopes = AccountSupportSecretRecorder()
+        let erased = AccountSupportSecretRecorder()
+        let finished = AccountSupportLimitsCompletion()
+        let reconnect = Task {
+            do {
+                let result = try await store.connectLimitsLogin(
+                    account: account,
+                    startLogin: { id, folder in
+                        #expect(id != account.limitsProfileID)
+                        scopes.record(folder)
+                        await gate.hold()
+                        if !cancelled { throw AccountSupportLinkedFailure.startup }
+                        let file = folder.appendingPathComponent(".credentials.json")
+                        try Data("synthetic-late-new-subscription".utf8).write(to: file)
+                        try FileManager.default.setAttributes(
+                            [.posixPermissions: 0o600], ofItemAtPath: file.path)
+                    }, eraseScopedSecret: { erased.record($0) })
+                await finished.finish()
+                return result
+            } catch {
+                await finished.finish()
+                throw error
+            }
+        }
+        await gate.waitUntilHeld()
+        do {
+            let newFolder = try #require(scopes.values.first)
+            #expect(newFolder != oldFolder)
+            if cancelled { reconnect.cancel() }
+            #expect(await finished.isFinished == false)
+            #expect(try await store.load() == linked)
+            #expect(try await store.limitsLoginCredentials(account: account).1 == oldData)
+            #expect(FileManager.default.fileExists(atPath: newFolder.path))
+            #expect(erased.values.isEmpty)
+            await gate.release()
+            if cancelled {
+                await #expect(throws: CancellationError.self) { _ = try await reconnect.value }
+            } else {
+                await #expect(throws: AccountSupportLinkedFailure.self) {
+                    _ = try await reconnect.value
+                }
+            }
+            #expect(await finished.isFinished)
+            #expect(try await store.load() == linked)
+            #expect(try await store.limitsLoginCredentials(account: account).1 == oldData)
+            #expect(erased.values == [newFolder])
+            #expect(!FileManager.default.fileExists(atPath: newFolder.path))
+            #expect(FileManager.default.fileExists(atPath: oldFolder.path))
+        } catch {
+            await gate.release()
+            reconnect.cancel()
+            _ = try? await reconnect.value
+            throw error
+        }
+    }
+
+    @Test func replacedScopeCleanupRetainsNewAuthorityAndRetriesOwnedJournal() async throws {
+        let root = try limitsFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        let first = ClaudeAccount(name: "Synthetic launch", credential: "synthetic-exact-launch")
+        try await store.save(.init(accounts: [first], defaultID: first.id))
+        let linked = try await store.connectLimitsLogin(
+            account: first, startLogin: { _, _ in }, eraseScopedSecret: { _ in })
+        let account = try #require(linked.accounts.first)
+        let (oldFolder, _) = try await store.limitsLoginCredentials(account: account)
+        let oldData = Data("synthetic-old-subscription".utf8)
+        try await store.saveLimitsLoginCredentials(account: account, expected: nil, data: oldData)
+        let gate = AccountSupportLimitsGate()
+        let scopes = AccountSupportSecretRecorder()
+        let reconnect = Task {
+            try await store.connectLimitsLogin(
+                account: account,
+                startLogin: { _, folder in scopes.record(folder) },
+                eraseScopedSecret: { folder in
+                    #expect(folder == oldFolder)
+                    await gate.hold()
+                    throw AccountSupportLinkedFailure.cleanup
+                })
+        }
+        await gate.waitUntilHeld()
+        do {
+            let current = try await store.load()
+            let replacement = try #require(current.accounts.first)
+            #expect(replacement.limitsProfileID != account.limitsProfileID)
+            #expect(replacement.credential == first.credential)
+            #expect(current.defaultID == linked.defaultID)
+            let (newFolder, newData) = try await store.limitsLoginCredentials(account: replacement)
+            #expect(newFolder == scopes.values.first && newData == nil)
+            #expect(FileManager.default.fileExists(atPath: oldFolder.path))
+            await gate.release()
+            await #expect(throws: AccountSupportLinkedFailure.self) {
+                _ = try await reconnect.value
+            }
+            #expect(try await store.load() == current)
+            let journal = directory.appendingPathComponent("limits-cleanup.json")
+            #expect(
+                try String(contentsOf: journal, encoding: .utf8).contains(
+                    oldFolder.lastPathComponent))
+            let erased = AccountSupportSecretRecorder()
+            let retried = try await store.connectLimitsLogin(
+                account: replacement, startLogin: { _, _ in },
+                eraseScopedSecret: { erased.record($0) })
+            #expect(Set(erased.values) == Set([oldFolder, newFolder]))
+            #expect(!FileManager.default.fileExists(atPath: oldFolder.path))
+            #expect(!FileManager.default.fileExists(atPath: newFolder.path))
+            #expect(retried.accounts.first?.credential == first.credential)
+            #expect(retried.defaultID == linked.defaultID)
+            let retained = try String(contentsOf: journal, encoding: .utf8)
+            #expect(!retained.contains(oldFolder.lastPathComponent))
+            #expect(!retained.contains(newFolder.lastPathComponent))
+        } catch {
+            await gate.release()
+            reconnect.cancel()
+            _ = try? await reconnect.value
+            throw error
+        }
     }
 
     @Test func failedOrCancelledLinkedLoginJoinsCleanupWithoutChangingAccounts() async throws {
