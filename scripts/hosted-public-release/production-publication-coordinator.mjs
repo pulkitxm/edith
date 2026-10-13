@@ -13,6 +13,8 @@ import {
   validateProductionCatalogMessage,
 } from "./production-catalog-channel.mjs";
 
+import { productionPublicationBudget } from "./production-publication-budget.mjs";
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export async function coordinateProductionCatalog(
   channel,
@@ -75,7 +77,7 @@ export function completedProductionCohortRequest(
   productionCatalogBinding(text, identity);
   return text;
 }
-async function runObserver(text, binding) {
+async function runObserver(text, binding, remaining) {
   const child = spawn(
     process.execPath,
     [
@@ -94,6 +96,7 @@ async function runObserver(text, binding) {
   let completed = false;
   let timedOut = false;
   let terminate;
+  let timeout;
   let launchError;
   const joined = new Promise((resolve_, reject) => {
     child.once("error", (error) => {
@@ -118,21 +121,36 @@ async function runObserver(text, binding) {
         child.kill("SIGKILL");
     }, 5000);
   };
-  const timeout = setTimeout(
-    () => {
+  try {
+    timeout = setTimeout(() => {
       timedOut = true;
       retire();
-    },
-    180 * 60 * 1000,
-  );
+    }, remaining());
+  } catch (error) {
+    timedOut = true;
+    retire();
+    await joined.catch(() => {});
+    channel.close();
+    throw error;
+  }
   return {
     channel,
     joined,
-    isActive: () =>
-      !completed &&
-      !timedOut &&
-      child.exitCode === null &&
-      child.signalCode === null,
+    isActive: () => {
+      try {
+        remaining();
+        return (
+          !completed &&
+          !timedOut &&
+          child.exitCode === null &&
+          child.signalCode === null
+        );
+      } catch {
+        timedOut = true;
+        retire();
+        return false;
+      }
+    },
     retire,
   };
 }
@@ -207,6 +225,7 @@ export function admitStagedPublicationAPI(namespace) {
   return namespace;
 }
 export async function publishCoordinatedProductionUpdate(templateText) {
+  const remaining = productionPublicationBudget();
   const publication = admitStagedPublicationAPI(
     await import("../extension-publish.mjs"),
   );
@@ -239,6 +258,7 @@ export async function publishCoordinatedProductionUpdate(templateText) {
     );
   };
   source();
+  remaining();
   const directory = join(root, "dist/extensions");
   const { include } = JSON.parse(
     await readFile(join(directory, "plan.json"), "utf8"),
@@ -255,6 +275,7 @@ export async function publishCoordinatedProductionUpdate(templateText) {
     publicKey: process.env.EXTENSION_CATALOG_PUBLIC_KEY,
     catalogPhase: "stage",
   });
+  remaining();
   const identity = publication.stagedExtensionPublication(stage.catalogStage);
   const record = JSON.parse(
     await readFile(join(directory, "keepAwake.json"), "utf8"),
@@ -297,6 +318,7 @@ export async function publishCoordinatedProductionUpdate(templateText) {
       },
     ).toString(),
   );
+  remaining();
   const text = completedProductionCohortRequest(
     template,
     identity,
@@ -323,19 +345,22 @@ export async function publishCoordinatedProductionUpdate(templateText) {
     },
   );
   source();
-  const observer = await runObserver(text, binding);
+  const observer = await runObserver(text, binding, remaining);
   try {
     await coordinateProductionCatalog(
       observer.channel,
       binding,
       async () => {
+        remaining();
         source();
         await publication.promoteStagedExtensionPublication(stage.catalogStage);
+        remaining();
         source();
       },
       observer.isActive,
     );
     await observer.joined;
+    remaining();
   } catch (error) {
     observer.retire();
     await observer.joined.catch(() => {});
