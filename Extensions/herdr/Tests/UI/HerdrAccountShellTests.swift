@@ -10,6 +10,10 @@ enum HerdrAccountFixture {
         let temporary = try #require(ProcessInfo.processInfo.environment["TMPDIR"])
         let physical = try #require(realpath(temporary, nil))
         defer { free(physical) }
+        var attributes = stat()
+        try #require(
+            lstat(physical, &attributes) == 0 && attributes.st_uid == getuid()
+                && attributes.st_mode & S_IFMT == S_IFDIR && attributes.st_mode & 0o777 == 0o700)
         let root = URL(fileURLWithPath: String(cString: physical), isDirectory: true)
             .appendingPathComponent("herdr-account-parity-\(UUID().uuidString)")
         try FileManager.default.createDirectory(
