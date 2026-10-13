@@ -18,6 +18,11 @@ spec = importlib.util.spec_from_file_location(
 watchdog = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(watchdog)
 
+image_spec = importlib.util.spec_from_file_location(
+    'selected_toolchain_images', Path(__file__).with_name('selected-toolchain-images.py'))
+image_policy = importlib.util.module_from_spec(image_spec)
+image_spec.loader.exec_module(image_policy)
+
 TARGETS = {
     'attention': ['ci-extension-attention'],
     'terminal': ['ci-extension-terminal'],
@@ -36,7 +41,12 @@ LOG_BOUND = 16_777_216
 
 
 class BoundedOwnership(watchdog.OwnedProcesses):
-    def __init__(self, leader, uid):
+    def __init__(self, leader, uid, selected_toolchain_images=None):
+        if selected_toolchain_images is not None and not image_policy.admitted_images(selected_toolchain_images):
+            raise ValueError('Unadmitted selected toolchain images')
+        self.selected_toolchain_images = selected_toolchain_images
+        self.leader_parent = None
+        self.recovery_first_kernel_zero = None
         super().__init__(leader, uid)
         self.errors = []
         self.seals = {}
@@ -60,6 +70,14 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         identity = value[:5]
         self.seals[leader] = identity[:3] + identity[4:5]
         self.known[leader] = identity
+        if selected_toolchain_images is not None:
+            if not selected_toolchain_images.permits(identity[3]):
+                raise RuntimeError('Owned leader is outside selected toolchain images')
+            before = self.complete_live_record(value[5])
+            after = self.complete_live_record(value[5])
+            if before is None or before != after:
+                raise RuntimeError('Owned toolchain leader parent unavailable')
+            self.leader_parent = before[1]
 
     def snapshot(self, pid, parent=None, parent_identity=None):
         self.recovery_failure_stages.pop(pid, None)
@@ -95,6 +113,10 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                 recovered = self.recover_snapshot(pid)
                 if recovered is not None:
                     return recovered
+                if captured['returnedBytes'] == 0:
+                    recovered = self.recover_selected_toolchain_leader(pid)
+                    if recovered is not None:
+                        return recovered
                 if captured['returnedBytes'] == 0 and self.defer_kernel_child(pid, parent, parent_identity):
                     return None
             if self.sealed_zombie(pid):
@@ -295,6 +317,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         return True
 
     def recover_snapshot(self, pid):
+        self.recovery_first_kernel_zero = None
         self.recovery_failure_stages.pop(pid, None)
         identity = self.known.get(pid)
         seal = self.current_seal(pid)
@@ -304,6 +327,8 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         for _ in range(2):
             info = watchdog.ProcessInfo()
             result = self.library.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
+            if not snapshots and type(result) is int and result == 0:
+                self.recovery_first_kernel_zero = pid
             if (type(result) is not int or result != ctypes.sizeof(info)
                     or info.pid != pid or info.status not in (1, 2, 3, 4)
                     or info.uid != self.uid or info.ruid != self.uid
@@ -318,6 +343,28 @@ class BoundedOwnership(watchdog.OwnedProcesses):
             snapshots.append((pid, info.seconds, info.microseconds, path.value.decode(),
                               info.pgid, info.ppid))
         return snapshots[1] if snapshots[0] == snapshots[1] else self.record_recovery_failure(pid, 'snapshot_fields')
+
+    def recover_selected_toolchain_leader(self, pid):
+        identity = self.known.get(pid)
+        seal = self.current_seal(pid)
+        images = self.selected_toolchain_images
+        parent = self.leader_parent
+        if (pid != self.leader or images is None or parent is None or identity is None
+                or seal is None or identity[:3] + identity[4:5] != seal
+                or pid in self.rejected or self.recovery_first_kernel_zero != pid
+                or self.recovery_failure_stages.get(pid) != 'first_kernel'
+                or not images.permits(identity[3])):
+            return None
+        before = self.complete_live_record(parent[0])
+        children = [self.complete_live_record(pid), self.complete_live_record(pid)]
+        after = self.complete_live_record(parent[0])
+        if (before is None or before != after or before[1] != parent
+                or any(child is None for child in children) or children[0] != children[1]
+                or children[0][1][:5] != identity or children[0][1][5] != parent[0]
+                or not images.permits(identity[3])):
+            return None
+        self.recovery_failure_stages.pop(pid, None)
+        return children[0][1][:6]
 
     def record_recovery_failure(self, pid, stage):
         if (pid in self.known and pid in self.seals

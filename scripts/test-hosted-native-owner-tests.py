@@ -1,4 +1,7 @@
 from pathlib import Path
+from contextlib import contextmanager
+import os
+from types import SimpleNamespace
 import importlib.util
 import json
 import re
@@ -1421,6 +1424,208 @@ class ChildSelfGroupContracts(unittest.TestCase):
         owner.refresh()
         self.assertTrue(owner.errors)
         self.assertEqual(owner.child_group_transitions[234], transition)
+        self.assertEqual(self.kernel.signals, [])
+
+
+class SelectedToolchainLeaderRecoveryContracts(unittest.TestCase):
+    setUp = ChildSelfGroupContracts.setUp
+
+    @contextmanager
+    def images(self, mutation=None):
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as root:
+            developer = Path(root) / 'Synthetic.app/Contents/Developer'
+            directory = developer / 'Toolchains/XcodeDefault.xctoolchain/usr/bin'
+            directory.mkdir(parents=True)
+            for name in ('swift-frontend', 'swift-package'):
+                image = directory / name
+                image.write_bytes(name.encode())
+                image.chmod(0o755)
+            if mutation == 'symlink':
+                (directory / 'swift-package').unlink()
+                (directory / 'swift-package').symlink_to(directory / 'swift-frontend')
+            if mutation == 'hardlink':
+                (directory / 'swift-package').unlink()
+                os.link(directory / 'swift-frontend', directory / 'swift-package')
+            if mutation in ('writable', 'not_executable'):
+                (directory / 'swift-package').chmod(0o775 if mutation == 'writable' else 0o644)
+            native_fstat = os.fstat
+            native_lstat = os.lstat
+
+            def root_owned(value):
+                fields = runner.image_policy.metadata(value)
+                names = ('st_dev', 'st_ino', 'st_mode', 'st_uid', 'st_nlink',
+                         'st_size', 'st_mtime_ns', 'st_ctime_ns')
+                return SimpleNamespace(**{**dict(zip(names, fields)),
+                                          'st_uid': 501 if mutation == 'uid' else 0,
+                                          'st_size': runner.image_policy.MAXIMUM_IMAGE_BYTES + 1
+                                          if mutation == 'oversize' else value.st_size})
+
+            with patch.object(runner.image_policy.os, 'fstat', side_effect=lambda fd: root_owned(native_fstat(fd))), \
+                    patch.object(runner.image_policy.os, 'lstat', side_effect=lambda path: root_owned(native_lstat(path))), \
+                    patch.object(runner.image_policy.subprocess, 'run') as signature:
+                if mutation == 'signature':
+                    signature.side_effect = subprocess.CalledProcessError(1, 'codesign')
+                images = runner.image_policy.SelectedToolchainImages(developer)
+                self.assertEqual(signature.call_count, 2)
+                for call in signature.call_args_list:
+                    self.assertEqual(call.args[0][:4],
+                                     ['/usr/bin/codesign', '--verify', '--strict', '--all-architectures'])
+                    self.assertEqual(call.kwargs['timeout'], 30)
+                yield images, directory
+
+    def leader(self, images, directory):
+        self.kernel.processes = {
+            777: (777, 90, 6, '/fixture/python', 777, 1, 501, 501),
+            123: (123, 100, 7, str(directory / 'swift-package'), 123, 777, 501, 501),
+        }
+        owner = runner.BoundedOwnership(123, 501, selected_toolchain_images=images)
+        self.assertEqual(owner.leader_parent, self.kernel.processes[777])
+        return owner
+
+    def first_two_zero(self, field=None):
+        original = self.kernel.proc_pidinfo
+        reads = []
+
+        def record(pid, flavor, argument, pointer, size):
+            if pid == 123:
+                reads.append(argument)
+                if len(reads) <= 2:
+                    return 0
+            result = original(pid, flavor, argument, pointer, size)
+            if pid == 123 and len(reads) in (3, 4) and field is not None:
+                if field == 'short':
+                    return size - 1
+                if field == 'missing':
+                    return 0
+                if field == 'volatile':
+                    if len(reads) == 3:
+                        pointer._obj.nfiles = 1
+                else:
+                    setattr(pointer._obj, field, 5 if field == 'status' else getattr(pointer._obj, field) + 1)
+            return result
+
+        return record, reads
+
+    def test_image_contract_rejects_foreign_ownership_links_modes_bounds_and_signature(self):
+        for mutation in ('uid', 'symlink', 'hardlink', 'writable', 'not_executable', 'oversize', 'signature'):
+            with self.subTest(mutation=mutation), self.assertRaises((ValueError, subprocess.CalledProcessError)):
+                with self.images(mutation):
+                    self.fail('Untrusted image acquired authority')
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_known_selected_leader_two_raw_records_reauthenticate_exact_identity(self):
+        with self.images() as (images, directory):
+            owner = self.leader(images, directory)
+            original = owner.known[123]
+            seal = owner.seals[123]
+            record, reads = self.first_two_zero()
+            with patch.object(self.kernel, 'proc_pidinfo', side_effect=record):
+                self.assertEqual(owner.snapshot(123), self.kernel.processes[123][:6])
+            self.assertEqual(reads, [0, 0, 0, 0])
+            self.assertEqual(owner.known[123], original)
+            self.assertEqual(owner.seals[123], seal)
+            self.assertEqual(owner.errors, [])
+            self.assertEqual(owner.recovery_failure_stages, {})
+            self.assertEqual(self.kernel.signals, [])
+
+    def test_selected_leader_changed_or_incomplete_child_record_never_recovers(self):
+        for field in ['short', 'missing', 'pid', 'seconds', 'microseconds', 'pgid',
+                      'ppid', 'uid', 'ruid', 'status', 'volatile']:
+            with self.subTest(field=field), self.images() as (images, directory):
+                owner = self.leader(images, directory)
+                record, _ = self.first_two_zero(field)
+                with patch.object(self.kernel, 'proc_pidinfo', side_effect=record):
+                    owner.refresh()
+                self.assertTrue(owner.errors)
+                self.assertEqual(owner.conflicts(), [owner.known[123]])
+                self.assertEqual(self.kernel.signals, [])
+
+    def test_selected_leader_parent_path_birth_or_unavailability_never_recovers(self):
+        for field in ['path', 'birth', 'missing']:
+            with self.subTest(field=field), self.images() as (images, directory):
+                owner = self.leader(images, directory)
+                record, _ = self.first_two_zero()
+                original = owner.complete_live_record
+                parent_reads = 0
+
+                def complete(pid):
+                    nonlocal parent_reads
+                    value = original(pid)
+                    if pid == 777:
+                        parent_reads += 1
+                        if parent_reads == 2:
+                            if field == 'missing':
+                                return None
+                            changed = list(value[1])
+                            changed[3 if field == 'path' else 1] = (
+                                '/fixture/changed-parent' if field == 'path' else 91)
+                            return value[0], tuple(changed)
+                    return value
+
+                with patch.object(self.kernel, 'proc_pidinfo', side_effect=record), \
+                        patch.object(owner, 'complete_live_record', side_effect=complete):
+                    owner.refresh()
+                self.assertTrue(owner.errors)
+                self.assertEqual(self.kernel.signals, [])
+
+    def test_selected_leader_image_mutation_between_proofs_never_recovers(self):
+        with self.images() as (images, directory):
+            owner = self.leader(images, directory)
+            record, _ = self.first_two_zero()
+            original = owner.complete_live_record
+            calls = 0
+
+            def complete(pid):
+                nonlocal calls
+                value = original(pid)
+                calls += 1
+                if calls == 4:
+                    (directory / 'swift-package').write_bytes(b'changed-signed-image')
+                return value
+
+            with patch.object(self.kernel, 'proc_pidinfo', side_effect=record), \
+                    patch.object(owner, 'complete_live_record', side_effect=complete):
+                owner.refresh()
+            self.assertTrue(owner.errors)
+            self.assertEqual(self.kernel.signals, [])
+
+    def test_nonzero_recovery_failure_and_foreign_path_cannot_use_selected_contract(self):
+        for changed in ['first_birth', 'second_zero', 'foreign']:
+            with self.subTest(changed=changed), self.images() as (images, directory):
+                owner = self.leader(images, directory)
+                original = self.kernel.proc_pidinfo
+                reads = 0
+                if changed == 'foreign':
+                    value = list(self.kernel.processes[123])
+                    value[3] = '/fixture/foreign-executable'
+                    self.kernel.processes[123] = tuple(value)
+                    owner.known[123] = tuple(value[:5])
+
+                def record(pid, flavor, argument, pointer, size):
+                    nonlocal reads
+                    result = original(pid, flavor, argument, pointer, size)
+                    if pid == 123:
+                        reads += 1
+                        if reads == 1 or changed == 'foreign' and reads == 2 or changed == 'second_zero' and reads == 3:
+                            return 0
+                        if changed == 'first_birth' and reads == 2:
+                            pointer._obj.seconds += 1
+                    return result
+
+                with patch.object(self.kernel, 'proc_pidinfo', side_effect=record):
+                    owner.refresh()
+                self.assertTrue(owner.errors)
+                self.assertEqual(self.kernel.signals, [])
+
+    def test_unadmitted_flags_are_rejected_and_default_leader_behavior_is_unchanged(self):
+        for value in [True, {}, SimpleNamespace(permits=lambda *args: True)]:
+            with self.subTest(value=type(value)), self.assertRaises(ValueError):
+                runner.BoundedOwnership(123, 501, selected_toolchain_images=value)
+        owner = runner.BoundedOwnership(123, 501)
+        record, _ = self.first_two_zero()
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=record):
+            owner.refresh()
+        self.assertTrue(owner.errors)
         self.assertEqual(self.kernel.signals, [])
 
 
