@@ -30,15 +30,24 @@ class OwnedProcesses:
         self.known = {}
         self.parents = {}
 
-    def snapshot(self, pid):
+    def snapshot(self, pid, on_failure=None):
         info = ProcessInfo()
         result = self.library.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
         if result != ctypes.sizeof(info) or info.uid != self.uid or info.ruid != self.uid:
+            if on_failure is not None:
+                clause = ('kernel_record_unavailable' if result != ctypes.sizeof(info)
+                          else 'effective_uid_mismatch' if info.uid != self.uid
+                          else 'real_uid_mismatch')
+                on_failure(clause, result, info)
             return None
         path = ctypes.create_string_buffer(4096)
         if self.library.proc_pidpath(pid, path, len(path)) <= 0:
+            if on_failure is not None:
+                on_failure('executable_path_unavailable', result, info)
             return None
         if info.pgid <= 0:
+            if on_failure is not None:
+                on_failure('invalid_process_group', result, info)
             return None
         return (pid, info.seconds, info.microseconds, path.value.decode(), info.pgid, info.ppid)
 

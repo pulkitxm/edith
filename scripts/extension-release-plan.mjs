@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
+import { lstat, readdir, readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { supportSourceInputs } from "./build-extension-support.mjs";
 import { ghosttyNativeInputs } from "./extension-ghostty-native.mjs";
@@ -281,6 +281,31 @@ export async function planPullRequestExtensions(root, definitions, baseSHA) {
 }
 
 export async function extensionFingerprint(root, definition, definitions) {
+  let gitMetadata;
+  try {
+    gitMetadata = await lstat(resolve(root, ".git"));
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  if (gitMetadata && !gitMetadata.isDirectory() && !gitMetadata.isFile())
+    throw new Error("Invalid extension source Git metadata");
+  const trackedResolverLocks = new Set(
+    gitMetadata
+      ? execFileSync(
+          "git",
+          [
+            "ls-files",
+            "--cached",
+            "-z",
+            "--",
+            ":(glob)Extensions/**/Package.resolved",
+          ],
+          { cwd: root, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
+        )
+          .split("\0")
+          .filter(Boolean)
+      : [],
+  );
   const inputs = new Set();
   const visited = new Set();
   const visiting = new Set();
@@ -302,6 +327,16 @@ export async function extensionFingerprint(root, definition, definitions) {
     const absolute = resolve(root, path);
     if (!absolute.startsWith(`${resolve(root)}/`))
       throw new Error("Input outside repository");
+    if (
+      path.startsWith("Extensions/") &&
+      path.endsWith("/Package.resolved") &&
+      !trackedResolverLocks.has(path)
+    ) {
+      const metadata = await lstat(absolute);
+      if (metadata.isSymbolicLink())
+        throw new Error("Symlink in extension input");
+      if (metadata.isFile()) return;
+    }
     let entries;
     try {
       entries = await readdir(absolute, { withFileTypes: true });

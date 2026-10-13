@@ -8,6 +8,7 @@ import {
   rename,
   rm,
   stat,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -45,6 +46,196 @@ const definitions = [
     dependencies: ["music"],
   },
 ];
+
+async function resolverLockFixture(run, repository = false) {
+  const directory = await mkdtemp(join(tmpdir(), "extension-resolver-inputs-"));
+  let root = directory;
+  const entries = [
+    {
+      id: "keepAwake",
+      version: "1.0.0",
+      hostABI: "edith-host-2",
+      inputs: ["Extensions/keepAwake"],
+      sharedInputs: [
+        "Extensions/fixtureSupport",
+        "Packages/EdithHost",
+        "Packages/ExtensionSupport",
+      ],
+      dependencies: [],
+    },
+    {
+      id: "follower",
+      version: "1.0.0",
+      hostABI: "edith-host-2",
+      inputs: ["Extensions/follower"],
+      sharedInputs: [],
+      dependencies: ["keepAwake"],
+    },
+    {
+      id: "independent",
+      version: "1.0.0",
+      hostABI: "edith-host-2",
+      inputs: ["Extensions/independent"],
+      sharedInputs: [],
+      dependencies: [],
+    },
+  ];
+  const generated = [
+    "Extensions/keepAwake/Package.resolved",
+    "Extensions/fixtureSupport/Package.resolved",
+    "Extensions/keepAwake/NativeRuntime/Package.resolved",
+  ];
+  const git = (...args) =>
+    execFileSync("git", args, { cwd: root, encoding: "utf8" });
+  const fingerprints = () =>
+    Promise.all(
+      entries.map((entry) => extensionFingerprint(root, entry, entries)),
+    );
+  const published = (fingerprints) =>
+    entries.map((entry, index) => ({
+      ...entry,
+      architecture: "arm64",
+      sourceFingerprint: fingerprints[index],
+    }));
+  try {
+    for (const path of [
+      "Extensions/keepAwake/Runtime.swift",
+      "Extensions/keepAwake/NativeRuntime/Engine.swift",
+      "Extensions/fixtureSupport/Admission.swift",
+      "Extensions/follower/Runtime.swift",
+      "Extensions/independent/Runtime.swift",
+      "Packages/EdithHost/Package.resolved",
+      "Packages/ExtensionSupport/Package.resolved",
+    ]) {
+      await mkdir(join(root, path, ".."), { recursive: true });
+      await writeFile(join(root, path), path);
+    }
+    if (repository) {
+      git("init", "--quiet");
+      git("add", ".");
+      if (repository === "worktree") {
+        git(
+          "-c",
+          "user.name=Synthetic Fixture",
+          "-c",
+          "user.email=fixture@example.test",
+          "commit",
+          "--quiet",
+          "-m",
+          "Resolver fixture",
+        );
+        git(
+          "worktree",
+          "add",
+          "--quiet",
+          "--detach",
+          join(directory, "linked"),
+        );
+        root = join(directory, "linked");
+      }
+    }
+    await run({ root, entries, generated, git, fingerprints, published });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+describe("generated extension resolver locks", () => {
+  test.each([false, true, "worktree"])(
+    "resolver output keeps the pristine source plan stable with Git=%s",
+    async (repository) => {
+      await resolverLockFixture(async (fixture) => {
+        const { root, entries, generated, fingerprints, published } = fixture;
+        const initial = await fingerprints();
+        for (const path of generated)
+          await writeFile(join(root, path), '{"pins":[]}\n');
+        expect(await fingerprints()).toEqual(initial);
+        for (const path of generated)
+          await writeFile(join(root, path), '{"pins":["resolved"]}\n');
+        expect(await fingerprints()).toEqual(initial);
+        expect(
+          await planUnpublishedExtensions(root, entries, published(initial)),
+        ).toEqual([]);
+        await writeFile(
+          join(root, "Extensions/fixtureSupport/Admission.swift"),
+          "changed production admission",
+        );
+        expect(
+          (
+            await planUnpublishedExtensions(root, entries, published(initial))
+          ).map(({ id }) => id),
+        ).toEqual(["keepAwake", "follower"]);
+      }, repository);
+    },
+  );
+
+  test.each([
+    "Extensions/keepAwake/NativeRuntime/Package.resolved",
+    "Extensions/Package.resolved",
+  ])(
+    "tracking %s and changing its physical bytes rebuilds its consumers",
+    async (path) => {
+      await resolverLockFixture(async (fixture) => {
+        const { root, entries, git, fingerprints, published } = fixture;
+        if (path === "Extensions/Package.resolved")
+          entries[0].sharedInputs.push("Extensions");
+        const initial = await fingerprints();
+        await writeFile(join(root, path), "reviewed dependency pins");
+        expect(await fingerprints()).toEqual(initial);
+        git("add", path);
+        const tracked = await fingerprints();
+        expect(tracked[0]).not.toBe(initial[0]);
+        expect(tracked[1]).not.toBe(initial[1]);
+        expect(tracked[2]).toBe(initial[2]);
+        expect(
+          (
+            await planUnpublishedExtensions(root, entries, published(initial))
+          ).map(({ id }) => id),
+        ).toEqual(["keepAwake", "follower"]);
+        await writeFile(join(root, path), "changed physical dependency pins");
+        expect(git("show", `:${path}`)).toBe("reviewed dependency pins");
+        const changed = await fingerprints();
+        expect(changed[0]).not.toBe(tracked[0]);
+        expect(changed[1]).not.toBe(tracked[1]);
+        expect(changed[2]).toBe(tracked[2]);
+        expect(
+          (
+            await planUnpublishedExtensions(root, entries, published(tracked))
+          ).map(({ id }) => id),
+        ).toEqual(["keepAwake", "follower"]);
+      }, true);
+    },
+  );
+
+  test.each(["Packages/EdithHost", "Packages/ExtensionSupport"])(
+    "%s dependency pins retain their contribution without Git",
+    async (directory) => {
+      await resolverLockFixture(async ({ root, fingerprints }) => {
+        const initial = await fingerprints();
+        await writeFile(
+          join(root, directory, "Package.resolved"),
+          "changed dependency pins",
+        );
+        const changed = await fingerprints();
+        expect(changed[0]).not.toBe(initial[0]);
+        expect(changed[1]).not.toBe(initial[1]);
+        expect(changed[2]).toBe(initial[2]);
+      });
+    },
+  );
+
+  test("an untracked extension resolver symlink cannot be ignored", async () => {
+    await resolverLockFixture(async ({ root, generated, fingerprints }) => {
+      await symlink(
+        join(root, "Packages/EdithHost/Package.resolved"),
+        join(root, generated[0]),
+      );
+      await expect(fingerprints()).rejects.toThrow(
+        "Symlink in extension input",
+      );
+    });
+  });
+});
 
 describe("independent extension releases", () => {
   test("Finder metadata does not rebuild extensions or their dependents", async () => {
