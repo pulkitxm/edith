@@ -234,6 +234,11 @@ extension-dev:
 ci-extension-keep-awake-compile:
 	/usr/bin/time -p swift build --package-path Extensions/keepAwake --target KeepAwakeExtensionTests --build-system native --jobs 1 -Xswiftc -j1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
+.PHONY: ci-extension-keep-awake-local
+ci-extension-keep-awake-local:
+	python3 -I -B scripts/test-keep-awake-local.test.py
+	python3 -I -B scripts/test-keep-awake-local.py
+
 ci-extension-keep-awake:
 	@test "$$GITHUB_ACTIONS" = true && test "$$RUNNER_ENVIRONMENT" = github-hosted && test "$$RUNNER_OS" = macOS
 	/usr/bin/time -p swift format lint --strict --recursive Extensions/keepAwake
