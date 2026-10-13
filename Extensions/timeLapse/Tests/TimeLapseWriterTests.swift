@@ -22,18 +22,15 @@ import Testing
             directory: directory,
             session: TimeLapseSession(settings: settings, width: 64, height: 64), sourceCount: 1,
             failure: { _ in }, progress: { _, _, _ in })
-        let image = try buffer(color: .green)
         let origin = ProcessInfo.processInfo.systemUptime
         for time in [0.0, 0.15, 0.4, 0.8] {
-            let sample = try audioSample(at: origin + time + 0.1)
-            await withCheckedContinuation { continuation in
-                writer.queue.async {
-                    writer.setFrame(image, source: 0)
-                    writer.capture(at: origin + time)
-                    writer.ingest(sample, source: -1, kind: "system")
-                    writer.ingest(sample, source: -1, kind: "microphone")
-                    continuation.resume()
-                }
+            try await Self.onWriterQueue(writer) {
+                let image = try Self.buffer(color: .green)
+                let sample = try Self.audioSample(at: origin + time + 0.1)
+                writer.setFrame(image, source: 0)
+                writer.capture(at: origin + time)
+                writer.ingest(sample, source: -1, kind: "system")
+                writer.ingest(sample, source: -1, kind: "microphone")
             }
             try await Task.sleep(for: .milliseconds(30))
         }
@@ -69,6 +66,22 @@ import Testing
         }
     }
 
+    @Test func queuedFixtureFailureReturnsBeforeWriterShutdown() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let writer = try TimeLapseWriter(
+            directory: directory,
+            session: TimeLapseSession(settings: TimeLapseSettings(), width: 64, height: 64),
+            sourceCount: 1, failure: { _ in }, progress: { _, _, _ in })
+        await #expect(throws: TimeLapseError.self) {
+            try await Self.onWriterQueue(writer) {
+                throw TimeLapseError.encoding("Synthetic fixture allocation failure")
+            }
+        }
+        let session = await writer.stop()
+        #expect(session.frames == 0)
+    }
+
     @Test func standardSegmentsPreserveGapsAndRecoverWithinFiveMinutes() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -77,15 +90,12 @@ import Testing
             session: TimeLapseSession(settings: TimeLapseSettings(), width: 64, height: 64),
             sourceCount: 1,
             failure: { _ in }, progress: { _, _, _ in })
-        let image = try buffer(color: .blue)
         let origin = ProcessInfo.processInfo.systemUptime
         for time in [0.0, 299.9, 300.5] {
-            await withCheckedContinuation { continuation in
-                writer.queue.async {
-                    writer.setFrame(image, source: 0)
-                    writer.capture(at: origin + time)
-                    continuation.resume()
-                }
+            try await Self.onWriterQueue(writer) {
+                let image = try Self.buffer(color: .blue)
+                writer.setFrame(image, source: 0)
+                writer.capture(at: origin + time)
             }
             try await Task.sleep(for: .milliseconds(30))
         }
@@ -110,17 +120,14 @@ import Testing
             directory: directory,
             session: TimeLapseSession(settings: settings, width: 128, height: 64), sourceCount: 2,
             failure: { _ in }, progress: { _, _, _ in })
-        let red = try buffer(color: .red)
-        let blue = try buffer(color: .blue)
         let uptime = ProcessInfo.processInfo.systemUptime
         for index in 0..<301 {
-            await withCheckedContinuation { continuation in
-                writer.queue.async {
-                    writer.setFrame(red, source: 0)
-                    writer.setFrame(blue, source: 1)
-                    writer.capture(at: uptime + Double(index))
-                    continuation.resume()
-                }
+            try await Self.onWriterQueue(writer) {
+                let red = try Self.buffer(color: .red)
+                let blue = try Self.buffer(color: .blue)
+                writer.setFrame(red, source: 0)
+                writer.setFrame(blue, source: 1)
+                writer.capture(at: uptime + Double(index))
             }
             if index % 10 == 0 { try await Task.sleep(for: .milliseconds(20)) }
         }
@@ -170,16 +177,13 @@ import Testing
             directory: directory,
             session: TimeLapseSession(settings: timeLapseSettings(), width: 128, height: 64),
             sourceCount: 2, failure: { _ in }, progress: { _, _, _ in })
-        let image = try buffer(color: .green)
         let uptime = ProcessInfo.processInfo.systemUptime
-        await withCheckedContinuation { continuation in
-            writer.queue.async {
-                writer.setFrame(image, source: 0)
-                writer.capture(at: uptime)
-                writer.setFrame(image, source: 1)
-                writer.capture(at: uptime + 5)
-                continuation.resume()
-            }
+        try await Self.onWriterQueue(writer) {
+            let image = try Self.buffer(color: .green)
+            writer.setFrame(image, source: 0)
+            writer.capture(at: uptime)
+            writer.setFrame(image, source: 1)
+            writer.capture(at: uptime + 5)
         }
         try await Task.sleep(for: .milliseconds(50))
         await withCheckedContinuation { continuation in
@@ -198,13 +202,10 @@ import Testing
             directory: directory,
             session: TimeLapseSession(settings: TimeLapseSettings(), width: 64, height: 64),
             sourceCount: 1, failure: { _ in }, progress: { _, _, _ in })
-        let image = try buffer(color: .green)
-        await withCheckedContinuation { continuation in
-            writer.queue.async {
-                writer.setFrame(image, source: 0)
-                writer.capture(at: ProcessInfo.processInfo.systemUptime)
-                continuation.resume()
-            }
+        try await Self.onWriterQueue(writer) {
+            let image = try Self.buffer(color: .green)
+            writer.setFrame(image, source: 0)
+            writer.capture(at: ProcessInfo.processInfo.systemUptime)
         }
         async let first = writer.stop()
         async let second = writer.stop()
@@ -292,18 +293,15 @@ import Testing
             directory: directory,
             session: TimeLapseSession(settings: settings, width: 64, height: 64),
             sourceCount: 1, failure: { _ in }, progress: { _, _, _ in })
-        let image = try buffer(color: .green)
         for index in 0..<31 {
             let time = 100 + Double(index) * settings.interval
-            let sample = try audioSample(at: time)
-            await withCheckedContinuation { continuation in
-                writer.queue.async {
-                    writer.setFrame(image, source: 0)
-                    writer.capture(at: time)
-                    writer.ingest(sample, source: -1, kind: "system")
-                    writer.ingest(sample, source: -1, kind: "microphone")
-                    continuation.resume()
-                }
+            try await Self.onWriterQueue(writer) {
+                let image = try Self.buffer(color: .green)
+                let sample = try Self.audioSample(at: time)
+                writer.setFrame(image, source: 0)
+                writer.capture(at: time)
+                writer.ingest(sample, source: -1, kind: "system")
+                writer.ingest(sample, source: -1, kind: "microphone")
             }
             try await Task.sleep(for: .milliseconds(10))
         }
@@ -374,13 +372,10 @@ import Testing
             directory: directory,
             session: TimeLapseSession(settings: settings, width: 64, height: 64), sourceCount: 1,
             failure: { _ in }, progress: { _, _, _ in })
-        let image = try buffer(color: .green)
-        await withCheckedContinuation { continuation in
-            writer.queue.async {
-                writer.setFrame(image, source: 0)
-                writer.capture(at: 100)
-                continuation.resume()
-            }
+        try await Self.onWriterQueue(writer) {
+            let image = try Self.buffer(color: .green)
+            writer.setFrame(image, source: 0)
+            writer.capture(at: 100)
         }
         var session = await writer.stop()
         #expect(session.failure == nil)
@@ -423,18 +418,15 @@ import Testing
                 if delayedConsumer { try? await Task.sleep(for: .seconds(1)) }
                 previews.append(image)
             })
-        let red = try buffer(color: .red)
-        let blue = try buffer(color: .blue)
         let uptime = ProcessInfo.processInfo.systemUptime
         for index in 0..<3 {
             writer.setPreviewEnabled(delayedConsumer || index == 1)
-            await withCheckedContinuation { continuation in
-                writer.queue.async {
-                    writer.setFrame(red, source: 0)
-                    writer.setFrame(blue, source: 1)
-                    writer.capture(at: uptime + Double(index) * 5)
-                    continuation.resume()
-                }
+            try await Self.onWriterQueue(writer) {
+                let red = try Self.buffer(color: .red)
+                let blue = try Self.buffer(color: .blue)
+                writer.setFrame(red, source: 0)
+                writer.setFrame(blue, source: 1)
+                writer.capture(at: uptime + Double(index) * 5)
             }
             try await Task.sleep(for: .milliseconds(100))
         }
@@ -471,12 +463,9 @@ import Testing
             session: TimeLapseSession(settings: settings, width: 64, height: 64),
             sourceCount: 1, failure: { _ in }, progress: { _, _, _ in })
         writer.startTimer()
-        let image = try buffer(color: .green)
-        await withCheckedContinuation { continuation in
-            writer.queue.async {
-                writer.setFrame(image, source: 0)
-                continuation.resume()
-            }
+        try await Self.onWriterQueue(writer) {
+            let image = try Self.buffer(color: .green)
+            writer.setFrame(image, source: 0)
         }
         let session = await writer.stop()
         #expect(session.failure == nil)
@@ -604,7 +593,25 @@ import Testing
         return false
     }
 
-    private func audioSample(at seconds: Double, frequency: Double = 440) throws -> CMSampleBuffer {
+    private static func onWriterQueue(
+        _ writer: TimeLapseWriter, operation: @escaping @Sendable () throws -> Void
+    ) async throws {
+        try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<Void, any Error>) in
+            writer.queue.async {
+                do {
+                    try operation()
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private static func audioSample(at seconds: Double, frequency: Double = 440) throws
+        -> CMSampleBuffer
+    {
         var description = AudioStreamBasicDescription(
             mSampleRate: 48000,
             mFormatID: kAudioFormatLinearPCM,
@@ -660,7 +667,7 @@ import Testing
             "timelapse-\(UUID().uuidString)")
     }
 
-    private func buffer(color: CIColor) throws -> CVPixelBuffer {
+    private static func buffer(color: CIColor) throws -> CVPixelBuffer {
         var raw: CVPixelBuffer?
         let status = CVPixelBufferCreate(
             nil, 64, 64, kCVPixelFormatType_32BGRA,
