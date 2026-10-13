@@ -256,6 +256,28 @@ public actor ClaudeAccountStorage {
         }
     }
 
+    public func renewLimitsLogin(
+        account: ClaudeAccount, expected: Data?, data: Data,
+        writeScopedSecret: @escaping @Sendable (URL, Data) async throws -> Void
+    ) async throws {
+        guard account.limitsProfileID != nil, data.count <= 65_536 else {
+            throw ClaudeAccountError.invalidRequest
+        }
+        _ = try await connectLimitsLogin(
+            account: account,
+            startLogin: { _, folder in
+                guard try await self.limitsLoginCredentials(account: account).1 == expected else {
+                    throw ClaudeAccountError.rejected(
+                        "The subscription login changed. Refresh limits again.")
+                }
+                try await writeScopedSecret(folder, data)
+                try Task.checkCancellation()
+                try await self.saveLimitsLoginCredentials(
+                    account: account, expected: expected, data: data)
+            },
+            eraseScopedSecret: { _ in throw ClaudeAccountError.invalidRequest })
+    }
+
     private func limitsProfile(_ account: ClaudeAccount, root: Int32) throws -> (UUID, Int32) {
         try requireSaved(account, root: root)
         guard account.authentication == .oauthToken, !account.isLoggedOut,

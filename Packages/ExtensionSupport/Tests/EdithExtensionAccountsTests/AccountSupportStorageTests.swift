@@ -846,6 +846,122 @@ import Testing
         #expect(try String(contentsOf: journal, encoding: .utf8) == "[]")
     }
 
+    @Test(arguments: [false, true])
+    func revocationJoinsHeldRenewalBeforeErasingItsLateNativeWrite(forget: Bool) async throws {
+        let root = try limitsFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = ClaudeAccountStorage(directory: root.appendingPathComponent("Accounts"))
+        let original = ClaudeAccount(name: "Synthetic launch", credential: "synthetic-launch")
+        try await store.save(.init(accounts: [original], defaultID: original.id))
+        let account = try #require(
+            try await store.connectLimitsLogin(
+                account: original, startLogin: { _, _ in }, eraseScopedSecret: { _ in }
+            )
+            .accounts.first)
+        let (folder, _) = try await store.limitsLoginCredentials(account: account)
+        let previous = Data("synthetic-previous".utf8)
+        let renewed = Data("synthetic-renewed".utf8)
+        try await store.saveLimitsLoginCredentials(account: account, expected: nil, data: previous)
+        let gate = AccountSupportLimitsGate()
+        let operations = AccountSupportSecretRecorder()
+        let renewal = Task {
+            try await store.renewLimitsLogin(
+                account: account, expected: previous, data: renewed,
+                writeScopedSecret: { scope, data in
+                    #expect(scope == folder && data == renewed)
+                    await gate.hold()
+                    operations.record(scope)
+                })
+        }
+        await gate.waitUntilHeld()
+        let finished = AccountSupportLimitsCompletion()
+        let revocation = Task {
+            let state =
+                try await
+                (forget
+                ? store.forget(id: account.id, eraseScopedSecret: { operations.record($0) })
+                : store.logout(id: account.id, eraseScopedSecret: { operations.record($0) }))
+            await finished.finish()
+            return state
+        }
+        do {
+            let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+            while try await store.load().accounts.first?.isLoggedOut != true {
+                try #require(ContinuousClock.now < deadline)
+                try await Task.sleep(for: .milliseconds(1))
+            }
+            #expect(await finished.isFinished == false)
+            #expect(operations.values.isEmpty)
+            #expect(FileManager.default.fileExists(atPath: folder.path))
+            await gate.release()
+            await #expect(throws: CancellationError.self) { try await renewal.value }
+            let state = try await revocation.value
+            #expect(forget ? state.accounts.isEmpty : state.accounts.first?.isLoggedOut == true)
+            #expect(operations.values.filter { $0 == folder }.count == 2)
+            #expect(!FileManager.default.fileExists(atPath: folder.path))
+        } catch {
+            await gate.release()
+            renewal.cancel()
+            revocation.cancel()
+            _ = try? await renewal.value
+            _ = try? await revocation.value
+            throw error
+        }
+    }
+
+    @Test func foreignRevocationRetainsRenewalCleanupAuthorityUntilTheWriterJoins() async throws {
+        let root = try limitsFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts")
+        let store = ClaudeAccountStorage(directory: directory)
+        let original = ClaudeAccount(name: "Synthetic launch", credential: "synthetic-launch")
+        try await store.save(.init(accounts: [original]))
+        let account = try #require(
+            try await store.connectLimitsLogin(
+                account: original, startLogin: { _, _ in }, eraseScopedSecret: { _ in }
+            )
+            .accounts.first)
+        let (folder, _) = try await store.limitsLoginCredentials(account: account)
+        let gate = AccountSupportLimitsGate()
+        let operations = AccountSupportSecretRecorder()
+        let renewal = Task {
+            try await store.renewLimitsLogin(
+                account: account, expected: nil, data: Data("synthetic-renewed".utf8),
+                writeScopedSecret: { scope, _ in
+                    await gate.hold()
+                    operations.record(scope)
+                })
+        }
+        await gate.waitUntilHeld()
+        do {
+            let foreign = ClaudeAccountStorage(directory: directory)
+            await #expect(throws: ClaudeAccountError.self) {
+                _ = try await foreign.forget(
+                    id: account.id, eraseScopedSecret: { operations.record($0) })
+            }
+            #expect(operations.values.isEmpty)
+            #expect(try await foreign.load().accounts.first?.isLoggedOut == true)
+            let journal = directory.appendingPathComponent("limits-cleanup.json")
+            #expect(try String(contentsOf: journal, encoding: .utf8).contains("true"))
+            await gate.release()
+            await #expect(throws: ClaudeAccountError.self) { try await renewal.value }
+            #expect(operations.values == [folder])
+            #expect(try String(contentsOf: journal, encoding: .utf8).contains("false"))
+            #expect(
+                try await foreign.forget(
+                    id: account.id, eraseScopedSecret: { operations.record($0) }
+                )
+                .accounts.isEmpty)
+            #expect(operations.values.filter { $0 == folder }.count == 2)
+            #expect(!FileManager.default.fileExists(atPath: folder.path))
+            #expect(try String(contentsOf: journal, encoding: .utf8) == "[]")
+        } catch {
+            await gate.release()
+            renewal.cancel()
+            _ = try? await renewal.value
+            throw error
+        }
+    }
 }
 
 private final class AccountSupportSecretRecorder: @unchecked Sendable {
