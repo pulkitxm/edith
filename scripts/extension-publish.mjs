@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
   chmod,
@@ -18,6 +19,7 @@ import {
   verifyCatalogPointerData,
 } from "./extension-catalog-pointer.mjs";
 import { extensionReleaseTag } from "./extension-release-plan.mjs";
+import { verifyCohortReleaseStamp } from "./extension-stage-continuity.mjs";
 import {
   publishExtensionAssets,
   snapshotReleaseFile,
@@ -48,8 +50,41 @@ export async function promoteStagedExtensionPublication(capability) {
   const stage = stagedPublications.get(capability);
   if (!stage || stage.claimed)
     throw new Error("Unknown or consumed staged publication");
+  stage.checkPromotion();
   stage.claimed = true;
   return stage.promote();
+}
+
+function availableStage(capability) {
+  const stage = stagedPublications.get(capability);
+  if (!stage || stage.claimed)
+    throw new Error("Unknown or consumed staged publication");
+  return stage;
+}
+
+export async function publishStagedHostReadiness(capability, hostIntent) {
+  const stage = availableStage(capability);
+  const bootstrap = await import(
+    "./hosted-public-release/production-bootstrap.mjs"
+  );
+  assert.equal(typeof bootstrap.verifiedHostBootstrapIntent, "function");
+  const intent = bootstrap.verifiedHostBootstrapIntent(hostIntent);
+  await intent.revalidate();
+  assert.equal(availableStage(capability), stage);
+  return stage.readiness(intent);
+}
+
+export async function bindStagedHostContinuation(capability, completedHost) {
+  const stage = availableStage(capability);
+  const bootstrap = await import(
+    "./hosted-public-release/production-bootstrap.mjs"
+  );
+  assert.equal(typeof bootstrap.verifiedCompletedHostBootstrap, "function");
+  const completed =
+    await bootstrap.verifiedCompletedHostBootstrap(completedHost);
+  await completed.revalidate();
+  assert.equal(availableStage(capability), stage);
+  return stage.bindContinuation(completed);
 }
 
 import { lookupRelease } from "./release-lookup.mjs";
@@ -729,10 +764,23 @@ export async function publishExtensions({
       "Staging requires an existing public catalog and package plan",
     );
   assertShippingExtensions(include);
+  let continuation;
+  const continuationSource = async () => {
+    if (!continuation) return target;
+    await continuation.completed.revalidate();
+    const stamp = await verifyCohortReleaseStamp({
+      source: target,
+      host: continuation.completed.intent.host,
+      proof: continuation.completed.proof,
+      release: continuation.completed.release,
+    });
+    assert.deepEqual(stamp, continuation.stamp);
+    return stamp.continuation;
+  };
   const verifyState = async () => {
     const current = await verifiedPublicationState({
       ref,
-      target,
+      target: await continuationSource(),
       previous: old,
       publicKey,
       readMain: async () =>
@@ -1051,28 +1099,305 @@ export async function publishExtensions({
   await verifyAsset(assets[0], pointer);
   await verifyState();
   const capability = Object.freeze({});
-  stagedPublications.set(capability, {
+  let readiness;
+  let readinessOwner;
+  const verifyStageAssets = async (fresh) => {
+    assert.equal(fresh.release.draft, false);
+    assert.deepEqual(trustedPublicationCatalog(fresh, publicKey), old);
+    assert.deepEqual(fresh.pointer, current.pointer);
+    const staged = fresh.release.assets.filter(
+      ({ name }) => name === candidate,
+    );
+    assert.equal(fresh.release.id, current.release.id);
+    assert.equal(fresh.asset.id, current.asset.id);
+    assert.equal(staged.length, 1);
+    assert.equal(staged[0].id, assets[0].id);
+    await verifyAsset(staged[0], pointer);
+    return fresh;
+  };
+  const verifyStage = async () => verifyStageAssets(await verifyState());
+  const readinessNative = async () => {
+    const { boundedReadinessFile } = await import(
+      "./extension-host-readiness.mjs"
+    );
+    const evidence = await import("./hosted-public-release/evidence.mjs");
+    const native = await import("./extension-native-evidence.mjs");
+    const bootstrap = await import(
+      "./hosted-public-release/production-host-readiness.mjs"
+    );
+    assert.equal(typeof bootstrap.verifyHostReadinessNativeFacts, "function");
+    const payload = evidence.verifiedEvidence(
+      await boundedReadinessFile(
+        resolve(directory, "native-evidence.json"),
+        evidence.maximumEvidenceBytes,
+      ),
+      publicKey,
+    );
+    assert.equal(payload.sourceCommit, target);
+    assert.equal(String(payload.runID), process.env.GITHUB_RUN_ID);
+    assert.equal(String(payload.runAttempt), process.env.GITHUB_RUN_ATTEMPT);
+    assert.deepEqual(payload.plannedIDs, ["keepAwake"]);
+    const observed = await native.evidenceInventory(
+      payload.runID,
+      payload.runAttempt,
+      nativeEvidenceFetch,
+    );
+    bootstrap.verifyHostReadinessNativeFacts(payload, {
+      run: observed.run,
+      jobs: { total_count: observed.jobs.length, jobs: observed.jobs },
+      artifacts: {
+        total_count: observed.artifacts.length,
+        artifacts: observed.artifacts,
+      },
+    });
+    const item = release(repository, nativeEvidence.tag);
+    assert.equal(item.draft, false);
+    assert.equal(
+      item.tag_name,
+      evidence.evidenceTag(target, payload.runID, payload.runAttempt),
+    );
+    assert.equal(item.target_commitish, target);
+    const raw = JSON.parse(
+      gh(
+        "api",
+        `repos/${repository}/git/ref/tags/${encodeURIComponent(item.tag_name)}`,
+      ),
+    );
+    assert.equal(raw.ref, `refs/tags/${item.tag_name}`);
+    assert.equal(raw.object.type, "commit");
+    assert.equal(raw.object.sha, target);
+    const asset = (name, bytes, sha256) => {
+      const found = item.assets.filter((row) => row.name === name);
+      assert.equal(found.length, 1);
+      assert(Number.isSafeInteger(found[0].id) && found[0].id > 0);
+      assert.equal(found[0].size, bytes);
+      assert.equal(found[0].digest, `sha256:${sha256}`);
+      return found[0];
+    };
+    const envelopeAsset = asset(
+      "native-evidence.json",
+      nativeEvidence.envelopeBytes,
+      nativeEvidence.envelopeSHA256,
+    );
+    const compositionAsset = asset(
+      "publication-composition.json",
+      nativeEvidence.compositionBytes,
+      nativeEvidence.compositionSHA256,
+    );
+    const envelope = (
+      await downloadReleaseAsset({
+        repository,
+        asset: envelopeAsset,
+        expectedBytes: nativeEvidence.envelopeBytes,
+        expectedSHA256: nativeEvidence.envelopeSHA256,
+        maximumBytes: evidence.maximumEvidenceBytes,
+      })
+    ).data;
+    assert.deepEqual(evidence.verifiedEvidence(envelope, publicKey), payload);
+    const composition = (
+      await downloadReleaseAsset({
+        repository,
+        asset: compositionAsset,
+        expectedBytes: nativeEvidence.compositionBytes,
+        expectedSHA256: nativeEvidence.compositionSHA256,
+        maximumBytes: evidence.maximumEvidenceBytes,
+      })
+    ).data;
+    evidence.verifiedComposition(composition, publicKey, {
+      source: target,
+      runID: payload.runID,
+      attempt: payload.runAttempt,
+      records,
+      fingerprints: { keepAwake: records[0].sourceFingerprint },
+    });
+    evidence.closedAssetInventory(
+      payload,
+      {
+        bytes: nativeEvidence.envelopeBytes,
+        sha256: nativeEvidence.envelopeSHA256,
+      },
+      item.assets,
+      {
+        bytes: nativeEvidence.compositionBytes,
+        sha256: nativeEvidence.compositionSHA256,
+      },
+    );
+    return Object.freeze({
+      tag: item.tag_name,
+      sourceCommit: target,
+      runID: payload.runID,
+      runAttempt: payload.runAttempt,
+      envelopeSHA256: nativeEvidence.envelopeSHA256,
+      envelopeBytes: nativeEvidence.envelopeBytes,
+      compositionSHA256: nativeEvidence.compositionSHA256,
+      compositionBytes: nativeEvidence.compositionBytes,
+      releaseID: item.id,
+      envelopeAssetID: envelopeAsset.id,
+      compositionAssetID: compositionAsset.id,
+    });
+  };
+  const stage = {
     claimed: false,
+    checkPromotion: () =>
+      assert(
+        !readinessOwner || continuation,
+        "Completed host continuation is required before cohort promotion",
+      ),
     identity: Object.freeze({
       source: target,
       previous: Object.freeze({ ...current.pointer }),
       candidate: Object.freeze({ ...pointer }),
     }),
-    promote: async () => {
-      const fresh = await verifyState();
-      const staged = fresh.release.assets.filter(
-        ({ name }) => name === candidate,
+    readiness: async (intent) => {
+      const { boundedReadinessFile, hostReadinessDescriptor } = await import(
+        "./extension-host-readiness.mjs"
       );
-      if (
-        fresh.release.id !== current.release.id ||
-        fresh.asset.id !== current.asset.id ||
-        staged.length !== 1 ||
-        staged[0].id !== assets[0].id
-      )
-        throw new Error("Staged catalog release changed");
+      assert(!continuation, "Host continuation already bound");
+      assert.equal(intent.role, "extensions");
+      assert.equal(intent.source, target);
+      assert.equal(intent.host.source, target);
+      assert.deepEqual(intent.previousCatalog, stage.identity.previous);
+      assert.deepEqual(intent.extensions, {
+        run: Number(process.env.GITHUB_RUN_ID),
+        runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+      });
+      assert.equal(records.length, 1);
+      assert.equal(records[0].id, "keepAwake");
+      assert.equal(records[0].version, "1.0.1");
+      assert.deepEqual(records[0].dependencies, []);
+      const owner = { host: intent.host, extensions: intent.extensions };
+      if (readinessOwner) assert.deepEqual(owner, readinessOwner);
+      else readinessOwner = structuredClone(owner);
+      await verifyStage();
+      const native = await readinessNative();
+      const payload = hostReadinessDescriptor({
+        source: target,
+        intent,
+        previous: stage.identity.previous,
+        candidate: stage.identity.candidate,
+        record: records[0],
+        native,
+        catalogReleaseID: current.release.id,
+        previousAssetID: current.asset.id,
+        candidateAssetID: assets[0].id,
+      });
+      const name = `host-readiness-${intent.host.run}-${intent.host.runAttempt}.json`;
+      assert(Number.isSafeInteger(intent.host.run) && intent.host.run > 0);
+      assert(
+        Number.isSafeInteger(intent.host.runAttempt) &&
+          intent.host.runAttempt > 0,
+      );
+      const work = await mkdtemp(
+        resolve(tmpdir(), "extension-host-readiness-"),
+      );
+      await chmod(work, 0o700);
+      try {
+        const input = resolve(work, "payload.json");
+        const output = resolve(work, name);
+        await writeFile(input, JSON.stringify(payload), {
+          mode: 0o600,
+          flag: "wx",
+        });
+        assert((await stat(input)).size <= 8192);
+        execFileSync(
+          "swift",
+          ["scripts/extension-catalog-sign.swift", "sign", input, output],
+          {
+            stdio: "inherit",
+            timeout: 60_000,
+          },
+        );
+        const bytes = await boundedReadinessFile(output, 16384);
+        const { verifiedEnvelope } = await import(
+          "./hosted-public-release/evidence.mjs"
+        );
+        assert.deepEqual(verifiedEnvelope(bytes, publicKey, 16384), payload);
+        const snapshot = await snapshotReleaseFile(
+          output,
+          resolve(work, "immutable.json"),
+        );
+        await intent.revalidate();
+        const fresh = await verifyStage();
+        assert.deepEqual(await readinessNative(), native);
+        assert.equal(availableStage(capability), stage);
+        assert(!continuation, "Host continuation already bound");
+        const matches = fresh.release.assets.filter((row) => row.name === name);
+        assert(matches.length <= 1);
+        if (!matches.length) {
+          preflightReleaseAsset({ repository, file: snapshot.file, name });
+          await upload(
+            repository,
+            fresh.release.id,
+            catalogTag,
+            snapshot.file,
+            name,
+          );
+        }
+        const published = await verifyStageAssets(
+          await readPublicationCatalog(repository, catalogTag),
+        );
+        const written = published.release.assets.filter(
+          (row) => row.name === name,
+        );
+        assert.equal(written.length, 1);
+        if (matches.length) assert.equal(written[0].id, matches[0].id);
+        assert(Number.isSafeInteger(written[0].id) && written[0].id > 0);
+        await downloadReleaseAsset({
+          repository,
+          asset: written[0],
+          expectedBytes: snapshot.bytes,
+          expectedSHA256: snapshot.sha256,
+          maximumBytes: 16384,
+          collect: false,
+        });
+        assert.deepEqual(await readinessNative(), native);
+        assert.equal(availableStage(capability), stage);
+        readiness = payload;
+        return Object.freeze({
+          name,
+          assetID: written[0].id,
+          bytes: snapshot.bytes,
+          sha256: snapshot.sha256,
+        });
+      } finally {
+        await rm(work, { recursive: true, force: true });
+      }
+    },
+    bindContinuation: async (completed) => {
+      assert(readiness, "Host readiness has not been published");
+      assert.equal(completed.intent.role, "extensions");
+      assert.equal(completed.intent.source, target);
+      assert.deepEqual(completed.intent.host, readiness.host);
+      assert.deepEqual(completed.intent.extensions, readiness.extensions);
+      assert.deepEqual(
+        completed.intent.previousCatalog,
+        stage.identity.previous,
+      );
+      assert(!continuation, "Host continuation already bound");
+      const stamp = await verifyCohortReleaseStamp({
+        source: target,
+        host: completed.intent.host,
+        proof: completed.proof,
+        release: completed.release,
+      });
+      await completed.revalidate();
+      assert.equal(availableStage(capability), stage);
+      assert(!continuation, "Host continuation already bound");
+      continuation = { completed, stamp };
+      try {
+        await verifyStage();
+      } catch (error) {
+        continuation = undefined;
+        throw error;
+      }
+      return Object.freeze({ ...stamp });
+    },
+    promote: async () => {
+      await verifyStage();
       return promote();
     },
-  });
+  };
+  stagedPublications.set(capability, stage);
   return { ...result, catalogStage: capability };
 }
 
