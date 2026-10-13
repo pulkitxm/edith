@@ -59,8 +59,11 @@ import Testing
         var stopped = false
         defer { if !stopped { _ = runtime.execute(["operation": "stop"]) } }
         var operations: [String] = []
+        var invocationPayloads: [Data] = []
+        var uiChanges = 0
         let model = ControlPresentation(client: nil, defaults: ui) { operation, payload in
             operations.append(operation)
+            invocationPayloads.append(payload)
             return try await withCheckedThrowingContinuation { continuation in
                 runtime.invoke(
                     ["token": UUID().uuidString, "command": operation, "payload": payload]
@@ -88,7 +91,12 @@ import Testing
         let host = NSHostingView(
             rootView: ExtensionPageHost {
                 ControlSettingsHost(presentation: model) {
-                    KeepAwakeSettings(defaults: ui, synchronize: { model.changed() })
+                    KeepAwakeSettings(
+                        defaults: ui,
+                        synchronize: {
+                            uiChanges += 1
+                            model.changed()
+                        })
                 }
             })
         host.frame = CGRect(x: 0, y: 0, width: 500, height: 400)
@@ -122,7 +130,89 @@ import Testing
             func idle() -> Bool {
                 model.ready && model.running && model.error == nil && !model.load.isRunning
             }
-            var readiness = KeepAwakePressReadiness(baseline: try snapshot())
+            let baseline = try snapshot()
+            let initialChanges = uiChanges
+            struct Invariant: Equatable {
+                let preferences: NSDictionary
+                let modelState: Data
+            }
+            func invariant() throws -> Invariant {
+                var uiPreferences = ui.persistentDomain(forName: uiSuite) ?? [:]
+                var enginePreferences = engine.persistentDomain(forName: suite) ?? [:]
+                uiPreferences.removeValue(forKey: "preventSleep")
+                enginePreferences.removeValue(forKey: "preventSleep")
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = .sortedKeys
+                return .init(
+                    preferences: NSDictionary(dictionary: [
+                        "ui": uiPreferences, "engine": enginePreferences,
+                    ]),
+                    modelState: try encoder.encode(model.state))
+            }
+            let baselineInvariant = try invariant()
+            typealias Action = KeepAwakeUIActionCompletion<Invariant>
+            func actionObservation(_ control: AnyObject?, afterPress: Bool) throws
+                -> Action.Observation
+            {
+                let suffix = operations.dropFirst(baseline[4])
+                var updates = 0
+                for index in baseline[4]..<operations.count {
+                    switch operations[index] {
+                    case "keepAwake.ui.update":
+                        updates += 1
+                        let update = try JSONDecoder().decode(
+                            ControlPreferenceUpdate.self, from: invocationPayloads[index])
+                        let values = try ControlPresentationContract.decode(
+                            update.values, keys: ControlPresentationContract.writable)
+                        guard update.removed.isEmpty, Set(values.keys) == ["preventSleep"],
+                            let value = values["preventSleep"],
+                            ControlPresentationContract.valid(value, for: "preventSleep"),
+                            (value as? NSNumber)?.boolValue == requested
+                        else {
+                            throw KeepAwakePressFailure(description: "Unexpected checkbox update")
+                        }
+                    case "keepAwake.ui.read":
+                        guard
+                            let payload = try JSONSerialization.jsonObject(
+                                with: invocationPayloads[index]) as? [String: Any], payload.isEmpty
+                        else {
+                            throw KeepAwakePressFailure(description: "Unexpected checkbox read")
+                        }
+                    default:
+                        throw KeepAwakePressFailure(description: "Unexpected checkbox operation")
+                    }
+                }
+                guard updates <= 1 else {
+                    throw KeepAwakePressFailure(description: "Repeated checkbox update")
+                }
+                guard let engineValue = engine.object(forKey: "preventSleep"),
+                    ControlPresentationContract.valid(engineValue, for: "preventSleep")
+                else {
+                    throw KeepAwakePressFailure(description: "Missing or invalid engine preference")
+                }
+                let value = ui.object(forKey: "preventSleep")
+                let binding = value.flatMap {
+                    ControlPresentationContract.valid($0, for: "preventSleep")
+                        ? ($0 as? NSNumber).map { $0.boolValue ? 1 : 0 } : nil
+                }
+                let accessibility = control as? any NSAccessibilityProtocol
+                let number = accessibility?.accessibilityValue() as? NSNumber
+                let axValue = number.flatMap {
+                    $0.doubleValue == 0 || $0.doubleValue == 1 ? $0.intValue : nil
+                }
+                return .init(
+                    binding: binding, accessibilityValue: axValue, mutations: uiChanges,
+                    invariant: try invariant(),
+                    idle: model.ready && model.running && model.error == nil
+                        && (!model.load.isRunning
+                            || afterPress && suffix.contains("keepAwake.ui.read"))
+                )
+            }
+            var completion = try Action(
+                baseline: .init(
+                    binding: baseline[0], accessibilityValue: nil, mutations: initialChanges,
+                    invariant: baselineInvariant, idle: idle()),
+                requested: requested ? 1 : 0)
             var observations: [[String: Bool]] = []
             var attempts = 0
             func pressFailure(_ stage: String, control: AnyObject?, accepted: Bool)
@@ -130,8 +220,8 @@ import Testing
             {
                 let accessibility = control as? any NSAccessibilityProtocol
                 let details = KeepAwakePressDiagnostics.encode(
-                    attempts: attempts, accepted: accepted, baseline: readiness.baseline,
-                    current: try? snapshot(), baselineValue: readiness.baselineAccessibilityValue,
+                    attempts: attempts, accepted: accepted, baseline: baseline,
+                    current: try? snapshot(), baselineValue: baseline[0],
                     currentValue: (accessibility?.accessibilityValue() as? NSNumber)?.intValue,
                     flags: [
                         "controlAvailable": control != nil,
@@ -149,7 +239,7 @@ import Testing
                 return KeepAwakePressFailure(description: stage + ": " + details)
             }
             try await wait(
-                "Accept original Keep awake checkbox press",
+                "Complete original Keep awake checkbox action",
                 diagnostic: {
                     if observations.isEmpty { return accessibilityDiagnostic(in: host) }
                     return diagnosticJSON([
@@ -158,13 +248,24 @@ import Testing
                 }
             ) {
                 do {
-                    try readiness.check(snapshot: snapshot(), idle: idle())
+                    if !completion.attempted {
+                        guard try snapshot() == baseline, idle(), uiChanges == initialChanges else {
+                            throw KeepAwakePressFailure(description: "Checkbox baseline changed")
+                        }
+                    }
                 } catch {
                     throw pressFailure(
                         "Original checkbox changed or became busy before accepted press",
                         control: checkbox(in: host), accepted: false)
                 }
-                guard let control = checkbox(in: host) else { return false }
+                guard let control = checkbox(in: host) else {
+                    if completion.attempted {
+                        throw pressFailure(
+                            "Original checkbox disappeared after its action", control: nil,
+                            accepted: completion.actionReturned == true)
+                    }
+                    return false
+                }
                 let selectorPresent = control.responds?(to: pressSelector) == true
                 let selectorAllowed = control.isAccessibilitySelectorAllowed?(pressSelector) == true
                 let enabled = control.isAccessibilityEnabled?() == true
@@ -172,22 +273,29 @@ import Testing
                 let accessibility = control as? any NSAccessibilityProtocol
                 let value = (accessibility?.accessibilityValue() as? NSNumber)?.intValue
                 let ready = selectorPresent && selectorAllowed && enabled && element && value != nil
-                var pressed = false
-                let accepted: Bool
+                let completed: Bool
                 do {
-                    accepted = try readiness.attempt(
-                        ready: ready, idle: idle(), value: value,
-                        perform: {
-                            attempts += 1
-                            pressed = accessibility?.accessibilityPerformPress() == true
-                            return pressed
-                        },
-                        snapshot: snapshot,
-                        readValue: { (accessibility?.accessibilityValue() as? NSNumber)?.intValue })
+                    if completion.attempted {
+                        guard ready else {
+                            throw KeepAwakePressFailure(
+                                description: "Original checkbox became unavailable")
+                        }
+                        completed = try completion.complete(
+                            actionObservation(control, afterPress: true))
+                    } else {
+                        completed = try completion.press(
+                            ready: ready,
+                            observation: actionObservation(control, afterPress: false),
+                            perform: {
+                                attempts += 1
+                                return accessibility?.accessibilityPerformPress() == true
+                            },
+                            observe: { try actionObservation(control, afterPress: true) })
+                    }
                 } catch {
                     throw pressFailure(
-                        "Original checkbox changed or became busy without accepted press",
-                        control: control, accepted: pressed)
+                        "Original checkbox did not complete its single intended action",
+                        control: control, accepted: completion.actionReturned == true)
                 }
                 observations.append([
                     "roleMatched": control.accessibilityRole?() == .checkBox,
@@ -196,10 +304,12 @@ import Testing
                         == "keepAwake.preventSleep",
                     "enabled": enabled, "element": element,
                     "selectorPresent": selectorPresent, "selectorAllowed": selectorAllowed,
-                    "valueAvailable": value != nil, "pressAccepted": pressed,
+                    "valueAvailable": value != nil,
+                    "pressAccepted": completion.actionReturned == true,
+                    "actionCompleted": completed,
                 ])
                 if observations.count > 2 { observations.removeFirst() }
-                return accepted
+                return completed
             }
             try await wait(
                 "Apply original Keep awake preference \(requested)",
@@ -220,8 +330,12 @@ import Testing
                 else { return false }
                 return try assertionCount() == (requested ? 1 : 0)
             }
+            try #require(attempts == 1 && uiChanges == initialChanges + 1)
+            try #require(
+                try completion.complete(actionObservation(checkbox(in: host), afterPress: true)))
             try #require(try assertionCount() == (requested ? 1 : 0))
-            try #require(operations.contains("keepAwake.ui.update"))
+            try #require(
+                operations.dropFirst(baseline[4]).filter { $0 == "keepAwake.ui.update" }.count == 1)
             try #require(model.error == nil)
             transitions.append(requested)
         }
