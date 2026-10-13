@@ -183,22 +183,13 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
             let message =
                 "Subscription login is not active. Check your CLI authentication settings and try again."
             if platform == .windows {
-                let authenticated =
-                    "$subscriptionLogin.loggedIn -and $subscriptionLogin.authMethod -eq 'claude.ai'"
                 lines.append(
-                    "$subscriptionLogin = " + status + " | ConvertFrom-Json; if (!(" + authenticated
-                        + ")) { " + login + "; $subscriptionLogin = " + status
-                        + " | ConvertFrom-Json }; if (" + authenticated + ") { " + launch
-                        + " } else { Write-Error " + PowerShell.literal(message) + " }")
+                    ClaudeSubscriptionAuthentication.powerShell(
+                        status: status, login: login, launch: launch, failure: message))
             } else {
-                let authenticated =
-                    "printf '%s' \"$subscription_status\" | grep -Eq '\"authMethod\"[[:space:]]*:[[:space:]]*\"claude.ai\"'"
-                    + " && printf '%s' \"$subscription_status\" | grep -Eq '\"loggedIn\"[[:space:]]*:[[:space:]]*true'"
                 lines.append(
-                    "subscription_status=$(" + status + "); if " + authenticated + "; then :; else "
-                        + login + "; subscription_status=$(" + status + "); fi; if " + authenticated
-                        + "; then " + launch + "; else printf '%s\\n' " + ShellQuote.quote(message)
-                        + "; false; fi")
+                    ClaudeSubscriptionAuthentication.posix(
+                        status: status, login: login, launch: launch, failure: message))
             }
         } else {
             lines.append(launch)
