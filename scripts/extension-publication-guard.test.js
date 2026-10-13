@@ -613,7 +613,7 @@ test("zero-matrix workflow verifies the frozen runtime before trusted draft fina
       "inputs",
       "cancelled",
       `return (${job.if});`,
-    )(needs, github, { publish: true }, () => cancelled);
+    )(needs, github, { publish: true, production_cohort: "" }, () => cancelled);
   const needs = {
     plan: { result: "success", outputs: { changed: "false", draft: "true" } },
     build: { result: "skipped" },

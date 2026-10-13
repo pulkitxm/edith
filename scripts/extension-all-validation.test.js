@@ -396,7 +396,12 @@ function admitted(expression, changes = {}) {
     ref: "refs/heads/main",
     ...changes.github,
   };
-  const inputs = { publish: true, validation_sha: "", ...changes.inputs };
+  const inputs = {
+    publish: true,
+    validation_sha: "",
+    production_cohort: "",
+    ...changes.inputs,
+  };
   const needs = {
     plan: {
       result: "success",

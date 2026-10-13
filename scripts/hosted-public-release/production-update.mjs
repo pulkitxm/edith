@@ -74,7 +74,7 @@ async function waitForObserved(operation, predicate, milliseconds = 5000) {
     await delay(Math.min(50, Math.max(1, deadline - performance.now())));
   }
 }
-export async function executeProductionUpdate(text) {
+export async function executeProductionUpdate(text, { promoteCatalog } = {}) {
   const capability = await prepareProductionInputs(text);
   const verified = productionVerifiedInputs(capability);
   const observer = await prepareProductionObserver(capability);
@@ -260,6 +260,7 @@ export async function executeProductionUpdate(text) {
       restored,
       assertions: afterAssertions,
     });
+    if (promoteCatalog) await promoteCatalog(verified.request);
     await verified.catalog("current");
     const previousOwners = (await observeRows()).filter((row) =>
       ["engine", "managedUI"].includes(row.role),

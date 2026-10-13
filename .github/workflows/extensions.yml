@@ -71,6 +71,11 @@ name: Extensions
         type: boolean
         required: true
         default: false
+      production_cohort:
+        description: Observe two verified public hosts and coordinate the Keep Awake catalog update
+        type: string
+        required: false
+        default: ""
       validation_sha:
         description: Validate all 39 extensions at this exact source SHA without publishing
         type: string
@@ -85,7 +90,7 @@ env:
   EXTENSION_CATALOG_PUBLIC_KEY: ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=
 jobs:
   frozen-host:
-    if: "!cancelled() && needs.plan.result == 'success' && (needs.plan.outputs.changed == 'true' || (needs.plan.outputs.changed == 'false' && needs.plan.outputs.draft == 'true'))"
+    if: "!cancelled() && needs.plan.result == 'success' && (needs.plan.outputs.changed == 'true' || (needs.plan.outputs.changed == 'false' && needs.plan.outputs.draft == 'true')) && (inputs.production_cohort == '' || (github.repository_id == '1289153439' && github.event_name == 'workflow_dispatch' && (github.actor_id == '65671483' || github.actor_id == '320458784') && fromJSON(inputs.production_cohort).source == github.sha))"
     needs:
       - plan
     runs-on: macos-26
@@ -409,8 +414,9 @@ jobs:
         if: always()
         run: "security delete-keychain \"$RUNNER_TEMP/extensions.keychain-db\" || true"
   publish:
+    timeout-minutes: ${{ inputs.production_cohort != '' && 180 || 360 }}
     permissions:
-      contents: write
+      contents: read
       actions: read
     needs:
       - plan
@@ -447,7 +453,35 @@ jobs:
           gh release upload --help
       - name: Install verified release dependencies
         run: bun install --frozen-lockfile
+      - name: Verify closed public update coordination contracts
+        if: inputs.production_cohort != ''
+        run: |
+          set -euo pipefail
+          bun test scripts/hosted-public-release/production-inputs.test.mjs scripts/hosted-public-release/production-observer.test.mjs scripts/hosted-public-release/production-summary.test.mjs scripts/hosted-public-release/production-catalog-channel.test.mjs scripts/hosted-public-release/production-publication-coordinator.test.mjs scripts/hosted-public-release/production-publication-workflow.test.mjs
+          python3 -I -B scripts/test-production-host-cohort.py
       - name: Preserve immutable native evidence before publication
         run: bun scripts/extension-native-evidence.mjs
       - name: Publish immutable extension releases and the signed catalog
-        run: bun scripts/extension-publish.mjs
+        env:
+          PUBLIC_HOST_UPDATE_REQUEST: ${{ inputs.production_cohort }}
+          PUBLIC_RELEASE_VERIFICATION: "1"
+        run: |
+          set -euo pipefail
+          if [ -n "$PUBLIC_HOST_UPDATE_REQUEST" ]; then
+            bun scripts/hosted-public-release/production-publication-coordinator.mjs
+          else
+            bun scripts/extension-publish.mjs
+          fi
+      - name: Emit only bounded sanitized public observations
+        if: always() && inputs.production_cohort != ''
+        env:
+          EXPECTED_SOURCE_SHA: "${{ github.sha }}"
+        run: bun scripts/hosted-public-release/production-summary.mjs
+      - name: Retain bounded sanitized public update observations
+        if: always() && inputs.production_cohort != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hosted-public-host-update-verification
+          path: local/public-host-cohort/summary.json
+          retention-days: 7
+          if-no-files-found: warn
