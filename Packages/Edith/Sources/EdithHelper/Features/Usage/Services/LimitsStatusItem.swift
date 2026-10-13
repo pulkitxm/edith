@@ -512,7 +512,10 @@ final class StackedLimitsView: NSView {
                         column.label, font: Self.labelFont, color: column.labelColor)
                     let value = Self.attributed(
                         column.value, font: Self.valueFont, color: column.valueColor)
-                    label.draw(at: NSPoint(x: columnX, y: valueY - 1))
+                    label.draw(
+                        at: NSPoint(
+                            x: columnX,
+                            y: valueY + Self.labelFont.descender - Self.valueFont.descender))
                     value.draw(at: NSPoint(x: columnX + label.size().width + 3, y: valueY))
                     columnX += label.size().width + 3 + value.size().width + Self.columnGap
                 }
