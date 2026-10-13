@@ -48,7 +48,7 @@ struct UsageUILimits: Codable, Sendable {
     func shutdownAndWait() async {
         let pending = Array(limitsPreparations.values)
         shutdown()
-        for task in pending { await task.value }
+        for task in pending { _ = await task.value }
         limitsPreparations = [:]
         await exports.stopAndWait()
     }

@@ -51,7 +51,7 @@ struct RateLimitsDialsView: View {
                 }
                 return UsageUILimitsSummary(
                     providers: await LimitsHistory.loadLatestProviders(),
-                    current: UsageWorkerOperations.controller?.latestLimits)
+                    current: await UsageWorkerOperations.controller?.latestLimits)
             }) { summary in
                 let latest = summary.providers
                 latestProviders = latest
