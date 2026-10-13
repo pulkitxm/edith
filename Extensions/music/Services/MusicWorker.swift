@@ -299,7 +299,14 @@ final class MusicWorker {
     func shutdown() async {
         stop()
         await tasks.shutdownAndWait()
-        if !isInertFixture { await DownloadWorker.shared.stop() }
+        guard resources != nil else { return }
+        await player.shutdownAndWait()
+        await accounts.shutdownAndWait()
+        await external.stopAndWait()
+        await MusicRemote.shared.stopAndWait()
+        await YoutubeDownloader.shared.shutdownAndWait()
+        await MusicTools.shared.shutdownAndWait()
+        await DownloadWorker.shared.stop()
     }
 
     func stop() {

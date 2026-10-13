@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Foundation
 import Testing
 
@@ -133,4 +134,115 @@ import Testing
         #expect(posts == 0)
         #expect(external.systemResourceCount == 0)
     }
+    @Test func workerShutdownJoinsRetiredPlaybackAndRejectsLateCommands() async throws {
+        try #require(ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil)
+        var receive: (@MainActor ([AnyHashable: Any]) -> Void)?
+        var pending: CheckedContinuation<ExternalPlayback?, Error>?
+        var entered = false
+        var cancelled = false
+        var posts = 0
+        let effects = ExternalMusicEffects(
+            isInert: false,
+            observeExternal: { app, handler in
+                if app == .spotify { receive = handler }
+                return NSObject()
+            },
+            removeExternal: { _ in }, observeCommand: { _ in NSObject() },
+            observeState: { _ in NSObject() }, removeLocal: { _ in }, isRunning: { _ in true },
+            readPlayback: { _, _ in
+                entered = true
+                let value: ExternalPlayback? = try await withCheckedThrowingContinuation {
+                    pending = $0
+                }
+                cancelled = Task.isCancelled
+                return value
+            },
+            postState: { _ in posts += 1 })
+        let external = ExternalMusic(effects: effects)
+        let suite = "test.music.drain." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let accounts = MusicAccounts(
+            defaults: defaults,
+            spotify: MusicSpotifySession(libraryURL: nil, defaults: defaults), pauseLocal: {})
+        let player = LocalMusicPlayer(mediaControlsEnabled: false)
+        let worker = try MusicWorker(
+            admission: { nil },
+            makeLiveResources: {
+                MusicWorkerResources.live(player: player, external: external, accounts: accounts)
+            }, startImmediately: false)
+        external.start()
+        receive?(["Name": "Mock Garden", "Player State": "Playing", "Duration": 100_000])
+        let read = Task { await external.refreshPresentationPlayback(force: true) }
+        defer {
+            pending?.resume(returning: nil); pending = nil
+            read.cancel(); worker.stop()
+        }
+        do {
+            for _ in 0..<100 {
+                if entered { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            try #require(entered && pending != nil)
+            worker.stop()
+            var started = 0
+            var joined = 0
+            let first = Task {
+                started += 1
+                await worker.shutdown()
+                joined += 1
+            }
+            let follower = Task {
+                started += 1
+                await worker.shutdown()
+                joined += 1
+            }
+            do {
+                for _ in 0..<100 {
+                    if started == 2 { break }
+                    try await Task.sleep(for: .milliseconds(10))
+                }
+                try #require(started == 2)
+                #expect(joined == 0)
+                do {
+                    try await worker.perform(
+                        MusicSurfaceCommand(
+                            sourceID: "external.spotify", trackKey: "Mock", action: "toggle"))
+                    Issue.record("Stopped Music worker accepted a command.")
+                } catch ExtensionPeerError.unavailable {
+                } catch {
+                    Issue.record(
+                        "Stopped Music worker rejected a command with an unexpected error.")
+                }
+                let completion = pending
+                pending = nil
+                completion?.resume(
+                    returning: .init(
+                        track: .init(
+                            app: .spotify, title: "Mock Late", artist: "", isPlaying: true,
+                            duration: 100), position: 25, volume: 0.5, shuffling: false,
+                        repeating: false, canShuffle: true, canRepeat: true))
+                await read.value
+                await first.value
+                await follower.value
+                #expect(joined == 2 && cancelled)
+                #expect(external.current == nil && external.playback == nil)
+                #expect(external.systemResourceCount == 0 && posts == 0)
+                await worker.shutdown()
+            } catch {
+                pending?.resume(returning: nil); pending = nil
+                await read.value
+                await first.value
+                await follower.value
+                throw error
+            }
+        } catch {
+            pending?.resume(returning: nil); pending = nil
+            read.cancel()
+            await read.value
+            await worker.shutdown()
+            throw error
+        }
+    }
+
 }
