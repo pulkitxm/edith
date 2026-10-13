@@ -2004,5 +2004,176 @@ class TerminalChildSelfGroupWitnessTests(unittest.TestCase):
         self.assertEqual(self.kernel.signals, [])
 
 
+class KnownLiveRecordRecoveryContracts(unittest.TestCase):
+    def setUp(self):
+        self.kernel = Kernel()
+        original = self.kernel.proc_pidinfo
+        def live(pid, flavor, argument, pointer, size):
+            result = original(pid, flavor, argument, pointer, size)
+            if result == size:
+                pointer._obj.status = 2
+            return result
+        self.kernel.proc_pidinfo = live
+        self.library = patch.object(runner.watchdog.ctypes, 'CDLL', return_value=self.kernel)
+        self.kill = patch.object(runner.os, 'kill', side_effect=self.kernel.kill)
+        self.library.start()
+        self.kill.start()
+        self.addCleanup(self.library.stop)
+        self.addCleanup(self.kill.stop)
+
+    def admitted_self_group(self):
+        self.kernel.processes[234] = (234, 101, 8, '/synthetic/toolchain/clang-stat-cache', 123, 123, 501, 501)
+        owner = runner.BoundedOwnership(123, 501)
+        owner.refresh()
+        child = list(self.kernel.processes[234])
+        child[4] = 234
+        self.kernel.processes[234] = tuple(child)
+        owner.refresh()
+        self.assertEqual(owner.errors, [])
+        self.assertEqual(owner.child_self_groups[234], 234)
+        return owner
+
+    def test_known_self_group_live_records_recover_without_parent_readmission(self):
+        owner = self.admitted_self_group()
+        known = dict(owner.known)
+        seals = dict(owner.seals)
+        original = self.kernel.proc_pidinfo
+        calls = []
+        def record(pid, flavor, argument, pointer, size):
+            calls.append((pid, flavor, argument))
+            return 0 if pid == 234 and argument == 0 else original(pid, flavor, argument, pointer, size)
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=record):
+            self.assertEqual(owner.snapshot(234), self.kernel.processes[234][:6])
+        self.assertEqual(calls, [(234, 3, 0), (234, 3, 1), (234, 3, 1)])
+        self.assertEqual(owner.known, known)
+        self.assertEqual(owner.seals, seals)
+        self.assertEqual(owner.errors, [])
+        self.assertEqual(owner.failure_observations, [])
+        self.assertEqual(owner.captured_snapshot_failures, [])
+        self.assertEqual(owner.terminal_child_refusals, {})
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_unknown_live_record_does_not_gain_known_recovery_authority(self):
+        owner = runner.BoundedOwnership(123, 501)
+        self.kernel.processes[234] = (234, 101, 8, '/synthetic/unadmitted', 123, 123, 501, 501)
+        original = self.kernel.proc_pidinfo
+        calls = []
+        def record(pid, flavor, argument, pointer, size):
+            if pid == 234:
+                calls.append(argument)
+                if argument == 0:
+                    return 0
+            return original(pid, flavor, argument, pointer, size)
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=record):
+            self.assertIsNone(owner.recover_snapshot(234, include_zombies=True))
+            self.assertEqual(calls, [])
+            with self.assertRaisesRegex(RuntimeError, 'Live owned process identity unavailable'):
+                owner.snapshot(234)
+        self.assertEqual(calls, [0, 1])
+        self.assertNotIn(234, owner.known)
+        self.assertNotIn(234, owner.seals)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_each_alternate_live_record_retains_identity_and_path_guards(self):
+        for field in ['pid', 'seconds', 'microseconds', 'pgid', 'uid', 'ruid',
+                      'short', 'missing', 'status', 'parent', 'path', 'executable']:
+            for changed_read in [1, 2]:
+                with self.subTest(field=field, changed_read=changed_read):
+                    owner = self.admitted_self_group()
+                    known = dict(owner.known)
+                    seals = dict(owner.seals)
+                    original = self.kernel.proc_pidinfo
+                    original_path = self.kernel.proc_pidpath
+                    reads = 0
+                    def record(pid, flavor, argument, pointer, size):
+                        nonlocal reads
+                        self.assertEqual((pid, flavor, argument), (234, 3, 1))
+                        reads += 1
+                        result = original(pid, flavor, argument, pointer, size)
+                        if reads == changed_read:
+                            if field == 'short':
+                                return size - 1
+                            if field == 'missing':
+                                return 0
+                            if field not in ['path', 'executable']:
+                                attribute = 'ppid' if field == 'parent' else field
+                                setattr(pointer._obj, attribute, 5 if field == 'status'
+                                        else getattr(pointer._obj, attribute) + 1)
+                        return result
+                    def path(pid, buffer, size):
+                        if reads == changed_read and field == 'path':
+                            return 0
+                        if reads == changed_read and field == 'executable':
+                            buffer.value = b'/synthetic/replaced-image'
+                            return len(buffer.value)
+                        return original_path(pid, buffer, size)
+                    with patch.object(self.kernel, 'proc_pidinfo', side_effect=record), \
+                            patch.object(self.kernel, 'proc_pidpath', side_effect=path):
+                        self.assertIsNone(owner.recover_snapshot(234, include_zombies=True))
+                    self.assertEqual(owner.known, known)
+                    self.assertEqual(owner.seals, seals)
+                    self.assertEqual(self.kernel.signals, [])
+
+    def test_zombie_lookup_does_not_become_live_recovery_or_signal_authority(self):
+        owner = self.admitted_self_group()
+        original_seal = owner.seals[234]
+        original = self.kernel.proc_pidinfo
+        def record(pid, flavor, argument, pointer, size):
+            if pid == 234 and argument == 0:
+                return 0
+            result = original(pid, flavor, argument, pointer, size)
+            if pid == 234:
+                pointer._obj.status = 5
+            return result
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=record):
+            self.assertIsNone(owner.recover_snapshot(234, include_zombies=True))
+            self.assertTrue(owner.sealed_zombie(234))
+            self.assertIsNone(owner.snapshot(234))
+            self.assertNotIn(234, [identity[0] for identity in owner.refresh()])
+        self.assertEqual(owner.seals[234], original_seal)
+        self.assertEqual(owner.errors, [])
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_recovery_keeps_sticky_rejection_and_per_signal_reuse_detection(self):
+        owner = self.admitted_self_group()
+        expected = owner.known[234]
+        owner.reject(234, 'Synthetic prior ownership failure')
+        original = self.kernel.proc_pidinfo
+        def record(pid, flavor, argument, pointer, size):
+            return 0 if pid == 234 and argument == 0 else original(pid, flavor, argument, pointer, size)
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=record) as calls:
+            self.assertIsNone(owner.recover_snapshot(234, include_zombies=True))
+            calls.assert_not_called()
+            with self.assertRaisesRegex(RuntimeError, 'Live owned process identity unavailable'):
+                owner.snapshot(234)
+        self.assertIn('Synthetic prior ownership failure', owner.errors)
+        self.assertIn(expected, owner.conflicts())
+        child = list(self.kernel.processes[234])
+        child[1] += 1
+        self.kernel.processes[234] = tuple(child)
+        self.assertFalse(owner.verified(expected))
+        self.assertEqual(self.kernel.signals, [])
+
+
+    def test_alternate_lookup_requires_nonleader_known_seal_and_exact_initial_zero(self):
+        owner = self.admitted_self_group()
+        with patch.object(self.kernel, 'proc_pidinfo') as records:
+            self.assertIsNone(owner.recover_snapshot(123, include_zombies=True))
+            self.assertIsNone(owner.recover_snapshot(345, include_zombies=True))
+            records.assert_not_called()
+        original = self.kernel.proc_pidinfo
+        calls = []
+        def short(pid, flavor, argument, pointer, size):
+            if pid == 234:
+                calls.append(argument)
+            result = original(pid, flavor, argument, pointer, size)
+            return size - 1 if pid == 234 and len(calls) == 1 else result
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=short):
+            self.assertEqual(owner.snapshot(234), self.kernel.processes[234][:6])
+        self.assertEqual(calls, [0, 0, 0])
+        self.assertEqual(owner.errors, [])
+        self.assertEqual(self.kernel.signals, [])
+
+
 if __name__ == '__main__':
     unittest.main()
