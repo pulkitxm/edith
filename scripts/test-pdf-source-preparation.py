@@ -18,6 +18,128 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
+VALUE_FIXTURE_SOURCE = """fn get_catalog(doc: &Document) -> &Dictionary {
+    match doc.trailer.get(b"Root").unwrap() {
+        &Object::Reference(ref id) => {
+            match doc.get_object(*id) {
+                Ok(&Object::Dictionary(ref catalog)) => { return catalog; }
+                _ => {}
+            }
+        }
+        _ => {}
+    }
+    panic!();
+}
+
+fn get_pages(doc: &Document) -> &Dictionary {
+    let catalog = get_catalog(doc);
+    match catalog.get(b"Pages").unwrap() {
+        &Object::Reference(ref id) => {
+            match doc.get_object(*id) {
+                Ok(&Object::Dictionary(ref pages)) => { return pages; }
+                other => {dlog!("pages: {:?}", other)}
+            }
+        }
+        other => { dlog!("pages: {:?}", other)}
+    }
+    dlog!("catalog {:?}", catalog);
+    panic!();
+}
+
+
+    dlog!("Page count: {}", get::<i64>(&doc, &get_pages(&doc), b"Count"));
+
+    dlog!("Pages: {:?}", get_pages(&doc));
+
+    dlog!("Type: {:?}", get_pages(&doc).get(b"Type").and_then(|x| x.as_name()).unwrap());
+
+#[derive(Clone)]
+struct PdfSimpleFont<'a> {
+    font: &'a Dictionary,
+    doc: &'a Document,
+    encoding: Option<Vec<u16>>,
+    unicode_map: Option<HashMap<u32, String>>,
+    widths: HashMap<CharCode, f64>,
+    missing_width: f64,
+}
+
+#[derive(Clone)]
+struct PdfType3Font<'a> {
+    font: &'a Dictionary,
+    doc: &'a Document,
+}
+
+fn original_simple_font() { PdfSimpleFont {doc, font, widths: width_map, encoding: encoding_table, missing_width, unicode_map} }
+fn original_type3_font() { PdfType3Font {doc, font, widths: width_map, encoding: encoding_table, unicode_map} }
+
+impl OriginalFont {
+    fn decode(&self, chars: &[u8]) -> String {
+        let strings = self.char_codes(chars).map(|x| self.decode_char(x.0)).collect::<Vec<_>>();
+        strings.join("")
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Type0Func {
+    domain: Vec<f64>,
+    range: Vec<f64>,
+    contents: Vec<u8>,
+    size: Vec<i64>,
+    bits_per_sample: i64,
+    encode: Vec<f64>,
+    decode: Vec<f64>,
+}
+
+#[derive(Clone, Debug)]
+struct Type2Func {
+    c0: Option<Vec<f64>>,
+    c1: Option<Vec<f64>>,
+    n: f64,
+}
+
+#[derive(Clone, Debug)]
+pub struct CalGray {
+    white_point: [f64; 3],
+    black_point: Option<[f64; 3]>,
+    gamma: Option<f64>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CalRGB {
+    white_point: [f64; 3],
+    black_point: Option<[f64; 3]>,
+    gamma: Option<[f64; 3]>,
+    matrix: Option<Vec<f64>>
+}
+
+#[derive(Clone, Debug)]
+pub struct Lab {
+    white_point: [f64; 3],
+    black_point: Option<[f64; 3]>,
+    range: Option<[f64; 4]>,
+}
+
+#[derive(Clone)]
+pub struct Separation {
+    name: String,
+    alternate_space: AlternateColorSpace,
+    tint_transform: Box<Function>,
+}
+
+#[derive(Clone, Debug)]
+enum Function {
+    Type0(Type0Func),
+    Type2(Type2Func),
+    Type3,
+    Type4(Vec<u8>),
+}
+
+impl Function {
+    fn parse_original() { validate_function_type(); validate_domain(); validate_range(); decode_sampled_stream(); }
+}
+"""
+
+
 def fixture_sources():
     values = {name: ('synthetic font source ' + name).encode() for name in MODULE.SOURCE_FILES}
     values['Cargo.toml.orig'] = b'version = "0.12.1"\nlopdf = {version = "0.42", default-features = false, features = ["wasm_js"]}\nlicense = "MIT"\n'
@@ -32,8 +154,6 @@ fn get_descriptor(&self) -> Option<PdfFontDescriptor> {}
 fn char_codes(&'a self, chars: &'a [u8]) -> PdfFontIter {}
 pub fn new(file: &mut dyn std::io::Write) -> HTMLOutput {}
 pub fn new(file: &mut dyn std::io::Write) -> SVGOutput {}
-other => {dlog!("pages: {:?}", other)}
-other => { dlog!("pages: {:?}", other)}
 Entry::Occupied(e) => {
                                                     panic!("unexpected entry in unicode map")
 }
@@ -68,6 +188,7 @@ for (k, v) in *info {
 }
 fn format_original() -> fmt::Result { keep_original_formatting() }
 """
+    library += VALUE_FIXTURE_SOURCE
     library += ''.join(f'fn result_{index}() -> Result<(), OutputError> {{ preserve_result_{index}() }}\n' for index in range(46))
     values['src/lib.rs'] = library.encode()
     table = ''.join(f'        ("synthetic-{index}", {index}),\n' for index in range(4700))
@@ -176,6 +297,45 @@ class PDFSourcePreparationTests(unittest.TestCase):
                 values[name] = values[name].replace(previous, current, 1)
                 with self.assertRaisesRegex(ValueError, 'warning adaptation'):
                     unpack(archive(values))
+
+    def test_retained_values_keep_debug_fields_and_clone_state(self):
+        library = self.files['src/lib.rs'].decode()
+        original = self.values['src/lib.rs'].decode()
+        for name in ('Type0Func', 'Type2Func', 'CalGray', 'CalRGB', 'Lab', 'Separation'):
+            expression = r'(?:pub )?struct ' + name + r' \{([^}]+)\}'
+            self.assertEqual(re.search(expression, original).group(1), re.search(expression, library).group(1))
+            self.assertIn('impl Clone for ' + name + ' {', library)
+        self.assertEqual(library.count('#[derive(Debug)]'), original.count('#[derive(Clone, Debug)]'))
+        self.assertEqual(library.count('#[allow('), original.count('#[allow('))
+        validation = 'validate_function_type(); validate_domain(); validate_range(); decode_sampled_stream();'
+        self.assertIn(validation, original)
+        self.assertIn(validation, library)
+        self.assertIn('Self::Type0(value) => Self::Type0(value.clone())', library)
+        self.assertIn('Self::Type2(value) => Self::Type2(value.clone())', library)
+        self.assertIn('Self::Type4(value) => Self::Type4(value.clone())', library)
+        self.assertNotIn('fn get_catalog(', library)
+        self.assertNotIn('fn get_pages(', library)
+        self.assertNotIn('fn decode(&self, chars:', library)
+        self.assertIn('PdfSimpleFont {doc, font, widths: width_map, encoding: encoding_table, missing_width, unicode_map}', library)
+        self.assertIn('PdfType3Font {font, widths: width_map, encoding: encoding_table, unicode_map}', library)
+
+    def test_value_layout_changes_and_duplicate_private_helpers_fail_closed(self):
+        for previous, current in (
+            (b'bits_per_sample: i64,', b'bits_per_sample: i32,'),
+            (b'pub struct CalRGB {', b'pub struct CalRGB {\n    unknown_field: f64,'),
+            (b'impl Function {', b'impl ForeignFunction {'),
+            (b'fn get_catalog(', b'fn changed_catalog('),
+            (b"struct PdfType3Font<'a> {", b"struct ForeignFont<'a> {"),
+        ):
+            with self.subTest(previous=previous):
+                values = dict(self.values)
+                values['src/lib.rs'] = values['src/lib.rs'].replace(previous, current, 1)
+                with self.assertRaisesRegex(ValueError, 'value adaptation'):
+                    unpack(archive(values))
+        values = dict(self.values)
+        values['src/lib.rs'] += VALUE_FIXTURE_SOURCE.encode()
+        with self.assertRaisesRegex(ValueError, 'adaptation'):
+            unpack(archive(values))
 
     def test_wrong_checksum_is_rejected(self):
         with self.assertRaisesRegex(ValueError, 'checksum'):
