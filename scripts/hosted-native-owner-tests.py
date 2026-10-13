@@ -47,6 +47,10 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         self.failure_observation_keys = set()
         self.captured_snapshot_failures = []
         self.captured_snapshot_keys = set()
+        self.admission_parents = {}
+        self.child_self_groups = {}
+        self.child_group_transitions = {}
+        self.self_group_observations = {}
         value = self.snapshot(leader)
         if value is None or value[4] != leader:
             raise RuntimeError('Owned leader identity unavailable')
@@ -134,9 +138,78 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         self.terminal_children[pid] = records[0]
         return True
 
+    def current_seal(self, pid):
+        original = self.seals.get(pid)
+        return None if original is None else original[:3] + (self.child_self_groups.get(pid, original[3]),)
+
+    def complete_live_record(self, pid):
+        info = watchdog.ProcessInfo()
+        result = self.library.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
+        if (type(result) is not int or result != ctypes.sizeof(info)
+                or info.pid != pid or info.status not in (1, 2, 3, 4)
+                or info.uid != self.uid or info.ruid != self.uid
+                or info.seconds <= 0 or info.microseconds >= 1_000_000
+                or info.pgid <= 0 or info.ppid <= 0):
+            return None
+        path = ctypes.create_string_buffer(4096)
+        if self.library.proc_pidpath(pid, path, len(path)) <= 0:
+            return None
+        try:
+            executable = path.value.decode()
+        except UnicodeError:
+            return None
+        identity = (pid, info.seconds, info.microseconds, executable,
+                    info.pgid, info.ppid, info.uid, info.ruid)
+        return bytes(info), identity
+
+    def admit_child_self_group(self, pid, current):
+        previous = self.known.get(pid)
+        original = self.seals.get(pid)
+        parent = self.admission_parents.get(pid)
+        row = {
+            'knownChild': previous is not None and original is not None and pid != self.leader,
+            'groupIsOwnPID': current[4] == pid,
+            'originalParentRetained': parent is not None,
+            'currentPathMatchesRetained': previous is not None and current[3] == previous[3],
+            'twoChildRecordsMatch': False,
+            'parentBeforeMatches': False,
+            'parentAfterMatches': False,
+            'parentRecordsStable': False,
+            'transitionAdmitted': False,
+        }
+        if pid in self.self_group_observations or len(self.self_group_observations) < 8:
+            self.self_group_observations[pid] = row
+        if (not row['knownChild'] or not row['groupIsOwnPID'] or parent is None
+                or not row['currentPathMatchesRetained'] or current[:3] != original[:3]
+                or previous[:3] + previous[4:5] != original
+                or pid in self.child_self_groups or pid in self.rejected
+                or current[4] == original[3]):
+            return False
+        parent_before = self.complete_live_record(parent[0])
+        row['parentBeforeMatches'] = parent_before is not None and parent_before[1] == parent
+        if not row['parentBeforeMatches']:
+            return False
+        children = [self.complete_live_record(pid), self.complete_live_record(pid)]
+        row['twoChildRecordsMatch'] = all(item is not None for item in children) and children[0] == children[1]
+        if not row['twoChildRecordsMatch']:
+            return False
+        child = children[0][1]
+        if (child[:3] != original[:3] or child[3] != previous[3] or child[4] != pid
+                or child[5] != parent[0] or child[:5] != current):
+            return False
+        parent_after = self.complete_live_record(parent[0])
+        row['parentAfterMatches'] = parent_after is not None and parent_after[1] == parent
+        row['parentRecordsStable'] = parent_before == parent_after
+        if not row['parentAfterMatches'] or not row['parentRecordsStable']:
+            return False
+        self.child_self_groups[pid] = pid
+        self.child_group_transitions[pid] = (previous, current, parent)
+        row['transitionAdmitted'] = True
+        return True
+
     def recover_snapshot(self, pid):
         identity = self.known.get(pid)
-        seal = self.seals.get(pid)
+        seal = self.current_seal(pid)
         if identity is None or seal is None or identity[:3] + identity[4:5] != seal:
             return None
         snapshots = []
@@ -158,7 +231,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
 
     def sealed_zombie(self, pid):
         identity = self.known.get(pid)
-        seal = self.seals.get(pid)
+        seal = self.current_seal(pid)
         if seal is None or (identity is not None and identity[:3] + identity[4:5] != seal):
             return False
         try:
@@ -200,6 +273,8 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                            uidMatches=info.uid == self.uid, realUIDMatches=info.ruid == self.uid)
         except Exception:
             row['probeFailed'] = True
+        if pid in self.self_group_observations:
+            row.update(self.self_group_observations[pid])
         self.failure_observations.append(row)
 
     def reject(self, pid, message):
@@ -224,10 +299,11 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                     continue
                 identity = value[:5]
                 seal = identity[:3] + identity[4:5]
-                previous = self.seals.get(pid)
+                previous = self.current_seal(pid)
                 if previous is not None and previous != seal:
-                    self.observe_failure(pid, 'birth_or_group_changed', identity)
-                    raise RuntimeError('Owned process birth or group changed')
+                    if not self.admit_child_self_group(pid, identity):
+                        self.observe_failure(pid, 'birth_or_group_changed', identity)
+                        raise RuntimeError('Owned process birth or group changed')
                 if previous is None:
                     if pid == self.leader:
                         if identity[4] != self.leader:
@@ -241,6 +317,9 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                     if len(self.seals) + len(self.terminal_children) >= 4096:
                         raise RuntimeError('Owned lifetime process bound exceeded')
                     self.seals[pid] = seal
+                    if pid != self.leader:
+                        self.admission_parents[pid] = parent_snapshot + (self.uid, self.uid)
+                        self.parents[pid] = parent
                 prior = self.known.get(pid)
                 if prior is not None and prior[3] != identity[3]:
                     if len(self.transitions) >= 1024:
@@ -474,6 +553,7 @@ def run_original(arguments, root, environment, output, deadline=TEST_DEADLINE,
         'observedTestingProcess': observed_testing,
         'ownedExecutableTransitions': getattr(ownership, 'transitions', []),
         'ownershipFailureObservations': getattr(ownership, 'failure_observations', []),
+        'childSelfGroupObservations': list(getattr(ownership, 'self_group_observations', {}).values()),
         'capturedSnapshotFailures': getattr(ownership, 'captured_snapshot_failures', []),
         'knownOwnedProcesses': list(observed), 'cleanup': cleanup,
         'logSHA256': hashlib.sha256(log_path.read_bytes()).hexdigest(),

@@ -1136,5 +1136,293 @@ class OwnedKernelContracts(unittest.TestCase):
         self.assertIn('Owned lifetime process bound exceeded', owner.errors)
 
 
+class ChildSelfGroupContracts(unittest.TestCase):
+    def setUp(self):
+        self.kernel = Kernel()
+        original = self.kernel.proc_pidinfo
+
+        def live(pid, flavor, argument, pointer, size):
+            result = original(pid, flavor, argument, pointer, size)
+            if result == size:
+                pointer._obj.status = 2
+            return result
+
+        self.kernel.proc_pidinfo = live
+        self.library = patch.object(runner.watchdog.ctypes, 'CDLL', return_value=self.kernel)
+        self.kill = patch.object(runner.os, 'kill', side_effect=self.kernel.kill)
+        self.library.start()
+        self.kill.start()
+        self.addCleanup(self.library.stop)
+        self.addCleanup(self.kill.stop)
+
+    def admitted_child(self):
+        self.kernel.processes = {
+            123: (123, 100, 7, '/usr/bin/make', 123, 1, 501, 501),
+            234: (234, 101, 8, '/fixture/swiftpm-testing-helper', 123, 123, 501, 501),
+        }
+        owner = runner.BoundedOwnership(123, 501)
+        owner.refresh()
+        self.assertEqual(owner.errors, [])
+        self.assertEqual(owner.admission_parents[234], self.kernel.processes[123])
+        self.assertEqual(owner.parents[234], 123)
+        return owner
+
+    def self_group(self):
+        child = list(self.kernel.processes[234])
+        child[4] = 234
+        self.kernel.processes[234] = tuple(child)
+
+    def test_real_admission_preserves_original_parent_and_one_strict_self_group(self):
+        owner = self.admitted_child()
+        original = owner.seals[234]
+        parent = owner.admission_parents[234]
+        self.self_group()
+        rows = owner.refresh()
+        self.assertIn(self.kernel.processes[234][:5], rows)
+        self.assertEqual(owner.seals[234], original)
+        self.assertEqual(owner.admission_parents[234], parent)
+        self.assertEqual(owner.current_seal(234), (234, 101, 8, 234))
+        self.assertEqual(owner.child_group_transitions[234],
+                         ((234, 101, 8, '/fixture/swiftpm-testing-helper', 123),
+                          self.kernel.processes[234][:5], parent))
+        self.assertTrue(all(owner.self_group_observations[234].values()))
+        self.assertEqual(owner.errors, [])
+        self.assertEqual(owner.conflicts(), [])
+
+    def test_child_identity_foreign_group_and_parent_changes_never_admit(self):
+        for index, changed in [(0, 999), (1, 201), (2, 9), (3, '/fixture/changed'),
+                               (4, 456), (5, 345), (6, 502), (7, 502)]:
+            with self.subTest(index=index):
+                owner = self.admitted_child()
+                self.self_group()
+                child = list(self.kernel.processes[234])
+                child[index] = changed
+                self.kernel.processes[234] = tuple(child)
+                owner.refresh()
+                self.assertNotIn(234, owner.child_self_groups)
+                self.assertTrue(owner.errors)
+                self.assertEqual(len(owner.conflicts()), 1)
+                self.assertEqual(self.kernel.signals, [])
+
+    def test_leader_unknown_and_unretained_parent_cannot_adopt_self_group(self):
+        owner = self.admitted_child()
+        leader = list(self.kernel.processes[123])
+        leader[4] = 345
+        self.kernel.processes[123] = tuple(leader)
+        owner.refresh()
+        self.assertTrue(owner.errors)
+        self.assertNotIn(123, owner.child_self_groups)
+        self.assertFalse(owner.admit_child_self_group(456, (456, 101, 8, '/fixture/unknown', 456)))
+        owner = self.admitted_child()
+        del owner.admission_parents[234]
+        self.self_group()
+        owner.refresh()
+        self.assertTrue(owner.errors)
+        self.assertNotIn(234, owner.admission_parents)
+        self.assertNotIn(234, owner.child_self_groups)
+
+    def test_child_full_kernel_records_must_be_complete_live_and_identical(self):
+        for changed in ['incomplete', 'status', 'volatile', 'time']:
+            with self.subTest(changed=changed):
+                owner = self.admitted_child()
+                self.self_group()
+                original = self.kernel.proc_pidinfo
+                reads = 0
+
+                def probe(pid, flavor, argument, pointer, size):
+                    nonlocal reads
+                    result = original(pid, flavor, argument, pointer, size)
+                    if pid == 234:
+                        reads += 1
+                        if reads == 3:
+                            if changed == 'incomplete':
+                                return size - 1
+                            if changed == 'status':
+                                pointer._obj.status = 5
+                            if changed == 'volatile':
+                                pointer._obj.nfiles = 1
+                            if changed == 'time':
+                                pointer._obj.microseconds = 1_000_000
+                    return result
+
+                with patch.object(self.kernel, 'proc_pidinfo', side_effect=probe):
+                    owner.refresh()
+                self.assertTrue(owner.errors)
+                self.assertNotIn(234, owner.child_self_groups)
+                self.assertFalse(owner.self_group_observations[234]['twoChildRecordsMatch'])
+
+    def test_original_parent_is_revalidated_before_and_after_child_records(self):
+        for changed_read in [1, 2]:
+            for field in ['birth', 'group', 'uid', 'real_uid', 'parent', 'missing', 'volatile']:
+                with self.subTest(read=changed_read, field=field):
+                    owner = self.admitted_child()
+                    self.self_group()
+                    original = self.kernel.proc_pidinfo
+                    reads = 0
+
+                    def probe(pid, flavor, argument, pointer, size):
+                        nonlocal reads
+                        result = original(pid, flavor, argument, pointer, size)
+                        if pid == 123:
+                            reads += 1
+                            if reads == changed_read:
+                                if field == 'missing':
+                                    return 0
+                                attribute = {'birth': 'seconds', 'group': 'pgid', 'uid': 'uid',
+                                             'real_uid': 'ruid', 'parent': 'ppid', 'volatile': 'nfiles'}[field]
+                                setattr(pointer._obj, attribute, getattr(pointer._obj, attribute) + 1)
+                        return result
+
+                    with patch.object(self.kernel, 'proc_pidinfo', side_effect=probe):
+                        owner.refresh()
+                    self.assertTrue(owner.errors)
+                    self.assertNotIn(234, owner.child_self_groups)
+
+    def test_parent_executable_change_cannot_be_inferred_from_current_parent(self):
+        owner = self.admitted_child()
+        self.self_group()
+        parent = list(self.kernel.processes[123])
+        parent[3] = '/fixture/new-parent'
+        self.kernel.processes[123] = tuple(parent)
+        owner.refresh()
+        self.assertTrue(owner.errors)
+        self.assertNotIn(234, owner.child_self_groups)
+        self.assertFalse(owner.self_group_observations[234]['parentBeforeMatches'])
+
+    def test_second_group_transition_and_prior_rejection_stay_failed(self):
+        owner = self.admitted_child()
+        self.self_group()
+        owner.refresh()
+        child = list(self.kernel.processes[234])
+        child[4] = 123
+        self.kernel.processes[234] = tuple(child)
+        owner.refresh()
+        self.assertTrue(owner.errors)
+        self.assertEqual(owner.child_self_groups[234], 234)
+        owner = self.admitted_child()
+        child = list(self.kernel.processes[234])
+        child[4] = 456
+        self.kernel.processes[234] = tuple(child)
+        owner.refresh()
+        rejected = list(owner.conflicts())
+        self.self_group()
+        owner.refresh()
+        self.assertNotIn(234, owner.child_self_groups)
+        self.assertEqual(owner.conflicts(), rejected)
+        self.assertTrue(owner.errors)
+
+    def test_signals_revalidate_each_pid_and_never_signal_child_group(self):
+        owner = self.admitted_child()
+        self.self_group()
+        owner.refresh()
+        with patch.object(runner.os, 'killpg') as groups:
+            owner.terminate(signal.SIGTERM)
+            groups.assert_not_called()
+        self.assertIn((234, signal.SIGTERM), self.kernel.signals)
+        self.kernel.signals.clear()
+        original = owner.verified
+
+        def changed(identity):
+            if identity[0] == 234:
+                child = list(self.kernel.processes[234])
+                child[1] += 1
+                self.kernel.processes[234] = tuple(child)
+            return original(identity)
+
+        with patch.object(owner, 'verified', side_effect=changed), patch.object(runner.os, 'killpg') as groups:
+            owner.terminate(signal.SIGKILL)
+            groups.assert_not_called()
+        self.assertNotIn((234, signal.SIGKILL), self.kernel.signals)
+        self.assertTrue(owner.errors)
+
+    def test_descendants_remain_owned_after_group_transition_and_parent_exit(self):
+        owner = self.admitted_child()
+        self.self_group()
+        owner.refresh()
+        self.kernel.processes[345] = (345, 102, 9, '/fixture/descendant', 234, 234, 501, 501)
+        rows = owner.refresh()
+        self.assertIn(self.kernel.processes[345][:5], rows)
+        self.assertEqual(owner.admission_parents[345], self.kernel.processes[234])
+        del self.kernel.processes[123]
+        clock = Clock()
+        cleanup = runner.retire(Process(0), owner, clock.now, clock.sleep)
+        self.assertGreater(cleanup['naturalSurvivorCount'], 0)
+        self.assertGreater(cleanup['remainingOwnedProcesses'], 0)
+        self.assertTrue(cleanup['reaped'])
+
+    def test_real_runner_still_requires_completion_and_natural_join(self):
+        for text, expected in [('Test run with 19 tests in 4 suites passed.\n', True),
+                               ('Test run with 0 tests passed.\n', False), ('Build complete!\n', False)]:
+            with self.subTest(text=text):
+                owner = self.admitted_child()
+                self.self_group()
+                original = owner.refresh
+                first = True
+
+                def refresh():
+                    nonlocal first
+                    rows = original()
+                    if first:
+                        first = False
+                        self.kernel.processes.clear()
+                    return rows
+
+                process = Process(0)
+                with patch.object(owner, 'refresh', side_effect=refresh):
+                    result, _, _ = OriginalNativeOwnerTests.run_fixture(self, text, process, owner)
+                self.assertIs(result['passed'], expected)
+                self.assertEqual(result['cleanup']['remainingOwnedProcesses'], 0)
+                self.assertEqual(result['cleanup']['unverifiedOwnedProcesses'], 0)
+                self.assertEqual(result['cleanup']['ownershipErrors'], [])
+                self.assertTrue(result['childSelfGroupObservations'][0]['transitionAdmitted'])
+                self.assertEqual(process.reaps, 1)
+                self.assertEqual(self.kernel.signals, [])
+
+    def test_approved_group_recovery_and_terminal_retirement_preserve_original_seals(self):
+        owner = self.admitted_child()
+        original_seal = owner.seals[234]
+        self.self_group()
+        owner.refresh()
+        transition = owner.child_group_transitions[234]
+        original = self.kernel.proc_pidinfo
+        reads = 0
+
+        def missing_once(pid, flavor, argument, pointer, size):
+            nonlocal reads
+            if pid == 234:
+                reads += 1
+                if reads == 1:
+                    return 0
+            return original(pid, flavor, argument, pointer, size)
+
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=missing_once):
+            self.assertEqual(owner.snapshot(234), self.kernel.processes[234][:6])
+        self.assertEqual(reads, 3)
+        self.assertEqual(owner.seals[234], original_seal)
+
+        def zombie(pid, flavor, argument, pointer, size):
+            if pid == 234 and argument == 0:
+                return 0
+            result = original(pid, flavor, argument, pointer, size)
+            if pid == 234:
+                pointer._obj.status = 5
+            return result
+
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=zombie):
+            owner.refresh()
+        self.assertNotIn(234, owner.known)
+        self.assertEqual(owner.seals[234], original_seal)
+        self.assertEqual(owner.child_group_transitions[234], transition)
+        self.assertEqual(owner.errors, [])
+        self.assertEqual(owner.conflicts(), [])
+        child = list(self.kernel.processes[234])
+        child[1] += 1
+        self.kernel.processes[234] = tuple(child)
+        owner.refresh()
+        self.assertTrue(owner.errors)
+        self.assertEqual(owner.child_group_transitions[234], transition)
+        self.assertEqual(self.kernel.signals, [])
+
+
 if __name__ == '__main__':
     unittest.main()
