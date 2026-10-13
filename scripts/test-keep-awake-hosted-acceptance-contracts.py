@@ -716,5 +716,94 @@ class AcceptanceContracts(unittest.TestCase):
         self.assertEqual(rows, [[row]])
 
 
+class OwnershipProofEmitterContracts(unittest.TestCase):
+    def producer(self, mode):
+        spec = importlib.util.spec_from_file_location(
+            'producer_contracts', Path(__file__).with_name('test-hosted-native-owner-tests.py'))
+        model = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(model)
+        kernel = model.Kernel()
+        original = kernel.proc_pidinfo
+        calls = 0
+
+        def record(pid, flavor, argument, pointer, size):
+            nonlocal calls
+            result = original(pid, flavor, argument, pointer, size)
+            pointer._obj.status = 5 if pid == 345 else 2
+            if mode == 'unsealed' and pid == 345 and argument == 0:
+                return 0
+            if mode == 'saturated' and pid == 123:
+                calls += 1
+                if calls <= 2:
+                    return 0
+            return result
+
+        with patch.object(model.runner.watchdog.ctypes, 'CDLL', return_value=kernel), \
+                patch.object(model.runner.os, 'kill', side_effect=kernel.kill):
+            owner = model.runner.BoundedOwnership(123, 501)
+            if mode == 'unsealed':
+                kernel.processes[234] = (234, 101, 8, '/fixture/private-parent', 234, 123, 501, 501)
+                with patch.object(kernel, 'proc_pidinfo', side_effect=record):
+                    owner.refresh()
+                self.assertIn(234, owner.known)
+                kernel.processes[345] = (345, 102, 9, '/fixture/private-child', 234, 234, 501, 501)
+            else:
+                owner.recovery_failure_stages = {pid: 'first_kernel' for pid in range(400, 408)}
+            with patch.object(kernel, 'proc_pidinfo', side_effect=record):
+                owner.refresh()
+        self.assertEqual(owner.errors, ['Live owned process identity unavailable'])
+        self.assertEqual(kernel.signals, [])
+        return owner.failure_observations[0]
+
+    def emit(self, candidates):
+        value = AcceptanceContracts().failed_runner()
+        value['cleanup']['ownershipErrors'] = ['Live owned process identity unavailable']
+        value['ownershipFailureObservations'] = candidates
+        output = io.StringIO()
+        with redirect_stdout(output):
+            acceptance.native_failure_diagnostics(value, Path('/synthetic/missing-log'))
+        return [json.loads(line) for line in output.getvalue().splitlines()]
+
+    def test_actual_unsealed_parent_group_and_saturated_recovery_witnesses_reach_real_emitter(self):
+        for mode in ['unsealed', 'saturated']:
+            with self.subTest(mode=mode):
+                row = self.producer(mode)
+                output = self.emit([row])
+                self.assertEqual(output[-1], {'nativeOwnershipFailureObservations': [row]})
+                self.assertNotIn('private', json.dumps(output))
+                self.assertNotIn('pid', row)
+                self.assertEqual(row['recoveryProofStage'],
+                                 'retained_identity' if mode == 'unsealed' else 'first_kernel')
+                if mode == 'unsealed':
+                    self.assertEqual(row['terminalRefusalReason'], 'parent_admission')
+                    self.assertTrue(row['terminalParentGroupMatchesSeal'])
+                    self.assertTrue(row['terminalParentGroupIsSelf'])
+                    self.assertFalse(row['terminalParentGroupMatchesLeader'])
+                else:
+                    self.assertNotIn('recoveryFailureStage', row)
+
+    def test_new_witness_shapes_reject_partial_unknown_and_nonboolean_fields(self):
+        row = self.producer('unsealed')
+        terminal = [key for key in row if key.startswith('terminal')]
+        invalid = [
+            {**row, 'recoveryProofStage': '/fixture/private'},
+            {**row, 'recoveryProofStage': None},
+            {**row, 'terminalRefusalReason': 'unreviewed'},
+            {**row, 'terminalChildRole': '/fixture/private'},
+            {**row, 'terminalParentIdentityKnown': 1},
+            {**row, 'pid': 123},
+        ]
+        for key in terminal:
+            invalid.append({name: value for name, value in row.items() if name != key})
+            if key not in ['terminalRefusalReason', 'terminalChildRole']:
+                invalid.append({**row, key: 1})
+        for changed in invalid:
+            with self.subTest(fields=sorted(changed)):
+                self.assertEqual(self.emit([changed, row])[-1],
+                                 {'nativeOwnershipFailureObservations': [row]})
+        self.assertEqual(self.emit([row] * 12)[-1],
+                         {'nativeOwnershipFailureObservations': [row] * 8})
+
+
 if __name__ == '__main__':
     unittest.main()
