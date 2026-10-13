@@ -89,15 +89,18 @@ async function fixture(run) {
       );
     }
     for (const path of new Set(definitions.flatMap(definitionSupportInputs))) {
-      if (path.endsWith(".txt")) {
+      if (path.endsWith(".txt") || path.endsWith(".mjs")) {
         await mkdir(join(root, path, ".."), { recursive: true });
-        await writeFile(join(root, path), "synthetic license");
+        await writeFile(
+          join(root, path),
+          path.endsWith(".mjs") ? await readFile(path) : "synthetic license",
+        );
       } else {
         await mkdir(join(root, path), { recursive: true });
         await writeFile(join(root, path, "Support.swift"), "synthetic support");
       }
     }
-    await mkdir(join(root, "scripts"));
+    await mkdir(join(root, "scripts"), { recursive: true });
     await writeFile(
       join(root, "scripts/build-extension-support.mjs"),
       "synthetic build input",

@@ -202,6 +202,7 @@ class OriginalNativeOwnerTests(unittest.TestCase):
         original = re.search(r'^ci-extension-database:\n((?:\t.*\n)+)', source, re.MULTILINE).group(1)
         self.assertEqual(original, '\tswift format lint --strict --recursive Extensions/database\n'
                          '\tenv -u EDITH_DATABASE_POSTGRESQL_HOST swift test --package-path Extensions/database/DatabaseEngine --no-parallel --jobs $(EXTENSION_SWIFT_JOBS)\n'
+                         '\t$(call PREPARE_ARGUMENT_PARSER,Extensions/database)\n'
                          "\tcd Extensions/database && env -u EDITH_DATABASE_POSTGRESQL_HOST EDITH_DATABASE_RELATION_FILTERS=0 node test.mjs $(if $(FILTER),'$(FILTER)')\n")
 
     def test_database_mutation_requires_its_exact_started_passed_and_summary_rows(self):

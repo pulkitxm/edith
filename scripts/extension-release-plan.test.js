@@ -1142,6 +1142,10 @@ test("role overrides fingerprint the complete selected SDK without changing unre
       join(root, "scripts/build-extension-support.mjs"),
       "builder",
     );
+    await writeFile(
+      join(root, "scripts/argument-parser-source.mjs"),
+      await readFile("scripts/argument-parser-source.mjs"),
+    );
     const before = await extensionFingerprint(root, definition, definitions);
     const cache = await supportCacheFingerprint(root, definition);
     const core = await extensionFingerprint(root, coreOnly, definitions);
@@ -1160,6 +1164,23 @@ test("role overrides fingerprint the complete selected SDK without changing unre
     const updated = await extensionFingerprint(root, definition, definitions);
     const updatedCache = await supportCacheFingerprint(root, definition);
     await writeFile(
+      join(root, "scripts/argument-parser-source.mjs"),
+      `${await readFile("scripts/argument-parser-source.mjs", "utf8")}\n`,
+    );
+    expect(await extensionFingerprint(root, definition, definitions)).not.toBe(
+      updated,
+    );
+    expect(await supportCacheFingerprint(root, definition)).not.toBe(
+      updatedCache,
+    );
+    expect(await extensionFingerprint(root, coreOnly, definitions)).toBe(core);
+    const parserUpdated = await extensionFingerprint(
+      root,
+      definition,
+      definitions,
+    );
+    const parserCache = await supportCacheFingerprint(root, definition);
+    await writeFile(
       join(
         root,
         "Packages/ExtensionSupport/Sources/EdithExtensionArchive/Source.swift",
@@ -1167,9 +1188,9 @@ test("role overrides fingerprint the complete selected SDK without changing unre
       "unselected archive SDK",
     );
     expect(await extensionFingerprint(root, definition, definitions)).toBe(
-      updated,
+      parserUpdated,
     );
-    expect(await supportCacheFingerprint(root, definition)).toBe(updatedCache);
+    expect(await supportCacheFingerprint(root, definition)).toBe(parserCache);
     const onlyOverride = { ...definition, supportProduct: null };
     expect(await supportCacheFingerprint(root, onlyOverride)).not.toBe("none");
   } finally {
@@ -1215,6 +1236,10 @@ test("native private SDK consumers invalidate on every selected support source",
       join(root, "scripts/build-extension-support.mjs"),
       "builder",
     );
+    await writeFile(
+      join(root, "scripts/argument-parser-source.mjs"),
+      await readFile("scripts/argument-parser-source.mjs"),
+    );
     const before = await extensionFingerprint(root, definition, [definition]);
     const cache = await supportCacheFingerprint(root, definition);
     expect(cache).not.toBe("none");
@@ -1229,6 +1254,18 @@ test("native private SDK consumers invalidate on every selected support source",
       before,
     );
     expect(await supportCacheFingerprint(root, definition)).not.toBe(cache);
+    const updated = await extensionFingerprint(root, definition, [definition]);
+    const updatedCache = await supportCacheFingerprint(root, definition);
+    await writeFile(
+      join(root, "scripts/argument-parser-source.mjs"),
+      `${await readFile("scripts/argument-parser-source.mjs", "utf8")}\n`,
+    );
+    expect(await extensionFingerprint(root, definition, [definition])).not.toBe(
+      updated,
+    );
+    expect(await supportCacheFingerprint(root, definition)).not.toBe(
+      updatedCache,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }
