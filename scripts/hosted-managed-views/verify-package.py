@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from macho_code_identity import executable_identity
+from package_extension_lifecycle_tools import carrier_input, checked_path
 
 
 def load(name, path):
@@ -55,6 +56,12 @@ def extract_regular(archive, target, *, expected_root=None, maximum_bytes=8 * 10
                 shutil.copyfileobj(source, destination, 1024 * 1024)
             output.chmod((entry.external_attr >> 16) & 0o777 or 0o600)
     return total
+
+
+def frozen_carrier_provider(directory):
+    root = Path(__file__).resolve().parents[2]
+    directory = checked_path(root, directory, directory=True)
+    return lambda: carrier_input(root, directory / 'Edith.app', directory / 'carrier-tools')
 
 
 def verify_package(artifact, directory, host, source_commit, fingerprint, host_hash, *, carrier_input_provider=None):
@@ -109,6 +116,10 @@ def verify_package(artifact, directory, host, source_commit, fingerprint, host_h
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 7:
-        raise SystemExit('Supply artifact, destination, host, source commit, fingerprint and host checksum')
-    print(json.dumps(verify_package(*sys.argv[1:]), sort_keys=True))
+    if len(sys.argv) == 9 and sys.argv[7] == '--carrier-directory':
+        provider = frozen_carrier_provider(sys.argv[8])
+        print(json.dumps(verify_package(*sys.argv[1:7], carrier_input_provider=provider), sort_keys=True))
+    else:
+        if len(sys.argv) != 7:
+            raise SystemExit('Supply artifact, destination, host, source commit, fingerprint and host checksum')
+        print(json.dumps(verify_package(*sys.argv[1:]), sort_keys=True))

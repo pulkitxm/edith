@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
   chmod,
+  lstat,
+  mkdir,
   mkdtemp,
   readFile,
   realpath,
+  rm,
   writeFile,
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -48,6 +51,60 @@ import {
   shippingDefinitions,
   shippingExtensionIDs,
 } from "./shipping-extension-policy.mjs";
+
+export async function withFrozenCarrierDirectory(root, artifact, operation) {
+  const sourceRoot = await realpath(root);
+  const local = join(sourceRoot, "local");
+  await mkdir(local, { recursive: true, mode: 0o700 });
+  const parent = await lstat(local);
+  assert(parent.isDirectory() && parent.uid === process.getuid());
+  assert.equal(parent.mode & 0o022, 0);
+  assert.equal(await realpath(local), local);
+  const directory = await mkdtemp(join(local, "native-evidence-carrier-"));
+  await chmod(directory, 0o700);
+  const owned = await lstat(directory);
+  assert(owned.isDirectory() && owned.uid === process.getuid());
+  assert.equal(owned.mode & 0o777, 0o700);
+  assert.equal(await realpath(directory), directory);
+  try {
+    const restored = closedJSON(
+      execFileSync(
+        "python3",
+        [
+          "-B",
+          join(
+            sourceRoot,
+            "scripts/hosted-managed-views/frozen-host-artifact.py",
+          ),
+          artifact,
+          directory,
+          "--tree",
+          "minimal-host",
+        ],
+        {
+          cwd: sourceRoot,
+          timeout: 300000,
+          maxBuffer: 8 * 1024 ** 2,
+          encoding: "utf8",
+        },
+      ),
+    );
+    assert.equal(restored.hostApp, join(directory, "Edith.app"));
+    assert.equal(
+      restored.hostBuildMetadata,
+      join(directory, "build-metadata.json"),
+    );
+    return await operation(directory);
+  } finally {
+    const current = await lstat(directory);
+    assert(current.isDirectory() && current.uid === owned.uid);
+    assert.equal(current.dev, owned.dev);
+    assert.equal(current.ino, owned.ino);
+    assert.equal(current.mode & 0o777, 0o700);
+    assert.equal(await realpath(directory), directory);
+    await rm(directory, { recursive: true });
+  }
+}
 
 export async function readEvidenceAPI(
   path,
@@ -430,46 +487,62 @@ export async function publishNativeEvidence({
   );
   assert.equal(hostHash, metadata.hostExecutableSHA256);
   command("codesign", ["--verify", "--deep", "--strict", frozen.hostApp]);
-  for (const entry of include) {
-    const path = join(work, `verify-${entry.id}`);
-    command("mkdir", ["-m", "700", path]);
-    const definition = definitions.find(({ id }) => id === entry.id);
-    await writeFile(join(path, "definition.json"), JSON.stringify(definition), {
-      mode: 0o600,
-      flag: "wx",
-    });
-    const row = payload.artifacts.find(
-      ({ name }) => name === `extension-${entry.id}`,
-    );
-    const receipt = closedJSON(
-      command("python3", [
-        "-B",
-        join(root, "scripts/hosted-managed-views/verify-package.py"),
-        rowPath(row.name),
-        path,
-        frozen.hostApp,
-        target,
-        entry.fingerprint,
-        hostHash,
-      ]),
-      8 * 1024 ** 2,
-    );
-    validatePackageReceipt(
-      receipt,
-      { ...row, extensionID: entry.id, sourceFingerprint: entry.fingerprint },
-      definition,
-      target,
-      hostHash,
-    );
-    await chmod(join(path, "package", `${entry.id}.json`), 0o600);
-    assert.deepEqual(
-      python("document", join(path, "package", `${entry.id}.json`)),
-      closedJSON(
-        await readFile(resolve(directory, `${entry.id}.json`), "utf8"),
-        1024 ** 2,
-      ),
-    );
-  }
+  await withFrozenCarrierDirectory(
+    root,
+    rowPath("frozen-extension-host"),
+    async (carrierDirectory) => {
+      for (const entry of include) {
+        const path = join(work, `verify-${entry.id}`);
+        command("mkdir", ["-m", "700", path]);
+        const definition = definitions.find(({ id }) => id === entry.id);
+        await writeFile(
+          join(path, "definition.json"),
+          JSON.stringify(definition),
+          {
+            mode: 0o600,
+            flag: "wx",
+          },
+        );
+        const row = payload.artifacts.find(
+          ({ name }) => name === `extension-${entry.id}`,
+        );
+        const receipt = closedJSON(
+          command("python3", [
+            "-B",
+            join(root, "scripts/hosted-managed-views/verify-package.py"),
+            rowPath(row.name),
+            path,
+            frozen.hostApp,
+            target,
+            entry.fingerprint,
+            hostHash,
+            "--carrier-directory",
+            carrierDirectory,
+          ]),
+          8 * 1024 ** 2,
+        );
+        validatePackageReceipt(
+          receipt,
+          {
+            ...row,
+            extensionID: entry.id,
+            sourceFingerprint: entry.fingerprint,
+          },
+          definition,
+          target,
+          hostHash,
+        );
+        await chmod(join(path, "package", `${entry.id}.json`), 0o600);
+        assert.deepEqual(
+          python("document", join(path, "package", `${entry.id}.json`)),
+          closedJSON(
+            await readFile(resolve(directory, `${entry.id}.json`), "utf8"),
+            1024 ** 2,
+          ),
+        );
+      }
+    },
+  );
   const payloadPath = join(work, "payload.json"),
     envelopePath = join(work, "native-evidence.json");
   await writeFile(payloadPath, JSON.stringify(payload), {
