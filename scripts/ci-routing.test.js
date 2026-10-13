@@ -38,7 +38,23 @@ test("Spotify catalog changes run native and locked Rust checks", () => {
   expect(matchesArea("music_player", "docs/music.md")).toBe(false);
   const job = ciJobs["music-player"];
   expect(job.needs).toBe("changes");
-  expect(job.if).toBe("needs.changes.outputs.music_player == 'true'");
+  const allows = new Function(
+    "needs",
+    "github",
+    "inputs",
+    `return Boolean(${job.if})`,
+  );
+  for (const event_name of ["push", "pull_request"]) {
+    for (const selected of [false, true]) {
+      expect(
+        allows(
+          { changes: { outputs: { music_player: String(selected) } } },
+          { event_name },
+          {},
+        ),
+      ).toBe(selected);
+    }
+  }
   expect(job["runs-on"]).toBe("macos-26");
   const checks = job.steps.find(
     (step) => step["working-directory"] === "apps/music-player",
