@@ -460,12 +460,20 @@ jobs:
             apps/companion/target
           key: cargo-${{ runner.os }}-${{ hashFiles('apps/companion/Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-
+      - name: Prepare the PDF extractor
+        run: make prepare-pdf-extract ci-pdf-source-preparation
       - name: Lint
         run: cargo clippy --all-targets --locked -- -D warnings
         working-directory: apps/companion
       - name: Tests
         run: cargo test --locked
         working-directory: apps/companion
+      - name: Build the original Companion container
+        run: docker build --progress=plain --tag edith-companion-pdf-check --file apps/companion/Dockerfile apps/companion
+      - name: Verify the original runtime image
+        run: |
+          test "$(docker image inspect --format '{{ .Config.User }}' edith-companion-pdf-check)" = companion
+          docker run --rm --network none --entrypoint /bin/sh edith-companion-pdf-check -c 'test -x /usr/local/bin/companion && test "$(id -un)" = companion && command -v ffmpeg && command -v exiftool'
       - name: Migrations apply to a real pgvector database
         env:
           DATABASE_URL: postgres://companion:companion-dev@127.0.0.1:5432/companion
