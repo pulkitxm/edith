@@ -413,6 +413,8 @@ extension VideoRenderPipeline {
         }
         let selection = try VideoDeliverySelection(
             range, duration: composition.duration, frameDuration: videoComposition.frameDuration)
+        let fallbackScope = fallbackFrameCache?.begin()
+        defer { if let fallbackScope { fallbackFrameCache?.end(fallbackScope) } }
         let temporary: URL
         if nativeOutput != nil {
             guard !overwrite else { throw VideoDeliveryError.destinationExists }
