@@ -50,8 +50,8 @@ private actor HerdrAccountParityLaunches {
             defaults: defaults, claudeAccounts: model, liveWatcher: { _ in },
             newAgentPaneCreator: { _, _, _, _ in await launches.pane() },
             agentStarter: { _, _, _ in Issue.record("Named account used ambient CLI starter") },
-            accountAgentStarter: { launcher, pane in
-                let environment = try await HerdrAccountFixture.run(launcher, home: root)
+            accountAgentStarter: { command, pane in
+                let environment = try await HerdrAccountFixture.run(command, home: root)
                 await launches.record(pane, environment: environment)
             }, machinesProvider: { [] })
         do {
@@ -122,7 +122,8 @@ private actor HerdrAccountParityLaunches {
                 return await launches.pane()
             },
             agentStarter: { _, _, _ in Issue.record("Named remote account used ambient starter") },
-            remoteAccountAgentStarter: { account, command, arguments, pane, machine in
+            remoteAccountAgentStarter: { account, command, arguments, environment, pane, machine in
+                #expect(environment.isEmpty)
                 await launches.recordRemote(
                     account, command: command, arguments: arguments, pane: pane, machine: machine)
             }, machinesProvider: { [selected, other] })
@@ -149,6 +150,143 @@ private actor HerdrAccountParityLaunches {
             await store.shutdown()
             throw error
         }
+        await store.shutdown()
+    }
+
+    @Test(arguments: ["command", "arguments", "environment"])
+    func invalidSavedLaunchInputsRejectBeforePaneCreation(input: String) async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let root = try HerdrAccountFixture.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = HerdrUIDefaults()
+        HerdrLaunchSettings.setCommand(
+            input == "command" ? "cc\0" : "cc", for: "Claude Code", in: defaults)
+        if input == "arguments" { defaults.set("bad\0", forKey: "herdr.sharedClaudeArguments") }
+        if input == "environment" {
+            defaults.set("ANTHROPIC_API_KEY=wrong", forKey: "herdr.sharedClaudeEnvironment")
+        }
+        let model = ClaudeAccountsModel(directory: root.appendingPathComponent("accounts"))
+        try await model.load()
+        let account = ClaudeAccount(name: "Validation", credential: "synthetic-token")
+        try await model.persist(.init(accounts: [account], defaultID: account.id))
+        let launches = HerdrAccountParityLaunches()
+        let store = HerdrStore(
+            defaults: defaults, claudeAccounts: model, liveWatcher: { _ in },
+            newAgentPaneCreator: { _, _, _, _ in await launches.pane() },
+            accountAgentStarter: { _, _ in Issue.record("Invalid settings reached account startup")
+            },
+            machinesProvider: { [] })
+        await #expect(throws: ClaudeAccountError.self) {
+            try await store.launchNewAgent(
+                kind: "Claude Code", host: .local(herdrPresent: true), existingSpace: nil,
+                newSpaceLabel: "Synthetic")
+        }
+        #expect(await launches.paneCount == 0)
+        #expect(store.accountSessions.isEmpty)
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: try model.directory.appendingPathComponent(account.id.uuidString).path))
+        await store.shutdown()
+    }
+
+    @Test func encodedRemoteCommandRejectsBeforeCreatingSelectedMachinePane() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let root = try HerdrAccountFixture.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = HerdrUIDefaults()
+        let command = "cc " + String(repeating: "x", count: 16_380)
+        let argument = String(repeating: "y", count: 8192)
+        HerdrLaunchSettings.setCommand(command, for: "Claude Code", in: defaults)
+        try HerdrLaunchSettings.setSharedClaudeLaunch(
+            arguments: argument, environment: "", in: defaults)
+        let selected = Machine(name: "Synthetic selected", host: "selected.invalid")
+        var account = ClaudeAccount(name: "Remote validation", credential: "synthetic-token")
+        account.remoteMachineID = selected.id.uuidString
+        let model = ClaudeAccountsModel(directory: root.appendingPathComponent("accounts"))
+        try await model.load()
+        try await model.persist(.init(accounts: [account], defaultID: account.id))
+        let direct = try account.launchCommand(
+            command: command, arguments: [argument], platform: .windows)
+        #expect(direct.utf8.count < 65_536)
+        #expect(
+            remoteHerdrCommand(
+                arguments: HerdrPaneRunCommand.arguments(pane: "validated-pane", command: direct),
+                platform: .windows
+            ).utf8.count > 65_536)
+        let launches = HerdrAccountParityLaunches()
+        let store = HerdrStore(
+            defaults: defaults, claudeAccounts: model, liveWatcher: { _ in },
+            newAgentPaneCreator: { _, _, _, _ in await launches.pane() },
+            remoteAccountAgentStarter: { _, _, _, _, _, _ in
+                Issue.record("Oversized command reached remote startup")
+            },
+            machinesProvider: { [selected] })
+        let host = HerdrHostSnapshot(
+            id: selected.id.uuidString, name: selected.name, isLocal: false, herdrPresent: true,
+            reachable: true, agents: [])
+        await #expect(throws: ClaudeAccountError.self) {
+            try await store.launchNewAgent(
+                kind: "Claude Code", host: host, existingSpace: nil, newSpaceLabel: "Synthetic")
+        }
+        #expect(await launches.paneCount == 0)
+        #expect(store.accountSessions.isEmpty)
+        #expect(
+            (try await ClaudeAccountStorage(directory: model.directory).load()).accounts == [
+                account
+            ])
+        await store.shutdown()
+    }
+
+    @Test func failedPaneCreatesNoBrowserProfileOrLaunchFile() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let root = try HerdrAccountFixture.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = ClaudeAccountsModel(directory: root.appendingPathComponent("accounts"))
+        try await model.load()
+        let account = ClaudeAccount(name: "Browser", authentication: .browserLogin)
+        try await model.persist(.init(accounts: [account], defaultID: account.id))
+        let store = HerdrStore(
+            defaults: HerdrUIDefaults(), claudeAccounts: model, liveWatcher: { _ in },
+            newAgentPaneCreator: { _, _, _, _ in throw HerdrCommandError.malformedResponse },
+            accountAgentStarter: { _, _ in Issue.record("Failed pane reached account startup") },
+            machinesProvider: { [] })
+        await #expect(throws: HerdrCommandError.self) {
+            try await store.launchNewAgent(
+                kind: "Claude Code", host: .local(herdrPresent: true), existingSpace: nil,
+                newSpaceLabel: "Synthetic")
+        }
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: try model.directory.appendingPathComponent(account.id.uuidString).path))
+        #expect(store.accountSessions.isEmpty)
+        await store.shutdown()
+    }
+
+    @Test func failedDirectStartupDoesNotRetainCredentialInMessage() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let root = try HerdrAccountFixture.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = ClaudeAccountsModel(directory: root.appendingPathComponent("accounts"))
+        try await model.load()
+        let account = ClaudeAccount(name: "Failure", credential: "synthetic-private-error-marker")
+        try await model.persist(.init(accounts: [account], defaultID: account.id))
+        let launches = HerdrAccountParityLaunches()
+        let store = HerdrStore(
+            defaults: HerdrUIDefaults(), claudeAccounts: model, liveWatcher: { _ in },
+            newAgentPaneCreator: { _, _, _, _ in await launches.pane() },
+            accountAgentStarter: { command, _ in throw HerdrCommandError.commandFailed(command) },
+            machinesProvider: { [] })
+        try await store.launchNewAgent(
+            kind: "Claude Code", host: .local(herdrPresent: true), existingSpace: nil,
+            newSpaceLabel: "Synthetic")
+        for _ in 0..<100 {
+            if !store.agentStartupMessages.isEmpty { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let message = try #require(store.agentStartupMessages.values.first)
+        #expect(!message.contains(account.credential))
+        #expect(!message.contains("export"))
+        #expect(store.accountSessions.values.contains(account.id.uuidString))
         await store.shutdown()
     }
 

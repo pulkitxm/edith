@@ -19,8 +19,8 @@ private actor HerdrAccountLaunchRecorder {
             workspaceID: "fixture", tabID: "fixture:tab", paneID: "fixture:pane")
     }
 
-    func begin(_ launcher: URL, suspend: Bool) async throws {
-        script = try String(contentsOf: launcher, encoding: .utf8)
+    func begin(_ command: String, suspend: Bool) async throws {
+        script = command
         started = true
         if suspend {
             do { try await Task.sleep(for: .seconds(30)) } catch { cancelled = true; throw error }
@@ -69,7 +69,7 @@ private actor HerdrAccountLaunchRecorder {
         #expect(store.sessions.isEmpty)
     }
 
-    @Test func selectedAccountLaunchUsesPrivateProfileAndOnlySelectedCredential() async throws {
+    @Test func selectedAccountLaunchKeepsNativeProfileAndOnlySelectedCredential() async throws {
         let root = try fixture()
         defer { try? FileManager.default.removeItem(at: root) }
         let first = ClaudeAccount(name: "Synthetic first", credential: "synthetic-first-token")
@@ -90,7 +90,8 @@ private actor HerdrAccountLaunchRecorder {
             try await Task.sleep(for: .milliseconds(5))
         }
         let script = try #require(await recorder.script)
-        #expect(script.contains(second.id.uuidString))
+        #expect(!script.contains("CLAUDE_CONFIG_DIR"))
+        #expect(!script.contains("CLAUDE_SECURESTORAGE_CONFIG_DIR"))
         #expect(script.contains("synthetic-second-key"))
         #expect(!script.contains("synthetic-first-token"))
         #expect(
@@ -99,7 +100,7 @@ private actor HerdrAccountLaunchRecorder {
         await store.drain()
     }
 
-    @Test func cancelledOwnedStartupRemovesLauncherAndKeepsAccount() async throws {
+    @Test func cancelledOwnedStartupCreatesNoLauncherAndKeepsAccount() async throws {
         let root = try fixture()
         defer { try? FileManager.default.removeItem(at: root) }
         let account = ClaudeAccount(name: "Synthetic cancelled", credential: "synthetic-token")
@@ -121,10 +122,7 @@ private actor HerdrAccountLaunchRecorder {
         await store.drain()
         #expect(await recorder.cancelled)
         let profile = try model.directory.appendingPathComponent(account.id.uuidString)
-        #expect(
-            (try FileManager.default.contentsOfDirectory(atPath: profile.path)).filter {
-                $0.hasPrefix("launch-")
-            }.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: profile.path))
         #expect(
             try await ClaudeAccountStorage(directory: model.directory).load().accounts.map(\.id)
                 == [account.id])

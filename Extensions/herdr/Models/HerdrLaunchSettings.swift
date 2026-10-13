@@ -48,19 +48,23 @@ public enum HerdrLaunchSettings {
             + command
     }
 
-    private static func environmentAssignments(_ text: String) throws -> [(String, String)] {
+    static func environmentAssignments(_ text: String) throws -> [(String, String)] {
+        guard text.utf8.count <= 8192, !text.utf8.contains(0) else {
+            throw ClaudeAccountError.invalidRequest
+        }
         let reserved: Set<String> = [
             "CLAUDE_CONFIG_DIR", "CLAUDE_SECURESTORAGE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN",
             "CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "CLAUDE_CODE_OAUTH_SCOPES", "ANTHROPIC_API_KEY",
             "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_PROFILE",
             "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
+            "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST",
         ]
         return try text.split(separator: "\n").map { line in
             let parts = line.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
             let name = String(parts[0]).trimmingCharacters(in: .whitespaces)
             guard parts.count == 2,
                 name.range(of: "^[A-Za-z_][A-Za-z0-9_]*$", options: .regularExpression) != nil,
-                !reserved.contains(name), !line.utf8.contains(0)
+                !reserved.contains(name.uppercased()), !line.utf8.contains(0)
             else {
                 throw ClaudeAccountError.rejected(
                     "Use NAME=value per line. Account credentials and directories are managed separately."
