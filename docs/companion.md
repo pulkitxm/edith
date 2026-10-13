@@ -117,3 +117,12 @@ ed invoke companion companion.search --json '{"query":"synthetic note","limit":1
 ```
 
 Deployment, stack controls, export, import, and erase remain in the Companion UI. See the [public invocation reference](cli/invoke/README.md) for worker availability and request limits.
+
+## Backend development
+
+Run `make prepare-pdf-extract` before invoking Cargo directly in `apps/companion`.
+The command verifies the official PDF extractor source checksum, applies the
+reviewed maintained-parser adaptation, and validates the generated private source
+tree on subsequent runs. `make ci-companion`, `make ci-companion-migrate`, and
+container builds prepare it automatically. The generated source lives in
+`apps/companion/local/pdf-extract` and must stay outside version control.

@@ -460,6 +460,8 @@ jobs:
             apps/companion/target
           key: cargo-${{ runner.os }}-${{ hashFiles('apps/companion/Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-
+      - name: Prepare the PDF extractor
+        run: make prepare-pdf-extract ci-pdf-source-preparation
       - name: Lint
         run: cargo clippy --all-targets --locked -- -D warnings
         working-directory: apps/companion
