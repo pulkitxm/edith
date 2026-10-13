@@ -26,28 +26,38 @@ def execute(developer, binary_directory, environment, run=subprocess.run):
     run(arguments, env=runtime_environment, check=True)
 
 
-def driver_contract(developer):
+def driver_contract(developer, entry="swift", inspect=lambda path: path.lstat()):
+    targets = {"swift": {"swift-frontend", "swift-driver"}, "swift-test": {"swift-package"}}
+    if entry not in targets:
+        raise ValueError("Unexpected selected Swift entry")
     developer = watchdog.canonical_path(developer, directory=True)
     if developer.parts[-2:] != ("Contents", "Developer"):
         raise ValueError("Unexpected selected developer layout")
     toolchain = watchdog.canonical_path(
         developer / "Toolchains/XcodeDefault.xctoolchain", directory=True)
     directory = watchdog.canonical_path(toolchain / "usr/bin", directory=True)
-    alias = directory / "swift"
-    link = alias.lstat()
+    alias = directory / entry
+    link = inspect(alias)
     if link.st_uid not in {0, os.getuid()} or link.st_nlink != 1:
         raise ValueError("Unexpected selected Swift driver ownership")
     if stat.S_ISLNK(link.st_mode):
         target_name = os.readlink(alias)
-        if target_name not in {"swift-frontend", "swift-driver"}:
+        if target_name not in targets[entry]:
             raise ValueError("Unexpected selected Swift driver alias")
         target = watchdog.canonical_path(directory / target_name)
     else:
+        if entry == "swift-test":
+            raise ValueError("Selected Swift test entry must use its package alias")
         target_name = None
         target = watchdog.canonical_path(alias)
-    metadata = target.lstat()
+    metadata = inspect(target)
     if metadata.st_nlink != 1:
         raise ValueError("Selected Swift driver must have one owned link")
+    if entry == "swift-test":
+        directory_info = inspect(directory)
+        if (directory_info.st_uid != 0 or directory_info.st_mode & 0o022
+                or link.st_uid != 0 or metadata.st_uid != 0 or metadata.st_mode & 0o022):
+            raise ValueError("Selected Swift test entry must be immutable and owned")
     def identity(value):
         return tuple(getattr(value, name) for name in (
             "st_dev", "st_ino", "st_mode", "st_uid", "st_nlink", "st_size",
@@ -56,12 +66,14 @@ def driver_contract(developer):
 
 
 class SelectedSwiftDriver:
-    def __init__(self, developer):
+    def __init__(self, developer, entry="swift", inspect=lambda path: path.lstat()):
         self.developer = Path(developer)
-        self.contract = driver_contract(self.developer)
+        self.entry = entry
+        self.inspect = inspect
+        self.contract = driver_contract(self.developer, entry, inspect)
 
     def validate(self):
-        if driver_contract(self.developer) != self.contract:
+        if driver_contract(self.developer, self.entry, self.inspect) != self.contract:
             raise ValueError("Selected Swift driver changed after admission")
         return self.contract[0]
 
