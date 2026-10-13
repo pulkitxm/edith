@@ -78,6 +78,27 @@ function fixtures() {
       ref: "refs/heads/main",
       object: { type: "commit", sha: source },
     },
+    "/actions/runs/13/attempts/1/jobs?per_page=100": {
+      total_count: 1,
+      jobs: [
+        {
+          id: 30,
+          run_id: 13,
+          run_attempt: 1,
+          head_sha: source,
+          name: "publish",
+          status: "in_progress",
+          conclusion: null,
+          steps: [
+            {
+              name: "Publish immutable extension releases and the signed catalog",
+              status: "in_progress",
+              conclusion: null,
+            },
+          ],
+        },
+      ],
+    },
     "/actions/runs/12/attempts/1/jobs?per_page=100": {
       total_count: 2,
       jobs: ["Build DMG", "Publish release"].map((name, index) => ({
@@ -289,4 +310,137 @@ test("ambient overrides wrong owner and diagnostic modes cannot admit host publi
         fixtures(),
       ),
     );
+});
+
+test("same-attempt host observation survives the handoff stamp without granting completed authority", async () => {
+  const f = fixtures();
+  const cap = await admitHostBootstrapIntent(
+    JSON.stringify(template),
+    environment,
+    f,
+  );
+  const intent = verifiedHostBootstrapIntent(cap);
+  assert.deepEqual(await intent.hostState(), {
+    status: "in_progress",
+    conclusion: null,
+  });
+  f.values["/git/ref/heads/main"].object.sha = "b".repeat(40);
+  Object.assign(f.values["/actions/runs/12"], {
+    status: "completed",
+    conclusion: "success",
+  });
+  assert.deepEqual(await intent.hostState(), {
+    status: "completed",
+    conclusion: "success",
+  });
+  const bootstrap = await import("./production-bootstrap.mjs");
+  await assert.rejects(bootstrap.verifiedCompletedHostBootstrap(cap));
+  const completed = await intent.completed();
+  assert.equal(completed.id, 12);
+});
+
+test("failed replayed or foreign observations revoke the pending identity instead of retrying them", async () => {
+  for (const edit of [
+    (f) => {
+      f.values["/actions/runs/12"].run_attempt += 1;
+    },
+    (f) => {
+      f.values["/actions/runs/12"].head_sha = "b".repeat(40);
+    },
+    (f) => {
+      f.values["/actions/runs/12"].actor.id = 1;
+    },
+    (f) => {
+      Object.assign(f.values["/actions/runs/12"], {
+        status: "completed",
+        conclusion: "failure",
+      });
+    },
+    (f) => {
+      Object.assign(f.values["/actions/runs/12"], {
+        status: "completed",
+        conclusion: "cancelled",
+      });
+    },
+    (f) => {
+      f.values["/actions/runs/12"].status = "unknown";
+    },
+    (f) => {
+      f.values["/actions/runs/13"].run_attempt += 1;
+    },
+  ]) {
+    const f = fixtures();
+    const cap = await admitHostBootstrapIntent(
+      JSON.stringify(template),
+      environment,
+      f,
+    );
+    const intent = verifiedHostBootstrapIntent(cap);
+    edit(f);
+    await assert.rejects(intent.hostState());
+    assert.throws(() => verifiedHostBootstrapIntent(cap));
+    await assert.rejects(intent.hostState());
+  }
+});
+
+test("owner cancellation between the host read and final owner read rejects the observation", async () => {
+  const f = fixtures();
+  let cancel = false;
+  const fetchMetadata = async (path) => {
+    const value = await f.fetchMetadata(path);
+    if (cancel && path === "/actions/runs/12")
+      Object.assign(f.values["/actions/runs/13"], {
+        status: "completed",
+        conclusion: "cancelled",
+      });
+    return value;
+  };
+  const cap = await admitHostBootstrapIntent(
+    JSON.stringify(template),
+    environment,
+    { fetchMetadata },
+  );
+  cancel = true;
+  await assert.rejects(verifiedHostBootstrapIntent(cap).hostState());
+  assert.throws(() => verifiedHostBootstrapIntent(cap));
+});
+
+test("active run status cannot conceal a retired replayed or substituted publication job", async () => {
+  for (const edit of [
+    (job) => {
+      job.status = "completed";
+      job.conclusion = "cancelled";
+    },
+    (job) => {
+      job.run_attempt += 1;
+    },
+    (job) => {
+      job.head_sha = "b".repeat(40);
+    },
+    (job) => {
+      job.id = 0;
+    },
+    (job) => {
+      job.steps[0].status = "completed";
+      job.steps[0].conclusion = "failure";
+    },
+    (job) => {
+      job.steps.push({ ...job.steps[0] });
+    },
+    (job) => {
+      job.id += 1;
+    },
+  ]) {
+    const f = fixtures();
+    const cap = await admitHostBootstrapIntent(
+      JSON.stringify(template),
+      environment,
+      f,
+    );
+    const intent = verifiedHostBootstrapIntent(cap);
+    await intent.hostState();
+    edit(f.values["/actions/runs/13/attempts/1/jobs?per_page=100"].jobs[0]);
+    await assert.rejects(intent.hostState());
+    assert.throws(() => verifiedHostBootstrapIntent(cap));
+  }
 });
