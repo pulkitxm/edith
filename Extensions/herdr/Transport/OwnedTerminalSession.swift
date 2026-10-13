@@ -249,6 +249,15 @@ enum OwnedTerminalContext {
         return Data("{}".utf8)
     }
 
+    func waitForExit() async throws -> Int32 {
+        while true {
+            try Task.checkCancellation()
+            guard !stopped else { throw CancellationError() }
+            if let code = terminal.observedExitCode() { return code }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
     func stop() {
         guard !stopped else { return }
         stopped = true
