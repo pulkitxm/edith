@@ -637,7 +637,8 @@ def retire(process, ownership, clock, sleep):
 
 def run_original(arguments, root, environment, output, deadline=TEST_DEADLINE,
                  process_factory=subprocess.Popen, ownership_factory=BoundedOwnership,
-                 clock=time.monotonic, sleep=time.sleep, sample=subprocess.run, selection=None):
+                 clock=time.monotonic, sleep=time.sleep, sample=subprocess.run, selection=None,
+                 testing_process=testing_process):
     if selection is not None and selection not in DATABASE_DIAGNOSTICS:
         raise ValueError('Unknown database diagnostic selection')
     started = clock()
