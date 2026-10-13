@@ -401,6 +401,198 @@ class OwnedKernelContracts(unittest.TestCase):
         self.addCleanup(self.kill.stop)
         self.owner = runner.BoundedOwnership(123, 501)
 
+    def add_path_gap(self, pid=234):
+        self.kernel.processes[pid] = (pid, 101, 8, '/fixture/compiler', 123, 123, 501, 501)
+        original_path = self.kernel.proc_pidpath
+        original_info = self.kernel.proc_pidinfo
+        def path(child, buffer, size):
+            return 0 if child == pid else original_path(child, buffer, size)
+        def info(child, flavor, argument, pointer, size):
+            result = original_info(child, flavor, argument, pointer, size)
+            if child == pid:
+                pointer._obj.status = 2
+            return result
+        return path, info
+
+    def test_path_gap_remains_unverified_until_exact_same_birth_full_identity_recovers(self):
+        path, info = self.add_path_gap()
+        with patch.object(self.kernel, 'proc_pidpath', side_effect=path), \
+                patch.object(self.kernel, 'proc_pidinfo', side_effect=info):
+            for _ in range(2):
+                self.assertEqual({item[0] for item in self.owner.refresh()}, {123})
+                self.assertNotIn(234, self.owner.known)
+                self.assertEqual(len(self.owner.conflicts()), 1)
+                self.assertEqual(self.owner.errors, [])
+        self.assertEqual(self.kernel.signals, [])
+        self.owner.refresh()
+        self.assertIn(234, self.owner.known)
+        self.assertEqual(self.owner.pending, {})
+        self.assertEqual(self.owner.conflicts(), [])
+        self.assertEqual(self.owner.errors, [])
+        self.assertEqual(self.owner.failure_observations[0]['kind'], 'pending_executable_identity')
+
+    def test_retirement_uses_final_pending_resolution_and_retains_permanent_rejections(self):
+        for resolves in (False, True):
+            with self.subTest(resolves=resolves):
+                owner = unittest.mock.Mock()
+                unresolved = [123]
+                owner.errors = ['permanent ownership rejection']
+                calls = 0
+                def refresh():
+                    nonlocal calls
+                    calls += 1
+                    if resolves and calls >= 2:
+                        unresolved.clear()
+                    return []
+                owner.refresh.side_effect = refresh
+                owner.conflicts.side_effect = lambda: list(unresolved)
+                clock = Clock()
+                result = runner.retire(Process(0), owner, clock.now, clock.sleep)
+                self.assertEqual(result['unverifiedOwnedProcesses'], 0 if resolves else 1)
+                self.assertEqual(result['ownershipErrors'], ['permanent ownership rejection'])
+                self.assertEqual(clock.value, 0)
+                owner.terminate.assert_not_called()
+
+    def test_unresolved_path_gap_cannot_turn_clean_exit_and_real_test_completion_into_pass(self):
+        path, info = self.add_path_gap()
+        self.kernel.processes[345] = (345, 102, 9, '/fixture/swiftpm-testing-helper', 123, 123, 501, 501)
+        original_refresh = self.owner.refresh
+        first = True
+        def refresh():
+            nonlocal first
+            rows = original_refresh()
+            if first:
+                first = False
+                del self.kernel.processes[345]
+                del self.kernel.processes[123]
+            return rows
+        with patch.object(self.kernel, 'proc_pidpath', side_effect=path), \
+                patch.object(self.kernel, 'proc_pidinfo', side_effect=info), \
+                patch.object(self.owner, 'refresh', side_effect=refresh):
+            result, _, _ = OriginalNativeOwnerTests.run_fixture(
+                self, 'Test run with 1 test passed.\n', Process(0), self.owner)
+        self.assertFalse(result['passed'])
+        self.assertTrue(result['testsCompleted'])
+        self.assertTrue(result['observedTestingProcess'])
+        self.assertEqual(result['pendingOwnedIdentityCount'], 1)
+        self.assertEqual(result['cleanup']['unverifiedOwnedProcesses'], 1)
+        self.assertNotIn((234, signal.SIGTERM), self.kernel.signals)
+        self.assertNotIn((234, signal.SIGKILL), self.kernel.signals)
+
+    def test_quarantined_child_birth_or_uid_change_never_admits_or_signals_reused_pid(self):
+        for index, value in [(1, 200), (2, 99), (6, 502), (7, 502)]:
+            with self.subTest(index=index):
+                self.kernel.processes = {123: (123, 100, 7, '/usr/bin/make', 123, 1, 501, 501)}
+                owner = runner.BoundedOwnership(123, 501)
+                path, info = self.add_path_gap()
+                with patch.object(self.kernel, 'proc_pidpath', side_effect=path), \
+                        patch.object(self.kernel, 'proc_pidinfo', side_effect=info):
+                    owner.refresh()
+                changed = list(self.kernel.processes[234])
+                changed[index] = value
+                self.kernel.processes[234] = tuple(changed)
+                owner.refresh()
+                self.assertTrue(owner.errors)
+                self.assertNotIn(234, owner.known)
+                owner.terminate(signal.SIGKILL)
+                self.assertNotIn((234, signal.SIGKILL), self.kernel.signals)
+
+    def test_pending_child_terminal_or_gone_retires_without_becoming_testing_or_signal_authority(self):
+        for terminal in (False, True):
+            with self.subTest(terminal=terminal):
+                self.kernel.processes = {123: (123, 100, 7, '/usr/bin/make', 123, 1, 501, 501)}
+                owner = runner.BoundedOwnership(123, 501)
+                path, info = self.add_path_gap()
+                with patch.object(self.kernel, 'proc_pidpath', side_effect=path), \
+                        patch.object(self.kernel, 'proc_pidinfo', side_effect=info):
+                    owner.refresh()
+                if not terminal:
+                    del self.kernel.processes[234]
+                    owner.refresh()
+                else:
+                    original = self.kernel.proc_pidinfo
+                    def zombie(pid, flavor, argument, pointer, size):
+                        result = original(pid, flavor, argument, pointer, size)
+                        if pid == 234:
+                            pointer._obj.status = 5
+                        return result
+                    with patch.object(self.kernel, 'proc_pidpath', side_effect=path), \
+                            patch.object(self.kernel, 'proc_pidinfo', side_effect=zombie):
+                        owner.refresh()
+                self.assertEqual(owner.pending, {})
+                self.assertEqual(owner.errors, [])
+                self.assertNotIn(234, owner.known)
+                self.assertEqual(self.kernel.signals, [])
+
+    def test_new_terminal_child_foreign_parent_or_unstable_birth_remains_failure(self):
+        for failure in ('foreign-parent', 'birth-change', 'parent-change'):
+            with self.subTest(failure=failure):
+                self.kernel.processes = {123: (123, 100, 7, '/usr/bin/make', 123, 1, 501, 501),
+                                         234: (234, 101, 8, '/fixture/compiler', 123, 123, 501, 501)}
+                owner = runner.BoundedOwnership(123, 501)
+                original = self.kernel.proc_pidinfo
+                calls = 0
+                def zombie(pid, flavor, argument, pointer, size):
+                    nonlocal calls
+                    if pid == 234 and argument == 0:
+                        return 0
+                    result = original(pid, flavor, argument, pointer, size)
+                    if pid == 234:
+                        calls += 1
+                        pointer._obj.status = 5
+                        if failure == 'foreign-parent':
+                            pointer._obj.ppid = 999
+                        if failure == 'birth-change' and calls == 2:
+                            pointer._obj.microseconds = 9
+                        if failure == 'parent-change' and calls == 2:
+                            self.kernel.processes[123] = (123, 200, 7, '/fixture/reused', 123, 1, 501, 501)
+                    return result
+                with patch.object(self.kernel, 'proc_pidinfo', side_effect=zombie):
+                    owner.refresh()
+                self.assertTrue(owner.errors)
+                self.assertNotIn(234, owner.seals)
+                self.assertNotIn(234, owner.known)
+
+    def test_only_same_birth_child_own_group_transition_updates_current_signal_identity(self):
+        self.kernel.processes[234] = (234, 101, 8, '/fixture/compiler', 123, 123, 501, 501)
+        self.owner.refresh()
+        self.kernel.processes[234] = (234, 101, 8, '/fixture/compiler', 234, 123, 501, 501)
+        self.owner.refresh()
+        self.assertEqual(self.owner.errors, [])
+        self.assertEqual(self.owner.group_transitions, [
+            {'previous': (234, 101, 8, 123), 'current': (234, 101, 8, 234)}])
+        self.assertEqual(self.owner.known[234][4], 234)
+        self.kernel.processes[234] = (234, 200, 8, '/fixture/reused', 234, 123, 501, 501)
+        self.owner.terminate(signal.SIGKILL)
+        self.assertNotIn((234, signal.SIGKILL), self.kernel.signals)
+        self.assertTrue(self.owner.errors)
+
+    def test_foreign_group_changed_leader_or_unstable_transition_never_gains_signal_authority(self):
+        for failure in ('foreign-group', 'leader', 'unstable'):
+            with self.subTest(failure=failure):
+                self.kernel.processes = {123: (123, 100, 7, '/usr/bin/make', 123, 1, 501, 501),
+                                         234: (234, 101, 8, '/fixture/compiler', 123, 123, 501, 501)}
+                owner = runner.BoundedOwnership(123, 501)
+                owner.refresh()
+                pid = 123 if failure == 'leader' else 234
+                values = list(self.kernel.processes[pid])
+                values[4] = 999 if failure != 'unstable' else pid
+                self.kernel.processes[pid] = tuple(values)
+                original = self.kernel.proc_pidpath
+                reads = 0
+                def changing(child, buffer, size):
+                    nonlocal reads
+                    result = original(child, buffer, size)
+                    if child == 234:
+                        reads += 1
+                        if reads == 2:
+                            buffer.value = b'/fixture/changed'
+                    return result
+                with patch.object(self.kernel, 'proc_pidpath', side_effect=changing):
+                    owner.refresh()
+                self.assertTrue(owner.errors)
+                self.assertEqual(owner.group_transitions, [])
+
     def test_sealed_zombie_retires_without_signals_and_retains_birth_history(self):
         self.owner.refresh()
         seal = self.owner.seals[123]
@@ -457,7 +649,7 @@ class OwnedKernelContracts(unittest.TestCase):
                 self.assertIn(123, owner.known)
                 self.assertEqual(self.kernel.signals, [])
 
-    def test_unknown_zombie_never_gains_a_seal_or_suppresses_failure(self):
+    def test_twice_verified_terminal_child_retires_with_owned_parent_without_signal_authority(self):
         self.kernel.processes[234] = (234, 101, 8, '/fixture/compiler', 123, 123, 501, 501)
         original = self.kernel.proc_pidinfo
 
@@ -471,10 +663,11 @@ class OwnedKernelContracts(unittest.TestCase):
 
         with patch.object(self.kernel, 'proc_pidinfo', side_effect=zombie):
             self.assertEqual({item[0] for item in self.owner.refresh()}, {123})
-        self.assertNotIn(234, self.owner.seals)
+        self.assertEqual(self.owner.seals[234], (234, 101, 8, 123))
         self.assertNotIn(234, self.owner.known)
-        self.assertEqual(self.owner.errors, ['Live owned process identity unavailable'])
-        self.assertIs(self.owner.failure_observations[0]['knownSeal'], False)
+        self.assertEqual(self.owner.errors, [])
+        self.assertEqual(self.owner.terminal_descendants, {234})
+        self.assertEqual(self.owner.failure_observations, [])
         self.assertEqual(self.kernel.signals, [])
 
     def test_later_zombie_proof_does_not_clear_an_existing_ownership_failure(self):
