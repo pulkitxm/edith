@@ -36,6 +36,8 @@ async function fixture() {
   await mkdir(resources, { recursive: true });
   await writeFile(executable, "synthetic executable", { mode: 0o755 });
   await writeFile(target, "synthetic launcher", { mode: 0o755 });
+  await chmod(executable, 0o755);
+  await chmod(target, 0o755);
   await writeFile(join(resources, "index.json"), "synthetic index");
   return { root, host, executable, launcher, target, resources };
 }

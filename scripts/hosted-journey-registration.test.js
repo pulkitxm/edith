@@ -325,6 +325,8 @@ test("command bounds and invalid receipt permissions remain failures", async () 
                   : JSON.stringify(receipt),
                 { mode: mode === "public" ? 0o644 : 0o600 },
               );
+            if (mode === "public")
+              await chmod(join(options.directory, "registration.json"), 0o644);
           },
         }),
       ).rejects.toMatchObject({ category });
