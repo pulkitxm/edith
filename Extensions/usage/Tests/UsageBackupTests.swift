@@ -1,3 +1,4 @@
+import EdithExtensionAccounts
 import EdithExtensionSupport
 import Foundation
 import Testing
@@ -252,6 +253,121 @@ import Testing
         #expect(status?["scheduled"] as? Bool == false)
         await provider.shutdown()
         #expect(!FileManager.default.fileExists(atPath: cloud.path))
+    }
+
+    @Test @MainActor func ownedBackupWhitelistNeverExportsOrRestoresSavedAccountFiles()
+        async throws
+    {
+        let temporaryPath = try #require(ProcessInfo.processInfo.environment["TMPDIR"])
+        let temporary = URL(fileURLWithPath: temporaryPath, isDirectory: true)
+            .resolvingSymlinksInPath()
+        let root = temporary.appendingPathComponent(
+            "usage-backup-synthetic-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        defer { try? FileManager.default.removeItem(at: root) }
+        try #require(root.deletingLastPathComponent().path == temporary.path)
+        let suite = "com.pulkit.edith.tests.backup-boundary-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: AppStorageKeys.Backup.icloud)
+        defaults.set(true, forKey: AppStorageKeys.Backup.usage)
+        defaults.set(true, forKey: AppStorageKeys.Backup.limits)
+        let application = root.appendingPathComponent("Edith")
+        let data = application.appendingPathComponent("Data/usage")
+        try FileManager.default.createDirectory(
+            at: data, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let environment = [
+            "EDITH_APPLICATION_IDENTIFIER": suite,
+            "EDITH_EXTENSION_ID": "usage",
+            "EDITH_EXTENSION_DATA_ROOT": data.path,
+            "EDITH_EXTENSION_STATE_ROOT": application.appendingPathComponent("ExtensionState").path,
+        ]
+        let accounts: URL
+        do {
+            accounts = try ClaudeAccountStorage.directory(environment: environment)
+        } catch {
+            Issue.record("Synthetic account directory admission failed")
+            throw error
+        }
+        let local = UsageBackupProvider.localDirectory(environment: environment, root: data)
+        let cloud: URL
+        do {
+            cloud = try UsageBackupProvider.cloudDirectory(
+                identifier: suite, root: data, home: root)
+        } catch {
+            Issue.record("Synthetic backup directory admission failed")
+            throw error
+        }
+        let profile = accounts.appendingPathComponent(UUID().uuidString)
+        let nested = local.appendingPathComponent("Accounts")
+        for directory in [profile, nested] {
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700])
+        }
+        let marker = "synthetic-account-boundary-8d19c0a6"
+        let secret = Data("{\"sentinel\":\"\(marker)\"}".utf8)
+        let protected = [
+            accounts.appendingPathComponent("accounts.json"),
+            profile.appendingPathComponent(".credentials.json"),
+            local.appendingPathComponent("accounts.json"),
+            nested.appendingPathComponent(".credentials.json"),
+        ]
+        for file in protected { try secret.write(to: file) }
+        try usage("2026-08-20", tokens: 23).write(to: local.appendingPathComponent("usage.json"))
+        let row = LimitsHistory.row(
+            session: .init(percent: 23, resetsAt: nil), week: nil,
+            now: Date(timeIntervalSince1970: 1_750_000_000))
+        try Data(row.line.utf8).write(to: local.appendingPathComponent("limits-history.jsonl"))
+        let provider = UsageBackupProvider(
+            directory: local, cloud: cloud, defaults: defaults, cloudAvailable: { true },
+            onBattery: { false })
+        do {
+            let response = try await provider.execute("backup.synchronize", payload: Data())
+            #expect(String(decoding: response, as: UTF8.self) == "{\"synchronized\":true}")
+            let files = try FileManager.default.contentsOfDirectory(atPath: cloud.path)
+            #expect(Set(files) == ["usage.json", "limits-history.jsonl"])
+            for name in ["usage.json", "limits-history.jsonl"] {
+                let exported = try Data(contentsOf: cloud.appendingPathComponent(name))
+                let retained = try Data(contentsOf: local.appendingPathComponent(name))
+                #expect(exported == retained)
+                #expect(!String(decoding: exported, as: UTF8.self).contains(marker))
+            }
+            for file in protected {
+                let retained = try Data(contentsOf: file)
+                #expect(retained == secret)
+            }
+            let foreignMarker = "synthetic-cloud-only-account-9c0e327a"
+            let foreign = Data(foreignMarker.utf8)
+            let cloudAccounts = cloud.appendingPathComponent("Accounts")
+            try FileManager.default.createDirectory(
+                at: cloudAccounts, withIntermediateDirectories: false,
+                attributes: [.posixPermissions: 0o700])
+            try foreign.write(to: cloud.appendingPathComponent("cloud-only-accounts.json"))
+            try foreign.write(to: cloudAccounts.appendingPathComponent(".credentials.json"))
+            try usage("2026-08-22", tokens: 42).write(
+                to: cloud.appendingPathComponent("usage.json"))
+            let restored = await provider.restoreOnEnable()
+            #expect(restored)
+            let restoredUsage = try Data(contentsOf: local.appendingPathComponent("usage.json"))
+            #expect(String(decoding: restoredUsage, as: UTF8.self).contains("2026-08-22"))
+            #expect(!String(decoding: restoredUsage, as: UTF8.self).contains(foreignMarker))
+            #expect(
+                !FileManager.default.fileExists(
+                    atPath: local.appendingPathComponent("cloud-only-accounts.json").path))
+            let nestedCredential = try Data(
+                contentsOf: nested.appendingPathComponent(".credentials.json"))
+            #expect(nestedCredential == secret)
+            for file in protected {
+                let retained = try Data(contentsOf: file)
+                #expect(retained == secret)
+            }
+        } catch {
+            await provider.shutdown()
+            throw error
+        }
+        await provider.shutdown()
     }
 
     @MainActor private func wait(_ ready: () -> Bool) async {
