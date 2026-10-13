@@ -278,6 +278,33 @@ export function nativePackageLinkFlags(root, definition, contents) {
   ];
 }
 
+export function extensionPackageHostContext({
+  root,
+  development,
+  developmentHostRoot,
+  environment = {},
+  containedHostApp = environment.EXTENSION_CONTAINING_HOST_APP,
+  carrierTools = environment.EXTENSION_UI_CARRIER_TOOLS,
+}) {
+  if (developmentHostRoot !== undefined && development !== true)
+    throw new Error(
+      "An alternate frozen host source requires a development package",
+    );
+  const contextRoot =
+    developmentHostRoot === undefined ? root : resolve(developmentHostRoot);
+  return Object.freeze({
+    root: contextRoot,
+    frozenHostApp: resolve(contextRoot, "local/minimal-host/Edith.app"),
+    hostApp:
+      containedHostApp ??
+      (development
+        ? resolve(contextRoot, "local/minimal-host/Edith.app")
+        : undefined),
+    carrierTools:
+      carrierTools ?? resolve(contextRoot, "local/minimal-host/carrier-tools"),
+  });
+}
+
 export async function buildExtensionPackage({
   root = process.cwd(),
   id,
@@ -287,10 +314,18 @@ export async function buildExtensionPackage({
   tagOverride,
   environment = process.env,
   functionalRoleBuild,
+  developmentHostRoot,
   containedHostApp = environment.EXTENSION_CONTAINING_HOST_APP,
-  carrierTools = environment.EXTENSION_UI_CARRIER_TOOLS ??
-    resolve(root, "local/minimal-host/carrier-tools"),
+  carrierTools = environment.EXTENSION_UI_CARRIER_TOOLS,
 }) {
+  const hostContext = extensionPackageHostContext({
+    root,
+    development,
+    developmentHostRoot,
+    environment,
+    containedHostApp,
+    carrierTools,
+  });
   const functionalInputs = {
     root,
     id,
@@ -322,9 +357,7 @@ export async function buildExtensionPackage({
   validateMinimumSystemVersion(definition.minimumSystemVersion);
   await verifyExtensionNativeDependencies(root, definition);
   await writeHostABI(root);
-  containedHostApp ??= development
-    ? resolve(root, "local/minimal-host/Edith.app")
-    : undefined;
+  containedHostApp = hostContext.hostApp;
   if (!containedHostApp)
     throw new Error(
       "A frozen signed host app is required for extension UI packages",
@@ -813,12 +846,12 @@ export async function buildExtensionPackage({
     JSON.stringify(payloadManifest),
   );
   const uiCarrier = await buildExtensionUICarrier({
-    root,
+    root: hostContext.root,
     environment,
     functionalRoleBuild,
     functionalInputs,
-    carrierTools,
-    frozenHostApp: resolve(root, "local/minimal-host/Edith.app"),
+    carrierTools: hostContext.carrierTools,
+    frozenHostApp: hostContext.frozenHostApp,
     minimumSystemVersion: definition.minimumSystemVersion,
     hostApp: containedHostApp,
     payloadDirectory: payload,

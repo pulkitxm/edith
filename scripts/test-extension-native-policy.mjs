@@ -88,11 +88,26 @@ import Foundation
     id: "mock",
     output: join(root, "output"),
     development: true,
+    developmentHostRoot: process.cwd(),
   });
   const payload = join(root, "unpacked");
   execFileSync("ditto", ["-xk", join(root, "output/mock.zip"), payload]);
-  const app = join(payload, "mock/app.bundle");
-  const helper = join(payload, "mock/helper.bundle");
+  const carrier = join(payload, "mock/ExtensionCarrier.app");
+  const roles = join(
+    carrier,
+    "Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/mock",
+  );
+  const app = join(roles, "app.bundle");
+  const helper = join(roles, "helper.bundle");
+  for (const role of ["app", "helper"]) {
+    try {
+      await access(join(payload, `mock/${role}.bundle`));
+      throw new Error("A role payload remained outside the UI worker");
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  execFileSync("codesign", ["--verify", "--strict", "--deep", carrier]);
   await access(join(app, "Contents/Frameworks/libFixtureNative.dylib"));
   try {
     await access(join(helper, "Contents/Frameworks/libFixtureNative.dylib"));
@@ -132,6 +147,12 @@ guard let result = object.perform(NSSelectorFromString("execute:"), with: ["oper
   );
   if (manifest.id !== "mock")
     throw new Error("Fixture package identity changed");
+  const containedManifest = JSON.parse(
+    await readFile(join(roles, "package.json"), "utf8"),
+  );
+  for (const key of ["id", "version", "hostABI", "architecture"])
+    if (manifest[key] !== containedManifest[key])
+      throw new Error("Contained role package identity changed");
   process.stdout.write(
     `${JSON.stringify({ selectedRoleNativePayloadValidated: true, unselectedRolePayloadAbsent: true, eagerNativeLinkageAbsent: true, relocatedLazyNativeInferenceLoaded: true, strictSignedRolesValidated: true })}\n`,
   );
