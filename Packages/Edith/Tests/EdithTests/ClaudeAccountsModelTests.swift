@@ -19,6 +19,13 @@ import Testing
         let restored = ClaudeAccountsModel(directory: root)
         try await restored.load()
         #expect(restored.launchSelection("default") == personal.id.uuidString)
+        var renamed = personal
+        renamed.name = "Updated personal"
+        try await ClaudeAccountStorage(directory: root).save(.init(accounts: [renamed, company]))
+        await model.rememberLaunchSelection(company.id.uuidString)
+        try await restored.load()
+        #expect(restored.state.accounts.first?.name == "Updated personal")
+        #expect(restored.launchSelection("default") == company.id.uuidString)
         try await model.persist(.init(accounts: [personal]))
         #expect(model.launchSelection("default") == personal.id.uuidString)
         try await model.persist(.init())

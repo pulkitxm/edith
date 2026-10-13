@@ -21,4 +21,12 @@ public actor ClaudeAccountStorage {
         try JSONEncoder().encode(state).write(to: file, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
     }
+
+    public func rememberLaunchAccount(_ id: UUID) throws -> ClaudeAccountsState {
+        var state = try load()
+        guard state.accounts.contains(where: { $0.id == id }) else { return state }
+        state.defaultID = id
+        try save(state)
+        return state
+    }
 }

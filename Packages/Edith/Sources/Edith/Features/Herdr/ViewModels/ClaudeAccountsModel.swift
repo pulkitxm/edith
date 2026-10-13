@@ -79,13 +79,15 @@ import Observation
 
     func rememberLaunchSelection(_ selection: String) async {
         guard let id = UUID(uuidString: selection), account(id) != nil else { return }
-        var next = state
-        next.defaultID = id
-        await save(next)
+        do {
+            state = try await storage.rememberLaunchAccount(id)
+            try? UsageAgentOperations.requestLimitsRefresh()
+            error = nil
+        } catch { self.error = error.localizedDescription }
     }
 
     func launchSelection(_ selection: String) -> String {
-        if let id = UUID(uuidString: selection), account(id) != nil { return selection }
+        if let id = UUID(uuidString: selection), account(id) != nil { return id.uuidString }
         return (account(state.defaultID) ?? state.accounts.first)?.id.uuidString ?? "cli"
     }
 }
