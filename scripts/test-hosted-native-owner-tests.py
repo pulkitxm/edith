@@ -1936,7 +1936,7 @@ class TerminalRefusalWitnessTests(unittest.TestCase):
         process = Process(0)
         ownership = Ownership(process)
         ownership.private_failure_pid_roles = {123: 'leader', 234: 'unsealed'}
-        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as directory:
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as directory:
             result = runner.run_original(
                 ['synthetic-command'], Path(directory), {}, Path(directory),
                 process_factory=lambda *args, **kwargs: process,

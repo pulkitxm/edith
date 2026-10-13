@@ -30,19 +30,27 @@ test.each([
 );
 
 test.each([
-  "ci-extension-time-lapse",
-  "ci-extension-blitztree",
-  "ci-extension-keep-awake",
-  "ci-extension-attention",
-])("%s retains its existing nonparser or generated support route", (target) => {
-  const commands = recipe(target);
-  expect(commands).not.toContain("scripts/prepare-argument-parser.py");
-  expect(commands).toContain("swift test --package-path");
-  if (target === "ci-extension-attention")
-    expect(commands).toContain(
-      "scripts/prepare-extension-native-support.mjs attention",
-    );
-});
+  ["ci-extension-time-lapse", "swift test --package-path"],
+  ["ci-extension-blitztree", "swift test --package-path"],
+  [
+    "ci-extension-keep-awake",
+    "python3 -B scripts/run-host-swift-testing.py package-test --package-path Extensions/keepAwake",
+  ],
+  ["ci-extension-attention", "swift test --package-path"],
+])(
+  "%s retains its existing nonparser or generated support route",
+  (target, compiler) => {
+    const commands = recipe(target);
+    expect(commands).not.toContain("scripts/prepare-argument-parser.py");
+    expect(commands).toContain(compiler);
+    if (target === "ci-extension-keep-awake")
+      expect(commands).not.toContain("/usr/bin/time -p swift test");
+    if (target === "ci-extension-attention")
+      expect(commands).toContain(
+        "scripts/prepare-extension-native-support.mjs attention",
+      );
+  },
+);
 
 function testArguments(argumentsList) {
   const source = readFileSync("Packages/Edith/test.sh", "utf8");
