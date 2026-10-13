@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { closedJSON, successfulRun } from "./contract.mjs";
+import { publicationStep } from "./evidence.mjs";
 import { productionReadonlyEnvironment } from "./production-catalog-channel.mjs";
 
 const admissions = new WeakMap();
@@ -219,6 +220,51 @@ export async function admitHostBootstrapIntent(
     await ownerRun();
     return run;
   };
+  let observationJob;
+  const observationOwner = async () => {
+    await ownerRun();
+    const jobs = await fetchMetadata(
+      `/actions/runs/${owner.run}/attempts/${owner.runAttempt}/jobs?per_page=100`,
+    );
+    current();
+    assert(jobs.total_count <= 100 && jobs.jobs.length === jobs.total_count);
+    assert.equal(
+      new Set(jobs.jobs.map((job) => job.id)).size,
+      jobs.jobs.length,
+    );
+    for (const job of jobs.jobs) integer(job.id);
+    const matches = jobs.jobs.filter((job) => job.name === "publish");
+    assert.equal(matches.length, 1);
+    const job = matches[0];
+    assert.equal(job.run_id, owner.run);
+    assert.equal(job.run_attempt, owner.runAttempt);
+    assert.equal(job.head_sha, owner.source);
+    assert.equal(job.status, "in_progress");
+    assert.equal(job.conclusion, null);
+    const steps = job.steps.filter((step) => step.name === publicationStep);
+    assert.equal(steps.length, 1);
+    assert.equal(steps[0].status, "in_progress");
+    assert.equal(steps[0].conclusion, null);
+    observationJob ??= job.id;
+    assert.equal(job.id, observationJob);
+    await ownerRun();
+  };
+  const hostState = async () => {
+    try {
+      assert.equal(role, "extensions");
+      await observationOwner();
+      const run = await fetchMetadata(`/actions/runs/${host.run}`);
+      current();
+      runIdentity(run, host, ".github/workflows/ci.yml");
+      if (run.status === "completed") assert.equal(run.conclusion, "success");
+      else activeRun(run);
+      await observationOwner();
+      return Object.freeze({ status: run.status, conclusion: run.conclusion });
+    } catch (error) {
+      state.closed = true;
+      throw error;
+    }
+  };
   state.identity = freeze({
     source: template.source,
     host: { ...host },
@@ -244,6 +290,7 @@ export async function admitHostBootstrapIntent(
       }
     },
     completed,
+    hostState,
   });
   admissions.set(capability, state);
   try {

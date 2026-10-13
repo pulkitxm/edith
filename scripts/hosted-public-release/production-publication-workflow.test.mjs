@@ -70,10 +70,9 @@ test("real restoration is reported through inherited pipes only and public summa
       'stdio: ["ignore", "inherit", "inherit", "pipe", "pipe"]',
     ),
   );
-  assert(
-    coordinator.includes(
-      "await publication.promoteStagedExtensionPublication(stage.catalogStage)",
-    ),
+  assert.match(
+    coordinator,
+    /await publication\.promoteStagedExtensionPublication\(\s*stage\.catalogStage\s*,?\s*\)/,
   );
   const summary = workflow.slice(
     workflow.indexOf(
@@ -88,4 +87,54 @@ test("real restoration is reported through inherited pipes only and public summa
     !workflow.includes("path: local/public-host-cohort/execution-result.json"),
   );
   assert(!workflow.includes("path: local/public-host-cohort/\n"));
+});
+
+test("pending readiness executes actual completed-host and shared-budget contracts in the existing publication job", () => {
+  const publish = Bun.YAML.parse(workflow).jobs.publish;
+  const validation = publish.steps.find(
+    (step) =>
+      step.name === "Verify closed public update coordination contracts",
+  );
+  for (const suite of [
+    "production-bootstrap",
+    "production-host-readiness",
+    "production-completed-host",
+    "production-publication-budget",
+    "production-pending-cohort",
+  ])
+    assert(
+      validation.run.includes(
+        `scripts/hosted-public-release/${suite}.test.mjs`,
+      ),
+    );
+  const prepare = coordinator.indexOf(
+    "bootstrap = await preparePendingProductionCohort",
+  );
+  const stage = coordinator.indexOf(
+    "const stage = await publication.publishExtensions",
+  );
+  const readiness = coordinator.indexOf(
+    "await publication.publishStagedHostReadiness",
+  );
+  const complete = coordinator.indexOf(
+    "const completed = await completePendingProductionCohort",
+  );
+  const bind = coordinator.indexOf(
+    "await publication.bindStagedHostContinuation",
+  );
+  const measure = coordinator.indexOf('"measure-package"');
+  const observer = coordinator.indexOf(
+    "await runObserver(text, binding, remaining)",
+  );
+  assert(
+    prepare > 0 &&
+      prepare < stage &&
+      stage < readiness &&
+      readiness < complete &&
+      complete < bind &&
+      bind < measure &&
+      measure < observer,
+  );
+  assert(coordinator.indexOf("await previous.catalog()") < stage);
+  assert(coordinator.includes("retireHostBootstrapIntent(bootstrap.pending)"));
 });
