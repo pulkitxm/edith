@@ -212,12 +212,13 @@ test("mixed goals take the heavier target", () => {
 });
 
 for (const goal of [
+  "ci-host-navigation-local",
   "ci-extension-keep-awake-compile",
   "ci-extension-keep-awake",
   "ci-extension-keep-awake-native",
   "package-extension-keep-awake",
 ]) {
-  test(`focused Keep Awake ${goal} respects the Swift resource budget`, () => {
+  test(`focused ${goal} respects the Swift resource budget`, () => {
     const admitted = decide([goal], healthy, []);
     expect(admitted.action).toBe("run");
     expect(admitted.profile).toBe("swift test");

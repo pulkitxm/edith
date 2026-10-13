@@ -175,6 +175,11 @@ ci-host: ci-host-invocation
 ci-host-core:
 	bun scripts/test-host-core.mjs
 
+.PHONY: ci-host-navigation-local
+ci-host-navigation-local:
+	python3 -B scripts/test-host-navigation-local.test.py
+	python3 -B scripts/test-host-navigation-local.py
+
 host:
 	bun scripts/build-minimal-host.mjs
 
