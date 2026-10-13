@@ -397,6 +397,96 @@ class OwnedKernelContracts(unittest.TestCase):
         self.addCleanup(self.kill.stop)
         self.owner = runner.BoundedOwnership(123, 501)
 
+    def test_captured_path_failure_keeps_original_sample_and_enumerated_parent(self):
+        self.kernel.processes[234] = (234, 101, 8, '/fixture/private', 123, 123, 501, 501)
+        original_info = self.kernel.proc_pidinfo
+        original_path = self.kernel.proc_pidpath
+
+        def info(pid, flavor, argument, pointer, size):
+            result = original_info(pid, flavor, argument, pointer, size)
+            if pid == 234:
+                pointer._obj.status = 2 if argument == 0 else 5
+            return result
+
+        def path(pid, buffer, size):
+            return 0 if pid == 234 else original_path(pid, buffer, size)
+
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=info) as records, \
+                patch.object(self.kernel, 'proc_pidpath', side_effect=path) as paths:
+            self.owner.refresh()
+        captured = self.owner.captured_snapshot_failures
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0]['clause'], 'executable_path_unavailable')
+        self.assertEqual(captured[0]['status'], 2)
+        self.assertEqual(self.owner.failure_observations[0]['status'], 5)
+        self.assertTrue(all(captured[0][field] for field in [
+            'pidMatches', 'uidMatches', 'realUIDMatches', 'parentEnumerated',
+            'parentIdentityKnown', 'parentMatches', 'leaderGroupMatches']))
+        self.assertEqual([call.args[:3] for call in records.call_args_list],
+                         [(123, 3, 0), (234, 3, 0), (234, 3, 1)])
+        self.assertEqual([call.args[0] for call in paths.call_args_list], [123, 234])
+        self.assertEqual(self.owner.errors, ['Live owned process identity unavailable'])
+        self.assertNotIn(234, self.owner.known)
+        self.assertNotIn(234, self.owner.seals)
+        self.assertEqual(self.kernel.signals, [])
+        self.assertNotIn('private', json.dumps(captured))
+
+    def test_snapshot_observer_preserves_kernel_reads_and_all_failure_clauses(self):
+        cases = [('kernel_record_unavailable', None), ('effective_uid_mismatch', 6),
+                 ('real_uid_mismatch', 7), ('executable_path_unavailable', 3),
+                 ('invalid_process_group', 4)]
+        for clause, field in cases:
+            with self.subTest(clause=clause):
+                traces = []
+                for observing in [False, True]:
+                    kernel = Kernel()
+                    values = [234, 101, 8, '/fixture/compiler', 123, 123, 501, 501]
+                    if field in [6, 7]:
+                        values[field] = 502
+                    if field == 4:
+                        values[field] = 0
+                    kernel.processes[234] = tuple(values)
+                    original_info = kernel.proc_pidinfo
+                    original_path = kernel.proc_pidpath
+                    trace = []
+                    captured = []
+
+                    def info(pid, flavor, argument, pointer, size):
+                        trace.append('info')
+                        result = original_info(pid, flavor, argument, pointer, size)
+                        return result - 1 if field is None else result
+
+                    def path(pid, buffer, size):
+                        trace.append('path')
+                        return 0 if field == 3 else original_path(pid, buffer, size)
+
+                    with patch.object(runner.watchdog.ctypes, 'CDLL', return_value=kernel), \
+                            patch.object(kernel, 'proc_pidinfo', side_effect=info), \
+                            patch.object(kernel, 'proc_pidpath', side_effect=path):
+                        owner = runner.watchdog.OwnedProcesses(123, 501)
+                        callback = (lambda reason, count, record: captured.append(reason)) if observing else None
+                        self.assertIsNone(owner.snapshot(234, callback))
+                    traces.append(trace)
+                    self.assertEqual(captured, [clause] if observing else [])
+                self.assertEqual(traces[0], traces[1])
+
+    def test_captured_failures_deduplicate_and_bound_without_changing_ownership(self):
+        self.owner.refresh()
+        self.assertEqual(self.owner.captured_snapshot_failures, [])
+        for pid in range(200, 212):
+            self.kernel.processes[pid] = (pid, pid, 7, '/fixture/private', 123, 123, 501, 501)
+        original = self.kernel.proc_pidpath
+        with patch.object(self.kernel, 'proc_pidpath',
+                          side_effect=lambda pid, buffer, size: 0 if pid >= 200 else original(pid, buffer, size)):
+            self.owner.refresh()
+            self.owner.refresh()
+        self.assertEqual(len(self.owner.captured_snapshot_failures), 8)
+        self.assertEqual(len(self.owner.captured_snapshot_keys), 8)
+        self.assertEqual(self.owner.errors, ['Live owned process identity unavailable'])
+        self.assertEqual(set(self.owner.known), {123})
+        self.assertEqual(self.kernel.signals, [])
+        self.assertNotIn('private', json.dumps(self.owner.captured_snapshot_failures))
+
     def test_sealed_zombie_retires_without_signals_and_retains_birth_history(self):
         self.owner.refresh()
         seal = self.owner.seals[123]

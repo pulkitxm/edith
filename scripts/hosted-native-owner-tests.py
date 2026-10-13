@@ -44,6 +44,8 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         self.rejected = {}
         self.failure_observations = []
         self.failure_observation_keys = set()
+        self.captured_snapshot_failures = []
+        self.captured_snapshot_keys = set()
         value = self.snapshot(leader)
         if value is None or value[4] != leader:
             raise RuntimeError('Owned leader identity unavailable')
@@ -51,8 +53,30 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         self.seals[leader] = identity[:3] + identity[4:5]
         self.known[leader] = identity
 
-    def snapshot(self, pid):
-        value = super().snapshot(pid)
+    def snapshot(self, pid, parent=None, parent_identity=None):
+        captured = None
+
+        def capture(clause, result, info):
+            nonlocal captured
+            complete = result == ctypes.sizeof(info)
+            seal = self.seals.get(pid)
+            captured = {
+                'clause': clause,
+                'returnedBytes': result if type(result) is int and -2147483648 <= result <= 2147483647 else None,
+                'expectedBytes': ctypes.sizeof(info),
+                'status': info.status if complete else None,
+                'pidMatches': info.pid == pid if complete else None,
+                'birthMatches': (pid, info.seconds, info.microseconds) == seal[:3] if complete and seal else None,
+                'groupMatches': info.pgid == seal[3] if complete and seal else None,
+                'uidMatches': info.uid == self.uid if complete else None,
+                'realUIDMatches': info.ruid == self.uid if complete else None,
+                'parentEnumerated': parent is not None,
+                'parentIdentityKnown': parent_identity is not None,
+                'parentMatches': info.ppid == parent if complete and parent is not None else None,
+                'leaderGroupMatches': info.pgid == self.leader if complete else None,
+            }
+
+        value = super().snapshot(pid, capture)
         if value is None:
             if self.sealed_zombie(pid):
                 return None
@@ -61,6 +85,10 @@ class BoundedOwnership(watchdog.OwnedProcesses):
             except ProcessLookupError:
                 return None
             self.observe_failure(pid, 'live_identity_unavailable')
+            if (captured is not None and pid not in self.captured_snapshot_keys
+                    and len(self.captured_snapshot_failures) < 8):
+                self.captured_snapshot_keys.add(pid)
+                self.captured_snapshot_failures.append(captured)
             raise RuntimeError('Live owned process identity unavailable')
         return value
 
@@ -126,7 +154,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                 continue
             visited.add(pid)
             try:
-                value = self.snapshot(pid)
+                value = self.snapshot(pid, parent, active.get(parent))
                 if value is None:
                     self.known.pop(pid, None)
                     continue
@@ -382,6 +410,7 @@ def run_original(arguments, root, environment, output, deadline=TEST_DEADLINE,
         'observedTestingProcess': observed_testing,
         'ownedExecutableTransitions': getattr(ownership, 'transitions', []),
         'ownershipFailureObservations': getattr(ownership, 'failure_observations', []),
+        'capturedSnapshotFailures': getattr(ownership, 'captured_snapshot_failures', []),
         'knownOwnedProcesses': list(observed), 'cleanup': cleanup,
         'logSHA256': hashlib.sha256(log_path.read_bytes()).hexdigest(),
         'ownedCrashReports': watchdog.owned_crash_reports(

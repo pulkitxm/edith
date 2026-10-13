@@ -107,6 +107,32 @@ def native_failure_diagnostics(value, log_path):
     if observations:
         print(json.dumps({'nativeOwnershipFailureObservations': observations}), flush=True)
 
+    captured = []
+    optional_booleans = ['pidMatches', 'birthMatches', 'groupMatches', 'uidMatches',
+                         'realUIDMatches', 'parentMatches', 'leaderGroupMatches']
+    fields = {'clause', 'returnedBytes', 'expectedBytes', 'status', 'parentEnumerated',
+              'parentIdentityKnown', *optional_booleans}
+    clauses = {'kernel_record_unavailable', 'effective_uid_mismatch', 'real_uid_mismatch',
+               'executable_path_unavailable', 'invalid_process_group'}
+    candidates = value.get('capturedSnapshotFailures', [])
+    for row in candidates[:8] if isinstance(candidates, list) else []:
+        if (not isinstance(row, dict) or set(row) != fields
+                or type(row['clause']) is not str or row['clause'] not in clauses
+                or 'live_identity_unavailable' not in kinds
+                or type(row['parentEnumerated']) is not bool
+                or type(row['parentIdentityKnown']) is not bool
+                or any(row[field] is not None and type(row[field]) is not bool
+                       for field in optional_booleans)
+                or type(row['expectedBytes']) is not int or not 1 <= row['expectedBytes'] <= 4096
+                or row['returnedBytes'] is not None and (type(row['returnedBytes']) is not int
+                    or not -2147483648 <= row['returnedBytes'] <= 2147483647)
+                or row['status'] is not None and (type(row['status']) is not int
+                    or not 0 <= row['status'] <= 4294967295)):
+            continue
+        captured.append(row)
+    if captured:
+        print(json.dumps({'nativeOwnershipCapturedSnapshotFailures': captured}), flush=True)
+
 
 def private_directory(path, private=False):
     require(path.resolve() == path and not path.is_symlink(), 'Output path traverses a symlink')

@@ -146,6 +146,50 @@ class AcceptanceContracts(unittest.TestCase):
             acceptance.native_failure_diagnostics({'passed': True}, Path('missing-tests.log'))
         self.assertEqual(captured.getvalue(), '')
 
+    def captured_snapshot(self):
+        return {
+            'clause': 'executable_path_unavailable', 'returnedBytes': 136,
+            'expectedBytes': 136, 'status': 2, 'pidMatches': True,
+            'birthMatches': None, 'groupMatches': None, 'uidMatches': True,
+            'realUIDMatches': True, 'parentEnumerated': True,
+            'parentIdentityKnown': True, 'parentMatches': True, 'leaderGroupMatches': True,
+        }
+
+    def captured_diagnostics(self, candidates, errors=None, passed=False):
+        value = self.failed_runner()
+        value['passed'] = passed
+        value['capturedSnapshotFailures'] = candidates
+        value['cleanup']['ownershipErrors'] = errors or ['Live owned process identity unavailable']
+        output = io.StringIO()
+        with redirect_stdout(output):
+            acceptance.native_failure_diagnostics(value, Path('missing-tests.log'))
+        return [json.loads(line) for line in output.getvalue().splitlines()]
+
+    def test_original_snapshot_diagnostics_are_closed_bounded_and_failure_only(self):
+        row = self.captured_snapshot()
+        rows = self.captured_diagnostics([row] * 12)
+        self.assertEqual(rows[-1], {'nativeOwnershipCapturedSnapshotFailures': [row] * 8})
+        self.assertEqual(rows[2], {'nativeOwnershipFailureKinds': ['live_identity_unavailable']})
+        self.assertEqual(self.captured_diagnostics([row], passed=True), [])
+        unknown = self.captured_diagnostics([row], errors=['private ownership detail'])
+        self.assertEqual(len(unknown), 2)
+        self.assertNotIn('private', json.dumps(unknown))
+
+    def test_original_snapshot_diagnostics_reject_unknown_fields_and_invalid_metadata(self):
+        row = self.captured_snapshot()
+        changes = [
+            {'clause': '/fixture/private/token'}, {'clause': {'private': 'token'}},
+            {'pid': 987}, {'status': True},
+            {'returnedBytes': True}, {'returnedBytes': 2**32}, {'expectedBytes': 0},
+            {'parentEnumerated': 1}, {'uidMatches': 'private'}, {'parentMatches': 1},
+        ]
+        for change in changes:
+            with self.subTest(change=change):
+                rows = self.captured_diagnostics([{**row, **change}, row])
+                self.assertEqual(rows[-1], {'nativeOwnershipCapturedSnapshotFailures': [row]})
+                self.assertNotIn('private', json.dumps(rows))
+        self.assertEqual(len(self.captured_diagnostics('private')), 3)
+
     def ownership_diagnostics(self, errors, passed=False):
         value = self.failed_runner()
         value['passed'] = passed
