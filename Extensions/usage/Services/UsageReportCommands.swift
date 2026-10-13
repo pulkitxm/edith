@@ -79,6 +79,10 @@ actor UsageReportCommands {
             try empty(object)
             try await MainActor.run { try controller.requestLimitsRefresh() }
             return try encode(["started": true])
+        case "usage.limits.project":
+            try empty(object)
+            try await MainActor.run { try controller.requestLimitsRefresh(force: false) }
+            return try encode(["started": true])
         case "usage.accounts.changed":
             try empty(object)
             try await controller.accountsChanged()
