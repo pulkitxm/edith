@@ -48,9 +48,8 @@ struct HostPageContent: View {
         case "about": HostAboutPage(identity: marketplace.identity)
         default:
             if destination.id == "appMaintenance",
-                let child = HostNavigationCatalog.maintenance.first(where: {
-                    $0.id == maintenanceSection
-                }), let id = child.extensionID
+                let child = HostNavigationCatalog.maintenanceDestination(
+                    maintenanceSection, active: active), let id = child.extensionID
             {
                 content(id, section: child.id)
             } else if let id = destination.extensionID {
@@ -121,6 +120,7 @@ struct HostPageContent: View {
     private func customize(_ tileID: String?) {
         HostSurfaceEditorRequest(target: .home, tileID: tileID).save(
             to: marketplace.surfaces.preferences)
-        settings = "surfaces"; select("settings")
+        settings = "surfaces"
+        select("settings")
     }
 }

@@ -210,6 +210,11 @@ ci-host: ci-host-invocation
 ci-host-core:
 	bun scripts/test-host-core.mjs
 
+.PHONY: ci-host-navigation-local
+ci-host-navigation-local:
+	python3 -B scripts/test-host-navigation-local.test.py
+	python3 -B scripts/test-host-navigation-local.py
+
 .PHONY: ci-codesign-requirements-local
 ci-codesign-requirements-local:
 	python3 -B scripts/test-codesign-requirement.py
