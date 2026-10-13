@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "reviewedSource": "ea5ed34e4ce981de1f5384c8fb27dde98ad41adc",
+  "reviewedSource": "cdad75523234c2806fbb972748332c4f07401d24",
   "owners": [
     {
       "id": "keepAwake",
@@ -12,7 +12,7 @@
       "factoryOverlay": false,
       "scope": "original-view-creation-close-reopen-disable",
       "functionalActionsValidated": false,
-      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; no utility action or settings mutation.",
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
       "sources": [
         {
           "path": "Extensions/keepAwake/Runtime.swift",
@@ -20,7 +20,7 @@
         },
         {
           "path": "Extensions/keepAwake/Presentation.swift",
-          "sha256": "63065ce8edc1d813eff0fe7b148ff959d96499569f1584418a988e0d0b9c1f8a"
+          "sha256": "753f4941634cf19bf6fe88d1d892a0782f7ea13d42c0c8a2d260b1da8746f2f1"
         }
       ]
     },
