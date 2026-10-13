@@ -41,6 +41,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         self.errors = []
         self.seals = {}
         self.transitions = []
+        self.terminal_children = {}
         self.rejected = {}
         self.failure_observations = []
         self.failure_observation_keys = set()
@@ -79,6 +80,8 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         value = super().snapshot(pid, capture)
         if value is None:
             if captured is not None and captured['clause'] == 'kernel_record_unavailable':
+                if self.terminal_child(pid, parent, parent_identity):
+                    return None
                 recovered = self.recover_snapshot(pid)
                 if recovered is not None:
                     return recovered
@@ -94,7 +97,42 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                 self.captured_snapshot_keys.add(pid)
                 self.captured_snapshot_failures.append(captured)
             raise RuntimeError('Live owned process identity unavailable')
+        if pid in self.terminal_children:
+            raise RuntimeError('Terminal child identity became live')
         return value
+
+    def terminal_child(self, pid, parent, parent_identity):
+        if (type(pid) is not int or pid <= 0 or type(parent) is not int or parent <= 0
+                or pid == self.leader or pid in self.seals or pid in self.known
+                or parent is None or parent_identity is None
+                or parent_identity != self.known.get(parent)
+                or parent_identity[0] != parent or parent_identity[4] != self.leader):
+            return False
+        before_parent = self.recover_snapshot(parent)
+        if before_parent is None or before_parent[:5] != parent_identity:
+            return False
+        records = []
+        for _ in range(2):
+            info = watchdog.ProcessInfo()
+            result = self.library.proc_pidinfo(pid, 3, 1, ctypes.byref(info), ctypes.sizeof(info))
+            if (type(result) is not int or result != ctypes.sizeof(info)
+                    or info.status != 5 or info.pid != pid
+                    or info.uid != self.uid or info.ruid != self.uid
+                    or info.ppid != parent or info.pgid != self.leader
+                    or info.seconds <= 0 or info.microseconds >= 1_000_000):
+                return False
+            records.append(bytes(info))
+        after_parent = self.recover_snapshot(parent)
+        if (records[0] != records[1] or after_parent is None
+                or after_parent[:5] != parent_identity):
+            return False
+        previous = self.terminal_children.get(pid)
+        if previous is not None and previous != records[0]:
+            raise RuntimeError('Terminal child kernel record changed')
+        if previous is None and len(self.terminal_children) + len(self.seals) >= 4096:
+            raise RuntimeError('Owned lifetime process bound exceeded')
+        self.terminal_children[pid] = records[0]
+        return True
 
     def recover_snapshot(self, pid):
         identity = self.known.get(pid)
@@ -200,7 +238,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                         parent_snapshot = self.snapshot(parent)
                         if parent_snapshot is None or parent_snapshot[:5] != active[parent]:
                             raise RuntimeError('Owned parent identity changed before admission')
-                    if len(self.seals) >= 4096:
+                    if len(self.seals) + len(self.terminal_children) >= 4096:
                         raise RuntimeError('Owned lifetime process bound exceeded')
                     self.seals[pid] = seal
                 prior = self.known.get(pid)
