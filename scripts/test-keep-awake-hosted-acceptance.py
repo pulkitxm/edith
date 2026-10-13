@@ -134,6 +134,93 @@ def native_failure_diagnostics(value, log_path):
         print(json.dumps({'nativeOwnershipCapturedSnapshotFailures': captured}), flush=True)
 
 
+
+def worker_failure_diagnostics(value, log_path=None):
+    cleanup = value['cleanup']
+    clean = (value['exitCode'] == 0 and not value['timedOut']
+             and not value['logBoundExceeded'] and value['failure'] is None
+             and cleanup['naturalSurvivorCount'] == 0 and cleanup['reaped']
+             and cleanup['remainingOwnedProcesses'] == 0
+             and cleanup['unverifiedOwnedProcesses'] == 0 and not cleanup['ownershipErrors'])
+    if clean:
+        return
+    boolean = lambda item: item if type(item) is bool else None
+    integer = lambda item: item if type(item) is int and -2147483648 <= item <= 2147483647 else None
+    kinds = {
+        'Live owned process identity unavailable': 'live_identity_unavailable',
+        'Owned process birth or group changed': 'birth_or_group_changed',
+        'Owned leader group changed': 'leader_group_changed',
+        'Owned descendant parent changed': 'descendant_parent_changed',
+        'Owned parent identity changed before admission': 'parent_identity_changed',
+        'Owned lifetime process bound exceeded': 'lifetime_process_bound_exceeded',
+        'Owned executable transition bound exceeded': 'executable_transition_bound_exceeded',
+        'Owned concurrent descendant bound exceeded': 'concurrent_descendant_bound_exceeded',
+        'Invalid owned child enumeration': 'child_enumeration_invalid',
+        'Owned identity changed before signal': 'identity_changed_before_signal',
+    }
+    errors = cleanup['ownershipErrors']
+    harness_signal = None
+    harness_stage = None
+    signals = {'SIGABRT', 'SIGBUS', 'SIGILL', 'SIGKILL', 'SIGSEGV', 'SIGTERM', 'SIGTRAP'}
+    stages = {
+        'fixtureOwnerBegin', 'fixtureOwnerComplete', 'fixtureCopyBegin', 'fixtureCopyComplete',
+        'fixtureSignBegin', 'fixtureSignComplete', 'hostIdentityBegin', 'hostIdentityComplete',
+        'fixtureHomeBegin', 'fixtureHomeComplete', 'packageStoreBegin', 'packageStoreComplete',
+        'ownerDefaultsBegin', 'ownerDefaultsComplete', 'peerEndpointBegin', 'peerEndpointComplete',
+        'sessionsBegin', 'sessionsComplete', 'surfacesBegin', 'surfacesComplete',
+        'packageInstallBegin', 'packageInstallComplete',
+    }
+    if log_path is not None:
+        try:
+            with log_path.open('rb') as log:
+                log.seek(0, os.SEEK_END)
+                log.seek(max(0, log.tell() - 16384))
+                tail = log.read(16384).decode('utf-8', errors='replace')
+            for line in tail.splitlines():
+                if len(line.encode('utf-8')) > 1024:
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(row, dict) or set(row) != {'lifecycleHarnessFailure'}:
+                    continue
+                failure = row['lifecycleHarnessFailure']
+                if (not isinstance(failure, dict)
+                        or set(failure) != {'signal', 'pid', 'source', 'stage'}
+                        or type(failure['signal']) is not str or failure['signal'] not in signals
+                        or failure['stage'] is not None
+                           and (type(failure['stage']) is not str or failure['stage'] not in stages)
+                        or type(failure['pid']) is not int or not 1 < failure['pid'] <= 2147483647
+                        or failure['source'] is not None
+                           and (type(failure['source']) is not str
+                                or re.fullmatch('[0-9a-f]{40}', failure['source']) is None)):
+                    continue
+                harness_signal = failure['signal']
+                harness_stage = failure['stage']
+        except OSError:
+            pass
+    metadata = {
+        'exitCode': integer(value['exitCode']),
+        'timedOut': boolean(value['timedOut']),
+        'logBoundExceeded': boolean(value['logBoundExceeded']),
+        'failurePresent': value['failure'] is not None,
+        'harnessSignal': harness_signal,
+        'harnessStage': harness_stage,
+        'testsCompleted': boolean(value.get('testsCompleted')),
+        'observedTestingProcess': boolean(value.get('observedTestingProcess')),
+        'cleanup': {
+            **{field: integer(cleanup[field]) for field in
+               ['naturalSurvivorCount', 'remainingOwnedProcesses', 'unverifiedOwnedProcesses']},
+            'reaped': boolean(cleanup['reaped']),
+            'ownershipErrorCount': len(errors),
+        },
+        'ownershipFailureKinds': sorted({kinds[error] for error in errors
+                                         if isinstance(error, str) and error in kinds}),
+    }
+    print(json.dumps({'workerFailure': metadata}, separators=(',', ':')), flush=True)
+
+
 def private_directory(path, private=False):
     require(path.resolve() == path and not path.is_symlink(), 'Output path traverses a symlink')
     attributes = path.stat()
@@ -233,6 +320,7 @@ def main():
             ['bun', 'scripts/test-extension-workers.mjs', 'keepAwake', '--retain-packages'],
             root, child_environment, work / 'worker', deadline=900)
         result['worker'] = worker
+        worker_failure_diagnostics(worker, work / 'worker/tests.log')
         cleanup = worker['cleanup']
         require(worker['exitCode'] == 0 and not worker['timedOut']
                 and not worker['logBoundExceeded'] and worker['failure'] is None
