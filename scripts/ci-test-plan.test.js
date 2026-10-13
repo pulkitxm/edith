@@ -1037,6 +1037,7 @@ test("the actual change job scopes release-only PRs and preserves main shipping 
       "scripts/test-extension-package.mjs",
       "scripts/extension-release-plan.mjs",
       "scripts/build-extension-support.mjs",
+      "scripts/argument-parser-source.mjs",
       "scripts/extension-ghostty-native.mjs",
       "scripts/extension-host-abi.mjs",
       "scripts/shipping-extension-policy.mjs",
