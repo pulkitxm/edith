@@ -15,6 +15,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { requireRegularTree } from "./build-contained-host-runtime.mjs";
 import { validateWorkerLifecycleScope } from "./extension-worker-proof.mjs";
+import { lifecycleHarnessSignalFailure } from "./lifecycle-harness-diagnostics.mjs";
 
 export const inertFixtureWorkers = new Set([
   "focusDim",
@@ -455,8 +456,9 @@ async function run() {
       const fixtureHome = workerFixtureHome(fixtureRoot, id);
       await mkdir(fixtureHome, { mode: 0o700 });
       await mkdir(join(fixtureHome, "tmp"), { mode: 0o700 });
-      const result = JSON.parse(
-        execFileSync(
+      let harnessOutput;
+      try {
+        harnessOutput = execFileSync(
           resolve(
             process.env.EXTENSION_LIFECYCLE_HARNESS ??
               "Packages/EdithHost/.build/debug/HostLifecycleHarness",
@@ -474,8 +476,19 @@ async function run() {
             timeout: 90_000,
             env: workerFixtureEnvironment(fixtureHome, fixtureIdentifier),
           },
-        ).trim(),
-      );
+        );
+      } catch (error) {
+        const failure = lifecycleHarnessSignalFailure(
+          error,
+          process.env.GITHUB_SHA,
+        );
+        if (failure)
+          process.stderr.write(
+            `${JSON.stringify({ lifecycleHarnessFailure: failure })}\n`,
+          );
+        throw error;
+      }
+      const result = JSON.parse(harnessOutput.trim());
       validateWorkerLifecycleResult(result, {
         id,
         surfaceContractVersion,
