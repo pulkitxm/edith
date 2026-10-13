@@ -307,6 +307,42 @@ extension MusicExtensionTests {
                 await waitUntil { remote.searchTracks.map(\.relativePath) == ["a.mp3", "b.mp3"] })
         }
 
+        @Test func stopAndWaitJoinsCancelledScanAndAllFollowersAfterSynchronousStop() async throws {
+            let fixture = MusicRemoteLoadFixture()
+            let remote = MusicRemote(scanFavourites: { fixture.scan() })
+            remote.openFavourites()
+            defer { fixture.releaseFirst(); remote.stop() }
+            try #require(await fixture.waitForFirstStart())
+            remote.stop()
+            var started = 0
+            var joined = 0
+            let first = Task {
+                started += 1
+                await remote.stopAndWait()
+                joined += 1
+            }
+            let follower = Task {
+                started += 1
+                await remote.stopAndWait()
+                joined += 1
+            }
+            do {
+                try #require(await waitUntil { started == 2 })
+                #expect(joined == 0)
+                fixture.releaseFirst()
+                await first.value
+                await follower.value
+                #expect(joined == 2 && fixture.firstWasCancelled)
+                #expect(!remote.favouritesLoaded && remote.favourites.isEmpty)
+                await remote.stopAndWait()
+            } catch {
+                fixture.releaseFirst()
+                await first.value
+                await follower.value
+                throw error
+            }
+        }
+
         @Test func failedMutationPublishesAReadableError() {
             let remote = MusicRemote()
 
@@ -345,6 +381,8 @@ extension MusicExtensionTests {
         private let firstReleased = DispatchSemaphore(value: 0)
         private let firstFinished = DispatchSemaphore(value: 0)
         private var calls = 0
+        private var firstCancelled = false
+        var firstWasCancelled: Bool { lock.withLock { firstCancelled } }
         private let root = URL(fileURLWithPath: "/tmp/music-remote-load")
 
         func list(_ path: String) -> MusicLibraryContentListing {
@@ -400,6 +438,7 @@ extension MusicExtensionTests {
         private func blockFirst() {
             firstStarted.signal()
             firstReleased.wait()
+            lock.withLock { firstCancelled = Task.isCancelled }
             firstFinished.signal()
         }
 
