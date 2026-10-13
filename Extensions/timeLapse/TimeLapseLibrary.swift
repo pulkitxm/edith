@@ -199,12 +199,8 @@ enum TimeLapseExporter {
             exporter.audioTimePitchAlgorithm = .timeDomain
             let url = directory.appendingPathComponent(".\(UUID().uuidString).m4a")
             temporary.append(url)
-            try await withTaskCancellationHandler {
-                try Task.checkCancellation()
-                try await exporter.export(to: url, as: .m4a)
-            } onCancel: {
-                exporter.cancelExport()
-            }
+            try Task.checkCancellation()
+            try await exporter.export(to: url, as: .m4a)
             let asset = AVURLAsset(url: url)
             guard let mixed = try await asset.loadTracks(withMediaType: .audio).first else {
                 throw TimeLapseError.empty
@@ -304,12 +300,8 @@ enum TimeLapseExporter {
         defer { if staging == nil { try? FileManager.default.removeItem(at: temporary) } }
         export.shouldOptimizeForNetworkUse = true
         try requireCurrent()
-        try await withTaskCancellationHandler {
-            try Task.checkCancellation()
-            try await export.export(to: temporary, as: fileType)
-        } onCancel: {
-            export.cancelExport()
-        }
+        try Task.checkCancellation()
+        try await export.export(to: temporary, as: fileType)
         try Task.checkCancellation()
         if let publish {
             try requireCurrent()
