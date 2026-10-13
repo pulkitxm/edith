@@ -33,6 +33,7 @@ import {
   closedProductionAsset,
   matchingProductionCatalogRecord,
   preparePreviousHostBootstrapInputs,
+  productionHostReleaseContext,
   productionInputEnvironment,
   productionVerifiedInputs,
   verifiedPreviousHostBootstrapInputs,
@@ -1050,6 +1051,114 @@ test.each([
     );
     assert.equal(process.env.GITHUB_TOKEN, "synthetic-readonly-token");
   });
+});
+
+test("actual public release channel reaches the Python host boundary for full current and previous generations", async () => {
+  const directory = await mkdtemp(
+    join(resolve(tmpdir()), "host-channel-synthetic-"),
+  );
+  await chmod(directory, 0o700);
+  try {
+    const request = JSON.parse(
+      execFileSync(
+        "python3",
+        [
+          "-I",
+          "-B",
+          "-c",
+          "import importlib.util,json;s=importlib.util.spec_from_file_location('cases','scripts/test-production-host-cohort.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(json.dumps(m.synthetic_request()))",
+        ],
+        { encoding: "utf8", timeout: 10000 },
+      ),
+    );
+    for (const generation of ["previous", "current"]) {
+      const host = request.hosts[generation];
+      const proof = Object.fromEntries(
+        Object.entries(host).map(([name, value]) => [
+          {
+            source: "sourceCommit",
+            designatedRequirement: "verifiedDesignatedRequirement",
+          }[name] ?? name,
+          value,
+        ]),
+      );
+      const proofBytes = Buffer.from(JSON.stringify(proof));
+      await writeFile(join(directory, "host-release-proof.json"), proofBytes, {
+        mode: 0o600,
+      });
+      host.proofSHA256 = createHash("sha256").update(proofBytes).digest("hex");
+      for (const prerelease of [false, true]) {
+        const release = {
+          id: 101,
+          tag_name: host.tag,
+          target_commitish: host.source,
+          draft: false,
+          prerelease,
+          assets: [],
+          publicationVerified: true,
+        };
+        const context = productionHostReleaseContext(
+          request,
+          generation,
+          directory,
+          release,
+        );
+        assert.deepEqual(Object.keys(context.releaseChannel).sort(), [
+          "draft",
+          "id",
+          "prerelease",
+          "tag_name",
+          "target_commitish",
+        ]);
+        assert.throws(() => productionVerifiedInputs(context));
+        const result = JSON.parse(
+          execFileSync(
+            "python3",
+            [
+              "-I",
+              "-B",
+              "-c",
+              "import importlib.util,json,sys;s=importlib.util.spec_from_file_location('inputs',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);v=json.loads(sys.stdin.read());m.inspect_host=lambda directory,expected,generation,channel,normalized: {'generation':generation,'channel':channel};print(json.dumps(m.host(v)))",
+              fileURLToPath(
+                new URL("./production-static-inputs.py", import.meta.url),
+              ),
+            ],
+            {
+              input: JSON.stringify(context),
+              env: {
+                HOME: process.env.HOME,
+                PATH: process.env.PATH,
+                TMPDIR: tmpdir(),
+                PYTHONDONTWRITEBYTECODE: "1",
+              },
+              timeout: 10000,
+            },
+          ).toString(),
+        );
+        assert.equal(result.generation, generation);
+        assert.deepEqual(result.channel, context.releaseChannel);
+      }
+      for (const edit of [
+        { id: 0 },
+        { tag_name: "v0.0.999" },
+        { target_commitish: "main" },
+        { draft: true },
+        { prerelease: "true" },
+      ])
+        assert.throws(() =>
+          productionHostReleaseContext(request, generation, directory, {
+            id: 101,
+            tag_name: host.tag,
+            target_commitish: host.source,
+            draft: false,
+            prerelease: false,
+            ...edit,
+          }),
+        );
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("owned preparation retains same-run publication identity through actual staged-native admission", () => {

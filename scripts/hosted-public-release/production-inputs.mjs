@@ -167,6 +167,29 @@ function nativeInputContext() {
   assert.equal(process.platform, "darwin");
   assert.equal(process.arch, "arm64");
 }
+export function productionHostReleaseContext(
+  request,
+  generation,
+  directory,
+  release,
+) {
+  assert(["previous", "current"].includes(generation));
+  assert(Number.isSafeInteger(release.id) && release.id > 0);
+  assert.equal(release.tag_name, request.hosts[generation].tag);
+  assert.match(release.target_commitish, /^[a-f0-9]{40}$/);
+  assert.equal(release.draft, false);
+  assert.equal(typeof release.prerelease, "boolean");
+  return {
+    request,
+    generation,
+    directory,
+    releaseChannel: Object.fromEntries(
+      ["id", "tag_name", "target_commitish", "draft", "prerelease"].map(
+        (key) => [key, release[key]],
+      ),
+    ),
+  };
+}
 export function closedProductionAsset(release, name, expected) {
   assert.equal(release.draft, false);
   const matches = release.assets.filter((asset) => asset.name === name);
@@ -652,20 +675,10 @@ async function prepareInputs(text, previous) {
       ref.object.sha,
     );
     const hostContext = join(hostDirectory, "context.json");
-    await record(hostContext, {
-      request,
-      generation,
-      directory: hostDirectory,
-      ...(previous
-        ? {
-            releaseChannel: Object.fromEntries(
-              ["id", "tag_name", "target_commitish", "draft", "prerelease"].map(
-                (key) => [key, release[key]],
-              ),
-            ),
-          }
-        : {}),
-    });
+    await record(
+      hostContext,
+      productionHostReleaseContext(request, generation, hostDirectory, release),
+    );
     toolchainProvenance(
       closedJSON(
         (
