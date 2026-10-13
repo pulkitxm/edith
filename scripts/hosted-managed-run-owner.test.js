@@ -226,6 +226,7 @@ test("owned receipt reader rejects FIFO, hardlink, public modes and real same-si
     ).rejects.toThrow();
     await rm(path);
     await writeFile(path, '{"value":1}', { mode: 0o644 });
+    await chmod(path, 0o644);
     expect(
       await readOwnedManagedDocument(
         fixture.directory,
@@ -263,6 +264,7 @@ test("owned receipt reader rejects FIFO, hardlink, public modes and real same-si
     await writeFile(join(fixture.directory, "approval-result.json"), "{}", {
       mode: 0o644,
     });
+    await chmod(join(fixture.directory, "approval-result.json"), 0o644);
     await expect(
       readOwnedManagedDocument(fixture.directory, "approval-result.json"),
     ).rejects.toThrow();
