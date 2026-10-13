@@ -44,11 +44,13 @@ def roles(bundle, expected):
 
 
 def verify(context):
-    INPUTS.COHORT.exact(context, ['request', 'generation', 'directory'])
+    INPUTS.COHORT.exact(context, ['request', 'generation', 'directory', 'releaseChannel'])
     request = INPUTS.COHORT.request(json.dumps(context['request']))
     generation = context['generation']
     INPUTS.COHORT.require(generation in ['previous', 'current'], 'Wrong Sparkle cohort generation')
     expected = request['hosts'][generation]
+    INPUTS.COHORT.exact(context['releaseChannel'], ['id', 'tag_name', 'target_commitish', 'draft', 'prerelease'])
+    INPUTS.release_tag(INPUTS.ROOT, expected, generation, context['releaseChannel'])
     directory = Path(context['directory'])
     INPUTS.COHORT.require(directory.is_absolute() and directory.resolve(strict=True) == directory, 'Noncanonical Sparkle inputs')
     archive = directory / 'Edith.dmg'

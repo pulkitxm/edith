@@ -2,9 +2,10 @@ import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { productionVerifiedInputs } from "./production-inputs.mjs";
 import {
   observeProductionHistory,
@@ -382,4 +383,70 @@ test("actual fixed Sparkle helper byte and linkage counterexamples run with scri
       maxBuffer: 65536,
     },
   );
+});
+
+test("actual opaque previous preparation retains the strict full-only Sparkle consumer boundary", async () => {
+  const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+  const original = join(
+    root,
+    "scripts/hosted-public-release/production-inputs.test.mjs",
+  );
+  const source = await readFile(original, "utf8");
+  const start = source.indexOf("async function withPreviousFixture(action) {");
+  const end = source.indexOf(
+    '\ntest("actual previous opaque preparation',
+    start,
+  );
+  assert(start > 0 && end > start);
+  const imports = source.slice(0, source.indexOf("\ntest("));
+  let fixture = source.slice(start, end);
+  const rootDeclaration =
+    'const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");';
+  assert.equal(fixture.split(rootDeclaration).length, 3);
+  fixture = fixture.replace(
+    rootDeclaration,
+    `const root = ${JSON.stringify(root)};`,
+  );
+  const directory = await mkdtemp(
+    join(resolve(tmpdir()), "sparkle-opaque-boundary-"),
+  );
+  const home = join(directory, "home");
+  await mkdir(home, { mode: 0o700 });
+  try {
+    const prefix = imports.replace(/from "(\.[^"]+)"/g, (match, relative) =>
+      match.replace(
+        relative,
+        pathToFileURL(resolve(dirname(original), relative)).href,
+      ),
+    );
+    const pythonProgram =
+      'import importlib.util,json,sys\nfrom unittest.mock import patch\ns=importlib.util.spec_from_file_location("sparkle",sys.argv[1])\nm=importlib.util.module_from_spec(s)\ns.loader.exec_module(m)\nv=json.load(sys.stdin)\nwith patch.object(m.INPUTS,"release_tag") as release,patch.object(m,"roles") as roles:\n    rejected=False\n    try:\n        m.verify(v)\n    except ValueError:\n        rejected=True\n    release.assert_not_called()\n    roles.assert_not_called()\n    assert rejected\nprint(json.dumps({"partialRejected":rejected,"nativeExecuted":False}))';
+    const program = `${prefix}\n${fixture}
+await withPreviousFixture(async ({producer,capability}) => {
+  const partial=await producer.preparePreviousHostBootstrapInputs(capability);
+  const value=producer.verifiedPreviousHostBootstrapInputs(partial);
+  await value.revalidate();
+  assert.throws(()=>producer.productionVerifiedInputs(partial));
+  assert.throws(()=>producer.verifiedPreviousHostBootstrapInputs({...partial}));
+  const path=join(value.directory,"host-previous/context.json");
+  const context=JSON.parse(await readFile(path,"utf8"));
+  assert.deepEqual(Object.keys(context).sort(),["directory","generation","releaseChannel","request"]);
+  assert.equal(context.generation,"previous");
+  assert.equal(context.request.schema,2);
+  const helper=${JSON.stringify(join(root, "scripts/hosted-public-release/production-sparkle-inputs.py"))};
+  const result=JSON.parse(execFileSync("python3",["-I","-B","-c",${JSON.stringify(pythonProgram)},helper],{input:JSON.stringify(context),env:{PATH:process.env.PATH,HOME:process.env.HOME,TMPDIR:process.env.TMPDIR},timeout:10000}).toString());
+  assert.deepEqual(result,{partialRejected:true,nativeExecuted:false});
+});
+`;
+    const runner = join(directory, "opaque-boundary.mjs");
+    await writeFile(runner, program, { mode: 0o600, flag: "wx" });
+    execFileSync(process.execPath, [runner], {
+      cwd: root,
+      env: { PATH: process.env.PATH, HOME: home, TMPDIR: directory },
+      timeout: 60000,
+      maxBuffer: 65536,
+    });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
