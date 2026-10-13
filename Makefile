@@ -253,6 +253,12 @@ ci-extension-keep-awake-peer-contracts:
 package-extension-keep-awake:
 	/usr/bin/time -p bun scripts/build-extension-package.mjs keepAwake
 
+.PHONY: ci-extension-control-contracts
+ci-extension-control-contracts:
+	python3 -I -B scripts/test-hosted-native-owner-tests.py
+	python3 -I -B scripts/test-keep-awake-hosted-acceptance-contracts.py
+	bun test scripts/hosted-managed-views-contract.test.js
+
 ci-extension-keep-awake-native:
 	/usr/bin/time -p python3 -B scripts/test-keep-awake-hosted-acceptance.py
 

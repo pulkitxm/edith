@@ -168,6 +168,114 @@ import Testing
         model.stop()
     }
 
+    @Test(arguments: [false, true])
+    func editReturningToBaselineDuringHeldWriteStillReachesEngine(initial: Bool) async throws {
+        let engine = fixture()
+        let local = fixture()
+        let original = initial ? "sample-a" : "sample-b"
+        let changed = initial ? "sample-b" : "sample-a"
+        engine.set(original, forKey: "colorPickerHotKeyLabel")
+        var updates: [String] = []
+        var pending: CheckedContinuation<Data, any Error>?
+        let model = ControlPresentation(client: nil, defaults: local) { operation, payload in
+            if operation == "colorPicker.ui.read" {
+                return try ControlPresentationContract.snapshot(
+                    defaults: engine, state: ControlPresentationState())
+            }
+            try #require(operation == "colorPicker.ui.update")
+            let update = try JSONDecoder().decode(ControlPreferenceUpdate.self, from: payload)
+            let values = try ControlPresentationContract.decode(
+                update.values, keys: ControlPresentationContract.writable)
+            try #require(update.removed.isEmpty && Set(values.keys) == ["colorPickerHotKeyLabel"])
+            updates.append(try #require(values["colorPickerHotKeyLabel"] as? String))
+            try ControlPresentationContract.update(payload, defaults: engine)
+            if updates.count == 1 {
+                return try await withCheckedThrowingContinuation { pending = $0 }
+            }
+            return Data("{}".utf8)
+        }
+        do {
+            await model.refresh()
+            local.set(changed, forKey: "colorPickerHotKeyLabel")
+            model.changed()
+            let clock = ContinuousClock()
+            let firstDeadline = clock.now.advanced(by: .seconds(5))
+            while pending == nil && clock.now < firstDeadline { await Task.yield() }
+            try #require(pending != nil && updates == [changed])
+            try #require(engine.string(forKey: "colorPickerHotKeyLabel") == changed)
+            local.set(original, forKey: "colorPickerHotKeyLabel")
+            model.changed()
+            pending?.resume(returning: Data("{}".utf8))
+            pending = nil
+            let secondDeadline = clock.now.advanced(by: .seconds(5))
+            while updates.count < 2 && clock.now < secondDeadline { await Task.yield() }
+            try #require(updates == [changed, original])
+            await model.stopAndWait()
+            #expect(local.string(forKey: "colorPickerHotKeyLabel") == original)
+            #expect(engine.string(forKey: "colorPickerHotKeyLabel") == original)
+            #expect(model.error == nil)
+        } catch {
+            pending?.resume(returning: Data("{}".utf8))
+            pending = nil
+            await model.stopAndWait()
+            throw error
+        }
+    }
+
+    @Test func duplicateCallbackDuringHeldWriteDoesNotSendEmptyUpdate() async throws {
+        let engine = fixture()
+        let local = fixture()
+        engine.set("sample-a", forKey: "colorPickerHotKeyLabel")
+        var updates = 0
+        var reads = 0
+        var pending: CheckedContinuation<Data, any Error>?
+        let model = ControlPresentation(client: nil, defaults: local) { operation, payload in
+            if operation == "colorPicker.ui.read" {
+                reads += 1
+                return try ControlPresentationContract.snapshot(
+                    defaults: engine, state: ControlPresentationState())
+            }
+            try #require(operation == "colorPicker.ui.update")
+            let update = try JSONDecoder().decode(ControlPreferenceUpdate.self, from: payload)
+            let values = try ControlPresentationContract.decode(
+                update.values, keys: ControlPresentationContract.writable)
+            #expect(update.removed.isEmpty && Set(values.keys) == ["colorPickerHotKeyLabel"])
+            updates += 1
+            try ControlPresentationContract.update(payload, defaults: engine)
+            if updates == 1 {
+                return try await withCheckedThrowingContinuation { pending = $0 }
+            }
+            return Data("{}".utf8)
+        }
+        do {
+            await model.refresh()
+            local.set("sample-b", forKey: "colorPickerHotKeyLabel")
+            model.changed()
+            let clock = ContinuousClock()
+            let deadline = clock.now.advanced(by: .seconds(5))
+            while pending == nil && clock.now < deadline { await Task.yield() }
+            try #require(pending != nil && updates == 1)
+            model.changed()
+            pending?.resume(returning: Data("{}".utf8))
+            pending = nil
+            let completionDeadline = clock.now.advanced(by: .seconds(5))
+            while reads < 2 && clock.now < completionDeadline {
+                await model.refresh()
+                if reads < 2 { await Task.yield() }
+            }
+            try #require(reads == 2 && updates == 1)
+            await model.stopAndWait()
+            #expect(local.string(forKey: "colorPickerHotKeyLabel") == "sample-b")
+            #expect(engine.string(forKey: "colorPickerHotKeyLabel") == "sample-b")
+            #expect(model.error == nil)
+        } catch {
+            pending?.resume(returning: Data("{}".utf8))
+            pending = nil
+            await model.stopAndWait()
+            throw error
+        }
+    }
+
     @Test func stopCancelsOwnedActionTask() async throws {
         let defaults = fixture()
         var began = false

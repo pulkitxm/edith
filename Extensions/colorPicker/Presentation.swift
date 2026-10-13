@@ -159,7 +159,7 @@ final class ControlPresentation {
         guard !applying, !stopped, ready else { return }
         let values = ControlPresentationContract.values(
             from: defaults, keys: ControlPresentationContract.writable)
-        guard !(values as NSDictionary).isEqual(to: baseline) else { return }
+        guard writing != nil || !(values as NSDictionary).isEqual(to: baseline) else { return }
         if !active {
             applying = true
             defer { applying = false }
@@ -184,6 +184,7 @@ final class ControlPresentation {
                     return !(NSDictionary(dictionary: [key: value])).isEqual(to: [key: old])
                 }
                 let removed = Array(Set(self.baseline.keys).subtracting(values.keys))
+                guard !changed.isEmpty || !removed.isEmpty else { break }
                 do {
                     let payload = try JSONEncoder().encode(
                         ControlPreferenceUpdate(
