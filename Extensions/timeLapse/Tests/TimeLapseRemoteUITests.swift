@@ -94,10 +94,12 @@ import Testing
         let recording = try #require(remote.library.recordings.first)
         remote.library.export(recording, quality: .original, to: probe.scope.destination)
         await probe.waitForStart()
+        await bridge.waitForExportPoll()
         remote.library.cancelExport()
         await probe.waitForCancellation()
         #expect(remote.library.exporting && !probe.returned)
         #expect(bridge.operations.contains("recording.ui.exportCancel"))
+        #expect(bridge.joinedCancellationReplies == 0)
         probe.release()
         await remote.library.finishExport()
         #expect(probe.returned && probe.exports == 1)
@@ -105,6 +107,9 @@ import Testing
         #expect(remote.library.message == "Export cancelled.")
         #expect(!remote.library.exporting)
         #expect(bridge.operations.contains("recording.ui.exportPoll"))
+        #expect(remote.library.exportLoad.errorMessage == nil)
+        #expect(bridge.operations.filter { $0 == "recording.ui.exportCancel" }.count == 1)
+        #expect(bridge.operations.last == "recording.ui.exportCancel")
         await remote.shutdown()
         client.invalidate()
         await commands.shutdownAndWait()
@@ -198,6 +203,12 @@ import Testing
         var rejectPollAfterJoinedCancellation = false
         var joinedCancellationReplies = 0
         var rejectedPolls = 0
+        private var exportPollCompleted = false
+        private var exportPollWaiter: CheckedContinuation<Void, Never>?
+        func waitForExportPoll() async {
+            if exportPollCompleted { return }
+            await withCheckedContinuation { exportPollWaiter = $0 }
+        }
         init(commands: TimeLapseUICommands) { self.commands = commands }
         @objc func invoke(_ data: Data, completion: @escaping (Data) -> Void) {
             guard
@@ -225,6 +236,11 @@ import Testing
                         throw ExtensionPeerError.unavailable
                     }
                     let reply = try await commands.execute(command, payload: payload)
+                    if command == "recording.ui.exportPoll" {
+                        exportPollCompleted = true
+                        exportPollWaiter?.resume()
+                        exportPollWaiter = nil
+                    }
                     if command == "recording.ui.exportCancel",
                         let status = try? JSONDecoder().decode(
                             TimeLapseUIExportStatus.self, from: reply), status.complete
