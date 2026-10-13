@@ -326,7 +326,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         guard !stopped, !exportOnly else { return }
         if let engineClient {
             permissionTask?.cancel()
-            permissionTask = launch { [self] in
+            permissionTask = launch {
                 _ = try? await engineClient.invoke("recording.ui.permission")
             }
         } else {
@@ -406,14 +406,14 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
             let writer = try TimeLapseWriter(
                 directory: directory, session: session, sourceCount: filters.count,
                 failure: { [weak self] message in
-                    callbacks.submit {
+                    callbacks.submit { [weak self] in
                         guard let self, self.activeSession == session.id else { return }
                         self.error = message
                         await self.stop(reason: message)
                     }
                 },
                 progress: { [weak self] frames, bytes, seconds in
-                    callbacks.submit {
+                    callbacks.submit { [weak self] in
                         guard let self, self.activeSession == session.id else { return }
                         self.frames = frames; self.bytes = bytes; self.playbackSeconds = seconds
                     }
