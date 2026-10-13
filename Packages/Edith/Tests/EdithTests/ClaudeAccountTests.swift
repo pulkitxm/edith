@@ -131,6 +131,25 @@ import Testing
         }
     }
 
+    @Test func authenticationModesKeepNativeSettingsAndUIAccountsCanUseCLILogin() throws {
+        for method in ClaudeAccount.Authentication.allCases {
+            let account = ClaudeAccount(
+                name: "Work", authentication: method, credential: "synthetic-credential")
+            let command = try account.launchCommand(command: "/usr/bin/env", arguments: [])
+            let environment = try run(command)
+            #expect(environment["CLAUDE_CONFIG_DIR"] == "/tmp/synthetic-existing-config")
+            #expect(
+                environment["CLAUDE_SECURESTORAGE_CONFIG_DIR"] == "/tmp/synthetic-existing-login")
+            #expect(!command.contains("CLAUDE_CONFIG_DIR="))
+        }
+        let account = ClaudeAccount(name: "UI login", authentication: .browserLogin)
+        let command = try account.launchCommand(command: "/usr/bin/env", arguments: [])
+        let environment = try run(command)
+        #expect(environment["CLAUDE_CODE_OAUTH_TOKEN"] == nil)
+        #expect(environment["ANTHROPIC_API_KEY"] == nil)
+        #expect(environment["CLAUDE_CONFIG_DIR"] == "/tmp/synthetic-existing-config")
+    }
+
     @Test func directLaunchUsesTheMachinesAliasAndItsExistingFlags() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -211,6 +230,7 @@ import Testing
             "HOME": (startupDirectory ?? FileManager.default.temporaryDirectory).path,
             "ZDOTDIR": (startupDirectory ?? FileManager.default.temporaryDirectory).path,
             "CLAUDE_CONFIG_DIR": "/tmp/synthetic-existing-config",
+            "CLAUDE_SECURESTORAGE_CONFIG_DIR": "/tmp/synthetic-existing-login",
             "ANTHROPIC_API_KEY": "wrong-api-key",
             "CLAUDE_CODE_OAUTH_TOKEN": "wrong-token", "ANTHROPIC_AUTH_TOKEN": "wrong-auth",
             "ANTHROPIC_PROFILE": "wrong-profile", "CLAUDE_CODE_USE_BEDROCK": "1",

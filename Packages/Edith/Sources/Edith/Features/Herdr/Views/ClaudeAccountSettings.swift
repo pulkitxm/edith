@@ -108,7 +108,7 @@ struct ClaudeAccountSettings: View {
                         }
                     } else {
                         Text(
-                            "The first launch opens Claude's login flow. Each account keeps its own login and settings."
+                            "Uses this machine's existing CLI configuration, including skills, plugins and MCP settings."
                         )
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

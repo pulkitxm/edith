@@ -125,7 +125,7 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
 
     public func validateLaunch() throws {
         try validate()
-        guard !credential.isEmpty else {
+        guard authentication == .browserLogin || !credential.isEmpty else {
             throw ClaudeAccountError.rejected(
                 "Enter a credential for this account in launch settings.")
         }
@@ -143,7 +143,7 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
         let cleared = Self.inheritedAuthenticationVariables.filter { !$0.hasSuffix("CONFIG_DIR") }
         let credentialName =
             authentication == .apiKey ? "ANTHROPIC_API_KEY" : "CLAUDE_CODE_OAUTH_TOKEN"
-        let assignments = variables + [(credentialName, credential)]
+        let assignments = variables + (credential.isEmpty ? [] : [(credentialName, credential)])
         var lines: [String]
         if platform == .windows {
             lines = cleared.map { "Remove-Item Env:" + $0 + " -ErrorAction SilentlyContinue" }
