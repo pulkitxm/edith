@@ -107,3 +107,28 @@ test("the locked graph uses the owned source and removes the advisory parser", (
     false,
   );
 });
+
+test("the hosted container proof builds the final image and checks its original user and tools", () => {
+  const workflow = read(".github/workflows/ci.yml");
+  const section = workflow.slice(
+    workflow.indexOf("  companion:\n"),
+    workflow.indexOf("  version:\n"),
+  );
+  const build =
+    "docker build --progress=plain --tag edith-companion-pdf-check --file apps/companion/Dockerfile apps/companion";
+  const position = section.indexOf(build);
+  expect(position).toBeGreaterThan(section.indexOf("cargo test --locked"));
+  expect(position).toBeLessThan(
+    section.indexOf("cargo run --locked -- --migrate-only"),
+  );
+  expect(section).toContain(
+    "docker image inspect --format '{{ .Config.User }}' edith-companion-pdf-check",
+  );
+  expect(section).toContain(
+    "docker run --rm --network none --entrypoint /bin/sh edith-companion-pdf-check",
+  );
+  expect(section).toContain(
+    'test -x /usr/local/bin/companion && test "$(id -un)" = companion && command -v ffmpeg && command -v exiftool',
+  );
+  expect(section).not.toContain("--target builder");
+});
