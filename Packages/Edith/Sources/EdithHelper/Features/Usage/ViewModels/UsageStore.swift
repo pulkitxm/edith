@@ -98,7 +98,7 @@ final class UsageStore: FeatureModule {
     private(set) var claudeAccounts: [ClaudeAccountLimits] = []
 
     private var initialLimitsLoaded = false
-    private var knownAccountConfiguration: [ClaudeAccount] = []
+    private var knownAccountConfiguration: [UUID: ClaudeAccount] = [:]
     private let accountsStorage: ClaudeAccountStorage
     private let accountLimits: ClaudeAccountLimitsCollector
     private var claudeUnavailable = false
@@ -314,13 +314,19 @@ final class UsageStore: FeatureModule {
         }
         let saved = await accountLimits.cachedSnapshots(accounts: configured)
         guard !terminating else { return }
-        let incoming = Dictionary(
-            incomingAccounts.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
-        let unchanged = Set(configured.filter { knownAccountConfiguration.contains($0) }.map(\.id))
-        let previous = Dictionary(
-            claudeAccounts.filter { unchanged.contains($0.id) }.map { ($0.id, $0) },
-            uniquingKeysWith: { _, last in last })
-        knownAccountConfiguration = configured
+        var incoming: [UUID: ClaudeAccountLimits] = [:]
+        for account in incomingAccounts { incoming[account.id] = account }
+        var unchanged = Set<UUID>()
+        var currentConfiguration: [UUID: ClaudeAccount] = [:]
+        for account in configured {
+            if knownAccountConfiguration[account.id] == account { unchanged.insert(account.id) }
+            currentConfiguration[account.id] = account
+        }
+        var previous: [UUID: ClaudeAccountLimits] = [:]
+        for account in claudeAccounts where unchanged.contains(account.id) {
+            previous[account.id] = account
+        }
+        knownAccountConfiguration = currentConfiguration
         claudeAccounts = saved.map { account in
             guard let received = incoming[account.id] ?? previous[account.id] else {
                 return account
