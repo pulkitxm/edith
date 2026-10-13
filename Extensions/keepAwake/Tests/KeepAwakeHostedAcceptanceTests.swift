@@ -148,7 +148,8 @@ import Testing
                 let selectorAllowed = control.isAccessibilitySelectorAllowed?(pressSelector) == true
                 let enabled = control.isAccessibilityEnabled?() == true
                 let element = control.isAccessibilityElement?() == true
-                let value = (control.accessibilityValue?() as? NSNumber)?.intValue
+                let accessibility = control as? any NSAccessibilityProtocol
+                let value = (accessibility?.accessibilityValue() as? NSNumber)?.intValue
                 let ready = selectorPresent && selectorAllowed && enabled && element && value != nil
                 var pressed = false
                 let accepted: Bool
@@ -161,7 +162,7 @@ import Testing
                             return pressed
                         },
                         snapshot: snapshot,
-                        readValue: { (control.accessibilityValue?() as? NSNumber)?.intValue })
+                        readValue: { (accessibility?.accessibilityValue() as? NSNumber)?.intValue })
                 } catch {
                     try #require(
                         false,
