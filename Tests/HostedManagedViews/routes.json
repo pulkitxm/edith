@@ -386,11 +386,11 @@
       "factoryOverlay": false,
       "scope": "original-view-creation-close-reopen-disable",
       "functionalActionsValidated": false,
-      "effects": "Remote filesystem model only. No project selection/filesystem scan/delete/reveal action.",
+      "effects": "Ordinary managed view creation retains the remote filesystem model and does not select, scan, delete or reveal projects. Signed functional fixture admission alone binds the original scanner and trash action to one owned 4096-byte victim, with descriptor identity, request ownership and joined retirement.",
       "sources": [
         {
           "path": "Extensions/blitztree/Runtime.swift",
-          "sha256": "94bc766dbc0feaae64224e615e123eb2195151cfcecb4c899ad2786559813bd2"
+          "sha256": "ed638ca20e606fe58b836986ed8ea6e1089d17f017683f43bd114adc10cd02ba"
         },
         {
           "path": "Extensions/blitztree/BlitzTreeModel.swift",

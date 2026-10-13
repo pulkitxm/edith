@@ -381,6 +381,33 @@ public struct WorkerFixtureEngineRequest: Equatable, Sendable {
         return lease
     }
 
+    public func blitzTreeNamespaceLease() throws -> WorkerFixtureCooperativeNamespaceLease {
+        try requireCurrent()
+        guard descriptor.owner == "blitztree", namespaceAdmissionOpen,
+            !grantedNamespaces.contains("scan-directory"),
+            !grantedNamespaces.contains("trash-directory"),
+            let phase = WorkerFixtureFilePhase(rawValue: descriptor.phase)
+        else { throw WorkerFixtureError.invalid }
+        let policy = try trust.rolePolicy(owner: descriptor.owner)
+        let scopes = try policy.resolvedOwnedPaths(
+            root: trust.root, session: trust.session, phase: phase)
+        guard let source = scopes.first(where: { $0.scope.name == "scan-directory" }),
+            let destination = scopes.first(where: { $0.scope.name == "trash-directory" })
+        else { throw WorkerFixtureError.invalid }
+        let claim = try WorkerFixtureBlitzTreeNamespace(
+            owner: descriptor.owner, source: source, destination: destination)
+        let paths = [source.path: true, destination.path: true]
+        try Self.namespaceGrantsForProcess.requireAvailable(paths)
+        let lease = try WorkerFixtureCooperativeNamespaceLease(
+            blitzTree: claim, engine: descriptor.engine,
+            requireAdmission: { [self] in try requireAuthorityCurrent() })
+        try requireCurrent()
+        try Self.namespaceGrantsForProcess.retain(paths)
+        grantedNamespaces.formUnion(["scan-directory", "trash-directory"])
+        namespaceGrants.append(lease)
+        return lease
+    }
+
     public func closeAdmission() {
         admissionOpen = false
         closeNamespaceAdmission()
@@ -854,9 +881,28 @@ struct WorkerFixtureEngineOutputScope {
     private let lease: WorkerFixtureNamespaceLease
     private var moved: Set<String> = []
 
-    init(
+    convenience init(
         source: WorkerFixtureResolvedFileScope, destination: WorkerFixtureResolvedFileScope,
         engine: WorkerFixtureUIProcess, requireAdmission: @escaping () throws -> Void
+    ) throws {
+        try self.init(
+            source: source, destination: destination, engine: engine, mutableFileCount: 2,
+            requireAdmission: requireAdmission)
+    }
+
+    convenience init(
+        blitzTree: WorkerFixtureBlitzTreeNamespace, engine: WorkerFixtureUIProcess,
+        requireAdmission: @escaping () throws -> Void
+    ) throws {
+        try self.init(
+            source: blitzTree.source, destination: blitzTree.destination, engine: engine,
+            mutableFileCount: 1, requireAdmission: requireAdmission)
+    }
+
+    private init(
+        source: WorkerFixtureResolvedFileScope, destination: WorkerFixtureResolvedFileScope,
+        engine: WorkerFixtureUIProcess, mutableFileCount: Int,
+        requireAdmission: @escaping () throws -> Void
     ) throws {
         guard source.scope.kind == .directory, destination.scope.kind == .directory,
             source.scope.purpose == .mutableState, destination.scope.purpose == .mutableState,
@@ -864,7 +910,8 @@ struct WorkerFixtureEngineOutputScope {
             source.path != destination.path,
             !source.path.hasPrefix(destination.path + "/"),
             !destination.path.hasPrefix(source.path + "/"),
-            source.scope.mutableFiles.count == 2, destination.scope.mutableFiles.count == 2,
+            source.scope.mutableFiles.count == mutableFileCount,
+            destination.scope.mutableFiles.count == mutableFileCount,
             source.scope.mutableFiles.allSatisfy({
                 $0.components.count == 1 && $0.initialState == .present
                     && Set($0.allowedStates) == [.present, .absent]

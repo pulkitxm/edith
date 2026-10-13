@@ -736,6 +736,7 @@
         "Extensions/blitztree/BlitzTreeActions.swift",
         "Extensions/blitztree/BlitzTreeClient.swift",
         "Extensions/blitztree/BlitzTreeCommands.swift",
+        "Extensions/blitztree/BlitzTreeFixtureFiles.swift",
         "Extensions/blitztree/BlitzTreeMap.swift",
         "Extensions/blitztree/BlitzTreeModel.swift",
         "Extensions/blitztree/BlitzTreePage.swift",

@@ -124,10 +124,15 @@ final class FunctionalProducerReceiver {
                     "stateless original source with mutable file grants")
             }
         }
-        if phase == "initial" {
+        if phase != "initial" {
+            guard finalSavedObservations[owner] != nil else {
+                throw FunctionalFailure.invalid("missing prior actual saved generation")
+            }
+        }
+        if phase == "initial" || owner == "blitztree" {
             let files = try FunctionalFileScopes.preparationFiles(
                 owner: owner, root: root.url.path, session: issuer.session, policy: policy,
-                bytes: preparation)
+                bytes: preparation, phase: filePhase)
             try FunctionalSavedGeneration.prepareDirectories(
                 owner: owner, phase: filePhase, root: root,
                 issuer: issuer, policy: policy, definition: definition)
@@ -143,10 +148,6 @@ final class FunctionalProducerReceiver {
                 _ = try await FunctionalSyntheticMedia.createDownloadsAudio(
                     root: root, sourceCommit: issuer.sourceCommit,
                     session: issuer.session, policy: policy)
-            }
-        } else {
-            guard finalSavedObservations[owner] != nil else {
-                throw FunctionalFailure.invalid("missing prior actual saved generation")
             }
         }
         observationSequence += 1

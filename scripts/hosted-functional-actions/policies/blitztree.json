@@ -1,0 +1,119 @@
+{
+  "owner": "blitztree",
+  "primaryRole": "app",
+  "operations": [
+    "blitztree.ui.scan",
+    "blitztree.ui.snapshot",
+    "blitztree.ui.trash"
+  ],
+  "presentations": [
+    {
+      "location": "main",
+      "section": "blitztree"
+    }
+  ],
+  "inputs": [],
+  "outputs": ["victim", "private-trash"],
+  "fileScopes": [
+    {
+      "name": "scan-directory",
+      "kind": "directory",
+      "purpose": "mutable-state",
+      "root": "owner-outputs",
+      "components": [
+        {
+          "phase": true
+        },
+        {
+          "literal": "scan"
+        }
+      ],
+      "maximumBytes": 4096,
+      "maximumEntries": 1,
+      "initialState": "present",
+      "allowedStates": ["present"],
+      "immutableFiles": [],
+      "mutableFiles": [
+        {
+          "components": ["victim.bin"],
+          "maximumBytes": 4096,
+          "initialState": "present",
+          "allowedStates": ["present", "absent"]
+        }
+      ]
+    },
+    {
+      "name": "trash-directory",
+      "kind": "directory",
+      "purpose": "mutable-state",
+      "root": "owner-outputs",
+      "components": [
+        {
+          "phase": true
+        },
+        {
+          "literal": "trash"
+        }
+      ],
+      "maximumBytes": 4096,
+      "maximumEntries": 1,
+      "initialState": "present",
+      "allowedStates": ["present"],
+      "immutableFiles": [],
+      "mutableFiles": [
+        {
+          "components": ["victim.bin"],
+          "maximumBytes": 4096,
+          "initialState": "absent",
+          "allowedStates": ["present", "absent"]
+        }
+      ]
+    },
+    {
+      "name": "victim",
+      "kind": "file",
+      "purpose": "mutable-state",
+      "root": "owner-outputs",
+      "components": [
+        {
+          "phase": true
+        },
+        {
+          "literal": "scan"
+        },
+        {
+          "literal": "victim.bin"
+        }
+      ],
+      "maximumBytes": 4096,
+      "maximumEntries": 1,
+      "initialState": "present",
+      "allowedStates": ["present", "absent"],
+      "immutableFiles": [],
+      "mutableFiles": []
+    },
+    {
+      "name": "private-trash",
+      "kind": "file",
+      "purpose": "initially-absent-output",
+      "root": "owner-outputs",
+      "components": [
+        {
+          "phase": true
+        },
+        {
+          "literal": "trash"
+        },
+        {
+          "literal": "victim.bin"
+        }
+      ],
+      "maximumBytes": 4096,
+      "maximumEntries": 1,
+      "initialState": "absent",
+      "allowedStates": ["present", "absent"],
+      "immutableFiles": [],
+      "mutableFiles": []
+    }
+  ]
+}
