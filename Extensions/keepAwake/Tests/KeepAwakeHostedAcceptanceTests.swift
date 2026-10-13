@@ -125,6 +125,29 @@ import Testing
             var readiness = KeepAwakePressReadiness(baseline: try snapshot())
             var observations: [[String: Bool]] = []
             var attempts = 0
+            func pressFailure(_ stage: String, control: AnyObject?, accepted: Bool)
+                -> KeepAwakePressFailure
+            {
+                let accessibility = control as? any NSAccessibilityProtocol
+                let details = KeepAwakePressDiagnostics.encode(
+                    attempts: attempts, accepted: accepted, baseline: readiness.baseline,
+                    current: try? snapshot(), baselineValue: readiness.baselineAccessibilityValue,
+                    currentValue: (accessibility?.accessibilityValue() as? NSNumber)?.intValue,
+                    flags: [
+                        "controlAvailable": control != nil,
+                        "roleMatched": control?.accessibilityRole?() == .checkBox,
+                        "labelMatched": control?.accessibilityLabel?() == "Keep awake",
+                        "identifierMatched": control?.accessibilityIdentifier?()
+                            == "keepAwake.preventSleep",
+                        "enabled": control?.isAccessibilityEnabled?() == true,
+                        "element": control?.isAccessibilityElement?() == true,
+                        "selectorPresent": control?.responds?(to: pressSelector) == true,
+                        "selectorAllowed": control?.isAccessibilitySelectorAllowed?(pressSelector)
+                            == true,
+                        "protocolConforms": accessibility != nil, "modelIdle": idle(),
+                    ])
+                return KeepAwakePressFailure(description: stage + ": " + details)
+            }
             try await wait(
                 "Accept original Keep awake checkbox press",
                 diagnostic: {
@@ -137,11 +160,9 @@ import Testing
                 do {
                     try readiness.check(snapshot: snapshot(), idle: idle())
                 } catch {
-                    try #require(
-                        false,
-                        "Original checkbox changed or became busy before accepted press: \(diagnosticJSON(["pressAttempts": attempts, "modelIdle": idle()]))"
-                    )
-                    throw error
+                    throw pressFailure(
+                        "Original checkbox changed or became busy before accepted press",
+                        control: checkbox(in: host), accepted: false)
                 }
                 guard let control = checkbox(in: host) else { return false }
                 let selectorPresent = control.responds?(to: pressSelector) == true
@@ -158,17 +179,15 @@ import Testing
                         ready: ready, idle: idle(), value: value,
                         perform: {
                             attempts += 1
-                            pressed = control.accessibilityPerformPress?() == true
+                            pressed = accessibility?.accessibilityPerformPress() == true
                             return pressed
                         },
                         snapshot: snapshot,
                         readValue: { (accessibility?.accessibilityValue() as? NSNumber)?.intValue })
                 } catch {
-                    try #require(
-                        false,
-                        "Original checkbox changed or became busy without accepted press: \(diagnosticJSON(["pressAttempts": attempts, "pressAccepted": pressed]))"
-                    )
-                    throw error
+                    throw pressFailure(
+                        "Original checkbox changed or became busy without accepted press",
+                        control: control, accepted: pressed)
                 }
                 observations.append([
                     "roleMatched": control.accessibilityRole?() == .checkBox,
