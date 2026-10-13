@@ -106,100 +106,124 @@ import Testing
     {
         let runtime = ExtensionRuntime()
         let requests = Requests()
-        let suite = try #require(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
-        let started =
-            runtime.execute(["operation": "start", "defaultsSuite": suite] as NSDictionary)
-            as? NSDictionary
-        let admitted = runtime.execute(["operation": "status"] as NSDictionary) as? NSDictionary
-        try #require(
-            started?["ok"] as? Bool == true && admitted?["running"] as? Bool == true,
-            "stage=runtime admission start=\(String(describing: started)) status=\(String(describing: admitted))"
-        )
-        print("studio background export: runtime admitted")
-        let root = try VideoEditorServiceTests.folder()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let movie = try await VideoEditorServiceTests.movie(in: root)
-        var project = VideoProject.create()
-        project.videoSettings = VideoSettings(width: 320, height: 180, frameRateNumerator: 30)
-        project.addAsset(movie, duration: 1, width: 64, height: 64)
-        let clip = try #require(project.clips.first?.id)
-        for _ in 0..<119 { _ = project.duplicate(clipID: clip) }
-        let source = root.appendingPathComponent("background.openscreen")
-        try project.save(to: source)
-        let original = try Data(contentsOf: source)
-        let output = root.appendingPathComponent("background.mp4")
-        var invalidations = 0
-        let old = facade(runtime, requests: requests, invalidate: { invalidations += 1 })
-        let editor = VideoEditorModel(facade: old)
-        editor.openProject(at: source)
-        try await waitUntil(
-            "initial native frame",
-            diagnostics: { diagnostics(runtime, requests: requests, facade: old, editor: editor) }
-        ) { editor.remoteFrame != nil || editor.errorMessage != nil }
-        #expect(editor.errorMessage == nil)
-        let id = try #require(editor.remoteSessionID)
-        old.exporter.start(to: output) { progress in
-            let _: VideoDeliveryReport = try await old.perform(
-                "studio.ui.video.export",
-                object: [
-                    "id": id.uuidString, "format": "video", "output": output.path,
-                    "settings": try old.object(VideoDeliverySettings()),
-                    "quality": VideoExportQuality.source.rawValue, "fps": 15, "width": 0,
-                    "loop": true,
-                ], progress: progress)
-        }
-        try await waitUntil(
-            "native export progress",
-            diagnostics: { diagnostics(runtime, requests: requests, facade: old, editor: editor) }
-        ) { (old.exporter.job?.progress ?? 0) > 0 }
-        #expect(old.exporter.isExporting)
-        editor.close()
-        old.stop()
-        try await waitUntil(
-            "closed facade invalidation",
-            diagnostics: {
-                "invalidations=\(invalidations) "
-                    + diagnostics(runtime, requests: requests, facade: old, editor: editor)
+        var ownedFacades: [StudioUIFacade] = []
+        var ownedEditor: VideoEditorModel?
+        let fixture = StudioBackgroundExportFixture {
+            ownedEditor?.close()
+            for facade in ownedFacades { facade.stop() }
+            await withCheckedContinuation { continuation in
+                runtime.prepareToStop { continuation.resume() }
             }
-        ) { invalidations == 1 }
-        let status = runtime.execute(["operation": "status"] as NSDictionary) as? NSDictionary
-        #expect(status?["preventsQuit"] as? Bool == true)
-        let reopened = facade(runtime, requests: requests)
-        reopened.refresh()
-        try await waitUntil(
-            "reopened export controls",
-            diagnostics: { diagnostics(runtime, requests: requests, facade: reopened) }
-        ) { reopened.state?.export != nil || reopened.failure != nil }
-        #expect(reopened.failure == nil && reopened.exporter.job?.destination == output)
-        let token = try #require(reopened.state?.export?.token)
-        reopened.observe()
-        try await waitUntil(
-            "native export completion",
-            diagnostics: { diagnostics(runtime, requests: requests, facade: reopened) }
-        ) { reopened.exporter.job?.phase == .finished }
-        let report = try #require(reopened.exporter.job?.report)
-        #expect(report.bytes > 0 && report.frameCount == 3600 && abs(report.duration - 120) < 0.01)
-        #expect(report.sha256 == (try await VideoDeliveryReport.inspect(output)).sha256)
-        #expect(try Data(contentsOf: source) == original)
-        #expect(reopened.exporter.job?.id == token)
-        reopened.exporter.clear()
-        try await waitUntil(
-            "native export cleared",
-            diagnostics: { diagnostics(runtime, requests: requests, facade: reopened) }
-        ) {
-            reopened.refresh(); return reopened.state?.export == nil
+            await ownedEditor?.stopAndWait()
+            for facade in ownedFacades { await facade.stopAndWait() }
         }
-        #expect(reopened.exporter.job == nil)
-        reopened.stop()
-        print(
-            "studio background export: waiting for runtime drain "
-                + diagnostics(runtime, requests: requests, facade: reopened))
-        await withCheckedContinuation { continuation in
-            runtime.prepareToStop { continuation.resume() }
+        try await fixture.run {
+            let suite = try #require(
+                ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
+            let started =
+                runtime.execute(["operation": "start", "defaultsSuite": suite] as NSDictionary)
+                as? NSDictionary
+            let admitted = runtime.execute(["operation": "status"] as NSDictionary) as? NSDictionary
+            try #require(
+                started?["ok"] as? Bool == true && admitted?["running"] as? Bool == true,
+                "stage=runtime admission start=\(String(describing: started)) status=\(String(describing: admitted))"
+            )
+            print("studio background export: runtime admitted")
+            let root = try VideoEditorServiceTests.folder()
+            fixture.directory = root
+            let movie = try await VideoEditorServiceTests.movie(in: root)
+            var project = VideoProject.create()
+            project.videoSettings = VideoSettings(width: 320, height: 180, frameRateNumerator: 30)
+            project.addAsset(movie, duration: 1, width: 64, height: 64)
+            let clip = try #require(project.clips.first?.id)
+            for _ in 0..<119 { _ = project.duplicate(clipID: clip) }
+            let source = root.appendingPathComponent("background.openscreen")
+            try project.save(to: source)
+            let original = try Data(contentsOf: source)
+            let output = root.appendingPathComponent("background.mp4")
+            var invalidations = 0
+            let old = facade(runtime, requests: requests, invalidate: { invalidations += 1 })
+            ownedFacades.append(old)
+            let editor = VideoEditorModel(facade: old)
+            ownedEditor = editor
+            editor.openProject(at: source)
+            try await waitUntil(
+                "initial native frame",
+                diagnostics: {
+                    diagnostics(runtime, requests: requests, facade: old, editor: editor)
+                }
+            ) { editor.remoteFrame != nil || editor.errorMessage != nil }
+            #expect(editor.errorMessage == nil)
+            let id = try #require(editor.remoteSessionID)
+            old.exporter.start(to: output) { progress in
+                let _: VideoDeliveryReport = try await old.perform(
+                    "studio.ui.video.export",
+                    object: [
+                        "id": id.uuidString, "format": "video", "output": output.path,
+                        "settings": try old.object(VideoDeliverySettings()),
+                        "quality": VideoExportQuality.source.rawValue, "fps": 15, "width": 0,
+                        "loop": true,
+                    ], progress: progress)
+            }
+            try await waitUntil(
+                "native export progress",
+                diagnostics: {
+                    diagnostics(runtime, requests: requests, facade: old, editor: editor)
+                }
+            ) { (old.exporter.job?.progress ?? 0) > 0 }
+            #expect(old.exporter.isExporting)
+            editor.close()
+            old.stop()
+            try await waitUntil(
+                "closed facade invalidation",
+                diagnostics: {
+                    "invalidations=\(invalidations) "
+                        + diagnostics(runtime, requests: requests, facade: old, editor: editor)
+                }
+            ) { invalidations == 1 }
+            let status = runtime.execute(["operation": "status"] as NSDictionary) as? NSDictionary
+            #expect(status?["preventsQuit"] as? Bool == true)
+            let reopened = facade(runtime, requests: requests)
+            ownedFacades.append(reopened)
+            reopened.refresh()
+            try await waitUntil(
+                "reopened export controls",
+                diagnostics: { diagnostics(runtime, requests: requests, facade: reopened) }
+            ) { reopened.state?.export != nil || reopened.failure != nil }
+            #expect(reopened.failure == nil && reopened.exporter.job?.destination == output)
+            let token = try #require(reopened.state?.export?.token)
+            reopened.observe()
+            try await waitUntil(
+                "native export completion",
+                diagnostics: { diagnostics(runtime, requests: requests, facade: reopened) }
+            ) { reopened.exporter.job?.phase == .finished }
+            let report = try #require(reopened.exporter.job?.report)
+            #expect(
+                report.bytes > 0 && report.frameCount == 3600 && abs(report.duration - 120) < 0.01)
+            #expect(report.sha256 == (try await VideoDeliveryReport.inspect(output)).sha256)
+            #expect(try Data(contentsOf: source) == original)
+            #expect(reopened.exporter.job?.id == token)
+            reopened.exporter.clear()
+            try await waitUntil(
+                "native export cleared",
+                diagnostics: { diagnostics(runtime, requests: requests, facade: reopened) }
+            ) {
+                reopened.refresh(); return reopened.state?.export == nil
+            }
+            #expect(reopened.exporter.job == nil)
+            reopened.stop()
+            print(
+                "studio background export: waiting for runtime drain "
+                    + diagnostics(runtime, requests: requests, facade: reopened))
+            await withCheckedContinuation { continuation in
+                runtime.prepareToStop { continuation.resume() }
+            }
+            let disabled = runtime.execute(["operation": "status"] as NSDictionary) as? NSDictionary
+            print(
+                "studio background export: runtime drained status=\(String(describing: disabled))")
+            #expect(
+                disabled?["running"] as? Bool == false
+                    && disabled?["preventsQuit"] as? Bool == false)
         }
-        let disabled = runtime.execute(["operation": "status"] as NSDictionary) as? NSDictionary
-        print("studio background export: runtime drained status=\(String(describing: disabled))")
-        #expect(
-            disabled?["running"] as? Bool == false && disabled?["preventsQuit"] as? Bool == false)
     }
 }
