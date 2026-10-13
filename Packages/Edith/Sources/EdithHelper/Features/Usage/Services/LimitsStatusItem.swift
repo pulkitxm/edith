@@ -73,7 +73,8 @@ final class LimitsStatusItem {
                         columns: [
                             .init(
                                 label: "accounts", value: "+\(accounts.count - 1)",
-                                valueColor: .secondaryLabelColor, labelColor: .secondaryLabelColor)
+                                valueColor: subColor ?? .secondaryLabelColor,
+                                labelColor: subColor ?? .secondaryLabelColor)
                         ]))
             }
             renderStackedGroups(rendered + stackedGroups(groups))
@@ -176,19 +177,31 @@ final class LimitsStatusItem {
 
     nonisolated static func accountGroups(
         _ accounts: [ClaudeAccountLimits], masked: Bool,
-        slots: [LimitWindowSlot] = [.session, .week]
+        slots: [LimitWindowSlot] = [.session, .week],
+        defaults: UserDefaults = SharedDefaults.store
     ) -> [StackedLimitsView.Group] {
-        accounts.map { account in
+        let mode = MenuBarTintMode(
+            preference: defaults.string(forKey: AppStorageKeys.MenuBar.colorMode))
+        let customText =
+            mode == .custom
+            ? nsColor(hex: defaults.string(forKey: AppStorageKeys.MenuBar.subColorHex)) : nil
+        let labelColor = customText ?? .secondaryLabelColor
+        let dimColor = customText ?? .tertiaryLabelColor
+        return accounts.map { account in
             let columns = slots.map { slot in
                 let percent = SurfaceQuotaValue(account.limits.window(for: slot)).percent
                 let color: NSColor =
                     masked || percent == nil
-                    ? .secondaryLabelColor
-                    : (percent! >= 85 ? .systemRed : percent! >= 60 ? .systemOrange : .labelColor)
+                    ? dimColor
+                    : account.limits.window(for: slot).map {
+                        Self.color(
+                            for: $0, duration: slot.pacingDuration(for: .claude, period: $0.period),
+                            defaults: defaults)
+                    } ?? dimColor
                 return StackedLimitsView.Column(
                     label: String(account.name.prefix(8)) + " " + slot.menuBarLabel,
                     value: masked ? "·" : percent.map { "\(Int($0))" } ?? "?",
-                    valueColor: color, labelColor: .secondaryLabelColor)
+                    valueColor: color, labelColor: labelColor)
             }
             return StackedLimitsView.Group(logo: nil, columns: columns)
         }
@@ -338,7 +351,20 @@ final class LimitsStatusItem {
     }
 
     private func color(for window: LimitWindow, duration: TimeInterval) -> NSColor {
-        let d = SharedDefaults.store
+        Self.color(for: window, duration: duration, defaults: SharedDefaults.store)
+    }
+
+    private nonisolated static func color(
+        for window: LimitWindow, duration: TimeInterval, defaults d: UserDefaults
+    ) -> NSColor {
+        let mode = MenuBarTintMode(preference: d.string(forKey: AppStorageKeys.MenuBar.colorMode))
+        func anchor(_ key: String, _ fallback: NSColor) -> NSColor {
+            guard mode == .custom else { return fallback }
+            return nsColor(hex: d.string(forKey: key)) ?? fallback
+        }
+        let lowColor = anchor(AppStorageKeys.MenuBar.lowColorHex, .systemGreen)
+        let midColor = anchor(AppStorageKeys.MenuBar.midColorHex, .systemOrange)
+        let highColor = anchor(AppStorageKeys.MenuBar.highColorHex, .systemRed)
         if d.object(forKey: AppStorageKeys.General.smartColor) as? Bool ?? true {
             let risk = LimitMath.smartRisk(
                 utilization: window.percent, resetsAt: window.resetsAt,
@@ -368,16 +394,7 @@ final class LimitsStatusItem {
         }
     }
 
-    private func anchor(_ key: String, _ fallback: NSColor) -> NSColor {
-        guard mode == .custom else { return fallback }
-        return Self.nsColor(hex: SharedDefaults.store.string(forKey: key)) ?? fallback
-    }
-
-    private var lowColor: NSColor { anchor(AppStorageKeys.MenuBar.lowColorHex, .systemGreen) }
-    private var midColor: NSColor { anchor(AppStorageKeys.MenuBar.midColorHex, .systemOrange) }
-    private var highColor: NSColor { anchor(AppStorageKeys.MenuBar.highColorHex, .systemRed) }
-
-    static func color(
+    nonisolated static func color(
         forRisk risk: Double, low: NSColor = .systemGreen, mid: NSColor = .systemOrange,
         high: NSColor = .systemRed
     ) -> NSColor {
@@ -388,7 +405,7 @@ final class LimitsStatusItem {
         return interpolateHSB(mid, high, t: (r - 0.55) / 0.30)
     }
 
-    static func nsColor(hex: String?) -> NSColor? {
+    nonisolated static func nsColor(hex: String?) -> NSColor? {
         guard var s = hex else { return nil }
         if s.hasPrefix("#") { s.removeFirst() }
         guard s.count == 6, let v = UInt64(s, radix: 16) else { return nil }
@@ -398,7 +415,8 @@ final class LimitsStatusItem {
             blue: CGFloat(v & 0xff) / 255, alpha: 1)
     }
 
-    private static func interpolateHSB(_ a: NSColor, _ b: NSColor, t: Double) -> NSColor {
+    private nonisolated static func interpolateHSB(_ a: NSColor, _ b: NSColor, t: Double) -> NSColor
+    {
         let f = CGFloat(max(0, min(1, t)))
         guard let x = a.usingColorSpace(.sRGB), let y = b.usingColorSpace(.sRGB) else { return a }
         let dh = y.hueComponent - x.hueComponent
