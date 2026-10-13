@@ -53,6 +53,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         self.self_group_observations = {}
         self.pending_children = {}
         self.pending_failures = set()
+        self.recovery_failure_stages = {}
         value = self.snapshot(leader)
         if value is None or value[4] != leader:
             raise RuntimeError('Owned leader identity unavailable')
@@ -293,10 +294,11 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         return True
 
     def recover_snapshot(self, pid):
+        self.recovery_failure_stages.pop(pid, None)
         identity = self.known.get(pid)
         seal = self.current_seal(pid)
         if identity is None or seal is None or identity[:3] + identity[4:5] != seal:
-            return None
+            return self.record_recovery_failure(pid, 'retained_identity')
         snapshots = []
         for _ in range(2):
             info = watchdog.ProcessInfo()
@@ -306,13 +308,21 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                     or info.uid != self.uid or info.ruid != self.uid
                     or info.seconds <= 0 or info.microseconds >= 1_000_000
                     or (pid, info.seconds, info.microseconds, info.pgid) != seal):
-                return None
+                return self.record_recovery_failure(
+                    pid, 'first_kernel' if not snapshots else 'second_kernel')
             path = ctypes.create_string_buffer(4096)
             if self.library.proc_pidpath(pid, path, len(path)) <= 0:
-                return None
+                return self.record_recovery_failure(
+                    pid, 'first_path' if not snapshots else 'second_path')
             snapshots.append((pid, info.seconds, info.microseconds, path.value.decode(),
                               info.pgid, info.ppid))
-        return snapshots[1] if snapshots[0] == snapshots[1] else None
+        return snapshots[1] if snapshots[0] == snapshots[1] else self.record_recovery_failure(pid, 'snapshot_fields')
+
+    def record_recovery_failure(self, pid, stage):
+        if (pid in self.known and pid in self.seals
+                and (pid in self.recovery_failure_stages or len(self.recovery_failure_stages) < 8)):
+            self.recovery_failure_stages[pid] = stage
+        return None
 
     def sealed_zombie(self, pid):
         identity = self.known.get(pid)
@@ -360,6 +370,8 @@ class BoundedOwnership(watchdog.OwnedProcesses):
             row['probeFailed'] = True
         if kind == 'birth_or_group_changed' and pid in self.self_group_observations:
             row.update(self.self_group_observations[pid])
+        if kind == 'live_identity_unavailable' and pid in self.recovery_failure_stages:
+            row['recoveryFailureStage'] = self.recovery_failure_stages[pid]
         self.failure_observations.append(row)
 
     def reject(self, pid, message):

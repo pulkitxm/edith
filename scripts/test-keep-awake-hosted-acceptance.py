@@ -93,14 +93,20 @@ def native_failure_diagnostics(value, log_path):
                          'currentPathMatchesRetained', 'twoChildRecordsMatch',
                          'parentBeforeMatches', 'parentAfterMatches',
                          'parentRecordsStable', 'transitionAdmitted'}
+    recovery_stages = {'retained_identity', 'first_kernel', 'first_path',
+                       'second_kernel', 'second_path', 'snapshot_fields'}
     candidates = value.get('ownershipFailureObservations', [])
     for row in candidates[:8] if isinstance(candidates, list) else []:
         extended = (isinstance(row, dict) and row.get('kind') == 'birth_or_group_changed'
                     and set(row) == fields | self_group_fields)
-        if (not isinstance(row, dict) or set(row) != fields and not extended
+        recovery = (isinstance(row, dict) and row.get('kind') == 'live_identity_unavailable'
+                    and set(row) == fields | {'recoveryFailureStage'})
+        if (not isinstance(row, dict) or set(row) != fields and not extended and not recovery
                 or row['kind'] not in ['live_identity_unavailable', 'birth_or_group_changed']
                 or row['kind'] not in kinds
                 or extended and any(type(row[field]) is not bool for field in self_group_fields)
+                or recovery and (type(row['recoveryFailureStage']) is not str
+                                 or row['recoveryFailureStage'] not in recovery_stages)
                 or type(row['knownSeal']) is not bool or type(row['probeFailed']) is not bool
                 or any(row[field] is not None and type(row[field]) is not bool
                        for field in boolean_fields)
