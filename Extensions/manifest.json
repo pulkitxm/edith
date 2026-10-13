@@ -1594,6 +1594,7 @@
         "Extensions/studio/VideoEditor/VideoProjectRegistry.swift",
         "Extensions/studio/VideoEditor/VideoPublicationManifest.swift",
         "Extensions/studio/VideoEditor/VideoRecorder.swift",
+        "Extensions/studio/VideoEditor/VideoFallbackFrames.swift",
         "Extensions/studio/VideoEditor/VideoRenderPipeline.swift",
         "Extensions/studio/VideoEditor/VideoReviewBorders.swift",
         "Extensions/studio/VideoEditor/VideoReviewOverlays.swift",

@@ -198,22 +198,6 @@ struct VideoRenderPipeline {
         return (timeMs - current.timeMs <= 150 ? current : nil, clicked)
     }
 
-    private final class FrameSource: @unchecked Sendable {
-        let generator: AVAssetImageGenerator
-        private let lock = NSLock()
-
-        init(asset: AVAsset) {
-            generator = AVAssetImageGenerator(asset: asset)
-        }
-
-        func frame(at time: Double) -> CGImage? {
-            lock.withLock {
-                try? generator.copyCGImage(
-                    at: CMTime(seconds: time, preferredTimescale: 600), actualTime: nil)
-            }
-        }
-    }
-
     private final class CameraFrameSource: @unchecked Sendable {
         let generator: AVAssetImageGenerator
         let offset: Double
@@ -273,6 +257,7 @@ struct VideoRenderPipeline {
     let segments: [Segment]
     let canvas: CGSize
     var captionRasterCache: VideoCaptionRasterCache? = nil
+    var fallbackFrameCache: VideoFallbackFrameCache? = nil
 
     var duration: Double { segments.last?.outputEnd ?? 0 }
 
@@ -303,7 +288,8 @@ struct VideoRenderPipeline {
 
         let segments = timingSegments(project: project)
         var visualEffects: [String: VideoVisualEffects] = [:]
-        var frameGenerators: [String: FrameSource] = [:]
+        let fallbackFrames = VideoFallbackFrameCache()
+        var frameGenerators: [String: VideoFallbackFrameSource] = [:]
         var cameras: [String: CameraFrameSource] = [:]
         var cursors: [String: [CursorSample]] = [:]
         var stillImages: [String: CIImage] = [:]
@@ -352,7 +338,8 @@ struct VideoRenderPipeline {
                     url: URL(fileURLWithPath: cameraPath), offset: (start + offset) / 1000)
             }
             if frameGenerators[clip.assetID] == nil {
-                frameGenerators[clip.assetID] = FrameSource(asset: asset)
+                frameGenerators[clip.assetID] = VideoFallbackFrameSource(
+                    asset: asset, cache: fallbackFrames)
             }
             guard let sourceVideo = try await asset.loadTracks(withMediaType: .video).first else {
                 throw RenderError.noVideo
@@ -537,7 +524,8 @@ struct VideoRenderPipeline {
             composition: composition, videoComposition: videoComposition,
             audioMix: mix.inputParameters.isEmpty ? nil : mix,
             audioRateSources: rateSources,
-            segments: segments, canvas: canvas, captionRasterCache: captionRasters)
+            segments: segments, canvas: canvas, captionRasterCache: captionRasters,
+            fallbackFrameCache: fallbackFrames)
     }
 
     static func audioTransitions(
@@ -649,6 +637,8 @@ struct VideoRenderPipeline {
         progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws {
         try Task.checkCancellation()
+        let fallbackScope = fallbackFrameCache?.begin()
+        defer { if let fallbackScope { fallbackFrameCache?.end(fallbackScope) } }
         let temporary = Self.exportTemporaryURL(url)
         defer { try? FileManager.default.removeItem(at: temporary) }
         let preset =
@@ -692,6 +682,8 @@ struct VideoRenderPipeline {
         }
         try Task.checkCancellation()
         let worker = Task.detached(priority: .userInitiated) {
+            let fallbackScope = fallbackFrameCache?.begin()
+            defer { if let fallbackScope { fallbackFrameCache?.end(fallbackScope) } }
             let temporary = Self.exportTemporaryURL(url)
             defer { try? FileManager.default.removeItem(at: temporary) }
             let count = max(1, Int(ceil(duration * Double(fps))))
