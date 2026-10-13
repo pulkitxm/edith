@@ -348,6 +348,7 @@ ci-extension-camera-carrier: host
 
 .PHONY: ci-extension-camera-voice
 ci-extension-camera-voice: host
+	bun test scripts/extension-development-host-context.test.js
 	bun scripts/test-extension-native-policy.mjs
 	python3 scripts/build-camera-microphone.py --application com.pulkit.edith.tests.camera --version 1.0.0 --output local/camera-microphone
 	python3 scripts/build-camera-microphone.py --test --driver local/camera-microphone/com.pulkit.edith.tests.camera.microphone.driver --output local/camera-microphone
