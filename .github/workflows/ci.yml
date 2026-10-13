@@ -255,7 +255,9 @@ jobs:
   music-player:
     name: music-player
     needs: changes
-    if: needs.changes.outputs.music_player == 'true'
+    if: >-
+      needs.changes.outputs.music_player == 'true'
+      && !(github.event_name == 'workflow_dispatch' && inputs.release == true && inputs.coordinated_host_release != '')
     runs-on: macos-26
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -436,8 +438,9 @@ jobs:
     name: companion
     needs: changes
     if: >-
-      needs.changes.outputs.companion == 'true'
-      || needs.changes.outputs.workflows == 'true'
+      (needs.changes.outputs.companion == 'true'
+      || needs.changes.outputs.workflows == 'true')
+      && !(github.event_name == 'workflow_dispatch' && inputs.release == true && inputs.coordinated_host_release != '')
     runs-on: ubuntu-latest
     concurrency:
       group: ci-companion-${{ github.ref }}-${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' && 'product' || github.run_id }}
