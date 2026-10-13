@@ -41,6 +41,14 @@ def unique_object(pairs):
 
 
 def request(text):
+    return validated_request(text, False)
+
+
+def preparation_template(text):
+    return validated_request(text, True)
+
+
+def validated_request(text, preparation):
     require(type(text) is str and 0 < len(text.encode()) <= 65536, "Unbounded cohort request")
     value = json.loads(text, object_pairs_hook=unique_object)
     exact(value, ["schema", "source", "application", "hosts", "packages", "catalogs"])
@@ -49,8 +57,12 @@ def request(text):
     require(value["application"] == APPLICATION, "Production application must be canonical")
     for kind in ["hosts", "packages", "catalogs"]:
         exact(value[kind], ["previous", "current"])
+    if preparation:
+        require(value["packages"]["current"] is None and value["catalogs"]["current"] is None, "Current package and catalog must be measured")
     for generation in ["previous", "current"]:
         host(value["hosts"][generation])
+        if preparation and generation == "current":
+            continue
         package(value["packages"][generation], "1.0.0" if generation == "previous" else "1.0.1")
         catalog(value["catalogs"][generation], value["packages"][generation])
     previous = value["hosts"]["previous"]
@@ -61,17 +73,18 @@ def request(text):
     require(current["build"] > previous["build"], "Host build is not newer")
     for key in ["teamIdentifier", "designatedRequirement", "hostABI", "architecture", "certificateCategory"]:
         require(previous[key] == current[key], "Host trust or worker compatibility changed")
-    for generation in ["previous", "current"]:
+    for generation in (["previous"] if preparation else ["previous", "current"]):
         item = value["packages"][generation]
         for key in ["hostABI", "architecture"]:
             require(item[key] == previous[key], "Package is incompatible with either host")
         require(item["workerContract"]["packagedHostRequirement"] == previous["designatedRequirement"], "Package does not authenticate both production hosts")
-    older = value["packages"]["previous"]
-    newer = value["packages"]["current"]
-    for key in ["archiveSHA256", "sourceFingerprint"]:
-        require(older[key] != newer[key], "Package generation did not change")
-    require(value["catalogs"]["current"]["revision"] > value["catalogs"]["previous"]["revision"], "Catalog did not advance")
-    require(value["catalogs"]["current"]["sha256"] != value["catalogs"]["previous"]["sha256"], "Catalog bytes did not change")
+    if not preparation:
+        older = value["packages"]["previous"]
+        newer = value["packages"]["current"]
+        for key in ["archiveSHA256", "sourceFingerprint"]:
+            require(older[key] != newer[key], "Package generation did not change")
+        require(value["catalogs"]["current"]["revision"] > value["catalogs"]["previous"]["revision"], "Catalog did not advance")
+        require(value["catalogs"]["current"]["sha256"] != value["catalogs"]["previous"]["sha256"], "Catalog bytes did not change")
     return value
 
 

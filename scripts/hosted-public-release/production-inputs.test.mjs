@@ -15,6 +15,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  managedNativeBuildSteps,
+  shippingNativeTestSteps,
+} from "../hosted-managed-views/native-ci-contract.mjs";
+import { stagedEvidence } from "./evidence.mjs";
+import {
+  admitCurrentProductionNativeRun,
   boundedProductionFile,
   closedProductionAsset,
   matchingProductionCatalogRecord,
@@ -222,4 +228,175 @@ test("selected signed catalog row must equal the immutable release record in eve
       record,
     ),
   );
+});
+
+function currentNativeFacts() {
+  const source = "a".repeat(40);
+  const record = {
+    id: "keepAwake",
+    version: "1.0.1",
+    sourceFingerprint: "b".repeat(64),
+  };
+  const lineage = { sourceCommit: source, runID: 101, runAttempt: 1 };
+  const run = {
+    id: 101,
+    run_attempt: 1,
+    repository: { full_name: "pulkitxm/edith" },
+    path: ".github/workflows/extensions.yml",
+    head_sha: source,
+    head_branch: "main",
+    event: "workflow_dispatch",
+    status: "in_progress",
+    conclusion: null,
+    actor: { id: 65671483 },
+  };
+  const jobs = [
+    "plan",
+    "frozen-host",
+    "tests",
+    "build (keepAwake)",
+    "publish",
+  ].map((name, index) => ({
+    id: 201 + index,
+    run_id: run.id,
+    name,
+    status: name === "publish" ? "in_progress" : "completed",
+    conclusion: name === "publish" ? null : "success",
+    steps: (name === "tests"
+      ? shippingNativeTestSteps
+      : name.startsWith("build (")
+        ? managedNativeBuildSteps
+        : name === "publish"
+          ? ["Preserve immutable native evidence before publication"]
+          : []
+    ).map((name_, number) => ({
+      name: name_,
+      number: number + 1,
+      status: name === "publish" ? "in_progress" : "completed",
+      conclusion: name === "publish" ? null : "success",
+    })),
+  }));
+  const artifacts = [
+    "extension-plan",
+    "frozen-extension-host",
+    "extension-keepAwake",
+  ].map((name, index) => ({
+    name,
+    id: 301 + index,
+    size_in_bytes: 37,
+    digest: `sha256:${"c".repeat(64)}`,
+    expired: false,
+    workflow_run: { id: run.id, head_sha: source },
+  }));
+  const environment = {
+    GITHUB_ACTIONS: "true",
+    RUNNER_ENVIRONMENT: "github-hosted",
+    RUNNER_OS: "macOS",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_REPOSITORY: "pulkitxm/edith",
+    GITHUB_SHA: source,
+    GITHUB_RUN_ID: "101",
+    GITHUB_RUN_ATTEMPT: "1",
+    GITHUB_JOB: "publish",
+    GITHUB_EVENT_NAME: "workflow_dispatch",
+    GITHUB_ACTOR_ID: "65671483",
+  };
+  const facts = { run, jobs, artifacts };
+  const payload = stagedEvidence({
+    ...facts,
+    source,
+    plannedIDs: [record.id],
+    fingerprints: {
+      ...Object.fromEntries(
+        Array.from({ length: 38 }, (_, i) => [`owner${i}`, "b".repeat(64)]),
+      ),
+      keepAwake: record.sourceFingerprint,
+    },
+    environment,
+  });
+  const publisher = jobs.find(({ name }) => name === "publish");
+  publisher.steps[0].status = "completed";
+  publisher.steps[0].conclusion = "success";
+  publisher.steps.push({
+    name: "Publish immutable extension releases and the signed catalog",
+    number: 2,
+    status: "in_progress",
+    conclusion: null,
+  });
+  return { record, lineage, facts, payload, environment };
+}
+
+test("same-run current B requires real native staging identity while publication remains active", () => {
+  const value = currentNativeFacts();
+  admitCurrentProductionNativeRun(
+    value.lineage,
+    value.payload,
+    value.facts,
+    value.record,
+    value.environment,
+  );
+  assert.throws(() => productionVerifiedInputs(value));
+});
+
+test("current staging rejects another run source actor attempt, incomplete native jobs and publisher step drift", () => {
+  const changes = [
+    (v) => {
+      v.environment.GITHUB_RUN_ID = "102";
+    },
+    (v) => {
+      v.environment.GITHUB_RUN_ATTEMPT = "2";
+    },
+    (v) => {
+      v.environment.GITHUB_SHA = "f".repeat(40);
+    },
+    (v) => {
+      v.environment.GITHUB_JOB = "tests";
+    },
+    (v) => {
+      v.facts.run.actor.id = 1;
+    },
+    (v) => {
+      v.facts.run.event = "push";
+    },
+    (v) => {
+      v.facts.run.status = "completed";
+    },
+    (v) => {
+      v.facts.jobs.find(({ name }) => name === "tests").conclusion = "failure";
+    },
+    (v) => {
+      v.facts.jobs.find(({ name }) => name === "tests").steps[0].conclusion =
+        "skipped";
+    },
+    (v) => {
+      v.facts.jobs.find(({ name }) => name === "publish").steps[0].status =
+        "in_progress";
+    },
+    (v) => {
+      v.facts.jobs.find(({ name }) => name === "publish").steps[1].status =
+        "completed";
+    },
+    (v) => {
+      v.facts.artifacts[0].expired = true;
+    },
+    (v) => {
+      v.payload.fingerprints.keepAwake = "f".repeat(64);
+    },
+    (v) => {
+      v.record.version = "1.0.0";
+    },
+  ];
+  for (const change of changes) {
+    const value = currentNativeFacts();
+    change(value);
+    assert.throws(() =>
+      admitCurrentProductionNativeRun(
+        value.lineage,
+        value.payload,
+        value.facts,
+        value.record,
+        value.environment,
+      ),
+    );
+  }
 });

@@ -17,7 +17,39 @@ import {
   successfulRun,
   toolchainProvenance,
 } from "./contract.mjs";
-import { verifiedLineage } from "./evidence.mjs";
+import {
+  stagedEvidence,
+  verifiedEvidence,
+  verifiedLineage,
+} from "./evidence.mjs";
+
+export function admitCurrentProductionNativeRun(
+  lineage,
+  payload,
+  facts,
+  record,
+  environment,
+) {
+  assert.equal(record.id, "keepAwake");
+  assert.equal(record.version, "1.0.1");
+  assert.equal(lineage.sourceCommit, environment.GITHUB_SHA);
+  assert.equal(String(lineage.runID), environment.GITHUB_RUN_ID);
+  assert.equal(String(lineage.runAttempt), environment.GITHUB_RUN_ATTEMPT);
+  assert.equal(environment.GITHUB_EVENT_NAME, "workflow_dispatch");
+  assert.equal(facts.run.event, "workflow_dispatch");
+  assert([65671483, 320458784].includes(facts.run.actor?.id));
+  assert.equal(String(facts.run.actor.id), environment.GITHUB_ACTOR_ID);
+  assert.equal(payload.fingerprints.keepAwake, record.sourceFingerprint);
+  const observed = stagedEvidence({
+    ...facts,
+    source: lineage.sourceCommit,
+    plannedIDs: ["keepAwake"],
+    fingerprints: payload.fingerprints,
+    environment,
+    publisherPhase: "publication",
+  });
+  assert.deepEqual(payload, observed);
+}
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const admitted = new WeakMap();
@@ -480,7 +512,52 @@ export async function prepareProductionInputs(text) {
     assert.equal(lineage.sourceCommit, item.source);
     assert.equal(lineage.runID, item.run);
     const native = await api(`/actions/runs/${item.run}`);
-    successfulRun(native, item.source, ".github/workflows/extensions.yml");
+    if (generation === "current" && native.status === "in_progress") {
+      const evidenceRelease = await api(
+        `/releases/tags/${encodeURIComponent(lineage.evidenceTag)}`,
+      );
+      assert.equal(evidenceRelease.target_commitish, item.source);
+      const evidenceRef = await api(
+        `/git/ref/tags/${encodeURIComponent(lineage.evidenceTag)}`,
+      );
+      assert.equal(evidenceRef.object.type, "commit");
+      assert.equal(evidenceRef.object.sha, item.source);
+      await download(
+        evidenceRelease,
+        "native-evidence.json",
+        join(packageDirectory, "native-evidence.json"),
+        {
+          bytes: lineage.evidenceBytes,
+          sha256: lineage.evidenceSHA256,
+        },
+      );
+      const payload = verifiedEvidence(
+        (
+          await boundedProductionFile(
+            join(packageDirectory, "native-evidence.json"),
+            1024 ** 2,
+          )
+        ).bytes,
+        publicKey,
+      );
+      const jobs = await api(
+        `/actions/runs/${item.run}/attempts/${lineage.runAttempt}/jobs?per_page=100`,
+      );
+      const artifacts = await api(
+        `/actions/runs/${item.run}/artifacts?per_page=100`,
+      );
+      assert.equal(jobs.total_count, jobs.jobs.length);
+      assert.equal(artifacts.total_count, artifacts.artifacts.length);
+      assert(jobs.jobs.length <= 100 && artifacts.artifacts.length <= 100);
+      admitCurrentProductionNativeRun(
+        lineage,
+        payload,
+        { run: native, jobs: jobs.jobs, artifacts: artifacts.artifacts },
+        record_,
+        environment,
+      );
+    } else
+      successfulRun(native, item.source, ".github/workflows/extensions.yml");
     assert.equal(native.head_branch, "main");
     assert(["push", "workflow_dispatch"].includes(native.event));
     assert([65671483, 320458784].includes(native.actor.id));

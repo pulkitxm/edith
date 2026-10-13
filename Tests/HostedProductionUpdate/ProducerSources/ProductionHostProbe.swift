@@ -92,7 +92,7 @@ struct ProductionHostProbe {
         else { throw HostWorkerError.rejected }
         let scope = try JSONDecoder().decode(Scope.self, from: payload)
         guard try canonical(scope) == payload, scope.sourceCommit == sourceCommit,
-            scope.uid == getuid(), getuid() == getruid(), scope.roles.count <= 14,
+            scope.uid == getuid(), geteuid() == getuid(), scope.roles.count <= 14,
             !scope.roles.isEmpty, scope.producerPID == getppid(),
             try HostRemoteKernelIdentity.read(scope.producerPID).generation
                 == scope.producerGeneration,
