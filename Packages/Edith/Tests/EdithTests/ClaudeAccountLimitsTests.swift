@@ -111,6 +111,29 @@ import Testing
                 as? NSNumber)?.intValue == 0o600)
     }
 
+    @Test func separateLimitsConnectionsDoNotShareCachedReadings() async {
+        var first = ClaudeAccount(name: "First", credential: "synthetic-shared-launch-token")
+        var second = ClaudeAccount(name: "Second", credential: first.credential)
+        first.limitsProfileID = UUID()
+        second.limitsProfileID = UUID()
+        let collector = ClaudeAccountLimitsCollector()
+        let now = Date()
+        let expectedID = first.id
+        let results = await collector.refresh(accounts: [first, second], now: now) { account, _ in
+            LimitsProviderSnapshot(
+                provider: .claude,
+                session: LimitWindow(percent: account.id == expectedID ? 25 : 80, resetsAt: nil),
+                week: nil)
+        }
+        #expect(results.map { $0.limits.session?.percent } == [25, 80])
+        first.limitsProfileID = UUID()
+        let reconnected = await collector.refresh(accounts: [first, second], now: now) { _, _ in
+            throw ClaudeLimitsReader.Failure.unauthorized
+        }
+        #expect(reconnected[0].limits.session == nil)
+        #expect(reconnected[1].limits.session?.percent == 80)
+    }
+
     @Test func changedCredentialsNeverReuseAnotherTokensLastKnownLimits() async {
         var account = ClaudeAccount(name: "Company", credential: "synthetic-old-token")
         let collector = ClaudeAccountLimitsCollector()

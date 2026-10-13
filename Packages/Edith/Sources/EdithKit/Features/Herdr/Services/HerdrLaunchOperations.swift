@@ -9,7 +9,7 @@ public struct HerdrAgentLaunch: Sendable {
 public enum HerdrLaunchOperations {
     public static func launchAccount(
         account: ClaudeAccount, command: String, arguments: [String], environment: String = "",
-        pane: String, on machine: Machine?
+        pane: String, on machine: Machine?, authenticationOnly: Bool = false
     ) async throws {
         try account.validateLaunch()
         let configurationPath =
@@ -17,10 +17,10 @@ public enum HerdrLaunchOperations {
             ? try await ClaudeSubscriptionProfile.prepare(account: account, on: machine) : nil
         let local = try account.launchCommand(
             command: command, arguments: arguments, environment: environment,
-            configurationPath: configurationPath)
+            configurationPath: configurationPath, authenticationOnly: authenticationOnly)
         let windows = try account.launchCommand(
             command: command, arguments: arguments, environment: environment, platform: .windows,
-            configurationPath: configurationPath)
+            configurationPath: configurationPath, authenticationOnly: authenticationOnly)
         _ = try await HerdrCommand.run(
             local: HerdrSessionCommand.scoped(
                 HerdrPaneRunCommand.arguments(pane: pane, command: local),

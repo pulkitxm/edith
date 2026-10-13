@@ -32,6 +32,45 @@ import Testing
         #expect(model.launchSelection("default") == "cli")
     }
 
+    @Test func connectingLimitsRetainsTheSavedLaunchAccount() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = ClaudeAccountsModel(directory: root)
+        let account = ClaudeAccount(name: "Company", credential: "synthetic-launch-token")
+        try await model.persist(.init(accounts: [account], defaultID: account.id))
+        var loginID: UUID?
+        let linked = try #require(
+            await model.connectLimitsLogin(account) { profile in
+                #expect(profile.authentication == .browserLogin)
+                #expect(profile.credential.isEmpty)
+                #expect(profile.id != account.id)
+                loginID = profile.id
+            })
+        #expect(linked.id == account.id)
+        #expect(linked.credential == account.credential)
+        #expect(linked.authentication == account.authentication)
+        #expect(linked.limitsProfileID == loginID)
+        #expect(model.state.accounts.count == 1)
+        #expect(model.state.defaultID == account.id)
+        let restored = ClaudeAccountsModel(directory: root)
+        try await restored.load()
+        #expect(restored.state.accounts == [linked])
+    }
+
+    @Test func failedLimitsConnectionLeavesTheSavedAccountUntouched() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = ClaudeAccountsModel(directory: root)
+        let account = ClaudeAccount(name: "Company", credential: "synthetic-launch-token")
+        try await model.persist(.init(accounts: [account]))
+        let linked = await model.connectLimitsLogin(account) { _ in
+            throw ClaudeAccountError.invalidRequest
+        }
+        #expect(linked == nil)
+        #expect(model.state.accounts == [account])
+        #expect(model.error != nil)
+    }
+
     @Test func persistenceKeepsNamesCredentialsAndDefaultsInPrivateFiles() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -333,12 +372,12 @@ import Testing
                 Divider()
                 ClaudeSharedLaunchSettings(defaults: launchDefaults)
             }
-            .padding(18).frame(width: width, height: 760 * zoom, alignment: .topLeading)
+            .padding(18).frame(width: width, height: 960 * zoom, alignment: .topLeading)
             .background(scheme == .dark ? Color.black : Color.white)
             .environment(\.colorScheme, scheme)
             let host = NSHostingView(rootView: view)
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: width, height: 760 * zoom),
+                contentRect: NSRect(x: 0, y: 0, width: width, height: 960 * zoom),
                 styleMask: [.borderless], backing: .buffered, defer: false)
             window.contentView = host
             window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)

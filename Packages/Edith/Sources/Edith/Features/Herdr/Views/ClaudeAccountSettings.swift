@@ -87,6 +87,33 @@ struct ClaudeAccountSettings: View {
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     }
+                    if let draft, draft.authentication == .oauthToken,
+                        accounts.account(draft.id) != nil
+                    {
+                        Text("Subscription limits").font(.edithText(.caption))
+                        Button(
+                            draft.limitsProfileID == nil
+                                ? "Connect subscription for limits"
+                                : "Reconnect subscription for limits"
+                        ) {
+                            Task {
+                                if let linked = await accounts.connectLimitsLogin(draft) {
+                                    self.draft = linked
+                                }
+                            }
+                        }
+                        Text(
+                            "Sign in to this same account in the limits terminal on this Mac. This login is used only to read limits and renews automatically. Your launch token stays unchanged."
+                        )
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        if draft.limitsProfileID != nil {
+                            Button("Disconnect limits login") {
+                                self.draft?.limitsProfileID = nil
+                                saveDraft()
+                            }
+                        }
+                    }
                     HStack {
                         Button("Save account") { saveDraft() }
                             .buttonStyle(.edith(.toolbar))
@@ -127,7 +154,10 @@ struct ClaudeAccountSettings: View {
         Binding(
             get: { draft?.authentication ?? .oauthToken },
             set: { value in
-                if value != draft?.authentication { draft?.loginData = nil }
+                if value != draft?.authentication {
+                    draft?.loginData = nil
+                    draft?.limitsProfileID = nil
+                }
                 draft?.authentication = value
             })
     }
@@ -144,6 +174,9 @@ struct ClaudeAccountSettings: View {
         draft.credential =
             draft.authentication == .browserLogin && draft.loginData == nil
             ? "" : draft.credential.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let previous = accounts.account(draft.id), previous.credential != draft.credential {
+            draft.limitsProfileID = nil
+        }
         self.draft = draft
         var next = accounts.state
         if next.accounts.isEmpty { next.defaultID = draft.id }

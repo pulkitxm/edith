@@ -139,6 +139,9 @@ public actor ClaudeAccountLimitsCollector {
     }
 
     private nonisolated func cacheKey(_ account: ClaudeAccount) -> String {
+        if let profileID = account.limitsProfileID {
+            return "limits-profile-" + profileID.uuidString
+        }
         let value =
             account.authentication == .browserLogin
             ? account.id.uuidString + (account.loginData ?? "")

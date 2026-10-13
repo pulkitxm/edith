@@ -1,7 +1,7 @@
 import Foundation
 
 public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
-    public enum Authentication: String, Codable, CaseIterable, Identifiable {
+    public enum Authentication: String, Codable, CaseIterable, Identifiable, Sendable {
         case oauthToken
         case apiKey
         case browserLogin
@@ -21,6 +21,7 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
     public var authentication: Authentication = .oauthToken
     public var credential = ""
     public var loginData: String?
+    public var limitsProfileID: UUID?
 
     public init(
         id: UUID = UUID(), name: String, authentication: Authentication = .oauthToken,
@@ -133,7 +134,8 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
 
     public func launchCommand(
         command: String, arguments: [String], environment: String = "",
-        platform: RemoteMachinePlatform = .darwin, configurationPath: String? = nil
+        platform: RemoteMachinePlatform = .darwin, configurationPath: String? = nil,
+        authenticationOnly: Bool = false
     ) throws -> String {
         try validateLaunch()
         guard !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -165,7 +167,15 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
         }
         let launch = HerdrPaneRunCommand.commandText(
             command, appending: arguments, platform: platform)
-        if authentication == .browserLogin, configurationPath != nil {
+        if authenticationOnly {
+            guard authentication == .browserLogin, configurationPath != nil else {
+                throw ClaudeAccountError.invalidRequest
+            }
+            lines.append(
+                HerdrPaneRunCommand.commandText(
+                    command, appending: arguments + ["auth", "login", "--claudeai"],
+                    platform: platform))
+        } else if authentication == .browserLogin, configurationPath != nil {
             let status = HerdrPaneRunCommand.commandText(
                 command, appending: arguments + ["auth", "status", "--json"], platform: platform)
             let login = HerdrPaneRunCommand.commandText(
@@ -173,13 +183,22 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
             let message =
                 "Subscription login is not active. Check your CLI authentication settings and try again."
             if platform == .windows {
+                let authenticated =
+                    "$subscriptionLogin.loggedIn -and $subscriptionLogin.authMethod -eq 'claude.ai'"
                 lines.append(
-                    ClaudeSubscriptionAuthentication.powerShell(
-                        status: status, login: login, launch: launch, failure: message))
+                    "$subscriptionLogin = " + status + " | ConvertFrom-Json; if (!(" + authenticated
+                        + ")) { " + login + "; $subscriptionLogin = " + status
+                        + " | ConvertFrom-Json }; if (" + authenticated + ") { " + launch
+                        + " } else { Write-Error " + PowerShell.literal(message) + " }")
             } else {
+                let authenticated =
+                    "printf '%s' \"$subscription_status\" | grep -Eq '\"authMethod\"[[:space:]]*:[[:space:]]*\"claude.ai\"'"
+                    + " && printf '%s' \"$subscription_status\" | grep -Eq '\"loggedIn\"[[:space:]]*:[[:space:]]*true'"
                 lines.append(
-                    ClaudeSubscriptionAuthentication.posix(
-                        status: status, login: login, launch: launch, failure: message))
+                    "subscription_status=$(" + status + "); if " + authenticated + "; then :; else "
+                        + login + "; subscription_status=$(" + status + "); fi; if " + authenticated
+                        + "; then " + launch + "; else printf '%s\\n' " + ShellQuote.quote(message)
+                        + "; false; fi")
             }
         } else {
             lines.append(launch)

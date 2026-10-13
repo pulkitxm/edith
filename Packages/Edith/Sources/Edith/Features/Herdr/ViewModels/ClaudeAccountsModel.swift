@@ -69,6 +69,43 @@ import Observation
         }
     }
 
+    func connectLimitsLogin(
+        _ account: ClaudeAccount,
+        startLogin: (ClaudeAccount) async throws -> Void = { profile in
+            let pane = try await HerdrLaunchOperations.createWorkspace(
+                label: "Limits: " + profile.name, on: nil)
+            try await HerdrLaunchOperations.launchAccount(
+                account: profile,
+                command: HerdrLaunchSettings.command(for: "Claude Code"),
+                arguments: HerdrLaunchSettings.sharedArguments().split(separator: "\n").map(
+                    String.init),
+                environment: HerdrLaunchSettings.sharedEnvironment(), pane: pane.paneID, on: nil,
+                authenticationOnly: true)
+        }
+    ) async -> ClaudeAccount? {
+        guard ready, !saving, state.accounts.contains(where: { $0.id == account.id }),
+            account.authentication == .oauthToken
+        else { return nil }
+        saving = true
+        defer { saving = false }
+        do {
+            try account.validateLaunch()
+            let profile = ClaudeAccount(name: account.name, authentication: .browserLogin)
+            try await startLogin(profile)
+            var linked = account
+            linked.limitsProfileID = profile.id
+            var next = state
+            next.accounts[next.accounts.firstIndex(where: { $0.id == account.id })!] = linked
+            try await persist(next)
+            try? UsageAgentOperations.requestLimitsRefresh()
+            error = nil
+            return linked
+        } catch {
+            self.error = error.localizedDescription
+            return nil
+        }
+    }
+
     func persist(_ next: ClaudeAccountsState) async throws {
         try await storage.save(next)
         state = next
