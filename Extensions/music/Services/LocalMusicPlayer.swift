@@ -446,7 +446,9 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         }
         tasks.start { [weak self] in
             guard let self, !Task.isCancelled, !self.stopped else { return }
-            guard let first = await self.playOrder().first else {
+            let first = await self.playOrder().first
+            guard !Task.isCancelled, !self.stopped else { return }
+            guard let first else {
                 self.queueSource = previousSource
                 return
             }
@@ -461,7 +463,9 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             resume()
         } else {
             tasks.start { [weak self] in
-                guard let self, let first = await self.playOrder().first else { return }
+                guard let self, let first = await self.playOrder().first,
+                    !Task.isCancelled, !self.stopped
+                else { return }
                 self.play(first)
             }
         }
@@ -485,6 +489,7 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         tasks.start { [weak self] in
             guard let self, !Task.isCancelled, !self.stopped else { return }
             let list = await self.playOrder()
+            guard !Task.isCancelled, !self.stopped else { return }
             let position = self.current.flatMap { list.firstIndex(of: $0) }
             guard let next = PlayQueue.index(after: position, delta: delta, count: list.count)
             else { return }
@@ -512,7 +517,8 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         broadcastState()
         tasks.start { [weak self] in
             let loaded = await MusicTaskOwner.detached { LoadedAudio(url: track.url) }
-            guard let self, self.loadGeneration == generation else { return }
+            guard let self, self.loadGeneration == generation, !Task.isCancelled, !self.stopped
+            else { return }
             guard let loaded else {
                 self.tracks.removeAll { $0 == track }
                 self.queueCache?.removeAll { $0 == track }
@@ -537,7 +543,8 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         broadcastState()
         tasks.start { [weak self] in
             guard let self, self.current == track else { return }
-            guard let art = await self.artwork(for: track) else { return }
+            guard let art = await self.artwork(for: track), !Task.isCancelled, !self.stopped
+            else { return }
             self.attachArtwork(art, for: track)
         }
     }
@@ -596,6 +603,11 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         isPlaying = false
         updateNowPlaying()
         broadcastState()
+    }
+
+    func shutdownAndWait() async {
+        shutdown()
+        await tasks.shutdownAndWait()
     }
 
     func shutdown() {
@@ -680,7 +692,8 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         updateNowPlaying()
         tasks.start { [weak self] in
             let loaded = await MusicTaskOwner.detached { LoadedAudio(url: track.url) }
-            guard let self, self.loadGeneration == generation else { return }
+            guard let self, self.loadGeneration == generation, !Task.isCancelled, !self.stopped
+            else { return }
             guard let loaded else {
                 if self.current == track { self.current = nil }
                 self.updateNowPlaying()

@@ -34,7 +34,13 @@ import Observation
     @ObservationIgnored private var readTask: Task<Void, Never>?
     @ObservationIgnored private var tasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var ownedTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var stopTask: Task<Void, Never>?
+    @ObservationIgnored private var retiredClients: [RetiredClient] = []
+    private struct RetiredClient {
+        weak var value: ExtensionEngineClient?
+    }
     private var suspended = false
+    private var configurationAfterStop = false
     private var generation: UInt64 = 0
     private var query = ""
     private var lifecycle: UInt64 = 0
@@ -50,7 +56,10 @@ import Observation
     var progress: Double { duration > 0 ? elapsed / duration : 0 }
 
     func configure(_ client: ExtensionEngineClient) {
-        guard !suspended else { return }
+        retiredClients.removeAll { $0.value == nil }
+        guard !retiredClients.contains(where: { $0.value === client }), admitConfiguration() else {
+            return
+        }
         clients[ObjectIdentifier(client)] = client
         invoke = { [weak self] operation, payload in
             guard let client = self?.clients.values.first else {
@@ -62,14 +71,29 @@ import Observation
     }
 
     func detach(_ client: ExtensionEngineClient) {
-        clients[ObjectIdentifier(client)] = nil
-        client.invalidate()
+        guard clients.removeValue(forKey: ObjectIdentifier(client)) != nil else { return }
+        retire(client)
         if clients.isEmpty { stop() }
     }
 
     func configure(invoke: @escaping (String, Data) async throws -> Data) {
-        guard !suspended else { return }
+        guard admitConfiguration() else { return }
         stop(); self.invoke = invoke; installLevelDemand()
+    }
+
+    private func admitConfiguration() -> Bool {
+        guard stopTask == nil else { return false }
+        if suspended {
+            guard configurationAfterStop else { return false }
+            suspended = false
+            configurationAfterStop = false
+        }
+        return true
+    }
+
+    private func retire(_ client: ExtensionEngineClient) {
+        client.invalidate()
+        retiredClients.append(RetiredClient(value: client))
     }
 
     func start() { rescan() }
@@ -88,6 +112,7 @@ import Observation
 
     func suspendCommands() {
         suspended = true
+        configurationAfterStop = false
         generation &+= 1; lifecycle &+= 1; levelGeneration &+= 1
         EmbeddedPlaybackLevel.shared.onViewersChange = nil
         for task in ownedTasks.values { task.cancel() }
@@ -100,10 +125,19 @@ import Observation
     }
 
     func stopAndWait() async {
+        if let stopTask { await stopTask.value; return }
         suspendCommands()
         stop()
         let owned = Array(ownedTasks.values)
-        for task in owned { await task.value }
+        let token = lifecycle
+        let task = Task { [weak self] in
+            for task in owned { await task.value }
+            guard let self else { return }
+            if self.lifecycle == token { self.configurationAfterStop = true }
+            self.stopTask = nil
+        }
+        stopTask = task
+        await task.value
     }
 
     func stop() {
@@ -117,7 +151,7 @@ import Observation
         EmbeddedPlaybackLevel.shared.reset()
         for task in ownedTasks.values { task.cancel() }
         tasks.removeAll()
-        for client in clients.values { client.invalidate() }
+        for client in clients.values { retire(client) }
         clients.removeAll(); invoke = nil
         tracks = []; folders = []; folderTracks = []; searchTracks = []; searchFolders = []
         favourites = []; favouritePaths = []; currentFile = nil; isPlaying = false

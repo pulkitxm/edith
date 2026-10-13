@@ -164,6 +164,7 @@ final class MusicRemote {
     private var revealObserver: NSObjectProtocol?
     private var searchScopePath: String?
     private var folderCache: [String: [MusicFolder]] = [:]
+    @ObservationIgnored private let retiredTasks = MusicTaskOwner()
     private var favouritesTask: Task<Void, Never>?
     private var favouritesGeneration = 0
     private var catalogTask: Task<Void, Never>?
@@ -274,17 +275,22 @@ final class MusicRemote {
         levelPing?.tolerance = 0.2
     }
 
+    func stopAndWait() async {
+        stop()
+        await retiredTasks.shutdownAndWait()
+    }
+
     func stop() {
         videoSession?.stop(); videoSession = nil
         levelPing?.invalidate(); levelPing = nil
-        favouritesTask?.cancel()
+        retiredTasks.cancelAndRetain(favouritesTask)
         favouritesTask = nil
         favouritesGeneration &+= 1
         favouritesLoaded = false
-        catalogTask?.cancel()
+        retiredTasks.cancelAndRetain(catalogTask)
         catalogTask = nil
         catalogGeneration &+= 1
-        entriesTask?.cancel()
+        retiredTasks.cancelAndRetain(entriesTask)
         entriesTask = nil
         entriesGeneration &+= 1
         invalidateSearchScope()
@@ -335,12 +341,12 @@ final class MusicRemote {
     }
 
     private func refreshCatalog() {
-        catalogTask?.cancel()
+        retiredTasks.cancelAndRetain(catalogTask)
         catalogGeneration &+= 1
         let generation = catalogGeneration
         let catalog = catalog
         catalogTask = Task { [weak self] in
-            let scanned = await Task.detached { catalog() }.value
+            let scanned = await MusicTaskOwner.detached { catalog() }
             guard !Task.isCancelled, let self, self.catalogGeneration == generation else { return }
             self.catalogTask = nil
             self.tracks = scanned
@@ -348,7 +354,7 @@ final class MusicRemote {
     }
 
     private func refreshEntries() {
-        entriesTask?.cancel()
+        retiredTasks.cancelAndRetain(entriesTask)
         entriesGeneration &+= 1
         let generation = entriesGeneration
         let path = folderPath
@@ -365,7 +371,7 @@ final class MusicRemote {
         }
         let ancestorPaths = missingAncestors
         entriesTask = Task { [weak self] in
-            let cached = await Task.detached { listingCache.load(path) }.value
+            let cached = await MusicTaskOwner.detached { listingCache.load(path) }
             if let cached, !Task.isCancelled, let self, self.entriesGeneration == generation,
                 self.folderPath == path
             {
@@ -374,28 +380,31 @@ final class MusicRemote {
                 self.entriesLoaded = true
                 self.folderCache[path] = cached.folders
             }
-            let result = await Task.detached {
+            guard !Task.isCancelled else { return }
+            let result = await MusicTaskOwner.detached {
                 (
                     entries: listFolder(path),
-                    ancestors: ancestorPaths.map { ($0, listSubfolders($0)) }
+                    ancestors: ancestorPaths.compactMap {
+                        Task.isCancelled ? nil : ($0, listSubfolders($0))
+                    }
                 )
-            }.value
+            }
             guard !Task.isCancelled, let self, self.entriesGeneration == generation,
                 self.folderPath == path
             else { return }
             let entries = result.entries
-            self.entriesTask = nil
             self.folders = entries.folders
             self.folderTracks = entries.tracks
             self.entriesLoaded = true
             self.folderCache[path] = entries.folders
             for (ancestor, folders) in result.ancestors { self.folderCache[ancestor] = folders }
-            await Task.detached { listingCache.save(path, entries) }.value
+            await MusicTaskOwner.detached { listingCache.save(path, entries) }
+            if self.entriesGeneration == generation { self.entriesTask = nil }
         }
     }
 
     func noteSearch(_ text: String) {
-        searchDebounceTask?.cancel()
+        retiredTasks.cancelAndRetain(searchDebounceTask)
         searchDebounceTask = nil
         searchQuery = text
         guard !text.isEmpty else {
@@ -419,7 +428,7 @@ final class MusicRemote {
 
     func loadSearchScope(matching query: String) {
         let path = folderPath
-        searchTask?.cancel()
+        retiredTasks.cancelAndRetain(searchTask)
         searchGeneration &+= 1
         let generation = searchGeneration
         searchScopePath = path
@@ -427,14 +436,14 @@ final class MusicRemote {
         let searchPage = searchPage
         let searchRemainder = searchRemainder
         searchTask = Task { [weak self] in
-            let first = await Task.detached { searchPage(path, query) }.value
+            let first = await MusicTaskOwner.detached { searchPage(path, query) }
             guard !Task.isCancelled, let self, self.searchGeneration == generation,
                 self.searchScopePath == path
             else { return }
             self.searchTracks = first.tracks
             self.searchFolders = first.folders
             self.searchLoaded = true
-            let rest = await Task.detached { searchRemainder(path, query) }.value
+            let rest = await MusicTaskOwner.detached { searchRemainder(path, query) }
             guard !Task.isCancelled, self.searchGeneration == generation,
                 self.searchScopePath == path
             else { return }
@@ -445,9 +454,9 @@ final class MusicRemote {
     }
 
     private func invalidateSearchScope() {
-        searchDebounceTask?.cancel()
+        retiredTasks.cancelAndRetain(searchDebounceTask)
         searchDebounceTask = nil
-        searchTask?.cancel()
+        retiredTasks.cancelAndRetain(searchTask)
         searchTask = nil
         searchGeneration &+= 1
         searchScopePath = nil
@@ -484,12 +493,12 @@ final class MusicRemote {
     }
 
     private func refreshFavourites() {
-        favouritesTask?.cancel()
+        retiredTasks.cancelAndRetain(favouritesTask)
         favouritesGeneration &+= 1
         let generation = favouritesGeneration
         let scanFavourites = scanFavourites
         favouritesTask = Task { [weak self] in
-            let tracks = await Task.detached { scanFavourites() }.value
+            let tracks = await MusicTaskOwner.detached { scanFavourites() }
             guard !Task.isCancelled, let self, self.favouritesGeneration == generation else {
                 return
             }

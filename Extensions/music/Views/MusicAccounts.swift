@@ -25,6 +25,7 @@ final class MusicSpotifySession {
     private var elapsedBase = 0.0
     private var updatedAt = Date()
     private var process: MusicNativePlayer?
+    private let retiredTasks = MusicTaskOwner()
     private var authorizationDeadline: Task<Void, Never>?
     private var buffer = Data()
     private(set) var generation = 0
@@ -108,7 +109,7 @@ final class MusicSpotifySession {
         receiveUIEvent?(event)
         switch event["event"] as? String {
         case "connected":
-            authorizationDeadline?.cancel()
+            retiredTasks.cancelAndRetain(authorizationDeadline)
             authorizationDeadline = nil
             connected = true
             connecting = false
@@ -185,9 +186,14 @@ final class MusicSpotifySession {
         send(["action": "volume", "value": volume])
     }
 
+    func stopAndWait() async {
+        stop()
+        await retiredTasks.shutdownAndWait()
+    }
+
     func stop() {
         generation += 1
-        authorizationDeadline?.cancel()
+        retiredTasks.cancelAndRetain(authorizationDeadline)
         authorizationDeadline = nil
         process?.stop()
         process = nil
@@ -315,6 +321,11 @@ final class MusicAccounts: NSObject, WKNavigationDelegate, WKUIDelegate {
     func activate() {
         if selected == .spotify { spotify.connect(authorize: false) }
         if selected == .youtubeMusic, youtubeConnected { loadYoutube() }
+    }
+
+    func shutdownAndWait() async {
+        shutdown()
+        await spotify.stopAndWait()
     }
 
     func shutdown() {
