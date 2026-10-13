@@ -88,6 +88,7 @@ import Foundation
     id: "mock",
     output: join(root, "output"),
     development: true,
+    developmentHostRoot: process.cwd(),
   });
   const payload = join(root, "unpacked");
   execFileSync("ditto", ["-xk", join(root, "output/mock.zip"), payload]);
