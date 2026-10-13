@@ -55,6 +55,12 @@ function hostSourceDirty(execute = execFileSync) {
   );
 }
 
+function removeCopiedCodeSignature(path, execute = execFileSync) {
+  const commands = execute("otool", ["-l", path], { encoding: "utf8" });
+  if (/^\s*cmd LC_CODE_SIGNATURE\s*$/m.test(commands))
+    execute("codesign", ["--remove-signature", path]);
+}
+
 const root = process.cwd();
 requireTrackedHostSource();
 const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
@@ -137,6 +143,7 @@ async function prepareFramework(directory) {
         encoding: "utf8",
       });
       if (!kind.includes("Mach-O")) continue;
+      removeCopiedCodeSignature(path);
       if (kind.includes("universal binary")) {
         const thin = `${path}.arm64`;
         execFileSync("lipo", [path, "-thin", "arm64", "-output", thin]);
@@ -232,6 +239,7 @@ execFileSync("python3", [
   JSON.stringify(extensionUIExtensionPoint(identity)),
   join(contents, "Extensions/ExtensionUI.appextensionpoints"),
 ]);
+removeCopiedCodeSignature(executable);
 const linked = execFileSync("otool", ["-L", executable], { encoding: "utf8" });
 for (const line of linked.split("\n").slice(1)) {
   const dependency = line.trim().split(" ")[0];
