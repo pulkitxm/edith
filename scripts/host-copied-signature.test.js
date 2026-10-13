@@ -27,7 +27,11 @@ test("copied signed code loses only its signature before transformation", () => 
   });
   expect(calls).toEqual([
     ["otool", ["-l", "/synthetic/copied/Sparkle"], { encoding: "utf8" }],
-    ["codesign", ["--remove-signature", "/synthetic/copied/Sparkle"], undefined],
+    [
+      "codesign",
+      ["--remove-signature", "/synthetic/copied/Sparkle"],
+      undefined,
+    ],
   ]);
 });
 
@@ -108,7 +112,9 @@ test("host executable signature removal precedes its first load-command mutation
     'execFileSync("install_name_tool"',
     linking,
   );
-  expect(removal).toBeGreaterThan(source.indexOf("await copyFile(join(products"));
+  expect(removal).toBeGreaterThan(
+    source.indexOf("await copyFile(join(products"),
+  );
   expect(removal).toBeLessThan(linking);
   expect(linking).toBeLessThan(transformation);
   expect(source).toContain('["--verify", "--deep", "--strict", destination]');
