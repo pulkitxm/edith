@@ -7,7 +7,8 @@ import Testing
 
 enum HerdrAccountFixture {
     static func root() throws -> URL {
-        let physical = try #require(realpath(FileManager.default.temporaryDirectory.path, nil))
+        let temporary = try #require(ProcessInfo.processInfo.environment["TMPDIR"])
+        let physical = try #require(realpath(temporary, nil))
         defer { free(physical) }
         let root = URL(fileURLWithPath: String(cString: physical), isDirectory: true)
             .appendingPathComponent("herdr-account-parity-\(UUID().uuidString)")
