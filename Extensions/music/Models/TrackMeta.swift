@@ -282,24 +282,96 @@ public enum MusicLibraryIndex {
 actor LoadGate {
     private let limit: Int
     private var active = 0
-    private var waiting: [CheckedContinuation<Void, Never>] = []
+    private var waiting: [(UUID, CheckedContinuation<Bool, Never>)] = []
 
     init(limit: Int) { self.limit = limit }
+    var queuedCount: Int { waiting.count }
 
-    func acquire() async {
+    func acquire() async -> Bool {
+        let id = UUID()
+        return await MusicTaskOwner.withJoinedCancellation {
+            await self.wait(id)
+        } onCancel: {
+            await self.cancel(id)
+        }
+    }
+
+    private func wait(_ id: UUID) async -> Bool {
+        guard !Task.isCancelled else { return false }
         if active < limit {
             active += 1
-            return
+            return true
         }
-        await withCheckedContinuation { waiting.append($0) }
+        return await withCheckedContinuation { continuation in
+            if Task.isCancelled {
+                continuation.resume(returning: false)
+            } else {
+                waiting.append((id, continuation))
+            }
+        }
+    }
+
+    private func cancel(_ id: UUID) {
+        guard let index = waiting.firstIndex(where: { $0.0 == id }) else { return }
+        waiting.remove(at: index).1.resume(returning: false)
     }
 
     func release() {
-        if waiting.isEmpty {
-            active -= 1
-        } else {
-            waiting.removeFirst().resume()
+        if waiting.isEmpty { active -= 1 } else { waiting.removeFirst().1.resume(returning: true) }
+    }
+}
+
+private actor MusicAssetLoader {
+    enum Artwork: Sendable {
+        case data(Data)
+        case image(CGImage)
+    }
+    private let asset: AVURLAsset
+    private var generator: AVAssetImageGenerator?
+    private var cancelled = false
+
+    init(url: URL) { asset = AVURLAsset(url: url) }
+
+    func cancel() {
+        cancelled = true
+        asset.cancelLoading()
+        generator?.cancelAllCGImageGeneration()
+    }
+
+    func duration() async -> TimeInterval? {
+        guard !cancelled, !Task.isCancelled,
+            let time = try? await asset.load(.duration), !cancelled, !Task.isCancelled,
+            time.seconds.isFinite
+        else { return nil }
+        return time.seconds
+    }
+
+    func artwork() async -> Artwork? {
+        guard !cancelled, !Task.isCancelled else { return nil }
+        if let metadata = try? await asset.load(.metadata) {
+            for item in metadata where item.commonKey == .commonKeyArtwork {
+                guard !cancelled, !Task.isCancelled else { return nil }
+                if let data = try? await item.load(.dataValue) {
+                    guard !cancelled, !Task.isCancelled else { return nil }
+                    if NSImage(data: data) != nil { return .data(data) }
+                }
+            }
         }
+        guard !cancelled, !Task.isCancelled,
+            let videoTracks = try? await asset.loadTracks(withMediaType: .video),
+            !videoTracks.isEmpty, !cancelled, !Task.isCancelled
+        else { return nil }
+        let imageGenerator = AVAssetImageGenerator(asset: asset)
+        generator = imageGenerator
+        imageGenerator.appliesPreferredTrackTransform = true
+        imageGenerator.maximumSize = CGSize(width: 240, height: 240)
+        imageGenerator.requestedTimeToleranceBefore = .positiveInfinity
+        imageGenerator.requestedTimeToleranceAfter = .positiveInfinity
+        let at = CMTime(seconds: 3, preferredTimescale: 600)
+        guard let image = try? await imageGenerator.image(at: at).image,
+            !cancelled, !Task.isCancelled
+        else { return nil }
+        return .image(image)
     }
 }
 
@@ -315,9 +387,12 @@ public enum TrackMeta {
     private static let gate = LoadGate(limit: 3)
     nonisolated(unsafe) static var loadAssetDuration: @Sendable (URL) async -> TimeInterval? = {
         url in
-        let asset = AVURLAsset(url: url)
-        guard let time = try? await asset.load(.duration), time.seconds.isFinite else { return nil }
-        return time.seconds
+        let loader = MusicAssetLoader(url: url)
+        return await MusicTaskOwner.withJoinedCancellation {
+            await loader.duration()
+        } onCancel: {
+            await loader.cancel()
+        }
     }
     private static let artworkCache: NSCache<NSURL, NSImage> = {
         let cache = NSCache<NSURL, NSImage>()
@@ -445,6 +520,7 @@ public enum TrackMeta {
         var folders: [MusicFolder] = []
         var tracks: [Track] = []
         for item in children(of: url(for: relativePath, base: base)) {
+            guard !Task.isCancelled else { break }
             if isDirectory(item) {
                 folders.append(
                     MusicFolder(url: item, relativePath: Self.relativePath(of: item, base: base)))
@@ -476,6 +552,7 @@ public enum TrackMeta {
         else { return [] }
         var result: [MusicFolder] = []
         for case let item as URL in enumerator where isDirectory(item) {
+            guard !Task.isCancelled else { break }
             result.append(
                 MusicFolder(url: item, relativePath: Self.relativePath(of: item, base: base)))
         }
@@ -507,19 +584,24 @@ public enum TrackMeta {
     }
 
     public static func duration(for track: Track) async -> TimeInterval? {
+        guard !Task.isCancelled else { return nil }
         if let hit = cacheLock.withLock({ durationCache[track.url] }) { return hit }
-        let indexed = await Task.detached { MusicLibraryIndex.duration(for: track.url) }.value
+        let indexed = await MusicTaskOwner.detached { MusicLibraryIndex.duration(for: track.url) }
+        guard !Task.isCancelled else { return nil }
         if let indexed {
             cacheLock.withLock { durationCache[track.url] = indexed }
             return indexed
         }
-        await gate.acquire()
-        defer { Task { await gate.release() } }
-        guard !Task.isCancelled else { return nil }
-        guard let seconds = await loadAssetDuration(track.url) else { return nil }
+        guard await gate.acquire() else { return nil }
+        let seconds = Task.isCancelled ? nil : await loadAssetDuration(track.url)
+        await gate.release()
+        guard !Task.isCancelled, let seconds else { return nil }
         cacheLock.withLock { durationCache[track.url] = seconds }
-        await Task.detached { MusicLibraryIndex.store(duration: seconds, for: track.url) }.value
-        return seconds
+        await MusicTaskOwner.detached {
+            guard !Task.isCancelled else { return }
+            MusicLibraryIndex.store(duration: seconds, for: track.url)
+        }
+        return Task.isCancelled ? nil : seconds
     }
 
     public static func durationLabel(for track: Track) async -> String? {
@@ -550,27 +632,38 @@ public enum TrackMeta {
     }
 
     public static func artwork(for track: Track) async -> NSImage? {
+        guard !Task.isCancelled else { return nil }
         if let hit = artworkCache.object(forKey: track.url as NSURL) { return hit }
         if cacheLock.withLock({ artworkMisses.contains(track.url) }) { return nil }
-        let indexedKey = await Task.detached { MusicLibraryIndex.artworkKey(for: track.url) }.value
+        let indexedKey = await MusicTaskOwner.detached {
+            MusicLibraryIndex.artworkKey(for: track.url)
+        }
+        guard !Task.isCancelled else { return nil }
         let key = indexedKey ?? ThumbnailStore.key(for: track.url)
         if let stored = ThumbnailStore.read(key) {
+            guard !Task.isCancelled else { return nil }
             artworkCache.setObject(stored, forKey: track.url as NSURL)
             if indexedKey == nil {
-                await Task.detached {
+                await MusicTaskOwner.detached {
+                    guard !Task.isCancelled else { return }
                     MusicLibraryIndex.store(artworkKey: key, for: track.url)
-                }.value
+                }
             }
-            return stored
+            return Task.isCancelled ? nil : stored
         }
-        await gate.acquire()
-        defer { Task { await gate.release() } }
+        guard await gate.acquire() else { return nil }
+        let image = Task.isCancelled ? nil : await loadArtwork(for: track.url)
+        await gate.release()
         guard !Task.isCancelled else { return nil }
-        if let image = await loadArtwork(for: track.url) {
+        if let image {
             let thumbnail = ThumbnailStore.store(image, key: key) ?? image
+            guard !Task.isCancelled else { return nil }
             artworkCache.setObject(thumbnail, forKey: track.url as NSURL)
-            await Task.detached { MusicLibraryIndex.store(artworkKey: key, for: track.url) }.value
-            return thumbnail
+            await MusicTaskOwner.detached {
+                guard !Task.isCancelled else { return }
+                MusicLibraryIndex.store(artworkKey: key, for: track.url)
+            }
+            return Task.isCancelled ? nil : thumbnail
         }
         cacheLock.withLock { _ = artworkMisses.insert(track.url) }
         return nil
@@ -630,26 +723,19 @@ public enum TrackMeta {
     }
 
     private static func loadArtwork(for url: URL) async -> NSImage? {
-        let asset = AVURLAsset(url: url)
-        if let metadata = try? await asset.load(.metadata) {
-            for item in metadata where item.commonKey == .commonKeyArtwork {
-                if let data = try? await item.load(.dataValue), let image = NSImage(data: data) {
-                    return image
-                }
-            }
+        let loader = MusicAssetLoader(url: url)
+        let artwork = await MusicTaskOwner.withJoinedCancellation {
+            await loader.artwork()
+        } onCancel: {
+            await loader.cancel()
         }
-        guard !Task.isCancelled,
-            let videoTracks = try? await asset.loadTracks(withMediaType: .video),
-            !videoTracks.isEmpty, !Task.isCancelled
-        else { return nil }
-        let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(width: 240, height: 240)
-        generator.requestedTimeToleranceBefore = .positiveInfinity
-        generator.requestedTimeToleranceAfter = .positiveInfinity
-        let at = CMTime(seconds: 3, preferredTimescale: 600)
-        guard let cg = try? await generator.image(at: at).image else { return nil }
-        return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+        guard !Task.isCancelled else { return nil }
+        switch artwork {
+        case .data(let data): return NSImage(data: data)
+        case .image(let image):
+            return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
+        case nil: return nil
+        }
     }
 
     public static func artworkCached(for track: Track) -> NSImage? {
