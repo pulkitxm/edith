@@ -805,5 +805,57 @@ class OwnershipProofEmitterContracts(unittest.TestCase):
                          {'nativeOwnershipFailureObservations': [row] * 8})
 
 
+class TerminalChildSelfGroupEmitterContracts(unittest.TestCase):
+    def emit(self, candidates):
+        return OwnershipProofEmitterContracts.emit(self, candidates)
+
+    def test_initial_zero_then_live_child_self_group_reaches_real_emitter_without_authority(self):
+        spec = importlib.util.spec_from_file_location(
+            'self_group_fixture', Path(__file__).with_name('test-hosted-native-owner-tests.py'))
+        model = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(model)
+        for group, incomplete, expected in [(234, False, True), (456, False, False),
+                                            (234, True, None)]:
+            with self.subTest(group=group, incomplete=incomplete):
+                kernel = model.Kernel()
+                original = kernel.proc_pidinfo
+                child_reads = 0
+
+                def record(pid, flavor, argument, pointer, size):
+                    nonlocal child_reads
+                    result = original(pid, flavor, argument, pointer, size)
+                    pointer._obj.status = 2
+                    if pid == 234:
+                        child_reads += 1
+                        if child_reads == 1 or incomplete and child_reads == 2:
+                            return 0
+                    return result
+
+                with patch.object(model.runner.watchdog.ctypes, 'CDLL', return_value=kernel), \
+                        patch.object(model.runner.os, 'kill', side_effect=kernel.kill):
+                    owner = model.runner.BoundedOwnership(123, 501)
+                    kernel.processes[234] = (234, 101, 8, '/fixture/private-child', group, 123, 501, 501)
+                    with patch.object(kernel, 'proc_pidinfo', side_effect=record):
+                        owner.refresh()
+                row = owner.failure_observations[0]
+                self.assertIs(row['terminalChildGroupIsSelf'], expected)
+                self.assertEqual(row['terminalRefusalReason'], 'first_child_record')
+                self.assertFalse(row['knownSeal'])
+                self.assertEqual(owner.errors, ['Live owned process identity unavailable'])
+                self.assertEqual(self.emit([row])[-1], {'nativeOwnershipFailureObservations': [row]})
+                self.assertNotIn(234, owner.seals)
+                self.assertNotIn(234, owner.known)
+                self.assertEqual(owner.terminal_children, {})
+                self.assertEqual(kernel.signals, [])
+                self.assertNotIn('private', json.dumps(self.emit([row])))
+                for invalid in [1, 'true', {}, []]:
+                    changed = {**row, 'terminalChildGroupIsSelf': invalid}
+                    self.assertEqual(self.emit([changed, row])[-1],
+                                     {'nativeOwnershipFailureObservations': [row]})
+                missing = {key: value for key, value in row.items() if key != 'terminalChildGroupIsSelf'}
+                self.assertEqual(self.emit([missing, row])[-1],
+                                 {'nativeOwnershipFailureObservations': [row]})
+
+
 if __name__ == '__main__':
     unittest.main()
