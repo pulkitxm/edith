@@ -364,3 +364,5 @@ test("preparation cannot supply fabricated B package facts or weaken immutable A
     );
   }
 });
+
+await import("../production-orchestration.test.js");
