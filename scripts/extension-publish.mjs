@@ -35,6 +35,23 @@ import {
 
 export { publishExtensionAssets } from "./immutable-release-assets.mjs";
 
+const stagedPublications = new WeakMap();
+
+export function stagedExtensionPublication(capability) {
+  const stage = stagedPublications.get(capability);
+  if (!stage || stage.claimed)
+    throw new Error("Unknown or consumed staged publication");
+  return stage.identity;
+}
+
+export async function promoteStagedExtensionPublication(capability) {
+  const stage = stagedPublications.get(capability);
+  if (!stage || stage.claimed)
+    throw new Error("Unknown or consumed staged publication");
+  stage.claimed = true;
+  return stage.promote();
+}
+
 import { lookupRelease } from "./release-lookup.mjs";
 import {
   assertShippingExtensions,
@@ -672,6 +689,7 @@ export async function publishExtensions({
   ref,
   catalogTag,
   publicKey,
+  catalogPhase = "complete",
   publishEvidence = async (value) => {
     const { preparedNativeEvidence } = await import(
       "./extension-native-evidence.mjs"
@@ -686,6 +704,8 @@ export async function publishExtensions({
     return verifyOriginalNativeLineage(value);
   },
 }) {
+  if (!["complete", "stage"].includes(catalogPhase))
+    throw new Error("Invalid catalog publication phase");
   if (!publicKey || !process.env.EXTENSION_CATALOG_PRIVATE_KEY)
     throw new Error(
       "Catalog signing credentials are required before publication",
@@ -704,6 +724,10 @@ export async function publishExtensions({
   const { include } = JSON.parse(
     await readFile(resolve(directory, "plan.json"), "utf8"),
   );
+  if (catalogPhase === "stage" && (old.revision < 1 || include.length === 0))
+    throw new Error(
+      "Staging requires an existing public catalog and package plan",
+    );
   assertShippingExtensions(include);
   const verifyState = async () => {
     const current = await verifiedPublicationState({
@@ -716,9 +740,13 @@ export async function publishExtensions({
           .sha,
       readCatalog: () => readPublicationCatalog(repository, catalogTag),
     });
+    if (catalogPhase === "stage" && current?.release?.draft !== false)
+      throw new Error("Staging requires an existing public catalog");
     return current ? { ...current, catalogRevision: old.revision } : undefined;
   };
-  await verifyState();
+  const initial = await verifyState();
+  if (catalogPhase === "stage" && initial?.release?.draft !== false)
+    throw new Error("Staging requires an existing public catalog");
   const publishDraft = async (id) =>
     mutate(
       "release",
@@ -961,53 +989,91 @@ export async function publishExtensions({
   }
   const candidate = `catalog-${next.revision}.json`;
   await upload(repository, catalog.id, catalogTag, envelope, candidate);
-  await promoteExtensionCatalog({
-    pointer: catalogPointer(await readFile(envelope), next.revision),
-    verifyState,
-    verifyAsset: async (asset, pointer) => {
-      const data = await readPointerAsset(repository, asset, pointer);
-      const verified = JSON.parse(
-        verifiedCatalogPayload(
-          verifyCatalogPointerData(data, pointer),
-          publicKey,
-        ),
-      );
-      if (!isDeepStrictEqual(verified, next))
-        throw new Error("Staged catalog differs");
-    },
-    updatePointer: async (id, body) =>
-      mutate(
-        "release",
-        "edit",
-        "--repo",
-        repository,
-        String(id),
-        "--body",
-        body,
-        "--make-latest",
-        "false",
+  const pointer = catalogPointer(await readFile(envelope), next.revision);
+  const verifyAsset = async (asset, pointer) => {
+    const data = await readPointerAsset(repository, asset, pointer);
+    const verified = JSON.parse(
+      verifiedCatalogPayload(
+        verifyCatalogPointerData(data, pointer),
+        publicKey,
       ),
-  });
-  if (catalog.draft)
-    await finalizeDraftCatalog({
-      verifyState: () =>
-        verifiedPublicationState({
-          ref,
-          target,
-          previous: next,
-          publicKey,
-          readMain: async () =>
-            JSON.parse(gh("api", `repos/${repository}/git/ref/heads/main`))
-              .object.sha,
-          readCatalog: () => readPublicationCatalog(repository, catalogTag),
-        }),
-      publish: publishDraft,
-    });
-  return {
+    );
+    if (!isDeepStrictEqual(verified, next))
+      throw new Error("Staged catalog differs");
+  };
+  const result = {
     published: records.map(({ id, version }) => ({ id, version })),
     revision: next.revision,
     nativeEvidence,
   };
+  const promote = async () => {
+    await promoteExtensionCatalog({
+      pointer,
+      verifyState,
+      verifyAsset,
+      updatePointer: async (id, body) =>
+        mutate(
+          "release",
+          "edit",
+          "--repo",
+          repository,
+          String(id),
+          "--body",
+          body,
+          "--make-latest",
+          "false",
+        ),
+    });
+    if (catalog.draft)
+      await finalizeDraftCatalog({
+        verifyState: () =>
+          verifiedPublicationState({
+            ref,
+            target,
+            previous: next,
+            publicKey,
+            readMain: async () =>
+              JSON.parse(gh("api", `repos/${repository}/git/ref/heads/main`))
+                .object.sha,
+            readCatalog: () => readPublicationCatalog(repository, catalogTag),
+          }),
+        publish: publishDraft,
+      });
+    return result;
+  };
+  if (catalogPhase === "complete") return promote();
+  const current = await verifyState();
+  const assets = current.release.assets.filter(
+    ({ name }) => name === candidate,
+  );
+  if (assets.length !== 1 || assets[0].size !== pointer.bytes)
+    throw new Error("Catalog upload did not finish");
+  await verifyAsset(assets[0], pointer);
+  await verifyState();
+  const capability = Object.freeze({});
+  stagedPublications.set(capability, {
+    claimed: false,
+    identity: Object.freeze({
+      source: target,
+      previous: Object.freeze({ ...current.pointer }),
+      candidate: Object.freeze({ ...pointer }),
+    }),
+    promote: async () => {
+      const fresh = await verifyState();
+      const staged = fresh.release.assets.filter(
+        ({ name }) => name === candidate,
+      );
+      if (
+        fresh.release.id !== current.release.id ||
+        fresh.asset.id !== current.asset.id ||
+        staged.length !== 1 ||
+        staged[0].id !== assets[0].id
+      )
+        throw new Error("Staged catalog release changed");
+      return promote();
+    },
+  });
+  return { ...result, catalogStage: capability };
 }
 
 if (import.meta.main) {
