@@ -222,11 +222,8 @@ async function record(path, value) {
     await handle.close();
   }
 }
-export async function prepareProductionInputs(text) {
-  assert.equal(process.platform, "darwin");
-  assert.equal(process.arch, "arm64");
-  assert.equal(process.env.PUBLIC_RELEASE_VERIFICATION, "1");
-  const environment = Object.fromEntries(
+export function productionInputEnvironment(environment) {
+  return Object.fromEntries(
     [
       "HOME",
       "PATH",
@@ -242,14 +239,23 @@ export async function prepareProductionInputs(text) {
       "GITHUB_EVENT_NAME",
       "GITHUB_REF",
       "GITHUB_SHA",
+      "GITHUB_RUN_ID",
+      "GITHUB_RUN_ATTEMPT",
+      "GITHUB_JOB",
       "GITHUB_ACTOR_ID",
       "PUBLIC_RELEASE_VERIFICATION",
       "PUBLISH",
       "REBUILD",
     ]
-      .filter((key) => process.env[key] !== undefined)
-      .map((key) => [key, process.env[key]]),
+      .filter((key) => environment[key] !== undefined)
+      .map((key) => [key, environment[key]]),
   );
+}
+export async function prepareProductionInputs(text) {
+  assert.equal(process.platform, "darwin");
+  assert.equal(process.arch, "arm64");
+  assert.equal(process.env.PUBLIC_RELEASE_VERIFICATION, "1");
+  const environment = productionInputEnvironment(process.env);
   for (const key of [
     "PYTHONPATH",
     "PYTHONHOME",
