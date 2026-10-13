@@ -61,7 +61,7 @@ def signing(path, expected_team, requirement=None):
 
 
 
-def historical_tag(root, expected):
+def historical_tag(root, expected, *, prerelease=False):
     source, tag, version, build = expected['source'], expected['tag'], expected['version'], str(expected['build'])
     COHORT.require(re.fullmatch('[0-9a-f]{40}', source) and tag == 'v' + version and re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', tag) and re.fullmatch('[0-9]{1,20}', build), 'Invalid historical release identity')
     def git(*args):
@@ -75,6 +75,8 @@ def historical_tag(root, expected):
         names = git('diff', '--name-only', source, target).decode().splitlines()
         allowed = {'Resources/Info.plist', 'Resources/HelperInfo.plist', 'Casks/edith.rb'}
         COHORT.require(len(names) == len(set(names)) and set(names) <= allowed, 'Unexpected historical release tree changes')
+        if prerelease:
+            COHORT.require(set(names) <= {'Resources/Info.plist', 'Resources/HelperInfo.plist'}, 'Prerelease changed the stable cask')
         original = {name: git('show', source + ':' + name) for name in allowed}
         changed = {name: git('show', target + ':' + name) for name in names}
         mode = STATIC.version_child(original, changed, parents, source, version, build, expected['dmgSHA256'])
@@ -82,19 +84,34 @@ def historical_tag(root, expected):
         value = plistlib.loads(git('show', target + ':' + name))
         COHORT.require(value['CFBundleShortVersionString'] == version and str(value['CFBundleVersion']) == build, 'Historical tag version differs')
     cask = git('show', target + ':Casks/edith.rb')
-    COHORT.require(b'  version "' + version.encode() + b'"\n' in cask and b'  sha256 "' + expected['dmgSHA256'].encode() + b'"\n' in cask, 'Historical tag cask differs from DMG')
+    if prerelease:
+        COHORT.require(cask == git('show', source + ':Casks/edith.rb'), 'Prerelease changed source cask bytes')
+    else:
+        COHORT.require(b'  version "' + version.encode() + b'"\n' in cask and b'  sha256 "' + expected['dmgSHA256'].encode() + b'"\n' in cask, 'Historical tag cask differs from DMG')
     return {'sourceCommit': source, 'tagTargetCommit': target, 'tag': tag, 'tagMode': mode, 'latestMainRequired': False}
 
 
-def release_tag(root, expected, generation):
+def release_tag(root, expected, generation, release_channel=None):
     COHORT.require(generation in ['previous', 'current'], 'Wrong release tag generation')
+    if release_channel is not None:
+        COHORT.exact(release_channel, ['id', 'tag_name', 'target_commitish', 'draft', 'prerelease'])
+        COHORT.require(type(release_channel['id']) is int and release_channel['id'] > 0 and release_channel['draft'] is False and type(release_channel['prerelease']) is bool and release_channel['tag_name'] == expected['tag'], 'Invalid actual public release channel')
+        target = command(['git', '-C', str(root), 'rev-parse', 'refs/tags/' + expected['tag']]).strip()
+        COHORT.require(release_channel['target_commitish'] == target, 'Public release target differs from raw tag')
+        if release_channel['prerelease']:
+            identity = historical_tag(root, expected, prerelease=True)
+            if generation == 'current':
+                COHORT.require(command(['git', '-C', str(root), 'rev-parse', 'refs/remotes/origin/main']).strip() == target, 'Current prerelease is not latest main')
+                identity.pop('latestMainRequired')
+                identity['mainMatchesTag'] = True
+            return identity
     if generation == 'previous':
         return historical_tag(root, expected)
     return STATIC.qualify_tag(str(root), expected['source'], expected['tag'], expected['version'], str(expected['build']), expected['dmgSHA256'])
 
 
 def host(context):
-    COHORT.exact(context, ['request', 'generation', 'directory'])
+    COHORT.exact(context, ['request', 'generation', 'directory'] + (['releaseChannel'] if 'releaseChannel' in context else []))
     request = COHORT.request(json.dumps(context['request']))
     generation = context['generation']
     COHORT.require(generation in ['previous', 'current'], 'Wrong cohort generation')
@@ -105,7 +122,7 @@ def host(context):
     COHORT.require(STATIC.file_hash(directory / 'host-release-proof.json', 1024**2)['sha256'] == expected['proofSHA256'], 'Host receipt digest differs')
     for key, original in [('source', 'sourceCommit'), ('version', 'version'), ('build', 'build'), ('hostExecutableSHA256', 'hostExecutableSHA256'), ('dmgSHA256', 'dmgSHA256'), ('dmgBytes', 'dmgBytes'), ('appcastSHA256', 'appcastSHA256'), ('installedBytes', 'installedBytes'), ('extensionPayloadBytes', 'extensionPayloadBytes'), ('teamIdentifier', 'teamIdentifier'), ('certificateCategory', 'certificateCategory'), ('designatedRequirement', 'verifiedDesignatedRequirement'), ('notarization', 'notarization')]:
         COHORT.require(str(proof[original]) == str(expected[key]), 'Host receipt identity differs')
-    tag_identity = release_tag(ROOT, expected, generation)
+    tag_identity = release_tag(ROOT, expected, generation, context.get('releaseChannel'))
     dmg = directory / 'Edith.dmg'
     COHORT.require(STATIC.file_hash(dmg) == {'bytes': expected['dmgBytes'], 'sha256': expected['dmgSHA256']}, 'Public DMG differs')
     mount = directory / 'mounted'
@@ -127,7 +144,10 @@ def host(context):
         COHORT.require(identity['signedSHA256'] == expected['hostExecutableSHA256'] and identity['normalization'] == expected['normalization'], 'Host implementation identity differs')
         signed = signing(bundle, expected['teamIdentifier'], expected['designatedRequirement'])
         COHORT.require(STATIC.file_hash(dmg) == {'bytes': expected['dmgBytes'], 'sha256': expected['dmgSHA256']}, 'Public DMG changed during verification')
-        return {'generation': generation, 'source': expected['source'], 'dmg': str(dmg), 'tagIdentity': tag_identity, 'publicStaticProof': actual, 'implementation': identity, 'role': {'role': 'host', 'executable': COHORT.EXECUTABLE, **signed}}
+        result = {'generation': generation, 'source': expected['source'], 'dmg': str(dmg), 'tagIdentity': tag_identity, 'publicStaticProof': actual, 'implementation': identity, 'role': {'role': 'host', 'executable': COHORT.EXECUTABLE, **signed}}
+        if 'releaseChannel' in context:
+            result['releaseChannel'] = context['releaseChannel']
+        return result
     finally:
         if attached:
             command(['hdiutil', 'detach', str(mount)], 120)

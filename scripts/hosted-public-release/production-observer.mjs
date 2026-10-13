@@ -225,6 +225,7 @@ export async function prepareProductionObserver(capability) {
     "Packages/EdithHost/Sources/EdithHostCore/HostRemoteAuthentication.swift",
     "Tests/HostedProductionUpdate/ProducerSources/ProductionHostProbe.swift",
     "scripts/hosted-public-release/production-sparkle-inputs.py",
+    "scripts/hosted-public-release/production-feed-preferences.py",
   ];
   const current = () => {
     assert.equal(
@@ -555,6 +556,52 @@ export async function prepareProductionObserver(capability) {
     await rm(output);
     return Object.freeze(info);
   };
+  let feedAttempted = false;
+  const feedReceipt = join(verified.directory, "sparkle-feed-route.json");
+  const feed = async (operation) => {
+    await verified.revalidate();
+    current();
+    const channel = verified.hosts.current.releaseChannel;
+    if (channel === undefined || channel.prerelease === false)
+      return { route: "ordinary-stable-feed" };
+    assert.equal(channel.prerelease, true);
+    assert.equal(channel.draft, false);
+    assert.equal(channel.tag_name, verified.request.hosts.current.tag);
+    assert(Number.isSafeInteger(channel.id) && channel.id > 0);
+    if (operation === "setup") {
+      assert.equal(feedAttempted, false);
+      feedAttempted = true;
+    } else if (!feedAttempted) return { route: "not-started" };
+    const result = JSON.parse(
+      execFileSync(
+        "python3",
+        [
+          "-I",
+          "-B",
+          sourcePaths[3],
+          operation,
+          accountHome,
+          verified.request.hosts.current.version,
+          feedReceipt,
+        ],
+        {
+          cwd: root,
+          env: verified.environment,
+          timeout: 10000,
+          maxBuffer: 65536,
+        },
+      ),
+    );
+    current();
+    await verified.revalidate();
+    if (operation === "setup") {
+      assert.deepEqual(result, {
+        route: "isolated-public-prerelease",
+        url: `https://github.com/pulkitxm/edith/releases/download/${verified.request.hosts.current.tag}/appcast.xml`,
+      });
+    } else assert(result.restored === true || result.routeNotStarted === true);
+    return result;
+  };
   return Object.freeze({
     cli,
     snapshot,
@@ -562,6 +609,8 @@ export async function prepareProductionObserver(capability) {
     state: (rows) => inspect("state", owned(rows)),
     assertions: (rows) => inspect("assertions", owned(rows)),
     quit: (row) => inspect("quit", owned([row])),
+    prepareFeed: () => feed("setup"),
+    restoreFeed: () => feed("restore"),
     action: async (action, rows) => {
       assert(actions.has(action));
       const expected = owned(rows);

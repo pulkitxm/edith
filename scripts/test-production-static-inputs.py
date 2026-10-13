@@ -188,6 +188,49 @@ class ProductionStaticInputTests(unittest.TestCase):
             records[('rev-parse', 'refs/remotes/origin/main')] = target.encode() + b'\n'
             self.assertIs(INPUTS.release_tag(self.directory, expected, 'current')['mainMatchesTag'], True)
 
+    def prerelease_records(self):
+        expected, target, records = self.historical_records(stamp=True)
+        records[('diff', '--name-only', expected['source'], target)] = b'Resources/Info.plist\nResources/HelperInfo.plist\n'
+        records[('show', target + ':Casks/edith.rb')] = records[('show', expected['source'] + ':Casks/edith.rb')]
+        records[('rev-parse', 'refs/remotes/origin/main')] = target.encode() + b'\n'
+        channel = {'id': 123, 'tag_name': expected['tag'], 'target_commitish': target, 'draft': False, 'prerelease': True}
+        return expected, target, records, channel
+
+    def qualify_channel(self, expected, records, channel, generation='current'):
+        def output(arguments, timeout, **kwargs):
+            self.assertEqual(timeout, 60)
+            self.assertEqual(arguments[:3], ['git', '-C', str(self.directory)])
+            return records[tuple(arguments[3:])]
+        with patch.object(INPUTS.subprocess, 'check_output', side_effect=output):
+            return INPUTS.release_tag(self.directory, expected, generation, channel)
+
+    def test_actual_prerelease_preserves_source_cask_and_current_main(self):
+        expected, target, records, channel = self.prerelease_records()
+        self.assertTrue(self.qualify_channel(expected, records, channel)['mainMatchesTag'])
+        old_main = {**records, ('rev-parse', 'refs/remotes/origin/main'): b'a' * 40 + b'\n'}
+        self.assertEqual(self.qualify_channel(expected, old_main, channel, 'previous')['tagTargetCommit'], target)
+        with self.assertRaisesRegex(ValueError, 'not latest main'):
+            self.qualify_channel(expected, old_main, channel)
+
+    def test_prerelease_cannot_change_cask_parent_or_nonversion_bytes(self):
+        expected, target, records, channel = self.prerelease_records()
+        for mutation in [
+            {('show', target + ':Casks/edith.rb'): b'changed synthetic cask'},
+            {('diff', '--name-only', expected['source'], target): b'Casks/edith.rb\n'},
+            {('show', '-s', '--format=%P', target): b'f' * 40},
+            {('show', target + ':Resources/Info.plist'): plistlib.dumps({'CFBundleShortVersionString': expected['version'], 'CFBundleVersion': str(expected['build']), 'SyntheticUnchanged': 'changed'})},
+        ]:
+            with self.subTest(mutation=next(iter(mutation))), self.assertRaises(ValueError):
+                self.qualify_channel(expected, {**records, **mutation}, channel)
+
+    def test_actual_channel_identity_cannot_replace_stable_contract_or_admit_drafts(self):
+        expected, target, records, channel = self.prerelease_records()
+        for change in [{'draft': True}, {'prerelease': 'true'}, {'id': True}, {'tag_name': 'v0.0.1'}, {'target_commitish': 'e' * 40}, {'additional': True}]:
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                self.qualify_channel(expected, records, {**channel, **change})
+        with self.assertRaisesRegex(ValueError, 'cask differs'):
+            self.qualify_channel(expected, records, {**channel, 'prerelease': False})
+
     def test_actual_zip_and_current_contained_helper_plists_are_read_without_native_execution(self):
         context = synthetic_archive(self.directory)
         value = self.verify(context)
