@@ -829,6 +829,8 @@ class TerminalChildSelfGroupEmitterContracts(unittest.TestCase):
                         child_reads += 1
                         if child_reads == 1 or incomplete and child_reads == 2:
                             return 0
+                    if pid == 123 and child_reads >= 4:
+                        pointer._obj.nfiles = 1
                     return result
 
                 with patch.object(model.runner.watchdog.ctypes, 'CDLL', return_value=kernel), \

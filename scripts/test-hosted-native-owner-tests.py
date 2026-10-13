@@ -2175,5 +2175,169 @@ class KnownLiveRecordRecoveryContracts(unittest.TestCase):
         self.assertEqual(self.kernel.signals, [])
 
 
+class UnsealedChildLiveRecoveryContracts(unittest.TestCase):
+    def exercise(self, group=123, initial=0, mutate=None, configure=None):
+        kernel = Kernel()
+        original_info = kernel.proc_pidinfo
+        original_path = kernel.proc_pidpath
+        child_reads = 0
+        parent_reads = 0
+        child_paths = 0
+        active = False
+        trace = []
+
+        def record(pid, flavor, argument, pointer, size):
+            nonlocal child_reads, parent_reads
+            result = original_info(pid, flavor, argument, pointer, size)
+            pointer._obj.status = 2
+            if active:
+                trace.append(('record', pid, argument))
+                if pid == 234:
+                    if argument == 0:
+                        return initial
+                    child_reads += 1
+                else:
+                    parent_reads += 1
+                if callable(mutate):
+                    result = mutate(pid, argument, pointer._obj, result, child_reads, parent_reads)
+            return result
+
+        def path(pid, buffer, size):
+            nonlocal child_paths
+            result = original_path(pid, buffer, size)
+            if active:
+                trace.append(('path', pid))
+                if pid == 234:
+                    child_paths += 1
+                    if mutate == 'path' and child_paths == 2:
+                        buffer.value = b'/fixture/changed'
+                    if mutate == 'empty_path':
+                        buffer.value = b''
+                        return 1
+            return result
+
+        with patch.object(runner.watchdog.ctypes, 'CDLL', return_value=kernel), \
+                patch.object(runner.os, 'kill', side_effect=kernel.kill):
+            owner = runner.BoundedOwnership(123, 501)
+            kernel.processes[234] = (234, 101, 8, '/fixture/compiler', group, 123, 501, 501)
+            if configure is not None:
+                configure(owner)
+            active = True
+            with patch.object(kernel, 'proc_pidinfo', side_effect=record), \
+                    patch.object(kernel, 'proc_pidpath', side_effect=path):
+                owner.refresh()
+        self.assertEqual(kernel.signals, [])
+        return owner, trace
+
+    def test_actual_refresh_recovers_only_stable_live_parent_or_self_group_children(self):
+        for group in [123, 234]:
+            with self.subTest(group=group):
+                owner, trace = self.exercise(group)
+                self.assertEqual(owner.errors, [])
+                self.assertEqual(owner.known[234], (234, 101, 8, '/fixture/compiler', group))
+                self.assertEqual(owner.seals[234], (234, 101, 8, group))
+                self.assertEqual(owner.admission_parents[234],
+                                 (123, 100, 7, '/usr/bin/make', 123, 1, 501, 501))
+                self.assertEqual(owner.parents[234], 123)
+                self.assertEqual(owner.pending_children, {})
+                self.assertEqual(owner.terminal_children, {})
+                self.assertEqual(owner.failure_observations, [])
+                self.assertEqual(owner.terminal_child_refusals, {})
+                bracket = [('record', 123, 0), ('path', 123),
+                           ('record', 234, 1), ('path', 234),
+                           ('record', 234, 1), ('path', 234),
+                           ('record', 123, 0), ('path', 123)]
+                self.assertTrue(any(trace[i:i + len(bracket)] == bracket
+                                    for i in range(len(trace) - len(bracket) + 1)))
+
+    def test_partial_negative_and_foreign_group_never_acquire_fresh_authority(self):
+        for initial, group in [(135, 123), (-1, 123), (0, 456)]:
+            with self.subTest(initial=initial, group=group):
+                owner, _ = self.exercise(group, initial)
+                self.assertTrue(owner.errors)
+                self.assertNotIn(234, owner.known)
+                self.assertNotIn(234, owner.seals)
+                self.assertNotIn(234, owner.admission_parents)
+
+    def test_every_changed_child_record_or_path_rejects_without_seal(self):
+        for field in ['short', 'zero', 'pid', 'seconds', 'microseconds', 'pgid', 'ppid',
+                      'uid', 'ruid', 'status', 'nfiles', 'path', 'empty_path']:
+            with self.subTest(field=field):
+                def mutate(pid, argument, info, result, reads, parents):
+                    if pid == 234 and argument == 1 and reads == 3:
+                        if field in ['short', 'zero']:
+                            return result - 1 if field == 'short' else 0
+                        if field not in ['path', 'empty_path']:
+                            setattr(info, field, getattr(info, field) + 1)
+                    return result
+
+                owner, _ = self.exercise(mutate=field if field in ['path', 'empty_path'] else mutate)
+                self.assertTrue(owner.errors)
+                self.assertNotIn(234, owner.known)
+                self.assertNotIn(234, owner.seals)
+                self.assertNotIn(234, owner.admission_parents)
+
+    def test_identical_invalid_live_records_cannot_qualify_through_raw_equality(self):
+        for field, value in [('pid', 999), ('seconds', 0), ('microseconds', 1000000),
+                             ('pgid', 0), ('ppid', 456), ('uid', 502), ('ruid', 502),
+                             ('status', 0), ('status', 5)]:
+            with self.subTest(field=field, value=value):
+                def mutate(pid, argument, info, result, reads, parents):
+                    if pid == 234 and argument == 1 and reads >= 2:
+                        setattr(info, field, value)
+                    return result
+
+                owner, _ = self.exercise(mutate=mutate)
+                self.assertTrue(owner.errors)
+                self.assertNotIn(234, owner.known)
+                self.assertNotIn(234, owner.seals)
+                self.assertNotIn(234, owner.admission_parents)
+
+    def test_parent_full_raw_change_after_children_never_grants_authority(self):
+        for field in ['pid', 'seconds', 'pgid', 'ppid', 'uid', 'ruid', 'nfiles']:
+            with self.subTest(field=field):
+                def mutate(pid, argument, info, result, reads, parents):
+                    if pid == 123 and reads >= 3:
+                        setattr(info, field, getattr(info, field) + 1)
+                    return result
+
+                owner, _ = self.exercise(mutate=mutate)
+                self.assertTrue(owner.errors)
+                self.assertNotIn(234, owner.known)
+                self.assertNotIn(234, owner.seals)
+
+    def test_direct_unknown_snapshot_cannot_backfill_parent_or_existing_child_authority(self):
+        kernel = Kernel()
+        with patch.object(runner.watchdog.ctypes, 'CDLL', return_value=kernel), \
+                patch.object(runner.os, 'kill', side_effect=kernel.kill):
+            owner = runner.BoundedOwnership(123, 501)
+            for pid, parent, identity in [(234, None, None), (123, 123, owner.known[123]),
+                                           (234, 123, (123, 999, 7, '/usr/bin/make', 123))]:
+                with patch.object(kernel, 'proc_pidinfo', wraps=kernel.proc_pidinfo) as reads:
+                    self.assertIsNone(owner.recover_unsealed_child(pid, parent, identity))
+                reads.assert_not_called()
+            kernel.processes[234] = (234, 101, 8, '/fixture/compiler', 123, 123, 501, 501)
+            for state in ['known', 'seals', 'pending_children', 'terminal_children', 'rejected']:
+                getattr(owner, state)[234] = owner.known[123]
+                with patch.object(kernel, 'proc_pidinfo', wraps=kernel.proc_pidinfo) as reads:
+                    self.assertIsNone(owner.recover_unsealed_child(234, 123, owner.known[123]))
+                reads.assert_not_called()
+                getattr(owner, state).pop(234)
+        self.assertEqual(kernel.signals, [])
+
+    def test_original_refresh_combined_caps_still_prevent_recovered_child_authority(self):
+        for bound in ['lifetime', 'concurrent']:
+            with self.subTest(bound=bound):
+                def configure(owner):
+                    if bound == 'lifetime':
+                        owner.terminal_children = {pid: b'bounded' for pid in range(1000, 5032)}
+                    owner.pending_children = {pid: owner.known[123] for pid in range(6000, 6063)}
+                owner, _ = self.exercise(configure=configure)
+                self.assertTrue(owner.errors)
+                self.assertNotIn(234, owner.known)
+                self.assertNotIn(234, owner.seals)
+                self.assertNotIn(234, owner.admission_parents)
+
+
 if __name__ == '__main__':
     unittest.main()
