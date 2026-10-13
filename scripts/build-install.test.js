@@ -232,7 +232,7 @@ describe("build install lifecycle", () => {
       expect(new TextDecoder().decode(result.stdout).trim()).toBe(slot);
     }
     expect(script).toContain('SLOT="$(scripts/dev-slots.sh claim)"');
-    expect(script).toContain(["$", '{SLOT:+--slot "$SLOT"}'].join(""));
+    expect(script).toContain('PACKAGE_ARGUMENTS+=(--slot "$SLOT")');
   });
 
   test("never launches a production copy outside /Applications", () => {

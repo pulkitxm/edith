@@ -148,12 +148,12 @@ if [ -n "$BRANCH" ]; then
       git worktree add "$ROOT" "$BRANCH"
     fi
     echo "building from $ROOT"
-    BUILD_ARGUMENTS=()
+    BUILD_ARGUMENTS=("$ROOT/build.sh")
     [ "$INSTALL" = 0 ] || BUILD_ARGUMENTS+=(--install)
     [ "$NO_OPEN" = 0 ] || BUILD_ARGUMENTS+=(--no-open)
     [ "$BACKGROUND" = 0 ] || BUILD_ARGUMENTS+=(--background)
     [ "$RELEASE" = 0 ] || BUILD_ARGUMENTS+=(--release)
-    exec "$ROOT/build.sh" "${BUILD_ARGUMENTS[@]}"
+    exec "${BUILD_ARGUMENTS[@]}"
   fi
 fi
 
@@ -169,15 +169,16 @@ if [ "$RELEASE" != 1 ]; then
   echo "development slot $SLOT (com.pulkit.edith.dev.$SLOT)"
 fi
 
-PACKAGE_VERSION_ARGS=()
+PACKAGE_ARGUMENTS=(--identity "$SIGN_IDENTITY")
 if [ "$RELEASE" = 1 ] && [ -n "${RELEASE_VERSION:-}${RELEASE_BUILD:-}" ]; then
-  PACKAGE_VERSION_ARGS=(--version "${RELEASE_VERSION:-}" --build "${RELEASE_BUILD:-}")
+  PACKAGE_ARGUMENTS+=(--version "${RELEASE_VERSION:-}" --build "${RELEASE_BUILD:-}")
 fi
+[ -z "$SLOT" ] || PACKAGE_ARGUMENTS+=(--slot "$SLOT")
+[ "$RELEASE" != 1 ] || PACKAGE_ARGUMENTS+=(--release)
 
 node scripts/build-minimal-host.mjs
 python3 scripts/package-shipping-host.py local/minimal-host/Edith.app dist/Edith.app \
-  --identity "$SIGN_IDENTITY" "${PACKAGE_VERSION_ARGS[@]}" ${SLOT:+--slot "$SLOT"} \
-  $([ "$RELEASE" != 1 ] || printf '%s' '--release')
+  "${PACKAGE_ARGUMENTS[@]}"
 APP="dist/Edith.app"
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
 if [ "$RELEASE" = 1 ]; then

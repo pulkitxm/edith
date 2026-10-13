@@ -94,6 +94,10 @@ ci-comments:
 	bun scripts/strip-comments.mjs --selftest
 	bun scripts/strip-comments.mjs --check
 
+.PHONY: ci-host-packaging-arguments
+ci-host-packaging-arguments:
+	bun test scripts/host-packaging-arguments.test.js scripts/build-install.test.js scripts/release-workflows.test.js --test-name-pattern 'host packaging and branch arguments|names each development build|DMG version preparation'
+
 ci-secrets:
 	bun run check-secrets
 
