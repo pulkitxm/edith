@@ -191,7 +191,8 @@ extension MusicExtensionTests {
                 }
                 do {
                     try await eventually { probes.allSatisfy(\.entered) }
-                    try #require(probes.allSatisfy(\.entered))
+                    let allEntered = probes.allSatisfy(\.entered)
+                    try #require(allEntered)
                     for probe in probes { probe.release() }
                     for load in loads { #expect(await load.value) }
                 } catch {
