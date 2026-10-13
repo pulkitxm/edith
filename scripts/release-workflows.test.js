@@ -483,14 +483,15 @@ test("DMG version preparation leaves frozen source clean and reaches the isolate
   );
   expect(buildScript).toContain(
     [
-      'PACKAGE_VERSION_ARGS=(--version "$',
+      'PACKAGE_ARGUMENTS+=(--version "$',
       '{RELEASE_VERSION:-}" --build "$',
       '{RELEASE_BUILD:-}")',
     ].join(""),
   );
   expect(buildScript).toContain(
-    ['--identity "$SIGN_IDENTITY" "$', '{PACKAGE_VERSION_ARGS[@]}"'].join(""),
+    'PACKAGE_ARGUMENTS=(--identity "$SIGN_IDENTITY")',
   );
+  expect(buildScript).toContain(['"$', '{PACKAGE_ARGUMENTS[@]}"'].join(""));
   expect(
     readFileSync("scripts/package_extension_lifecycle_tools.py", "utf8"),
   ).toContain("metadata.get('sourceTreeDirty') is not False");
