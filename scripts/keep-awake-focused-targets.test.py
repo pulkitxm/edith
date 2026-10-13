@@ -101,7 +101,7 @@ class KeepAwakeFocusedTargetsTests(unittest.TestCase):
             self.assertIn(key + '=\"$$fixture', command)
         self.assertIn('EDITH_SHARED_DEFAULTS_SUITE="edith.keepAwake.tests.$$(basename "$$fixture")"', command)
         self.assertIn("swift format lint --strict --recursive Extensions/keepAwake", command)
-        self.assertIn("swift test --package-path Extensions/keepAwake --build-system native --no-parallel --jobs 1 -Xswiftc -j1", command)
+        self.assertIn("python3 -B scripts/run-host-swift-testing.py package-test --package-path Extensions/keepAwake --build-system native --no-parallel --jobs 1 -Xswiftc -j1", command)
         self.assertEqual(command.count("/usr/bin/time -p"), 2)
 
     def cleanup_spy(self, root, status=0):
@@ -222,20 +222,21 @@ console.log(JSON.stringify(step));'''
         self.assertEqual(recipe("ci-extension-keep-awake-native").strip(), "/usr/bin/time -p python3 -B scripts/test-keep-awake-hosted-acceptance.py")
 
     def test_peer_diagnostics_reuse_isolation_and_only_select_closed_diagnostics(self):
-        original = recipe("ci-extension-keep-awake").splitlines()
+        original = recipe("ci-extension-keep-awake").replace("python3 -B scripts/run-host-swift-testing.py package-test", "swift test").splitlines()
         focused = recipe("ci-extension-keep-awake-peer-diagnostics").splitlines()
-        self.assertEqual(len(focused), 2)
+        self.assertEqual(len(focused), 3)
+        self.assertEqual(focused[1], "\t$(call PREPARE_ARGUMENT_PARSER,Packages/ExtensionSupport)")
         self.assertEqual(focused[0], original[0])
         marker = "/usr/bin/time -p swift test "
-        self.assertEqual(focused[1].split(marker)[0], original[2].split(marker)[0])
+        self.assertEqual(focused[2].split(marker)[0], original[2].split(marker)[0])
         expected = original[2].split(marker)[1].replace(
             "--package-path Extensions/keepAwake",
             "--package-path Packages/ExtensionSupport --filter ExtensionPeerFailureDiagnosticsTests",
         )
-        self.assertEqual(focused[1].split(marker)[1], expected)
+        self.assertEqual(focused[2].split(marker)[1], expected)
         self.assertNotIn("--filter", original[2])
         for override in ["--skip", "$(FILTER)", "$(SKIP)"]:
-            self.assertNotIn(override, focused[1])
+            self.assertNotIn(override, focused[2])
         gate = runpy.run_path(str(ROOT / "scripts/make-resource-gate.py"))
         self.assertEqual(gate["profile_for"]("ci-extension-keep-awake-peer-diagnostics")[:2], (2.5, 2560.0))
         tests = (ROOT / "Packages/ExtensionSupport/Tests/EdithExtensionSupportTests/ExtensionPeerFailureDiagnosticsTests.swift").read_text()
@@ -280,20 +281,21 @@ console.log(JSON.stringify({steps: workflow.jobs.tests.steps, required: contract
         self.assertLess(names.index(name), names.index("Validate the shipping extension and marketplace"))
 
     def test_peer_transport_reuse_isolation_and_only_select_socket_and_existing_peer_suites(self):
-        original = recipe("ci-extension-keep-awake").splitlines()
+        original = recipe("ci-extension-keep-awake").replace("python3 -B scripts/run-host-swift-testing.py package-test", "swift test").splitlines()
         focused = recipe("ci-extension-keep-awake-peer-transport").splitlines()
-        self.assertEqual(len(focused), 2)
+        self.assertEqual(len(focused), 3)
+        self.assertEqual(focused[1], "\t$(call PREPARE_ARGUMENT_PARSER,Packages/ExtensionSupport)")
         self.assertEqual(focused[0], original[0])
         marker = "/usr/bin/time -p swift test "
-        self.assertEqual(focused[1].split(marker)[0], original[2].split(marker)[0])
+        self.assertEqual(focused[2].split(marker)[0], original[2].split(marker)[0])
         expected = original[2].split(marker)[1].replace(
             "--package-path Extensions/keepAwake",
             "--package-path Packages/ExtensionSupport --filter 'ExtensionPeerSocketTests|ExtensionPeerTests'",
         )
-        self.assertEqual(focused[1].split(marker)[1], expected)
+        self.assertEqual(focused[2].split(marker)[1], expected)
         self.assertNotIn("--filter", original[2])
         for override in ["--skip", "$(FILTER)", "$(SKIP)"]:
-            self.assertNotIn(override, focused[1])
+            self.assertNotIn(override, focused[2])
         gate = runpy.run_path(str(ROOT / "scripts/make-resource-gate.py"))
         self.assertEqual(gate["profile_for"]("ci-extension-keep-awake-peer-transport")[:2], (2.5, 2560.0))
         tests = (ROOT / "Packages/ExtensionSupport/Tests/EdithExtensionSupportTests/ExtensionPeerSocketTests.swift").read_text()
@@ -341,7 +343,7 @@ console.log(JSON.stringify({steps: workflow.jobs.tests.steps, required: contract
         self.assertLess(names.index(name), names.index("Validate the shipping extension and marketplace"))
 
     def test_peer_contracts_reuse_isolation_and_only_select_the_rejection_suite(self):
-        original = recipe("ci-extension-keep-awake").splitlines()
+        original = recipe("ci-extension-keep-awake").replace("python3 -B scripts/run-host-swift-testing.py package-test", "swift test").splitlines()
         focused = recipe("ci-extension-keep-awake-peer-contracts").splitlines()
         self.assertEqual(len(focused), 2)
         self.assertEqual(focused[0], original[0])
