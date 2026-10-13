@@ -17,7 +17,7 @@ private actor AccountLimitsProbe {
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
 
     private func account(_ name: String = "Synthetic account") -> ClaudeAccount {
-        .init(name: name, credential: "synthetic-token")
+        .init(name: name, credential: "synthetic-token-" + name)
     }
 
     @Test func configuredAccountsReplaceAmbientClaudeAndDisabledClaudeDoesNotReadAccounts()
@@ -215,6 +215,80 @@ private actor AccountLimitsProbe {
         }
         #expect(await named.calls == 1)
         #expect(await ambient.calls == 1)
+    }
+
+    @Test(arguments: [ClaudeAccount.Authentication.oauthToken, .apiKey])
+    func duplicateCredentialsShareRetryAfterAcrossRenameAndRemoval(
+        authentication: ClaudeAccount.Authentication
+    ) async throws {
+        let collector = ClaudeAccountLimitsCollector()
+        var first = account("Company")
+        var duplicate = account("Imported CLI")
+        first.authentication = authentication
+        duplicate.authentication = authentication
+        duplicate.credential = first.credential
+        let probe = AccountLimitsProbe()
+        let fetch: @Sendable (ClaudeAccount, URL) async throws -> LimitsProviderSnapshot = { _, _ in
+            await probe.enter(); await probe.leave()
+            throw ClaudeLimitsReader.Failure.rateLimited(300)
+        }
+        let original = try await collector.refresh(
+            accounts: [first, duplicate], directory: directory, now: now, fetch: fetch)
+        #expect(original.map(\.id) == [first.id, duplicate.id])
+        #expect(original.allSatisfy { $0.limits.error != nil })
+        #expect(await probe.calls == 1)
+        first.name = "Renamed company"
+        let renamed = try await collector.refresh(
+            accounts: [first, duplicate], directory: directory,
+            now: now.addingTimeInterval(61), fetch: fetch)
+        #expect(renamed.map(\.name) == [first.name, duplicate.name])
+        #expect(await probe.calls == 1)
+        let retained = try await collector.refresh(
+            accounts: [duplicate], directory: directory,
+            now: now.addingTimeInterval(62), fetch: fetch)
+        #expect(retained.map(\.id) == [duplicate.id])
+        #expect(await probe.calls == 1)
+        _ = try await collector.refresh(
+            accounts: [duplicate], directory: directory,
+            now: now.addingTimeInterval(301), fetch: fetch)
+        #expect(await probe.calls == 2)
+        duplicate.credential = "synthetic-replaced-token"
+        _ = try await collector.refresh(
+            accounts: [duplicate], directory: directory,
+            now: now.addingTimeInterval(302), fetch: fetch)
+        #expect(await probe.calls == 3)
+    }
+
+    @Test func browserProfilesAndAssociatedMachinesNeverShareCredentialCache() async throws {
+        let collector = ClaudeAccountLimitsCollector()
+        var browser = account("First browser")
+        browser.authentication = .browserLogin
+        var secondBrowser = browser
+        secondBrowser.id = UUID()
+        secondBrowser.name = "Second browser"
+        var local = account("Local OAuth")
+        local.credential = browser.credential
+        var remote = local
+        remote.id = UUID()
+        remote.name = "Remote OAuth"
+        remote.remoteMachineID = UUID().uuidString
+        var revoked = local
+        revoked.id = UUID()
+        revoked.name = "Revoked OAuth"
+        revoked.isLoggedOut = true
+        let probe = AccountLimitsProbe()
+        let values = try await collector.refresh(
+            accounts: [browser, secondBrowser, local, remote, revoked],
+            directory: directory, now: now
+        ) { account, _ in
+            #expect(!account.isLoggedOut)
+            await probe.enter(); await probe.leave()
+            return .init(provider: .claude, session: .init(percent: 23, resetsAt: nil), week: nil)
+        }
+        #expect(await probe.calls == 4)
+        #expect(values.count == 5)
+        #expect(values.last?.limits.session == nil)
+        #expect(values.last?.limits.error != nil)
     }
 
     private func waitUntil(_ predicate: () async -> Bool) async throws {
