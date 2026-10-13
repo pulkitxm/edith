@@ -65,7 +65,9 @@ import Testing
             }
             let policy = try WorkerFixtureRolePolicy(
                 owner: "blitztree", primaryRole: .app, operations: ["blitztree.ui.trash"],
-                presentations: [], inputs: [], outputs: [], fileScopes: scopes,
+                presentations: [
+                    try WorkerFixturePresentationScope(location: "main", section: "blitztree")
+                ], inputs: [], outputs: [], fileScopes: scopes,
                 manifestSHA256: String(repeating: "a", count: 64),
                 caseSHA256: String(repeating: "b", count: 64))
             let resolved = try policy.resolvedOwnedPaths(

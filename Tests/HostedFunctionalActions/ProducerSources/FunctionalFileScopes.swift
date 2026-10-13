@@ -51,7 +51,7 @@ final class FunctionalFileScopes {
 
     static func preparationFiles(
         owner: String, root: String, session: String, policy: WorkerFixtureRolePolicy,
-        bytes: Data
+        bytes: Data, phase: WorkerFixtureFilePhase = .initial
     ) throws -> [PreparationFile] {
         guard bytes.count <= 8_388_608, owner == policy.owner else {
             throw FunctionalFailure.invalid("literal finite preparation scope")
@@ -74,7 +74,7 @@ final class FunctionalFileScopes {
         }
         var allowed: [(root: String, components: [[String: Any]], path: String, maximum: Int)] = []
         var bindings: [(root: String, components: [[String: Any]], path: String)] = []
-        for entry in try policy.resolvedOwnedPaths(root: root, session: session, phase: .initial) {
+        for entry in try policy.resolvedOwnedPaths(root: root, session: session, phase: phase) {
             let scope = entry.scope
             let components = scope.components.map(component)
             bindings.append((scope.root.rawValue, components, entry.path))
