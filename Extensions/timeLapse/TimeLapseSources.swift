@@ -147,7 +147,7 @@ actor TimeLapseThumbnailLoader {
         let token = UUID()
         let task = Task {
             _ = await previous?.value
-            guard !Task.isCancelled else { return CGImage?.none }
+            guard !stopped, !Task.isCancelled else { return CGImage?.none }
             let image = await operation()
             return Task.isCancelled ? nil : image
         }
