@@ -717,7 +717,9 @@ export function functionalProducerBootstrapSource(plan, repository) {
         `FunctionalCollectedEvidence.Policy(definition: try! JSONDecoder().decode(FunctionalCollectedEvidence.Definition.self, from: Data(base64Encoded: ${encoded})!), semantics: [${phases
           .map((rule) => {
             const before = sourceSavedValue(
-              rule.phase === "initial" ? reader.initial : reader.final,
+              rule.phase === "initial" || definition.owner === "blitztree"
+                ? reader.initial
+                : reader.final,
               plan,
               definition.owner,
               rule.phase,

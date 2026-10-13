@@ -1,0 +1,97 @@
+{
+  "schema": 1,
+  "owner": "blitztree",
+  "reads": [
+    {
+      "name": "victim",
+      "root": "owner-outputs",
+      "components": [
+        {
+          "derived": "phase"
+        },
+        "scan",
+        "victim.bin"
+      ],
+      "maximumBytes": 4096,
+      "format": "raw-file",
+      "selections": [
+        {
+          "name": "bytes",
+          "path": ["bytes"],
+          "codec": "value"
+        },
+        {
+          "name": "sha256",
+          "path": ["sha256"],
+          "codec": "value"
+        }
+      ]
+    },
+    {
+      "name": "private-trash",
+      "root": "owner-outputs",
+      "components": [
+        {
+          "derived": "phase"
+        },
+        "trash",
+        "victim.bin"
+      ],
+      "maximumBytes": 4096,
+      "format": "raw-file",
+      "selections": [
+        {
+          "name": "bytes",
+          "path": ["bytes"],
+          "codec": "value"
+        },
+        {
+          "name": "sha256",
+          "path": ["sha256"],
+          "codec": "value"
+        }
+      ]
+    }
+  ],
+  "sentinels": [],
+  "initial": {
+    "victim": {
+      "bytes": {
+        "present": true,
+        "value": 4096
+      },
+      "sha256": {
+        "present": true,
+        "value": "fa348f8e8bdec968196a69ee608e4844220726ebfc003ba533594f8d5f1be16e"
+      }
+    },
+    "private-trash": {
+      "bytes": {
+        "present": false
+      },
+      "sha256": {
+        "present": false
+      }
+    }
+  },
+  "final": {
+    "victim": {
+      "bytes": {
+        "present": false
+      },
+      "sha256": {
+        "present": false
+      }
+    },
+    "private-trash": {
+      "bytes": {
+        "present": true,
+        "value": 4096
+      },
+      "sha256": {
+        "present": true,
+        "value": "fa348f8e8bdec968196a69ee608e4844220726ebfc003ba533594f8d5f1be16e"
+      }
+    }
+  }
+}

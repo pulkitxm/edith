@@ -924,7 +924,10 @@ final class FunctionalCollectedEvidence {
                 prior.capabilitySHA256 == stage.journal.capabilitySHA256,
                 prior.engine == stage.capability.engine, prior.ui == stage.capability.ui,
                 prior.beforeRequestID == stage.journal.records.first?.request.requestID,
-                prior.readbackSHA256 == stages[0].persistence.readbackSHA256
+                prior.readbackSHA256
+                    == (owner == "blitztree"
+                        ? expectedBefore.map(FunctionalBytes.digest)
+                        : stages[0].persistence.readbackSHA256)
             else {
                 throw FunctionalFailure.invalid(
                     "saved before construction and first request binding")
