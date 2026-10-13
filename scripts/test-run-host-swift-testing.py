@@ -202,5 +202,125 @@ class SwiftDriverAdmissionTests(unittest.TestCase):
             driver.validate()
 
 
+class PackageTestInvocationTests(unittest.TestCase):
+    def fixture(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        developer = Path(temporary.name).resolve() / "Xcode.app/Contents/Developer"
+        directory = developer / "Toolchains/XcodeDefault.xctoolchain/usr/bin"
+        directory.mkdir(parents=True)
+        directory.chmod(0o755)
+        target = directory / "swift-package"
+        target.write_bytes(b"synthetic-unexecuted-package-image")
+        target.chmod(0o755)
+        alias = directory / "swift-test"
+        alias.symlink_to(target.name)
+        original = Path.lstat
+        observations = []
+        def inspect(path):
+            value = original(path)
+            observations.append(path)
+            fields = {name: getattr(value, name) for name in dir(value) if name.startswith("st_")}
+            fields["st_uid"] = 0
+            return type("RootOwnedMetadata", (), fields)()
+        return developer, alias, target, inspect, observations
+
+    def test_direct_package_alias_preserves_exact_caller_flags_and_nonzero_joined_exit(self):
+        developer, alias, target, inspect, observations = self.fixture()
+        arguments = ["--package-path", "Extensions/keepAwake", "--build-system", "native",
+                     "--no-parallel", "--jobs", "1", "-Xswiftc", "-j1", "-Xswiftc",
+                     "-plugin-path", "-Xswiftc", str(developer / "Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins")]
+        for status in [0, 7, -9]:
+            with self.subTest(status=status), patch.object(Path, "lstat", inspect):
+                at_join = []
+                def joined(arguments, **options):
+                    at_join.append(observations.count(target))
+                    return type("JoinedResult", (), {"returncode": status})()
+                run = Mock(side_effect=joined)
+                self.assertEqual(runtime.run_package_tests(developer, arguments, run), status)
+                run.assert_called_once_with([str(alias), *arguments], check=False)
+                self.assertGreater(observations.count(target), at_join[0])
+                self.assertNotIn("test", run.call_args.args[0])
+
+    def test_driver_mutation_during_success_or_failure_cannot_return_joined_status(self):
+        for status in [0, 7]:
+            with self.subTest(status=status):
+                developer, alias, target, inspect, _ = self.fixture()
+                def run(arguments, **options):
+                    self.assertEqual(arguments, [str(alias), "--skip-build"])
+                    self.assertEqual(options, {"check": False})
+                    target.write_bytes(b"changed-synthetic-unexecuted-package-image")
+                    return type("JoinedResult", (), {"returncode": status})()
+                with patch.object(Path, "lstat", inspect):
+                    with self.assertRaisesRegex(ValueError, "changed after admission"):
+                        runtime.run_package_tests(developer, ["--skip-build"], run)
+
+    def test_failed_subprocess_join_still_revalidates_driver_and_propagates_failure(self):
+        developer, _, target, inspect, observations = self.fixture()
+        failure = ChildProcessError("synthetic child wait failed")
+        with patch.object(Path, "lstat", inspect):
+            at_join = []
+            def failed_join(arguments, **options):
+                at_join.append(observations.count(target))
+                raise failure
+            run = Mock(side_effect=failed_join)
+            with self.assertRaises(ChildProcessError) as outcome:
+                runtime.run_package_tests(developer, ["--skip-build"], run)
+            self.assertIs(outcome.exception, failure)
+            self.assertGreater(observations.count(target), at_join[0])
+            run.assert_called_once()
+
+    def test_failed_subprocess_join_does_not_hide_changed_driver(self):
+        developer, _, target, inspect, _ = self.fixture()
+        def run(arguments, **options):
+            target.write_bytes(b"changed-synthetic-unexecuted-package-image")
+            raise ChildProcessError("synthetic child wait failed")
+        with patch.object(Path, "lstat", inspect):
+            with self.assertRaisesRegex(ValueError, "changed after admission") as outcome:
+                runtime.run_package_tests(developer, ["--skip-build"], run)
+            self.assertIsInstance(outcome.exception.__context__, ChildProcessError)
+
+    def test_missing_flags_and_duplicate_test_command_are_rejected_before_launch(self):
+        for arguments in [[], ["test", "--skip-build"]]:
+            with self.subTest(arguments=arguments), patch.object(runtime, "SelectedSwiftDriver") as driver:
+                run = Mock()
+                with self.assertRaisesRegex(ValueError, "Unexpected package test arguments"):
+                    runtime.run_package_tests("/synthetic/developer", arguments, run)
+                driver.assert_not_called()
+                run.assert_not_called()
+
+    def test_cli_package_mode_uses_real_selected_driver_and_preserves_exit(self):
+        developer, alias, _, inspect, _ = self.fixture()
+        for status in [0, 7]:
+            with self.subTest(status=status), patch.object(Path, "lstat", inspect):
+                with patch.dict(runtime.os.environ, {"DEVELOPER_DIR": str(developer)}):
+                    with patch.object(runtime.sys, "argv", ["runner", "package-test", "--skip-build"]):
+                        with patch.object(runtime.subprocess, "run", return_value=type("JoinedResult", (), {"returncode": status})()) as run:
+                            with patch.object(runtime.subprocess, "check_output") as lookup:
+                                self.assertEqual(runtime.main(), status)
+                                run.assert_called_once_with([str(alias), "--skip-build"], check=False)
+                                lookup.assert_not_called()
+
+    def test_unknown_cli_modes_cannot_query_or_launch_a_toolchain(self):
+        for mode in ["test", "package", "swift-test", "--help", "unknown"]:
+            with self.subTest(mode=mode), patch.object(runtime.sys, "argv", ["runner", mode]):
+                with patch.object(runtime.subprocess, "check_output") as lookup:
+                    with patch.object(runtime.subprocess, "run") as run:
+                        with self.assertRaisesRegex(ValueError, "Unexpected host test arguments"):
+                            runtime.main()
+                        lookup.assert_not_called()
+                        run.assert_not_called()
+
+    def test_keep_recipe_retains_private_fixture_guards_and_all_original_test_flags(self):
+        root = Path(__file__).resolve().parents[1]
+        recipe = (root / "Makefile").read_text().split("ci-extension-keep-awake:\n", 1)[1].split("\n\n", 1)[0]
+        self.assertIn('test "$$GITHUB_ACTIONS" = true && test "$$RUNNER_ENVIRONMENT" = github-hosted && test "$$RUNNER_OS" = macOS', recipe)
+        prefix = "/usr/bin/time -p python3 -B scripts/run-host-swift-testing.py package-test"
+        self.assertEqual(recipe.count(prefix), 1)
+        self.assertTrue(recipe.endswith(prefix + ' --package-path Extensions/keepAwake --build-system native --no-parallel --jobs 1 -Xswiftc -j1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"'))
+        for retained in ["umask 077", "cleanup-keep-awake-fixture.py", "CFFIXED_USER_HOME", "XDG_CONFIG_HOME", "EDITH_TEST_NATIVE_CAPTURE=0", "EDITH_EXTENSION_DATA_ROOT", "EDITH_SHARED_DEFAULTS_SUITE"]:
+            self.assertIn(retained, recipe)
+
+
 if __name__ == "__main__":
     unittest.main()

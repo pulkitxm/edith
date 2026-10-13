@@ -87,9 +87,23 @@ def binary_directory(driver, check_output=subprocess.check_output):
     return result
 
 
+def run_package_tests(developer, arguments, run=subprocess.run):
+    if not arguments or arguments[0] == "test":
+        raise ValueError("Unexpected package test arguments")
+    driver = SelectedSwiftDriver(developer, entry="swift-test")
+    try:
+        result = run([str(driver.validate()), *arguments], check=False)
+    finally:
+        driver.validate()
+    return result.returncode
+
+
 def main():
-    if sys.argv[1:]:
-        raise ValueError("Unexpected host test arguments")
+    arguments = sys.argv[1:]
+    if arguments:
+        if arguments[0] != "package-test":
+            raise ValueError("Unexpected host test arguments")
+        return run_package_tests(os.environ["DEVELOPER_DIR"], arguments[1:], run=subprocess.run)
     developer = subprocess.check_output(["xcode-select", "-p"], text=True, timeout=30).strip()
     driver = SelectedSwiftDriver(developer)
     directory = binary_directory(driver)
@@ -97,4 +111,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
