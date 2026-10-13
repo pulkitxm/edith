@@ -20,6 +20,33 @@ ADAPTATIONS = (
 )
 
 
+WARNING_ADAPTATIONS = (
+    ('src/lib.rs', 'use std::result::Result;', 'use std::result::Result as StdResult;', 1),
+    ('src/lib.rs', '-> Result<', '-> StdResult<', 46),
+    ('src/lib.rs', 'std::f64::NAN', 'f64::NAN', 1),
+    ('src/lib.rs', 'fn get_descriptor(&self) -> Option<PdfFontDescriptor>', "fn get_descriptor(&self) -> Option<PdfFontDescriptor<'_>>", 1),
+    ('src/lib.rs', "fn char_codes(&'a self, chars: &'a [u8]) -> PdfFontIter", "fn char_codes(&'a self, chars: &'a [u8]) -> PdfFontIter<'a>", 1),
+    ('src/lib.rs', 'pub fn new(file: &mut dyn std::io::Write) -> HTMLOutput', "pub fn new(file: &mut dyn std::io::Write) -> HTMLOutput<'_>", 1),
+    ('src/lib.rs', 'pub fn new(file: &mut dyn std::io::Write) -> SVGOutput', "pub fn new(file: &mut dyn std::io::Write) -> SVGOutput<'_>", 1),
+    ('src/lib.rs', 'other => {dlog!("pages: {:?}", other)}', '_other => {dlog!("pages: {:?}", _other)}', 1),
+    ('src/lib.rs', 'other => { dlog!("pages: {:?}", other)}', '_other => { dlog!("pages: {:?}", _other)}', 1),
+    ('src/lib.rs', 'Entry::Occupied(e) => {\n                                                    panic!("unexpected entry in unicode map")', 'Entry::Occupied(_e) => {\n                                                    panic!("unexpected entry in unicode map")', 1),
+    ('src/lib.rs', 'dlog!("{} = {} ({:?})", code, name, unicode);\n                                if let Some(ref mut unicode_map) = unicode_map {', 'dlog!("{} = {} ({:?})", code, name, unicode);\n                                if let Some(ref mut _unicode_map) = unicode_map {', 1),
+    ('src/lib.rs', 'if let Some(ref unicode_map) = unicode_map {', 'if let Some(ref _unicode_map) = unicode_map {', 1),
+    ('src/lib.rs', 'dlog!("{} {:?}", code, unicode_map.get(&(code as u32)));', 'dlog!("{} {:?}", code, _unicode_map.get(&(code as u32)));', 2),
+    ('src/lib.rs', 'let name = encoding.get(b"Type").and_then(|x| x.as_name()).and_then(|x| Ok(pdf_to_utf8(x)));\n                dlog!("name: {}", name);', 'let _name = encoding.get(b"Type").and_then(|x| x.as_name()).and_then(|x| Ok(pdf_to_utf8(x)));\n                dlog!("name: {}", _name);', 1),
+    ('src/lib.rs', 'let name = if is_core_font(&base_name) {', 'let _name = if is_core_font(&base_name) {', 1),
+    ('src/lib.rs', 'if let Ok(Object::Name(name)) = name_encoded {\n                    dlog!("name: {}", pdf_to_utf8(name));', 'if let Ok(Object::Name(_name)) = name_encoded {\n                    dlog!("name: {}", pdf_to_utf8(_name));', 1),
+    ('src/lib.rs', "fn new(doc: &'a Document, font: &'a Dictionary) -> PdfCIDFont<'a> {\n        let base_name = get_name_string(doc, font, b\"BaseFont\");", "fn new(doc: &'a Document, font: &'a Dictionary) -> PdfCIDFont<'a> {\n        let _base_name = get_name_string(doc, font, b\"BaseFont\");", 1),
+    ('src/lib.rs', 'dlog!("base_name {} {:?}", base_name, font);', 'dlog!("base_name {} {:?}", _base_name, font);', 1),
+    ('src/lib.rs', 'for (k, v) in *info {', 'for (_k, v) in *info {', 1),
+    ('src/lib.rs', '&Object::String(ref s, StringFormat::Literal) => { dlog!("{}: {}", pdf_to_utf8(k), pdf_to_utf8(s)); }', '&Object::String(ref _s, StringFormat::Literal) => { dlog!("{}: {}", pdf_to_utf8(_k), pdf_to_utf8(_s)); }', 1),
+    ('src/glyphnames.rs', "const names: [(&'static str, u16); 4700]", "const NAMES: [(&'static str, u16); 4700]", 1),
+    ('src/glyphnames.rs', 'names.binary_search_by_key', 'NAMES.binary_search_by_key', 1),
+    ('src/glyphnames.rs', 'names[indx].1', 'NAMES[indx].1', 1),
+)
+
+
 def require(condition, message):
     if not condition:
         raise ValueError(message)
@@ -52,6 +79,10 @@ def source_files(data, expected_sha256):
     for name, previous, current in ADAPTATIONS:
         value = result[name].decode('utf8')
         require(value.count(previous) == 1, 'Reviewed PDF source adaptation no longer matches')
+        result[name] = value.replace(previous, current).encode('utf8')
+    for name, previous, current, count in WARNING_ADAPTATIONS:
+        value = result[name].decode('utf8')
+        require(value.count(previous) == count, 'Reviewed PDF warning adaptation no longer matches')
         result[name] = value.replace(previous, current).encode('utf8')
     return result
 
