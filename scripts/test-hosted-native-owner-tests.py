@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import importlib.util
 import json
 import re
@@ -1760,6 +1761,219 @@ class PendingKernelChildContracts(unittest.TestCase):
         self.assertEqual(len(owner.pending_children), 62)
         self.assertEqual(owner.lifetime_count(), 4096)
         self.assertEqual(owner.errors, [])
+        self.assertEqual(self.kernel.signals, [])
+
+
+class TerminalRefusalWitnessTests(unittest.TestCase):
+    def setUp(self):
+        self.kernel = Kernel()
+        library = patch.object(runner.watchdog.ctypes, 'CDLL', return_value=self.kernel)
+        kill = patch.object(runner.os, 'kill', side_effect=self.kernel.kill)
+        library.start()
+        kill.start()
+        self.addCleanup(library.stop)
+        self.addCleanup(kill.stop)
+        self.owner = runner.BoundedOwnership(123, 501)
+
+    def test_admitted_parent_own_group_refusal_records_only_original_comparisons(self):
+        self.kernel.processes[234] = (234, 101, 8, '/fixture/private-parent', 234, 123, 501, 501)
+        parent = self.kernel.processes[234][:5]
+        self.owner.known[234] = parent
+        self.owner.seals[234] = parent[:3] + parent[4:5]
+        with patch.object(self.kernel, 'proc_pidinfo', wraps=self.kernel.proc_pidinfo) as reads:
+            self.assertFalse(self.owner.terminal_child(345, 234, parent))
+        reads.assert_not_called()
+        row = self.owner.terminal_child_refusals[345]
+        self.assertEqual(row['terminalRefusalReason'], 'parent_admission')
+        self.assertEqual(row['terminalChildRole'], 'unsealed')
+        self.assertTrue(row['terminalParentIdentityKnown'])
+        self.assertTrue(row['terminalParentGroupMatchesSeal'])
+        self.assertTrue(row['terminalParentGroupIsSelf'])
+        self.assertFalse(row['terminalParentGroupMatchesLeader'])
+        self.assertIsNone(row['terminalChildGroupMatchesParent'])
+        self.assertIsNone(row['terminalRawRecordsStable'])
+        self.assertEqual(self.owner.terminal_children, {})
+        self.assertNotIn(345, self.owner.known)
+        self.assertNotIn(345, self.owner.seals)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_first_zero_record_witness_survives_later_zombie_diagnostic_without_new_queries(self):
+        self.kernel.processes[234] = (234, 101, 8, '/fixture/private-child', 123, 123, 501, 501)
+        original = self.kernel.proc_pidinfo
+        children = 0
+
+        def record(pid, flavor, argument, pointer, size):
+            nonlocal children
+            value = original(pid, flavor, argument, pointer, size)
+            pointer._obj.status = 5 if pid == 234 else 2
+            if pid == 234:
+                children += 1
+                if children == 1:
+                    return 0
+            return value
+
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=record) as reads:
+            self.assertFalse(self.owner.terminal_child(234, 123, self.owner.known[123]))
+            self.owner.observe_failure(234, 'live_identity_unavailable')
+        self.assertEqual([call.args[0] for call in reads.call_args_list], [123, 123, 234, 234])
+        row = self.owner.failure_observations[0]
+        self.assertEqual(row['terminalRefusalReason'], 'first_child_record')
+        self.assertFalse(row['terminalChildRecordComplete'])
+        self.assertIsNone(row['terminalChildIsZombie'])
+        self.assertEqual(row['status'], 5)
+        self.assertTrue(row['terminalParentGroupMatchesSeal'])
+        self.assertEqual(self.owner.terminal_children, {})
+        self.assertNotIn(234, self.owner.known)
+        self.assertNotIn(234, self.owner.seals)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_complete_records_distinguish_child_group_instability_and_parent_after_refusal(self):
+        for mode in ['group', 'volatile', 'parent']:
+            with self.subTest(mode=mode):
+                owner = runner.BoundedOwnership(123, 501)
+                self.kernel.processes[234] = (234, 101, 8, '/fixture/private-child', 123, 123, 501, 501)
+                original = self.kernel.proc_pidinfo
+                children = 0
+
+                def record(pid, flavor, argument, pointer, size):
+                    nonlocal children
+                    result = original(pid, flavor, argument, pointer, size)
+                    pointer._obj.status = 5 if pid == 234 else 2
+                    if pid == 234:
+                        children += 1
+                        if mode == 'group':
+                            pointer._obj.pgid = 234
+                        elif mode == 'volatile' and children == 2:
+                            pointer._obj.nfiles = 1
+                    elif mode == 'parent' and children == 2:
+                        pointer._obj.seconds = 200
+                    return result
+
+                with patch.object(self.kernel, 'proc_pidinfo', side_effect=record) as reads:
+                    self.assertFalse(owner.terminal_child(234, 123, owner.known[123]))
+                row = owner.terminal_child_refusals[234]
+                self.assertEqual(row['terminalRefusalReason'], {
+                    'group': 'first_child_record', 'volatile': 'child_records_changed',
+                    'parent': 'parent_after',
+                }[mode])
+                self.assertTrue(row['terminalChildRecordComplete'])
+                self.assertTrue(row['terminalChildIsZombie'])
+                self.assertEqual(row['terminalChildGroupMatchesParent'], mode != 'group')
+                self.assertEqual(row['terminalRawRecordsStable'], None if mode == 'group' else mode == 'parent')
+                self.assertEqual(reads.call_count, {'group': 3, 'volatile': 6, 'parent': 5}[mode])
+                self.assertEqual(owner.terminal_children, {})
+                self.assertNotIn(234, owner.known)
+                self.assertNotIn(234, owner.seals)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_refusal_rows_are_closed_bounded_first_seen_and_never_expose_paths(self):
+        for pid in range(234, 246):
+            self.assertFalse(self.owner.terminal_child_refusal(
+                pid, 123, self.owner.known[123], '/fixture/private-reason', stable='private-value'))
+        self.assertEqual(len(self.owner.terminal_child_refusals), 8)
+        original = dict(self.owner.terminal_child_refusals[234])
+        self.owner.terminal_child_refusal(234, 123, self.owner.known[123], 'parent_before')
+        self.assertEqual(self.owner.terminal_child_refusals[234], original)
+        self.owner.observe_failure(234, 'live_identity_unavailable')
+        row = self.owner.failure_observations[0]
+        self.assertEqual(row['terminalRefusalReason'], 'unknown')
+        self.assertIsNone(row['terminalRawRecordsStable'])
+        self.assertNotIn('private', json.dumps(row))
+        self.assertTrue(all(type(value) is bool or value is None
+                            for key, value in original.items()
+                            if key not in ['terminalRefusalReason', 'terminalChildRole']))
+        self.assertEqual(self.owner.terminal_children, {})
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_recovery_stage_survives_saturated_history_without_changing_kernel_calls(self):
+        self.owner.recovery_failure_stages = {pid: 'first_kernel' for pid in range(400, 408)}
+        original = self.kernel.proc_pidinfo
+        calls = 0
+
+        def record(pid, flavor, argument, pointer, size):
+            nonlocal calls
+            calls += 1
+            result = original(pid, flavor, argument, pointer, size)
+            pointer._obj.status = 2
+            return 0 if calls <= 2 else result
+
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=record) as reads:
+            with self.assertRaisesRegex(RuntimeError, 'Live owned process identity unavailable'):
+                self.owner.snapshot(123)
+        self.assertEqual([call.args[:3] for call in reads.call_args_list],
+                         [(123, 3, 0), (123, 3, 0), (123, 3, 1), (123, 3, 1)])
+        row = self.owner.failure_observations[0]
+        self.assertNotIn('recoveryFailureStage', row)
+        self.assertEqual(row['recoveryProofStage'], 'first_kernel')
+        self.assertEqual(row['status'], 2)
+        self.assertTrue(row['knownSeal'])
+        self.assertEqual(len(self.owner.recovery_failure_stages), 8)
+        self.assertEqual(self.owner.private_failure_pid_roles, {123: 'leader'})
+        self.assertNotIn('pid', row)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_path_refusal_cannot_reuse_a_previous_kernel_recovery_reason(self):
+        self.owner.last_recovery_failure = (123, 'first_kernel')
+        original = self.kernel.proc_pidinfo
+
+        def record(pid, flavor, argument, pointer, size):
+            result = original(pid, flavor, argument, pointer, size)
+            pointer._obj.status = 2
+            return result
+
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=record) as reads, \
+                patch.object(self.kernel, 'proc_pidpath', return_value=0):
+            with self.assertRaisesRegex(RuntimeError, 'Live owned process identity unavailable'):
+                self.owner.snapshot(123)
+        self.assertEqual([call.args[:3] for call in reads.call_args_list],
+                         [(123, 3, 0), (123, 3, 1), (123, 3, 1)])
+        self.assertEqual(self.owner.failure_observations[0]['recoveryProofStage'], 'not_attempted')
+        self.assertEqual(self.owner.private_failure_pid_roles, {123: 'leader'})
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_failure_pid_roles_are_only_in_private_timeline_after_original_join(self):
+        clock = Clock()
+        process = Process(0)
+        ownership = Ownership(process)
+        ownership.private_failure_pid_roles = {123: 'leader', 234: 'unsealed'}
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as directory:
+            result = runner.run_original(
+                ['synthetic-command'], Path(directory), {}, Path(directory),
+                process_factory=lambda *args, **kwargs: process,
+                ownership_factory=lambda *args: ownership, clock=clock.now, sleep=clock.sleep)
+            rows = [json.loads(line) for line in (Path(directory) / 'processes.jsonl').read_text().splitlines()]
+        self.assertFalse(result['passed'])
+        self.assertFalse(result['testsCompleted'])
+        self.assertEqual(rows[-1], {'failurePIDRoles': [
+            {'pid': 123, 'role': 'leader'}, {'pid': 234, 'role': 'unsealed'},
+        ]})
+        self.assertNotIn('failurePIDRoles', result)
+        self.assertNotIn('private_failure_pid_roles', result)
+        self.assertEqual(process.reaps, 1)
+        self.assertEqual(ownership.signals, [])
+
+    def test_successful_recovery_clears_terminal_refusal_before_later_path_failure(self):
+        original = self.kernel.proc_pidinfo
+        calls = 0
+
+        def record(pid, flavor, argument, pointer, size):
+            nonlocal calls
+            calls += 1
+            result = original(pid, flavor, argument, pointer, size)
+            pointer._obj.status = 2
+            return 0 if calls == 1 else result
+
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=record):
+            self.assertEqual(self.owner.snapshot(123)[:5], self.owner.known[123])
+        self.assertIsNone(self.owner.last_recovery_failure)
+        self.assertEqual(self.owner.terminal_child_refusals, {})
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=record), \
+                patch.object(self.kernel, 'proc_pidpath', return_value=0):
+            with self.assertRaisesRegex(RuntimeError, 'Live owned process identity unavailable'):
+                self.owner.snapshot(123)
+        row = self.owner.failure_observations[0]
+        self.assertEqual(row['recoveryProofStage'], 'not_attempted')
+        self.assertNotIn('terminalRefusalReason', row)
         self.assertEqual(self.kernel.signals, [])
 
 

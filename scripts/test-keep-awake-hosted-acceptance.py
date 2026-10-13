@@ -95,18 +95,50 @@ def native_failure_diagnostics(value, log_path):
                          'parentRecordsStable', 'transitionAdmitted'}
     recovery_stages = {'retained_identity', 'first_kernel', 'first_path',
                        'second_kernel', 'second_path', 'snapshot_fields'}
+    terminal_booleans = {
+        'terminalParentPIDMatches', 'terminalParentGroupMatchesLeader',
+        'terminalParentGroupMatchesSeal', 'terminalParentGroupIsSelf',
+        'terminalChildRecordComplete', 'terminalChildIsZombie',
+        'terminalChildGroupMatchesParent', 'terminalChildGroupMatchesLeader',
+        'terminalChildParentMatches', 'terminalRawRecordsStable',
+    }
+    terminal_fields = {'terminalRefusalReason', 'terminalChildRole',
+                       'terminalParentIdentityKnown', *terminal_booleans}
+    terminal_reasons = {'parent_admission', 'parent_before', 'first_child_record',
+                        'second_child_record', 'child_records_changed', 'parent_after', 'unknown'}
+    proof_stages = recovery_stages | {'not_attempted', 'unknown'}
+    optional_groups = [self_group_fields, {'recoveryFailureStage'},
+                       {'recoveryProofStage'}, terminal_fields]
+    optional_fields = set().union(*optional_groups)
     candidates = value.get('ownershipFailureObservations', [])
     for row in candidates[:8] if isinstance(candidates, list) else []:
-        extended = (isinstance(row, dict) and row.get('kind') == 'birth_or_group_changed'
-                    and set(row) == fields | self_group_fields)
-        recovery = (isinstance(row, dict) and row.get('kind') == 'live_identity_unavailable'
-                    and set(row) == fields | {'recoveryFailureStage'})
-        if (not isinstance(row, dict) or set(row) != fields and not extended and not recovery
-                or row['kind'] not in ['live_identity_unavailable', 'birth_or_group_changed']
+        if not isinstance(row, dict) or not fields.issubset(row):
+            continue
+        extra = set(row) - fields
+        if (extra - optional_fields
+                or any(extra & group and not group.issubset(extra) for group in optional_groups)):
+            continue
+        extended = self_group_fields.issubset(extra)
+        recovery = 'recoveryFailureStage' in extra
+        proof = 'recoveryProofStage' in extra
+        terminal = terminal_fields.issubset(extra)
+        if (row['kind'] not in ['live_identity_unavailable', 'birth_or_group_changed']
                 or row['kind'] not in kinds
+                or (recovery or proof or terminal) and row['kind'] != 'live_identity_unavailable'
+                or extended and row['kind'] != 'birth_or_group_changed'
+                and not (row['kind'] == 'live_identity_unavailable' and proof)
                 or extended and any(type(row[field]) is not bool for field in self_group_fields)
                 or recovery and (type(row['recoveryFailureStage']) is not str
                                  or row['recoveryFailureStage'] not in recovery_stages)
+                or proof and (type(row['recoveryProofStage']) is not str
+                              or row['recoveryProofStage'] not in proof_stages)
+                or terminal and (type(row['terminalRefusalReason']) is not str
+                                 or row['terminalRefusalReason'] not in terminal_reasons
+                                 or type(row['terminalChildRole']) is not str
+                                 or row['terminalChildRole'] not in {'leader', 'known', 'unsealed'}
+                                 or type(row['terminalParentIdentityKnown']) is not bool
+                                 or any(row[field] is not None and type(row[field]) is not bool
+                                        for field in terminal_booleans))
                 or type(row['knownSeal']) is not bool or type(row['probeFailed']) is not bool
                 or any(row[field] is not None and type(row[field]) is not bool
                        for field in boolean_fields)

@@ -42,6 +42,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         self.seals = {}
         self.transitions = []
         self.terminal_children = {}
+        self.terminal_child_refusals = {}
         self.rejected = {}
         self.failure_observations = []
         self.failure_observation_keys = set()
@@ -54,6 +55,8 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         self.pending_children = {}
         self.pending_failures = set()
         self.recovery_failure_stages = {}
+        self.last_recovery_failure = None
+        self.private_failure_pid_roles = {}
         value = self.snapshot(leader)
         if value is None or value[4] != leader:
             raise RuntimeError('Owned leader identity unavailable')
@@ -62,6 +65,8 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         self.known[leader] = identity
 
     def snapshot(self, pid, parent=None, parent_identity=None):
+        self.last_recovery_failure = None
+        self.terminal_child_refusals.pop(pid, None)
         self.recovery_failure_stages.pop(pid, None)
         if pid in self.pending_failures:
             raise RuntimeError('Pending owned child identity permanently rejected')
@@ -91,17 +96,22 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         if value is None:
             if captured is not None and captured['clause'] == 'kernel_record_unavailable':
                 if self.terminal_child(pid, parent, parent_identity):
+                    self.terminal_child_refusals.pop(pid, None)
                     return None
                 recovered = self.recover_snapshot(pid)
                 if recovered is not None:
+                    self.terminal_child_refusals.pop(pid, None)
                     return recovered
                 if captured['returnedBytes'] == 0 and self.defer_kernel_child(pid, parent, parent_identity):
+                    self.terminal_child_refusals.pop(pid, None)
                     return None
             if self.sealed_zombie(pid):
+                self.terminal_child_refusals.pop(pid, None)
                 return None
             try:
                 os.kill(pid, 0)
             except ProcessLookupError:
+                self.terminal_child_refusals.pop(pid, None)
                 return None
             self.observe_failure(pid, 'live_identity_unavailable')
             if (captured is not None and pid not in self.captured_snapshot_keys
@@ -113,6 +123,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
             raise RuntimeError('Terminal child identity became live')
         if pid in self.pending_children:
             value = self.resolve_pending_child(pid, value)
+        self.terminal_child_refusals.pop(pid, None)
         return value
 
     def defer_kernel_child(self, pid, parent, parent_identity):
@@ -195,10 +206,10 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                 or parent is None or parent_identity is None
                 or parent_identity != self.known.get(parent)
                 or parent_identity[0] != parent or parent_identity[4] != self.leader):
-            return False
+            return self.terminal_child_refusal(pid, parent, parent_identity, 'parent_admission')
         before_parent = self.recover_snapshot(parent)
         if before_parent is None or before_parent[:5] != parent_identity:
-            return False
+            return self.terminal_child_refusal(pid, parent, parent_identity, 'parent_before')
         records = []
         for _ in range(2):
             info = watchdog.ProcessInfo()
@@ -208,12 +219,17 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                     or info.uid != self.uid or info.ruid != self.uid
                     or info.ppid != parent or info.pgid != self.leader
                     or info.seconds <= 0 or info.microseconds >= 1_000_000):
-                return False
+                return self.terminal_child_refusal(
+                    pid, parent, parent_identity,
+                    'first_child_record' if not records else 'second_child_record', info, result)
             records.append(bytes(info))
         after_parent = self.recover_snapshot(parent)
         if (records[0] != records[1] or after_parent is None
                 or after_parent[:5] != parent_identity):
-            return False
+            return self.terminal_child_refusal(
+                pid, parent, parent_identity,
+                'child_records_changed' if records[0] != records[1] else 'parent_after',
+                info, result, records[0] == records[1])
         previous = self.terminal_children.get(pid)
         if previous is not None and previous != records[0]:
             raise RuntimeError('Terminal child kernel record changed')
@@ -221,6 +237,33 @@ class BoundedOwnership(watchdog.OwnedProcesses):
             raise RuntimeError('Owned lifetime process bound exceeded')
         self.terminal_children[pid] = records[0]
         return True
+
+    def terminal_child_refusal(self, pid, parent, parent_identity, reason,
+                               info=None, result=None, stable=None):
+        if (type(pid) is int and pid > 0 and pid not in self.terminal_child_refusals
+                and len(self.terminal_child_refusals) < 8):
+            identity = parent_identity if type(parent_identity) is tuple and len(parent_identity) == 5 else None
+            complete = info is not None and type(result) is int and result == ctypes.sizeof(info)
+            self.terminal_child_refusals[pid] = {
+                'terminalRefusalReason': reason if type(reason) is str and reason in {
+                    'parent_admission', 'parent_before', 'first_child_record',
+                    'second_child_record', 'child_records_changed', 'parent_after',
+                } else 'unknown',
+                'terminalChildRole': 'leader' if pid == self.leader else 'known' if pid in self.known else 'unsealed',
+                'terminalParentIdentityKnown': identity is not None and identity == self.known.get(parent),
+                'terminalParentPIDMatches': identity[0] == parent if identity is not None else None,
+                'terminalParentGroupMatchesLeader': identity[4] == self.leader if identity is not None else None,
+                'terminalParentGroupMatchesSeal': identity[:3] + identity[4:5] == self.current_seal(parent)
+                if identity is not None else None,
+                'terminalParentGroupIsSelf': identity[4] == identity[0] if identity is not None else None,
+                'terminalChildRecordComplete': complete if info is not None else None,
+                'terminalChildIsZombie': info.status == 5 if complete else None,
+                'terminalChildGroupMatchesParent': info.pgid == identity[4] if complete and identity is not None else None,
+                'terminalChildGroupMatchesLeader': info.pgid == self.leader if complete else None,
+                'terminalChildParentMatches': info.ppid == parent if complete else None,
+                'terminalRawRecordsStable': stable if type(stable) is bool else None,
+            }
+        return False
 
     def current_seal(self, pid):
         original = self.seals.get(pid)
@@ -295,6 +338,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         return True
 
     def recover_snapshot(self, pid):
+        self.last_recovery_failure = None
         self.recovery_failure_stages.pop(pid, None)
         identity = self.known.get(pid)
         seal = self.current_seal(pid)
@@ -320,6 +364,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         return snapshots[1] if snapshots[0] == snapshots[1] else self.record_recovery_failure(pid, 'snapshot_fields')
 
     def record_recovery_failure(self, pid, stage):
+        self.last_recovery_failure = (pid, stage)
         if (pid in self.known and pid in self.seals
                 and (pid in self.recovery_failure_stages or len(self.recovery_failure_stages) < 8)):
             self.recovery_failure_stages[pid] = stage
@@ -373,6 +418,19 @@ class BoundedOwnership(watchdog.OwnedProcesses):
             row.update(self.self_group_observations[pid])
         if kind == 'live_identity_unavailable' and pid in self.recovery_failure_stages:
             row['recoveryFailureStage'] = self.recovery_failure_stages[pid]
+        if kind == 'live_identity_unavailable':
+            stage = self.last_recovery_failure[1] if (self.last_recovery_failure is not None
+                    and self.last_recovery_failure[0] == pid) else 'not_attempted'
+            row['recoveryProofStage'] = stage if type(stage) is str and stage in {
+                'retained_identity', 'first_kernel', 'second_kernel',
+                'first_path', 'second_path', 'snapshot_fields', 'not_attempted',
+            } else 'unknown'
+        if (type(pid) is int and pid > 0 and pid not in self.private_failure_pid_roles
+                and len(self.private_failure_pid_roles) < 8):
+            self.private_failure_pid_roles[pid] = (
+                'leader' if pid == self.leader else 'known' if known else 'unsealed')
+        if kind == 'live_identity_unavailable':
+            row.update(self.terminal_child_refusals.get(pid, {}))
         self.failure_observations.append(row)
 
     def reject(self, pid, message):
@@ -638,6 +696,13 @@ def run_original(arguments, root, environment, output, deadline=TEST_DEADLINE,
             failure = str(error)
         finally:
             cleanup = retire(process, ownership, clock, sleep)
+            roles = getattr(ownership, 'private_failure_pid_roles', {})
+            if type(roles) is dict and 0 < len(roles) <= 8:
+                timeline.write(json.dumps({'failurePIDRoles': [
+                    {'pid': pid, 'role': role} for pid, role in list(roles.items())[:8]
+                    if type(pid) is int and pid > 0 and type(role) is str and role in {'leader', 'known', 'unsealed'}
+                ]}) + '\n')
+                timeline.flush()
     if log_path.stat().st_size > LOG_BOUND:
         with log_path.open('r+b') as bounded:
             bounded.truncate(LOG_BOUND)
