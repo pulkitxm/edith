@@ -174,8 +174,18 @@ import Testing
                 account: account, folder: folder, shared: shared, home: root)
             try Data(account.id.uuidString.utf8).write(
                 to: folder.appendingPathComponent(".credentials.json"))
+            let executable = root.appendingPathComponent("synthetic-cli")
+            try Data(
+                """
+                case "$*" in
+                    *'auth status --json'*) printf '%s\\n' '{"loggedIn":true,"authMethod":"claude.ai"}' ;;
+                    *) /usr/bin/env ;;
+                esac
+                """.utf8
+            ).write(to: executable)
             let command = try account.launchCommand(
-                command: "/usr/bin/env", arguments: [], configurationPath: folder.path)
+                command: "/bin/sh " + ShellQuote.quote(executable.path), arguments: [],
+                configurationPath: folder.path)
             let environment = try run(command)
             #expect(environment["CLAUDE_CONFIG_DIR"] == folder.path)
             #expect(environment["CLAUDE_SECURESTORAGE_CONFIG_DIR"] == folder.path)
@@ -218,6 +228,58 @@ import Testing
                     contentsOf: folder.appendingPathComponent(".credentials.json"), encoding: .utf8)
                     == account.id.uuidString)
         }
+    }
+
+    @Test func subscriptionProfilesSignInOnceEvenWhenDemoModeSkipsOnboarding() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let executable = root.appendingPathComponent("synthetic-cli")
+        try Data(
+            """
+            case "$*" in
+                *'auth status --json'*)
+                    if [ -f "$CLAUDE_CONFIG_DIR/verified" ]; then
+                        printf '%s\\n' '{"loggedIn":true,"authMethod":"claude.ai"}'
+                    else
+                        printf '%s\\n' '{"loggedIn":false,"authMethod":"none"}'
+                    fi ;;
+                *'auth login --claudeai'*)
+                    printf '%s\\n' login >> "$CLAUDE_CONFIG_DIR/logins"
+                    touch "$CLAUDE_CONFIG_DIR/verified" ;;
+                *) /usr/bin/env ;;
+            esac
+            """.utf8
+        ).write(to: executable)
+        let account = ClaudeAccount(name: "Personal", authentication: .browserLogin)
+        let command = try account.launchCommand(
+            command: "/bin/sh " + ShellQuote.quote(executable.path), arguments: ["--verbose"],
+            environment: "IS_DEMO=1", configurationPath: root.path)
+        for _ in 0..<2 {
+            let environment = try run(command)
+            #expect(environment["CLAUDE_CONFIG_DIR"] == root.path)
+            #expect(environment["IS_DEMO"] == "1")
+            #expect(environment["ANTHROPIC_API_KEY"] == nil)
+        }
+        #expect(
+            try String(contentsOf: root.appendingPathComponent("logins"), encoding: .utf8)
+                == "login\n")
+        try Data(
+            """
+            case "$*" in
+                *'auth status --json'*) printf '%s\\n' '{"loggedIn":true,"authMethod":"api_key"}' ;;
+                *'auth login --claudeai'*) : ;;
+                *) export WRONG_ACCOUNT_LAUNCHED=1; /usr/bin/env ;;
+            esac
+            """.utf8
+        ).write(to: executable)
+        #expect(try run(command, expectedStatus: 1)["WRONG_ACCOUNT_LAUNCHED"] == nil)
+        let windows = try account.launchCommand(
+            command: "cc", arguments: [], platform: .windows,
+            configurationPath: "C:\\profiles\\personal")
+        #expect(windows.contains("'auth' 'login' '--claudeai'"))
+        #expect(windows.contains("$subscriptionLogin.authMethod -eq 'claude.ai'"))
+
     }
 
     @Test func directLaunchUsesTheMachinesAliasAndItsExistingFlags() throws {
@@ -290,7 +352,8 @@ import Testing
     }
 
     private func run(
-        _ command: String, shell: String = "/bin/sh", startupDirectory: URL? = nil
+        _ command: String, shell: String = "/bin/sh", startupDirectory: URL? = nil,
+        expectedStatus: Int32 = 0
     ) throws -> [String: String] {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: shell)
@@ -310,7 +373,7 @@ import Testing
         try process.run()
         let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        #expect(process.terminationStatus == 0)
+        #expect(process.terminationStatus == expectedStatus)
         return Dictionary(
             String(decoding: data, as: UTF8.self).split(separator: "\n").compactMap {
                 let parts = $0.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)

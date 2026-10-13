@@ -163,8 +163,36 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
             lines = ["unset " + cleared.joined(separator: " ")]
             lines += assignments.map { "export " + $0.0 + "=" + ShellQuote.quote($0.1) }
         }
-        lines.append(
-            HerdrPaneRunCommand.commandText(command, appending: arguments, platform: platform))
+        let launch = HerdrPaneRunCommand.commandText(
+            command, appending: arguments, platform: platform)
+        if authentication == .browserLogin, configurationPath != nil {
+            let status = HerdrPaneRunCommand.commandText(
+                command, appending: arguments + ["auth", "status", "--json"], platform: platform)
+            let login = HerdrPaneRunCommand.commandText(
+                command, appending: arguments + ["auth", "login", "--claudeai"], platform: platform)
+            let message =
+                "Subscription login is not active. Check your CLI authentication settings and try again."
+            if platform == .windows {
+                let authenticated =
+                    "$subscriptionLogin.loggedIn -and $subscriptionLogin.authMethod -eq 'claude.ai'"
+                lines.append(
+                    "$subscriptionLogin = " + status + " | ConvertFrom-Json; if (!(" + authenticated
+                        + ")) { " + login + "; $subscriptionLogin = " + status
+                        + " | ConvertFrom-Json }; if (" + authenticated + ") { " + launch
+                        + " } else { Write-Error " + PowerShell.literal(message) + " }")
+            } else {
+                let authenticated =
+                    "printf '%s' \"$subscription_status\" | grep -Eq '\"authMethod\"[[:space:]]*:[[:space:]]*\"claude.ai\"'"
+                    + " && printf '%s' \"$subscription_status\" | grep -Eq '\"loggedIn\"[[:space:]]*:[[:space:]]*true'"
+                lines.append(
+                    "subscription_status=$(" + status + "); if " + authenticated + "; then :; else "
+                        + login + "; subscription_status=$(" + status + "); fi; if " + authenticated
+                        + "; then " + launch + "; else printf '%s\\n' " + ShellQuote.quote(message)
+                        + "; false; fi")
+            }
+        } else {
+            lines.append(launch)
+        }
         return lines.joined(separator: "; ")
     }
 

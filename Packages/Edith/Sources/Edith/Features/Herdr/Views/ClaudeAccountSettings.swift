@@ -210,7 +210,10 @@ struct ClaudeAccountLaunchPicker: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     ClaudeAccountSettings(
                         accounts: accounts, machine: machine,
-                        accountAdded: { selection = $0.id.uuidString })
+                        accountAdded: { account in
+                            selection = account.id.uuidString
+                            Task { await accounts.rememberLaunchSelection(account.id.uuidString) }
+                        })
                     Divider()
                     ClaudeSharedLaunchSettings()
                     Button("Done") { editing = false }
