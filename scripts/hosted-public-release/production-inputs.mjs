@@ -22,6 +22,8 @@ import {
   verifiedEvidence,
   verifiedLineage,
 } from "./evidence.mjs";
+import { verifiedHostBootstrapIntent } from "./production-bootstrap.mjs";
+import { productionReadonlyEnvironment } from "./production-catalog-channel.mjs";
 
 export function admitCurrentProductionNativeRun(
   lineage,
@@ -53,6 +55,7 @@ export function admitCurrentProductionNativeRun(
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const admitted = new WeakMap();
+const previousAdmissions = new WeakMap();
 export async function boundedProductionFile(
   path,
   maximum,
@@ -145,6 +148,47 @@ export function productionVerifiedInputs(capability) {
   const value = admitted.get(capability);
   assert(value, "Public inputs must be verified by the owned preparation");
   return value;
+}
+export function verifiedPreviousHostBootstrapInputs(capability) {
+  const state = previousAdmissions.get(capability);
+  assert(state && !state.closed, "Unknown or revoked previous host inputs");
+  return state.value;
+}
+export async function preparePreviousHostBootstrapInputs(capability) {
+  const intent = verifiedHostBootstrapIntent(capability);
+  assert.equal(intent.role, "extensions");
+  await intent.revalidate();
+  return prepareInputs(JSON.stringify(intent.template), {
+    intent,
+    closed: false,
+  });
+}
+function nativeInputContext() {
+  assert.equal(process.platform, "darwin");
+  assert.equal(process.arch, "arm64");
+}
+export function productionHostReleaseContext(
+  request,
+  generation,
+  directory,
+  release,
+) {
+  assert(["previous", "current"].includes(generation));
+  assert(Number.isSafeInteger(release.id) && release.id > 0);
+  assert.equal(release.tag_name, request.hosts[generation].tag);
+  assert.match(release.target_commitish, /^[a-f0-9]{40}$/);
+  assert.equal(release.draft, false);
+  assert.equal(typeof release.prerelease, "boolean");
+  return {
+    request,
+    generation,
+    directory,
+    releaseChannel: Object.fromEntries(
+      ["id", "tag_name", "target_commitish", "draft", "prerelease"].map(
+        (key) => [key, release[key]],
+      ),
+    ),
+  };
 }
 export function closedProductionAsset(release, name, expected) {
   assert.equal(release.draft, false);
@@ -252,10 +296,18 @@ export function productionInputEnvironment(environment) {
   );
 }
 export async function prepareProductionInputs(text) {
-  assert.equal(process.platform, "darwin");
-  assert.equal(process.arch, "arm64");
+  return prepareInputs(text);
+}
+async function prepareInputs(text, previous) {
+  nativeInputContext();
   assert.equal(process.env.PUBLIC_RELEASE_VERIFICATION, "1");
-  const environment = productionInputEnvironment(process.env);
+  const environment = previous
+    ? {
+        ...productionReadonlyEnvironment(process.env),
+        PUBLISH: "false",
+        REBUILD: "",
+      }
+    : productionInputEnvironment(process.env);
   for (const key of [
     "PYTHONPATH",
     "PYTHONHOME",
@@ -271,14 +323,16 @@ export async function prepareProductionInputs(text) {
       Buffer.byteLength(text) > 0 &&
       Buffer.byteLength(text) <= 65536,
   );
+  const requestParser = previous ? "bootstrap_template" : "request";
   const validated = execFileSync(
     "python3",
     [
       "-I",
       "-B",
       "-c",
-      "import importlib.util,json,os,sys;s=importlib.util.spec_from_file_location('cohort',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);v=m.request(sys.stdin.read());m.hosted(os.environ,v['source']);print(json.dumps(v))",
+      "import importlib.util,json,os,sys;s=importlib.util.spec_from_file_location('cohort',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);v=getattr(m,sys.argv[2])(sys.stdin.read());m.hosted(os.environ,v['source']);print(json.dumps(v))",
       join(root, "scripts/hosted-public-release/production-cohort.py"),
+      requestParser,
     ],
     {
       cwd: root,
@@ -306,10 +360,127 @@ export async function prepareProductionInputs(text) {
     "",
   );
   await mkdir(join(root, "local"), { recursive: true });
-  const directory = join(root, "local/public-host-cohort");
+  const directory = join(
+    root,
+    previous ? "local/previous-host-bootstrap" : "local/public-host-cohort",
+  );
   await privateDirectory(directory);
-  const authenticated = managedAuthenticatedFetch(process.env, fetch);
-  const api = async (path) => {
+  const authenticated = managedAuthenticatedFetch(
+    previous ? { ...productionReadonlyEnvironment(process.env) } : process.env,
+    fetch,
+  );
+  const apiRecords = new Map();
+  const immutableAPI = (path, value) => {
+    if (/^\/actions\/runs\/[0-9]+$/.test(path))
+      return {
+        ...Object.fromEntries(
+          [
+            "id",
+            "run_attempt",
+            "head_sha",
+            "head_branch",
+            "event",
+            "path",
+            "status",
+            "conclusion",
+          ].map((key) => [key, value[key]]),
+        ),
+        repository: {
+          id: value.repository?.id,
+          full_name: value.repository?.full_name,
+        },
+        actor: value.actor?.id,
+        triggeringActor: value.triggering_actor?.id ?? null,
+      };
+    if (
+      /^\/actions\/runs\/[0-9]+\/attempts\/[0-9]+\/jobs\?per_page=100$/.test(
+        path,
+      )
+    ) {
+      assert(
+        value.total_count <= 100 && value.jobs.length === value.total_count,
+      );
+      assert.equal(
+        new Set(value.jobs.map(({ id }) => id)).size,
+        value.jobs.length,
+      );
+      for (const job of value.jobs)
+        assert(Number.isSafeInteger(job.id) && job.id > 0);
+      return {
+        total_count: value.total_count,
+        jobs: value.jobs
+          .map((job) => ({
+            ...Object.fromEntries(
+              [
+                "id",
+                "run_id",
+                "run_attempt",
+                "head_sha",
+                "name",
+                "status",
+                "conclusion",
+              ].map((key) => [key, job[key]]),
+            ),
+            steps: (job.steps ?? []).map((step) =>
+              Object.fromEntries(
+                ["number", "name", "status", "conclusion"].map((key) => [
+                  key,
+                  step[key],
+                ]),
+              ),
+            ),
+          }))
+          .sort((a, b) => a.id - b.id),
+      };
+    }
+    if (path.startsWith("/git/ref/tags/"))
+      return {
+        ref: value.ref ?? null,
+        object: { type: value.object?.type, sha: value.object?.sha },
+      };
+    assert(path.startsWith("/releases/tags/"));
+    assert(Number.isSafeInteger(value.id) && value.id > 0);
+    assert(Array.isArray(value.assets) && value.assets.length <= 1000);
+    assert.equal(
+      new Set(value.assets.map(({ id }) => id)).size,
+      value.assets.length,
+    );
+    for (const asset of value.assets)
+      assert(Number.isSafeInteger(asset.id) && asset.id > 0);
+    return {
+      ...Object.fromEntries(
+        ["id", "tag_name", "target_commitish", "draft", "prerelease"].map(
+          (key) => [key, value[key]],
+        ),
+      ),
+      ...(path === "/releases/tags/extension-catalog-v1"
+        ? { body: value.body }
+        : {}),
+      assets: value.assets
+        .map((asset) =>
+          Object.fromEntries(
+            [
+              "id",
+              "name",
+              "size",
+              "digest",
+              "state",
+              "browser_download_url",
+            ].map((key) => [key, asset[key]]),
+          ),
+        )
+        .sort((a, b) => a.id - b.id),
+    };
+  };
+  const previousRun = (run, expectedID) => {
+    assert.equal(run.id, expectedID);
+    assert(Number.isSafeInteger(run.run_attempt) && run.run_attempt > 0);
+    assert.equal(run.repository?.id, 1289153439);
+    assert([65671483, 320458784].includes(run.actor?.id));
+    if (run.triggering_actor)
+      assert([65671483, 320458784].includes(run.triggering_actor.id));
+  };
+  const api = async (path, remember = true) => {
     assert(
       /^\/(?:actions\/runs\/|releases\/tags\/|git\/ref\/tags\/)/.test(path),
     );
@@ -320,7 +491,10 @@ export async function prepareProductionInputs(text) {
         headers: { Accept: "application/vnd.github+json" },
       },
     );
-    assert.equal(response.status, 200);
+    if (response.status !== 200) {
+      await response.body?.cancel();
+      assert.equal(response.status, 200);
+    }
     const reader = response.body.getReader();
     const chunks = [];
     let total = 0;
@@ -335,7 +509,12 @@ export async function prepareProductionInputs(text) {
     } finally {
       await reader.cancel();
     }
-    return closedJSON(Buffer.concat(chunks).toString(), 8 * 1024 ** 2);
+    const value = closedJSON(Buffer.concat(chunks).toString(), 8 * 1024 ** 2);
+    if (previous && remember) {
+      assert(apiRecords.size < 16 || apiRecords.has(path));
+      apiRecords.set(path, immutableAPI(path, value));
+    }
+    return value;
   };
   const verifiedFiles = [];
   const download = async (release, name, target, expected) => {
@@ -350,7 +529,18 @@ export async function prepareProductionInputs(text) {
             : 1024 ** 2;
     assert(asset.bytes <= maximum);
     await downloadPublic({ ...asset, destination: target });
-    verifiedFiles.push({ target, ...asset });
+    const seal = previous
+      ? await boundedProductionFile(target, asset.bytes, false, false)
+      : undefined;
+    if (seal) {
+      assert.equal(seal.byteCount, asset.bytes);
+      assert.equal(seal.sha256, asset.sha256);
+    }
+    verifiedFiles.push({
+      target,
+      ...asset,
+      ...(seal ? { dev: seal.dev, ino: seal.ino } : {}),
+    });
     return asset;
   };
   const python = (phase, context) =>
@@ -387,25 +577,58 @@ export async function prepareProductionInputs(text) {
   ];
   assert.equal(keys.length, 1);
   const publicKey = keys[0][1];
-  for (const generation of ["previous", "current"]) {
+  for (const generation of previous ? ["previous"] : ["previous", "current"]) {
     const host = request.hosts[generation];
     const run = await api(`/actions/runs/${host.run}`);
     successfulRun(run, host.source, ".github/workflows/ci.yml");
+    if (previous) previousRun(run, host.run);
     assert.equal(run.head_branch, "main");
     assert(["push", "workflow_dispatch"].includes(run.event));
     assert([65671483, 320458784].includes(run.actor.id));
-    const jobs = await api(`/actions/runs/${host.run}/jobs?per_page=100`);
+    const jobs = await api(
+      previous
+        ? `/actions/runs/${host.run}/attempts/${run.run_attempt}/jobs?per_page=100`
+        : `/actions/runs/${host.run}/jobs?per_page=100`,
+    );
     assert(jobs.total_count <= 100 && jobs.jobs.length === jobs.total_count);
     for (const name of ["Build DMG", "Publish release"]) {
       const matching = jobs.jobs.filter((job) => job.name === name);
       assert.equal(matching.length, 1);
       assert.equal(matching[0].run_id, host.run);
       assert.equal(matching[0].conclusion, "success");
+      if (previous) {
+        assert.equal(matching[0].run_attempt, run.run_attempt);
+        assert.equal(matching[0].head_sha, host.source);
+        assert.equal(matching[0].status, "completed");
+      }
     }
     const ref = await api(`/git/ref/tags/${encodeURIComponent(host.tag)}`);
     assert.equal(ref.object.type, "commit");
     const release = await api(`/releases/tags/${encodeURIComponent(host.tag)}`);
     assert.equal(release.tag_name, host.tag);
+    if (previous) {
+      const names = [
+        "Edith.dmg",
+        "appcast.xml",
+        "build-metadata.json",
+        "host-release-proof.json",
+        "toolchain-provenance.json",
+      ];
+      assert.equal(release.assets.length, names.length);
+      assert.deepEqual(
+        release.assets.map(({ name }) => name).sort(),
+        names.sort(),
+      );
+      assert.equal(
+        new Set(release.assets.map(({ id }) => id)).size,
+        names.length,
+      );
+      for (const asset of release.assets) {
+        assert(Number.isSafeInteger(asset.id) && asset.id > 0);
+        assert.equal(asset.state, "uploaded");
+      }
+      assert.equal(release.target_commitish, ref.object.sha);
+    }
     const hostDirectory = join(directory, `host-${generation}`);
     await privateDirectory(hostDirectory);
     for (const name of [
@@ -452,11 +675,10 @@ export async function prepareProductionInputs(text) {
       ref.object.sha,
     );
     const hostContext = join(hostDirectory, "context.json");
-    await record(hostContext, {
-      request,
-      generation,
-      directory: hostDirectory,
-    });
+    await record(
+      hostContext,
+      productionHostReleaseContext(request, generation, hostDirectory, release),
+    );
     toolchainProvenance(
       closedJSON(
         (
@@ -572,6 +794,10 @@ export async function prepareProductionInputs(text) {
       );
     } else
       successfulRun(native, item.source, ".github/workflows/extensions.yml");
+    if (previous) {
+      previousRun(native, item.run);
+      assert.equal(native.run_attempt, lineage.runAttempt);
+    }
     assert.equal(native.head_branch, "main");
     assert(["push", "workflow_dispatch"].includes(native.event));
     assert([65671483, 320458784].includes(native.actor.id));
@@ -634,14 +860,25 @@ export async function prepareProductionInputs(text) {
     });
   };
   await catalog("previous");
-  const roles = [
-    hosts.previous.role,
-    hosts.current.role,
-    ...Object.values(hosts).map(({ role }) => ({ ...role, role: "engine" })),
-    packages.previous.managedUIRole,
-    packages.current.managedUIRole,
-  ];
+  const roles = previous
+    ? undefined
+    : [
+        hosts.previous.role,
+        hosts.current.role,
+        ...Object.values(hosts).map(({ role }) => ({
+          ...role,
+          role: "engine",
+        })),
+        packages.previous.managedUIRole,
+        packages.current.managedUIRole,
+      ];
   const revalidate = async () => {
+    if (previous) {
+      assert(!previous.closed);
+      await previous.intent.revalidate();
+      for (const [path, snapshot] of apiRecords)
+        assert.deepEqual(immutableAPI(path, await api(path, false)), snapshot);
+    }
     assert.equal(
       execFileSync("git", ["rev-parse", "HEAD"], {
         cwd: root,
@@ -668,8 +905,47 @@ export async function prepareProductionInputs(text) {
       );
       assert.equal(actual.byteCount, file.bytes);
       assert.equal(actual.sha256, file.sha256);
+      if (previous) {
+        assert.equal(actual.dev, file.dev);
+        assert.equal(actual.ino, file.ino);
+      }
     }
   };
+  if (previous) {
+    const check = async () => {
+      try {
+        await revalidate();
+        await previous.intent.revalidate();
+      } catch (error) {
+        previous.closed = true;
+        throw error;
+      }
+    };
+    await check();
+    const capability = Object.freeze({});
+    previous.value = freeze({
+      intent: previous.intent,
+      template: request,
+      directory,
+      hosts,
+      packages,
+      environment,
+      catalog: async () => {
+        try {
+          await check();
+          const value = await catalog("previous");
+          await check();
+          return value;
+        } catch (error) {
+          previous.closed = true;
+          throw error;
+        }
+      },
+      revalidate: check,
+    });
+    previousAdmissions.set(capability, previous);
+    return capability;
+  }
   await revalidate();
   const capability = Object.freeze({});
   admitted.set(

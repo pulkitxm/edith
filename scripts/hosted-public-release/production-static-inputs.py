@@ -297,9 +297,13 @@ def extracted_package(directory, expected):
 
 def package(context):
     COHORT.exact(context, ['request', 'generation', 'directory'])
-    request = COHORT.request(json.dumps(context['request']))
     generation = context['generation']
     COHORT.require(generation in ['previous', 'current'], 'Wrong cohort generation')
+    if context['request'].get('schema') == 2:
+        COHORT.require(generation == 'previous', 'Pending current package cannot use strict constructor')
+        request = COHORT.bootstrap_template(json.dumps(context['request']))
+    else:
+        request = COHORT.request(json.dumps(context['request']))
     expected = request['packages'][generation]
     host_expected = request['hosts']['previous']
     directory = Path(context['directory'])

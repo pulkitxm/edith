@@ -122,6 +122,54 @@ class ProductionStaticInputTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'worker contract differs'):
                 INPUTS.measure_package(context)
 
+    def bootstrap_context(self):
+        context = synthetic_archive(self.directory)
+        request = context['request']
+        previous = request['hosts']['previous']
+        request['schema'] = 2
+        request['hosts']['current'] = {'kind': 'pending-public-host', 'source': request['source'], 'run': 99, 'runAttempt': 1, 'tag': 'v0.0.402', 'version': '0.0.402', 'build': previous['build'] + 1}
+        request['packages']['current'] = None
+        request['catalogs']['current'] = None
+        return context
+
+    def test_pending_bootstrap_admits_only_actual_previous_package_contract(self):
+        context = self.bootstrap_context()
+        value = self.verify(context)
+        self.assertEqual(value['generation'], 'previous')
+        self.assertEqual(value['version'], '1.0.0')
+        self.assertEqual(value['metrics']['sha256'], context['request']['packages']['previous']['archiveSHA256'])
+        self.assertIsNone(context['request']['packages']['current'])
+        self.assertIsNone(context['request']['catalogs']['current'])
+        with self.assertRaisesRegex(ValueError, 'Invalid cohort schema'):
+            INPUTS.COHORT.request(json.dumps(context['request']))
+
+    def test_pending_current_package_cannot_reuse_previous_native_authority(self):
+        context = self.bootstrap_context()
+        context['generation'] = 'current'
+        with patch.object(INPUTS, 'signing') as signing:
+            with self.assertRaisesRegex(ValueError, 'Pending current package'):
+                INPUTS.package(context)
+            signing.assert_not_called()
+
+    def test_previous_bootstrap_rejects_supplied_success_foreign_host_and_mutated_archive(self):
+        context = self.bootstrap_context()
+        for field, value in [('kind', 'verified-public-host'), ('publicationVerified', True)]:
+            changed = json.loads(json.dumps(context))
+            changed['request']['hosts']['current'][field] = value
+            with self.subTest(field=field), patch.object(INPUTS, 'signing') as signing:
+                with self.assertRaises(ValueError):
+                    INPUTS.package(changed)
+                signing.assert_not_called()
+        changed = json.loads(json.dumps(context))
+        changed['request']['packages']['previous']['workerContract']['packagedHostRequirement'] = 'foreign synthetic requirement'
+        with self.assertRaisesRegex(ValueError, 'host trust differs'):
+            self.verify(changed)
+        (self.directory / 'keepAwake.zip').write_bytes(b'changed synthetic archive')
+        with patch.object(INPUTS, 'signing') as signing:
+            with self.assertRaises(ValueError):
+                INPUTS.package(context)
+            signing.assert_not_called()
+
     def historical_records(self, stamp=False):
         expected = CASES.synthetic_request()['hosts']['previous']
         source, tag = expected['source'], expected['tag']
