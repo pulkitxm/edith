@@ -35,6 +35,7 @@ EXACT = {
     "ghostty": "ghostty",
     "ci-swift-test": "swift-test",
     "ci-host": "swift-test",
+    "ci-host-navigation-local": "swift-test",
     "ci-marketplace-host": "swift-test",
     "ci-marketplace-runtime": "swift-test",
     "extension-dev": "swift-test",

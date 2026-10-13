@@ -162,11 +162,18 @@ enum HostNavigationCatalog {
     {
         if let provider = page.extensionID, !active.contains(provider) { return false }
         guard let suite = page.suite else { return true }
+        guard !active.isDisjoint(with: suiteProviders[suite] ?? []) else { return false }
         let enabled =
             defaults.object(forKey: "suite" + suite.capitalized + "Enabled") as? Bool
-            ?? !active.isDisjoint(with: suiteProviders[suite] ?? [])
+            ?? true
         guard enabled else { return false }
         return true
+    }
+    static func maintenanceDestination(_ selection: String, active: Set<String>)
+        -> HostNavigationSection?
+    {
+        let available = maintenance.filter { $0.extensionID.map(active.contains) ?? false }
+        return available.first { $0.id == selection } ?? available.first
     }
     static func settingsSections(installed: Set<String>, pending: Set<String>)
         -> [HostNavigationSection]
