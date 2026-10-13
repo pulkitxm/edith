@@ -89,11 +89,18 @@ def native_failure_diagnostics(value, log_path):
                       'birthMatches', 'groupMatches', 'uidMatches', 'realUIDMatches']
     fields = {'kind', 'knownSeal', 'returnedBytes', 'expectedBytes', 'status', 'probeFailed',
               *boolean_fields}
+    self_group_fields = {'knownChild', 'groupIsOwnPID', 'originalParentRetained',
+                         'currentPathMatchesRetained', 'twoChildRecordsMatch',
+                         'parentBeforeMatches', 'parentAfterMatches',
+                         'parentRecordsStable', 'transitionAdmitted'}
     candidates = value.get('ownershipFailureObservations', [])
     for row in candidates[:8] if isinstance(candidates, list) else []:
-        if (not isinstance(row, dict) or set(row) != fields
+        extended = (isinstance(row, dict) and row.get('kind') == 'birth_or_group_changed'
+                    and set(row) == fields | self_group_fields)
+        if (not isinstance(row, dict) or set(row) != fields and not extended
                 or row['kind'] not in ['live_identity_unavailable', 'birth_or_group_changed']
                 or row['kind'] not in kinds
+                or extended and any(type(row[field]) is not bool for field in self_group_fields)
                 or type(row['knownSeal']) is not bool or type(row['probeFailed']) is not bool
                 or any(row[field] is not None and type(row[field]) is not bool
                        for field in boolean_fields)

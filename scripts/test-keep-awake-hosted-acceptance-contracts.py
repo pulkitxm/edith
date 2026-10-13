@@ -500,5 +500,102 @@ class AcceptanceContracts(unittest.TestCase):
 
 
 
+    def real_self_group_failure(self):
+        module_spec = importlib.util.spec_from_file_location(
+            'ownership_contract_fixtures', Path(__file__).with_name('test-hosted-native-owner-tests.py'))
+        fixtures = importlib.util.module_from_spec(module_spec)
+        module_spec.loader.exec_module(fixtures)
+        product = fixtures.runner
+        kernel = fixtures.Kernel()
+        kernel.processes[234] = (234, 101, 8, '/synthetic/original', 123, 123, 501, 501)
+        original = kernel.proc_pidinfo
+
+        def live(pid, flavor, argument, pointer, size):
+            result = original(pid, flavor, argument, pointer, size)
+            if result == size:
+                pointer._obj.status = 2
+            return result
+
+        kernel.proc_pidinfo = live
+        with patch.object(product.watchdog.ctypes, 'CDLL', return_value=kernel), \
+                patch.object(product.os, 'kill', side_effect=kernel.kill):
+            owner = product.BoundedOwnership(123, 501)
+            owner.refresh()
+            self.assertEqual(owner.errors, [])
+            kernel.processes[234] = (234, 101, 8, '/synthetic/changed', 234, 123, 501, 501)
+            owner.refresh()
+        self.assertEqual(owner.errors, ['Owned process birth or group changed'])
+        self.assertEqual(kernel.signals, [])
+        value = self.failed_runner()
+        value['cleanup']['ownershipErrors'] = owner.errors
+        value['cleanup']['unverifiedOwnedProcesses'] = len(owner.conflicts())
+        value['ownershipFailureObservations'] = owner.failure_observations
+        return value, owner
+
+    def emitted_group_rows(self, value):
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / 'synthetic.log'
+            log.write_text('synthetic original failure\n')
+            output = io.StringIO()
+            with redirect_stdout(output):
+                acceptance.native_failure_diagnostics(value, log)
+        rows = [json.loads(line) for line in output.getvalue().splitlines()]
+        return [row['nativeOwnershipFailureObservations'] for row in rows
+                if 'nativeOwnershipFailureObservations' in row], output.getvalue()
+
+    def test_real_owned_self_group_failure_survives_current_closed_diagnostic_boundary(self):
+        value, owner = self.real_self_group_failure()
+        rows, text = self.emitted_group_rows(value)
+        self.assertEqual(rows, [owner.failure_observations])
+        self.assertEqual(len(rows[0]), 1)
+        row = rows[0][0]
+        self.assertEqual(row['kind'], 'birth_or_group_changed')
+        self.assertTrue(row['knownChild'])
+        self.assertTrue(row['groupIsOwnPID'])
+        self.assertTrue(row['originalParentRetained'])
+        self.assertFalse(row['currentPathMatchesRetained'])
+        self.assertFalse(row['transitionAdmitted'])
+        self.assertNotIn('/synthetic/', text)
+        self.assertNotIn('pid": 234', text)
+
+    def test_self_group_extension_rejects_missing_extra_and_nonboolean_fields(self):
+        value, _ = self.real_self_group_failure()
+        original = value['ownershipFailureObservations'][0]
+        for field in ['knownChild', 'groupIsOwnPID', 'originalParentRetained',
+                      'currentPathMatchesRetained', 'twoChildRecordsMatch', 'parentBeforeMatches',
+                      'parentAfterMatches', 'parentRecordsStable', 'transitionAdmitted']:
+            for malformed in ['missing', 'integer', 'null', 'string']:
+                with self.subTest(field=field, malformed=malformed):
+                    row = dict(original)
+                    if malformed == 'missing':
+                        row.pop(field)
+                    else:
+                        row[field] = {'integer': 1, 'null': None, 'string': '/synthetic/private'}[malformed]
+                    value['ownershipFailureObservations'] = [row]
+                    rows, text = self.emitted_group_rows(value)
+                    self.assertEqual(rows, [])
+                    self.assertNotIn('/synthetic/private', text)
+        for update in [{'extra': True}, {'kind': 'live_identity_unavailable'}]:
+            row = {**original, **update}
+            value['cleanup']['ownershipErrors'] = ['Live owned process identity unavailable',
+                                                   'Owned process birth or group changed']
+            value['ownershipFailureObservations'] = [row]
+            rows, _ = self.emitted_group_rows(value)
+            self.assertEqual(rows, [])
+
+    def test_ordinary_live_failure_does_not_reuse_stale_self_group_observations(self):
+        _, owner = self.real_self_group_failure()
+        owner.observe_failure(234, 'live_identity_unavailable')
+        row = owner.failure_observations[-1]
+        self.assertEqual(row['kind'], 'live_identity_unavailable')
+        self.assertNotIn('knownChild', row)
+        self.assertNotIn('transitionAdmitted', row)
+        value = self.failed_runner()
+        value['cleanup']['ownershipErrors'] = ['Live owned process identity unavailable']
+        value['ownershipFailureObservations'] = [row]
+        rows, _ = self.emitted_group_rows(value)
+        self.assertEqual(rows, [[row]])
+
+
 if __name__ == '__main__':
     unittest.main()

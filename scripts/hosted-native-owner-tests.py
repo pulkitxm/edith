@@ -358,7 +358,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                            uidMatches=info.uid == self.uid, realUIDMatches=info.ruid == self.uid)
         except Exception:
             row['probeFailed'] = True
-        if pid in self.self_group_observations:
+        if kind == 'birth_or_group_changed' and pid in self.self_group_observations:
             row.update(self.self_group_observations[pid])
         self.failure_observations.append(row)
 
