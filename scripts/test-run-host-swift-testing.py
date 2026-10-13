@@ -202,6 +202,37 @@ class SwiftDriverAdmissionTests(unittest.TestCase):
             driver.validate()
 
 
+    def test_selected_build_alias_preserves_immutable_package_image_contract(self):
+        developer, directory, _, target = self.fixture("swift-package")
+        directory.chmod(0o755)
+        target.chmod(0o755)
+        alias = directory / "swift-build"
+        alias.symlink_to("swift-package")
+        def inspect(path):
+            value = path.lstat()
+            fields = {name: getattr(value, name) for name in dir(value) if name.startswith("st_")}
+            fields["st_uid"] = 0
+            return type("RootOwnedMetadata", (), fields)()
+        driver = runtime.SelectedSwiftDriver(developer, entry="swift-build", inspect=inspect)
+        self.assertEqual(driver.validate(), alias)
+        for replacement in ["swift-frontend", "../bin/swift-package"]:
+            alias.unlink()
+            alias.symlink_to(replacement)
+            with self.assertRaises(ValueError):
+                runtime.SelectedSwiftDriver(developer, entry="swift-build", inspect=inspect)
+        alias.unlink()
+        alias.symlink_to("swift-package")
+        for changed in [directory, target]:
+            mode = changed.stat().st_mode & 0o777
+            changed.chmod(0o777)
+            with self.assertRaises(ValueError):
+                runtime.SelectedSwiftDriver(developer, entry="swift-build", inspect=inspect)
+            changed.chmod(mode)
+        target.write_bytes(b"changed synthetic package image")
+        with self.assertRaisesRegex(ValueError, "changed after admission"):
+            driver.validate()
+
+
 class PackageTestInvocationTests(unittest.TestCase):
     def fixture(self):
         temporary = tempfile.TemporaryDirectory()

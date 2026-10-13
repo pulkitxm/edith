@@ -582,5 +582,47 @@ class AccountSDKLocalGuardTests(unittest.TestCase):
 
 
 
+    def test_owned_phase_optional_budget_and_cadence_preserve_default_contract(self):
+        import inspect
+        parameters = inspect.signature(HELPER.run_owned).parameters
+        self.assertEqual(parameters["deadline"].default, 360)
+        self.assertEqual(parameters["cadence"].default, 0.1)
+        process = SyntheticProcess([None, 0], waits=[0])
+        owner = SyntheticOwnership()
+        sleeps = []
+        result = HELPER.run_owned(
+            ["/synthetic/swift-build"], self.root, {}, self.base / "build.log",
+            process_factory=lambda *args, **kwargs: process,
+            ownership_factory=lambda *args: owner,
+            clock=SyntheticClock([0, 360, 361, 362, 363]), sleep=sleeps.append,
+            deadline=2400, cadence=0.5)
+        self.assertFalse(result["timedOut"])
+        self.assertEqual(result["exitCode"], 0)
+        self.assertEqual(sleeps, [0.5])
+        self.assertTrue(HELPER.verified_cleanup(result["cleanup"]))
+        process = SyntheticProcess([None], waits=[0])
+        owner = SyntheticOwnership(active=[(123, 100, 1, "/synthetic/swift-build", 123)])
+        result = HELPER.run_owned(
+            ["/synthetic/swift-build"], self.root, {}, self.base / "expired-build.log",
+            process_factory=lambda *args, **kwargs: process,
+            ownership_factory=lambda *args: owner,
+            clock=SyntheticClock([0, 17, 18, 19, 20]), sleep=lambda _: None,
+            deadline=17, cadence=0.5)
+        self.assertTrue(result["timedOut"])
+        self.assertEqual(result["exitCode"], 1)
+        self.assertEqual(result["cleanup"]["naturalSurvivorCount"], 1)
+
+    def test_invalid_owned_phase_bounds_reject_before_any_child_launch(self):
+        for field, values in [("deadline", [True, 0, -1, 2401, float("inf"), float("nan"), "360"]),
+                              ("cadence", [True, 0, -1, 0.6, float("inf"), float("nan"), "0.1"])]:
+            for value in values:
+                with self.subTest(field=field, value=value):
+                    process = unittest.mock.Mock()
+                    with self.assertRaises(ValueError):
+                        HELPER.run_owned(["synthetic"], self.root, {}, self.base / "invalid.log",
+                                         process_factory=process, **{field: value})
+                    process.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

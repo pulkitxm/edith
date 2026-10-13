@@ -27,7 +27,7 @@ def execute(developer, binary_directory, environment, run=subprocess.run):
 
 
 def driver_contract(developer, entry="swift", inspect=lambda path: path.lstat()):
-    targets = {"swift": {"swift-frontend", "swift-driver"}, "swift-test": {"swift-package"}}
+    targets = {"swift": {"swift-frontend", "swift-driver"}, "swift-test": {"swift-package"}, "swift-build": {"swift-package"}}
     if entry not in targets:
         raise ValueError("Unexpected selected Swift entry")
     developer = watchdog.canonical_path(developer, directory=True)
@@ -46,18 +46,18 @@ def driver_contract(developer, entry="swift", inspect=lambda path: path.lstat())
             raise ValueError("Unexpected selected Swift driver alias")
         target = watchdog.canonical_path(directory / target_name)
     else:
-        if entry == "swift-test":
-            raise ValueError("Selected Swift test entry must use its package alias")
+        if entry in {"swift-test", "swift-build"}:
+            raise ValueError("Selected Swift package entry must use its package alias")
         target_name = None
         target = watchdog.canonical_path(alias)
     metadata = inspect(target)
     if metadata.st_nlink != 1:
         raise ValueError("Selected Swift driver must have one owned link")
-    if entry == "swift-test":
+    if entry in {"swift-test", "swift-build"}:
         directory_info = inspect(directory)
         if (directory_info.st_uid != 0 or directory_info.st_mode & 0o022
                 or link.st_uid != 0 or metadata.st_uid != 0 or metadata.st_mode & 0o022):
-            raise ValueError("Selected Swift test entry must be immutable and owned")
+            raise ValueError("Selected Swift package entry must be immutable and owned")
     def identity(value):
         return tuple(getattr(value, name) for name in (
             "st_dev", "st_ino", "st_mode", "st_uid", "st_nlink", "st_size",
