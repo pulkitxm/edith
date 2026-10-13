@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "reviewedSource": "cdad75523234c2806fbb972748332c4f07401d24",
+  "reviewedSource": "db8e8b7aaacab570cb8a2a417b1290d0c66596d1",
   "owners": [
     {
       "id": "keepAwake",
@@ -56,7 +56,7 @@
       "factoryOverlay": false,
       "scope": "original-view-creation-close-reopen-disable",
       "functionalActionsValidated": false,
-      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; no utility action or settings mutation.",
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
       "sources": [
         {
           "path": "Extensions/focusDim/Runtime.swift",
@@ -64,7 +64,7 @@
         },
         {
           "path": "Extensions/focusDim/Presentation.swift",
-          "sha256": "f1cecafa79278dca96b5e96d415017bee728e12f79311a1981aadc823658851f"
+          "sha256": "b784f1e30c755b0313402802dcf40daf9e44f6479e901ba2617c12c524fccbef"
         }
       ]
     },
@@ -78,7 +78,7 @@
       "factoryOverlay": false,
       "scope": "original-view-creation-close-reopen-disable",
       "functionalActionsValidated": false,
-      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; no utility action or settings mutation.",
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
       "sources": [
         {
           "path": "Extensions/windowSweaters/Runtime.swift",
@@ -86,7 +86,7 @@
         },
         {
           "path": "Extensions/windowSweaters/Presentation.swift",
-          "sha256": "66045cb995f19a287db80dcd24e105c8f3d1792b0d1e80abae114d11138fed27"
+          "sha256": "938ed403500b0981e694ff12397f77685336e10ff63090c4ebaa3a47eb75ade4"
         }
       ]
     },
@@ -100,7 +100,7 @@
       "factoryOverlay": false,
       "scope": "original-view-creation-close-reopen-disable",
       "functionalActionsValidated": false,
-      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; no utility action or settings mutation.",
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
       "sources": [
         {
           "path": "Extensions/micMute/Runtime.swift",
@@ -108,7 +108,7 @@
         },
         {
           "path": "Extensions/micMute/Presentation.swift",
-          "sha256": "eab418d7081377258304ddfc9cd969993460169eb0375603c0abf7bbdcf8986d"
+          "sha256": "79807a79cf5a0f5eb6e75302b44a5f05145c4da16a67582af14df330650a8e7f"
         }
       ]
     },
@@ -122,7 +122,7 @@
       "factoryOverlay": false,
       "scope": "original-view-creation-close-reopen-disable",
       "functionalActionsValidated": false,
-      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; no utility action or settings mutation.",
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
       "sources": [
         {
           "path": "Extensions/keystrokeHighlight/Runtime.swift",
@@ -130,7 +130,7 @@
         },
         {
           "path": "Extensions/keystrokeHighlight/Presentation.swift",
-          "sha256": "266f43f6fd29320016fc34026e14ff71410e4e370e75592f949950cd16656f29"
+          "sha256": "ded5caf6e4005feb8465d9a9a305c0a4ae5e259be828c8a22cf94599607a775a"
         }
       ]
     },
@@ -144,7 +144,7 @@
       "factoryOverlay": false,
       "scope": "original-view-creation-close-reopen-disable",
       "functionalActionsValidated": false,
-      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; no utility action or settings mutation.",
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
       "sources": [
         {
           "path": "Extensions/presenter/Runtime.swift",
@@ -152,7 +152,7 @@
         },
         {
           "path": "Extensions/presenter/Presentation.swift",
-          "sha256": "5645ff8ed62bdc6775cc41e4016d1b70f3dcd64ba8cf7492796c19e53c7f9465"
+          "sha256": "50654a659d7aa1c394b60fd273e9172306e5c0673e211a0ae6ccedc07b73806e"
         }
       ]
     },
@@ -166,7 +166,7 @@
       "factoryOverlay": false,
       "scope": "original-view-creation-close-reopen-disable",
       "functionalActionsValidated": false,
-      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; no utility action or settings mutation.",
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
       "sources": [
         {
           "path": "Extensions/colorPicker/Runtime.swift",
@@ -174,7 +174,7 @@
         },
         {
           "path": "Extensions/colorPicker/Presentation.swift",
-          "sha256": "e845a0cfdeb5eacdd54b981a2ccbf9d0af420bc6549819194a80b6be43a973b7"
+          "sha256": "7c6c3ca340802e94dac0a1c74f13aee826d8c0fdbe9e09b13f530346efda2085"
         }
       ]
     },
@@ -188,7 +188,7 @@
       "factoryOverlay": false,
       "scope": "original-view-creation-close-reopen-disable",
       "functionalActionsValidated": false,
-      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; no utility action or settings mutation.",
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
       "sources": [
         {
           "path": "Extensions/systemStats/Runtime.swift",
@@ -196,7 +196,7 @@
         },
         {
           "path": "Extensions/systemStats/Presentation.swift",
-          "sha256": "5bcd3570281b006709a5faff1ac3b7034fc062ecb7d9265580ad0813b5008c81"
+          "sha256": "bd85284b002b438f9ed0a733ffdf5ff9a763a84cff9e4aefaafa16882a830292"
         }
       ]
     },
@@ -210,7 +210,7 @@
       "factoryOverlay": false,
       "scope": "original-view-creation-close-reopen-disable",
       "functionalActionsValidated": false,
-      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; no utility action or settings mutation.",
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
       "sources": [
         {
           "path": "Extensions/emoji/Runtime.swift",
@@ -218,7 +218,7 @@
         },
         {
           "path": "Extensions/emoji/Presentation.swift",
-          "sha256": "b7efdd398182327f8cc32d89cfe0f6a2adadc827be5d25f96d18fb6084181b75"
+          "sha256": "75a5089fd46721584acb22190089be88267edeb9a522e4d230a202dc18f4641f"
         }
       ]
     },
