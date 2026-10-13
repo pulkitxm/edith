@@ -166,15 +166,19 @@ import Testing
     }
 
     private func fixtures(_ count: Int) -> [ClaudeAccountLimits] {
-        (0..<count).map { index in
-            ClaudeAccountLimits(
-                id: UUID(),
-                name: index == 0 ? "Company" : index == 1 ? "Personal" : "Team \(index)",
-                limits: .init(
-                    provider: .claude,
-                    session: LimitWindow(percent: Double(20 + index * 10), resetsAt: nil),
-                    week: LimitWindow(percent: Double(40 + index * 8), resetsAt: nil)),
-                refreshedAt: Date())
+        (0..<count).map { index -> ClaudeAccountLimits in
+            let name: String
+            switch index {
+            case 0: name = "Company"
+            case 1: name = "Personal"
+            default: name = "Team \(index)"
+            }
+            let sessionPercent = Double(20 + index * 10)
+            let weekPercent = Double(40 + index * 8)
+            let session = LimitWindow(percent: sessionPercent, resetsAt: nil)
+            let week = LimitWindow(percent: weekPercent, resetsAt: nil)
+            let limits = LimitsProviderSnapshot(provider: .claude, session: session, week: week)
+            return ClaudeAccountLimits(id: UUID(), name: name, limits: limits, refreshedAt: Date())
         }
     }
 }
