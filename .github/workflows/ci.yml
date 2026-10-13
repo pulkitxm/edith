@@ -172,6 +172,7 @@ jobs:
       swift_tests: ${{ steps.areas.outputs.swift_tests }}
       docs: ${{ steps.areas.outputs.docs }}
       workflows: ${{ steps.areas.outputs.workflows }}
+      native_workflows: ${{ steps.areas.outputs.native_workflows }}
       promo: ${{ steps.areas.outputs.promo }}
       site: ${{ steps.areas.outputs.site }}
       scripts: ${{ steps.areas.outputs.scripts }}
@@ -208,7 +209,7 @@ jobs:
             echo "no comparable base commit, running every area"
           fi
           area() {
-            if [ -z "$base" ] || printf '%s\n' "$changed" | grep -qE "$2"; then
+            if [ -z "$base" ] || printf '%s\n' "$changed" | grep -vFx "${3:-}" | grep -E "$2" >/dev/null; then
               echo "$1=true" >> "$GITHUB_OUTPUT"
               echo "$1: run"
             else
@@ -220,6 +221,7 @@ jobs:
           area host '^(Packages/(EdithHost|ExtensionMarketplace)/(Package\.(swift|resolved)$|Sources/)|Packages/ExtensionSupport/(Package.swift|Sources/(EdithExtensionSupport|EdithExtensionUI)/)|Resources/(Info.plist|Host.entitlements|AppIcon.icns|ed-launcher)$|scripts/(build-minimal-host.mjs|package-shipping-host.py|host_build_metadata.py|verify.shipping.host.py|package-host-dmg.py|release-local.sh|publish-host-release.mjs|publish-release-state.sh)$|build.sh$|Makefile$|\.github/(workflows/ci.yml|actions/cache-host/))'
           area docs '^docs/'
           area workflows '^\.github/(workflows|actions)/'
+          area native_workflows '^\.github/(workflows|actions)/' '.github/workflows/security.yml'
           area promo '^apps/promo-video/'
           area site '^apps/site/'
           area scripts '^(scripts/|Casks/|README\.md$|Makefile$|package\.json$|bun\.lock$|biome\.json$)'
@@ -227,7 +229,7 @@ jobs:
           area source '\.(swift|js|mjs|ts|tsx|css|json|ya?ml|html)$'
           area companion '^apps/companion/'
           area companion_runtime '^apps/companion/(Dockerfile|compose(\.[^/]+)?\.yaml)$'
-          area music_player '^(apps/music-player/|build\.sh$|\.github/workflows/)'
+          area music_player '^(apps/music-player/|build\.sh$|\.github/workflows/)' '.github/workflows/security.yml'
           test_scope=()
           if [ "$GITHUB_REF" = refs/heads/main ]; then
             test_scope=(--shipping)
@@ -339,7 +341,7 @@ jobs:
     if: >-
       github.event_name == 'pull_request'
       && (needs.changes.outputs.host == 'true'
-      || needs.changes.outputs.workflows == 'true')
+      || needs.changes.outputs.native_workflows == 'true')
     runs-on: macos-26
     concurrency:
       group: ci-swift-build-${{ github.ref }}-${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' && 'product' || github.run_id }}

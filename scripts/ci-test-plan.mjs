@@ -21,10 +21,12 @@ export function planSwiftTests(
 ) {
   const force =
     all ||
-    paths.some((path) =>
-      /^(Makefile|\.swift-format|scripts\/ci-test-plan\.mjs)$|^\.github\/(workflows|actions)\//.test(
-        path,
-      ),
+    paths.some(
+      (path) =>
+        path !== ".github/workflows/security.yml" &&
+        /^(Makefile|\.swift-format|scripts\/ci-test-plan\.mjs)$|^\.github\/(workflows|actions)\//.test(
+          path,
+        ),
     );
   const matches = (pattern) =>
     force || paths.some((path) => pattern.test(path));

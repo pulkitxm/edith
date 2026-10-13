@@ -26,6 +26,136 @@ const areaPatterns = new Map(
 
 const matchesArea = (area, path) => areaPatterns.get(area)?.test(path) ?? false;
 
+function runAreas(paths, { all = false } = {}) {
+  const root = mkdtempSync(join(tmpdir(), "edith-security-routing-"));
+  const output = join(root, "output");
+  const script = ciJobs.changes.steps.find((step) => step.id === "areas").run;
+  const areas = script.slice(
+    script.indexOf("area() {"),
+    script.indexOf("test_scope=()"),
+  );
+  try {
+    execFileSync("bash", ["-e", "-o", "pipefail", "-c", areas], {
+      stdio: "pipe",
+      env: {
+        ...process.env,
+        base: all ? "" : "synthetic-base",
+        changed: paths.join("\n"),
+        GITHUB_OUTPUT: output,
+      },
+    });
+    return Object.fromEntries(
+      readFileSync(output, "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => line.split("=")),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test("security workflow changes keep guards without native builds", () => {
+  const paths = [".github/workflows/security.yml"];
+  const areas = runAreas(paths);
+  expect(areas.workflows).toBe("true");
+  expect(areas.source).toBe("true");
+  for (const area of ["swift", "host", "native_workflows", "music_player"])
+    expect(areas[area], area).toBe("false");
+  expect(planSwiftTests(paths)).toEqual({ include: [] });
+  expect(planSwiftTests(paths, { shipping: true })).toEqual({ include: [] });
+  expect(ciJobs.changes.outputs.native_workflows).toBe(
+    ["$", "{{ steps.areas.outputs.native_workflows }}"].join(""),
+  );
+  expect(ciJobs["swift-build"].if).toContain(
+    "needs.changes.outputs.native_workflows == 'true'",
+  );
+  expect(ciJobs["swift-build"].if).not.toContain(
+    "needs.changes.outputs.workflows == 'true'",
+  );
+  const checks = ciJobs.checks.steps;
+  expect(checks.find((step) => step.name === "Validate workflows")?.if).toBe(
+    "needs.changes.outputs.workflows == 'true'",
+  );
+  expect(
+    checks.find((step) => step.run === "make ci-secrets")?.if,
+  ).toBeUndefined();
+  expect(
+    checks.some(
+      (step) =>
+        step.run === "make ci-scripts" &&
+        step.if.includes("needs.changes.outputs.workflows == 'true'"),
+    ),
+  ).toBe(true);
+});
+
+test("security changes do not hide owner source or dependency checks", () => {
+  for (const path of [
+    "Extensions/keepAwake/Runtime.swift",
+    "Packages/ExtensionSupport/Package.swift",
+    "Packages/EdithHost/Sources/EdithHost/HostApplication.swift",
+    "Makefile",
+    "apps/music-player/Cargo.lock",
+  ]) {
+    const paths = [".github/workflows/security.yml", path];
+    expect(planSwiftTests(paths)).toEqual(planSwiftTests([path]));
+    const combined = runAreas(paths);
+    const original = runAreas([path]);
+    for (const area of ["swift", "host", "native_workflows", "music_player"])
+      expect(combined[area], `${path}: ${area}`).toBe(original[area]);
+  }
+  expect(
+    planSwiftTests(["Extensions/keepAwake/Runtime.swift"]).include.some(
+      (lane) => lane.extension === "keepAwake",
+    ),
+  ).toBe(true);
+});
+
+test("native and unknown workflow changes retain broad qualification", () => {
+  const full = planSwiftTests([], { all: true });
+  for (const path of [
+    ".github/workflows/ci.yml",
+    ".github/workflows/extensions.yml",
+    ".github/workflows/native-actions.yml",
+    ".github/workflows/unknown.yml",
+    ".github/workflows/security.yaml",
+    ".github/workflows/security.yml.backup",
+    ".github/actions/cache-host/action.yml",
+  ]) {
+    expect(planSwiftTests([path]), path).toEqual(full);
+    expect(
+      planSwiftTests([".github/workflows/security.yml", path]),
+      path,
+    ).toEqual(full);
+    const areas = runAreas([path]);
+    expect(areas.native_workflows, path).toBe("true");
+    if (path.startsWith(".github/workflows/"))
+      expect(areas.music_player, path).toBe("true");
+  }
+  expect(
+    planSwiftTests([".github/workflows/security.yml"], { all: true }),
+  ).toEqual(full);
+  for (const area of Object.values(
+    runAreas([".github/workflows/security.yml"], { all: true }),
+  ))
+    expect(area).toBe("true");
+});
+
+test("large changed lists retain early area matches under pipefail", () => {
+  const unrelated = Array.from(
+    { length: 7500 },
+    (_, index) => `unrelated/${index}/${"x".repeat(64)}`,
+  );
+  for (const first of [
+    [".github/workflows/security.yml", "Extensions/keepAwake/Runtime.swift"],
+    [".github/workflows/security.yml", ".github/workflows/ci.yml"],
+  ]) {
+    const changed = [...first, ...unrelated];
+    expect(Buffer.byteLength(changed.join("\n"))).toBeGreaterThan(512 * 1024);
+    expect(runAreas(changed)).toEqual(runAreas(first));
+  }
+});
+
 test("Spotify catalog changes run native and locked Rust checks", () => {
   for (const path of [
     "apps/music-player/src/catalog.rs",
