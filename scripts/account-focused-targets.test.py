@@ -30,6 +30,11 @@ def recipe(target):
     return match.group(1).splitlines()
 
 
+def fixture_recipe(target):
+    command, = [line for line in recipe(target) if line.startswith("\t@set -eu; umask 077; fixture=")]
+    return command
+
+
 class AccountFocusedTargetsTests(unittest.TestCase):
     cleanup_spy = FOCUSED.KeepAwakeFocusedTargetsTests.cleanup_spy
 
@@ -45,7 +50,7 @@ class AccountFocusedTargetsTests(unittest.TestCase):
 
     def test_selection_is_fixed_and_original_rejection_tests_are_not_skipped(self):
         for target, (package, owner, suite) in TARGETS.items():
-            command = recipe(target)[1]
+            command = fixture_recipe(target)
             self.assertIn("--package-path " + package + " --filter '", command)
             self.assertIn(suite, command)
             self.assertIn("--build-system native --no-parallel --jobs 1 -Xswiftc -j1", command)
@@ -74,7 +79,7 @@ class AccountFocusedTargetsTests(unittest.TestCase):
                     supplied = root / "alias" if alias else storage
                     if alias:
                         supplied.symlink_to(storage, target_is_directory=True)
-                    setup = recipe(target)[1].removeprefix("\t@").split("env -u ", 1)[0].replace("$$", "$")
+                    setup = fixture_recipe(target).removeprefix("\t@").split("env -u ", 1)[0].replace("$$", "$")
                     self.assertNotIn("swift", setup)
                     paths = ["", "tmp", "cache", "config", "Data", "Data/" + owner, "ExtensionState"]
                     probe = "import json,os,pathlib,stat,sys; root=pathlib.Path(sys.argv[1]); paths=json.loads(sys.argv[2]); print(json.dumps([{'path':str(root/p),'canonical':str((root/p).resolve()),'mode':stat.S_IMODE((root/p).lstat().st_mode),'uid':(root/p).lstat().st_uid,'directory':(root/p).is_dir()} for p in paths]))"
@@ -98,7 +103,7 @@ class AccountFocusedTargetsTests(unittest.TestCase):
             with self.subTest(target=target), tempfile.TemporaryDirectory(prefix="account-contract-status-") as temporary:
                 root = pathlib.Path(temporary).resolve()
                 self.cleanup_spy(root, status=9)
-                setup = recipe(target)[1].removeprefix("\t@").split("env -u ", 1)[0].replace("$$", "$")
+                setup = fixture_recipe(target).removeprefix("\t@").split("env -u ", 1)[0].replace("$$", "$")
                 result = subprocess.run(["/bin/sh", "-c", setup + "exit 7"], cwd=root, env={"PATH": "/usr/bin:/bin", "HOME": str(root), "TMPDIR": str(root), "PYTHONDONTWRITEBYTECODE": "1"}, capture_output=True, timeout=10)
                 self.assertEqual(result.returncode, 7)
 

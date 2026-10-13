@@ -260,6 +260,11 @@ test("a cold Machines target prepares its native renderer before Swift tests", (
   const root = mkdtempSync(join(tmpdir(), "edith-native-prerequisite-"));
   const bin = join(root, "bin");
   mkdirSync(bin);
+  mkdirSync(join(root, "scripts"));
+  writeFileSync(
+    join(root, "scripts/prepare-argument-parser.py"),
+    readFileSync("scripts/prepare-argument-parser.py"),
+  );
   const script = (name, body) => {
     const path = join(bin, name);
     writeFileSync(path, `#!/bin/sh\nset -eu\n${body}\n`);
@@ -271,13 +276,26 @@ test("a cold Machines target prepares its native renderer before Swift tests", (
       'test "$1" = scripts/build-ghostty.sh\ntest "$2" = --extension-only\nmkdir -p Extensions/terminal/Native/vendor\n: > Extensions/terminal/Native/vendor/prepared\nprintf "%s\\n" renderer >> events',
     );
     script(
+      "python3",
+      'test "$#" = 4\ntest "$1" = -I\ntest "$2" = -B\ntest "$3" = scripts/prepare-argument-parser.py\ntest "$4" = Extensions/machines\ntest -f "$3"\ntest -f Extensions/terminal/Native/vendor/prepared\nprintf "%s\\n" argument-parser >> events\ntest "$PREPARE_FAIL" = 0',
+    );
+    script(
       "swift",
       'test -f Extensions/terminal/Native/vendor/prepared\ncase "$*" in\n  *"--package-path Extensions/machines"*"--filter MachinesExtensionTests"*) printf "%s\\n" machines-core >> events ;;\n  *"--package-path Extensions/machines"*"--filter MachinesExtensionUITests"*) printf "%s\\n" machines-ui >> events ;;\n  *) exit 2 ;;\nesac',
     );
     for (const [target, expected] of [
-      ["ci-machines", ["renderer", "machines-core"]],
-      ["ci-machines-ui", ["renderer", "machines-ui"]],
-      ["ci-extension-machines", ["renderer", "machines-core", "machines-ui"]],
+      ["ci-machines", ["renderer", "argument-parser", "machines-core"]],
+      ["ci-machines-ui", ["renderer", "argument-parser", "machines-ui"]],
+      [
+        "ci-extension-machines",
+        [
+          "renderer",
+          "argument-parser",
+          "machines-core",
+          "argument-parser",
+          "machines-ui",
+        ],
+      ],
     ]) {
       rmSync(join(root, "events"), { force: true });
       rmSync(join(root, "Extensions"), { recursive: true, force: true });
@@ -288,12 +306,29 @@ test("a cold Machines target prepares its native renderer before Swift tests", (
           ...process.env,
           EDITH_MAKE_GATE: "skip",
           PATH: `${bin}:${process.env.PATH}`,
+          PREPARE_FAIL: "0",
         },
       });
       expect(
         readFileSync(join(root, "events"), "utf8").trim().split("\n"),
       ).toEqual(expected);
     }
+    rmSync(join(root, "events"));
+    expect(() =>
+      execFileSync("make", ["-f", makefile, "ci-machines"], {
+        cwd: root,
+        stdio: "pipe",
+        env: {
+          ...process.env,
+          EDITH_MAKE_GATE: "skip",
+          PATH: `${bin}:${process.env.PATH}`,
+          PREPARE_FAIL: "1",
+        },
+      }),
+    ).toThrow();
+    expect(
+      readFileSync(join(root, "events"), "utf8").trim().split("\n"),
+    ).toEqual(["renderer", "argument-parser"]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

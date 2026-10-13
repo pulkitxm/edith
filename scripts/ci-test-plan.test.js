@@ -586,6 +586,7 @@ test.each(["refs/pull/1/merge", "refs/heads/main"])(
       for (const path of [
         "scripts/extension-release-plan.mjs",
         "scripts/build-extension-support.mjs",
+        "scripts/argument-parser-source.mjs",
         "scripts/extension-ghostty-native.mjs",
         "scripts/extension-host-abi.mjs",
         "scripts/shipping-extension-policy.mjs",

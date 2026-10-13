@@ -5,4 +5,5 @@ export SDKROOT := $(shell DEVELOPER_DIR="$(DEVELOPER_DIR)" xcrun --sdk macosx --
 
 .PHONY: ci-studio-extension
 ci-studio-extension:
+	python3 -I -B ../../scripts/prepare-argument-parser.py "$(CURDIR)"
 	@studio_fixture=$$(mktemp -d /tmp/studio-extension-tests.XXXXXX); trap 'rm -rf "$$studio_fixture"' EXIT; EDITH_EXTENSION_DATA_ROOT="$$studio_fixture/data" EDITH_TEST_RUNTIME_ROOT="$$studio_fixture/runtime" EDITH_SHARED_DEFAULTS_SUITE="studio.tests.$$(uuidgen).extension.studio.worker" bun test.mjs $(if $(FILTER),'$(FILTER)')
