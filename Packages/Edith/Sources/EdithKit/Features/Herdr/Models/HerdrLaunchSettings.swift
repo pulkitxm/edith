@@ -46,7 +46,7 @@ public enum HerdrLaunchSettings {
             + command
     }
 
-    private static func environmentAssignments(_ text: String) throws -> [(String, String)] {
+    static func environmentAssignments(_ text: String) throws -> [(String, String)] {
         let reserved: Set<String> = [
             "CLAUDE_CONFIG_DIR", "CLAUDE_SECURESTORAGE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN",
             "CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "CLAUDE_CODE_OAUTH_SCOPES", "ANTHROPIC_API_KEY",

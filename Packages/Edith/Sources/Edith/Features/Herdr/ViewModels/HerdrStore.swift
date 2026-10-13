@@ -252,9 +252,8 @@ final class HerdrStore {
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
-    private let accountAgentStarter: @Sendable (URL, String) async throws -> Void
-    private let remoteAccountAgentStarter:
-        @Sendable (ClaudeAccount, String, [String], String, Machine) async throws -> Void
+    private let accountAgentStarter:
+        @Sendable (ClaudeAccount, String, [String], String, String, Machine?) async throws -> Void
     private let newAgentPaneCreator: HerdrNewAgentPaneCreator
     private let agentStarter: @Sendable (String, String, Machine?) async throws -> Void
     private(set) var agentStartupMessages: [String: String] = [:]
@@ -298,17 +297,14 @@ final class HerdrStore {
                 name: HerdrLaunchSettings.defaultHerdrSlug(for: kind) ?? kind.lowercased(),
                 pane: pane, on: machine)
         },
-        accountAgentStarter: @escaping @Sendable (URL, String) async throws -> Void = {
-            launcher, pane in
-            try await HerdrLaunchOperations.launchLocalAccount(launcher: launcher, pane: pane)
-        },
-        remoteAccountAgentStarter:
-            @escaping @Sendable (ClaudeAccount, String, [String], String, Machine) async throws ->
-            Void = {
-                account, command, arguments, pane, machine in
-                try await HerdrLaunchOperations.launchRemoteAccount(
-                    account: account, command: command, arguments: arguments, pane: pane,
-                    on: machine)
+        accountAgentStarter:
+            @escaping @Sendable (ClaudeAccount, String, [String], String, String, Machine?)
+            async throws -> Void = {
+                account, command, arguments, environment, pane, machine in
+                try await HerdrLaunchOperations.launchAccount(
+                    account: account, command: command, arguments: arguments,
+                    environment: environment,
+                    pane: pane, on: machine)
             },
         terminalIDResolver: @escaping @Sendable (String, String, Machine?) async throws -> String =
             {
@@ -344,7 +340,6 @@ final class HerdrStore {
         self.newAgentPaneCreator = newAgentPaneCreator
         self.agentStarter = agentStarter
         self.accountAgentStarter = accountAgentStarter
-        self.remoteAccountAgentStarter = remoteAccountAgentStarter
         self.terminalIDResolver = terminalIDResolver
         self.agentFocuser = agentFocuser
         self.workspacePresenter = workspacePresenter
@@ -2001,26 +1996,16 @@ final class HerdrStore {
         } else if accountID != nil {
             throw ClaudeAccountError.invalidRequest
         }
-        let accountLauncher: URL?
-        if let account, machine == nil {
-            let arguments = HerdrLaunchSettings.launchArguments(
-                kind: kind, options: HerdrLaunchSettings.options(for: kind, in: defaults),
-                in: defaults)
-            let command = HerdrLaunchSettings.launchCommand(for: kind, in: defaults)
-            let directory = claudeAccounts.directory
-            accountLauncher = try await Task.detached {
-                try account.launcher(command: command, arguments: arguments, directory: directory)
-            }.value
-        } else {
-            accountLauncher = nil
+        let accountCommand = HerdrLaunchSettings.command(for: kind, in: defaults)
+        let accountArguments = HerdrLaunchSettings.launchArguments(
+            kind: kind, options: HerdrLaunchSettings.options(for: kind, in: defaults), in: defaults)
+        let accountEnvironment = HerdrLaunchSettings.sharedEnvironment(in: defaults)
+        if let account {
+            _ = try account.launchCommand(
+                command: accountCommand, arguments: accountArguments,
+                environment: accountEnvironment)
         }
-        let created: HerdrCreatedPane
-        do {
-            created = try await newAgentPaneCreator(kind, machine, existingSpace, newSpaceLabel)
-        } catch {
-            if let accountLauncher { try? FileManager.default.removeItem(at: accountLauncher) }
-            throw error
-        }
+        let created = try await newAgentPaneCreator(kind, machine, existingSpace, newSpaceLabel)
         let placeholder = HerdrAgent.make(
             machineID: host.id, machineName: host.name, machineIsLocal: host.isLocal,
             sshTarget: host.sshTarget, session: "default", pane: created.paneID, kind: kind,
@@ -2036,23 +2021,13 @@ final class HerdrStore {
         }
         let start = agentStarter
         let startAccount = accountAgentStarter
-        let startRemoteAccount = remoteAccountAgentStarter
-        let accountCommand = HerdrLaunchSettings.launchCommand(for: kind, in: defaults)
-        let accountArguments = HerdrLaunchSettings.launchArguments(
-            kind: kind, options: HerdrLaunchSettings.options(for: kind, in: defaults), in: defaults)
         let id = placeholder.id
         agentStartupTasks[id] = Task { [weak self] in
             do {
-                if let accountLauncher {
-                    do {
-                        try await startAccount(accountLauncher, created.paneID)
-                    } catch {
-                        try? FileManager.default.removeItem(at: accountLauncher)
-                        throw error
-                    }
-                } else if let account, let machine {
-                    try await startRemoteAccount(
-                        account, accountCommand, accountArguments, created.paneID, machine)
+                if let account {
+                    try await startAccount(
+                        account, accountCommand, accountArguments, accountEnvironment,
+                        created.paneID, machine)
                 } else {
                     try await start(kind, created.paneID, machine)
                 }

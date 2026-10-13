@@ -7,59 +7,25 @@ public struct HerdrAgentLaunch: Sendable {
 }
 
 public enum HerdrLaunchOperations {
-    public static func launchLocalAccount(launcher: URL, pane: String) async throws {
-        _ = try await HerdrCommand.run(
-            HerdrSessionCommand.scoped(
-                HerdrPaneRunCommand.arguments(pane: pane, command: ShellQuote.quote(launcher.path)),
-                session: HerdrTerminalSpace.defaultSession), timeout: 15, on: nil)
-    }
-
-    public static func launchRemoteAccount(
-        account: ClaudeAccount, command: String, arguments: [String], pane: String,
-        on machine: Machine
+    public static func launchAccount(
+        account: ClaudeAccount, command: String, arguments: [String], environment: String = "",
+        pane: String, on machine: Machine?
     ) async throws {
-        let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
-        try await connection.connect()
-        guard await connection.remotePlatform != .windows else {
-            throw ClaudeAccountError.rejected(
-                "Account launches require a POSIX shell on this machine.")
-        }
-        let prepared = try await connection.run(
-            "umask 077; folder=\"$HOME/.local/share/edith/accounts/\(account.id.uuidString)\"; mkdir -p \"$folder\" && chmod 700 \"$folder\" && printf '%s' \"$folder\"",
-            timeout: 15)
-        guard prepared.succeeded, prepared.stdoutText.hasPrefix("/"),
-            !prepared.stdoutText.contains("\n")
-        else { throw HerdrCommandError.commandFailed(prepared.stderrText) }
-        let path = prepared.stdoutText + "/launch-" + UUID().uuidString + ".sh"
-        let script = try account.launchScript(
-            command: command, arguments: arguments, configurationPath: prepared.stdoutText,
-            launcherPath: path)
-        do {
-            if account.authentication == .browserLogin, let loginData = account.loginData {
-                let credentials = ShellQuote.quote(prepared.stdoutText + "/.credentials.json")
-                let seeded = try await connection.run(
-                    "umask 077; if [ ! -f " + credentials + " ]; then cat > " + credentials
-                        + "; else cat >/dev/null; fi",
-                    stdin: Data(loginData.utf8), timeout: 15)
-                guard seeded.succeeded else {
-                    throw HerdrCommandError.commandFailed(seeded.stderrText)
-                }
-            }
-            let uploaded = try await connection.run(
-                "umask 077; cat > " + ShellQuote.quote(path) + " && chmod 700 "
-                    + ShellQuote.quote(path),
-                stdin: script, timeout: 15)
-            guard uploaded.succeeded else {
-                throw HerdrCommandError.commandFailed(uploaded.stderrText)
-            }
-            _ = try await HerdrCommand.run(
-                HerdrSessionCommand.scoped(
-                    HerdrPaneRunCommand.arguments(pane: pane, command: ShellQuote.quote(path)),
-                    session: HerdrTerminalSpace.defaultSession), timeout: 15, on: machine)
-        } catch {
-            _ = try? await connection.run("rm -f -- " + ShellQuote.quote(path), timeout: 5)
-            throw error
-        }
+        let local = try account.launchCommand(
+            command: command, arguments: arguments, environment: environment)
+        let windows = try account.launchCommand(
+            command: command, arguments: arguments, environment: environment, platform: .windows)
+        _ = try await HerdrCommand.run(
+            local: HerdrSessionCommand.scoped(
+                HerdrPaneRunCommand.arguments(pane: pane, command: local),
+                session: HerdrTerminalSpace.defaultSession),
+            remote: { platform in
+                remoteHerdrCommand(
+                    arguments: HerdrSessionCommand.scoped(
+                        HerdrPaneRunCommand.arguments(
+                            pane: pane, command: platform == .windows ? windows : local),
+                        session: HerdrTerminalSpace.defaultSession), platform: platform)
+            }, timeout: 15, on: machine)
     }
 
     private static let defaultTimeout: TimeInterval = 15

@@ -125,67 +125,38 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
 
     public func validateLaunch() throws {
         try validate()
-        guard authentication == .browserLogin || !credential.isEmpty else {
+        guard !credential.isEmpty else {
             throw ClaudeAccountError.rejected(
                 "Enter a credential for this account in launch settings.")
         }
     }
 
-    public func launcher(command: String, arguments: [String], directory: URL) throws -> URL {
+    public func launchCommand(
+        command: String, arguments: [String], environment: String = "",
+        platform: RemoteMachinePlatform = .darwin
+    ) throws -> String {
         try validateLaunch()
         guard !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ClaudeAccountError.rejected("Enter a Claude launch command in launch settings.")
         }
-        let folder = directory.appendingPathComponent(id.uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(
-            at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        if authentication == .browserLogin, let loginData {
-            let credentials = folder.appendingPathComponent(".credentials.json")
-            if !FileManager.default.fileExists(atPath: credentials.path) {
-                try Data(loginData.utf8).write(to: credentials, options: .atomic)
-                try FileManager.default.setAttributes(
-                    [.posixPermissions: 0o600], ofItemAtPath: credentials.path)
-            }
+        let variables = try HerdrLaunchSettings.environmentAssignments(environment)
+        let cleared = Self.inheritedAuthenticationVariables.filter { !$0.hasSuffix("CONFIG_DIR") }
+        let credentialName =
+            authentication == .apiKey ? "ANTHROPIC_API_KEY" : "CLAUDE_CODE_OAUTH_TOKEN"
+        let assignments = variables + [(credentialName, credential)]
+        var lines: [String]
+        if platform == .windows {
+            lines = cleared.map { "Remove-Item Env:" + $0 + " -ErrorAction SilentlyContinue" }
+            lines += assignments.map { "$env:" + $0.0 + "=" + PowerShell.literal($0.1) }
+        } else {
+            lines = ["unset " + cleared.joined(separator: " ")]
+            lines += assignments.map { "export " + $0.0 + "=" + ShellQuote.quote($0.1) }
         }
-        let file = folder.appendingPathComponent("launch-\(UUID().uuidString).sh")
-        try launchScript(
-            command: command, arguments: arguments, configurationPath: folder.path,
-            launcherPath: file.path
-        ).write(to: file, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: file.path)
-        return file
+        lines.append(
+            HerdrPaneRunCommand.commandText(command, appending: arguments, platform: platform))
+        return lines.joined(separator: "; ")
     }
 
-    public func launchScript(
-        command: String, arguments: [String], configurationPath: String, launcherPath: String
-    ) throws -> Data {
-        try validateLaunch()
-        guard !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw ClaudeAccountError.rejected("Enter a Claude launch command in launch settings.")
-        }
-        let source = ". " + ShellQuote.quote(launcherPath) + " --account-environment"
-        var lines = [
-            "#!/bin/sh",
-            "if [ \"${1-}\" != --account-environment ]; then",
-            "  exec \"${SHELL:-/bin/sh}\" -lic " + ShellQuote.quote(source),
-            "fi",
-            "unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN CLAUDE_CODE_OAUTH_REFRESH_TOKEN CLAUDE_CODE_OAUTH_SCOPES ANTHROPIC_BASE_URL ANTHROPIC_PROFILE CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY",
-            "export CLAUDE_CONFIG_DIR=" + ShellQuote.quote(configurationPath),
-            "export CLAUDE_SECURESTORAGE_CONFIG_DIR=" + ShellQuote.quote(configurationPath),
-        ]
-        switch authentication {
-        case .oauthToken:
-            lines.append("export CLAUDE_CODE_OAUTH_TOKEN=" + ShellQuote.quote(credential))
-        case .apiKey:
-            lines.append("export ANTHROPIC_API_KEY=" + ShellQuote.quote(credential))
-        case .browserLogin: break
-        }
-        lines.append("/bin/rm -f -- " + ShellQuote.quote(launcherPath))
-        lines.append(
-            "eval "
-                + ShellQuote.quote(HerdrPaneRunCommand.commandText(command, appending: arguments)))
-        return Data((lines.joined(separator: "\n") + "\n").utf8)
-    }
 }
 
 public struct ClaudeAccountsState: Codable, Equatable {

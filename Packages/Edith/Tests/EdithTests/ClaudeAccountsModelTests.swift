@@ -41,10 +41,15 @@ import Testing
                 return HerdrCreatedPane(
                     workspaceID: "synthetic", tabID: "synthetic-tab", paneID: pane)
             },
-            accountAgentStarter: { launcher, pane in
+            accountAgentStarter: { account, command, arguments, environment, pane, machine in
+                #expect(machine == nil)
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: "/bin/sh")
-                process.arguments = [launcher.path]
+                process.arguments = [
+                    "-c",
+                    try account.launchCommand(
+                        command: command, arguments: arguments, environment: environment),
+                ]
                 process.environment = [
                     "PATH": "/usr/bin:/bin", "SHELL": "/bin/sh", "HOME": root.path,
                     "ANTHROPIC_API_KEY": "wrong",
@@ -111,6 +116,8 @@ import Testing
         HerdrLaunchSettings.setCommand("cc", for: "Claude Code", in: defaults)
         HerdrLaunchSettings.setOptions(
             .init(model: "synthetic-model"), for: "Claude Code", in: defaults)
+        try HerdrLaunchSettings.setSharedClaudeLaunch(
+            arguments: "--verbose", environment: "IS_DEMO=1", in: defaults)
         let machine = Machine(name: "Synthetic Remote", host: "synthetic.invalid")
         let capture = AccountLaunchCapture()
         let store = HerdrStore(
@@ -120,10 +127,12 @@ import Testing
                 return HerdrCreatedPane(
                     workspaceID: "synthetic", tabID: "synthetic", paneID: "remote-pane")
             },
-            remoteAccountAgentStarter: { account, command, arguments, pane, selected in
-                #expect(selected.id == machine.id)
+            accountAgentStarter: { account, command, arguments, environment, pane, selected in
+                #expect(selected?.id == machine.id)
                 #expect(command == "cc")
                 #expect(arguments.contains("synthetic-model"))
+                #expect(arguments.contains("--verbose"))
+                #expect(environment == "IS_DEMO=1")
                 await capture.record(pane, account.credential)
             }, machinesProvider: { [machine] })
         store.claudeAccounts = ClaudeAccountsModel(directory: root)
@@ -169,7 +178,7 @@ import Testing
         #expect(restored.filteredAgents == [agent])
     }
 
-    @Test func paneCreationFailureRemovesTheUnusedCredentialLauncher() async throws {
+    @Test func paneCreationFailureDoesNotCreateAccountLaunchFiles() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let store = HerdrStore(
@@ -189,7 +198,7 @@ import Testing
                 kind: "Claude Code", host: host, existingSpace: nil, newSpaceLabel: "Synthetic")
         }
         let folder = root.appendingPathComponent(account.id.uuidString)
-        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path).isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: folder.path))
         #expect(store.accountSessions.isEmpty)
     }
 

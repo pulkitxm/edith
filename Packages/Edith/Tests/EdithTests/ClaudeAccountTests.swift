@@ -89,8 +89,8 @@ import Testing
             kind: "Claude Code", options: .none, in: defaults)
         for credential in ["synthetic-work", "synthetic-personal"] {
             let account = ClaudeAccount(name: credential, credential: credential)
-            let file = try account.launcher(command: command, arguments: arguments, directory: root)
-            let environment = try run(file, shell: "/bin/zsh", startupDirectory: root)
+            let direct = try account.launchCommand(command: command, arguments: arguments)
+            let environment = try run(direct, shell: "/bin/zsh", startupDirectory: root)
             #expect(environment["FLAG_VALUE"] == "two words")
             #expect(environment["IS_DEMO"] == "1")
             #expect(environment["LITERAL"] == "$(touch forbidden); 'quoted'")
@@ -112,45 +112,26 @@ import Testing
         #expect(HerdrLaunchSettings.sharedArguments(in: defaults) == "FLAG_VALUE=two words")
     }
 
-    @Test func simultaneousAccountsHaveIsolatedCredentialsAndConfigDirectories() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let token = "synthetic-'token;$(touch forbidden)"
-        let personal = ClaudeAccount(name: "Personal", credential: token)
-        let company = ClaudeAccount(
-            name: "Company", authentication: .apiKey, credential: "synthetic-api-key")
-        let first = try personal.launcher(command: "/usr/bin/env", arguments: [], directory: root)
-        let second = try company.launcher(command: "/usr/bin/env", arguments: [], directory: root)
-        let personalEnvironment = try run(first)
-        let companyEnvironment = try run(second)
-        #expect(personalEnvironment["CLAUDE_CODE_OAUTH_TOKEN"] == token)
-        #expect(personalEnvironment["ANTHROPIC_API_KEY"] == nil)
-        #expect(companyEnvironment["ANTHROPIC_API_KEY"] == "synthetic-api-key")
-        #expect(companyEnvironment["CLAUDE_CODE_OAUTH_TOKEN"] == nil)
-        #expect(personalEnvironment["CLAUDE_CONFIG_DIR"] != companyEnvironment["CLAUDE_CONFIG_DIR"])
-        #expect(personalEnvironment["ANTHROPIC_AUTH_TOKEN"] == nil)
-        #expect(personalEnvironment["CLAUDE_CODE_USE_BEDROCK"] == nil)
-        #expect(
-            !FileManager.default.fileExists(atPath: root.appendingPathComponent("forbidden").path))
-        #expect(!FileManager.default.fileExists(atPath: first.path))
+    @Test func directOAuthLaunchUsesSelectedTokenAndPreservesCLISettings() throws {
+        for shell in ["/bin/bash", "/bin/zsh"] {
+            let token = "synthetic-'token;$(touch forbidden)"
+            let personal = ClaudeAccount(name: "Personal", credential: token)
+            let company = ClaudeAccount(name: "Company", credential: "synthetic-company-token")
+            let first = try personal.launchCommand(command: "/usr/bin/env", arguments: [])
+            let second = try company.launchCommand(command: "/usr/bin/env", arguments: [])
+            let environment = try run(first, shell: shell)
+            #expect(environment["CLAUDE_CODE_OAUTH_TOKEN"] == token)
+            #expect(environment["ANTHROPIC_API_KEY"] == nil)
+            #expect(environment["ANTHROPIC_AUTH_TOKEN"] == nil)
+            #expect(environment["CLAUDE_CODE_USE_BEDROCK"] == nil)
+            #expect(environment["CLAUDE_CONFIG_DIR"] == "/tmp/synthetic-existing-config")
+            #expect(try run(second, shell: shell)["CLAUDE_CODE_OAUTH_TOKEN"] == company.credential)
+            #expect(!first.contains("launch-"))
+            #expect(!first.contains(".local/share/edith"))
+        }
     }
 
-    @Test func browserLoginClearsCredentialsAndKeepsTheConfigPathAcrossRename() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: root) }
-        var account = ClaudeAccount(name: "Work", authentication: .browserLogin)
-        let first = try account.launcher(command: "/usr/bin/env", arguments: [], directory: root)
-        account.name = "Company"
-        let second = try account.launcher(command: "/usr/bin/env", arguments: [], directory: root)
-        #expect(first.deletingLastPathComponent() == second.deletingLastPathComponent())
-        try FileManager.default.removeItem(at: first)
-        let environment = try run(second)
-        #expect(environment["CLAUDE_CODE_OAUTH_TOKEN"] == nil)
-        #expect(environment["ANTHROPIC_API_KEY"] == nil)
-        #expect(environment["ANTHROPIC_PROFILE"] == nil)
-    }
-
-    @Test func shellAliasesRunAfterStartupWithoutUsingTheShellsCredentials() throws {
+    @Test func directLaunchUsesTheMachinesAliasAndItsExistingFlags() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -159,17 +140,27 @@ import Testing
                 .utf8
         ).write(to: root.appendingPathComponent(".zshrc"))
         let account = ClaudeAccount(name: "Work", credential: "synthetic-selected-token")
-        let file = try account.launcher(command: "cc", arguments: [], directory: root)
-        let environment = try run(file, shell: "/bin/zsh", startupDirectory: root)
+        let command = try account.launchCommand(
+            command: "cc", arguments: ["FLAG_VALUE=two words"], environment: "EXTRA=value")
+        let environment = try run(command, shell: "/bin/zsh", startupDirectory: root)
         #expect(environment["CLAUDE_CODE_OAUTH_TOKEN"] == account.credential)
         #expect(environment["IS_DEMO"] == "1")
-        #expect(environment["CLAUDE_CONFIG_DIR"] == file.deletingLastPathComponent().path)
-        #expect(!FileManager.default.fileExists(atPath: file.path))
-        let login = ClaudeAccount(name: "Other", authentication: .browserLogin)
-        let second = try login.launcher(command: "cc", arguments: [], directory: root)
-        #expect(
-            try run(second, shell: "/bin/zsh", startupDirectory: root)["CLAUDE_CODE_OAUTH_TOKEN"]
-                == nil)
+        #expect(environment["EXTRA"] == "value")
+        #expect(environment["FLAG_VALUE"] == "two words")
+    }
+
+    @Test func windowsLaunchUsesPowerShellExportsAndTheConfiguredCLI() throws {
+        let account = ClaudeAccount(name: "Work", credential: "synthetic-'token;$value")
+        let command = try account.launchCommand(
+            command: "cc", arguments: ["--model", "synthetic model"],
+            environment: "IS_DEMO=1\nEXTRA=literal'value", platform: .windows)
+        #expect(command.contains("$env:CLAUDE_CODE_OAUTH_TOKEN='synthetic-''token;$value'"))
+        #expect(command.contains("$env:EXTRA='literal''value'"))
+        #expect(command.hasSuffix("cc '--model' 'synthetic model'"))
+        #expect(command.contains("Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue"))
+        #expect(!command.contains("unset "))
+        #expect(!command.contains("export "))
+        #expect(!command.contains("launch-"))
     }
 
     @Test func currentCLIImportChoosesOAuthThenAPIKeyThenSavedLogin() throws {
@@ -194,33 +185,6 @@ import Testing
         #expect(throws: (any Error).self) { try ClaudeAccount.currentCLIAccount(environment: [:]) }
     }
 
-    @Test func importedLoginKeepsRefreshCredentialsAndNeverOverwritesAnUpdatedLogin() throws {
-        let data = Data(
-            #"{"claudeAiOauth":{"accessToken":"synthetic-access","refreshToken":"synthetic-refresh"}}"#
-                .utf8)
-        let account = try ClaudeAccount.currentCLIAccount(environment: [:], savedLoginData: data)
-        #expect(account.authentication == .browserLogin)
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let file = try account.launcher(command: "/usr/bin/env", arguments: [], directory: root)
-        let credentials = file.deletingLastPathComponent().appendingPathComponent(
-            ".credentials.json")
-        #expect(try Data(contentsOf: credentials) == data)
-        #expect(
-            (try FileManager.default.attributesOfItem(atPath: credentials.path)[.posixPermissions]
-                as? NSNumber)?.intValue == 0o600)
-        #expect(try run(file)["CLAUDE_CODE_OAUTH_TOKEN"] == nil)
-        let updated = Data(
-            #"{"claudeAiOauth":{"accessToken":"synthetic-updated","refreshToken":"synthetic-refreshed"}}"#
-                .utf8)
-        try updated.write(to: credentials)
-        _ = try account.launcher(command: "/usr/bin/env", arguments: [], directory: root)
-        #expect(try Data(contentsOf: credentials) == updated)
-        #expect(
-            try JSONDecoder().decode(ClaudeAccount.self, from: JSONEncoder().encode(account))
-                == account)
-    }
-
     @Test func invalidAndIncompleteAccountsCannotLaunch() throws {
         #expect(throws: (any Error).self) { try ClaudeAccount(name: "Work").validateLaunch() }
         #expect(throws: (any Error).self) { try ClaudeAccount(name: " ").validate() }
@@ -237,16 +201,16 @@ import Testing
     }
 
     private func run(
-        _ launcher: URL, shell: String = "/bin/sh", startupDirectory: URL? = nil
+        _ command: String, shell: String = "/bin/sh", startupDirectory: URL? = nil
     ) throws -> [String: String] {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = [launcher.path]
-        process.currentDirectoryURL = launcher.deletingLastPathComponent()
+        process.executableURL = URL(fileURLWithPath: shell)
+        process.arguments = ["-lic", command]
         process.environment = [
             "PATH": "/usr/bin:/bin", "SHELL": shell,
-            "HOME": launcher.deletingLastPathComponent().path,
-            "ZDOTDIR": (startupDirectory ?? launcher.deletingLastPathComponent()).path,
+            "HOME": (startupDirectory ?? FileManager.default.temporaryDirectory).path,
+            "ZDOTDIR": (startupDirectory ?? FileManager.default.temporaryDirectory).path,
+            "CLAUDE_CONFIG_DIR": "/tmp/synthetic-existing-config",
             "ANTHROPIC_API_KEY": "wrong-api-key",
             "CLAUDE_CODE_OAUTH_TOKEN": "wrong-token", "ANTHROPIC_AUTH_TOKEN": "wrong-auth",
             "ANTHROPIC_PROFILE": "wrong-profile", "CLAUDE_CODE_USE_BEDROCK": "1",
