@@ -431,6 +431,164 @@ class OwnedKernelContracts(unittest.TestCase):
         self.assertEqual(self.kernel.signals, [])
         self.assertNotIn('private', json.dumps(captured))
 
+    def test_missing_record_recovers_only_with_two_complete_unchanged_owned_snapshots(self):
+        original = self.kernel.proc_pidinfo
+        counts = []
+
+        def info(pid, flavor, argument, pointer, size):
+            counts.append(argument)
+            if len(counts) == 1:
+                return 0
+            result = original(pid, flavor, argument, pointer, size)
+            pointer._obj.status = 2
+            return result
+
+        expected = self.owner.known[123]
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=info):
+            self.assertEqual(self.owner.snapshot(123)[:5], expected)
+        self.assertEqual(counts, [0, 0, 0])
+        self.assertEqual(self.owner.errors, [])
+        self.assertEqual(self.owner.failure_observations, [])
+        self.assertEqual(self.owner.captured_snapshot_failures, [])
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_missing_record_cannot_recover_changed_or_incomplete_owned_identity(self):
+        for field in ['pid', 'seconds', 'microseconds', 'pgid', 'uid', 'ruid', 'short',
+                      'missing', 'path', 'parent', 'executable', 'status']:
+            for changed_read in [2, 3]:
+                with self.subTest(field=field, changed_read=changed_read):
+                    owner = runner.BoundedOwnership(123, 501)
+                    known = dict(owner.known)
+                    seals = dict(owner.seals)
+                    original = self.kernel.proc_pidinfo
+                    original_path = self.kernel.proc_pidpath
+                    reads = 0
+
+                    def info(pid, flavor, argument, pointer, size):
+                        nonlocal reads
+                        reads += 1
+                        if reads == 1:
+                            return 0
+                        result = original(pid, flavor, argument, pointer, size)
+                        pointer._obj.status = 2
+                        if reads == changed_read:
+                            if field == 'short':
+                                return size - 1
+                            if field == 'missing':
+                                return 0
+                            if field not in ['path', 'executable']:
+                                name = 'ppid' if field == 'parent' else field
+                                setattr(pointer._obj, name, 5 if field == 'status'
+                                        else getattr(pointer._obj, name) + 1)
+                        return result
+
+                    def path(pid, buffer, size):
+                        if reads == changed_read and field == 'path':
+                            return 0
+                        if reads == changed_read and field == 'executable':
+                            buffer.value = b'/synthetic/different'
+                            return len(buffer.value)
+                        return original_path(pid, buffer, size)
+
+                    with patch.object(self.kernel, 'proc_pidinfo', side_effect=info), \
+                            patch.object(self.kernel, 'proc_pidpath', side_effect=path):
+                        with self.assertRaisesRegex(RuntimeError, 'Live owned process identity unavailable'):
+                            owner.snapshot(123)
+                    self.assertEqual(owner.known, known)
+                    self.assertEqual(owner.seals, seals)
+                    self.assertEqual(owner.failure_observations[0]['kind'], 'live_identity_unavailable')
+                    self.assertEqual(owner.captured_snapshot_failures[0]['clause'], 'kernel_record_unavailable')
+                    self.assertEqual(self.kernel.signals, [])
+
+    def test_missing_unknown_record_never_retries_or_admits_a_live_process(self):
+        self.kernel.processes[234] = (234, 101, 8, '/fixture/compiler', 123, 123, 501, 501)
+        original = self.kernel.proc_pidinfo
+        counts = []
+
+        def info(pid, flavor, argument, pointer, size):
+            if pid == 234:
+                counts.append(argument)
+                if argument == 0:
+                    return 0
+            result = original(pid, flavor, argument, pointer, size)
+            pointer._obj.status = 2
+            return result
+
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=info):
+            with self.assertRaisesRegex(RuntimeError, 'Live owned process identity unavailable'):
+                self.owner.snapshot(234)
+        self.assertEqual(counts, [0, 1])
+        self.assertNotIn(234, self.owner.known)
+        self.assertNotIn(234, self.owner.seals)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_known_path_or_user_failure_never_uses_missing_record_recovery(self):
+        original = self.kernel.proc_pidinfo
+        for field in ['path', 'uid', 'ruid']:
+            with self.subTest(field=field):
+                owner = runner.BoundedOwnership(123, 501)
+                calls = []
+
+                def info(pid, flavor, argument, pointer, size):
+                    calls.append(argument)
+                    result = original(pid, flavor, argument, pointer, size)
+                    pointer._obj.status = 2
+                    if field != 'path':
+                        setattr(pointer._obj, field, 502)
+                    return result
+
+                with patch.object(self.kernel, 'proc_pidinfo', side_effect=info), \
+                        patch.object(self.kernel, 'proc_pidpath', return_value=0):
+                    with self.assertRaisesRegex(RuntimeError, 'Live owned process identity unavailable'):
+                        owner.snapshot(123)
+                self.assertEqual(calls, [0, 1, 1])
+                self.assertEqual(self.kernel.signals, [])
+
+    def test_recovered_read_preserves_sticky_conflicts_and_per_signal_identity_checks(self):
+        expected = self.owner.known[123]
+        self.owner.reject(123, 'Existing ownership failure')
+        original = self.kernel.proc_pidinfo
+        reads = 0
+
+        def info(pid, flavor, argument, pointer, size):
+            nonlocal reads
+            reads += 1
+            if reads == 1:
+                return 0
+            result = original(pid, flavor, argument, pointer, size)
+            pointer._obj.status = 2
+            return result
+
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=info):
+            self.assertEqual(self.owner.snapshot(123)[:5], expected)
+        self.assertEqual(self.owner.errors, ['Existing ownership failure'])
+        self.assertEqual(self.owner.conflicts(), [expected])
+        self.kernel.processes[123] = (123, 200, 7, '/fixture/reused', 123, 1, 501, 501)
+        self.assertFalse(self.owner.verified(expected))
+        self.assertIn('Existing ownership failure', self.owner.errors)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_inconsistent_history_never_recovers_a_missing_record(self):
+        original = self.kernel.proc_pidinfo
+        identity = self.owner.known[123]
+        self.owner.known[123] = (123, 200, *identity[2:])
+        calls = []
+
+        def info(pid, flavor, argument, pointer, size):
+            calls.append(argument)
+            if argument == 0:
+                return 0
+            result = original(pid, flavor, argument, pointer, size)
+            pointer._obj.status = 2
+            return result
+
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=info):
+            with self.assertRaisesRegex(RuntimeError, 'Live owned process identity unavailable'):
+                self.owner.snapshot(123)
+        self.assertEqual(calls, [0, 1])
+        self.assertEqual(self.owner.seals[123], identity[:3] + identity[4:5])
+        self.assertEqual(self.kernel.signals, [])
+
     def test_snapshot_observer_preserves_kernel_reads_and_all_failure_clauses(self):
         cases = [('kernel_record_unavailable', None), ('effective_uid_mismatch', 6),
                  ('real_uid_mismatch', 7), ('executable_path_unavailable', 3),
