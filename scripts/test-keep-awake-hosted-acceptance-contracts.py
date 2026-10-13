@@ -695,5 +695,26 @@ class AcceptanceContracts(unittest.TestCase):
         self.assertNotIn(999, owner.recovery_failure_stages)
 
 
+    def test_new_snapshot_failure_never_reuses_a_prior_parent_recovery_stage(self):
+        value, owner = self.real_self_group_failure()
+        with patch.object(owner.library, 'proc_pidinfo', return_value=0):
+            self.assertIsNone(owner.recover_snapshot(123))
+        self.assertEqual(owner.recovery_failure_stages[123], 'first_kernel')
+        errors = list(owner.errors)
+        with patch.object(owner.library, 'proc_pidpath', return_value=0), \
+                patch.object(acceptance.os, 'kill', return_value=None):
+            with self.assertRaisesRegex(RuntimeError, 'Live owned process identity unavailable') as failure:
+                owner.snapshot(123)
+        owner.reject(123, str(failure.exception))
+        row = owner.failure_observations[-1]
+        self.assertEqual(row['kind'], 'live_identity_unavailable')
+        self.assertNotIn('recoveryFailureStage', row)
+        self.assertTrue(all(error in owner.errors for error in errors))
+        value['cleanup']['ownershipErrors'] = owner.errors
+        value['ownershipFailureObservations'] = [row]
+        rows, _ = self.emitted_group_rows(value)
+        self.assertEqual(rows, [[row]])
+
+
 if __name__ == '__main__':
     unittest.main()

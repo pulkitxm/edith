@@ -62,6 +62,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         self.known[leader] = identity
 
     def snapshot(self, pid, parent=None, parent_identity=None):
+        self.recovery_failure_stages.pop(pid, None)
         if pid in self.pending_failures:
             raise RuntimeError('Pending owned child identity permanently rejected')
         captured = None
