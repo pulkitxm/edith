@@ -1,5 +1,5 @@
 import AppKit
-import EdithKit
+@testable import EdithKit
 import SwiftUI
 import Foundation
 import Testing
@@ -148,6 +148,76 @@ import Testing
         #expect(environment["CLAUDE_CODE_OAUTH_TOKEN"] == nil)
         #expect(environment["ANTHROPIC_API_KEY"] == nil)
         #expect(environment["CLAUDE_CONFIG_DIR"] == "/tmp/synthetic-existing-config")
+    }
+
+    @Test func subscriptionProfilesSeparateLoginsAndShareLiveConfiguration() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let shared = root.appendingPathComponent(".claude")
+        try FileManager.default.createDirectory(at: shared, withIntermediateDirectories: true)
+        try Data("{\"theme\":\"dark\"}".utf8).write(
+            to: shared.appendingPathComponent("settings.json"))
+        try Data(
+            "{\"oauthAccount\":{\"emailAddress\":\"synthetic@example.invalid\"},\"theme\":\"dark\",\"mcpServers\":{\"demo\":{\"command\":\"demo-server\"}}}"
+                .utf8
+        ).write(to: root.appendingPathComponent(".claude.json"))
+        let accounts = ["Personal", "Work"].map {
+            ClaudeAccount(name: $0, authentication: .browserLogin)
+        }
+        let legacySkill = root.appendingPathComponent(accounts[0].id.uuidString + "/skills/legacy")
+        try FileManager.default.createDirectory(at: legacySkill, withIntermediateDirectories: true)
+        try Data("synthetic existing skill".utf8).write(
+            to: legacySkill.appendingPathComponent("SKILL.md"))
+        for account in accounts {
+            let folder = root.appendingPathComponent(account.id.uuidString)
+            try ClaudeSubscriptionProfile.prepareLocal(
+                account: account, folder: folder, shared: shared, home: root)
+            try Data(account.id.uuidString.utf8).write(
+                to: folder.appendingPathComponent(".credentials.json"))
+            let command = try account.launchCommand(
+                command: "/usr/bin/env", arguments: [], configurationPath: folder.path)
+            let environment = try run(command)
+            #expect(environment["CLAUDE_CONFIG_DIR"] == folder.path)
+            #expect(environment["CLAUDE_SECURESTORAGE_CONFIG_DIR"] == folder.path)
+            #expect(environment["CLAUDE_CODE_OAUTH_TOKEN"] == nil)
+            let configuration = try #require(
+                JSONSerialization.jsonObject(
+                    with: Data(contentsOf: folder.appendingPathComponent(".claude.json")))
+                    as? [String: Any])
+            #expect(configuration["oauthAccount"] == nil)
+            #expect(configuration["mcpServers"] != nil)
+            #expect(configuration["theme"] as? String == "dark")
+        }
+        let skills = shared.appendingPathComponent("skills/demo")
+        try FileManager.default.createDirectory(at: skills, withIntermediateDirectories: true)
+        try Data("synthetic shared skill".utf8).write(to: skills.appendingPathComponent("SKILL.md"))
+        try Data("{\"theme\":\"light\"}".utf8).write(
+            to: shared.appendingPathComponent("settings.json"), options: .atomic)
+        for account in accounts {
+            let folder = root.appendingPathComponent(account.id.uuidString)
+            #expect(
+                try String(
+                    contentsOf: folder.appendingPathComponent("settings.json"), encoding: .utf8
+                ).contains("light"))
+            #expect(
+                try String(
+                    contentsOf: folder.appendingPathComponent("skills/demo/SKILL.md"),
+                    encoding: .utf8) == "synthetic shared skill")
+            #expect(
+                try String(
+                    contentsOf: folder.appendingPathComponent(".credentials.json"), encoding: .utf8)
+                    == account.id.uuidString)
+            #expect(
+                try String(
+                    contentsOf: folder.appendingPathComponent("skills/legacy/SKILL.md"),
+                    encoding: .utf8) == "synthetic existing skill")
+            try ClaudeSubscriptionProfile.prepareLocal(
+                account: account, folder: folder, shared: shared, home: root)
+            #expect(
+                try String(
+                    contentsOf: folder.appendingPathComponent(".credentials.json"), encoding: .utf8)
+                    == account.id.uuidString)
+        }
     }
 
     @Test func directLaunchUsesTheMachinesAliasAndItsExistingFlags() throws {

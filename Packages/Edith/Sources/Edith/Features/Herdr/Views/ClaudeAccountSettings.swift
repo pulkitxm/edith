@@ -82,7 +82,7 @@ struct ClaudeAccountSettings: View {
                         }
                     } else {
                         Text(
-                            "Uses this machine's existing CLI configuration, including skills, plugins and MCP settings."
+                            "Keeps a separate subscription login for this account on each machine. Sign in once per machine. Skills, plugins and settings are shared."
                         )
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

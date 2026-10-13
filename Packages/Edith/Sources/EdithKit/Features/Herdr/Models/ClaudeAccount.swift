@@ -133,7 +133,7 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
 
     public func launchCommand(
         command: String, arguments: [String], environment: String = "",
-        platform: RemoteMachinePlatform = .darwin
+        platform: RemoteMachinePlatform = .darwin, configurationPath: String? = nil
     ) throws -> String {
         try validateLaunch()
         guard !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -143,7 +143,18 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
         let cleared = Self.inheritedAuthenticationVariables.filter { !$0.hasSuffix("CONFIG_DIR") }
         let credentialName =
             authentication == .apiKey ? "ANTHROPIC_API_KEY" : "CLAUDE_CODE_OAUTH_TOKEN"
-        let assignments = variables + (credential.isEmpty ? [] : [(credentialName, credential)])
+        var assignments = variables
+        if authentication == .browserLogin {
+            if let configurationPath {
+                assignments += [
+                    ("CLAUDE_CONFIG_DIR", configurationPath),
+                    ("CLAUDE_SECURESTORAGE_CONFIG_DIR", configurationPath),
+                    ("CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST", "1"),
+                ]
+            }
+        } else {
+            assignments.append((credentialName, credential))
+        }
         var lines: [String]
         if platform == .windows {
             lines = cleared.map { "Remove-Item Env:" + $0 + " -ErrorAction SilentlyContinue" }

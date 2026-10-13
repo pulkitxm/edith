@@ -11,10 +11,16 @@ public enum HerdrLaunchOperations {
         account: ClaudeAccount, command: String, arguments: [String], environment: String = "",
         pane: String, on machine: Machine?
     ) async throws {
+        try account.validateLaunch()
+        let configurationPath =
+            account.authentication == .browserLogin
+            ? try await ClaudeSubscriptionProfile.prepare(account: account, on: machine) : nil
         let local = try account.launchCommand(
-            command: command, arguments: arguments, environment: environment)
+            command: command, arguments: arguments, environment: environment,
+            configurationPath: configurationPath)
         let windows = try account.launchCommand(
-            command: command, arguments: arguments, environment: environment, platform: .windows)
+            command: command, arguments: arguments, environment: environment, platform: .windows,
+            configurationPath: configurationPath)
         _ = try await HerdrCommand.run(
             local: HerdrSessionCommand.scoped(
                 HerdrPaneRunCommand.arguments(pane: pane, command: local),
