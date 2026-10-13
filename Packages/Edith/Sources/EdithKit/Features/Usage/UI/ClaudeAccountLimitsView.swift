@@ -43,6 +43,14 @@ public struct ClaudeAccountLimitsView: View {
                     if let error = account.limits.error {
                         Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
+                        if account.limits.session != nil || account.limits.week != nil {
+                            Text("Last updated \(account.refreshedAt, style: .relative) ago")
+                                .font(.edithText(.caption2)).foregroundStyle(.secondary)
+                        }
+                        if let retry = account.retryAt, retry > Date() {
+                            Text("Retrying in \(retry, style: .relative)")
+                                .font(.edithText(.caption2)).foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .padding(UIScale.pt(compact ? 10 : 14))

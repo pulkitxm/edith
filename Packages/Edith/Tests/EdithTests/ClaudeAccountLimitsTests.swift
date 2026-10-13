@@ -65,6 +65,69 @@ import Testing
         #expect(remaining.count == 1)
     }
 
+    @Test func throttlingRetainsLastKnownLimitsAndBackoffAcrossRestarts() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("limits.json")
+        let account = ClaudeAccount(name: "Company", credential: "synthetic-private-token")
+        let collector = ClaudeAccountLimitsCollector(cacheFile: file)
+        let now = Date()
+        let calls = AccountLimitsCalls()
+        let success: @Sendable (ClaudeAccount, URL) async throws -> LimitsProviderSnapshot = {
+            _, _ in
+            await calls.record(account.id)
+            return LimitsProviderSnapshot(
+                provider: .claude, session: LimitWindow(percent: 25, resetsAt: nil),
+                week: LimitWindow(percent: 40, resetsAt: nil))
+        }
+        let failure: @Sendable (ClaudeAccount, URL) async throws -> LimitsProviderSnapshot = {
+            _, _ in
+            await calls.record(account.id)
+            throw ClaudeLimitsReader.Failure.rateLimited(300)
+        }
+        _ = await collector.refresh(accounts: [account], now: now, fetch: success)
+        let stale = await collector.refresh(
+            accounts: [account], now: now.addingTimeInterval(61), fetch: failure)
+        #expect(stale.first?.limits.session?.percent == 25)
+        #expect(stale.first?.limits.week?.percent == 40)
+        #expect(stale.first?.refreshedAt == now)
+        #expect(stale.first?.retryAt == now.addingTimeInterval(361))
+        #expect(stale.first?.limits.error != nil)
+        let restarted = ClaudeAccountLimitsCollector(cacheFile: file)
+        let waiting = await restarted.refresh(
+            accounts: [account], now: now.addingTimeInterval(100), fetch: success)
+        #expect(waiting == stale)
+        #expect(await calls.count == 2)
+        let fresh = await restarted.refresh(
+            accounts: [account], now: now.addingTimeInterval(362), fetch: success)
+        #expect(fresh.first?.limits.error == nil)
+        #expect(fresh.first?.retryAt == nil)
+        #expect(fresh.first?.refreshedAt == now.addingTimeInterval(362))
+        #expect(await calls.count == 3)
+        let data = try Data(contentsOf: file)
+        #expect(!String(decoding: data, as: UTF8.self).contains(account.credential))
+        #expect(
+            (try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions]
+                as? NSNumber)?.intValue == 0o600)
+    }
+
+    @Test func changedCredentialsNeverReuseAnotherTokensLastKnownLimits() async {
+        var account = ClaudeAccount(name: "Company", credential: "synthetic-old-token")
+        let collector = ClaudeAccountLimitsCollector()
+        let now = Date()
+        _ = await collector.refresh(accounts: [account], now: now) { _, _ in
+            LimitsProviderSnapshot(
+                provider: .claude, session: LimitWindow(percent: 30, resetsAt: nil), week: nil)
+        }
+        account.credential = "synthetic-new-token"
+        let result = await collector.refresh(accounts: [account], now: now.addingTimeInterval(61)) {
+            _, _ in
+            throw ClaudeLimitsReader.Failure.rateLimited(nil)
+        }
+        #expect(result.first?.limits.session == nil)
+        #expect(result.first?.retryAt == now.addingTimeInterval(1861))
+    }
+
     @Test func duplicateCredentialsAndRenamesDoNotRepeatRateLimitedRequests() async {
         var company = ClaudeAccount(name: "Company", credential: "synthetic-shared-token")
         let duplicate = ClaudeAccount(name: "Current CLI account", credential: company.credential)
@@ -163,6 +226,45 @@ import Testing
         view.groups = LimitsStatusItem.accountGroups(
             ClaudeAccountLimitsLayout.inlineAccounts(fixtures(5), selectedID: nil), masked: false)
         #expect(view.desiredWidth < 180)
+    }
+
+    @MainActor @Test func renderStaleAndUnavailableLimitsWithSyntheticAccounts() async throws {
+        guard let output = ProcessInfo.processInfo.environment["EDITH_LIMITS_CACHE_EVIDENCE_DIR"]
+        else { return }
+        let accounts = [
+            ClaudeAccount(name: "Company", credential: "synthetic-company-token"),
+            ClaudeAccount(name: "Personal", credential: "synthetic-personal-token"),
+        ]
+        let collector = ClaudeAccountLimitsCollector()
+        let now = Date().addingTimeInterval(-120)
+        _ = await collector.refresh(accounts: accounts, now: now) { account, _ in
+            if account.id == accounts[1].id { throw ClaudeLimitsReader.Failure.rateLimited(300) }
+            return LimitsProviderSnapshot(
+                provider: .claude, session: LimitWindow(percent: 25, resetsAt: nil),
+                week: LimitWindow(percent: 40, resetsAt: nil))
+        }
+        let stale = await collector.refresh(accounts: accounts, now: now.addingTimeInterval(61)) {
+            _, _ in
+            throw ClaudeLimitsReader.Failure.rateLimited(300)
+        }
+        let host = NSHostingView(
+            rootView:
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Rate limits").font(.edithText(.headline))
+                    ClaudeAccountLimitsView(accounts: stale, compact: true)
+                    Spacer()
+                }.padding(18).frame(width: 330, height: 420)
+                .background(Color(nsColor: .windowBackgroundColor))
+                .environment(\.colorScheme, .dark))
+        host.appearance = NSAppearance(named: .darkAqua)
+        host.frame = NSRect(x: 0, y: 0, width: 330, height: 420)
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        let data = try #require(bitmap.representation(using: .png, properties: [:]))
+        let root = URL(fileURLWithPath: output)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try data.write(to: root.appendingPathComponent("limits-retry.png"))
     }
 
     private func fixtures(_ count: Int) -> [ClaudeAccountLimits] {

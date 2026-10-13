@@ -6,12 +6,17 @@ public struct ClaudeAccountLimits: Codable, Equatable, Identifiable, Sendable {
     public let name: String
     public let limits: LimitsProviderSnapshot
     public let refreshedAt: Date
+    public let retryAt: Date?
 
-    public init(id: UUID, name: String, limits: LimitsProviderSnapshot, refreshedAt: Date) {
+    public init(
+        id: UUID, name: String, limits: LimitsProviderSnapshot, refreshedAt: Date,
+        retryAt: Date? = nil
+    ) {
         self.id = id
         self.name = name
         self.limits = limits
         self.refreshedAt = refreshedAt
+        self.retryAt = retryAt
     }
 }
 
@@ -25,16 +30,25 @@ public enum ClaudeAccountLimitsLayout {
 }
 
 public actor ClaudeAccountLimitsCollector {
-    public static let shared = ClaudeAccountLimitsCollector()
-    private struct Cached {
+    public static let shared = ClaudeAccountLimitsCollector(
+        cacheFile: DataRoot.caches.appendingPathComponent("usage/account-limits.json"))
+    private struct Cached: Codable, Sendable {
         let snapshot: ClaudeAccountLimits
         let retryAt: Date
     }
     private var cached: [String: Cached] = [:]
     private var collecting = false
     private var followers: [CheckedContinuation<Void, Never>] = []
+    private let cacheFile: URL?
 
-    public init() {}
+    public init(cacheFile: URL? = nil) {
+        self.cacheFile = cacheFile
+        if let cacheFile, let data = try? Data(contentsOf: cacheFile),
+            let saved = try? JSONDecoder().decode([String: Cached].self, from: data)
+        {
+            cached = saved
+        }
+    }
 
     public func refresh(
         accounts: [ClaudeAccount], directory: URL = ClaudeAccountStorage.directory,
@@ -62,24 +76,30 @@ public actor ClaudeAccountLimitsCollector {
             guard scheduled.insert(key).inserted else { return false }
             return cached[key].map { $0.retryAt <= now } ?? true
         }
+        let previous = cached
         let read: @Sendable (ClaudeAccount) async -> (ClaudeAccount, ClaudeAccountLimits, Date) = {
             account in
             let limits: LimitsProviderSnapshot
             var retry = now.addingTimeInterval(60)
+            var refreshedAt = now
             do {
                 limits = try await fetch(account, directory)
             } catch {
                 if case ClaudeLimitsReader.Failure.rateLimited(let after) = error {
                     retry = now.addingTimeInterval(max(after ?? 1800, 60))
                 }
+                let last = previous[self.cacheKey(account)]?.snapshot
+                refreshedAt = last?.refreshedAt ?? now
                 limits = LimitsProviderSnapshot(
-                    provider: .claude, session: nil, week: nil,
+                    provider: .claude, session: last?.limits.session, week: last?.limits.week,
+                    fable: last?.limits.fable, grok: last?.limits.grok,
                     error: error.localizedDescription)
             }
             return (
                 account,
                 ClaudeAccountLimits(
-                    id: account.id, name: account.name, limits: limits, refreshedAt: now), retry
+                    id: account.id, name: account.name, limits: limits, refreshedAt: refreshedAt,
+                    retryAt: limits.error == nil ? nil : retry), retry
             )
         }
         await withTaskGroup(of: (ClaudeAccount, ClaudeAccountLimits, Date).self) { group in
@@ -97,15 +117,28 @@ public actor ClaudeAccountLimitsCollector {
                 }
             }
         }
+        persistCache()
         return accounts.compactMap { account in
             guard let saved = cached[cacheKey(account)] else { return nil }
             return ClaudeAccountLimits(
                 id: account.id, name: account.name, limits: saved.snapshot.limits,
-                refreshedAt: saved.snapshot.refreshedAt)
+                refreshedAt: saved.snapshot.refreshedAt, retryAt: saved.snapshot.retryAt)
         }
     }
 
-    private func cacheKey(_ account: ClaudeAccount) -> String {
+    private func persistCache() {
+        guard let cacheFile else { return }
+        do {
+            try FileManager.default.createDirectory(
+                at: cacheFile.deletingLastPathComponent(), withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700])
+            try JSONEncoder().encode(cached).write(to: cacheFile, options: .atomic)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o600], ofItemAtPath: cacheFile.path)
+        } catch {}
+    }
+
+    private nonisolated func cacheKey(_ account: ClaudeAccount) -> String {
         let value =
             account.authentication == .browserLogin
             ? account.id.uuidString + (account.loginData ?? "")
