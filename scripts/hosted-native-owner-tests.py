@@ -78,6 +78,10 @@ class BoundedOwnership(watchdog.OwnedProcesses):
 
         value = super().snapshot(pid, capture)
         if value is None:
+            if captured is not None and captured['clause'] == 'kernel_record_unavailable':
+                recovered = self.recover_snapshot(pid)
+                if recovered is not None:
+                    return recovered
             if self.sealed_zombie(pid):
                 return None
             try:
@@ -91,6 +95,28 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                 self.captured_snapshot_failures.append(captured)
             raise RuntimeError('Live owned process identity unavailable')
         return value
+
+    def recover_snapshot(self, pid):
+        identity = self.known.get(pid)
+        seal = self.seals.get(pid)
+        if identity is None or seal is None or identity[:3] + identity[4:5] != seal:
+            return None
+        snapshots = []
+        for _ in range(2):
+            info = watchdog.ProcessInfo()
+            result = self.library.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
+            if (type(result) is not int or result != ctypes.sizeof(info)
+                    or info.pid != pid or info.status not in (1, 2, 3, 4)
+                    or info.uid != self.uid or info.ruid != self.uid
+                    or info.seconds <= 0 or info.microseconds >= 1_000_000
+                    or (pid, info.seconds, info.microseconds, info.pgid) != seal):
+                return None
+            path = ctypes.create_string_buffer(4096)
+            if self.library.proc_pidpath(pid, path, len(path)) <= 0:
+                return None
+            snapshots.append((pid, info.seconds, info.microseconds, path.value.decode(),
+                              info.pgid, info.ppid))
+        return snapshots[1] if snapshots[0] == snapshots[1] else None
 
     def sealed_zombie(self, pid):
         identity = self.known.get(pid)
