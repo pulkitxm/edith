@@ -46,6 +46,7 @@ class ReleaseAggregateTests(unittest.TestCase):
         self.index = self.shipping / 'Contents/Resources/index.json'
         self.index.parent.mkdir(parents=True)
         self.index.write_text(json.dumps(index))
+        self.index.chmod(0o644)
         self.frozen['hostTreeInventory']['Contents/Resources/index.json'] = {
             'sha256': report.digest_file(self.index), 'mode': 0o644}
         self.assets = self.fixture.root / 'release-assets'
@@ -100,6 +101,13 @@ class ReleaseAggregateTests(unittest.TestCase):
         self.assertEqual(result['releaseAssetBytesByCategory']['originalNativeEvidenceArchives'], evidence['originalArchiveBytes'])
         self.assertEqual(result['releaseAssetBytesByCategory']['signedNativeEvidenceLinks'], evidence['signedLinkBytes'])
         self.assertEqual(result['artifactPublication'], 'not-verified')
+
+    def test_shipping_resource_permissions_must_match_frozen_inventory(self):
+        self.assertEqual(self.index.stat().st_mode & 0o777, 0o644)
+        self.aggregate()
+        self.index.chmod(0o600)
+        with self.assertRaisesRegex(ValueError, 'Shipping resources differ from frozen package host'):
+            self.aggregate()
 
     def test_all39_retained_links_include_distinct_current_evidence_in_aggregate_total(self):
         shutil.rmtree(self.evidence_assets)
