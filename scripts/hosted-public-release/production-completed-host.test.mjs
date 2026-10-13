@@ -2,7 +2,15 @@ import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  lstat,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -473,9 +481,15 @@ test("post-inspection asset replay cancellation file substitution and source con
       writeFile(join(directory, "appcast.xml"), "changed", { mode: 0o600 }),
     async ({ directory }) => {
       const path = join(directory, "appcast.xml"),
-        bytes = await readFile(path);
-      await rm(path);
-      await writeFile(path, bytes, { mode: 0o600 });
+        bytes = await readFile(path),
+        original = await lstat(path, { bigint: true }),
+        replacement = `${path}.replacement`;
+      await writeFile(replacement, bytes, { mode: 0o600, flag: "wx" });
+      assert.notEqual(
+        (await lstat(replacement, { bigint: true })).ino,
+        original.ino,
+      );
+      await rename(replacement, path);
     },
     async ({ directory }) =>
       writeFile(join(directory, "context.json"), "{}", { mode: 0o600 }),

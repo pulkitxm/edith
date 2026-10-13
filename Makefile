@@ -180,6 +180,10 @@ ci-codesign-requirements-local:
 	python3 -B scripts/test-codesign-requirement.py
 	bun test scripts/codesign-requirements.test.js
 
+.PHONY: ci-cohort-dispatch-local
+ci-cohort-dispatch-local:
+	bun test scripts/hosted-native-owner-routing.test.js scripts/hosted-native-compile-routing.test.js scripts/hosted-coordinated-release-routing.test.js scripts/hosted-public-release/production-completed-host.test.mjs
+
 host:
 	bun scripts/build-minimal-host.mjs
 
