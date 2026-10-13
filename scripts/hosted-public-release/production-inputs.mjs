@@ -188,6 +188,14 @@ export function matchingProductionCatalogRecord(records, immutable) {
   assert.deepEqual(selected, immutable);
   return selected;
 }
+export function verifiedProductionCatalog(bytes, publicKey) {
+  return closedJSON(
+    new TextDecoder("utf-8", { fatal: true }).decode(
+      verifiedCatalogPayload(bytes, publicKey),
+    ),
+    3 * 1024 ** 2,
+  );
+}
 async function privateDirectory(path) {
   await mkdir(path, { mode: 0o700 });
   const info = await lstat(path);
@@ -604,10 +612,7 @@ export async function prepareProductionInputs(text) {
       (await boundedProductionFile(path, 3 * 1024 ** 2)).bytes,
       pointer,
     );
-    const value = closedJSON(
-      verifiedCatalogPayload(bytes, publicKey),
-      3 * 1024 ** 2,
-    );
+    const value = verifiedProductionCatalog(bytes, publicKey);
     const selected = matchingProductionCatalogRecord(
       value.packages,
       packages[generation].catalogRecord,
