@@ -47,14 +47,14 @@ def bounded_owned_bytes(path, maximum):
 def signing(path, expected_team, requirement=None):
     arguments = ['codesign', '--verify', '--deep', '--strict', '--verbose=2']
     if requirement is not None:
-        arguments.extend(['-R', requirement])
+        arguments.append('-R=' + requirement)
     command(arguments + [str(path)])
     result = subprocess.run(['codesign', '-d', '--verbose=4', str(path)], check=True, capture_output=True, text=True, timeout=60)
     text = result.stderr
     teams = re.findall(r'^TeamIdentifier=([A-Z0-9]{10})$', text, re.M)
     hashes = re.findall(r'^CDHash=([a-f0-9]{40})$', text, re.M)
     COHORT.require(teams == [expected_team] and len(hashes) == 1, 'Signed code ownership differs')
-    code_requirement = subprocess.run(['codesign', '-d', '-r-', str(path)], check=True, capture_output=True, text=True, timeout=60).stderr
+    code_requirement = subprocess.run(['codesign', '-d', '-r-', str(path)], check=True, capture_output=True, text=True, timeout=60).stdout
     requirements = re.findall(r'^designated => (.+)$', code_requirement, re.M)
     COHORT.require(len(requirements) == 1 and len(requirements[0]) <= 4096, 'Missing designated code requirement')
     return {'codeHash': hashes[0], 'requirement': requirements[0]}

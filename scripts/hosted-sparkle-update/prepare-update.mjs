@@ -122,7 +122,7 @@ export async function inventorySparkleApp(
     stdio: "pipe",
     timeout: 10000,
   });
-  execute("codesign", ["--verify", "--strict", "-R", requirement, app], {
+  execute("codesign", ["--verify", "--strict", `-R=${requirement}`, app], {
     stdio: "pipe",
     timeout: 10000,
   });
