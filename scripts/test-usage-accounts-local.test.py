@@ -110,14 +110,17 @@ class UsageAccountLocalRouteTests(unittest.TestCase):
     def test_closed_fixture_environment_cannot_inherit_hosted_flags_credentials_or_actual_home(self):
         inherited = {"PATH": "/usr/bin:/bin", "DEVELOPER_DIR": "/Applications/Xcode.app/Contents/Developer",
                      "HOME": "/synthetic/foreign", "GITHUB_ACTIONS": "synthetic", "RUNNER_ENVIRONMENT": "synthetic",
-                     "ANTHROPIC_API_KEY": "synthetic", "EDITH_EXTENSION_STATE_ROOT": "/synthetic/foreign"}
+                     "ANTHROPIC_API_KEY": "synthetic", "EDITH_EXTENSION_STATE_ROOT": "/synthetic/foreign",
+                     "XDG_DATA_HOME": "/synthetic/foreign", "XDG_STATE_HOME": "/synthetic/foreign",
+                     "XDG_RUNTIME_DIR": "/synthetic/foreign"}
         with patch.dict(os.environ, inherited, clear=True):
             environment = HELPER.environment(self.fixture)
         for forbidden in ["GITHUB_ACTIONS", "RUNNER_ENVIRONMENT", "ANTHROPIC_API_KEY"]:
             self.assertNotIn(forbidden, environment)
         self.assertEqual(environment["HOME"], str(self.fixture))
         self.assertEqual(environment["EDITH_TEST_NATIVE_CAPTURE"], "0")
-        for key in ["HOME", "TMPDIR", "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "EDITH_EXTENSION_STATE_ROOT"]:
+        for key in ["HOME", "CFFIXED_USER_HOME", "TMPDIR", "XDG_CACHE_HOME", "XDG_CONFIG_HOME",
+                    "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "EDITH_EXTENSION_STATE_ROOT"]:
             self.assertTrue(Path(environment[key]).is_relative_to(self.fixture))
 
     def test_zero_wrong_suite_duplicate_summary_and_native_failure_never_pass(self):

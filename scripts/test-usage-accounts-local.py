@@ -54,10 +54,14 @@ def source_inventory(root):
 def environment(fixture):
     result = RUNTIME.environment(fixture)
     RUNTIME.private_directory(fixture / "Data/usage")
+    for name in ["xdg-data", "xdg-state", "xdg-runtime"]:
+        RUNTIME.private_directory(fixture / name)
     result.update({
         "EDITH_TEST_NATIVE_CAPTURE": "0", "EDITH_EXTENSION_FIXTURE_HOME": str(fixture),
         "EDITH_EXTENSION_DATA_ROOT": str(fixture / "Data/usage"), "EDITH_EXTENSION_ID": "usage",
         "EDITH_SHARED_DEFAULTS_SUITE": "edith.usage.accounts." + fixture.name,
+        "XDG_DATA_HOME": str(fixture / "xdg-data"), "XDG_STATE_HOME": str(fixture / "xdg-state"),
+        "XDG_RUNTIME_DIR": str(fixture / "xdg-runtime"),
     })
     return result
 
