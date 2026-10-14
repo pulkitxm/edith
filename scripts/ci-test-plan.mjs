@@ -118,15 +118,13 @@ export function planSwiftTests(
     include.push({ lane: "native-music", targets: "ci-music-native" });
   }
   if (shipping) shippingDefinitions(extensions);
-  const owners = extensions.map(
-    (definition) => ({
-      ...definition,
-      inputs: definition.inputs ?? [`Extensions/${definition.id}`],
-      sharedInputs: definition.sharedInputs ?? [],
-      dependencies: definition.dependencies ?? [],
-      sameExecutableWorker: false,
-    }),
-  );
+  const owners = extensions.map((definition) => ({
+    ...definition,
+    inputs: definition.inputs ?? [`Extensions/${definition.id}`],
+    sharedInputs: definition.sharedInputs ?? [],
+    dependencies: definition.dependencies ?? [],
+    sameExecutableWorker: false,
+  }));
   const supportPackageChanged = paths.some((path) =>
     /^Packages\/ExtensionSupport\/Package\.(swift|resolved)$/.test(path),
   );
