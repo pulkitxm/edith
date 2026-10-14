@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 
@@ -25,9 +26,8 @@ import Testing
     }
 
     @Test func libraryRejectsLinkedSessionsAndExternalMetadata() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let outside = FileManager.default.temporaryDirectory.appendingPathComponent(
-            UUID().uuidString)
+        let root = try timeLapseFixtureRoot()
+        let outside = try timeLapseFixtureRoot()
         defer {
             try? FileManager.default.removeItem(at: root);
             try? FileManager.default.removeItem(at: outside)
@@ -165,4 +165,19 @@ import Testing
         ]
         #expect(throws: TimeLapseError.self) { try session.validate() }
     }
+}
+
+private func timeLapseFixtureRoot() throws -> URL {
+    let temporary = try #require(ProcessInfo.processInfo.environment["TMPDIR"])
+    let physical = try #require(realpath(temporary, nil))
+    defer { free(physical) }
+    var attributes = stat()
+    try #require(
+        lstat(physical, &attributes) == 0 && attributes.st_uid == getuid()
+            && attributes.st_mode & S_IFMT == S_IFDIR && attributes.st_mode & 0o777 == 0o700)
+    let root = URL(fileURLWithPath: String(cString: physical), isDirectory: true)
+        .appendingPathComponent("time-lapse-model-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(
+        at: root, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+    return root
 }
