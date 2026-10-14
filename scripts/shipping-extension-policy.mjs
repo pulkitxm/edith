@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 
+export const deferredExtensionIDs = Object.freeze(["lidAwake", "machines"]);
+
 let manifestIDs;
 
 export function shippingExtensionIDs() {
@@ -9,7 +11,9 @@ export function shippingExtensionIDs() {
         new URL("../Extensions/manifest.json", import.meta.url),
         "utf8",
       ),
-    ).map(({ id }) => id),
+    )
+      .map(({ id }) => id)
+      .filter((id) => !deferredExtensionIDs.includes(id)),
   );
   return manifestIDs;
 }
@@ -41,7 +45,12 @@ export function shippingDefinitions(definitions) {
       throw new Error(`Unreleased shipping extension dependency: ${id}`);
     return entry;
   });
-  if (selected.length !== definitions.length)
+  if (
+    definitions.some(
+      (entry) =>
+        !ids.includes(entry.id) && !deferredExtensionIDs.includes(entry.id),
+    )
+  )
     throw new Error("Extension is outside the shipping release scope");
   assertShippingExtensions(selected);
   return selected;

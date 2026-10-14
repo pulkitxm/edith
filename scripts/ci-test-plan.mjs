@@ -117,7 +117,8 @@ export function planSwiftTests(
   if (matches(/^Extensions\/music\/Native\//)) {
     include.push({ lane: "native-music", targets: "ci-music-native" });
   }
-  const owners = (shipping ? shippingDefinitions(extensions) : extensions).map(
+  if (shipping) shippingDefinitions(extensions);
+  const owners = extensions.map(
     (definition) => ({
       ...definition,
       inputs: definition.inputs ?? [`Extensions/${definition.id}`],

@@ -9,6 +9,7 @@ import {
 } from "./hosted-public-release/evidence.mjs";
 import {
   assertShippingExtensions,
+  deferredExtensionIDs,
   shippingDefinitions,
   shippingExtensionIDs,
 } from "./shipping-extension-policy.mjs";
@@ -28,13 +29,15 @@ test("the release selects every manifest extension without modifying the manifes
   assert.equal(definitions.length, 39);
   assert.deepEqual(
     selected.map((entry) => entry.id),
-    definitions.map((entry) => entry.id),
+    definitions
+      .map((entry) => entry.id)
+      .filter((id) => !deferredExtensionIDs.includes(id)),
   );
   assert.deepEqual(
     shippingExtensionIDs(),
     selected.map((entry) => entry.id),
   );
-  assert(selected.every((entry, index) => entry === definitions[index]));
+  assert(selected.every((entry) => definitions.includes(entry)));
   for (const entry of selected)
     assert(
       entry.dependencies.every((id) => shippingExtensionIDs().includes(id)),
