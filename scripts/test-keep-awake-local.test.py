@@ -181,6 +181,41 @@ class KeepAwakeLocalContracts(unittest.TestCase):
                 self.assertEqual(validations, ['swift-test', 'swift-test'])
 
 
+class KeepParameterizedResultContracts(unittest.TestCase):
+    def output(self):
+        methods = model.test_methods(model.ROOT)
+        rows = [f'Test {name}() passed after 0.001 seconds.'
+                for name in sorted(methods - {model.HOSTED_METHOD})]
+        output = ('\n'.join(rows) + '\n' + f'Test {model.HOSTED_METHOD}() skipped.\n'
+                  + 'Test run with 47 tests in 9 suites passed.').encode()
+        for count, name, argument in [
+                (2, 'editReturningToBaselineDuringHeldWriteStillReachesEngine', 'initial'),
+                (9, 'unsignedLegacyIntentFailsBeforeDefaultsAndStore', 'mode')]:
+            output = output.replace(f'Test {name}() passed'.encode(),
+                                    f'Test {name}({argument}:) with {count} test cases passed'.encode())
+        return output, methods
+
+    def test_parameterized_aggregates_count_the_original_named_methods(self):
+        output, methods = self.output()
+        self.assertEqual(model.result(output, methods),
+                         {'executedMethods': 46, 'skippedMethods': [model.HOSTED_METHOD], 'passed': True})
+
+    def test_invalid_parameterized_aggregate_counts_never_complete_the_inventory(self):
+        output, methods = self.output()
+        for count in ['0', '-1', '01', '1.5', '1e2', 'true', '']:
+            with self.subTest(count=count):
+                changed = output.replace(b'with 2 test cases passed',
+                                         f'with {count} test cases passed'.encode())
+                self.assertFalse(model.result(changed, methods)['passed'])
+
+    def test_duplicate_and_unexpected_parameterized_aggregates_reject(self):
+        output, methods = self.output()
+        row = b'Test unsignedLegacyIntentFailsBeforeDefaultsAndStore(mode:) with 9 test cases passed.'
+        for extra in [row, row.replace(b'unsignedLegacyIntentFailsBeforeDefaultsAndStore', b'unknownMethod')]:
+            with self.subTest(extra=extra):
+                self.assertFalse(model.result(output + b'\n' + extra, methods)['passed'])
+
+
 class KeepPackageCarrierContracts(unittest.TestCase):
     def test_original_argv_uses_the_shared_carrier_and_cannot_mint_authority_from_a_plain_driver(self):
         class Driver:

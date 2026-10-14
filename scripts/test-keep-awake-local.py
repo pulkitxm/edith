@@ -63,11 +63,13 @@ def test_methods(root):
 
 
 def result(output, methods):
-    passed = set(value.decode() for value in re.findall(rb'\bTest (\w+)\([^\r\n]*\) passed', output))
+    passed_rows = re.findall(rb'\bTest (\w+)\([^\r\n]*\)(?: with [1-9][0-9]* test cases)? passed', output)
+    passed = {value.decode() for value in passed_rows}
     skipped = set(value.decode() for value in re.findall(rb'\bTest (\w+)\([^\r\n]*\) skipped', output))
     summaries = re.findall(rb'Test run with (\d+) tests[^\r\n]*passed', output)
     return {'executedMethods': len(passed), 'skippedMethods': sorted(skipped),
-            'passed': passed == methods - {HOSTED_METHOD} and skipped == {HOSTED_METHOD}
+            'passed': len(passed_rows) == len(passed) and passed == methods - {HOSTED_METHOD}
+            and skipped == {HOSTED_METHOD}
             and len(summaries) == 1 and int(summaries[0]) in {EXECUTED_COUNT, METHOD_COUNT}}
 
 
