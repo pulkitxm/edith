@@ -64,7 +64,7 @@ enum UsageNativeAssembly {
 
     static func document(
         events: [UsageNativeEvent], archive: UsageNativeArchive, now: Date,
-        timezone: TimeZone, cloudSources: [String]
+        timezone: TimeZone, cloudSources: [String], accounts: UsageNativeAccounts = .init()
     ) throws -> [String: Any] {
         var calendar = Calendar(identifier: .gregorian); calendar.timeZone = timezone
         let formatter = DateFormatter(); formatter.calendar = calendar;
@@ -72,8 +72,9 @@ enum UsageNativeAssembly {
         formatter.locale = Locale(identifier: "en_US_POSIX"); formatter.dateFormat = "yyyy-MM-dd"
         var projects: [String: UsageNativeProject] = [:]
         var values: [UsageNativeCostedEvent] = []
-        for event in deduplicate(events) {
+        for var event in deduplicate(events) {
             try Task.checkCancellation()
+            event.source = accounts.source(of: event)
             guard event.timestamp.timeIntervalSince1970.isFinite, event.tokens.total.isFinite else {
                 throw UsageNativeFailure.invalidInput("usage receipt")
             }
@@ -139,7 +140,16 @@ enum UsageNativeAssembly {
         return [
             "schemaVersion": 8, "generatedAt": stamp, "sources": sources, "defaultSources": sources,
             "sourceMeta": Dictionary(
-                uniqueKeysWithValues: sources.map { ($0, ["label": labels[$0] ?? $0, "tool": $0]) }),
+                uniqueKeysWithValues: sources.map { source in
+                    let account = accounts.label(source)
+                    return (
+                        source,
+                        [
+                            "label": labels[source] ?? account ?? source,
+                            "tool": account == nil ? source : "cli",
+                        ]
+                    )
+                }),
             "totals": totals, "daily": daily, "sessions": sessions,
             "cloudSourcesCollected": cloudSources.sorted(),
             "historyRetention": try archive.reconcile(daily),
