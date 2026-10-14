@@ -41,22 +41,24 @@ final class ExtensionRuntime: NSObject {
 
     #endif
     #if !EDITH_FUNCTIONAL_FIXTURE
-    private let validateOrdinaryContext: (NSDictionary) throws -> Void
+    private let admitOrdinaryContext: (NSDictionary) throws -> WorkerFixtureAdmission?
 
-    override convenience init() { self.init(validateOrdinaryContext: Self.validateOrdinaryContext) }
+    override convenience init() { self.init(admitOrdinaryContext: Self.admitOrdinaryContext) }
 
-    init(validateOrdinaryContext: @escaping (NSDictionary) throws -> Void) {
-        self.validateOrdinaryContext = validateOrdinaryContext
+    init(admitOrdinaryContext: @escaping (NSDictionary) throws -> WorkerFixtureAdmission?) {
+        self.admitOrdinaryContext = admitOrdinaryContext
         super.init()
     }
 
-    private static func validateOrdinaryContext(_ context: NSDictionary) throws {
+    private static func admitOrdinaryContext(_ context: NSDictionary) throws
+        -> WorkerFixtureAdmission?
+    {
         guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
-            context["hostedFunctionalFixture"] == nil,
-            try WorkerFixtureAdmission.current(
-                extensionID: "plugins", context: context,
-                roleBundle: Bundle(for: ExtensionRuntime.self)) == nil
+            context["hostedFunctionalFixture"] == nil
         else { throw WorkerFixtureError.invalid }
+        return try WorkerFixtureAdmission.current(
+            extensionID: "plugins", context: context,
+            roleBundle: Bundle(for: ExtensionRuntime.self))
     }
     #endif
     private var fixtureActive = false
@@ -277,7 +279,7 @@ final class ExtensionRuntime: NSObject {
                 try admission?.requireCurrent()
             } catch { return ["ok": false] as NSDictionary }
             #else
-            do { try validateOrdinaryContext(input) } catch {
+            do { _ = try admitOrdinaryContext(input) } catch {
                 fixtureRejected = true; return ["ok": false] as NSDictionary
             }
             #endif
@@ -371,12 +373,22 @@ final class ExtensionRuntime: NSObject {
                     }
                 }
                 #else
-                try validateOrdinaryContext(input)
+                let admission = try admitOrdinaryContext(input)
                 guard suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
                 else { return ["ok": false] as NSDictionary }
                 if model == nil {
-                    guard DocumentRenderer.isAvailable else { return ["ok": false] as NSDictionary }
-                    model = SkillsModel()
+                    if let admission {
+                        guard let defaults = UserDefaults(suiteName: suite) else {
+                            throw WorkerFixtureError.invalid
+                        }
+                        model = PluginsFixtureTools.makeAdmittedModel(
+                            defaults: defaults, dataDirectory: admission.dataDirectory, agents: [])
+                    } else {
+                        guard DocumentRenderer.isAvailable else {
+                            return ["ok": false] as NSDictionary
+                        }
+                        model = SkillsModel()
+                    }
                 }
                 #endif
             } catch {
