@@ -156,6 +156,22 @@ private actor LinkedLoginAuthority {
         #expect(input.contains(ClaudeLimitsLogin.service(first)))
         #expect(!input.contains("synthetic-access"))
         #expect(input.contains(data.map { String(format: "%02x", $0) }.joined()))
+        let literalProbe = LimitsLoginProbe()
+        try await ClaudeLimitsLogin.saveNative(
+            data, folder: first, username: "synthetic user'$(printf value); *",
+            run: { request, _ in
+                await literalProbe.request(request)
+                return .init(terminationStatus: 0, output: "")
+            })
+        let literalRequests = await literalProbe.requests
+        let literalRequest = try #require(literalRequests.first)
+        let literalData = try #require(literalRequest.standardInputData)
+        let literalInput = String(decoding: literalData, as: UTF8.self)
+        #expect(literalRequest.arguments == ["-i"])
+        #expect(
+            literalInput.hasPrefix(
+                #"add-generic-password -U -a 'synthetic user'\''$(printf value); *' -s '"#))
+        #expect(!literalInput.contains("synthetic-access"))
     }
 
     @Test func nativeOnlyLoginWinsOverPrivateFileWithoutChangingLaunchCredential() async throws {

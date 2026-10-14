@@ -156,8 +156,8 @@ enum ClaudeLimitsLogin {
         guard data.count <= 65_536 else { throw ClaudeAccountError.invalidRequest }
         let hex = data.map { String(format: "%02x", $0) }.joined()
         let input =
-            "add-generic-password -U -a " + ShellQuote.quote(username)
-            + " -s " + ShellQuote.quote(service(folder)) + " -X " + ShellQuote.quote(hex) + "\n"
+            "add-generic-password -U -a " + quote(username)
+            + " -s " + quote(service(folder)) + " -X " + quote(hex) + "\n"
         let request = CLICommandRequest(
             executableURL: URL(fileURLWithPath: "/usr/bin/security"), arguments: ["-i"],
             environment: [:], timeout: 3, maximumOutputBytes: 1024,
@@ -167,6 +167,10 @@ enum ClaudeLimitsLogin {
         guard result.terminationStatus == 0 else {
             throw ClaudeAccountError.rejected("Could not save the renewed limits login.")
         }
+    }
+
+    private static func quote(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     private final class RedirectPolicy: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
