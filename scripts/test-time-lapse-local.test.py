@@ -171,6 +171,15 @@ class TimeLapseLocalRouteTests(unittest.TestCase):
             self.assertNotEqual(HELPER.test_result(0, bad)[0], 0)
         self.assertEqual(HELPER.test_result(2, output)[0], 2)
 
+    def test_failed_native_log_reports_execution_without_qualification(self):
+        output = self.output().replace(
+            b"Test libraryRejectsLinkedSessionsAndExternalMetadata() passed",
+            b"Test libraryRejectsLinkedSessionsAndExternalMetadata() failed")
+        output = output.replace(b"Suite TimeLapseTests passed", b"Suite TimeLapseTests failed")
+        output = output.replace(b"15 tests in 2 suites passed", b"15 tests in 2 suites failed")
+        self.assertEqual(HELPER.test_result(1, output), (1, 14, 20, True))
+        self.assertEqual(HELPER.test_result(1, b"Build failed.\n"), (1, 0, 0, False))
+
     def synthetic_run(self, cleanup=None, native_status=0, after_join=None):
         driver = SyntheticDriver()
         calls = []

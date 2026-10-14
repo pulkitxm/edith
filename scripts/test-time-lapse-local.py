@@ -110,7 +110,8 @@ def test_result(exit_status, output):
              and len(cases) == sum(PARAMETER_COUNTS.values())
              and all(cases.count(name.encode()) == count for name, count in PARAMETER_COUNTS.items()))
     status = exit_status if exit_status >= 0 else 1
-    return (status if status or valid else 1), len(passed), expanded, valid
+    executed = bool(passed) or re.search(rb"\bTest \w+\([^\r\n]*\) started", output) is not None
+    return (status if status or valid else 1), len(passed), expanded, executed
 
 
 def remove_previous_receipt(path):
