@@ -73,9 +73,9 @@ private actor LinkedLoginAuthority {
             #expect(request.url?.absoluteString == "https://platform.claude.com/v1/oauth/token")
             #expect(request.httpMethod == "POST")
             #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+            let bodyData = try #require(request.httpBody)
             let body = try #require(
-                JSONSerialization.jsonObject(with: try #require(request.httpBody))
-                    as? [String: String])
+                JSONSerialization.jsonObject(with: bodyData) as? [String: String])
             #expect(body["refresh_token"] == "synthetic-refresh")
             #expect(body["grant_type"] == "refresh_token")
             #expect(body["scope"] == "user:profile")
