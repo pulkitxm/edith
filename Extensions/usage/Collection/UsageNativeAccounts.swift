@@ -1,12 +1,12 @@
 import EdithExtensionAccounts
 import Foundation
 
-public struct UsageNativeAccounts: Sendable {
+struct UsageNativeAccounts: Sendable {
     var sessions: [String: UUID]
     var names: [UUID: String]
     var defaultID: UUID?
 
-    public init() { self.init(sessions: [:], names: [:]) }
+    init() { self.init(sessions: [:], names: [:]) }
 
     init(sessions: [String: UUID], names: [UUID: String], defaultID: UUID? = nil) {
         self.sessions = sessions
@@ -14,7 +14,7 @@ public struct UsageNativeAccounts: Sendable {
         self.defaultID = defaultID
     }
 
-    public static func load(
+    static func load(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) async -> Self {
         guard let directory = try? ClaudeAccountStorage.directory(environment: environment) else {

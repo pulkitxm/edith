@@ -4,12 +4,12 @@ import Foundation
 public enum UsageNativeCollector {
     public static func collect(
         home: URL, dataDirectory: URL, environment: [String: String],
-        accounts: UsageNativeAccounts = .init(), now: Date = Date(),
-        onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void
+        now: Date = Date(), onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void
     ) async throws -> Data {
         try await collect(
             home: home, dataDirectory: dataDirectory, environment: environment, now: now,
-            network: UsageNativeNetwork(), accounts: accounts, onEvent: onEvent)
+            network: UsageNativeNetwork(), accounts: await UsageNativeAccounts.load(),
+            onEvent: onEvent)
     }
 
     public static func collectRemote(
