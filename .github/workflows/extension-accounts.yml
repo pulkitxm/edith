@@ -10,6 +10,8 @@ name: Extension accounts
       - scripts/account-focused-targets.test.py
       - scripts/test-account-sdk-local.py
       - scripts/test-account-sdk-local.test.py
+      - scripts/test-usage-accounts-local.py
+      - scripts/test-usage-accounts-local.test.py
       - Makefile
       - .github/workflows/extension-accounts.yml
 permissions:
@@ -56,6 +58,11 @@ jobs:
       - name: Verify local SDK isolation contracts
         if: "matrix.target == 'ci-extension-accounts'"
         run: python3 -B scripts/test-account-sdk-local.test.py
+      - name: Verify local Usage route contracts
+        if: "matrix.target == 'ci-extension-usage-accounts'"
+        env:
+          TMPDIR: "${{ runner.temp }}"
+        run: make ci-extension-usage-account-contracts
       - name: Run account contracts with synthetic data
         env:
           ACCOUNT_TEST_TARGET: "${{ matrix.target }}"

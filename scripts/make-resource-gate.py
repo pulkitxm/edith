@@ -71,6 +71,7 @@ EXACT = {
     "ci-functional-filesystem-local": "swift-test",
     "ci-extension-herdr-accounts": "swift-test",
     "ci-extension-usage-accounts": "swift-test",
+    "ci-extension-usage-accounts-local": "swift-test",
     "ci-security": "scan",
     "ci-gitleaks": "scan",
     "ci-cargo-audit": "scan",
