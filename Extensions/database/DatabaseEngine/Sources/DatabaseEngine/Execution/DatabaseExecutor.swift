@@ -1022,7 +1022,6 @@ public actor DatabaseExecutor {
     }
 
     func disconnectAll() async {
-        await cancelAndWait()
         guard !isShuttingDown else { return }
         isShuttingDown = true
         let operationIDs = Array(activeOperations.keys)
