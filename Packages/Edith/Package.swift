@@ -45,6 +45,19 @@ let shippedSwiftSettings: [SwiftSetting] = [
     .unsafeFlags(["-Xfrontend", "-disable-reflection-metadata"]),
 ]
 
+#if os(macOS)
+let ghosttyBinaryTargets: [Target] = [
+    .binaryTarget(
+        name: "GhosttyKit",
+        path: "vendor/GhosttyKit.xcframework"
+    )
+]
+let ghosttyDependencies: [Target.Dependency] = ["EdithCore", "GhosttyKit"]
+#else
+let ghosttyBinaryTargets: [Target] = []
+let ghosttyDependencies: [Target.Dependency] = ["EdithCore"]
+#endif
+
 let targets: [Target] = [
     .target(
         name: "EdithCore",
@@ -221,13 +234,9 @@ let targets: [Target] = [
             ])
         ]
     ),
-    .binaryTarget(
-        name: "GhosttyKit",
-        path: "vendor/GhosttyKit.xcframework"
-    ),
     .target(
         name: "GhosttyTerminal",
-        dependencies: ["EdithCore", "GhosttyKit"],
+        dependencies: ghosttyDependencies,
         resources: [
             .copy("Resources/Fonts"),
             .copy("../../vendor/GhosttyResources"),
@@ -291,5 +300,5 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: products,
     dependencies: dependencies,
-    targets: targets
+    targets: targets + ghosttyBinaryTargets
 )
