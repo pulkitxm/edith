@@ -623,9 +623,10 @@ import WorkerFixtureSupport
 
     func requestWorkCancellation() {
         workSuspended = true
+        store.cancelPendingWork()
+        store.claudeAccounts.limitsLoginOwner.stop()
         terminalSessions.stopAll()
         for selection in shells.values { selection.holder.stopRendering() }
-        store.cancelPendingWork()
         maintenance?.cancel()
         cliStreams?.stop()
         agentCLIStreams?.stop()
@@ -646,6 +647,7 @@ import WorkerFixtureSupport
         hostFolderChoice?.invalidate()
         ambientPolicy.stop()
         await discoveryAdmission.stopAndWait()
+        await store.claudeAccounts.limitsLoginOwner.joinPendingWork()
         await terminalSessions.stopAllAndWait()
         maintenance?.cancel()
         await maintenance?.value
@@ -661,6 +663,7 @@ import WorkerFixtureSupport
     func shutdown() async {
         guard !isStopped else { return }
         isStopped = true
+        await store.claudeAccounts.limitsLoginOwner.stopAndWait()
         ambientPolicy.stop()
         await discoveryAdmission.stopAndWait()
         if HerdrLive.admission === discoveryAdmission { HerdrLive.admission = nil }

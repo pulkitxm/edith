@@ -725,6 +725,8 @@ final class HerdrStore {
 
     func drain() async {
         cancelPendingWork()
+        await claudeAccounts.limitsLoginOwner.joinPendingWork()
+        await claudeAccounts.subscriptionLogin.stopAndWait()
         let holders = terminalHolders
         let polling = Array(uiRetirements.values)
         let requests = Array(uiRequests.values)

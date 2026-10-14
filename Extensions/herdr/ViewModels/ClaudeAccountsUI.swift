@@ -43,10 +43,35 @@ struct ClaudeSharedLaunchMutation: Codable {
             guard object.isEmpty else { throw ExtensionPeerError.invalidRequest }
             return try JSONEncoder().encode(current)
         }
+        if command == "herdr.ui.accounts.limitsStatus"
+            || command == "herdr.ui.accounts.limitsCancel"
+        {
+            guard payload.count <= 256, Set(object.keys) == ["id", "ticket"],
+                let raw = object["id"] as? String, let id = UUID(uuidString: raw),
+                let token = object["ticket"] as? String, let ticket = UUID(uuidString: token)
+            else { throw ExtensionPeerError.invalidRequest }
+            let state =
+                command == "herdr.ui.accounts.limitsCancel"
+                ? try model.limitsLoginOwner.requestCancellation(accountID: id, ticket: ticket)
+                : try model.limitsLoginOwner.status(accountID: id, ticket: ticket)
+            return try JSONEncoder().encode(state)
+        }
         if command == "herdr.ui.accounts.select" {
             guard payload.count <= 128, Set(object.keys) == ["id"],
                 let raw = object["id"] as? String, UUID(uuidString: raw) != nil
             else { throw ExtensionPeerError.invalidRequest }
+        }
+        if command == "herdr.ui.accounts.limitsStart" {
+            guard !model.saving else {
+                throw ExtensionPeerError.rejected("An account change is already in progress.")
+            }
+            guard payload.count <= 256, Set(object.keys) == ["id", "ticket"],
+                let raw = object["id"] as? String, let id = UUID(uuidString: raw),
+                let token = object["ticket"] as? String, let ticket = UUID(uuidString: token)
+            else { throw ExtensionPeerError.invalidRequest }
+            return try JSONEncoder().encode(
+                await model.startCanonicalLimitsLogin(
+                    id, ticket: ticket, defaults: worker.store.uiDefaults))
         }
         guard !model.saving else {
             throw ExtensionPeerError.rejected("An account change is already in progress.")

@@ -12,9 +12,12 @@ import Observation
     private let suppliedDirectory: URL?
     let client: HerdrUIClient?
     private var storage: ClaudeAccountStorage?
+    let limitsLoginOwner: HerdrLimitsLogin
+    let subscriptionLogin = HerdrLimitsLoginPresentation()
     private var requests: [UUID: Task<Data, Error>] = [:]
     private var stopped = false
     private let eraseSecret: @Sendable (URL) throws -> Void
+    private let readState: @Sendable (ClaudeAccountStorage) async throws -> ClaudeAccountsState
     private let invalidateUsage: @Sendable () async -> Void
     private let refreshUsage: @Sendable () async -> Void
 
@@ -34,6 +37,11 @@ import Observation
 
     init(
         directory: URL? = nil, client: HerdrUIClient? = nil,
+        limitsLogin: HerdrLimitsLogin? = nil,
+        readState: @escaping @Sendable (ClaudeAccountStorage) async throws -> ClaudeAccountsState =
+            {
+                try await $0.load()
+            },
         eraseSecret: @escaping @Sendable (URL) throws -> Void = ClaudeAccountImport
             .eraseScopedSecret,
         invalidateUsage: @escaping @Sendable () async -> Void = ClaudeAccountsModel
@@ -43,6 +51,8 @@ import Observation
     ) {
         suppliedDirectory = directory
         self.client = client
+        limitsLoginOwner = limitsLogin ?? HerdrLimitsLogin()
+        self.readState = readState
         self.eraseSecret = eraseSecret
         self.invalidateUsage = invalidateUsage
         self.refreshUsage = refreshUsage
@@ -70,7 +80,7 @@ import Observation
         if client != nil {
             next = try await perform("herdr.ui.accounts.read")
         } else {
-            next = try await ownedStorage().load()
+            next = try await readState(ownedStorage())
         }
         try Task.checkCancellation()
         guard !stopped else { throw ExtensionPeerError.unavailable }
@@ -154,6 +164,7 @@ import Observation
                     "herdr.ui.accounts.forget",
                     payload: JSONSerialization.data(withJSONObject: ["id": id.uuidString]))
             } else {
+                await limitsLoginOwner.cancel(accountID: id)
                 let previous = account(id)
                 state = try await ownedStorage().logout(
                     id: id, eraseScopedSecret: eraseSecret)
@@ -187,6 +198,7 @@ import Observation
                     "herdr.ui.accounts.logout",
                     payload: JSONSerialization.data(withJSONObject: ["id": id.uuidString]))
             } else {
+                await limitsLoginOwner.cancel(accountID: id)
                 let previous = account(id)
                 state = try await ownedStorage().logout(
                     id: id, eraseScopedSecret: eraseSecret)
@@ -291,6 +303,110 @@ import Observation
         return next
     }
 
+    func startCanonicalLimitsLogin(_ id: UUID, ticket: UUID, defaults: UserDefaults) async throws
+        -> HerdrLimitsLoginState
+    {
+        guard client == nil, !stopped, !saving else { throw ExtensionPeerError.invalidRequest }
+        return try await limitsLoginOwner.beginPreparing(
+            accountID: id, ticket: ticket,
+            prepare: { [self] in
+                try await load()
+                try Task.checkCancellation()
+                guard !saving else {
+                    throw ExtensionPeerError.rejected("An account change is already in progress.")
+                }
+                guard ready, !stopped, let account = account(id) else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                var environment = CLIToolEnvironment.sanitized()
+                if let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
+                {
+                    environment["HOME"] = fixture
+                    environment["ZDOTDIR"] = fixture
+                }
+                return .init(
+                    account: account, storage: try ownedStorage(),
+                    command: HerdrLaunchSettings.command(for: "Claude Code", in: defaults),
+                    sharedEnvironment: HerdrLaunchSettings.sharedEnvironment(in: defaults),
+                    inheritedEnvironment: environment)
+            },
+            didConnect: { [weak self] in
+                guard let self, !self.stopped else { return }
+                try? await self.load()
+                await self.notifyChanged()
+            })
+    }
+
+    func startLimitsLogin(_ id: UUID, ticket: UUID, defaults: UserDefaults) async throws
+        -> HerdrLimitsLoginState
+    {
+        guard ready, !stopped, !saving, let account = account(id) else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        saving = true
+        defer { saving = false }
+        if client != nil {
+            return try limitsLoginReply(
+                await performData(
+                    "herdr.ui.accounts.limitsStart",
+                    payload: JSONSerialization.data(withJSONObject: [
+                        "id": id.uuidString, "ticket": ticket.uuidString,
+                    ])), accountID: id, ticket: ticket)
+        }
+        var environment = CLIToolEnvironment.sanitized()
+        if let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] {
+            environment["HOME"] = fixture
+            environment["ZDOTDIR"] = fixture
+        }
+        return try limitsLoginOwner.begin(
+            account: account, ticket: ticket, storage: ownedStorage(),
+            command: HerdrLaunchSettings.command(for: "Claude Code", in: defaults),
+            sharedEnvironment: HerdrLaunchSettings.sharedEnvironment(in: defaults),
+            inheritedEnvironment: environment,
+            didConnect: { [weak self] in
+                guard let self, !self.stopped else { return }
+                try? await self.load()
+                await self.notifyChanged()
+            })
+    }
+
+    func limitsLoginStatus(_ state: HerdrLimitsLoginState) async throws -> HerdrLimitsLoginState {
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        if client != nil { return try await performLimitsLogin("limitsStatus", state: state) }
+        return try limitsLoginOwner.status(accountID: state.accountID, ticket: state.ticket)
+    }
+
+    func cancelLimitsLogin(_ state: HerdrLimitsLoginState) async throws -> HerdrLimitsLoginState {
+        if client != nil { return try await performLimitsLogin("limitsCancel", state: state) }
+        return try await limitsLoginOwner.cancel(accountID: state.accountID, ticket: state.ticket)
+    }
+
+    func limitsTerminal(_ operation: String, payload: Data) async throws -> Data {
+        if client != nil { return try await performData(operation, payload: payload) }
+        return try await limitsLoginOwner.executeTerminal(operation, payload: payload)
+    }
+
+    private func performLimitsLogin(_ operation: String, state: HerdrLimitsLoginState) async throws
+        -> HerdrLimitsLoginState
+    {
+        try limitsLoginReply(
+            await performData(
+                "herdr.ui.accounts." + operation,
+                payload: JSONSerialization.data(withJSONObject: [
+                    "id": state.accountID.uuidString, "ticket": state.ticket.uuidString,
+                ])), accountID: state.accountID, ticket: state.ticket)
+    }
+
+    private func limitsLoginReply(_ data: Data, accountID: UUID, ticket: UUID) throws
+        -> HerdrLimitsLoginState
+    {
+        let reply = try JSONDecoder().decode(HerdrLimitsLoginState.self, from: data)
+        guard reply.accountID == accountID, reply.ticket == ticket else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        return reply
+    }
+
     nonisolated static func invalidateEnabledUsage() async {
         guard let endpoint = ExtensionPeerEndpoint.current(owner: "usage") else { return }
         _ = try? await endpoint.invoke(
@@ -317,8 +433,18 @@ import Observation
         await cleanup.value
     }
 
-    func cancelPendingWork() { for request in requests.values { request.cancel() } }
-    func shutdown() { stopped = true; cancelPendingWork(); requests.removeAll(); ready = false }
+    func cancelPendingWork() {
+        subscriptionLogin.cancel()
+        limitsLoginOwner.cancelPendingWork()
+        for request in requests.values { request.cancel() }
+    }
+    func shutdown() {
+        stopped = true
+        limitsLoginOwner.stop()
+        cancelPendingWork()
+        requests.removeAll()
+        ready = false
+    }
 }
 
 struct ClaudeAccountsMutation: Codable {

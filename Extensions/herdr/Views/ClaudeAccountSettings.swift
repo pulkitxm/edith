@@ -9,6 +9,7 @@ struct ClaudeAccountSettings: View {
     var machineID: String? = nil
     var accountAdded: (ClaudeAccount) -> Void = { _ in }
     @State private var draft: ClaudeAccount?
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
@@ -81,7 +82,7 @@ struct ClaudeAccountSettings: View {
                             .accessibilityLabel("Full credential")
                         if draft?.authentication == .oauthToken {
                             Text(
-                                "Generate a token with claude setup-token. Tokens without profile access can launch sessions but cannot show subscription limits."
+                                "Generate a token with claude setup-token. Connect a subscription login to show limits when this token has no profile access."
                             )
                             .font(.edithText(.caption)).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -92,6 +93,22 @@ struct ClaudeAccountSettings: View {
                         )
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let draft, draft.authentication == .oauthToken,
+                        let saved = accounts.account(draft.id), !saved.isLoggedOut,
+                        saved.authentication == .oauthToken
+                    {
+                        Button(
+                            saved.limitsProfileID == nil
+                                ? "Connect subscription limits" : "Reconnect subscription limits"
+                        ) {
+                            accounts.subscriptionLogin.start(
+                                accountID: saved.id, accounts: accounts,
+                                defaults: SharedDefaults.store)
+                        }
+                        .help(
+                            "Sign in for subscription limits while keeping this account's launch token."
+                        )
                     }
                     HStack {
                         Button("Save account") { saveDraft() }
@@ -110,7 +127,26 @@ struct ClaudeAccountSettings: View {
                     }
                 }
             }
-            .disabled(!accounts.ready || accounts.saving)
+            .disabled(!accounts.ready || accounts.saving || accounts.subscriptionLogin.running)
+            if accounts.subscriptionLogin.running {
+                VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                    Text("Complete subscription sign-in in this terminal.")
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+                    TerminalPane(
+                        holder: accounts.subscriptionLogin.holder,
+                        palette: .edith(dark: scheme == .dark)
+                    )
+                    .frame(height: UIScale.pt(200))
+                    Button("Cancel sign-in") { accounts.subscriptionLogin.cancel() }
+                }
+            }
+            if let error = accounts.subscriptionLogin.error {
+                Text(error).font(.edithText(.caption)).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if accounts.subscriptionLogin.state?.phase == .connected {
+                Text("Subscription limits connected.")
+                    .font(.edithText(.caption)).foregroundStyle(.secondary)
+            }
             if let error = accounts.error {
                 HStack {
                     Text(error).foregroundStyle(.red)
@@ -121,6 +157,7 @@ struct ClaudeAccountSettings: View {
         .onAppear {
             selectAccountIfNeeded()
         }
+        .onDisappear { accounts.subscriptionLogin.cancel() }
         .pageTask {
             await accounts.read()
             selectAccountIfNeeded()
@@ -161,6 +198,7 @@ struct ClaudeAccountSettings: View {
         var next = accounts.state
         if next.accounts.isEmpty { next.defaultID = draft.id }
         if let index = next.accounts.firstIndex(where: { $0.id == draft.id }) {
+            draft.limitsProfileID = next.accounts[index].limitsProfileID
             next.accounts[index] = draft
         } else {
             next.accounts.append(draft)
@@ -226,7 +264,7 @@ struct ClaudeAccountLaunchPicker: View {
         .onChange(of: accounts.state.accounts.map(\.id)) { _, _ in
             selection = accounts.launchSelection(selection)
         }
-        .edithSheet(isPresented: $editing) {
+        .edithSheet(isPresented: $editing, dismissible: !accounts.subscriptionLogin.running) {
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     ClaudeAccountSettings(
@@ -236,7 +274,9 @@ struct ClaudeAccountLaunchPicker: View {
                         })
                     Divider()
                     ClaudeSharedLaunchSettings(accounts: accounts)
+                        .disabled(accounts.subscriptionLogin.running)
                     Button("Done") { editing = false }
+                        .disabled(accounts.subscriptionLogin.running)
                 }
                 .padding(UIScale.pt(18))
             }

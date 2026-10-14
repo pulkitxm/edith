@@ -219,6 +219,11 @@ final class OwnedTerminalPTY {
         }
     }
 
+    func observedExitCode() -> Int32? {
+        observeExit()
+        return exitCode
+    }
+
     private func observeExit() {
         guard exitCode == nil else { return }
         var information = siginfo_t()
