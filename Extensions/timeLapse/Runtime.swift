@@ -159,7 +159,7 @@ final class ExtensionRuntime: NSObject {
                         created = TimeLapseRecorder()
                     }
                     #else
-                    guard !TimeLapseExportIntent.present(input) else {
+                    guard !TimeLapseExportIntent.functional(input) else {
                         return ["ok": false] as NSDictionary
                     }
                     created = TimeLapseRecorder()
@@ -225,10 +225,14 @@ public func createExtension() -> UnsafeMutableRawPointer? {
 }
 
 private enum TimeLapseExportIntent {
+    static func functional(_ context: NSDictionary) -> Bool {
+        ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] != nil
+            || context["hostedFunctionalFixture"] != nil
+    }
+
     static func present(_ context: NSDictionary) -> Bool {
         let environment = ProcessInfo.processInfo.environment
-        return environment["EDITH_FUNCTIONAL_FIXTURE"] != nil
-            || context["hostedFunctionalFixture"] != nil
+        return functional(context)
             || environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
             || (context["hostIdentifier"] as? String)?.hasPrefix("com.pulkit.edith.tests.") == true
             || Bundle.main.bundleIdentifier?.hasPrefix("com.pulkit.edith.tests.") == true

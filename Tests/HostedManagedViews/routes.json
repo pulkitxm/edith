@@ -324,7 +324,7 @@
       "sources": [
         {
           "path": "Extensions/timeLapse/Runtime.swift",
-          "sha256": "ad8d66a0abba0e3b38c9107c64d10372c30f086df052426999e3bf48f29a9908"
+          "sha256": "650d5e38a7525ff64be9908c9b3bbe869f492170899b099dc9a4689aefd867db"
         },
         {
           "path": "Extensions/timeLapse/TimeLapseRecorder.swift",
