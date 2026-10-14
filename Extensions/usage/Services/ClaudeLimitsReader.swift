@@ -119,7 +119,9 @@ public enum ClaudeLimitsReader {
         case .apiKey:
             throw ClaudeAccountError.rejected(
                 "Subscription limits are unavailable for API-key accounts.")
-        case .oauthToken: return try validatedToken(account.credential)
+        case .oauthToken:
+            guard account.limitsProfileID == nil else { throw Failure.missingToken }
+            return try validatedToken(account.credential)
         case .browserLogin:
             guard let token = savedLogin(account, directory) else {
                 throw ClaudeAccountError.rejected(
@@ -140,6 +142,9 @@ public enum ClaudeLimitsReader {
         },
         remoteLogin: @Sendable (ClaudeAccount) async throws -> String? = {
             try await ClaudeAccountRemoteLogin.token(account: $0)
+        },
+        linkedLogin: @Sendable (ClaudeAccount, URL) async throws -> String = {
+            try await ClaudeLimitsLogin.token(account: $0, directory: $1)
         }
     ) async throws -> String {
         try Task.checkCancellation()
@@ -148,7 +153,9 @@ public enum ClaudeLimitsReader {
         guard try await isCurrent(account, directory) else { throw CancellationError() }
         try Task.checkCancellation()
         let token: String
-        if account.authentication == .browserLogin, let machineID = account.remoteMachineID {
+        if account.limitsProfileID != nil {
+            token = try validatedToken(await linkedLogin(account, directory))
+        } else if account.authentication == .browserLogin, let machineID = account.remoteMachineID {
             guard UUID(uuidString: machineID) != nil else {
                 throw ClaudeAccountError.invalidRequest
             }
