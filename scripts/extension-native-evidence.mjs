@@ -15,6 +15,7 @@ import {
   extensionFingerprint,
   planUnpublishedExtensions,
 } from "./extension-release-plan.mjs";
+import { readGitHubResponse, TransientGitHubError } from "./github-retry.mjs";
 import {
   downloadCIArtifact,
   validatePackageReceipt,
@@ -109,36 +110,54 @@ export async function withFrozenCarrierDirectory(root, artifact, operation) {
 export async function readEvidenceAPI(
   path,
   fetch_,
-  { allowMissing = false } = {},
+  { allowMissing = false, retry = {} } = {},
 ) {
   assert(/^\/(?:actions\/|git\/)/.test(path));
-  const response = await fetch_(
+  return readGitHubResponse(
+    fetch_,
     `https://api.github.com/repos/${repository}${path}`,
-    {
+    () => ({
       signal: AbortSignal.timeout(60000),
       headers: { Accept: "application/vnd.github+json" },
+    }),
+    {
+      ...retry,
+      read: async (response) => {
+        if (allowMissing && response.status === 404) {
+          await response.body?.cancel();
+          return null;
+        }
+        assert.equal(response.status, 200);
+        const reader = response.body.getReader();
+        const chunks = [];
+        let total = 0;
+        try {
+          while (true) {
+            let next;
+            try {
+              next = await reader.read();
+            } catch (error) {
+              throw new TransientGitHubError(
+                `GitHub response body failed: ${error?.message}`,
+                { cause: error },
+              );
+            }
+            const { done, value } = next;
+            if (done) break;
+            total += value.length;
+            assert(total <= 8 * 1024 ** 2);
+            chunks.push(value);
+          }
+        } finally {
+          await reader.cancel();
+        }
+        return closedJSON(
+          Buffer.concat(chunks).toString("utf8"),
+          8 * 1024 ** 2,
+        );
+      },
     },
   );
-  if (allowMissing && response.status === 404) {
-    await response.body?.cancel();
-    return null;
-  }
-  assert.equal(response.status, 200);
-  const reader = response.body.getReader();
-  const chunks = [];
-  let total = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.length;
-      assert(total <= 8 * 1024 ** 2);
-      chunks.push(value);
-    }
-  } finally {
-    await reader.cancel();
-  }
-  return closedJSON(Buffer.concat(chunks).toString("utf8"), 8 * 1024 ** 2);
 }
 
 export async function preserveNativeEvidenceTag({
@@ -147,13 +166,17 @@ export async function preserveNativeEvidenceTag({
   attempt,
   fetchAPI,
   createTag,
+  retry = {},
 }) {
   const tag = evidenceTag(source, runID, attempt);
   const path = `/git/ref/tags/${encodeURIComponent(tag)}`;
-  let ref = await readEvidenceAPI(path, fetchAPI, { allowMissing: true });
+  let ref = await readEvidenceAPI(path, fetchAPI, {
+    allowMissing: true,
+    retry,
+  });
   if (!ref) {
     await createTag(tag, source);
-    ref = await readEvidenceAPI(path, fetchAPI);
+    ref = await readEvidenceAPI(path, fetchAPI, { retry });
   }
   assert.equal(ref.ref, `refs/tags/${tag}`);
   assert.equal(ref.object.type, "commit");
