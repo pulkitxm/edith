@@ -138,8 +138,9 @@ import Testing
             if operation == "herdr.ui.accounts.limitsCancel" {
                 let object = try #require(
                     JSONSerialization.jsonObject(with: payload) as? [String: String])
-                cancelledTickets.append(
-                    try #require(UUID(uuidString: try #require(object["ticket"]))))
+                let ticketString = try #require(object["ticket"])
+                let ticket = UUID(uuidString: ticketString)
+                cancelledTickets.append(try #require(ticket))
             }
             return try await worker.execute(operation, payload: payload)
         }
