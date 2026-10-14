@@ -42,12 +42,15 @@ import Observation
             {
                 try await $0.load()
             },
-        eraseSecret: @escaping @Sendable (URL) throws -> Void = ClaudeAccountImport
-            .eraseScopedSecret,
-        invalidateUsage: @escaping @Sendable () async -> Void = ClaudeAccountsModel
-            .invalidateEnabledUsage,
-        refreshUsage: @escaping @Sendable () async -> Void = ClaudeAccountsModel
-            .refreshEnabledUsage
+        eraseSecret: @escaping @Sendable (URL) throws -> Void = {
+            try ClaudeAccountImport.eraseScopedSecret($0)
+        },
+        invalidateUsage: @escaping @Sendable () async -> Void = {
+            await ClaudeAccountsModel.invalidateEnabledUsage()
+        },
+        refreshUsage: @escaping @Sendable () async -> Void = {
+            await ClaudeAccountsModel.refreshEnabledUsage()
+        }
     ) {
         suppliedDirectory = directory
         self.client = client
