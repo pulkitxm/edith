@@ -107,15 +107,34 @@ case "$MODE" in
       if [[ "$RELEASE_PRERELEASE" != true ]]; then rewrite_cask; fi
       verify_cask
       git add "${release_paths[@]}"
-      RESULT="$(pukbot commit create --repo "$REPO" --branch main \
-        --message "Release ${RELEASE_TAG} [skip ci]" \
-        "${release_paths[@]}" --json)" \
-        || {
-          git fetch origin main --tags
-          [[ "$(git rev-parse origin/main)" == "$BUILT_SHA" ]] || release_superseded
+      COMMIT_ERRORS="$(mktemp)"
+      RESULT=""
+      for attempt in 1 2 3 4; do
+        if RESULT="$(pukbot commit create --repo "$REPO" --branch main \
+          --message "Release ${RELEASE_TAG} [skip ci]" \
+          "${release_paths[@]}" --json 2>"$COMMIT_ERRORS")"; then
+          break
+        fi
+        echo "release commit attempt ${attempt} failed:" >&2
+        cat "$COMMIT_ERRORS" >&2
+        printf '%s\n' "$RESULT" >&2
+        git fetch origin main --tags
+        MAIN_SHA="$(git rev-parse origin/main)"
+        if [[ "$MAIN_SHA" != "$BUILT_SHA" ]]; then
+          if [[ "$(git rev-parse "$MAIN_SHA^")" == "$BUILT_SHA" ]] \
+            && [[ "$(git show -s --format=%s "$MAIN_SHA")" == "Release ${RELEASE_TAG} [skip ci]" ]]; then
+            RESULT="{\"resourceUrl\":\"https://github.com/${REPO}/commit/${MAIN_SHA}\"}"
+            break
+          fi
+          release_superseded
+        fi
+        if [[ "$attempt" -eq 4 ]]; then
           echo "release blocked: release commit failed" >&2
           exit 1
-        }
+        fi
+        sleep $((attempt * ${RELEASE_RETRY_SECONDS:-15}))
+      done
+      rm -f "$COMMIT_ERRORS"
       RELEASE_SHA="$(printf '%s' "$RESULT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["resourceUrl"].rsplit("/",1)[1])')"
       [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] \
         || { echo "release blocked: invalid release commit" >&2; exit 1; }
@@ -128,8 +147,22 @@ case "$MODE" in
       git switch --detach "$RELEASE_SHA"
       verify_cask
     fi
-    pukbot tag create "$RELEASE_TAG" --repo "$REPO" --target "$RELEASE_SHA" \
-      --message "Edith $RELEASE_TAG build $RELEASE_BUILD" --json \
+    TAG_DONE=0
+    for attempt in 1 2 3 4; do
+      if pukbot tag create "$RELEASE_TAG" --repo "$REPO" --target "$RELEASE_SHA" \
+        --message "Edith $RELEASE_TAG build $RELEASE_BUILD" --json; then
+        TAG_DONE=1
+        break
+      fi
+      echo "release tag attempt ${attempt} failed" >&2
+      git fetch origin --tags --force
+      if [[ "$(git rev-parse -q --verify "refs/tags/${RELEASE_TAG}^{commit}" || true)" == "$RELEASE_SHA" ]]; then
+        TAG_DONE=1
+        break
+      fi
+      [[ "$attempt" -eq 4 ]] || sleep $((attempt * ${RELEASE_RETRY_SECONDS:-15}))
+    done
+    [[ "$TAG_DONE" -eq 1 ]] \
       || { echo "release blocked: release tag failed; retry the same built source" >&2; exit 1; }
     ;;
   rebuild)

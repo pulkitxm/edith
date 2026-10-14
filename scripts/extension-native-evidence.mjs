@@ -636,7 +636,7 @@ export async function publishNativeEvidence({
     entry: { tag },
     files,
   });
-  if (item.draft) await publishDraft(item.id);
+  if (item.draft) await publishDraft(item.id, tag);
   await verifyImmutableReleaseAssets({ repository, receipt: publishedAssets });
   const envelopeDigest = { bytes: envelope.length, sha256: digest(envelope) };
   await writeFile(resolve(directory, "native-evidence.json"), envelope, {
@@ -758,13 +758,15 @@ if (import.meta.main) {
     publishFiles: publishExtensionAssets,
     lookupRelease: (repository, tag) => lookupRelease({ repository, tag }),
     mutate: (...args) => executeReleaseMutation(args),
-    publishDraft: (id) =>
+    publishDraft: (id, tag) =>
       executeReleaseMutation([
         "release",
         "edit",
         "--repo",
         repository,
         String(id),
+        "--tag",
+        tag,
         "--draft",
         "false",
         "--make-latest",

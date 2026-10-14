@@ -385,6 +385,8 @@ export async function publishHostRelease({
         "release",
         "edit",
         String(release.id),
+        "--tag",
+        tag,
         "--draft",
         "false",
         "--prerelease",
