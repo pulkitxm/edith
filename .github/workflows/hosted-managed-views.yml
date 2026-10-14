@@ -107,7 +107,7 @@ jobs:
         run: bun scripts/hosted-managed-views/run-managed.mjs --artifact-run "$ARTIFACT_RUN" --artifact-source "$ARTIFACT_SOURCE" --chunk "$MANAGED_CHUNK"
       - name: Retain only bounded synthetic smoke outcomes
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: "hosted-managed-original-view-chunk-${{ matrix.chunk }}"
           retention-days: 3
@@ -115,7 +115,7 @@ jobs:
           if-no-files-found: error
       - name: Retain the source-bound fixture Host build receipt
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: "hosted-managed-fixture-host-chunk-${{ matrix.chunk }}"
           retention-days: 3
@@ -158,7 +158,7 @@ jobs:
         run: bun scripts/hosted-managed-views/aggregate-managed.mjs --artifact-run "$ARTIFACT_RUN" --artifact-source "$ARTIFACT_SOURCE"
       - name: Retain bounded complete aggregate outcome
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: hosted-managed-original-view-outcomes
           retention-days: 3

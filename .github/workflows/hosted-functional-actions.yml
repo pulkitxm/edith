@@ -179,7 +179,7 @@ jobs:
         run: bun scripts/hosted-functional-actions/controller.mjs --run
       - name: Retain only qualified synthetic outcomes and attested artifacts
         if: success()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: functional-fixture-trust
           path: local/hosted-functional-actions/qualified-evidence
