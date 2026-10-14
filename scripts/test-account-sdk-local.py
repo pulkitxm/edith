@@ -36,6 +36,79 @@ let package = Package(
 )
 """
 
+OWNED_GROUPS = {
+    "Sources/EdithExtensionSupport": [
+        'AppStorageKeys.swift',
+        'BlockingWork.swift',
+        'CLIChildProcess.swift',
+        'CLICommandRunner.swift',
+        'CLIToolEnvironment.swift',
+        'ExtensionAmbientPolicy.swift',
+        'ExtensionCLIEnvelope.swift',
+        'ExtensionCLIStreamEnvelope.swift',
+        'ExtensionCommandOwnership.swift',
+        'ExtensionCommandRegistry.swift',
+        'ExtensionData.swift',
+        'ExtensionEngine.swift',
+        'ExtensionEngineClient.swift',
+        'ExtensionNativeTask.swift',
+        'ExtensionNativeTaskAdmission.swift',
+        'ExtensionNativeTaskAuthorization.swift',
+        'ExtensionNativeTaskGroups.swift',
+        'ExtensionPeer.swift',
+        'ExtensionPeerFailureDiagnostics.swift',
+        'ExtensionPeerRegistration.swift',
+        'ExtensionPrivilegedService.swift',
+        'ExtensionProcessIdentity.swift',
+        'ExtensionSharedState.swift',
+        'ExtensionUIConfiguration.swift',
+        'FeatureModule.swift',
+        'HotKeyRegistrar.swift',
+        'PersistentFileLease.swift',
+        'RestoredPathValidation.swift',
+        'SharedDefaults.swift',
+        'SurfaceArrangement.swift',
+        'SurfaceCalendar.swift',
+        'SurfaceChart.swift',
+        'SurfaceClockRules.swift',
+        'SurfaceCommandService.swift',
+        'SurfaceExtensionCatalog.swift',
+        'SurfaceGlanceSource.swift',
+        'SurfaceHostContext.swift',
+        'SurfaceLayout.swift',
+        'SurfaceLayoutProfile.swift',
+        'SurfaceLayoutStore.swift',
+        'SurfaceNotchTab.swift',
+        'SurfacePrivacyState.swift',
+        'SurfaceSlider.swift',
+        'SurfaceSnapshot.swift',
+        'SurfaceSnapshotClient.swift',
+        'SurfaceSourceChoice.swift',
+        'SurfaceThumbnail.swift',
+        'UserOperation.swift',
+        'UserShellEnvironment.swift',
+    ],
+    "Tests/EdithExtensionSupportTests": ["ExtensionOwnedProcessGroupTests.swift"],
+}
+OWNED_METHODS = (
+    'lateUnknownMemberAfterLeaderExitRetainsAuthorityWithoutSignalling',
+    'joinedLeaderCannotReleaseWhileCapturedDescendantStillLives',
+    'unreadableBirthAndFailedMembershipScanNeverBecomeAbsence',
+    'reusedGroupNeverProvidesSignalAuthority',
+    'cancellationAndSecondRetireJoinOneActualCleanupTask',
+)
+OWNED_MANIFEST = """// swift-tools-version:6.0
+import PackageDescription
+let package = Package(
+    name: "OwnedProcessContracts",
+    platforms: [.macOS(.v14)],
+    targets: [
+        .target(name: "EdithExtensionSupport", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(name: "EdithExtensionSupportTests", dependencies: ["EdithExtensionSupport"], swiftSettings: [.swiftLanguageMode(.v5)])
+    ]
+)
+"""
+
 
 class LocalOwnership(OWNERSHIP.BoundedOwnership):
     def __init__(self, leader, uid, package_driver_pair=None):
@@ -100,12 +173,13 @@ def write_private(path, data):
         stream.write(data)
 
 
-def prepare_package(root, package):
+def prepare_package(root, package, owned_process_groups=False):
     digests = {}
     count = 0
-    for group, names in GROUPS.items():
+    groups = OWNED_GROUPS if owned_process_groups else GROUPS
+    for group, names in groups.items():
         source = root / "Packages/ExtensionSupport" / group
-        if source.is_symlink() or sorted(path.name for path in source.glob("*.swift")) != sorted(names):
+        if source.is_symlink() or (not owned_process_groups or group.startswith("Sources/")) and sorted(path.name for path in source.glob("*.swift")) != sorted(names):
             raise ValueError("Account contract source inventory changed")
         destination = package / group
         private_directory(destination.parent)
@@ -120,13 +194,15 @@ def prepare_package(root, package):
             digests[f"{group}/{name}"] = hashlib.sha256(data).hexdigest()
             if group.startswith("Tests/"):
                 count += len(re.findall(rb"@Test\b", data))
-    write_private(package / "Package.swift", MANIFEST.encode())
+                if owned_process_groups and tuple(re.findall(rb"@Test\s+func\s+(\w+)\(", data)) != tuple(name.encode() for name in OWNED_METHODS):
+                    raise ValueError("Owned process contract methods changed")
+    write_private(package / "Package.swift", (OWNED_MANIFEST if owned_process_groups else MANIFEST).encode())
     if count == 0:
         raise ValueError("Account contract suite is empty")
     return digests, count
 
 
-def environment(fixture, modules=None):
+def environment(fixture, modules=None, owned_process_groups=False):
     result = {key: os.environ[key] for key in ["PATH", "DEVELOPER_DIR", "LANG", "LC_ALL"] if key in os.environ}
     for name in ["tmp", "cache", "config", "security", "modules", "Data", "ExtensionState"]:
         private_directory(fixture / name)
@@ -139,6 +215,8 @@ def environment(fixture, modules=None):
         "EDITH_EXTENSION_DATA_ROOT": str(fixture / "Data/herdr"), "EDITH_EXTENSION_STATE_ROOT": str(fixture / "ExtensionState"),
         "EDITH_EXTENSION_ID": "herdr", "EDITH_APPLICATION_IDENTIFIER": "com.pulkit.edith.dev.accounts-contracts",
     })
+    if owned_process_groups:
+        result = {key: value for key, value in result.items() if not key.startswith("EDITH_")}
     return result
 
 
@@ -148,6 +226,16 @@ def test_result(exit_status, output, expected):
     executed = passed > 0 or re.search(rb"\bTest (?!run\b)[^\r\n]+ started\.", output) is not None
     status = exit_status if exit_status >= 0 else 1
     if status == 0 and (len(matches) != 1 or passed != expected):
+        status = 1
+    return status, passed, executed
+
+
+def owned_process_result(exit_status, output):
+    status, passed, executed = test_result(exit_status, output, len(OWNED_METHODS))
+    summaries = re.findall(rb"Test run with (\d+) tests in (\d+) suites? passed", output)
+    positives = re.findall(rb"\bTest (\w+)\(\) passed", output)
+    if (summaries != [(b"5", b"1")] or len(positives) != len(OWNED_METHODS)
+            or set(positives) != {name.encode() for name in OWNED_METHODS}):
         status = 1
     return status, passed, executed
 
@@ -261,7 +349,7 @@ def run_owned(command, root, environment, output, process_factory=subprocess.Pop
 
 
 
-def run():
+def run(owned_process_groups=False):
     os.umask(0o077)
     allowed = Path(os.environ["EDITH_LOCAL_CI_ROOT"])
     if sys.platform != "darwin" or not allowed.is_absolute() or allowed.resolve(strict=True) != allowed or not ROOT.is_relative_to(allowed):
@@ -270,22 +358,23 @@ def run():
     if local.is_symlink():
         raise ValueError("Local contract storage must not be a symlink")
     local.mkdir(exist_ok=True)
-    storage = private_directory(local / "account-contracts")
+    storage = private_directory(local / ("owned-process-group-contracts" if owned_process_groups else "account-contracts"))
     with os.fdopen(private_file(storage / "run.lock", os.O_RDWR), "r+") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         package = private_directory(storage / "package")
         build = private_directory(storage / "build")
         modules = private_directory(storage / "modules")
-        digests, count = prepare_package(ROOT, package)
+        digests, count = prepare_package(ROOT, package, True) if owned_process_groups else prepare_package(ROOT, package)
         fixture = Path(tempfile.mkdtemp(prefix="fixture-", dir=storage))
         started = time.monotonic()
         selected_driver_validated = False
         try:
             driver = DRIVERS.SelectedSwiftDriver(os.environ["DEVELOPER_DIR"], entry="swift-test")
             swift = driver.validate()
-            command = [str(swift), "--package-path", str(package), "--scratch-path", str(build), "--cache-path", str(fixture / "cache"), "--config-path", str(fixture / "config"), "--security-path", str(fixture / "security"), "--filter", "AccountSupport", "--build-system", "swiftbuild", "--no-parallel", "--jobs", "1", "-Xswiftc", "-j1", "-Xswiftc", "-warnings-as-errors", "-Xswiftc", "-module-cache-path", "-Xswiftc", str(modules)]
+            command = [str(swift), "--package-path", str(package), "--scratch-path", str(build), "--cache-path", str(fixture / "cache"), "--config-path", str(fixture / "config"), "--security-path", str(fixture / "security"), "--filter", "(" + "|".join(OWNED_METHODS) + ")" if owned_process_groups else "AccountSupport", "--build-system", "swiftbuild", "--no-parallel", "--jobs", "1", "-Xswiftc", "-j1", "-Xswiftc", "-warnings-as-errors", "-Xswiftc", "-module-cache-path", "-Xswiftc", str(modules)]
             command = DRIVERS.SelectedPackageArguments(driver, command)
-            owned = run_owned(command, ROOT, environment(fixture, modules), fixture / "tests.log")
+            child_environment = environment(fixture, modules, True) if owned_process_groups else environment(fixture, modules)
+            owned = run_owned(command, ROOT, child_environment, fixture / "tests.log")
             try:
                 driver.validate()
                 selected_driver_validated = True
@@ -297,8 +386,11 @@ def run():
                 output = source.read(OUTPUT_BOUND)
             write_private(storage / "last.log", output)
             sys.stdout.buffer.write(output)
-            status, passed, executed = test_result(owned["exitCode"], output, count)
+            status, passed, executed = owned_process_result(owned["exitCode"], output) if owned_process_groups else test_result(owned["exitCode"], output, count)
             receipt = {"exit": status, "elapsedSeconds": time.monotonic() - started, "expectedTests": count, "passedTests": passed, "sourceSHA256": digests, "outputSHA256": hashlib.sha256(output).hexdigest(), "applicationExecution": False, "sdkTestsExecuted": executed, "isolatedAccountSDK": True, "ownership": owned}
+            if owned_process_groups:
+                receipt["isolatedAccountSDK"] = False
+                receipt["isolatedOwnedProcessGroupsSDK"] = True
             write_private(storage / "receipt.json", (json.dumps(receipt, indent=2) + "\n").encode())
             print(json.dumps(receipt), flush=True)
             return status if status >= 0 else 1
@@ -308,5 +400,13 @@ def run():
                 shutil.rmtree(fixture)
 
 
+def main():
+    if not sys.argv[1:]:
+        return run()
+    if sys.argv[1:] == ["--owned-process-groups"]:
+        return run(True)
+    raise ValueError("Unexpected local SDK contract mode")
+
+
 if __name__ == "__main__":
-    raise SystemExit(run())
+    raise SystemExit(main())

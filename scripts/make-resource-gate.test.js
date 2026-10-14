@@ -448,3 +448,22 @@ test("make runs light targets through the gate without waiting", async () => {
     [],
   );
 }, 20000);
+
+test("the original owned-process SDK route retains the native resource budget", () => {
+  const result = decide(
+    ["ci-extension-owned-process-groups-local"],
+    healthy,
+    [],
+  );
+  expect(result.action).toBe("run");
+  expect(result.profile).toBe("swift test");
+  expect(result.need_threads).toBe(2.5);
+  expect(result.need_mem_mb).toBe(2560);
+  expect(
+    decide(
+      ["ci-extension-owned-process-groups-local"],
+      { ...healthy, cpus: 6 },
+      [seated(0)],
+    ).action,
+  ).toBe("wait");
+});
