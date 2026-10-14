@@ -340,7 +340,7 @@ ci-extension-support:
 define UTILITY_EXTENSION_NATIVE_TEST
 	swift format lint --strict --recursive Extensions/$(1)
 	$(call PREPARE_ARGUMENT_PARSER,Extensions/$(1))
-	fixture=$$(mktemp -d /tmp/edith-$(1)-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; env -u EDITH_EXTENSION_TEST_SDK -u EDITH_TEST_VOICE_ENCODER -u EDITH_TEST_VOICE_MODEL EDITH_TEST_NATIVE_CAPTURE=0 EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/data" EDITH_SHARED_DEFAULTS_SUITE="edith.$(1).tests.$$(basename "$$fixture")" swift test --package-path Extensions/$(1) --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" $(if $(FILTER),--filter '$(FILTER)') $(if $(SKIP),--skip '$(SKIP)')
+	fixture=$$(mktemp -d /tmp/edith-$(1)-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; $(if $(filter timeLapse,$(1)),mkdir -m 700 "$$fixture/tmp";) env -u EDITH_EXTENSION_TEST_SDK -u EDITH_TEST_VOICE_ENCODER -u EDITH_TEST_VOICE_MODEL $(if $(filter timeLapse,$(1)),TMPDIR="$$fixture/tmp") EDITH_TEST_NATIVE_CAPTURE=0 EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/data" EDITH_SHARED_DEFAULTS_SUITE="edith.$(1).tests.$$(basename "$$fixture")" swift test --package-path Extensions/$(1) --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" $(if $(FILTER),--filter '$(FILTER)') $(if $(SKIP),--skip '$(SKIP)')
 endef
 
 .PHONY: ci-extension-system-stats

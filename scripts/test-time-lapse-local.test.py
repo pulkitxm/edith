@@ -3,6 +3,8 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -122,6 +124,24 @@ class TimeLapseLocalRouteTests(unittest.TestCase):
         make = (HELPER.ROOT / "Makefile").read_text()
         self.assertIn("ci-extension-time-lapse:\n\t$(call UTILITY_EXTENSION_NATIVE_TEST,timeLapse)", make)
         self.assertIn("ci-extension-time-lapse-local:\n\tpython3 -B scripts/test-time-lapse-local.py", make)
+
+    def test_hosted_recipe_constructs_a_private_physical_temporary_root_without_changing_other_routes(self):
+        def recipe(target):
+            output = subprocess.check_output(
+                ["/usr/bin/make", "-n", "EDITH_MAKE_GATE=1", target], cwd=HELPER.ROOT,
+                env={"PATH": "/usr/bin:/bin:/usr/sbin:/sbin"}, text=True)
+            return next(line for line in output.splitlines() if line.startswith("fixture="))
+        line = recipe("ci-extension-time-lapse")
+        self.assertIn('TMPDIR="$fixture/tmp"', line)
+        prefix = line.split(" env ", 1)[0]
+        prefix = prefix.replace("/tmp/edith-timeLapse-tests.XXXXXX", shlex.quote(str(self.base / "hosted.XXXXXX")))
+        output = subprocess.check_output(
+            ["/bin/sh", "-c", prefix + ' /usr/bin/stat -f "%Lp" "$fixture/tmp"; cd "$fixture/tmp"; /bin/pwd -P'],
+            env={"PATH": "/usr/bin:/bin:/usr/sbin:/sbin"}, text=True).splitlines()
+        self.assertEqual(output[0], "700")
+        self.assertTrue(Path(output[1]).is_relative_to(self.base))
+        self.assertEqual(list(self.base.glob("hosted.*")), [])
+        self.assertNotIn("TMPDIR=", recipe("ci-extension-system-stats"))
 
     def test_closed_environment_keeps_all_storage_private_and_drops_real_capture_and_hosted_hints(self):
         inherited = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "DEVELOPER_DIR": "/synthetic/Xcode",
