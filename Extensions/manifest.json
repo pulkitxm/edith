@@ -2111,6 +2111,9 @@
     "supportProduct": null,
     "nativePackage": "Extensions/attention/NativeRuntime",
     "nativeProduct": "AttentionNative",
+    "nativeClangDirectories": [
+      ".build/checkouts/GRDB.swift/Sources/GRDBSQLite"
+    ],
     "nativePresentationRoles": [
       "app"
     ],

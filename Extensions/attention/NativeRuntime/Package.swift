@@ -14,7 +14,9 @@ let package = Package(
         .target(
             name: "AttentionNative",
             dependencies: [
-                .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
+                .product(
+                    name: "WorkerFixtureSupport", package: "fixtureSupport",
+                    moduleAliases: ["WorkerFixtureSupport": "AttentionWorkerFixtureSupport"]),
                 .product(
                     name: "EdithExtensionCommands_attention_native",
                     package: "attention_native"),
@@ -31,7 +33,9 @@ let package = Package(
             name: "AttentionNativeTests",
             dependencies: [
                 "AttentionNative",
-                .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
+                .product(
+                    name: "WorkerFixtureTestSupport", package: "fixtureSupport",
+                    moduleAliases: ["WorkerFixtureSupport": "AttentionWorkerFixtureSupport"]),
             ],
             swiftSettings: [.swiftLanguageMode(.v5)]),
     ]
