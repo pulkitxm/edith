@@ -160,8 +160,9 @@ import Testing
             VideoEditPlan(operations: [.addMedia(path: movie.path, name: "source")]), to: source,
             overwrite: true)
         let request = try VideoEditorService.prepareOpen(source)
-        let bridge = VideoEditorOpenBridge.shared
-        bridge.shutdown()
+        VideoEditorOpenBridge.shared.shutdown()
+        let bridge = VideoEditorOpenBridge()
+        VideoEditorOpenBridge.shared = bridge
         var finished = false
         let opening = Task {
             try await bridge.open(request, timeout: 10); finished = true
