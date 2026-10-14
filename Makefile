@@ -286,6 +286,11 @@ ci-extension-accounts:
 ci-extension-herdr-accounts-local:
 	python3 -B scripts/test-herdr-accounts-local.py
 
+.PHONY: ci-extension-herdr-account-contracts
+ci-extension-herdr-account-contracts:
+	python3 -B scripts/test-herdr-accounts-local.test.py
+	python3 -B scripts/test-account-sdk-local.test.py
+
 .PHONY: ci-extension-herdr-accounts
 ci-extension-herdr-accounts: ghostty-extension
 	@test "$$GITHUB_ACTIONS" = true && test "$$RUNNER_ENVIRONMENT" = github-hosted && test "$$RUNNER_OS" = macOS

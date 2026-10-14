@@ -62,6 +62,21 @@ class HerdrAccountLocalRouteTests(unittest.TestCase):
         self.assertEqual(gate.profile_for("ci-extension-herdr-accounts-local"), gate.PROFILES["swift-test"])
         self.assertEqual(gate.profile_for("ci-extension-herdr-accounts-local"), gate.profile_for("ci-extension-herdr-accounts"))
 
+    def test_actual_workflow_selects_pure_contract_target_with_explicit_temporary_root(self):
+        workflow = (HELPER.ROOT / ".github/workflows/extension-accounts.yml").read_text()
+        for path in ["scripts/test-herdr-accounts-local.py", "scripts/test-herdr-accounts-local.test.py"]:
+            self.assertIn("      - " + path, workflow.split("permissions:", 1)[0])
+        step = workflow.split("      - name: Verify local Herdr route contracts\n", 1)[1].split("      - name:", 1)[0]
+        self.assertIn("if: \"matrix.target == 'ci-extension-herdr-accounts'\"", step)
+        self.assertIn('TMPDIR: "${{ runner.temp }}"', step)
+        self.assertIn("run: make ci-extension-herdr-account-contracts", step)
+        make = (HELPER.ROOT / "Makefile").read_text()
+        target = make.split("ci-extension-herdr-account-contracts:\n", 1)[1].split("\n.PHONY:", 1)[0]
+        self.assertEqual(target.strip().splitlines(), [
+            "python3 -B scripts/test-herdr-accounts-local.test.py",
+            "\tpython3 -B scripts/test-account-sdk-local.test.py",
+        ])
+
     def test_selection_contains_all13_suites_and_only_two_exact_window_method_skips(self):
         inventory = HELPER.source_inventory(self.root)
         self.assertEqual(len(inventory["methods"]), 90)
@@ -120,6 +135,7 @@ class HerdrAccountLocalRouteTests(unittest.TestCase):
         with patch.object(HELPER, "ROOT", self.root), patch.object(HELPER.sys, "platform", "darwin"), \
                 patch.dict(os.environ, {"EDITH_LOCAL_CI_ROOT": str(self.base), "DEVELOPER_DIR": "/Applications/Xcode.app/Contents/Developer"}), \
                 patch.object(HELPER.RUNTIME.DRIVERS, "SelectedSwiftDriver", return_value=driver), \
+                patch("builtins.print"), \
                 patch.object(HELPER.RUNTIME, "run_owned", side_effect=owned):
             status = HELPER.run()
         storage = self.root / "local/herdr-account-contracts"
