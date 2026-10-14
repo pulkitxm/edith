@@ -3,26 +3,29 @@ import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 import { planSwiftTests } from "./ci-test-plan.mjs";
 
-test("shipping shared changes retain host and original Keep Awake tests", () => {
+test("shipping shared changes retain host, Keep Awake and every other extension lane", () => {
   const plan = planSwiftTests(["Makefile"], { shipping: true });
-  assert.deepEqual(
-    plan.include.map((lane) => lane.lane),
-    ["host-runtime", "extension-keepAwake"],
-  );
+  assert.deepEqual(plan, planSwiftTests(["Makefile"]));
+  const lanes = plan.include.map((lane) => lane.lane);
+  assert.equal(lanes[0], "host-runtime");
   assert.equal(plan.include[0].targets, "ci-host ci-marketplace-runtime");
-  assert.equal(plan.include[1].targets, "ci-extension-keep-awake");
+  const keepAwake = plan.include.find(
+    (lane) => lane.lane === "extension-keepAwake",
+  );
+  assert.equal(keepAwake.targets, "ci-extension-keep-awake");
+  for (const lane of ["extension-music", "extension-terminal", "native-music"])
+    assert(lanes.includes(lane), lane);
 });
 
-test("unreleased extension changes do not occupy shipping native runners", () => {
+test("every shipping extension change occupies its own native runners on main", () => {
   for (const path of [
     "Extensions/music/Native/Sources/Player.swift",
     "Extensions/terminal/Tests/TerminalTests.swift",
     "Extensions/calendar/Runtime.swift",
   ]) {
-    assert.deepEqual(planSwiftTests([path], { shipping: true }), {
-      include: [],
-    });
-    assert(planSwiftTests([path]).include.length > 0);
+    const plan = planSwiftTests([path], { shipping: true });
+    assert(plan.include.length > 0, path);
+    assert.deepEqual(plan, planSwiftTests([path]));
   }
 });
 
@@ -38,7 +41,7 @@ test("the original Keep Awake suite stays selected for its own test changes", ()
   assert.equal(plan.include[0].targets, "ci-extension-keep-awake");
 });
 
-test("shipping CLI bounds a complete rebuild while the full inventory remains testable", () => {
+test("shipping CLI rebuilds the full shipping inventory", () => {
   const shipping = JSON.parse(
     execFileSync(
       process.execPath,
@@ -50,8 +53,6 @@ test("shipping CLI bounds a complete rebuild while the full inventory remains te
     ),
   );
   assert.deepEqual(shipping, planSwiftTests([], { all: true, shipping: true }));
-  assert.equal(shipping.include.length, 2);
-  assert(
-    planSwiftTests([], { all: true }).include.length > shipping.include.length,
-  );
+  assert.deepEqual(shipping, planSwiftTests([], { all: true }));
+  assert(shipping.include.length > 2);
 });

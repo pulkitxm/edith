@@ -629,12 +629,9 @@ test.each(["refs/pull/1/merge", "refs/heads/main"])(
       expect(values.get("swift")).toBe("true");
       expect(values.get("host")).toBe("false");
       expect(values.get("scripts")).toBe("false");
-      const shipping = ref === "refs/heads/main";
-      expect(values.get("swift_tests")).toBe(String(!shipping));
+      expect(values.get("swift_tests")).toBe("true");
       expect(JSON.parse(values.get("swift_matrix"))).toEqual({
-        include: shipping
-          ? []
-          : [{ lane: "feature-models", targets: "ci-extension-support" }],
+        include: [{ lane: "feature-models", targets: "ci-extension-support" }],
       });
       expect(() => git("show", `${head}:scripts/ci-test-plan.mjs`)).toThrow();
     } finally {
