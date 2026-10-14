@@ -497,8 +497,9 @@ final class AppMaintenanceModel {
                         try await updateExecutor.execute(plan, confirmed: true)
                     },
                     commit: { [self] results in
-                        updateState = updatePersistence.recording(results, in: updateState)
-                        try updatePersistence.save(updateState)
+                        self.updateState = self.updatePersistence.recording(
+                            results, in: self.updateState)
+                        try self.updatePersistence.save(self.updateState)
                     })
                 guard !stopped, !suspending, !Task.isCancelled else { return }
                 updateHistory = updateState.history
