@@ -302,7 +302,6 @@ private final class CoreOwnerFixture: @unchecked Sendable {
             Issue.record("Owned fixture did not exit after bounded cleanup.")
             return
         }
-        process.waitUntilExit()
         try? output.fileHandleForReading.close()
         try? FileManager.default.removeItem(at: root)
     }
