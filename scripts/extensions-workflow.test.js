@@ -269,6 +269,13 @@ test("selected optional native suites gate lifecycle and release signing", () =>
   expect(build.steps[suites].run).toBe(
     'bun scripts/test-extension-package.mjs "$EXTENSION_ID"',
   );
+  expect(build.steps[suites].if).toBeUndefined();
+  const signing = build.steps.find(
+    (step) => step.name === "Import the release signing certificate",
+  );
+  expect(build.steps[suites].env.EXTENSION_PACKAGE_SUITES).toBe(
+    `\${{ (${signing.if}) && 'skip' || 'run' }}`,
+  );
 });
 
 test("matrix jobs restore executable modes and never rebuild the shared host", () => {

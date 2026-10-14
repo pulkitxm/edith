@@ -17,8 +17,26 @@ export function extensionTestTargets(definition) {
   return targets;
 }
 
-export function runExtensionPackageTests(definition, run = execFileSync) {
+export function packageSuitesMode(environment = process.env) {
+  const mode = environment.EXTENSION_PACKAGE_SUITES ?? "run";
+  if (mode !== "run" && mode !== "skip")
+    throw new Error("Invalid extension package suites mode");
+  return mode;
+}
+
+export function runExtensionPackageTests(
+  definition,
+  run = execFileSync,
+  mode = "run",
+) {
   const targets = extensionTestTargets(definition);
+  if (mode === "skip") {
+    if (targets.length)
+      console.log(
+        `Suites validated before merge, skipping: ${targets.join(" ")}`,
+      );
+    return;
+  }
   if (targets.length) run("make", targets, { stdio: "inherit" });
 }
 
@@ -31,5 +49,5 @@ if (import.meta.main) {
   const definition = definitions.find(({ id }) => id === process.argv[2]);
   if (definition?.contractVersion !== 1)
     throw new Error("Unknown native extension worker");
-  runExtensionPackageTests(definition);
+  runExtensionPackageTests(definition, execFileSync, packageSuitesMode());
 }

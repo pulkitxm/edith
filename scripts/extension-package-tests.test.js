@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { runExtensionPackageTests } from "./test-extension-package.mjs";
+import {
+  packageSuitesMode,
+  runExtensionPackageTests,
+} from "./test-extension-package.mjs";
 
 test("optional test packages run only the selected extension's declared targets", () => {
   const calls = [];
@@ -62,4 +65,26 @@ test("Notch's actual manifest runs its standalone browser and panel tests only",
   expect(calls).toEqual([
     ["make", ["ci-extension-notch-native"], { stdio: "inherit" }],
   ]);
+});
+
+test("publishing runs skip suites validated before merge while keeping target checks", () => {
+  let called = false;
+  runExtensionPackageTests(
+    { testTargets: ["ci-extension-studio", "ci-extension-studio-native"] },
+    () => {
+      called = true;
+    },
+    "skip",
+  );
+  expect(called).toBe(false);
+  expect(() =>
+    runExtensionPackageTests({ testTargets: ["--eval=x"] }, () => {}, "skip"),
+  ).toThrow("Invalid extension test targets");
+  expect(packageSuitesMode({})).toBe("run");
+  expect(packageSuitesMode({ EXTENSION_PACKAGE_SUITES: "run" })).toBe("run");
+  expect(packageSuitesMode({ EXTENSION_PACKAGE_SUITES: "skip" })).toBe("skip");
+  for (const value of ["", "SKIP", "false", "0"])
+    expect(() =>
+      packageSuitesMode({ EXTENSION_PACKAGE_SUITES: value }),
+    ).toThrow("Invalid extension package suites mode");
 });
