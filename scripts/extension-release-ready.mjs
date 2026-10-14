@@ -15,6 +15,7 @@ import {
   compareSystemVersions,
   validateMinimumSystemVersion,
 } from "./extension-system-version.mjs";
+import { readGitHubResponse } from "./github-retry.mjs";
 import { shippingDefinitions } from "./shipping-extension-policy.mjs";
 import { verifiedCatalogPayload } from "./verify-extension-catalog.mjs";
 
@@ -91,6 +92,7 @@ export async function verifyCurrentMain({
   releaseTag,
   fetchMetadata,
   repository = catalogRepository,
+  retry = {},
 }) {
   if (
     !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) ||
@@ -99,17 +101,25 @@ export async function verifyCurrentMain({
     !/^v[0-9]+\.[0-9]+\.[0-9]+$/.test(releaseTag)
   )
     throw new Error("Invalid release source identity");
-  const read = async (path) => {
-    const response = await fetchMetadata(
+  const read = (path) =>
+    readGitHubResponse(
+      fetchMetadata,
       `https://api.github.com/repos/${repository}/${path}`,
+      () => undefined,
+      {
+        ...retry,
+        read: async (response) => {
+          if (response.status !== 200)
+            throw new Error(
+              `Cannot verify current main: HTTP ${response.status}`,
+            );
+          const data = await response.text();
+          if (Buffer.byteLength(data) > 1024 ** 2)
+            throw new Error("Current main response exceeds its limit");
+          return JSON.parse(data);
+        },
+      },
     );
-    if (response.status !== 200)
-      throw new Error(`Cannot verify current main: HTTP ${response.status}`);
-    const data = await response.text();
-    if (Buffer.byteLength(data) > 1024 ** 2)
-      throw new Error("Current main response exceeds its limit");
-    return JSON.parse(data);
-  };
   const reference = await read("git/ref/heads/main");
   if (
     reference.ref !== "refs/heads/main" ||

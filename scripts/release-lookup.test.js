@@ -62,12 +62,17 @@ test("published lookup does not scan unrelated releases", () => {
 });
 
 test("authentication and server errors never become bootstrap absence", () => {
-  for (const status of [403, 429, 500]) {
+  for (const [status, attempts] of [
+    [403, 1],
+    [429, 6],
+    [500, 6],
+  ]) {
     let calls = 0;
     expect(() =>
       lookupRelease({
         repository,
         tag,
+        retry: { sleep: () => {} },
         execute: () => {
           calls++;
           throw Object.assign(new Error("Denied"), {
@@ -76,29 +81,31 @@ test("authentication and server errors never become bootstrap absence", () => {
         },
       }),
     ).toThrow("Denied");
-    expect(calls).toBe(1);
+    expect(calls).toBe(attempts);
   }
 });
 
 test("malformed and foreign tagged responses do not fall back to a listing", () => {
-  for (const body of [
-    "broken",
-    "null",
-    "[]",
-    JSON.stringify({ ...item, tag_name: "foreign" }),
+  for (const [body, attempts] of [
+    ["broken", 6],
+    ["", 6],
+    ["null", 1],
+    ["[]", 1],
+    [JSON.stringify({ ...item, tag_name: "foreign" }), 1],
   ]) {
     let calls = 0;
     expect(() =>
       lookupRelease({
         repository,
         tag,
+        retry: { sleep: () => {} },
         execute: () => {
           calls++;
           return body;
         },
       }),
     ).toThrow();
-    expect(calls).toBe(1);
+    expect(calls).toBe(attempts);
   }
 });
 

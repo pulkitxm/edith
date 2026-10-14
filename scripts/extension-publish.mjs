@@ -87,6 +87,7 @@ export async function bindStagedHostContinuation(capability, completedHost) {
   return stage.bindContinuation(completed);
 }
 
+import { withGitHubRetrySync } from "./github-retry.mjs";
 import { lookupRelease } from "./release-lookup.mjs";
 import {
   assertShippingExtensions,
@@ -148,10 +149,17 @@ export function mergeExtensionCatalog(previous, records, revision) {
 }
 
 function gh(...args) {
-  return execFileSync("gh", args, {
-    encoding: "utf8",
-    timeout: args[0] === "api" ? 60_000 : undefined,
-    maxBuffer: 4 * 1024 ** 2,
+  const run = () =>
+    execFileSync("gh", args, {
+      encoding: "utf8",
+      timeout: args[0] === "api" ? 60_000 : undefined,
+      maxBuffer: 4 * 1024 ** 2,
+    });
+  if (args[0] !== "api") return run();
+  return withGitHubRetrySync(() => {
+    const output = run();
+    JSON.parse(output);
+    return output;
   });
 }
 

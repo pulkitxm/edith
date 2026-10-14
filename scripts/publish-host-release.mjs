@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { verifyCurrentMain } from "./extension-release-ready.mjs";
+import { withGitHubRetrySync } from "./github-retry.mjs";
 import {
   assetSnapshot,
   hostAssets,
@@ -55,6 +56,7 @@ export function preflightHostRelease({
   source,
   rebuild = false,
   execute = execFileSync,
+  retry = {},
 }) {
   if (
     !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) ||
@@ -109,6 +111,7 @@ export function preflightHostRelease({
       repository,
       file: resolve(directory, name),
       execute,
+      retry,
     });
   }
   requireAssetSnapshot(directory, snapshot);
@@ -124,12 +127,14 @@ export async function publishHostRelease({
   sourceTarget = target,
   prerelease = false,
   execute = execFileSync,
+  retry = {},
   matchesAsset = releaseAssetMatchesFile,
   verifySource = async () => {
     const current = await verifyCurrentMain({
       target: sourceTarget,
       releaseTag: tag,
       repository,
+      retry,
       fetchMetadata: async (url) =>
         new Response(
           execute("gh", ["api", url], {
@@ -155,6 +160,7 @@ export async function publishHostRelease({
       source: sourceTarget,
       rebuild,
       execute,
+      retry,
     });
     const verifyFiles = () => {
       requireAssetSnapshot(directory, copies.original);
@@ -163,13 +169,17 @@ export async function publishHostRelease({
     let tagIdentity;
     const verifyTag = () => {
       const read = (path) =>
-        JSON.parse(
-          execute("gh", ["api", `repos/${repository}/${path}`], {
-            encoding: "utf8",
-            timeout: 60_000,
-            killSignal: "SIGKILL",
-            maxBuffer: 1024 ** 2,
-          }),
+        withGitHubRetrySync(
+          () =>
+            JSON.parse(
+              execute("gh", ["api", `repos/${repository}/${path}`], {
+                encoding: "utf8",
+                timeout: 60_000,
+                killSignal: "SIGKILL",
+                maxBuffer: 1024 ** 2,
+              }),
+            ),
+          retry,
         );
       const reference = read(`git/ref/tags/${tag}`);
       if (
@@ -207,7 +217,8 @@ export async function publishHostRelease({
       verifyTag();
       verifyFiles();
     };
-    const readRelease = () => lookupRelease({ repository, tag, execute });
+    const readRelease = () =>
+      lookupRelease({ repository, tag, execute, retry });
     const requireIdentity = (value, draft, id) => {
       if (
         !value ||
@@ -236,13 +247,17 @@ export async function publishHostRelease({
       return current;
     };
     const guardSource = () => {
-      const reference = JSON.parse(
-        execute("gh", ["api", `repos/${repository}/git/ref/heads/main`], {
-          encoding: "utf8",
-          timeout: 60_000,
-          killSignal: "SIGKILL",
-          maxBuffer: 1024 ** 2,
-        }),
+      const reference = withGitHubRetrySync(
+        () =>
+          JSON.parse(
+            execute("gh", ["api", `repos/${repository}/git/ref/heads/main`], {
+              encoding: "utf8",
+              timeout: 60_000,
+              killSignal: "SIGKILL",
+              maxBuffer: 1024 ** 2,
+            }),
+          ),
+        retry,
       );
       if (
         reference.ref !== "refs/heads/main" ||
@@ -284,6 +299,7 @@ export async function publishHostRelease({
             }
             return execute(command, args, options);
           },
+          retry,
         },
       );
       await verifyInputs();
@@ -343,6 +359,7 @@ export async function publishHostRelease({
           }
           return execute(command, args, options);
         },
+        retry,
       });
       await verifyInputs();
       const current = requireIdentity(readRelease(), true, release.id);
@@ -384,6 +401,7 @@ export async function publishHostRelease({
           }
           return execute(command, args, options);
         },
+        retry,
       },
     );
     await verifyInputs();

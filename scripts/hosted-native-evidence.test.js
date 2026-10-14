@@ -712,6 +712,7 @@ test("fresh evidence drafts preserve an exact lightweight source tag before rele
       preserveNativeEvidenceTag({
         ...value,
         fetchAPI: async () => new Response("failure", { status }),
+        retry: { sleep: async () => {} },
       }),
     ).rejects.toThrow();
     expect(writes).toHaveLength(1);

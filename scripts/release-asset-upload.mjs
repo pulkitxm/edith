@@ -3,6 +3,8 @@ import { statSync } from "node:fs";
 import { copyFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { TransientGitHubError, withGitHubRetrySync } from "./github-retry.mjs";
+import { lookupRelease } from "./release-lookup.mjs";
 
 function assetArguments({ repository, releaseID, file, name }) {
   const size = statSync(file).size;
@@ -42,6 +44,147 @@ function runAssetRequest(args, execute, timeout = 120_000) {
   return result;
 }
 
+function watchWorkflow(workflowUrl, execute, timeout) {
+  const match =
+    /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/actions\/runs\/([1-9][0-9]*)$/.exec(
+      workflowUrl,
+    );
+  if (!match) throw new Error("Invalid release mutation workflow identity");
+  try {
+    execute(
+      "gh",
+      [
+        "run",
+        "watch",
+        match[3],
+        "--repo",
+        `${match[1]}/${match[2]}`,
+        "--exit-status",
+      ],
+      {
+        encoding: "utf8",
+        timeout,
+        killSignal: "SIGKILL",
+        maxBuffer: 2 * 1024 ** 2,
+      },
+    );
+  } catch (error) {
+    if (error?.code === "ETIMEDOUT" || error?.signal) throw error;
+    throw new TransientGitHubError(
+      `Pukbot workflow failed: ${workflowUrl}: ${error?.message}`,
+      {
+        cause: error,
+      },
+    );
+  }
+}
+
+const booleanMutationFlags = new Set([
+  "--draft",
+  "--prerelease",
+  "--generate-notes",
+  "--dry-run",
+]);
+
+function mutationArguments(args) {
+  const positional = [];
+  const flags = {};
+  for (let index = 2; index < args.length; index++) {
+    const argument = args[index];
+    if (!argument.startsWith("--")) positional.push(argument);
+    else if (
+      booleanMutationFlags.has(argument) ||
+      index + 1 >= args.length ||
+      args[index + 1].startsWith("--")
+    )
+      flags[argument] = true;
+    else flags[argument] = args[++index];
+  }
+  return { positional, flags };
+}
+
+function readTagCommit({ repository, tag, execute, retry }) {
+  try {
+    return withGitHubRetrySync(
+      () =>
+        JSON.parse(
+          execute(
+            "gh",
+            [
+              "api",
+              `repos/${repository}/git/ref/tags/${encodeURIComponent(tag)}`,
+            ],
+            {
+              encoding: "utf8",
+              timeout: 60_000,
+              killSignal: "SIGKILL",
+              maxBuffer: 1024 ** 2,
+            },
+          ),
+        ),
+      retry,
+    );
+  } catch (error) {
+    if (/\bHTTP 404\b/.test(String(error?.stderr))) return undefined;
+    throw error;
+  }
+}
+
+export function createdObjectConfirmation(args, execute, retry = {}) {
+  if (args[1] !== "create" || args.includes("--dry-run")) return undefined;
+  const { positional, flags } = mutationArguments(args);
+  const repository = flags["--repo"];
+  const target = flags["--target"];
+  const [tag] = positional;
+  if (
+    positional.length !== 1 ||
+    typeof repository !== "string" ||
+    typeof target !== "string"
+  )
+    return undefined;
+  if (args[0] === "release")
+    return () => {
+      const release = lookupRelease({ repository, tag, execute, retry });
+      return Boolean(
+        release &&
+          release.tag_name === tag &&
+          release.target_commitish === target &&
+          release.draft === Boolean(flags["--draft"]) &&
+          release.prerelease === Boolean(flags["--prerelease"]),
+      );
+    };
+  if (args[0] === "tag")
+    return () => {
+      const reference = readTagCommit({ repository, tag, execute, retry });
+      return Boolean(
+        reference &&
+          reference.ref === `refs/tags/${tag}` &&
+          reference.object?.type === "commit" &&
+          reference.object.sha === target,
+      );
+    };
+  return undefined;
+}
+
+function retryMutation(operation, { confirm, confirmed, remaining, retry }) {
+  return withGitHubRetrySync(
+    (attempt) => {
+      try {
+        return operation();
+      } catch (error) {
+        if (attempt > 1 && confirm?.()) return confirmed;
+        throw error;
+      }
+    },
+    {
+      ...retry,
+      remaining,
+      beforeRetry:
+        confirm && (() => (confirm() ? { value: confirmed } : undefined)),
+    },
+  );
+}
+
 function isAssetCapacityError(error, file) {
   let structuredMessage;
   try {
@@ -72,10 +215,14 @@ export function preflightReleaseAsset({
   file,
   name = basename(file),
   execute = execFileSync,
+  retry = {},
 }) {
   const args = assetArguments({ repository, releaseID: 1, file, name });
   try {
-    runAssetRequest([...args, "--dry-run"], execute);
+    withGitHubRetrySync(
+      () => runAssetRequest([...args, "--dry-run"], execute),
+      retry,
+    );
     return "pukbot";
   } catch (error) {
     if (!isAssetCapacityError(error, file)) throw error;
@@ -116,6 +263,7 @@ export function executeReleaseMutation(
     execute = execFileSync,
     totalTimeoutMs = 30 * 60_000,
     now = () => performance.now(),
+    retry = {},
   } = {},
 ) {
   const remaining = releaseRequestDeadline({
@@ -123,31 +271,20 @@ export function executeReleaseMutation(
     now,
     operation: "mutation",
   });
-  const result = runAssetRequest(args, execute, remaining());
-  if (result.workflowUrl) {
-    const match =
-      /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/actions\/runs\/([1-9][0-9]*)$/.exec(
-        result.workflowUrl,
-      );
-    if (!match) throw new Error("Invalid release mutation workflow identity");
-    execute(
-      "gh",
-      [
-        "run",
-        "watch",
-        match[3],
-        "--repo",
-        `${match[1]}/${match[2]}`,
-        "--exit-status",
-      ],
-      {
-        encoding: "utf8",
-        timeout: remaining(),
-        killSignal: "SIGKILL",
-        maxBuffer: 2 * 1024 ** 2,
-      },
-    );
-  }
+  const result = retryMutation(
+    () => {
+      const result = runAssetRequest(args, execute, remaining());
+      if (result.workflowUrl)
+        watchWorkflow(result.workflowUrl, execute, remaining());
+      return result;
+    },
+    {
+      confirm: createdObjectConfirmation(args, execute, retry),
+      confirmed: { ok: true, confirmed: true },
+      remaining,
+      retry,
+    },
+  );
   remaining();
   return result;
 }
@@ -161,6 +298,7 @@ export async function uploadReleaseAsset({
   execute = execFileSync,
   totalTimeoutMs = 30 * 60_000,
   now = () => performance.now(),
+  retry = {},
 }) {
   const remaining = releaseRequestDeadline({
     totalTimeoutMs,
@@ -168,30 +306,34 @@ export async function uploadReleaseAsset({
     operation: "asset upload",
   });
   const args = assetArguments({ repository, releaseID, file, name });
+  const size = statSync(file).size;
+  const confirm =
+    typeof tag === "string"
+      ? () => {
+          const release = lookupRelease({ repository, tag, execute, retry });
+          return Boolean(
+            release?.id === releaseID &&
+              release.assets.some(
+                (asset) =>
+                  asset.name === name &&
+                  asset.size === size &&
+                  asset.state === "uploaded",
+              ),
+          );
+        }
+      : undefined;
   try {
-    const result = runAssetRequest(args, execute, remaining());
-    if (result.workflowUrl) {
-      const url = new URL(result.workflowUrl);
-      const parts = url.pathname.split("/").filter(Boolean);
-      execute(
-        "gh",
-        [
-          "run",
-          "watch",
-          parts.at(-1),
-          "--repo",
-          `${parts[0]}/${parts[1]}`,
-          "--exit-status",
-        ],
-        {
-          encoding: "utf8",
-          timeout: remaining(),
-          killSignal: "SIGKILL",
-        },
-      );
-    }
+    const result = retryMutation(
+      () => {
+        const result = runAssetRequest(args, execute, remaining());
+        if (result.workflowUrl)
+          watchWorkflow(result.workflowUrl, execute, remaining());
+        return "pukbot";
+      },
+      { confirm, confirmed: "pukbot", remaining, retry },
+    );
     remaining();
-    return "pukbot";
+    return result;
   } catch (error) {
     if (!isAssetCapacityError(error, file)) throw error;
     if (typeof tag !== "string" || !/^[A-Za-z0-9][A-Za-z0-9/_.-]*$/.test(tag))
@@ -200,11 +342,19 @@ export async function uploadReleaseAsset({
     try {
       const upload = join(temporary, name);
       await copyFile(file, upload);
-      execute("gh", ["release", "upload", tag, upload, "--repo", repository], {
-        encoding: "utf8",
-        timeout: remaining(),
-        killSignal: "SIGKILL",
-      });
+      retryMutation(
+        () =>
+          execute(
+            "gh",
+            ["release", "upload", tag, upload, "--repo", repository],
+            {
+              encoding: "utf8",
+              timeout: remaining(),
+              killSignal: "SIGKILL",
+            },
+          ),
+        { confirm, confirmed: "gh", remaining, retry },
+      );
       remaining();
       return "gh";
     } finally {

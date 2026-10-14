@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { withGitHubRetrySync } from "./github-retry.mjs";
 
 function validateRelease(value, tag) {
   if (
@@ -22,6 +23,7 @@ export function lookupRelease({
   tag,
   execute = execFileSync,
   maximumPages = 20,
+  retry = {},
 }) {
   if (
     !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) ||
@@ -40,12 +42,16 @@ export function lookupRelease({
   )
     throw new Error("Invalid release lookup identity");
   const read = (path) =>
-    JSON.parse(
-      execute("gh", ["api", path], {
-        encoding: "utf8",
-        timeout: 60_000,
-        maxBuffer: 4 * 1024 ** 2,
-      }),
+    withGitHubRetrySync(
+      () =>
+        JSON.parse(
+          execute("gh", ["api", path], {
+            encoding: "utf8",
+            timeout: 60_000,
+            maxBuffer: 4 * 1024 ** 2,
+          }),
+        ),
+      retry,
     );
   try {
     return validateRelease(
