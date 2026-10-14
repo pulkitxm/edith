@@ -13,7 +13,9 @@ let package = Package(
             name: "EdithDocsWorker",
             dependencies: [.product(name: "Markdown", package: "swift-markdown")],
             resources: [.copy("Resources/cli-docs.json")],
-            swiftSettings: [.swiftLanguageMode(.v5)]),
+            swiftSettings: [
+                .swiftLanguageMode(.v5), .enableExperimentalFeature("CheckImplementationOnly"),
+            ]),
         .testTarget(
             name: "EdithDocsWorkerTests", dependencies: ["EdithDocsWorker"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
