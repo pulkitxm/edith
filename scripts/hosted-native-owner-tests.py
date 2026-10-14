@@ -17,6 +17,10 @@ spec = importlib.util.spec_from_file_location(
     'hosted_process_watchdog', Path(__file__).parent / 'hosted-host-tests/watchdog.py')
 watchdog = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(watchdog)
+driver_spec = importlib.util.spec_from_file_location(
+    'native_selected_swift', Path(__file__).parent / 'run-host-swift-testing.py')
+DRIVERS = importlib.util.module_from_spec(driver_spec)
+driver_spec.loader.exec_module(DRIVERS)
 
 TARGETS = {
     'attention': ['ci-extension-attention'],
@@ -36,7 +40,10 @@ LOG_BOUND = 16_777_216
 
 
 class BoundedOwnership(watchdog.OwnedProcesses):
-    def __init__(self, leader, uid):
+    def __init__(self, leader, uid, package_driver_pair=None):
+        if package_driver_pair is not None and not DRIVERS.admitted_package_driver_pair(package_driver_pair):
+            raise ValueError('Authenticated selected package driver pair required')
+        self.package_driver_pair = package_driver_pair
         super().__init__(leader, uid)
         self.errors = []
         self.seals = {}
@@ -491,8 +498,10 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         }
         if pid in self.self_group_observations or len(self.self_group_observations) < 8:
             self.self_group_observations[pid] = row
+        compound = not row['currentPathMatchesRetained']
         if (not row['knownChild'] or not row['groupIsOwnPID'] or parent is None
-                or not row['currentPathMatchesRetained'] or current[:3] != original[:3]
+                or compound and not self.permits_package_driver_transition(previous, current)
+                or current[:3] != original[:3]
                 or previous[:3] + previous[4:5] != original
                 or pid in self.child_self_groups or pid in self.rejected
                 or current[4] == original[3]):
@@ -506,7 +515,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         if not row['twoChildRecordsMatch']:
             return False
         child = children[0][1]
-        if (child[:3] != original[:3] or child[3] != previous[3] or child[4] != pid
+        if (child[:3] != original[:3] or child[3] != current[3] or child[4] != pid
                 or child[5] != parent[0] or child[:5] != current):
             return False
         parent_after = self.complete_live_record(parent[0])
@@ -514,10 +523,20 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         row['parentRecordsStable'] = parent_before == parent_after
         if not row['parentAfterMatches'] or not row['parentRecordsStable']:
             return False
+        if compound and not self.permits_package_driver_transition(previous, current):
+            return False
         self.child_self_groups[pid] = pid
         self.child_group_transitions[pid] = (previous, current, parent)
         row['transitionAdmitted'] = True
         return True
+
+    def permits_package_driver_transition(self, previous, current):
+        if not DRIVERS.admitted_package_driver_pair(self.package_driver_pair) or previous is None:
+            return False
+        try:
+            return self.package_driver_pair.permits(previous[3], current[3])
+        except (OSError, ValueError, RuntimeError):
+            return False
 
     def recover_snapshot(self, pid, include_zombies=False):
         self.last_recovery_failure = None

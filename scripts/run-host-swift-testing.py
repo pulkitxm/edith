@@ -1,8 +1,10 @@
 import importlib.util
+import hashlib
 import os
 import stat
 import subprocess
 import sys
+import weakref
 from pathlib import Path
 
 
@@ -76,6 +78,105 @@ class SelectedSwiftDriver:
         if driver_contract(self.developer, self.entry, self.inspect) != self.contract:
             raise ValueError("Selected Swift driver changed after admission")
         return self.contract[0]
+
+
+ADMITTED_PACKAGE_DRIVER_PAIRS = weakref.WeakSet()
+PACKAGE_IMAGE_BOUND = 268_435_456
+
+
+class SelectedPackageArguments(list):
+    def __init__(self, driver, arguments):
+        super().__init__(arguments)
+        self.driver = driver
+
+
+def image_identity(value):
+    return tuple(getattr(value, name) for name in (
+        "st_dev", "st_ino", "st_mode", "st_uid", "st_nlink", "st_size",
+        "st_mtime_ns", "st_ctime_ns"))
+
+
+class SelectedPackageDriverPair:
+    def __init__(self, driver):
+        self.images = []
+        try:
+            if type(driver) is not SelectedSwiftDriver or driver.entry not in {"swift-test", "swift-build"}:
+                raise ValueError("Selected package driver required")
+            driver.validate()
+            self.driver = driver
+            self.source = driver.contract[1]
+            self.directory = self.source.parent
+            self.destination = self.directory / "swift-driver"
+            directory = self.directory.lstat()
+            if (self.source.name != "swift-package" or not stat.S_ISDIR(directory.st_mode)
+                    or directory.st_uid != 0 or directory.st_mode & 0o022):
+                raise ValueError("Immutable selected package directory required")
+            self.directory_identity = image_identity(directory)
+            for path in (self.source, self.destination):
+                if path.resolve(strict=True) != path:
+                    raise ValueError("Canonical selected package image required")
+                descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
+                self.images.append((path, descriptor, None, None))
+                value = os.fstat(descriptor)
+                if (not stat.S_ISREG(value.st_mode) or value.st_uid != 0
+                        or value.st_nlink != 1 or value.st_mode & 0o022
+                        or not value.st_mode & 0o111 or not 0 < value.st_size <= PACKAGE_IMAGE_BOUND):
+                    raise ValueError("Immutable selected package image required")
+                identity = image_identity(value)
+                digest = self.image_digest(descriptor, value.st_size)
+                self.images[-1] = (path, descriptor, identity, digest)
+            if self.images[0][2] != driver.contract[4]:
+                raise ValueError("Selected package image differs from alias contract")
+            self.validate_images()
+            ADMITTED_PACKAGE_DRIVER_PAIRS.add(self)
+        except BaseException:
+            self.close()
+            raise
+
+    @staticmethod
+    def image_digest(descriptor, size):
+        digest = hashlib.sha256()
+        offset = 0
+        while offset < size:
+            block = os.pread(descriptor, min(1_048_576, size - offset), offset)
+            if not block:
+                raise RuntimeError("Incomplete selected package image")
+            offset += len(block)
+            digest.update(block)
+        return digest.hexdigest()
+
+    def validate_images(self):
+        self.driver.validate()
+        if (self.directory.resolve(strict=True) != self.directory
+                or image_identity(self.directory.lstat()) != self.directory_identity):
+            raise RuntimeError("Selected package directory changed")
+        for path, descriptor, identity, digest in self.images:
+            if (path.resolve(strict=True) != path or image_identity(path.lstat()) != identity
+                    or image_identity(os.fstat(descriptor)) != identity
+                    or self.image_digest(descriptor, identity[5]) != digest
+                    or image_identity(path.lstat()) != identity
+                    or image_identity(os.fstat(descriptor)) != identity):
+                raise RuntimeError("Selected package image changed")
+
+    def permits(self, previous, current):
+        if not admitted_package_driver_pair(self) or (previous, current) != (str(self.source), str(self.destination)):
+            return False
+        self.validate_images()
+        return True
+
+    def close(self):
+        ADMITTED_PACKAGE_DRIVER_PAIRS.discard(self)
+        for _, descriptor, _, _ in self.images:
+            os.close(descriptor)
+        self.images = []
+
+    def __del__(self):
+        if getattr(self, "images", None):
+            self.close()
+
+
+def admitted_package_driver_pair(value):
+    return type(value) is SelectedPackageDriverPair and value in ADMITTED_PACKAGE_DRIVER_PAIRS
 
 
 def binary_directory(driver, check_output=subprocess.check_output):

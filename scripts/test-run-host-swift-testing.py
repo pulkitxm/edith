@@ -1,4 +1,5 @@
 import importlib.util
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import tempfile
@@ -351,6 +352,138 @@ class PackageTestInvocationTests(unittest.TestCase):
         self.assertTrue(recipe.endswith(prefix + ' --package-path Extensions/keepAwake --build-system native --no-parallel --jobs 1 -Xswiftc -j1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"'))
         for retained in ["umask 077", "cleanup-keep-awake-fixture.py", "CFFIXED_USER_HOME", "XDG_CONFIG_HOME", "EDITH_TEST_NATIVE_CAPTURE=0", "EDITH_EXTENSION_DATA_ROOT", "EDITH_SHARED_DEFAULTS_SUITE"]:
             self.assertIn(retained, recipe)
+
+
+@contextmanager
+def selected_pair_fixture(module):
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary).resolve()
+        developer = root / "Xcode.app/Contents/Developer"
+        directory = developer / "Toolchains/XcodeDefault.xctoolchain/usr/bin"
+        directory.mkdir(parents=True)
+        source = directory / "swift-package"
+        destination = directory / "swift-driver"
+        for path in (source, destination):
+            path.write_bytes(("synthetic-unexecuted-" + path.name).encode())
+            path.chmod(0o755)
+        (directory / "swift-test").symlink_to("swift-package")
+        original_lstat = Path.lstat
+        original_fstat = os.fstat
+        inodes = {(value.st_dev, value.st_ino) for value in [original_lstat(source), original_lstat(destination)]}
+
+        def root_metadata(value):
+            fields = {name: getattr(value, name) for name in dir(value) if name.startswith("st_")}
+            fields["st_uid"] = 0
+            return type("SyntheticRootMetadata", (), fields)()
+
+        def owned_path(path):
+            value = original_lstat(path)
+            return root_metadata(value) if path.is_relative_to(root) else value
+
+        def owned_descriptor(descriptor):
+            value = original_fstat(descriptor)
+            return root_metadata(value) if (value.st_dev, value.st_ino) in inodes else value
+
+        with patch.object(Path, "lstat", owned_path), patch.object(module.os, "fstat", owned_descriptor):
+            driver = module.SelectedSwiftDriver(developer, entry="swift-test")
+            yield driver, source, destination
+
+
+class SelectedPackageDriverPairTests(unittest.TestCase):
+    def test_carrier_defers_admission_and_preserves_every_original_argument(self):
+        driver = Mock()
+        arguments = ["/synthetic/swift-test", "--filter", "OriginalCase", "--jobs", "1"]
+        carrier = runtime.SelectedPackageArguments(driver, arguments)
+        self.assertEqual(carrier, arguments)
+        self.assertIs(carrier.driver, driver)
+        driver.validate.assert_not_called()
+        self.assertFalse(runtime.admitted_package_driver_pair(carrier))
+
+    def test_real_constructor_admits_only_exact_pair_and_close_revokes_held_authority(self):
+        with selected_pair_fixture(runtime) as (driver, source, destination):
+            pair = runtime.SelectedPackageDriverPair(driver)
+            descriptors = [row[1] for row in pair.images]
+            self.assertTrue(pair.permits(str(source), str(destination)))
+            self.assertFalse(pair.permits(str(destination), str(source)))
+            self.assertFalse(pair.permits(str(source), str(destination.with_name("swift-frontend"))))
+            self.assertFalse(pair.permits(str(source.parent.parent / source.name), str(destination)))
+            pair.close()
+            self.assertFalse(pair.permits(str(source), str(destination)))
+            for descriptor in descriptors:
+                with self.assertRaises(OSError):
+                    os.fstat(descriptor)
+
+    def test_image_mutation_permissions_links_and_replacement_invalidate_real_held_pair(self):
+        for image in ["source", "destination"]:
+            for change in ["bytes", "writable", "hardlink", "symlink", "replacement"]:
+                with self.subTest(image=image, change=change), selected_pair_fixture(runtime) as (driver, source, destination):
+                    pair = runtime.SelectedPackageDriverPair(driver)
+                    target = source if image == "source" else destination
+                    if change == "bytes":
+                        target.write_bytes(b"changed synthetic bytes")
+                    elif change == "writable":
+                        target.chmod(0o777)
+                    elif change == "hardlink":
+                        os.link(target, target.with_name("duplicate"))
+                    else:
+                        previous = target.with_name("old-image")
+                        target.rename(previous)
+                        if change == "symlink":
+                            target.symlink_to(previous.name)
+                        else:
+                            target.write_bytes(b"synthetic replaced image")
+                            target.chmod(0o755)
+                    with self.assertRaises((OSError, ValueError, RuntimeError)):
+                        pair.permits(str(source), str(destination))
+                    pair.close()
+
+    def test_held_sha_rejects_byte_change_even_when_metadata_reports_original_identity(self):
+        with selected_pair_fixture(runtime) as (driver, source, destination):
+            pair = runtime.SelectedPackageDriverPair(driver)
+            descriptor = pair.images[1][1]
+            original_path = Path.lstat
+            original_fd = os.fstat
+            path_metadata = destination.lstat()
+            fd_metadata = os.fstat(descriptor)
+            destination.write_bytes(b"x" * destination.stat().st_size)
+            with patch.object(Path, "lstat", lambda path: path_metadata if path == destination else original_path(path)), \
+                    patch.object(os, "fstat", lambda value: fd_metadata if value == descriptor else original_fd(value)):
+                with self.assertRaisesRegex(RuntimeError, "Selected package image changed"):
+                    pair.permits(str(source), str(destination))
+            pair.close()
+
+    def test_unadmitted_forged_subclass_or_wrong_entry_cannot_mint_pair_authority(self):
+        forged = object.__new__(runtime.SelectedPackageDriverPair)
+        self.assertFalse(runtime.admitted_package_driver_pair(forged))
+        self.assertFalse(forged.permits("source", "destination"))
+        class DriverSubclass(runtime.SelectedSwiftDriver):
+            pass
+        with selected_pair_fixture(runtime) as (driver, _, _):
+            for value in [None, object(), object.__new__(DriverSubclass)]:
+                with self.assertRaises(ValueError):
+                    runtime.SelectedPackageDriverPair(value)
+            driver.entry = "swift"
+            with self.assertRaises(ValueError):
+                runtime.SelectedPackageDriverPair(driver)
+
+    def test_destination_user_owner_nonexecutable_and_oversize_are_rejected_before_admission(self):
+        for change in ["user", "nonexecutable", "oversize"]:
+            with self.subTest(change=change), selected_pair_fixture(runtime) as (driver, source, destination):
+                if change == "nonexecutable":
+                    destination.chmod(0o600)
+                elif change == "oversize":
+                    with destination.open("r+b") as output:
+                        output.truncate(runtime.PACKAGE_IMAGE_BOUND + 1)
+                original = os.fstat
+                def metadata(descriptor):
+                    value = original(descriptor)
+                    if change == "user" and value.st_ino == destination.stat().st_ino:
+                        fields = {name: getattr(value, name) for name in dir(value) if name.startswith("st_")}
+                        fields["st_uid"] = os.getuid()
+                        return type("SyntheticUserMetadata", (), fields)()
+                    return value
+                with patch.object(os, "fstat", metadata), self.assertRaises(ValueError):
+                    runtime.SelectedPackageDriverPair(driver)
 
 
 if __name__ == "__main__":
