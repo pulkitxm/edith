@@ -101,6 +101,10 @@ private actor HerdrAccountLaunchRecorder {
         #expect(!script.contains("synthetic-first-token"))
         #expect(
             script.contains("unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN"))
+        let tagging = try ClaudeAccountSessions.launchArguments(
+            account: second.id, directory: model.directory)
+        #expect(script.hasSuffix(tagging.map(ShellQuote.quote).joined(separator: " ")))
+        #expect(!tagging.joined().contains(first.id.uuidString))
         #expect(store.accountSessions["local|default|fixture:pane"] == second.id.uuidString)
         await store.drain()
     }

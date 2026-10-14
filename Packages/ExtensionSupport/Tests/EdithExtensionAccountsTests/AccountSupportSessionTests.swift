@@ -84,7 +84,8 @@ import Testing
             FileManager.default.createFile(
                 atPath: ledger.path, contents: Data(lines.joined(separator: "\n").utf8),
                 attributes: [.posixPermissions: 0o600]))
-        #expect(try ClaudeAccountSessions.accounts(directory: directory) == ["synthetic-b": account])
+        #expect(
+            try ClaudeAccountSessions.accounts(directory: directory) == ["synthetic-b": account])
     }
 
     @Test func sharedLedgerIsRejected() throws {
