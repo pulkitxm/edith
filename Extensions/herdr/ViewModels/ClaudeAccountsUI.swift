@@ -43,6 +43,19 @@ struct ClaudeSharedLaunchMutation: Codable {
             guard object.isEmpty else { throw ExtensionPeerError.invalidRequest }
             return try JSONEncoder().encode(current)
         }
+        if command == "herdr.ui.accounts.limitsStatus"
+            || command == "herdr.ui.accounts.limitsCancel"
+        {
+            guard payload.count <= 256, Set(object.keys) == ["id", "ticket"],
+                let raw = object["id"] as? String, let id = UUID(uuidString: raw),
+                let token = object["ticket"] as? String, let ticket = UUID(uuidString: token)
+            else { throw ExtensionPeerError.invalidRequest }
+            let state =
+                command == "herdr.ui.accounts.limitsCancel"
+                ? try model.limitsLoginOwner.requestCancellation(accountID: id, ticket: ticket)
+                : try model.limitsLoginOwner.status(accountID: id, ticket: ticket)
+            return try JSONEncoder().encode(state)
+        }
         if command == "herdr.ui.accounts.select" {
             guard payload.count <= 128, Set(object.keys) == ["id"],
                 let raw = object["id"] as? String, UUID(uuidString: raw) != nil
@@ -56,6 +69,13 @@ struct ClaudeSharedLaunchMutation: Codable {
             throw ExtensionPeerError.rejected("An account change is already in progress.")
         }
         switch command {
+        case "herdr.ui.accounts.limitsStart":
+            guard payload.count <= 256, Set(object.keys) == ["id", "ticket"],
+                let raw = object["id"] as? String, let id = UUID(uuidString: raw),
+                let token = object["ticket"] as? String, let ticket = UUID(uuidString: token)
+            else { throw ExtensionPeerError.invalidRequest }
+            return try JSONEncoder().encode(
+                await model.startLimitsLogin(id, ticket: ticket, defaults: worker.store.uiDefaults))
         case "herdr.ui.accounts.read":
             guard object.isEmpty else { throw ExtensionPeerError.invalidRequest }
         case "herdr.ui.accounts.save":
