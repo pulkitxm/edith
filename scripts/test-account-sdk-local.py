@@ -44,7 +44,7 @@ class LocalOwnership(OWNERSHIP.BoundedOwnership):
         self.private_failure_identities = []
         super().__init__(leader, uid)
 
-    def observe_failure(self, pid, kind, current=None):
+    def observe_failure(self, pid, kind, current=None, record=None):
         if len(self.private_failure_identities) < 8:
             original = self.known.get(pid)
             seal = self.seals.get(pid)
@@ -54,7 +54,9 @@ class LocalOwnership(OWNERSHIP.BoundedOwnership):
                 "originalKnown": list(original) if original is not None else None,
                 "originalSeal": list(seal) if seal is not None else None,
             })
-        return super().observe_failure(pid, kind, current)
+        if record is None:
+            return super().observe_failure(pid, kind, current)
+        return super().observe_failure(pid, kind, current, record=record)
 
 
 def private_directory(path):
