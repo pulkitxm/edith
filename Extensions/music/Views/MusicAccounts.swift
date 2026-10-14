@@ -310,8 +310,7 @@ final class MusicAccounts: NSObject, WKNavigationDelegate, WKUIDelegate {
         case .local: pauseLocal()
         case .spotify: spotify.send(["action": "pause"])
         case .youtubeMusic:
-            youtubeView?.evaluateJavaScript(
-                "document.querySelector('video')?.pause()", completionHandler: nil)
+            pauseYoutube()
         }
         selected = provider
         defaults.set(provider.rawValue, forKey: "musicSelectedProvider")
@@ -323,6 +322,11 @@ final class MusicAccounts: NSObject, WKNavigationDelegate, WKUIDelegate {
         if selected == .youtubeMusic, youtubeConnected { loadYoutube() }
     }
 
+    private func pauseYoutube() {
+        youtubeView?.evaluateJavaScript(
+            "document.querySelector('video')?.pause()", completionHandler: nil)
+    }
+
     func shutdownAndWait() async {
         shutdown()
         await spotify.stopAndWait()
@@ -331,8 +335,7 @@ final class MusicAccounts: NSObject, WKNavigationDelegate, WKUIDelegate {
     func shutdown() {
         youtubeGeneration += 1
         spotify.stop()
-        youtubeView?.evaluateJavaScript(
-            "document.querySelector('video')?.pause()", completionHandler: nil)
+        pauseYoutube()
         youtubeView?.stopLoading()
         youtubeView?.navigationDelegate = nil
         youtubeView = nil
@@ -364,8 +367,7 @@ final class MusicAccounts: NSObject, WKNavigationDelegate, WKUIDelegate {
             youtubeConnected = true
             defaults.set(true, forKey: "musicYoutubeAccountSaved")
             youtubeView?.stopLoading()
-            youtubeView?.evaluateJavaScript(
-                "document.querySelector('video')?.pause()", completionHandler: nil)
+            pauseYoutube()
             youtubeView = nil
             loadYoutube()
         } catch { if token == youtubeGeneration { youtubeError = error.localizedDescription } }
@@ -377,8 +379,7 @@ final class MusicAccounts: NSObject, WKNavigationDelegate, WKUIDelegate {
         youtubeConnecting = true
         defer { youtubeConnecting = false }
         youtubeView?.stopLoading()
-        youtubeView?.evaluateJavaScript(
-            "document.querySelector('video')?.pause()", completionHandler: nil)
+        pauseYoutube()
         youtubeView = nil
         await youtubeStore.removeData(
             ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
