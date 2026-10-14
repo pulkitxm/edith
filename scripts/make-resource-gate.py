@@ -64,6 +64,7 @@ EXACT = {
     "ci-promo": "node",
     "ci-scripts": "node",
     "ci-scripts-batch": "node",
+    "ci-release-orchestration-local": "node",
     "ci-performance": "node",
     "bench-cli": "node",
     "icon": "node",
