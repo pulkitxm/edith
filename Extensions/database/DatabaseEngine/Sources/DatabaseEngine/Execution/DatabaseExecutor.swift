@@ -2120,7 +2120,6 @@ public actor DatabaseExecutor {
         let active = activeOperations.removeValue(forKey: operationID)
         active?.deadlineTask?.cancel()
         await active?.deadlineTask?.value
-        _ = await active?.cancellationTask?.value
         guard serverCancellationTasks[operationID] == nil else { return }
         let completion = serverCancellationCompletions.removeValue(forKey: operationID)
         serverCancellationReservations.remove(operationID)
