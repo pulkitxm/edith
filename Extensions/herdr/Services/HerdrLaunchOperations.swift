@@ -9,18 +9,32 @@ public struct HerdrAgentLaunch: Sendable {
 }
 
 public enum HerdrLaunchOperations {
-    public static func launchLocalAccount(launcher: URL, pane: String) async throws {
+    public static func launchLocalAccount(command: String, pane: String) async throws {
         try Task.checkCancellation()
         _ = try await HerdrCommand.run(
             HerdrSessionCommand.scoped(
-                HerdrPaneRunCommand.arguments(pane: pane, command: ShellQuote.quote(launcher.path)),
+                HerdrPaneRunCommand.arguments(pane: pane, command: command),
                 session: HerdrTerminalSpace.defaultSession), timeout: 15, on: nil)
     }
 
     public static func launchRemoteAccount(
-        account: ClaudeAccount, command: String, arguments: [String], pane: String,
+        account: ClaudeAccount, command: String, arguments: [String], environment: String,
+        pane: String,
         on machine: Machine
     ) async throws {
+        try validateAccountTarget(account, on: machine)
+        _ = try account.launchCommand(
+            command: command, arguments: arguments, environment: environment,
+            configurationPath: account.authentication == .browserLogin ? "/validated/profile" : nil)
+        if account.authentication != .browserLogin {
+            let launch = try accountLaunch(
+                account: account, command: command, arguments: arguments, environment: environment,
+                pane: pane)
+            try Task.checkCancellation()
+            _ = try await HerdrCommand.run(
+                local: launch.local, remote: launch.remote, timeout: launch.timeout, on: machine)
+            return
+        }
         let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
         try await connection.connect()
         guard let platform = await connection.remotePlatform, platform != .windows else {
@@ -48,54 +62,73 @@ public enum HerdrLaunchOperations {
             throw ClaudeAccountError.rejected(
                 "The selected machine could not prepare an account login.")
         }
-        let path = prepared.stdoutText + "/launch-" + UUID().uuidString + ".sh"
-        let script = try account.launchScript(
-            command: command, arguments: arguments, configurationPath: prepared.stdoutText,
-            launcherPath: path)
-        do {
-            let credentialGuard = try ClaudeAccountImport.remoteCredentialValidation(
-                path: prepared.stdoutText + "/.credentials.json", platform: platform)
-            let admitted = try await connection.run(credentialGuard, timeout: 15)
-            guard admitted.succeeded else {
-                throw ClaudeAccountError.rejected(
-                    "The selected machine has an unsafe account login file.")
-            }
-            if account.authentication == .browserLogin, let loginData = account.loginData {
-                let credentials = ShellQuote.quote(prepared.stdoutText + "/.credentials.json")
-                let seeded = try await connection.run(
-                    credentialGuard + "; umask 077; test ! -L " + credentials
-                        + "; status=$?; if [ $status -ne 0 ]; then exit $status; fi; if [ ! -e "
-                        + credentials + " ]; then (set -C; cat > " + credentials
-                        + "); else test -f " + credentials + " && cat >/dev/null; fi",
-                    stdin: Data(loginData.utf8), timeout: 15)
-                guard seeded.succeeded else {
-                    throw ClaudeAccountError.rejected(
-                        "The selected machine could not save the account login.")
-                }
-            }
-            try Task.checkCancellation()
-            let qualified = try await connection.run(credentialGuard, timeout: 15)
-            guard qualified.succeeded else {
-                throw ClaudeAccountError.rejected(
-                    "The selected machine has an unsafe account login file.")
-            }
-            let uploaded = try await connection.run(
-                "umask 077; (set -C; cat > " + ShellQuote.quote(path) + ") && chmod 700 "
-                    + ShellQuote.quote(path),
-                stdin: script, timeout: 15)
-            guard uploaded.succeeded else {
-                throw ClaudeAccountError.rejected(
-                    "The selected machine could not prepare the account launch.")
-            }
-            try Task.checkCancellation()
-            _ = try await HerdrCommand.run(
-                HerdrSessionCommand.scoped(
-                    HerdrPaneRunCommand.arguments(pane: pane, command: ShellQuote.quote(path)),
-                    session: HerdrTerminalSpace.defaultSession), timeout: 15, on: machine)
-        } catch {
-            _ = try? await connection.run("rm -f -- " + ShellQuote.quote(path), timeout: 5)
-            throw error
+        let credentialGuard = try ClaudeAccountImport.remoteCredentialValidation(
+            path: prepared.stdoutText + "/.credentials.json", platform: platform)
+        let admitted = try await connection.run(credentialGuard, timeout: 15)
+        guard admitted.succeeded else {
+            throw ClaudeAccountError.rejected(
+                "The selected machine has an unsafe account login file.")
         }
+        if account.authentication == .browserLogin, let loginData = account.loginData {
+            let credentials = ShellQuote.quote(prepared.stdoutText + "/.credentials.json")
+            let seeded = try await connection.run(
+                credentialGuard + "; umask 077; test ! -L " + credentials
+                    + "; status=$?; if [ $status -ne 0 ]; then exit $status; fi; if [ ! -e "
+                    + credentials + " ]; then (set -C; cat > " + credentials
+                    + "); else test -f " + credentials + " && cat >/dev/null; fi",
+                stdin: Data(loginData.utf8), timeout: 15)
+            guard seeded.succeeded else {
+                throw ClaudeAccountError.rejected(
+                    "The selected machine could not save the account login.")
+            }
+        }
+        try Task.checkCancellation()
+        let qualified = try await connection.run(credentialGuard, timeout: 15)
+        guard qualified.succeeded else {
+            throw ClaudeAccountError.rejected(
+                "The selected machine has an unsafe account login file.")
+        }
+        let launch = try accountLaunch(
+            account: account, command: command, arguments: arguments, environment: environment,
+            configurationPath: prepared.stdoutText, pane: pane)
+        try Task.checkCancellation()
+        _ = try await HerdrCommand.run(
+            local: launch.local, remote: launch.remote, timeout: launch.timeout, on: machine)
+    }
+
+    static func validateAccountTarget(_ account: ClaudeAccount, on machine: Machine) throws {
+        try account.validateLaunch()
+        guard account.remoteMachineID == machine.id.uuidString else {
+            throw ClaudeAccountError.rejected("Choose the machine associated with this account.")
+        }
+        _ = try ClaudeAccountImport.remoteProfileExpression(accountID: account.id)
+    }
+
+    static func accountLaunch(
+        account: ClaudeAccount, command: String, arguments: [String], environment: String,
+        configurationPath: String? = nil, pane: String,
+        session: String = HerdrTerminalSpace.defaultSession
+    ) throws -> HerdrAgentLaunch {
+        let local = try account.launchCommand(
+            command: command, arguments: arguments, environment: environment,
+            configurationPath: configurationPath)
+        let windows = try account.launchCommand(
+            command: command, arguments: arguments, environment: environment, platform: .windows,
+            configurationPath: configurationPath)
+        @Sendable func remoteCommand(_ platform: RemoteMachinePlatform) -> String {
+            remoteHerdrCommand(
+                arguments: HerdrSessionCommand.scoped(
+                    HerdrPaneRunCommand.arguments(
+                        pane: pane, command: platform == .windows ? windows : local),
+                    session: session), platform: platform)
+        }
+        guard remoteCommand(.windows).utf8.count <= 65_536,
+            remoteCommand(.linux).utf8.count <= 65_536
+        else { throw ClaudeAccountError.invalidRequest }
+        return HerdrAgentLaunch(
+            local: HerdrSessionCommand.scoped(
+                HerdrPaneRunCommand.arguments(pane: pane, command: local), session: session),
+            remote: { remoteCommand($0) }, timeout: 15)
     }
 
     private static let defaultTimeout: TimeInterval = 15

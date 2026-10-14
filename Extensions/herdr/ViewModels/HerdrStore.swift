@@ -298,9 +298,9 @@ final class HerdrStore {
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
-    private let accountAgentStarter: @Sendable (URL, String) async throws -> Void
+    private let accountAgentStarter: @Sendable (String, String) async throws -> Void
     private let remoteAccountAgentStarter:
-        @Sendable (ClaudeAccount, String, [String], String, Machine) async throws -> Void
+        @Sendable (ClaudeAccount, String, [String], String, String, Machine) async throws -> Void
     private let newAgentPaneCreator: HerdrNewAgentPaneCreator
     private let agentStarter: @Sendable (String, String, Machine?) async throws -> Void
     private(set) var agentStartupMessages: [String: String] = [:]
@@ -345,16 +345,18 @@ final class HerdrStore {
                 name: HerdrLaunchSettings.defaultHerdrSlug(for: kind) ?? kind.lowercased(),
                 pane: pane, on: machine)
         },
-        accountAgentStarter: @escaping @Sendable (URL, String) async throws -> Void = {
-            launcher, pane in
-            try await HerdrLaunchOperations.launchLocalAccount(launcher: launcher, pane: pane)
+        accountAgentStarter: @escaping @Sendable (String, String) async throws -> Void = {
+            command, pane in
+            try await HerdrLaunchOperations.launchLocalAccount(command: command, pane: pane)
         },
         remoteAccountAgentStarter:
-            @escaping @Sendable (ClaudeAccount, String, [String], String, Machine) async throws ->
+            @escaping @Sendable (ClaudeAccount, String, [String], String, String, Machine)
+            async throws ->
             Void = {
-                account, command, arguments, pane, machine in
+                account, command, arguments, environment, pane, machine in
                 try await HerdrLaunchOperations.launchRemoteAccount(
-                    account: account, command: command, arguments: arguments, pane: pane,
+                    account: account, command: command, arguments: arguments,
+                    environment: environment, pane: pane,
                     on: machine)
             },
         terminalIDResolver: @escaping @Sendable (String, String, Machine?) async throws -> String =
@@ -2267,29 +2269,35 @@ final class HerdrStore {
         } else if kind != "Claude Code", accountID != nil {
             throw ClaudeAccountError.invalidRequest
         }
-        let accountLauncher: URL?
-        if let account, machine == nil {
-            let arguments = HerdrLaunchSettings.launchArguments(
-                kind: kind, options: HerdrLaunchSettings.options(for: kind, in: defaults),
-                in: defaults)
-            let command = HerdrLaunchSettings.launchCommand(for: kind, in: defaults)
-            let directory = try claudeAccounts.directory
-            accountLauncher = try await account.launcher(
-                command: command, arguments: arguments, directory: directory)
-        } else {
-            accountLauncher = nil
-        }
-        let created: HerdrCreatedPane
-        do {
-            created = try await newAgentPaneCreator(kind, machine, existingSpace, newSpaceLabel)
-            try Task.checkCancellation()
-        } catch {
-            if let accountLauncher {
-                try? await ClaudeAccountStorage(directory: try claudeAccounts.directory)
-                    .removeLauncher(accountLauncher)
+        let accountCommand = HerdrLaunchSettings.command(for: kind, in: defaults)
+        let accountArguments = HerdrLaunchSettings.launchArguments(
+            kind: kind, options: HerdrLaunchSettings.options(for: kind, in: defaults), in: defaults)
+        let accountEnvironment = HerdrLaunchSettings.sharedEnvironment(in: defaults)
+        let accountDirectory: URL?
+        let localAccountCommand: String?
+        if let account {
+            accountDirectory = machine == nil ? try claudeAccounts.directory : nil
+            let profile =
+                account.authentication == .browserLogin
+                ? accountDirectory?.appendingPathComponent(account.id.uuidString).path
+                    ?? "/validated/profile" : nil
+            localAccountCommand = try account.launchCommand(
+                command: accountCommand, arguments: accountArguments,
+                environment: accountEnvironment,
+                configurationPath: profile)
+            if let machine {
+                try HerdrLaunchOperations.validateAccountTarget(account, on: machine)
+                _ = try HerdrLaunchOperations.accountLaunch(
+                    account: account, command: accountCommand, arguments: accountArguments,
+                    environment: accountEnvironment, configurationPath: profile,
+                    pane: "validated-pane")
             }
-            throw error
+        } else {
+            accountDirectory = nil
+            localAccountCommand = nil
         }
+        let created = try await newAgentPaneCreator(kind, machine, existingSpace, newSpaceLabel)
+        try Task.checkCancellation()
         let placeholder = HerdrAgent.make(
             machineID: host.id, machineName: host.name, machineIsLocal: host.isLocal,
             sshTarget: host.sshTarget, session: "default", pane: created.paneID, kind: kind,
@@ -2303,52 +2311,49 @@ final class HerdrStore {
         } else {
             open(placeholder)
         }
-        let launcherDirectory = accountLauncher.map {
-            $0.deletingLastPathComponent().deletingLastPathComponent()
-        }
         let start = agentStarter
         let startAccount = accountAgentStarter
         let startRemoteAccount = remoteAccountAgentStarter
-        let accountCommand = HerdrLaunchSettings.launchCommand(for: kind, in: defaults)
-        let accountArguments = HerdrLaunchSettings.launchArguments(
-            kind: kind, options: HerdrLaunchSettings.options(for: kind, in: defaults), in: defaults)
         let id = placeholder.id
         agentStartupTasks[id] = HerdrWorkOwnership.start { [weak self] in
             do {
-                if let accountLauncher {
-                    do {
-                        try await startAccount(accountLauncher, created.paneID)
-                    } catch {
-                        try? await ClaudeAccountStorage(
-                            directory: launcherDirectory
-                                ?? accountLauncher.deletingLastPathComponent()
-                                .deletingLastPathComponent()
-                        ).removeLauncher(accountLauncher)
-                        throw error
+                if let account, let accountDirectory, let localAccountCommand {
+                    if account.authentication == .browserLogin {
+                        let storage = ClaudeAccountStorage(directory: accountDirectory)
+                        try await storage.seedLogin(account: account)
                     }
+                    try Task.checkCancellation()
+                    try await startAccount(localAccountCommand, created.paneID)
                 } else if let account, let machine {
                     try await startRemoteAccount(
-                        account, accountCommand, accountArguments, created.paneID, machine)
+                        account, accountCommand, accountArguments, accountEnvironment,
+                        created.paneID, machine)
                     try Task.checkCancellation()
-                    if account.isLoggedOut, account.authentication == .browserLogin, let self {
-                        try await self.claudeAccounts.load()
-                        if self.claudeAccounts.account(account.id) == account {
-                            var next = self.claudeAccounts.state
-                            next.accounts = next.accounts.map {
-                                var current = $0
-                                if current.id == account.id { current.isLoggedOut = false }
-                                return current
-                            }
-                            try await self.claudeAccounts.persist(next)
-                            await self.claudeAccounts.notifyChanged()
-                        }
-                    }
                 } else {
                     try await start(kind, created.paneID, machine)
                 }
+                try Task.checkCancellation()
+                if let account, account.isLoggedOut, account.authentication == .browserLogin,
+                    let self
+                {
+                    try await self.claudeAccounts.load()
+                    if self.claudeAccounts.account(account.id) == account {
+                        var next = self.claudeAccounts.state
+                        next.accounts = next.accounts.map {
+                            var current = $0
+                            if current.id == account.id { current.isLoggedOut = false }
+                            return current
+                        }
+                        try await self.claudeAccounts.persist(next)
+                        await self.claudeAccounts.notifyChanged()
+                    }
+                }
             } catch {
                 guard !Task.isCancelled else { return }
-                self?.agentStartupMessages[id] = HerdrLaunchOperations.startupMessage(for: error)
+                self?.agentStartupMessages[id] =
+                    account == nil
+                    ? HerdrLaunchOperations.startupMessage(for: error)
+                    : "The selected account could not start. Check this terminal before trying again."
             }
             self?.agentStartupTasks[id] = nil
         }
