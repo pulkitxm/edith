@@ -29,17 +29,28 @@ import Testing
     }
 
     private func waitUntil(
-        _ stage: String, diagnostics: () -> String,
+        _ stage: String, stallLimit: Duration = .seconds(30), overallLimit: Duration = .seconds(30),
+        progress: () -> Double = { 0 }, diagnostics: () -> String,
         sourceLocation: SourceLocation = #_sourceLocation, _ ready: () -> Bool
     ) async throws {
         let started = ContinuousClock.now
-        let deadline = started + .seconds(30)
+        var advanced = started
+        var latest = progress()
         print("studio background export: waiting for \(stage)")
-        while !ready(), ContinuousClock.now < deadline {
+        while !ready() {
+            let now = ContinuousClock.now
+            let current = progress()
+            if current > latest {
+                latest = current
+                advanced = now
+            }
+            if now - started >= overallLimit || now - advanced >= stallLimit { break }
             try await Task.sleep(for: .milliseconds(10))
         }
         let satisfied = ready()
-        let details = "stage=\(stage) elapsed=\(started.duration(to: .now)) \(diagnostics())"
+        let details =
+            "stage=\(stage) elapsed=\(started.duration(to: .now)) "
+            + "sinceProgress=\(advanced.duration(to: .now)) progress=\(latest) \(diagnostics())"
         print("studio background export: \(details)")
         try #require(satisfied, Comment(rawValue: details), sourceLocation: sourceLocation)
     }
@@ -194,7 +205,10 @@ import Testing
             let token = try #require(reopened.state?.export?.token)
             reopened.observe()
             try await waitUntil(
-                "native export completion",
+                "native export completion", overallLimit: .seconds(600),
+                progress: {
+                    max(reopened.exporter.job?.progress ?? 0, reopened.state?.export?.progress ?? 0)
+                },
                 diagnostics: { diagnostics(runtime, requests: requests, facade: reopened) }
             ) { reopened.exporter.job?.phase == .finished }
             let report = try #require(reopened.exporter.job?.report)

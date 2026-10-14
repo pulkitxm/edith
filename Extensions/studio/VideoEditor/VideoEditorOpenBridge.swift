@@ -31,7 +31,7 @@ final class VideoEditorOpenBridge {
         }
     }
 
-    static let shared = VideoEditorOpenBridge()
+    static var shared = VideoEditorOpenBridge()
     private(set) var pending: Presentation?
     weak var activeEditor: VideoEditorModel?
     private var request: VideoEditorService.OpenRequest?

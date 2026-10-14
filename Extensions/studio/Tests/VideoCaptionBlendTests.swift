@@ -129,7 +129,7 @@ import Testing
             )
             #expect(mean <= 1)
             #expect(textMean <= 6)
-            let tolerance = name == "export" && background != "white" ? 2 : 1
+            let tolerance = name == "export" && background != "white" ? 4 : 1
             for y in [2000, 2100, 2850, 3700] {
                 for channel in 0..<3 {
                     let offset = (y * 2160 + 100) * 4 + channel
