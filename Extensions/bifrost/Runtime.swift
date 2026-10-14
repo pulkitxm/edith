@@ -86,9 +86,11 @@ final class ExtensionRuntime: NSObject {
         let drain = beginCommandDrain()
         Task { [self] in
             await drain.value
-            do { try await owner?.prepareDisable(); completion(nil) } catch {
-                completion(error as NSError)
+            let failure: NSError?
+            do { try await owner?.prepareDisable(); failure = nil } catch {
+                failure = error as NSError
             }
+            withExtendedLifetime(self) { completion(failure) }
         }
     }
 

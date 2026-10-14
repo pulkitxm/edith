@@ -3,7 +3,7 @@ import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 
-@MainActor struct SEOCommand: AsyncParsableCommand {
+struct SEOCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "seo",
         abstract: "Audit a site's pages, metadata, and Lighthouse scores.",
@@ -174,7 +174,7 @@ import Foundation
     }
 }
 
-@MainActor struct SEOListCommand: AsyncParsableCommand {
+struct SEOListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls",
         abstract: "List saved site-audit projects.",
@@ -188,7 +188,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let projects = try await SEOCLI.call { try await SEOCLIController().list() }
             if json {
@@ -208,7 +208,7 @@ import Foundation
     }
 }
 
-@MainActor struct SEOCreateCommand: AsyncParsableCommand {
+struct SEOCreateCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "create",
         abstract: "Create a site-audit project from a site URL.",
@@ -227,7 +227,7 @@ import Foundation
     @Argument(help: "Site URL, with or without a scheme.")
     var url: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let project = try await SEOCLI.call {
                 try await SEOCLIController().create(url: url, name: name)
@@ -242,7 +242,7 @@ import Foundation
     }
 }
 
-@MainActor struct SEORenameCommand: AsyncParsableCommand {
+struct SEORenameCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "rename",
         abstract: "Rename a site-audit project.",
@@ -261,7 +261,7 @@ import Foundation
     @Argument(help: "New project name.")
     var name: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let projectID = try SEOCLI.identifier(id)
             let project = try await SEOCLI.call {
@@ -276,7 +276,7 @@ import Foundation
     }
 }
 
-@MainActor struct SEODeleteCommand: AsyncParsableCommand {
+struct SEODeleteCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "delete",
         abstract: "Delete a site-audit project and its runs.",
@@ -297,7 +297,7 @@ import Foundation
     @Argument(help: "Project id from `ed seo ls`.")
     var id: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let projectID = try SEOCLI.identifier(id)
             let project = try await SEOCLI.call { try await SEOCLIController().show(projectID) }
@@ -312,7 +312,7 @@ import Foundation
     }
 }
 
-@MainActor struct SEOShowCommand: AsyncParsableCommand {
+struct SEOShowCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "show",
         abstract: "Show one site-audit project and its page selection.",
@@ -328,7 +328,7 @@ import Foundation
     @Argument(help: "Project id from `ed seo ls`.")
     var id: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let projectID = try SEOCLI.identifier(id)
             let controller = SEOCLIController()
@@ -350,7 +350,7 @@ import Foundation
     }
 }
 
-@MainActor struct SEOPagesCommand: AsyncParsableCommand {
+struct SEOPagesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "pages",
         abstract: "Discover a site's pages and choose which ones to audit.",
@@ -391,7 +391,7 @@ import Foundation
     @Argument(help: "Project id from `ed seo ls`.")
     var id: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let edits = choice()
             guard edits.count <= 1 else {
@@ -432,7 +432,7 @@ import Foundation
     }
 }
 
-@MainActor struct SEOLighthouseCommand: AsyncParsableCommand {
+struct SEOLighthouseCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "lighthouse",
         abstract: "Turn Lighthouse scoring on or off for the next audit.",
@@ -451,7 +451,7 @@ import Foundation
     @Argument(help: "on scores pages with Lighthouse. off records metadata only.")
     var state: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let enabled: Bool
             switch state.lowercased() {
@@ -476,7 +476,7 @@ import Foundation
     }
 }
 
-@MainActor struct SEOStartCommand: AsyncParsableCommand {
+struct SEOStartCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "start",
         abstract: "Start an audit of the selected pages.",
@@ -502,7 +502,7 @@ import Foundation
     @Argument(help: "Project id from `ed seo ls`.")
     var id: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             if lighthouse && noLighthouse {
                 throw CLIFailure.usage("Pass only one of --lighthouse or --no-lighthouse.")
@@ -521,7 +521,7 @@ import Foundation
     }
 }
 
-@MainActor struct SEOStopCommand: AsyncParsableCommand {
+struct SEOStopCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "stop",
         abstract: "Stop the audit running for a project.",
@@ -541,7 +541,7 @@ import Foundation
     @Argument(help: "Project id from `ed seo ls`.")
     var id: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let projectID = try SEOCLI.identifier(id)
             let project = try await SEOCLI.call { try await SEOCLIController().show(projectID) }
@@ -558,7 +558,7 @@ import Foundation
     }
 }
 
-@MainActor struct SEORunCommand: AsyncParsableCommand {
+struct SEORunCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "run",
         abstract: "Show one audit run, including issues and social cards.",
@@ -593,7 +593,7 @@ import Foundation
     @Argument(help: "Project id from `ed seo ls`.")
     var id: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let projectID = try SEOCLI.identifier(id)
             let selectedRun = try runID.map(SEOCLI.identifier)

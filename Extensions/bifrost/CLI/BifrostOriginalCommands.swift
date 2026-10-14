@@ -3,7 +3,7 @@ import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 
-@MainActor struct BifrostCLICommand: AsyncParsableCommand {
+struct BifrostCLICommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "bifrost",
         abstract: "Open the Bifrost launcher and query the apps, sums, and conversions it knows.",
@@ -43,7 +43,7 @@ import Foundation
     }
 }
 
-@MainActor struct BifrostOpenCommand: AsyncParsableCommand {
+struct BifrostOpenCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "open", abstract: "Open the Bifrost launcher bar.",
         discussion: """
@@ -60,7 +60,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             try BifrostBridge.requireExtension()
             let text = query ?? ""
@@ -80,7 +80,7 @@ import Foundation
     }
 }
 
-@MainActor struct BifrostListCommand: AsyncParsableCommand {
+struct BifrostListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls", abstract: "List the applications Bifrost has indexed.",
         discussion: """
@@ -101,7 +101,7 @@ import Foundation
     @Option(help: "Show at most this many applications.")
     var limit: Int = 50
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let limit = try ArgumentChecks.nonNegative(self.limit, "--limit")
             let index = try BifrostBridge.index()
@@ -148,7 +148,7 @@ import Foundation
     }
 }
 
-@MainActor struct BifrostCalcCommand: AsyncParsableCommand {
+struct BifrostCalcCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "calc", abstract: "Evaluate an expression the way the bar does.",
         discussion: """
@@ -165,7 +165,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             guard let calculation = BifrostCalculator.evaluate(expression) else {
                 throw CLIFailure.notFound(
@@ -186,7 +186,7 @@ import Foundation
     }
 }
 
-@MainActor struct BifrostConvertCommand: AsyncParsableCommand {
+struct BifrostConvertCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "convert", abstract: "Convert between units the way the bar does.",
         discussion: """
@@ -203,7 +203,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             guard let conversion = BifrostConversionParser.parse(sentence) else {
                 throw CLIFailure.notFound(
@@ -227,7 +227,7 @@ import Foundation
     }
 }
 
-@MainActor struct BifrostReindexCommand: AsyncParsableCommand {
+struct BifrostReindexCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "reindex", abstract: "Rebuild the Bifrost application index.",
         discussion: """
@@ -241,7 +241,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             try BifrostBridge.requireExtension()
             try BifrostCLIEnvironment.reindex()
@@ -259,7 +259,7 @@ import Foundation
     }
 }
 
-@MainActor struct BifrostClearCommand: AsyncParsableCommand {
+struct BifrostClearCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "clear", abstract: "Forget what Bifrost ranks as frequently opened.",
         discussion: """
@@ -273,7 +273,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             var ledger = BifrostUsageLedger.load(
                 from: SharedDefaults.store, key: AppStorageKeys.Bifrost.usage)
