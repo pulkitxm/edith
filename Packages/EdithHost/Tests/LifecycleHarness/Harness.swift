@@ -318,11 +318,11 @@ struct HostLifecycleHarness {
             stage = "initial commands"
             if extensionID == "calendar" { try await verifyCalendar(endpoint) }
             if extensionID == "virtualCamera" {
-                guard childProcesses(of: oldPID).isEmpty else {
+                guard await settledChildProcesses(of: oldPID, count: 0).isEmpty else {
                     throw HostWorkerError.invalidResponse
                 }
                 try await CameraFixture.verify(endpoint, fixture: fixture, seed: true)
-                cameraChildren = childProcesses(of: oldPID)
+                cameraChildren = await settledChildProcesses(of: oldPID, count: 1)
                 guard cameraChildren.count == 1 else { throw HostWorkerError.invalidResponse }
             } else if extensionID == "audioMixer" {
                 try await AudioMixerFixture.verify(endpoint)
@@ -395,11 +395,11 @@ struct HostLifecycleHarness {
             try await requireExited(terminalChildren)
             try await requireExited(cameraChildren)
             if extensionID == "virtualCamera" {
-                guard childProcesses(of: newPID).isEmpty else {
+                guard await settledChildProcesses(of: newPID, count: 0).isEmpty else {
                     throw HostWorkerError.invalidResponse
                 }
                 try await CameraFixture.verify(endpoint, fixture: fixture, seed: false)
-                cameraChildren = childProcesses(of: newPID)
+                cameraChildren = await settledChildProcesses(of: newPID, count: 1)
                 guard cameraChildren.count == 1 else { throw HostWorkerError.invalidResponse }
             } else if extensionID == "audioMixer" {
                 try await AudioMixerFixture.verify(endpoint)
@@ -509,11 +509,11 @@ struct HostLifecycleHarness {
             stage = "restored commands"
             if extensionID == "calendar" { try await verifyCalendar(endpoint) }
             if extensionID == "virtualCamera" {
-                guard childProcesses(of: restoredPID).isEmpty else {
+                guard await settledChildProcesses(of: restoredPID, count: 0).isEmpty else {
                     throw HostWorkerError.invalidResponse
                 }
                 try await CameraFixture.verify(endpoint, fixture: fixture, seed: false)
-                cameraChildren = childProcesses(of: restoredPID)
+                cameraChildren = await settledChildProcesses(of: restoredPID, count: 1)
                 guard cameraChildren.count == 1 else { throw HostWorkerError.invalidResponse }
             } else if extensionID == "audioMixer" {
                 try await AudioMixerFixture.verify(endpoint)
@@ -1128,6 +1128,17 @@ struct HostLifecycleHarness {
             invoke: { command, payload in
                 try await endpoint.invoke(command, payload: payload, timeout: 5)
             }, children: { childProcesses(of: workerPID) })
+    }
+
+    private static func settledChildProcesses(of pid: Int32, count: Int) async -> [Int32] {
+        let clock = ContinuousClock()
+        let deadline = clock.now + .seconds(15)
+        var children = childProcesses(of: pid)
+        while children.count != count, clock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(200))
+            children = childProcesses(of: pid)
+        }
+        return children
     }
 
     private static func childProcesses(of pid: Int32) -> [Int32] {

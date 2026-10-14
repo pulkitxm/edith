@@ -321,7 +321,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     }
 
     private func handleCapture(_ buffer: CVPixelBuffer, systemBackgroundActive: Bool) {
-        guard running, state.privacy.usesCamera, output != nil else { return }
+        guard running, state.privacy.usesCamera, let output else { return }
         if let rendered = render(
             buffer, at: clock(), systemBackgroundActive: systemBackgroundActive)
         {
@@ -475,7 +475,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
         timer.schedule(
             deadline: .now(), repeating: 1 / Self.privacyFrameRate, leeway: .milliseconds(10))
         timer.setEventHandler { [weak self] in
-            guard let self, self.running, !self.state.privacy.usesCamera, self.output != nil,
+            guard let self, self.running, !self.state.privacy.usesCamera, let output = self.output,
                 let frame = self.makePrivacyFrame()
             else { return }
             self.emit(frame)
