@@ -478,7 +478,7 @@
       "sources": [
         {
           "path": "Extensions/music/Runtime.swift",
-          "sha256": "ea50e3188636814d77c32d56e8026fe4b7a45fc92f90cdebcfd4c679dc00836d"
+          "sha256": "f9ff3be08120ecdf648c6cb7781be28df4bb1fdc3c9629e9be1f1553afec55c1"
         },
         {
           "path": "Extensions/music/UI/Runtime.swift",
@@ -588,7 +588,7 @@
       "sources": [
         {
           "path": "Extensions/studio/Runtime.swift",
-          "sha256": "487c391453b0c5ce43bea83a844b3271d5dd3e29bb5f78c0039df01793dd6a5d"
+          "sha256": "dd0e685f348bc25088898f464eff00b8e5f2538b16b37720845039d9638fb326"
         },
         {
           "path": "Extensions/studio/UIBridge/StudioUIScene.swift",
@@ -782,7 +782,7 @@
       "sources": [
         {
           "path": "Extensions/codeStats/Runtime.swift",
-          "sha256": "7784ad8f1b457955ec7ba0249fcb7365ccd6cd24d7900474cba729905a0a3520"
+          "sha256": "38926e95b3aa76250ed0d26e060efaaf0a29f12eae92ab02a9b60239a9d05290"
         },
         {
           "path": "Extensions/codeStats/CodeStatsUIBridge.swift",

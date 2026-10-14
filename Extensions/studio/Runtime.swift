@@ -170,6 +170,33 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        let ownedModel = model
+        let ownedFixture = fixture
+        let ownedStreams = streams
+        let ownedScenes = Array(uiScenes.values)
+        ownedFixture?.engineAdmission?.closeAdmission()
+        ownedFixture?.nativeExporter?.suspendCommands()
+        commands.suspend()
+        work.suspend()
+        videoSessions.suspend()
+        resources.suspend()
+        ownedStreams?.stop()
+        ownedModel?.suspendCommands()
+        for scene in ownedScenes { scene.suspendCommands() }
+        Task { [self, ownedModel, ownedFixture, ownedStreams] in
+            await commands.suspendAndWait()
+            await ownedStreams?.stopAndWait()
+            await work.suspendAndWait()
+            await resources.suspendAndWait()
+            await ownedFixture?.nativeExporter?.suspendCommandsAndWait()
+            await ownedModel?.suspendCommandsAndWait()
+            for scene in ownedScenes { await scene.suspendCommandsAndWait() }
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         let actual = beginShutdown()
