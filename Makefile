@@ -363,6 +363,14 @@ ci-extension-system:
 ci-extension-time-lapse:
 	$(call UTILITY_EXTENSION_NATIVE_TEST,timeLapse)
 
+.PHONY: ci-extension-time-lapse-local ci-extension-time-lapse-contracts
+ci-extension-time-lapse-local:
+	python3 -B scripts/test-time-lapse-local.py
+
+ci-extension-time-lapse-contracts:
+	python3 -B scripts/test-time-lapse-local.test.py
+	python3 -B scripts/test-account-sdk-local.test.py
+
 .PHONY: ci-extension-cleaner
 ci-extension-cleaner:
 	$(call UTILITY_EXTENSION_NATIVE_TEST,cleaner)
