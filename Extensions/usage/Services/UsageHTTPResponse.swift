@@ -6,13 +6,14 @@ public enum UsageHTTPResponse {
     }
 
     public static func read(
-        _ request: URLRequest, session: URLSession, maximumBytes: Int = 1_024 * 1_024
+        _ request: URLRequest, session: URLSession, maximumBytes: Int = 1_024 * 1_024,
+        delegate: (any URLSessionTaskDelegate)? = nil
     ) async throws -> (Data, URLResponse) {
         try Task.checkCancellation()
         guard maximumBytes > 0 else { throw Failure.oversized }
         let owned = URLSession(configuration: session.configuration)
         defer { owned.invalidateAndCancel() }
-        let (bytes, response) = try await owned.bytes(for: request)
+        let (bytes, response) = try await owned.bytes(for: request, delegate: delegate)
         if response.expectedContentLength > Int64(maximumBytes) {
             throw Failure.oversized
         }
