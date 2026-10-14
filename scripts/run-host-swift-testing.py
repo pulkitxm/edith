@@ -83,7 +83,7 @@ class SelectedSwiftDriver:
 
 
 ADMITTED_PACKAGE_DRIVER_PAIRS = weakref.WeakSet()
-PACKAGE_IMAGE_BOUND = 268_435_456
+PACKAGE_IMAGE_BOUND = 1_073_741_824
 
 
 class SelectedPackageArguments(list):
@@ -122,9 +122,9 @@ class SelectedPackageDriverPair:
                 self.images.append((path, descriptor, None, None))
                 value = os.fstat(descriptor)
                 if (not stat.S_ISREG(value.st_mode) or value.st_uid not in {0, os.getuid()}
-                        or value.st_nlink != 1 or value.st_mode & 0o022
+                        or value.st_mode & 0o002
                         or not value.st_mode & 0o111 or not 0 < value.st_size <= PACKAGE_IMAGE_BOUND):
-                    raise ValueError("Immutable selected package image required")
+                    raise ValueError(f"Immutable selected package image required: {path.name}")
                 identity = image_identity(value)
                 digest = self.image_digest(descriptor, value.st_size)
                 self.images[-1] = (path, descriptor, identity, digest)
