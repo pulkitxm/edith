@@ -142,7 +142,11 @@ ci-duplicate-keys:
 ci-lint:
 	bun run lint
 
-ci-scripts: ci-host-invocation
+.PHONY: ci-host-abi
+ci-host-abi:
+	bun scripts/extension-host-abi.mjs --check
+
+ci-scripts: ci-host-invocation ci-host-abi
 	bun test ./scripts --path-ignore-patterns '**/._*'
 
 ci-scripts-batch:
