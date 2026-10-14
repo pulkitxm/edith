@@ -22,7 +22,7 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
 
     func send(_ request: DatabaseBrokerCommandRequest) async throws -> DatabaseBrokerCommandResponse
     {
-        try await commandTasks.perform { [self] in try await sendWork(request) }
+        try await perform { [self] in try await sendWork(request) }
     }
 
     private func sendWork(_ request: DatabaseBrokerCommandRequest) async throws
@@ -34,6 +34,13 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
         _ = try response.envelope(
             matching: request.envelope(requestID: UUID(), sequence: 0), sequence: 0)
         return response
+    }
+
+    private func perform<Value: Sendable>(
+        _ work: @escaping @MainActor () async throws -> Value
+    ) async throws -> Value {
+        guard !stopped else { throw ExtensionEngineError.unavailable }
+        return try await commandTasks.perform(work)
     }
 
     func load() async {
@@ -140,12 +147,12 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
     }
 
     func repair() async throws {
-        try await commandTasks.perform { [self] in _ = try await engine.invoke("database.ui.repair")
+        try await perform { [self] in _ = try await engine.invoke("database.ui.repair")
         }
     }
 
     func prepare(_ id: DatabaseConnectionID) async throws {
-        try await commandTasks.perform { [self] in try await prepareWork(id) }
+        try await perform { [self] in try await prepareWork(id) }
     }
 
     private func prepareWork(_ id: DatabaseConnectionID) async throws {
@@ -155,7 +162,7 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
     }
 
     func store(_ secret: Data, for reference: DatabaseSecretReference) async throws {
-        try await commandTasks.perform { [self] in try await storeWork(secret, for: reference) }
+        try await perform { [self] in try await storeWork(secret, for: reference) }
     }
 
     private func storeWork(_ secret: Data, for reference: DatabaseSecretReference) async throws {
@@ -166,7 +173,7 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
     }
 
     func delete(_ reference: DatabaseSecretReference) async throws {
-        try await commandTasks.perform { [self] in try await deleteWork(reference) }
+        try await perform { [self] in try await deleteWork(reference) }
     }
 
     private func deleteWork(_ reference: DatabaseSecretReference) async throws {
