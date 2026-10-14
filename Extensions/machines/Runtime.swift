@@ -481,5 +481,8 @@ final class ExtensionRuntime: NSObject {
 
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
-    MainActor.assumeIsolated { Unmanaged.passRetained(ExtensionRuntime()).toOpaque() }
+    UnsafeMutableRawPointer(
+        bitPattern: MainActor.assumeIsolated {
+            UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
+        })
 }

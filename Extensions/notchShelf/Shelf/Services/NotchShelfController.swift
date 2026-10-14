@@ -1633,7 +1633,8 @@ final class NotchPromiseCallbackOwnership {
 }
 
 @MainActor
-final class SharePickerDelegate: NSObject, NSSharingServicePickerDelegate, NSSharingServiceDelegate
+final class SharePickerDelegate: NSObject, @MainActor NSSharingServicePickerDelegate,
+    NSSharingServiceDelegate
 {
     private let onEnd: @MainActor @Sendable () -> Void
     private var selectedService: NSSharingService?
