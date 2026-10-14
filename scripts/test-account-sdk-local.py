@@ -336,6 +336,11 @@ def run_owned(command, root, environment, output, process_factory=subprocess.Pop
                                "ownershipErrors": ["Owned leader admission failed"]}
                 else:
                     cleanup = OWNERSHIP.retire(process, ownership, clock, sleep)
+        if package_driver_pair is not None:
+            try:
+                package_driver_pair.validate_images()
+            except (OSError, ValueError, RuntimeError) as error:
+                failure = type(error).__name__
         overflow = bound_output(output) or overflow
         code = 124 if timed_out else 1 if overflow or failure else process.returncode
         safe = verified_cleanup(cleanup)

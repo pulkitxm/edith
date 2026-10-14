@@ -107,12 +107,13 @@ class SelectedPackageDriverPair:
             self.source = driver.contract[1]
             self.directory = self.source.parent
             self.destination = self.directory / "swift-driver"
+            self.frontend = self.directory / "swift-frontend"
             directory = self.directory.lstat()
             if (self.source.name != "swift-package" or not stat.S_ISDIR(directory.st_mode)
                     or directory.st_uid != 0 or directory.st_mode & 0o022):
                 raise ValueError("Immutable selected package directory required")
             self.directory_identity = image_identity(directory)
-            for path in (self.source, self.destination):
+            for path in (self.source, self.destination, self.frontend):
                 if path.resolve(strict=True) != path:
                     raise ValueError("Canonical selected package image required")
                 descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
@@ -146,6 +147,8 @@ class SelectedPackageDriverPair:
         return digest.hexdigest()
 
     def validate_images(self):
+        if tuple(row[0] for row in self.images) != (self.source, self.destination, self.frontend):
+            raise RuntimeError("Selected package image set changed")
         self.driver.validate()
         if (self.directory.resolve(strict=True) != self.directory
                 or image_identity(self.directory.lstat()) != self.directory_identity):
@@ -159,7 +162,11 @@ class SelectedPackageDriverPair:
                 raise RuntimeError("Selected package image changed")
 
     def permits(self, previous, current):
-        if not admitted_package_driver_pair(self) or (previous, current) != (str(self.source), str(self.destination)):
+        if not admitted_package_driver_pair(self):
+            return False
+        transitions = ((str(self.source), str(self.destination)),
+                       (str(self.destination), str(self.frontend)))
+        if (previous, current) not in transitions:
             return False
         self.validate_images()
         return True
