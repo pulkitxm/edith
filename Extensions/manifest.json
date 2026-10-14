@@ -1397,6 +1397,9 @@
     "supportProduct": "EdithExtensionUI",
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
+    "nativeClangDirectories": [
+      "vendor/GhosttyKit.xcframework/macos-arm64/Headers"
+    ],
     "nativeResources": [
       "TerminalNative_GhosttyTerminal.bundle"
     ],
@@ -2213,6 +2216,9 @@
     "supportProduct": "EdithExtensionDocuments",
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
+    "nativeClangDirectories": [
+      "vendor/GhosttyKit.xcframework/macos-arm64/Headers"
+    ],
     "nativeResources": [
       "TerminalNative_GhosttyTerminal.bundle"
     ],
@@ -2818,6 +2824,9 @@
     ],
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
+    "nativeClangDirectories": [
+      "vendor/GhosttyKit.xcframework/macos-arm64/Headers"
+    ],
     "nativeResources": [
       "TerminalNative_GhosttyTerminal.bundle"
     ],
@@ -3081,6 +3090,9 @@
     ],
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
+    "nativeClangDirectories": [
+      "vendor/GhosttyKit.xcframework/macos-arm64/Headers"
+    ],
     "nativeResources": [
       "TerminalNative_GhosttyTerminal.bundle"
     ],
