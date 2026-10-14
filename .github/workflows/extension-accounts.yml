@@ -10,6 +10,8 @@ name: Extension accounts
       - scripts/account-focused-targets.test.py
       - scripts/test-account-sdk-local.py
       - scripts/test-account-sdk-local.test.py
+      - scripts/test-herdr-accounts-local.py
+      - scripts/test-herdr-accounts-local.test.py
       - Makefile
       - .github/workflows/extension-accounts.yml
 permissions:
@@ -38,6 +40,11 @@ jobs:
         env:
           EXPECTED_SOURCE_SHA: "${{ github.event.pull_request.head.sha || github.sha }}"
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+      - name: Verify local Herdr route contracts
+        if: "matrix.target == 'ci-extension-herdr-accounts'"
+        env:
+          TMPDIR: "${{ runner.temp }}"
+        run: make ci-extension-herdr-account-contracts
       - name: Install the pinned terminal toolchain
         id: ghostty-toolchain
         if: "matrix.target == 'ci-extension-herdr-accounts'"
