@@ -254,6 +254,57 @@ import Testing
         #expect(await fixture.network.count == 0)
     }
 
+    @Test func anEmptyMarketplaceFetchesTheCatalogWhenNoneIsCached() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        await fixture.network.set(data: try fixture.envelope(packages: [fixture.package("1.0.0")]))
+        let marketplace = try fixture.marketplace()
+        await marketplace.loadCachedCatalog()
+        let now = Date()
+        await marketplace.refreshCatalogIfStale(now: now)
+        #expect(await fixture.network.count == 1)
+        #expect(marketplace.available["sample"]?.version == "1.0.0")
+        #expect(marketplace.installed.isEmpty)
+        #expect(marketplace.sessions.processIdentifiers.isEmpty)
+        await marketplace.refreshCatalogIfStale(now: now.addingTimeInterval(60))
+        #expect(await fixture.network.count == 1)
+        await marketplace.refreshCatalogIfStale(now: now.addingTimeInterval(9 * 60 * 60))
+        #expect(await fixture.network.count == 2)
+    }
+
+    @Test func aCachedCatalogWithoutARecordedRefreshIsRefreshed() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let envelope = try fixture.envelope(packages: [fixture.package("1.0.0")])
+        try FileManager.default.createDirectory(
+            at: fixture.cache.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try envelope.write(to: fixture.cache)
+        await fixture.network.set(data: envelope)
+        let marketplace = try fixture.marketplace()
+        await marketplace.loadCachedCatalog()
+        #expect(await fixture.network.count == 0)
+        await marketplace.refreshCatalogIfStale()
+        #expect(await fixture.network.count == 1)
+        let restarted = try fixture.marketplace()
+        await restarted.loadCachedCatalog()
+        await restarted.refreshCatalogIfStale()
+        #expect(await fixture.network.count == 1)
+    }
+
+    @Test func anOfflineCatalogRefreshIsRetriedOnTheNextVisit() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let marketplace = try fixture.marketplace()
+        await marketplace.refreshCatalogIfStale()
+        #expect(await fixture.network.count == 1)
+        #expect(marketplace.error != nil)
+        await fixture.network.set(data: try fixture.envelope(packages: [fixture.package("1.0.0")]))
+        await marketplace.refreshCatalogIfStale()
+        #expect(await fixture.network.count == 2)
+        #expect(marketplace.available["sample"] != nil)
+        #expect(marketplace.error == nil)
+    }
+
     @Test func automaticUpdatePreferencesPersistAcrossAppUpdates() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }

@@ -112,6 +112,7 @@ struct HostApplication: App {
                     ?? "com.pulkit.edith.dev.extension-host-rebuild",
                 supportDirectory: support)
             let loaded = try HostMarketplace.live(identity: identity)
+            Task.detached(priority: .utility) { HostLegacyServices.retire(identity: identity) }
             #endif
             let gateway = HostCLIGateway(marketplace: loaded)
             let core = try HostCoreCLIAdapter.make(
@@ -290,6 +291,7 @@ struct HostApplication: App {
             }
             await services.start()
             await loaded.loadCachedCatalog()
+            await loaded.refreshCatalogIfStale()
             await loaded.restoreEnabledExtensions()
             await loaded.updateInstalledIfDue()
         } catch { startupError = true }
