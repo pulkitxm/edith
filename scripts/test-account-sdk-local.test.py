@@ -624,5 +624,72 @@ class AccountSDKLocalGuardTests(unittest.TestCase):
                     process.assert_not_called()
 
 
+class SuppliedOwnershipRecordContracts(unittest.TestCase):
+    def fixtures(self):
+        spec = importlib.util.spec_from_file_location(
+            "local_record_owner_fixtures", Path(__file__).with_name("test-hosted-native-owner-tests.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_supplied_full_partial_and_failed_records_reach_real_parent_without_query(self):
+        fixtures = self.fixtures()
+        for mode, expected in [(0, False), (4, True), (12, True), ("partial", None), ("failed", None)]:
+            with self.subTest(mode=mode):
+                kernel = fixtures.Kernel()
+                with patch.object(HELPER.OWNERSHIP.watchdog.ctypes, "CDLL", return_value=kernel):
+                    owner = HELPER.LocalOwnership(123, 501)
+                info = HELPER.OWNERSHIP.watchdog.ProcessInfo()
+                size = kernel.proc_pidinfo(123, 3, 1, type("Pointer", (), {"_obj": info})(), 136)
+                info.status = 2
+                info.flags = mode if type(mode) is int else 4
+                record = (size if type(mode) is int else 0 if mode == "partial" else None,
+                          info, mode == "failed")
+                with patch.object(kernel, "proc_pidinfo", side_effect=AssertionError("Unexpected kernel query")), \
+                        patch.object(HELPER.OWNERSHIP.os, "kill", side_effect=AssertionError("Unexpected signal")), \
+                        patch.object(HELPER.OWNERSHIP.BoundedOwnership, "observe_failure",
+                                     autospec=True, side_effect=HELPER.OWNERSHIP.BoundedOwnership.observe_failure) as parent:
+                    owner.observe_failure(123, "live_identity_unavailable", record=record)
+                self.assertEqual(parent.call_count, 1)
+                self.assertIs(parent.call_args.kwargs["record"], record)
+                self.assertEqual(len(owner.failure_observations), 1)
+                self.assertIs(owner.failure_observations[0]["processInExit"], expected)
+                self.assertEqual(owner.private_failure_identities[0]["originalSeal"], [123, 100, 7, 123])
+                self.assertEqual(kernel.signals, [])
+
+    def test_actual_terminal_refusal_through_local_wrapper_preserves_original_sample_and_error(self):
+        fixtures = self.fixtures()
+        kernel = fixtures.Kernel()
+        kernel.processes[234] = (234, 101, 8, "/synthetic/compiler", 123, 123, 501, 501)
+        original = kernel.proc_pidinfo
+        exiting = False
+        def record(pid, flavor, argument, pointer, size):
+            result = original(pid, flavor, argument, pointer, size)
+            if result:
+                pointer._obj.status = 2
+                pointer._obj.flags = 4 if exiting and pid == 234 else 0
+            return result
+        with patch.object(HELPER.OWNERSHIP.watchdog.ctypes, "CDLL", return_value=kernel), \
+                patch.object(kernel, "proc_pidinfo", side_effect=record), \
+                patch.object(HELPER.OWNERSHIP.os, "kill", side_effect=kernel.kill):
+            owner = HELPER.LocalOwnership(123, 501)
+            owner.refresh()
+            previous = owner.known[234]
+            exiting = True
+            kernel.processes[234] = (234, 102, 8, "/synthetic/compiler", 123, 123, 501, 501)
+            with patch.object(kernel, "proc_pidinfo", side_effect=record) as reads:
+                owner.refresh()
+        self.assertEqual([call.args[:3] for call in reads.call_args_list if call.args[0] == 234], [(234, 3, 0)])
+        self.assertEqual(owner.errors, ["Live owned process identity unavailable"])
+        self.assertEqual(owner.private_failure_identities[0]["originalKnown"], list(previous))
+        self.assertEqual(owner.private_failure_identities[0]["originalSeal"], [234, 101, 8, 123])
+        row = owner.failure_observations[0]
+        self.assertIs(row["processInExit"], True)
+        self.assertIs(row["knownSeal"], True)
+        self.assertIs(row["birthMatches"], False)
+        self.assertEqual(row["returnedBytes"], 136)
+        self.assertEqual(kernel.signals, [])
+
+
 if __name__ == "__main__":
     unittest.main()
