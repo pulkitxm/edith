@@ -2,7 +2,9 @@ import AppKit
 import Foundation
 import Observation
 import UserNotifications
+#if canImport(WorkerFixtureSupport)
 import WorkerFixtureSupport
+#endif
 
 @MainActor
 @Observable
