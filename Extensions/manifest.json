@@ -1807,6 +1807,8 @@
         "Extensions/usage/Models/UsageShareSnapshot.swift",
         "Extensions/usage/Models/UsageSourceSelection.swift",
         "Extensions/usage/Runtime.swift",
+        "Extensions/usage/Services/AccountQuotaCache.swift",
+        "Extensions/usage/Services/ClaudeLimitsLogin.swift",
         "Extensions/usage/Services/ClaudeLimitsReader.swift",
         "Extensions/usage/Services/ClaudeSavedLogin.swift",
         "Extensions/usage/Services/ClaudeStatusLine.swift",
