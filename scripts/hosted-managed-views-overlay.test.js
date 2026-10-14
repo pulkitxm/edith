@@ -68,7 +68,7 @@ test("only two factory overlays change admission while actual model/view/control
     expect(result).toContain("HostedManagedFactoryAdmission.accepts(input");
     const ordinaryAdmission =
       owner === "plugins"
-        ? "try validateOrdinaryContext(input)"
+        ? "_ = try admitOrdinaryContext(input)"
         : "guard try admitFixture(input) == nil";
     expect(result).toContain(ordinaryAdmission);
     expect(result).toContain(`extensionID: "${owner}"`);
