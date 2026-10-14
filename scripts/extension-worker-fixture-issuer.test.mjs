@@ -15,8 +15,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
+  awaitFixturePackageBuilds,
+  fixturePackageBuilds,
+  fixturePackageEnvironment,
+  fixturePackageRecord,
+  fixtureSupportScopes,
   inertFixtureWorkers,
   parseWorkerFixtureArguments,
+  startFixturePackageBuild,
   supportedFixtureWorkers,
   validateCameraFixtureHost,
   validatePrivilegedWorkerLifecycleResult,
@@ -608,4 +614,192 @@ test("full worker inventory rejects unselected foreign, missing and duplicate ow
     validateWorkerFixtureSelection([...definitions].reverse(), requested),
     [definitions.find(({ id }) => id === "music")],
   );
+});
+
+test("fixture support scopes match each role's support product", async () => {
+  for (const definition of workers) {
+    const expected = Object.keys(definition.roles).flatMap((role) => {
+      const product = Object.hasOwn(definition.supportProducts ?? {}, role)
+        ? definition.supportProducts[role]
+        : definition.supportProduct;
+      return product ? [{ product, scope: `${definition.id}_${role}` }] : [];
+    });
+    assert.deepEqual(fixtureSupportScopes(definition), expected);
+  }
+  assert.deepEqual(
+    fixtureSupportScopes({
+      id: "example",
+      roles: { app: [], helper: [], cli: [] },
+      supportProduct: "EdithExtensionUI",
+      supportProducts: { helper: "EdithExtensionSupport", cli: null },
+    }),
+    [
+      { product: "EdithExtensionUI", scope: "example_app" },
+      { product: "EdithExtensionSupport", scope: "example_helper" },
+    ],
+  );
+  const builder = await readFile(
+    new URL("./build-extension-package.mjs", import.meta.url),
+    "utf8",
+  );
+  assert(builder.includes("definition.supportProducts[role]"));
+  assert(/`\$\{id\}_\$\{role\}`/.test(builder));
+  assert(builder.includes("prepareNativeSupport(root, definition"));
+});
+
+test("fixture packages build both versions and the Machines usage peer", () => {
+  const releases = "/synthetic/root/machines";
+  const sourceApp = "/synthetic/host/Edith.app";
+  assert.deepEqual(
+    fixturePackageBuilds({ id: "keepAwake", releases, sourceApp }),
+    [
+      {
+        id: "keepAwake",
+        version: "1.0.0",
+        output: join(releases, "1.0.0"),
+        containedHostApp: sourceApp,
+      },
+      {
+        id: "keepAwake",
+        version: "1.1.0",
+        output: join(releases, "1.1.0"),
+        containedHostApp: sourceApp,
+      },
+    ],
+  );
+  const machines = fixturePackageBuilds({
+    id: "machines",
+    releases,
+    sourceApp,
+  });
+  assert.equal(machines.length, 3);
+  assert.deepEqual(machines[2], {
+    id: "usage",
+    version: "1.0.0",
+    output: join(releases, "usage-peer", "1.0.0"),
+  });
+});
+
+test("fixture package environment pins version, output and host only", () => {
+  const base = {
+    PATH: "/usr/bin",
+    EXTENSION_RELEASE_TAG: "extensions/x/1.0.0-abc",
+    EXTENSION_CONTAINING_HOST_APP: "/inherited/Edith.app",
+    EXTENSION_SWIFT_JOBS: "2",
+  };
+  const pinned = fixturePackageEnvironment(
+    {
+      version: "1.1.0",
+      output: "/synthetic/out",
+      containedHostApp: "/synthetic/Edith.app",
+    },
+    base,
+  );
+  assert.deepEqual(pinned, {
+    PATH: "/usr/bin",
+    EXTENSION_CONTAINING_HOST_APP: "/synthetic/Edith.app",
+    EXTENSION_SWIFT_JOBS: "2",
+    EXTENSION_VERSION: "1.1.0",
+    EXTENSION_OUTPUT: "/synthetic/out",
+  });
+  const peer = fixturePackageEnvironment(
+    { version: "1.0.0", output: "/synthetic/peer" },
+    base,
+  );
+  assert.equal(peer.EXTENSION_CONTAINING_HOST_APP, "/inherited/Edith.app");
+  assert.equal(peer.EXTENSION_RELEASE_TAG, undefined);
+  assert.equal(base.EXTENSION_RELEASE_TAG, "extensions/x/1.0.0-abc");
+});
+
+test("fixture package records come only from the final builder line", () => {
+  const record = { id: "keepAwake", version: "1.1.0", sha256: "a".repeat(64) };
+  assert.deepEqual(
+    fixturePackageRecord(
+      `Building for production...\n${JSON.stringify(record)}\n`,
+      { id: "keepAwake", version: "1.1.0" },
+    ),
+    { record, output: "Building for production..." },
+  );
+  assert.throws(
+    () =>
+      fixturePackageRecord(JSON.stringify(record), {
+        id: "usage",
+        version: "1.1.0",
+      }),
+    /another id/,
+  );
+  assert.throws(
+    () =>
+      fixturePackageRecord(JSON.stringify(record), {
+        id: "keepAwake",
+        version: "1.0.0",
+      }),
+    /another version/,
+  );
+  assert.throws(() =>
+    fixturePackageRecord("Build failed", {
+      id: "keepAwake",
+      version: "1.0.0",
+    }),
+  );
+});
+
+test("fixture package builds run concurrently and fail closed", async () => {
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "edith-fixture-builds-")),
+  );
+  try {
+    const script = join(root, "builder.sh");
+    await writeFile(
+      script,
+      [
+        "set -eu",
+        'touch "$MARKERS/$EXTENSION_VERSION"',
+        "deadline=50",
+        'while [ ! -e "$MARKERS/$PEER" ]; do',
+        "  deadline=$((deadline - 1))",
+        '  [ "$deadline" -gt 0 ] || exit 7',
+        "  sleep 0.1",
+        "done",
+        'echo "compiled $1 $EXTENSION_VERSION into $EXTENSION_OUTPUT"',
+        '[ "$EXTENSION_VERSION" = "$FAILING" ] && exit 3',
+        'printf \'{"id":"%s","version":"%s"}\\n\' "$1" "$EXTENSION_VERSION"',
+        "",
+      ].join("\n"),
+    );
+    const run = async (failing) => {
+      const markers = join(root, `markers-${failing}`);
+      const logDirectory = join(root, `logs-${failing}`);
+      await mkdir(markers);
+      await mkdir(logDirectory);
+      return awaitFixturePackageBuilds(
+        [
+          ["1.0.0", "1.1.0"],
+          ["1.1.0", "1.0.0"],
+        ].map(([version, peer]) =>
+          startFixturePackageBuild(
+            { id: "keepAwake", version, output: join(root, version) },
+            {
+              logDirectory,
+              command: "/bin/sh",
+              script,
+              environment: {
+                PATH: "/usr/bin:/bin",
+                MARKERS: markers,
+                PEER: peer,
+                FAILING: failing,
+              },
+            },
+          ),
+        ),
+      );
+    };
+    assert.deepEqual(await run("none"), [
+      { id: "keepAwake", version: "1.0.0" },
+      { id: "keepAwake", version: "1.1.0" },
+    ]);
+    await assert.rejects(run("1.1.0"), /keepAwake 1\.1\.0 failed \(exit 3\)/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
