@@ -9,7 +9,6 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import {
   buildExtensionSupport,
@@ -27,7 +26,7 @@ assert(
   "Pass the absolute HostCommandHarness path from ci-extension-commands",
 );
 const root = await realpath(
-  await mkdtemp(join(tmpdir(), "extension-command-fixture-")),
+  await mkdtemp(resolve("local/extension-command-fixture-")),
 );
 try {
   const products = buildExtensionSupport(

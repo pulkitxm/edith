@@ -208,7 +208,6 @@ final class HostWorkerApplication {
         let cleanup = Result {
             try preparation.begin(token: request.token) {
                 self.peerServer?.closeMutationAdmission()
-                await self.peerServer?.joinAdmittedRequests()
                 for runtime in self.runtimes { try await runtime.suspendCommandsAll() }
                 await self.peerServer?.cancelAndJoinRequests()
                 for runtime in self.runtimes { try await runtime.prepareDisableAll() }

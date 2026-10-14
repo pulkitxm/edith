@@ -146,6 +146,11 @@ struct HostCommandHarness {
                 let stoppedAt = ContinuousClock.now
                 if mode == "crash" {
                     kill(pid, SIGKILL)
+                } else if mode == "hang" || mode == "asyncHang" {
+                    do {
+                        try await worker.stop()
+                        throw HostWorkerError.rejected
+                    } catch HostWorkerError.timedOut {}
                 } else {
                     try await worker.stop()
                 }

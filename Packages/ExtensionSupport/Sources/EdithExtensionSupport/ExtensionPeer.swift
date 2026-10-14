@@ -826,15 +826,6 @@ public final class ExtensionPeerServer {
 
     public func closeMutationAdmission() { admission = .draining }
 
-    public func joinAdmittedRequests() async {
-        admission = .draining
-        let snapshot = executing
-        for (token, task) in snapshot {
-            await task.value
-            executing[token] = nil
-        }
-    }
-
     public func cancelAndJoinRequests() async {
         admission = .draining
         let snapshot = executing
