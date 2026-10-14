@@ -68,9 +68,18 @@ const excludedProductionDirectories = new Set([
   "vendor",
 ]);
 
+const extensionTestOnlyFiles = new Set([
+  "test.mjs",
+  "Makefile",
+  "osv-scanner.toml",
+  ".gitignore",
+]);
+
 function excludedProductionInput(path) {
   return (
     path.split("/").at(-1) === ".DS_Store" ||
+    (path.startsWith("Extensions/") &&
+      extensionTestOnlyFiles.has(path.split("/").at(-1))) ||
     path.split("/").some((part) => excludedProductionDirectories.has(part)) ||
     path ===
       "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift" ||
