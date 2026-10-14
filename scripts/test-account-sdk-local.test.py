@@ -777,5 +777,200 @@ class SelectedPackageLauncherBindingTests(unittest.TestCase):
                 self.assertFalse((source.parent / "rejected-launch.log").exists())
 
 
+class OwnedProcessSDKLocalTests(unittest.TestCase):
+    names = (
+        "lateUnknownMemberAfterLeaderExitRetainsAuthorityWithoutSignalling",
+        "joinedLeaderCannotReleaseWhileCapturedDescendantStillLives",
+        "unreadableBirthAndFailedMembershipScanNeverBecomeAbsence",
+        "reusedGroupNeverProvidesSignalAuthority",
+        "cancellationAndSecondRetireJoinOneActualCleanupTask",
+    )
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="owned-process-sdk-contract-", dir=os.environ["TMPDIR"])
+        self.addCleanup(temporary.cleanup)
+        self.base = Path(temporary.name).resolve()
+        self.root = self.base / "checkout"
+        self.root.mkdir(mode=0o700)
+        self.package = self.base / "package"
+        self.package.mkdir(mode=0o700)
+        self.bytes = {}
+        for group, names in HELPER.OWNED_GROUPS.items():
+            destination = self.root / "Packages/ExtensionSupport" / group
+            destination.mkdir(parents=True, mode=0o700)
+            for name in names:
+                data = (HELPER.ROOT / "Packages/ExtensionSupport" / group / name).read_bytes()
+                (destination / name).write_bytes(data)
+                self.bytes[group + "/" + name] = data
+
+    def positive_output(self):
+        return ("\n".join("Test " + name + "() passed after 0.001 seconds." for name in self.names)
+                + "\nTest run with 5 tests in 1 suite passed after 0.1 seconds.\n").encode()
+
+    def test_actual_fifty_sources_and_original_five_methods_are_selected_without_other_targets(self):
+        unrelated = self.root / "Packages/ExtensionSupport/Tests/EdithExtensionSupportTests/Unrelated.swift"
+        unrelated.write_text("@Test func unrelated() {}\n")
+        digests, count = HELPER.prepare_package(self.root, self.package, True)
+        self.assertEqual(count, 5)
+        self.assertEqual(tuple(HELPER.OWNED_METHODS), self.names)
+        self.assertEqual(len(digests), 50)
+        self.assertEqual(set(digests), set(self.bytes))
+        for name, data in self.bytes.items():
+            self.assertEqual((self.package / name).read_bytes(), data)
+            self.assertEqual(digests[name], hashlib.sha256(data).hexdigest())
+        self.assertFalse((self.package / "Tests/EdithExtensionSupportTests/Unrelated.swift").exists())
+        manifest = (self.package / "Package.swift").read_text()
+        self.assertEqual(manifest.count(".target("), 1)
+        self.assertEqual(manifest.count(".testTarget("), 1)
+        self.assertEqual(manifest.count(".swiftLanguageMode(.v5)"), 2)
+        self.assertIn('dependencies: ["EdithExtensionSupport"]', manifest)
+        for excluded in [".package(", "Ghostty", "ZIP", "ArgumentParser", "EdithExtensionUI", "EdithExtensionAccounts"]:
+            self.assertNotIn(excluded, manifest)
+
+    def test_owned_inventory_missing_links_method_drift_and_generated_extras_fail_closed(self):
+        source = self.root / "Packages/ExtensionSupport/Sources/EdithExtensionSupport"
+        test = self.root / "Packages/ExtensionSupport/Tests/EdithExtensionSupportTests/ExtensionOwnedProcessGroupTests.swift"
+        original = test.read_bytes()
+        for kind in ["extra", "missing", "link", "method", "stale"]:
+            with self.subTest(kind=kind):
+                changed = source / "Unexpected.swift"
+                if kind == "extra":
+                    changed.write_text("struct Unexpected {}\n")
+                elif kind == "missing":
+                    test.unlink()
+                elif kind == "link":
+                    test.unlink()
+                    test.symlink_to(HELPER.ROOT / "Packages/ExtensionSupport/Tests/EdithExtensionSupportTests/ExtensionOwnedProcessGroupTests.swift")
+                elif kind == "method":
+                    test.write_bytes(original.replace(self.names[0].encode(), b"unexpectedOriginalMethod"))
+                else:
+                    HELPER.prepare_package(self.root, self.package, True)
+                    changed = self.package / "Tests/EdithExtensionSupportTests/Stale.swift"
+                    changed.write_text("@Test func stale() {}\n")
+                try:
+                    with self.assertRaises(ValueError):
+                        HELPER.prepare_package(self.root, self.package, True)
+                finally:
+                    if kind in ["extra", "stale"]:
+                        changed.unlink()
+                    else:
+                        if test.is_symlink():
+                            test.unlink()
+                        test.write_bytes(original)
+
+    def test_named_result_requires_five_unique_original_positives_one_suite_and_success(self):
+        output = self.positive_output()
+        self.assertEqual(HELPER.owned_process_result(0, output), (0, 5, True))
+        self.assertEqual(HELPER.owned_process_result(7, output), (7, 5, True))
+        invalid = [
+            b"Test run with 5 tests in 1 suite passed.\n",
+            output.replace(self.names[0].encode(), b"unknownMethod"),
+            output.replace(self.names[0].encode(), self.names[1].encode()),
+            output + ("Test " + self.names[0] + "() passed.\n").encode(),
+            output.replace(b"5 tests in 1 suite", b"5 tests in 2 suites"),
+            output.replace(b"5 tests in 1 suite", b"0 tests in 1 suite"),
+            output + b"Test run with 5 tests in 1 suite passed.\n",
+        ]
+        for changed in invalid:
+            with self.subTest(output=changed):
+                self.assertNotEqual(HELPER.owned_process_result(0, changed)[0], 0)
+
+    def test_owned_environment_has_private_roots_without_account_or_ambient_authority(self):
+        fixture = self.base / "fixture"
+        fixture.mkdir(mode=0o700)
+        inherited = {"PATH": "/usr/bin:/bin", "DEVELOPER_DIR": "/synthetic/selected",
+                     "EDITH_WORKER": "synthetic", "EDITH_EXTENSION_ID": "ambient",
+                     "GITHUB_TOKEN": "synthetic", "SSH_AUTH_SOCK": "/synthetic/socket",
+                     "NODE_OPTIONS": "--require /synthetic/preload", "DYLD_INSERT_LIBRARIES": "/synthetic/library"}
+        with patch.dict(os.environ, inherited, clear=True):
+            environment = HELPER.environment(fixture, owned_process_groups=True)
+        self.assertFalse(any(key.startswith("EDITH_") for key in environment))
+        for key in ["GITHUB_TOKEN", "SSH_AUTH_SOCK", "NODE_OPTIONS", "DYLD_INSERT_LIBRARIES"]:
+            self.assertNotIn(key, environment)
+        self.assertEqual(environment["PATH"], inherited["PATH"])
+        self.assertEqual(environment["DEVELOPER_DIR"], inherited["DEVELOPER_DIR"])
+        for key in ["HOME", "TMPDIR", "CFFIXED_USER_HOME", "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "CLANG_MODULE_CACHE_PATH", "SWIFTPM_MODULECACHE_OVERRIDE"]:
+            self.assertTrue(Path(environment[key]).is_relative_to(fixture))
+
+    def test_actual_fixed_mode_uses_separate_cache_direct_alias_and_strict_fixture_retention(self):
+        developer = self.base / "Selected.app/Contents/Developer"
+        directory = developer / "Toolchains/XcodeDefault.xctoolchain/usr/bin"
+        directory.mkdir(parents=True, mode=0o755)
+        target = directory / "swift-package"
+        target.write_bytes(b"synthetic-unexecuted-package-image")
+        target.chmod(0o755)
+        alias = directory / "swift-test"
+        alias.symlink_to(target.name)
+        def inspect(path):
+            metadata = path.lstat()
+            values = {name: getattr(metadata, name) for name in dir(metadata) if name.startswith("st_")}
+            values["st_uid"] = 0
+            return type("RootOwnedMetadata", (), values)()
+        baseline = {"reaped": True, "remainingOwnedProcesses": 0, "unverifiedOwnedProcesses": 0,
+                    "ownershipErrors": [], "pendingOwnedChildren": 0, "naturalSurvivorCount": 0}
+        class Output(io.StringIO):
+            def __init__(self):
+                super().__init__()
+                self.buffer = io.BytesIO()
+        for mode in ["positive", "missing-name", "pending", "driver-changed"]:
+            with self.subTest(mode=mode):
+                target.write_bytes(b"synthetic-unexecuted-package-image")
+                driver = HELPER.DRIVERS.SelectedSwiftDriver(developer, entry="swift-test", inspect=inspect)
+                fixture = None
+                def owned(command, checkout, environment, output):
+                    nonlocal fixture
+                    fixture = output.parent
+                    self.assertEqual(command[0], str(alias))
+                    self.assertNotIn("test", command)
+                    self.assertEqual(command[command.index("--filter") + 1], "(" + "|".join(self.names) + ")")
+                    self.assertEqual(command[command.index("--jobs") + 1], "1")
+                    self.assertIn("--no-parallel", command)
+                    self.assertIn("-warnings-as-errors", command)
+                    self.assertFalse(any(key.startswith("EDITH_") for key in environment))
+                    self.assertTrue(fixture.is_relative_to(self.root / "local/owned-process-group-contracts"))
+                    data = self.positive_output()
+                    if mode == "missing-name":
+                        data = data.replace(self.names[0].encode(), b"unexpected")
+                    HELPER.write_private(output, data)
+                    if mode == "driver-changed":
+                        target.write_bytes(b"changed-synthetic-unexecuted-image-after-join")
+                    return {"exitCode": 1 if mode == "pending" else 0,
+                            "cleanup": {**baseline, "pendingOwnedChildren": 1 if mode == "pending" else 0}}
+                with patch.object(HELPER, "ROOT", self.root), patch.object(HELPER.sys, "platform", "darwin"), \
+                        patch.object(HELPER.sys, "stdout", Output()), \
+                        patch.dict(os.environ, {"EDITH_LOCAL_CI_ROOT": str(self.base), "DEVELOPER_DIR": str(developer)}, clear=True), \
+                        patch.object(HELPER.DRIVERS, "SelectedSwiftDriver", return_value=driver), \
+                        patch.object(HELPER, "run_owned", side_effect=owned):
+                    self.assertEqual(HELPER.run(True), 0 if mode == "positive" else 1)
+                self.assertIsNotNone(fixture)
+                self.assertEqual(fixture.exists(), mode != "positive")
+                receipt = json.loads((self.root / "local/owned-process-group-contracts/receipt.json").read_bytes())
+                self.assertFalse(receipt["isolatedAccountSDK"])
+                self.assertTrue(receipt["isolatedOwnedProcessGroupsSDK"])
+                self.assertEqual(receipt["expectedTests"], 5)
+                self.assertEqual(len(receipt["sourceSHA256"]), 50)
+                self.assertFalse((self.root / "local/account-contracts").exists())
+
+    def test_real_make_route_invokes_only_the_fixed_sdk_mode(self):
+        make = (HELPER.ROOT / "Makefile").read_text()
+        recipe = make.split("ci-extension-owned-process-groups-local:\n", 1)[1].split("\n\n", 1)[0]
+        self.assertEqual(recipe, "\tpython3 -B scripts/test-account-sdk-local.py --owned-process-groups")
+        self.assertNotIn("swift test", recipe)
+        self.assertNotIn("GITHUB_ACTIONS", recipe)
+
+    def test_cli_has_only_two_fixed_modes_and_rejects_unexpected_arguments_before_run(self):
+        for arguments in [["unknown"], ["--owned-process-groups", "extra"], ["--filter", "other"]]:
+            with self.subTest(arguments=arguments), patch.object(HELPER.sys, "argv", ["helper", *arguments]):
+                with patch.object(HELPER, "run") as run:
+                    with self.assertRaisesRegex(ValueError, "Unexpected local SDK contract mode"):
+                        HELPER.main()
+                    run.assert_not_called()
+        for arguments, expected in [([], ()), (["--owned-process-groups"], (True,))]:
+            with self.subTest(arguments=arguments), patch.object(HELPER.sys, "argv", ["helper", *arguments]):
+                with patch.object(HELPER, "run", return_value=0) as run:
+                    self.assertEqual(HELPER.main(), 0)
+                    run.assert_called_once_with(*expected)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -281,6 +281,10 @@ ci-functional-filesystem-local:
 	python3 -I -B scripts/test-functional-filesystem-local.test.py
 	python3 -I -B scripts/test-functional-filesystem-local.py
 
+.PHONY: ci-extension-owned-process-groups-local
+ci-extension-owned-process-groups-local:
+	python3 -B scripts/test-account-sdk-local.py --owned-process-groups
+
 .PHONY: ci-extension-accounts
 ci-extension-accounts:
 	@test "$$GITHUB_ACTIONS" = true && test "$$RUNNER_ENVIRONMENT" = github-hosted && test "$$RUNNER_OS" = macOS
