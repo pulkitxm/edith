@@ -69,8 +69,7 @@ import Testing
     }
 
     @Test func cancellingTheNativeRelayReapsItsSyntheticPtyProcess() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
-            "herdr-native-cancel-" + UUID().uuidString)
+        let root = try HerdrAccountFixture.root()
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let pidFile = root.appendingPathComponent("pid")
