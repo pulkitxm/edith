@@ -73,6 +73,7 @@ EXACT = {
     "ci-extension-owned-process-groups-local": "swift-test",
     "ci-extension-herdr-accounts": "swift-test",
     "ci-extension-herdr-accounts-local": "swift-test",
+    "ci-extension-herdr-settings-local": "swift-test",
     "ci-extension-usage-accounts": "swift-test",
     "ci-extension-usage-accounts-local": "swift-test",
     "ci-security": "scan",

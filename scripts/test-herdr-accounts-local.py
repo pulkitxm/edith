@@ -35,9 +35,26 @@ HOSTED_METHODS = (
     "notificationSettingsRenderAtCompactRegularWidthsZoomAndColorSchemes",
 )
 SKIP = r"^HerdrUITests\.HerdrSettingsTests/(?:" + "|".join(HOSTED_METHODS) + r")(?:\(\))?(?:/|$)"
+SETTINGS_SUITE = "HerdrSettingsActionTests"
+SETTINGS_METHOD = "stuckThresholdCallbackPersistsAndRestoresOriginalSettings"
+SETTINGS_FILTER = r"^HerdrSettingsActionTests\." + SETTINGS_SUITE + "/" + SETTINGS_METHOD + r"(?:\(\))?(?:/|$)"
 
 
-def source_inventory(root):
+def expected_counts(settings_action):
+    if type(settings_action) is not bool:
+        raise ValueError("Local Herdr selection must be a boolean")
+    return (1, 1, 1) if settings_action else (91, 13, 116)
+
+
+def settings_action_requested(arguments):
+    if arguments not in ([], ["--settings-action"]):
+        raise ValueError("Unknown local Herdr selection")
+    return bool(arguments)
+
+
+def source_inventory(root, settings_action=False):
+    expected, _, _ = expected_counts(settings_action)
+    selected_suites = (SETTINGS_SUITE,) if settings_action else SUITES
     methods = []
     pins = {}
     hosted = []
@@ -49,7 +66,7 @@ def source_inventory(root):
         selected = False
         for match in re.finditer(r"@Test(?:(?!@Test).)*?\bfunc\s+(\w+)\(", text, re.S):
             preceding = [suite for suite in suites if suite.start() < match.start()]
-            if not preceding or preceding[-1].group(1) not in SUITES:
+            if not preceding or preceding[-1].group(1) not in selected_suites:
                 continue
             suite = preceding[-1].group(1)
             selected = True
@@ -60,9 +77,11 @@ def source_inventory(root):
                 methods.append(identity)
         if selected:
             pins[str(path.relative_to(root))] = hashlib.sha256(data).hexdigest()
-    if (set(identity.split("/")[0] for identity in methods) != set(SUITES)
-            or len(methods) != len(set(methods)) or len(methods) != 91
-            or set(hosted) != {"HerdrSettingsTests/" + method for method in HOSTED_METHODS}):
+    expected_hosted = set() if settings_action else {"HerdrSettingsTests/" + method for method in HOSTED_METHODS}
+    if (set(identity.split("/")[0] for identity in methods) != set(selected_suites)
+            or len(methods) != len(set(methods)) or len(methods) != expected
+            or set(hosted) != expected_hosted
+            or (settings_action and methods != [SETTINGS_SUITE + "/" + SETTINGS_METHOD])):
         raise ValueError("Local Herdr account selection changed")
     return {"methods": methods, "pendingHostedMethods": hosted, "sourceSHA256": pins}
 
@@ -76,21 +95,32 @@ def environment(fixture):
     return result
 
 
-def command(swift, root, fixture, developer):
+def command(swift, root, fixture, developer, settings_action=False):
+    expected_counts(settings_action)
     return [str(swift), "--package-path", str(root / "Extensions/herdr"),
             "--scratch-path", str(root / "Extensions/herdr/.build"),
             "--cache-path", str(fixture / "cache"), "--config-path", str(fixture / "config"),
             "--security-path", str(fixture / "security"), "--disable-automatic-resolution",
-            "--filter", FILTER, "--skip", SKIP, "--build-system", "native", "--no-parallel",
+            "--filter", SETTINGS_FILTER if settings_action else FILTER,
+            "--skip", SKIP, "--build-system", "native", "--no-parallel",
             "--jobs", "1", "-Xswiftc", "-j1", "-Xswiftc", "-plugin-path", "-Xswiftc",
             str(Path(developer) / "Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins")]
 
 
-def test_result(exit_status, output):
-    status, passed, executed = RUNTIME.test_result(exit_status, output, 91)
-    summaries = re.findall(rb"Test run with (\d+) tests in (\d+) suites passed", output)
-    if status == 0 and summaries != [(b"91", b"13")]:
+def test_result(exit_status, output, settings_action=False):
+    methods, suites, _ = expected_counts(settings_action)
+    status, passed, executed = RUNTIME.test_result(exit_status, output, methods)
+    summaries = re.findall(rb"Test run with (\d+) tests? in (\d+) suites? passed", output)
+    if settings_action:
+        status = exit_status if exit_status >= 0 else 1
+        passed = int(summaries[0][0]) if len(summaries) == 1 else 0
+    if status == 0 and summaries != [(str(methods).encode(), str(suites).encode())]:
         status = 1
+    if settings_action and status == 0:
+        names = re.findall(rb"^\xe2\x97\x87 Test (\w+)\([^\n]*\) started\.$", output, re.M)
+        positives = re.findall(rb"^\xe2\x9c\x94 Test (\w+)\([^\n]*\) passed", output, re.M)
+        if names != [SETTINGS_METHOD.encode()] or positives != [SETTINGS_METHOD.encode()]:
+            status = 1
     return status, passed, executed
 
 
@@ -107,7 +137,8 @@ def remove_previous_receipt(path):
             os.close(descriptor)
 
 
-def run():
+def run(settings_action=False):
+    methods, suites, expanded = expected_counts(settings_action)
     os.umask(0o077)
     allowed = Path(os.environ["EDITH_LOCAL_CI_ROOT"])
     if (sys.platform != "darwin" or not allowed.is_absolute()
@@ -121,7 +152,7 @@ def run():
     with os.fdopen(RUNTIME.private_file(storage / "run.lock", os.O_RDWR), "r+") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         remove_previous_receipt(storage / "receipt.json")
-        sources = source_inventory(ROOT)
+        sources = source_inventory(ROOT, settings_action)
         fixture = Path(tempfile.mkdtemp(prefix="fixture-", dir=storage))
         started = time.monotonic()
         validated = False
@@ -130,7 +161,7 @@ def run():
             driver = RUNTIME.DRIVERS.SelectedSwiftDriver(os.environ["DEVELOPER_DIR"], entry="swift-test")
             owned = RUNTIME.run_owned(
                 RUNTIME.DRIVERS.SelectedPackageArguments(
-                    driver, command(driver.validate(), ROOT, fixture, os.environ["DEVELOPER_DIR"])),
+                    driver, command(driver.validate(), ROOT, fixture, os.environ["DEVELOPER_DIR"], settings_action)),
                 ROOT, environment(fixture), fixture / "tests.log")
             try:
                 driver.validate()
@@ -140,14 +171,14 @@ def run():
                 owned["selectedDriverFailure"] = type(error).__name__
             output = (fixture / "tests.log").read_bytes()[:RUNTIME.OUTPUT_BOUND]
             RUNTIME.write_private(storage / "last.log", output)
-            status, passed, executed = test_result(owned["exitCode"], output)
-            if not RUNTIME.verified_cleanup(owned["cleanup"]) or source_inventory(ROOT) != sources:
+            status, passed, executed = test_result(owned["exitCode"], output, settings_action)
+            if not RUNTIME.verified_cleanup(owned["cleanup"]) or source_inventory(ROOT, settings_action) != sources:
                 status = 1
             receipt = {
                 "exit": status, "elapsedSeconds": time.monotonic() - started,
-                "expectedMethods": 91, "expectedSuites": 13, "passedMethods": passed,
-                "expectedExpandedInvocations": 116,
-                "expandedInvocationsQualified": False,
+                "expectedMethods": methods, "expectedSuites": suites, "passedMethods": passed,
+                "expectedExpandedInvocations": expanded,
+                "expandedInvocationsQualified": settings_action and status == 0,
                 "herdrTestsExecuted": executed, "applicationExecution": False,
                 "selectedDriverValidated": validated, "sourceInventory": sources,
                 "outputSHA256": hashlib.sha256(output).hexdigest(), "ownership": owned,
@@ -155,7 +186,7 @@ def run():
             RUNTIME.write_private(storage / "receipt.json", (json.dumps(receipt, indent=2) + "\n").encode())
             completed = True
             print(json.dumps({"exit": status, "passedMethods": passed,
-                              "pendingHostedMethods": len(HOSTED_METHODS)}), flush=True)
+                              "pendingHostedMethods": len(sources["pendingHostedMethods"])}), flush=True)
             return status
         finally:
             if (completed and "owned" in locals() and "status" in locals() and status == 0
@@ -164,4 +195,4 @@ def run():
 
 
 if __name__ == "__main__":
-    raise SystemExit(run())
+    raise SystemExit(run(settings_action_requested(sys.argv[1:])))

@@ -304,6 +304,10 @@ ci-extension-accounts:
 ci-extension-herdr-accounts-local:
 	python3 -B scripts/test-herdr-accounts-local.py
 
+.PHONY: ci-extension-herdr-settings-local
+ci-extension-herdr-settings-local:
+	python3 -B scripts/test-herdr-accounts-local.py --settings-action
+
 .PHONY: ci-extension-herdr-account-contracts
 ci-extension-herdr-account-contracts:
 	python3 -B scripts/test-herdr-accounts-local.test.py
