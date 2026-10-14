@@ -82,6 +82,9 @@ import SwiftUI
             failure = nil
             startSettingsScheduler()
             refreshExistingCompletions()
+            HostLegacyMigration.migrate(
+                defaults: defaults, extensionIDs: Set(marketplace.entries.map(\.id)),
+                downloadedIDs: marketplace.downloadedIDs)
             if workflowModel.incomplete,
                 marketplace.downloadedIDs.isEmpty
                     || defaults.bool(forKey: HostWorkflowOnboardingModel.reviewPendingKey)

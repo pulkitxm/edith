@@ -30,7 +30,7 @@ struct HostWorkflowOnboardingView: View {
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
         .overlay(RoundedRectangle(cornerRadius: UIScale.pt(14)).strokeBorder(DashSkin.line(dark)))
         .pageTask {
-            if model.stage == .workflows, !model.busy { model.refreshCatalog() }
+            if [.workflows, .review].contains(model.stage), !model.busy { model.refreshCatalog() }
             await permissions.refresh()
         }
         .onDisappear {
