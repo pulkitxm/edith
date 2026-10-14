@@ -426,10 +426,10 @@ final class SEOAuditService {
                         owner?.report(progress, scoresOnly: scoresOnly)
                     }
                 }
-                await gate.release()
+                gate.release()
                 return .project(project)
             } catch {
-                await gate.release()
+                gate.release()
                 throw error
             }
         }
