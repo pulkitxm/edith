@@ -10,7 +10,9 @@ public enum MachineUsageFixtureSnapshot {
             throw ExtensionPeerError.unavailable
         }
         let home = URL(fileURLWithPath: path).standardizedFileURL
-        guard home != FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL else {
+        guard let account = getpwuid(getuid())?.pointee.pw_dir,
+            home != URL(fileURLWithPath: String(cString: account)).standardizedFileURL
+        else {
             throw ExtensionPeerError.invalidRequest
         }
         var directory = stat()
