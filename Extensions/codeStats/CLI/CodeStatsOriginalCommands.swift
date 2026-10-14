@@ -7,7 +7,7 @@ enum CodeStatsCLIEnvironment {
     static var client: @Sendable () -> CodeStatsCLIClient = { CodeStatsCLIClient() }
 }
 
-@MainActor struct CodeStatsCLICommand: AsyncParsableCommand {
+struct CodeStatsCLICommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "code-stats",
         abstract: "Report on the code you wrote across a mirror of your GitHub repositories.",
@@ -227,7 +227,7 @@ enum CodeStatsCLIEnvironment {
     }
 }
 
-@MainActor struct CodeStatsStatusCommand: AsyncParsableCommand {
+struct CodeStatsStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "status",
         abstract: "Show the mirror folder, schedule, last refresh and live progress.",
@@ -241,7 +241,7 @@ enum CodeStatsCLIEnvironment {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let status = try await CodeStatsCLI.call {
                 try await CodeStatsCLIEnvironment.client().status()
@@ -255,7 +255,7 @@ enum CodeStatsCLIEnvironment {
     }
 }
 
-@MainActor struct CodeStatsRunCommand: AsyncParsableCommand {
+struct CodeStatsRunCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "run",
         abstract: "Refresh the mirror and recount your commits in the background.",
@@ -274,7 +274,7 @@ enum CodeStatsCLIEnvironment {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let run = try await CodeStatsCLI.call {
                 try await CodeStatsCLIEnvironment.client().start()
@@ -308,7 +308,7 @@ enum CodeStatsCLIEnvironment {
     }
 }
 
-@MainActor struct CodeStatsCancelCommand: AsyncParsableCommand {
+struct CodeStatsCancelCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "cancel",
         abstract: "Cancel the code stats refresh that is running.",
@@ -322,7 +322,7 @@ enum CodeStatsCLIEnvironment {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let status = try await CodeStatsCLI.call {
                 try await CodeStatsCLIEnvironment.client().cancel()
@@ -336,7 +336,7 @@ enum CodeStatsCLIEnvironment {
     }
 }
 
-@MainActor struct CodeStatsReportCommand: AsyncParsableCommand {
+struct CodeStatsReportCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "report",
         abstract: "Print the code stats report for 30 days, 90 days, a year or all time.",
@@ -353,7 +353,7 @@ enum CodeStatsCLIEnvironment {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             guard let parsed = CodeStatsRange(argument: range),
                 CodeStatsRange.presets.contains(parsed)
@@ -402,7 +402,7 @@ enum CodeStatsCLIEnvironment {
     }
 }
 
-@MainActor struct CodeStatsFolderCommand: AsyncParsableCommand {
+struct CodeStatsFolderCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "folder",
         abstract: "Choose the folder that holds the repository mirror.",
@@ -419,7 +419,7 @@ enum CodeStatsCLIEnvironment {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             if let fixture = CodeStatsExecutionEnvironment.fixtureHome {
                 let url = CodeStatsPaths.standardizedURL(path, homeDirectory: fixture)
@@ -452,7 +452,7 @@ enum CodeStatsCLIEnvironment {
     }
 }
 
-@MainActor struct CodeStatsScheduleCommand: AsyncParsableCommand {
+struct CodeStatsScheduleCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "schedule",
         abstract: "Choose how often code stats refresh on their own.",
@@ -476,7 +476,7 @@ enum CodeStatsCLIEnvironment {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             guard let kind = CodeStatsScheduleKind(rawValue: kind.lowercased()) else {
                 throw CLIFailure.usage(
@@ -520,7 +520,7 @@ enum CodeStatsCLIEnvironment {
     }
 }
 
-@MainActor struct CodeStatsIdentityCommand: AsyncParsableCommand {
+struct CodeStatsIdentityCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "identity",
         abstract: "List, add or remove the emails and name fragments counted as you.",
@@ -537,7 +537,7 @@ enum CodeStatsCLIEnvironment {
         defaultSubcommand: CodeStatsIdentityListCommand.self)
 }
 
-@MainActor struct CodeStatsIdentityListCommand: AsyncParsableCommand {
+struct CodeStatsIdentityListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "list",
         abstract: "List the emails and name fragments counted as you.",
@@ -551,7 +551,7 @@ enum CodeStatsCLIEnvironment {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let identity = CodeStatsPreferences.identity(in: CodeStatsCLI.defaults)
             if json {
@@ -565,7 +565,7 @@ enum CodeStatsCLIEnvironment {
     }
 }
 
-@MainActor struct CodeStatsIdentityAddCommand: AsyncParsableCommand {
+struct CodeStatsIdentityAddCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "add",
         abstract: "Count commits with this email or name fragment as yours.",
@@ -582,7 +582,7 @@ enum CodeStatsCLIEnvironment {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw CLIFailure.usage("the identity cannot be blank")
@@ -596,7 +596,7 @@ enum CodeStatsCLIEnvironment {
     }
 }
 
-@MainActor struct CodeStatsIdentityRemoveCommand: AsyncParsableCommand {
+struct CodeStatsIdentityRemoveCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "remove",
         abstract: "Stop counting commits with this email or name fragment as yours.",
@@ -613,7 +613,7 @@ enum CodeStatsCLIEnvironment {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let defaults = CodeStatsCLI.defaults
             guard CodeStatsPreferences.removeIdentity(value, in: defaults) else {
@@ -625,7 +625,7 @@ enum CodeStatsCLIEnvironment {
         }
     }
 
-    static func report(
+    @MainActor static func report(
         _ value: String, changed: Bool, verb: String, defaults: UserDefaults, json: Bool
     ) {
         let identity = CodeStatsPreferences.identity(in: defaults)
@@ -641,7 +641,7 @@ enum CodeStatsCLIEnvironment {
     }
 }
 
-@MainActor struct CodeStatsAuthorsCommand: AsyncParsableCommand {
+struct CodeStatsAuthorsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "authors",
         abstract: "List the commit authors found in the mirror and which count as you.",
@@ -655,7 +655,7 @@ enum CodeStatsCLIEnvironment {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let authors = try await CodeStatsCLI.call {
                 try await CodeStatsCLIEnvironment.client().authors()
@@ -689,7 +689,7 @@ enum CodeStatsCLIEnvironment {
     }
 }
 
-@MainActor struct CodeStatsAuditCommand: AsyncParsableCommand {
+struct CodeStatsAuditCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "audit",
         abstract: "Explain what was counted and what was excluded, and why.",
@@ -705,7 +705,7 @@ enum CodeStatsCLIEnvironment {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let audit = try await CodeStatsCLI.call {
                 try await CodeStatsCLIEnvironment.client().audit()

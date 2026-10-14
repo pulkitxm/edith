@@ -5,7 +5,7 @@ import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
 
-@MainActor struct CodeStatsExportCommand: AsyncParsableCommand {
+struct CodeStatsExportCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "export",
         abstract: "Render your code stats as branded PNG cards.",
@@ -32,7 +32,7 @@ import Foundation
     @Flag(name: .long, help: "Also copy the first rendered card to the clipboard.")
     var clipboard = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let selected = try CodeStatsExportFiles.cards(card)
             guard let parsed = CodeStatsRange(argument: range),
