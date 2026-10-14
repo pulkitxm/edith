@@ -155,6 +155,10 @@ ci-scripts-batch: ci-host-abi
 	  paths="$$(python3 scripts/test-batches.py script-paths "$(BATCH)")"; \
 	  bun test $$paths
 
+.PHONY: ci-release-orchestration-local
+ci-release-orchestration-local:
+	bun test scripts/production-orchestration.test.js
+
 ci-performance:
 	bun scripts/check-performance-audit.mjs
 	bun scripts/check-database-size.mjs
