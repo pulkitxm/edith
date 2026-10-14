@@ -22,7 +22,7 @@ function embeddedDocker(path) {
 test("Companion consumes only the prepared maintained PDF dependency", () => {
   const manifest = read("apps/companion/Cargo.toml");
   expect(manifest).toContain(
-    'pdf-extract = { version = "0.13.0", path = "local/pdf-extract" }',
+    'pdf-extract = { version = "0.13.0", path = "pdf-extract" }',
   );
   expect(manifest).not.toContain('pdf-extract = "0.12.0"');
   expect(read("apps/companion/src/ingest.rs")).toContain(
@@ -70,7 +70,7 @@ test("Linux Companion prepares sources before every locked Cargo producer", () =
 test("actual and both deployed Dockerfiles prepare identical pinned sources", () => {
   expect(docker).toContain("RUN apk add --no-cache musl-dev python3");
   expect(docker).toContain(
-    "COPY Cargo.toml Cargo.lock prepare-pdf-extract.py ./\nRUN python3 -B prepare-pdf-extract.py",
+    "COPY Cargo.toml Cargo.lock prepare-pdf-extract.py ./\nCOPY pdf-extract/Cargo.toml pdf-extract/\nRUN python3 -B prepare-pdf-extract.py",
   );
   expect(docker.indexOf("RUN cargo build --release --locked")).toBeGreaterThan(
     docker.indexOf("RUN python3 -B prepare-pdf-extract.py"),
@@ -131,4 +131,30 @@ test("the hosted container proof builds the final image and checks its original 
     'test -x /usr/local/bin/companion && test "$(id -un)" = companion && command -v ffmpeg && command -v exiftool',
   );
   expect(section).not.toContain("--target builder");
+});
+
+test("the real PDF path manifest is available before generated sources and retains its locked graph", () => {
+  const companion = Bun.TOML.parse(read("apps/companion/Cargo.toml"));
+  const dependency = companion.dependencies["pdf-extract"];
+  const source = Bun.TOML.parse(
+    read(`apps/companion/${dependency.path}/Cargo.toml`),
+  );
+  expect(dependency).toEqual({ version: "0.13.0", path: "pdf-extract" });
+  expect(source.package.name).toBe("pdf-extract");
+  expect(source.package.version).toBe(dependency.version);
+  expect(source.package.license).toBe("MIT");
+  expect(source.dependencies.lopdf).toEqual({
+    version: "0.45",
+    "default-features": false,
+    features: ["wasm_js"],
+  });
+  expect(source.lib).toBeUndefined();
+  expect(
+    Object.values(source.dependencies).some(
+      (value) => typeof value === "object" && "path" in value,
+    ),
+  ).toBe(false);
+  expect(read(".gitignore")).toContain(
+    "apps/companion/pdf-extract/*\n!apps/companion/pdf-extract/Cargo.toml",
+  );
 });

@@ -10,7 +10,7 @@ chrono = { version = "0.4", features = ["serde"] }
 futures-util = "0.3"
 hex = "0.4"
 lexopt = "0.3"
-pdf-extract = { version = "0.13.0", path = "local/pdf-extract" }
+pdf-extract = { version = "0.13.0", path = "pdf-extract" }
 redis = { version = "1", features = ["tokio-comp"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "multipart", "stream"] }
 serde = { version = "1", features = ["derive"] }

@@ -442,6 +442,65 @@ class PDFSourcePreparationTests(unittest.TestCase):
         after = (self.target / 'README.md').stat()
         self.assertEqual(MODULE.file_identity(before), MODULE.file_identity(after))
 
+    def test_tracked_manifest_prepares_real_private_sources_without_changing_metadata(self):
+        self.target.mkdir(mode=0o755)
+        manifest = self.target / 'Cargo.toml'
+        manifest.write_bytes(self.files['Cargo.toml'])
+        os.chmod(manifest, 0o644)
+        before = MODULE.file_identity(manifest.stat())
+        with patch.object(MODULE, '__file__', str(self.root / 'prepare-pdf-extract.py')), patch.object(MODULE, 'download', return_value=self.data), patch.object(MODULE, 'ARCHIVE_SHA256', hashlib.sha256(self.data).hexdigest()):
+            self.assertEqual(MODULE.prepare(), self.target)
+            self.assertEqual(MODULE.prepare(), self.target)
+        self.assertEqual(before, MODULE.file_identity(manifest.stat()))
+        self.assertEqual(manifest.read_bytes(), self.files['Cargo.toml'])
+        self.assertEqual(stat.S_IMODE(self.target.stat().st_mode), 0o700)
+        for name, value in self.files.items():
+            self.assertEqual((self.target / name).read_bytes(), value)
+            self.assertEqual(stat.S_IMODE((self.target / name).stat().st_mode), 0o644 if name == 'Cargo.toml' else 0o600)
+        self.assertEqual((self.target / 'LICENSE').read_bytes(), self.values['LICENSE'])
+
+    def test_tracked_manifest_rejects_changed_bytes_links_and_writable_modes_before_source_creation(self):
+        self.target.mkdir(mode=0o755)
+        manifest = self.target / 'Cargo.toml'
+        manifest.write_bytes(self.files['Cargo.toml'])
+        os.chmod(manifest, 0o644)
+        for mode in (0o666, 0o664, 0o600):
+            os.chmod(manifest, mode)
+            with self.assertRaisesRegex(ValueError, 'immutable'):
+                MODULE.immutable_manifest(manifest, self.files['Cargo.toml'])
+        os.chmod(manifest, 0o644)
+        manifest.write_bytes(b'foreign metadata')
+        with self.assertRaisesRegex(ValueError, 'immutable|adaptations'):
+            MODULE.immutable_manifest(manifest, self.files['Cargo.toml'])
+        manifest.write_bytes(self.files['Cargo.toml'])
+        os.link(manifest, self.root / 'linked-manifest')
+        with self.assertRaisesRegex(ValueError, 'immutable'):
+            MODULE.immutable_manifest(manifest, self.files['Cargo.toml'])
+        (self.root / 'linked-manifest').unlink()
+        manifest.unlink()
+        manifest.symlink_to(self.root / 'outside')
+        with self.assertRaises(OSError):
+            MODULE.immutable_manifest(manifest, self.files['Cargo.toml'])
+        self.assertFalse((self.target / 'src').exists())
+
+    def test_tracked_metadata_never_relaxes_private_generated_source_checks(self):
+        self.target.mkdir(mode=0o755)
+        manifest = self.target / 'Cargo.toml'
+        manifest.write_bytes(self.files['Cargo.toml'])
+        os.chmod(manifest, 0o644)
+        MODULE.immutable_manifest(manifest, self.files['Cargo.toml'])
+        MODULE.install(self.target, self.files, True)
+        source = self.target / 'src/lib.rs'
+        os.chmod(source, 0o644)
+        with self.assertRaisesRegex(ValueError, 'private'):
+            MODULE.snapshot(self.target, self.expected, True)
+        os.chmod(source, 0o600)
+        source.write_bytes(b'changed parser')
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            MODULE.snapshot(self.target, self.expected, True)
+        self.assertEqual(source.read_bytes(), b'changed parser')
+        self.assertEqual(manifest.read_bytes(), self.files['Cargo.toml'])
+
 
 if __name__ == '__main__':
     unittest.main()
