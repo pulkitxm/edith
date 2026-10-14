@@ -1,5 +1,14 @@
 import { expect, test } from "bun:test";
-import { lookupRelease } from "./release-lookup.mjs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import {
+  listReleases,
+  lookupRelease,
+  readGitHubAPI,
+  releaseFromListing,
+} from "./release-lookup.mjs";
 
 const repository = "synthetic/fixture";
 const tag = "extensions/calendar/1.0.0-source";
@@ -151,4 +160,140 @@ test("invalid identities reject before any process starts", () => {
     ).toThrow();
     expect(calls).toBe(0);
   }
+});
+
+test("a known release ID is one direct read with no tag probe or listing", () => {
+  const calls = [];
+  const value = lookupRelease({
+    repository,
+    tag,
+    releaseID: 7,
+    execute: (_command, args, options) => {
+      calls.push([args[1], options.stdio]);
+      return JSON.stringify(item);
+    },
+  });
+  expect(value).toEqual(item);
+  expect(calls).toEqual([
+    [`repos/${repository}/releases/7`, ["ignore", "pipe", "pipe"]],
+  ]);
+  expect(() =>
+    lookupRelease({
+      repository,
+      tag,
+      releaseID: 7,
+      execute: () => JSON.stringify({ ...item, id: 8 }),
+    }),
+  ).toThrow("Invalid release lookup ID");
+  expect(() =>
+    lookupRelease({
+      repository,
+      tag,
+      releaseID: 7,
+      execute: () => JSON.stringify({ ...item, tag_name: "foreign" }),
+    }),
+  ).toThrow("Invalid release lookup response");
+  expect(
+    lookupRelease({ repository, tag, releaseID: 7, execute: missing }),
+  ).toBeUndefined();
+  expect(() =>
+    lookupRelease({ repository, tag, releaseID: 0, execute: missing }),
+  ).toThrow("Invalid release lookup identity");
+});
+
+test("one release listing answers every tag without per-tag probes", () => {
+  const calls = [];
+  const releases = Array.from({ length: 39 }, (_, index) => ({
+    ...item,
+    id: index + 1,
+    tag_name: `extensions/package${index}/1.0.0-source`,
+  }));
+  const listed = listReleases({
+    repository,
+    execute: (_command, args) => {
+      calls.push(args[1]);
+      return JSON.stringify(releases);
+    },
+  });
+  for (const [index, value] of releases.entries())
+    expect(
+      releaseFromListing(listed, `extensions/package${index}/1.0.0-source`),
+    ).toEqual(value);
+  expect(releaseFromListing(listed, "extensions/absent/1.0.0")).toBeUndefined();
+  expect(calls).toEqual([`repos/${repository}/releases?per_page=100&page=1`]);
+  expect(() => releaseFromListing([item, { ...item, id: 8 }], tag)).toThrow(
+    "Ambiguous",
+  );
+});
+
+function fakeGitHubCLI(status) {
+  const directory = mkdtempSync(join(tmpdir(), "release-lookup-gh-"));
+  writeFileSync(
+    join(directory, "gh"),
+    `#!/bin/sh\nprintf '{"message":"synthetic"}'\nprintf 'gh: Synthetic (HTTP ${status})\\n' >&2\nexit 1\n`,
+    { mode: 0o700 },
+  );
+  const script = join(directory, "lookup.mjs");
+  writeFileSync(
+    script,
+    `import { lookupRelease, readGitHubAPI } from ${JSON.stringify(resolve("scripts/release-lookup.mjs"))};
+const missingByID = lookupRelease({ repository: "synthetic/fixture", tag: "synthetic-tag", releaseID: 7, retry: { sleep: () => {} } });
+const missingRef = readGitHubAPI({ path: "repos/synthetic/fixture/git/ref/tags/synthetic-tag", allowMissing: true, retry: { sleep: () => {} } });
+process.stdout.write(JSON.stringify([missingByID ?? null, missingRef ?? null]));
+`,
+  );
+  const result = spawnSync(process.execPath, [script], {
+    encoding: "utf8",
+    env: { ...process.env, PATH: `${directory}:${process.env.PATH}` },
+  });
+  rmSync(directory, { recursive: true, force: true });
+  return result;
+}
+
+test("expected 404 lookups print nothing and return missing", () => {
+  const result = fakeGitHubCLI(404);
+  expect(result.status).toBe(0);
+  expect(result.stdout).toBe("[null,null]");
+  expect(result.stderr).toBe("");
+});
+
+test("non-404 lookup failures still throw with the gh message", () => {
+  const result = fakeGitHubCLI(403);
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("HTTP 403");
+  for (const status of [403, 422]) {
+    let calls = 0;
+    expect(() =>
+      readGitHubAPI({
+        path: "repos/synthetic/fixture/releases/7",
+        allowMissing: true,
+        retry: { sleep: () => {} },
+        execute: () => {
+          calls++;
+          throw Object.assign(
+            new Error(`Command failed: gh: Denied (HTTP ${status})`),
+            {
+              stderr: `gh: Denied (HTTP ${status})`,
+            },
+          );
+        },
+      }),
+    ).toThrow(`HTTP ${status}`);
+    expect(calls).toBe(1);
+  }
+  let calls = 0;
+  expect(() =>
+    readGitHubAPI({
+      path: "repos/synthetic/fixture/releases/7",
+      allowMissing: true,
+      retry: { sleep: () => {} },
+      execute: () => {
+        calls++;
+        throw Object.assign(new Error("Command failed"), {
+          stderr: "gh: Server Error (HTTP 502)",
+        });
+      },
+    }),
+  ).toThrow();
+  expect(calls).toBe(6);
 });

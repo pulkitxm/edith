@@ -88,7 +88,11 @@ export async function bindStagedHostContinuation(capability, completedHost) {
 }
 
 import { withGitHubRetrySync } from "./github-retry.mjs";
-import { lookupRelease } from "./release-lookup.mjs";
+import {
+  listReleases,
+  lookupRelease,
+  releaseFromListing,
+} from "./release-lookup.mjs";
 import {
   assertShippingExtensions,
   shippingDefinitions,
@@ -877,6 +881,7 @@ export async function publishExtensions({
       throw new Error("Original native package identity differs");
     return admission;
   };
+  const existingReleases = listReleases({ repository });
   for (const entry of include) {
     const recordPath = resolve(directory, `${entry.id}.json`);
     let record = await validatedExtensionBuild({
@@ -885,7 +890,7 @@ export async function publishExtensions({
       entry,
     });
     const zip = resolve(directory, `${entry.id}.zip`);
-    let item = release(repository, entry.tag);
+    let item = releaseFromListing(existingReleases, entry.tag);
     if (!item) {
       mutate(
         "release",

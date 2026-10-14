@@ -101,7 +101,11 @@ export async function publishExtensionAssets({
       });
     }
     const current = () => {
-      const value = readRelease({ repository, tag: entry.tag });
+      const value = readRelease({
+        repository,
+        tag: entry.tag,
+        releaseID: item.id,
+      });
       assert(value && value.id === item.id && value.tag_name === entry.tag);
       const names = value.assets.map(({ name }) => name);
       if (new Set(names).size !== names.length)
@@ -138,20 +142,18 @@ export async function publishExtensionAssets({
     const before = current();
     await verify(before, false);
     for (const snapshot of snapshots) {
-      const latest = current();
-      if (!latest.assets.some(({ name }) => name === snapshot.name)) {
-        if (!latest.draft)
-          throw new Error(
-            "Published extension release is missing an immutable asset",
-          );
-        await uploadAsset(
-          repository,
-          latest.id,
-          entry.tag,
-          snapshot.file,
-          snapshot.name,
+      if (before.assets.some(({ name }) => name === snapshot.name)) continue;
+      if (!before.draft)
+        throw new Error(
+          "Published extension release is missing an immutable asset",
         );
-      }
+      await uploadAsset(
+        repository,
+        before.id,
+        entry.tag,
+        snapshot.file,
+        snapshot.name,
+      );
     }
     const final = current();
     await verify(final, true);
@@ -175,7 +177,11 @@ export async function verifyImmutableReleaseAssets({
   readRelease = lookupRelease,
   downloadAsset = downloadReleaseAsset,
 }) {
-  const item = readRelease({ repository, tag: receipt.tag });
+  const item = readRelease({
+    repository,
+    tag: receipt.tag,
+    releaseID: receipt.releaseID,
+  });
   assert(item && item.id === receipt.releaseID && !item.draft);
   assert.deepEqual(
     item.assets.map(({ name }) => name).sort(),

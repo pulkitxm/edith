@@ -560,7 +560,7 @@ test("host create and promotion await completed release workflows before observi
       "completed:edit",
     ]);
     expect(value.release.draft).toBe(false);
-    expect(value.calls.at(-1)[2]).toContain("/tags/v1.2.3");
+    expect(value.calls.at(-1)[2]).toBe("repos/synthetic/fixture/releases/7");
   } finally {
     value.clean();
   }
