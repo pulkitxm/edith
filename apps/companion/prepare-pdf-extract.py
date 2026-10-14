@@ -119,7 +119,7 @@ def file_identity(info):
     return (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_nlink, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
 
 
-def snapshot(path, expected_hashes):
+def snapshot(path, expected_hashes, tracked_manifest=False):
     private_directory(path)
     actual = set()
     for current, directories, files in os.walk(path, followlinks=False):
@@ -134,7 +134,7 @@ def snapshot(path, expected_hashes):
             descriptor = os.open(file, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
             try:
                 info = os.fstat(descriptor)
-                require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_nlink == 1 and stat.S_IMODE(info.st_mode) == 0o600 and 0 < info.st_size <= MAXIMUM_BYTES, 'Generated PDF source file is not private and owned')
+                require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_nlink == 1 and stat.S_IMODE(info.st_mode) in ((0o600, 0o644) if tracked_manifest and name == "Cargo.toml" else (0o600,)) and 0 < info.st_size <= MAXIMUM_BYTES, 'Generated PDF source file is not private and owned')
                 with os.fdopen(os.dup(descriptor), 'rb') as stream:
                     value = stream.read(info.st_size + 1)
                 after = os.fstat(descriptor)
@@ -146,10 +146,15 @@ def snapshot(path, expected_hashes):
     require(actual == set(expected_hashes), 'Generated PDF source is incomplete; run make prepare-pdf-extract from a fresh generated directory')
 
 
-def install(path, files):
+def install(path, files, tracked_manifest=False):
     expected = {name: hashlib.sha256(value).hexdigest() for name, value in files.items()}
-    path.mkdir(mode=0o700)
+    if tracked_manifest:
+        private_directory(path)
+    else:
+        path.mkdir(mode=0o700)
     for name, value in files.items():
+        if tracked_manifest and name == "Cargo.toml":
+            continue
         require(PurePosixPath(name).as_posix() == name and all(part not in ('', '.', '..') for part in name.split('/')) and not name.startswith('/'), 'Unsafe generated PDF source path')
         target = path / name
         target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -159,7 +164,22 @@ def install(path, files):
             stream.write(value)
             stream.flush()
             os.fsync(stream.fileno())
-    snapshot(path, expected)
+    snapshot(path, expected, tracked_manifest)
+
+
+def immutable_manifest(path, value):
+    info = path.parent.lstat()
+    require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and stat.S_IMODE(info.st_mode) in (0o700, 0o755) and path.parent.resolve(strict=True) == path.parent, "PDF manifest directory is not owned and immutable")
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        info = os.fstat(descriptor)
+        require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_nlink == 1 and stat.S_IMODE(info.st_mode) in (0o600, 0o644) and info.st_size == len(value), "PDF manifest is not owned and immutable")
+        with os.fdopen(os.dup(descriptor), "rb") as stream:
+            current = stream.read(MAXIMUM_BYTES + 1)
+        require(file_identity(info) == file_identity(os.fstat(descriptor)) == file_identity(path.lstat()) and current == value, "PDF manifest differs from reviewed archive adaptations")
+    finally:
+        os.close(descriptor)
+    os.chmod(path.parent, 0o700)
 
 
 def download():
@@ -171,15 +191,13 @@ def download():
 
 def prepare():
     root = Path(__file__).resolve().parent
-    local = root / 'local'
-    local.mkdir(mode=0o700, exist_ok=True)
-    private_directory(local)
     files = source_files(download(), ARCHIVE_SHA256)
-    target = local / 'pdf-extract'
-    if target.exists() or target.is_symlink():
-        snapshot(target, {name: hashlib.sha256(value).hexdigest() for name, value in files.items()})
+    target = root / 'pdf-extract'
+    immutable_manifest(target / 'Cargo.toml', files['Cargo.toml'])
+    if (target / 'src').exists() or (target / 'src').is_symlink():
+        snapshot(target, {name: hashlib.sha256(value).hexdigest() for name, value in files.items()}, True)
     else:
-        install(target, files)
+        install(target, files, True)
     return target
 
 
