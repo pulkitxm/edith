@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { closeSync, openSync, readFileSync } from "node:fs";
 import {
   copyFile,
   cp,
@@ -360,10 +361,136 @@ export async function validateCameraFixtureHost(
   return { sourceApp: path, fixtureIdentifier: metadata.CFBundleIdentifier };
 }
 
-async function run() {
-  const { buildExtensionPackage } = await import(
-    "./build-extension-package.mjs"
+export function fixtureSupportScopes(definition) {
+  return Object.keys(definition.roles ?? {}).flatMap((role) => {
+    const product =
+      definition.supportProducts &&
+      Object.hasOwn(definition.supportProducts, role)
+        ? definition.supportProducts[role]
+        : definition.supportProduct;
+    return product ? [{ product, scope: `${definition.id}_${role}` }] : [];
+  });
+}
+
+export async function prepareFixtureSupport(
+  definition,
+  { root = process.cwd(), environment = process.env } = {},
+) {
+  const { buildExtensionSupport } = await import(
+    "./build-extension-support.mjs"
   );
+  const { prepareNativeSupport } = await import(
+    "./prepare-extension-native-support.mjs"
+  );
+  const build = (supportRoot, product, scope) =>
+    buildExtensionSupport(supportRoot, product, scope, environment);
+  if (definition.nativePackage) prepareNativeSupport(root, definition, build);
+  for (const { product, scope } of fixtureSupportScopes(definition))
+    build(root, product, scope);
+}
+
+export function fixturePackageBuilds({ id, releases, sourceApp }) {
+  return [
+    ...["1.0.0", "1.1.0"].map((version) => ({
+      id,
+      version,
+      output: join(releases, version),
+      containedHostApp: sourceApp,
+    })),
+    ...(id === "machines"
+      ? [
+          {
+            id: "usage",
+            version: "1.0.0",
+            output: join(releases, "usage-peer", "1.0.0"),
+          },
+        ]
+      : []),
+  ];
+}
+
+export function fixturePackageEnvironment(
+  { version, output, containedHostApp },
+  environment = process.env,
+) {
+  const result = {
+    ...environment,
+    EXTENSION_VERSION: version,
+    EXTENSION_OUTPUT: output,
+  };
+  delete result.EXTENSION_RELEASE_TAG;
+  if (containedHostApp !== undefined)
+    result.EXTENSION_CONTAINING_HOST_APP = containedHostApp;
+  return result;
+}
+
+export function fixturePackageRecord(log, { id, version }) {
+  const lines = log.trimEnd().split("\n");
+  const record = JSON.parse(lines.at(-1));
+  assert.equal(record.id, id, `Fixture package ${id} reported another id`);
+  assert.equal(
+    record.version,
+    version,
+    `Fixture package ${id} ${version} reported another version`,
+  );
+  return { record, output: lines.slice(0, -1).join("\n") };
+}
+
+export function startFixturePackageBuild(
+  build,
+  {
+    logDirectory,
+    environment = process.env,
+    command = process.execPath,
+    script = fileURLToPath(
+      new URL("./build-extension-package.mjs", import.meta.url),
+    ),
+  },
+) {
+  const log = join(logDirectory, `${build.id}-${build.version}-build.log`);
+  const descriptor = openSync(log, "wx", 0o600);
+  let child;
+  try {
+    child = spawn(command, [script, build.id, "--development"], {
+      env: fixturePackageEnvironment(build, environment),
+      stdio: ["ignore", descriptor, "inherit"],
+    });
+  } finally {
+    closeSync(descriptor);
+  }
+  return new Promise((resolvePromise, reject) => {
+    child.once("error", reject);
+    child.once("close", (code, signal) => {
+      const text = readFileSync(log, "utf8");
+      if (code !== 0) {
+        if (text)
+          process.stdout.write(text.endsWith("\n") ? text : `${text}\n`);
+        reject(
+          new Error(
+            `Fixture package ${build.id} ${build.version} failed (${signal ?? `exit ${code}`})`,
+          ),
+        );
+        return;
+      }
+      try {
+        const { record, output } = fixturePackageRecord(text, build);
+        if (output) process.stdout.write(`${output}\n`);
+        resolvePromise(record);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
+export async function awaitFixturePackageBuilds(builds) {
+  const results = await Promise.allSettled(builds);
+  const failure = results.find(({ status }) => status === "rejected");
+  if (failure) throw failure.reason;
+  return results.map(({ value }) => value);
+}
+
+async function run() {
   const definitions = JSON.parse(
     await readFile("Extensions/manifest.json", "utf8"),
   );
@@ -385,13 +512,10 @@ async function run() {
         workers.some((entry) => entry.id === id),
         `Unknown worker extension ${id}`,
       );
-    for (const {
-      id,
-      surfaceContractVersion,
-      systemExtensionCarrier,
-    } of workers.filter(
+    for (const definition of workers.filter(
       (entry) => requested.length === 0 || requested.includes(entry.id),
     )) {
+      const { id, surfaceContractVersion, systemExtensionCarrier } = definition;
       const releases = join(root, id);
       await mkdir(releases);
       let sourceApp = resolve("local/minimal-host/Edith.app");
@@ -411,14 +535,25 @@ async function run() {
         ]);
         execFileSync("codesign", ["--force", "--sign", "-", sourceApp]);
       }
+      const logDirectory = join(root, `${id}-build-logs`);
+      await mkdir(logDirectory, { mode: 0o700 });
+      const builds = fixturePackageBuilds({ id, releases, sourceApp });
+      const independent = builds
+        .filter((build) => build.id !== id)
+        .map((build) => startFixturePackageBuild(build, { logDirectory }));
+      try {
+        await prepareFixtureSupport(definition);
+      } catch (error) {
+        await Promise.allSettled(independent);
+        throw error;
+      }
+      await awaitFixturePackageBuilds([
+        ...independent,
+        ...builds
+          .filter((build) => build.id === id)
+          .map((build) => startFixturePackageBuild(build, { logDirectory })),
+      ]);
       for (const version of ["1.0.0", "1.1.0"]) {
-        await buildExtensionPackage({
-          id,
-          output: join(releases, version),
-          development: true,
-          version,
-          containedHostApp: sourceApp,
-        });
         if (id === "virtualCamera") {
           const provenance = JSON.parse(
             await readFile(
@@ -442,14 +577,6 @@ async function run() {
             assert.match(role.executableAfterSigningSHA256, /^[0-9a-f]{64}$/);
           }
         }
-      }
-      if (id === "machines") {
-        await buildExtensionPackage({
-          id: "usage",
-          output: join(releases, "usage-peer", "1.0.0"),
-          development: true,
-          version: "1.0.0",
-        });
       }
       const fixtureRoot = join(root, `${id}-host`);
       await mkdir(fixtureRoot, { mode: 0o700 });

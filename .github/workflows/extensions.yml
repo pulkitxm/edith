@@ -119,8 +119,10 @@ jobs:
         if: "needs.plan.outputs.mode != 'validation'"
         run: make host
       - run: |
-          swift build --package-path Packages/EdithHost --build-system native --jobs 2 --product HostLifecycleHarness
+          swift build --package-path Packages/EdithHost --build-system native --jobs 2 --product HostLifecycleHarness &
+          lifecycle_harness=$!
           swift build --package-path Packages/ExtensionMarketplace --build-system native --jobs 2 --product MarketplaceHarness
+          wait "$lifecycle_harness"
           python3 scripts/package_extension_lifecycle_tools.py --host local/minimal-host/Edith.app --host-products "$(swift build --package-path Packages/EdithHost --build-system native --show-bin-path)" --marketplace-products "$(swift build --package-path Packages/ExtensionMarketplace --build-system native --show-bin-path)" --carrier-products "$(swift build --package-path Packages/EdithHost --build-system native --configuration release --show-bin-path)" --output local/extension-tools
       - name: Import the release signing certificate
         if: "!inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
@@ -353,8 +355,13 @@ jobs:
       - name: "Reuse this extension's unchanged support libraries"
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          path: "local/extension-support/${{ matrix.id }}_*"
-          key: "extension-support-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.id }}-${{ steps.support-toolchain.outputs.fingerprint }}-${{ matrix.supportFingerprint }}"
+          path: |
+            local/extension-support/${{ matrix.id }}_*/build.json
+            local/extension-support/${{ matrix.id }}_*/.build/arm64-apple-macosx/release/lib*.a
+            local/extension-support/${{ matrix.id }}_*/.build/arm64-apple-macosx/release/Modules
+            local/extension-support/${{ matrix.id }}_*/.build/arm64-apple-macosx/release/*.bundle
+            local/extension-support/${{ matrix.id }}_*/.build/out/Products/Release
+          key: "extension-support-v3-${{ runner.os }}-${{ runner.arch }}-${{ matrix.id }}-${{ steps.support-toolchain.outputs.fingerprint }}-${{ matrix.supportFingerprint }}"
       - name: "Test this extension's optional native packages"
         env:
           EXTENSION_ID: "${{ matrix.id }}"
@@ -364,6 +371,7 @@ jobs:
         run: "bun scripts/test-extension-workers.mjs \"${{ matrix.id }}\""
         env:
           EXTENSION_LIFECYCLE_HARNESS: local/extension-tools/HostLifecycleHarness
+          EXTENSION_SWIFT_JOBS: "3"
       - name: Import the release signing certificate
         if: "!inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
         env:
@@ -392,6 +400,7 @@ jobs:
           EXTENSION_VERSION: "${{ matrix.version }}"
           DEVELOPMENT: "${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.publish != true) }}"
           EXTENSION_UI_CARRIER_TOOLS: local/extension-tools
+          EXTENSION_SWIFT_JOBS: "3"
           EXTENSION_CONTAINING_HOST_APP: "${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.publish != true)) && 'local/minimal-host/Edith.app' || 'local/extension-release-host/Edith.app' }}"
         run: |
           if [ "$DEVELOPMENT" = true ]; then
