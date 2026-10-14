@@ -9,7 +9,11 @@ actor DatabaseMCPCommandLifetime {
     {
         guard !stopping, tasks.count < 32, !Task.isCancelled else {
             return CallTool.Result(
-                content: [.text("The owned database tool session is unavailable.")],
+                content: [
+                    .text(
+                        text: "The owned database tool session is unavailable.", annotations: nil,
+                        _meta: nil)
+                ],
                 isError: true)
         }
         let id = UUID()
