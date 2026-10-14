@@ -4,6 +4,10 @@ import Foundation
 import Observation
 
 @MainActor @Observable final class ClaudeAccountsModel {
+    nonisolated private static let readOwnedState:
+        @Sendable (ClaudeAccountStorage) async throws -> ClaudeAccountsState = { storage in
+            try await storage.load()
+        }
     static let shared = ClaudeAccountsModel()
     private(set) var state = ClaudeAccountsState()
     private(set) var error: String?
@@ -39,9 +43,7 @@ import Observation
         directory: URL? = nil, client: HerdrUIClient? = nil,
         limitsLogin: HerdrLimitsLogin? = nil,
         readState: @escaping @Sendable (ClaudeAccountStorage) async throws -> ClaudeAccountsState =
-            {
-                try await $0.load()
-            },
+            readOwnedState,
         eraseSecret: @escaping @Sendable (URL) throws -> Void = {
             try ClaudeAccountImport.eraseScopedSecret($0)
         },
