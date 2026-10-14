@@ -43,6 +43,11 @@ struct ClaudeSharedLaunchMutation: Codable {
             guard object.isEmpty else { throw ExtensionPeerError.invalidRequest }
             return try JSONEncoder().encode(current)
         }
+        if command == "herdr.ui.accounts.select" {
+            guard payload.count <= 128, Set(object.keys) == ["id"],
+                let raw = object["id"] as? String, UUID(uuidString: raw) != nil
+            else { throw ExtensionPeerError.invalidRequest }
+        }
         guard !model.saving else {
             throw ExtensionPeerError.rejected("An account change is already in progress.")
         }
@@ -62,6 +67,13 @@ struct ClaudeSharedLaunchMutation: Codable {
                 throw ExtensionPeerError.rejected("Accounts changed. Reload and try again.")
             }
             await model.save(change.state)
+        case "herdr.ui.accounts.select":
+            guard let raw = object["id"] as? String,
+                await model.rememberLaunchSelection(raw)
+            else {
+                throw ExtensionPeerError.rejected(
+                    model.error ?? "This account could not be selected. Reload and try again.")
+            }
         case "herdr.ui.accounts.import":
             guard Set(object.keys).isSubset(of: ["machineID"]) else {
                 throw ExtensionPeerError.invalidRequest

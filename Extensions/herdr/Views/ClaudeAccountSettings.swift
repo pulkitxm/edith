@@ -9,7 +9,6 @@ struct ClaudeAccountSettings: View {
     var machineID: String? = nil
     var accountAdded: (ClaudeAccount) -> Void = { _ in }
     @State private var draft: ClaudeAccount?
-    @State private var defaultID: UUID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
@@ -43,10 +42,10 @@ struct ClaudeAccountSettings: View {
                     Button("Use current CLI account") {
                         Task {
                             if let account = await accounts.importCurrentCLIAccount(
-                                on: machine, machineID: machineID)
+                                on: machine, machineID: machineID),
+                                await accounts.rememberLaunchSelection(account.id.uuidString)
                             {
                                 draft = account
-                                defaultID = account.id
                                 accountAdded(account)
                             }
                         }
@@ -54,30 +53,6 @@ struct ClaudeAccountSettings: View {
                     .help(
                         "Copy the current CLI credentials into a named account and use it for new sessions."
                     )
-                }
-                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                    Text("Default for new Claude sessions").font(.edithText(.caption))
-                    Picker("Default for new Claude sessions", selection: $defaultID) {
-                        if accounts.state.accounts.isEmpty {
-                            Text("Existing CLI login").tag(UUID?.none)
-                        } else {
-                            Text("First saved account").tag(UUID?.none)
-                        }
-                        ForEach(accounts.state.accounts) { account in
-                            Text(account.name).tag(Optional(account.id))
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .onChange(of: defaultID) { _, value in
-                        guard accounts.ready, value != accounts.state.defaultID else { return }
-                        var next = accounts.state
-                        next.defaultID = value
-                        Task {
-                            await accounts.save(next)
-                            if accounts.error != nil { defaultID = accounts.state.defaultID }
-                        }
-                    }
                 }
                 if draft != nil {
                     Text("Account name").font(.edithText(.caption))
@@ -144,18 +119,15 @@ struct ClaudeAccountSettings: View {
             }
         }
         .onAppear {
-            defaultID = accounts.state.defaultID
             selectAccountIfNeeded()
         }
         .pageTask {
             await accounts.read()
-            defaultID = accounts.state.defaultID
             selectAccountIfNeeded()
         }
         .onChange(of: accounts.state.accounts.map(\.id)) { _, _ in
             selectAccountIfNeeded()
         }
-        .onChange(of: accounts.state.defaultID) { _, value in defaultID = value }
     }
 
     private func selectAccountIfNeeded() {
@@ -196,7 +168,11 @@ struct ClaudeAccountSettings: View {
         let added = !accounts.state.accounts.contains { $0.id == draft.id }
         Task {
             await accounts.save(next)
-            if added, accounts.error == nil { accountAdded(draft) }
+            if added, accounts.error == nil,
+                await accounts.rememberLaunchSelection(draft.id.uuidString)
+            {
+                accountAdded(draft)
+            }
         }
     }
 
@@ -218,32 +194,46 @@ struct ClaudeAccountLaunchPicker: View {
     var machineID: String? = nil
     @Binding var selection: String
     @State private var editing = false
+    @State private var selectionError: String?
 
     var body: some View {
-        HStack {
-            Picker("Claude account", selection: $selection) {
-                Text(
-                    "Launch default: \((accounts.account(accounts.state.defaultID) ?? accounts.state.accounts.first)?.name ?? "Existing CLI login")"
-                )
-                .tag("default")
-                if accounts.state.accounts.isEmpty {
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+            HStack {
+                Picker(
+                    "Claude account",
+                    selection: Binding(
+                        get: { accounts.launchSelection(selection) }, set: choose)
+                ) {
                     Text("Existing CLI login").tag("cli")
+                    ForEach(accounts.launchAccounts) { account in
+                        Text("\(account.name) (\(account.authentication.title))").tag(
+                            account.id.uuidString)
+                    }
                 }
-                ForEach(accounts.state.accounts) { account in
-                    Text("\(account.name) (\(account.authentication.title))").tag(
-                        account.id.uuidString)
-                }
+                .disabled(!accounts.ready || accounts.saving)
+                Button("Manage accounts") { editing = true }
             }
-            Button("Manage accounts") { editing = true }
+            if let selectionError {
+                Text(selectionError).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .font(.edithText(.caption))
-        .pageTask { await accounts.read() }
+        .pageTask {
+            await accounts.read()
+            selection = accounts.launchSelection(selection)
+        }
+        .onChange(of: accounts.state.accounts.map(\.id)) { _, _ in
+            selection = accounts.launchSelection(selection)
+        }
         .edithSheet(isPresented: $editing) {
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     ClaudeAccountSettings(
                         accounts: accounts, machine: machine, machineID: machineID,
-                        accountAdded: { selection = $0.id.uuidString })
+                        accountAdded: {
+                            selection = $0.id.uuidString; selectionError = nil
+                        })
                     Divider()
                     ClaudeSharedLaunchSettings(accounts: accounts)
                     Button("Done") { editing = false }
@@ -253,4 +243,20 @@ struct ClaudeAccountLaunchPicker: View {
             .frame(width: PresentationMetrics.width(540), height: PresentationMetrics.width(640))
         }
     }
+
+    private func choose(_ value: String) {
+        selection = value
+        selectionError = nil
+        Task {
+            if await accounts.rememberLaunchSelection(value) {
+                if selectionError != nil { selection = accounts.launchSelection("default") }
+                return
+            }
+            guard selection == value else { return }
+            selectionError =
+                accounts.error ?? "This account could not be selected. Reload and try again."
+            selection = accounts.launchSelection("default")
+        }
+    }
+
 }

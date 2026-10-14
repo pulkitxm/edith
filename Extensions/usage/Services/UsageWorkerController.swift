@@ -32,6 +32,7 @@ public final class UsageWorkerController {
     private let sleep: @Sendable (Duration) async throws -> Void
     private var periodicAdmissions: [String: Date] = [:]
     private let fetchLimits: FetchLimits
+    private let projectLimits: FetchLimits
     private let collect: Collect
     private let dataDirectory: URL
     private let limitsSession = LimitsRefreshSession()
@@ -47,6 +48,9 @@ public final class UsageWorkerController {
         dataDirectory: URL = Repo.dataDir,
         fetchLimits: @escaping FetchLimits = { session in
             await LimitsCollector.refresh(force: true, refreshSession: session, announce: { _ in })
+        },
+        projectLimits: @escaping FetchLimits = { session in
+            await LimitsCollector.refresh(force: false, refreshSession: session, announce: { _ in })
         },
         ambientPolicy: ExtensionAmbientPolicy? = nil,
         allowsBackgroundCollection: @escaping @MainActor () -> Bool = {
@@ -69,6 +73,7 @@ public final class UsageWorkerController {
         self.dataDirectory = dataDirectory
         self.collect = collect
         self.fetchLimits = fetchLimits
+        self.projectLimits = projectLimits
     }
 
     @discardableResult
@@ -154,10 +159,10 @@ public final class UsageWorkerController {
         return id.uuidString
     }
 
-    public func requestLimitsRefresh() throws {
+    public func requestLimitsRefresh(force: Bool = true) throws {
         guard !stopped else { throw ExtensionPeerError.unavailable }
         guard limitsTask == nil, !limitsResetting else { return }
-        let fetch = fetchLimits
+        let fetch = force ? fetchLimits : projectLimits
         limitsTask = Task { [weak self, limitsSession] in
             let result = await fetch(limitsSession)
             guard !Task.isCancelled, let self, !self.stopped else { return }
