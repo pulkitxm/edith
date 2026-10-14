@@ -1480,7 +1480,7 @@ final class NotchShelfController {
         ) { [weak self, owner] url, error in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.enqueueCallback(whileStopping: true) {
+                self.enqueueCallback(whileStopping: true) { [self] in
                     defer {
                         owner.returned(name: url.lastPathComponent)
                         if owner.completed {
