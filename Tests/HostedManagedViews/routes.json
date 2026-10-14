@@ -412,7 +412,7 @@
       "sources": [
         {
           "path": "Extensions/plugins/Runtime.swift",
-          "sha256": "3ed35d38b7a01618b99713ce395b441d732fe4310af3c4049a87b64122b35e6c"
+          "sha256": "2dd37bcd50c17a722babd22ab667cf43a7a49fcf6d586e56f1b0116595dbe076"
         },
         {
           "path": "Extensions/plugins/SkillsModel.swift",
@@ -434,7 +434,7 @@
       "sources": [
         {
           "path": "Extensions/notchShelf/Runtime.swift",
-          "sha256": "3afa836f18cc40b93c0322ad182bca506f7af5b781c3f8d7dc4450a324f18331"
+          "sha256": "61caad151a1b6cdae0312479e86d570f04f0eea33c6bc5526334b6bff2c48d3f"
         },
         {
           "path": "Extensions/notchShelf/Settings/NotchSettingsModel.swift",

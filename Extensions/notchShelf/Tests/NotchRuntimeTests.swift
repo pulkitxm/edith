@@ -26,7 +26,7 @@ import Testing
             })
         #else
         let runtime = ExtensionRuntime(
-            validateOrdinaryContext: { _ in },
+            admitOrdinaryContext: { _ in nil },
             contextSource: { fixture.context },
             connectedDisplays: { [42: CGSize(width: 1280, height: 900)] },
             createController: { context, displays in

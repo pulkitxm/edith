@@ -88,11 +88,12 @@ final class ExtensionRuntime: NSObject {
     }
 
     #else
-    private let validateOrdinaryContext: @MainActor (NSDictionary) throws -> Void
+    private let admitOrdinaryContext: @MainActor (NSDictionary) throws -> WorkerFixtureAdmission?
 
     init(
-        validateOrdinaryContext: @escaping @MainActor (NSDictionary) throws -> Void =
-            ExtensionRuntime.validateOrdinaryContext,
+        admitOrdinaryContext:
+            @escaping @MainActor (NSDictionary) throws -> WorkerFixtureAdmission? =
+            ExtensionRuntime.admitOrdinaryContext,
         contextSource: @escaping @MainActor () -> SurfaceHostContext? = {
             SurfaceHostContext.current
         },
@@ -112,20 +113,22 @@ final class ExtensionRuntime: NSObject {
                 NotchShelfController(context: $0, hostDisplays: $1)
             }
     ) {
-        self.validateOrdinaryContext = validateOrdinaryContext
+        self.admitOrdinaryContext = admitOrdinaryContext
         self.contextSource = contextSource
         self.connectedDisplays = connectedDisplays
         self.createController = createController
         super.init()
     }
 
-    private static func validateOrdinaryContext(_ context: NSDictionary) throws {
+    private static func admitOrdinaryContext(_ context: NSDictionary) throws
+        -> WorkerFixtureAdmission?
+    {
         guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
-            context["hostedFunctionalFixture"] == nil,
-            try WorkerFixtureAdmission.current(
-                extensionID: "notchShelf", context: context,
-                roleBundle: Bundle(for: ExtensionRuntime.self)) == nil
+            context["hostedFunctionalFixture"] == nil
         else { throw WorkerFixtureError.invalid }
+        return try WorkerFixtureAdmission.current(
+            extensionID: "notchShelf", context: context,
+            roleBundle: Bundle(for: ExtensionRuntime.self))
     }
 
     #endif
@@ -508,7 +511,11 @@ final class ExtensionRuntime: NSObject {
                 }
             } catch { return ["ok": false] as NSDictionary }
             #else
-            do { try validateOrdinaryContext(input) } catch {
+            do {
+                guard try admitOrdinaryContext(input) == nil else {
+                    return ["ok": false] as NSDictionary
+                }
+            } catch {
                 fixtureRejected = true; return ["ok": false] as NSDictionary
             }
             #endif
@@ -615,7 +622,16 @@ final class ExtensionRuntime: NSObject {
                 }
                 guard !fixtureActive else { throw WorkerFixtureError.invalid }
                 #else
-                try validateOrdinaryContext(input)
+                if try admitOrdinaryContext(input) != nil {
+                    guard controller == nil, panelEngine == nil, uiScenes.isEmpty,
+                        input["defaultsSuite"] as? String
+                            == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                    else { throw WorkerFixtureError.invalid }
+                    fixtureActive = true
+                    startRequested = true
+                    return ["ok": true] as NSDictionary
+                }
+                guard !fixtureActive else { throw WorkerFixtureError.invalid }
                 #endif
             } catch {
                 fixtureRejected = true
