@@ -82,7 +82,9 @@ public enum ClaudeLimitsReader {
 
     static func fetchAccount(
         _ account: ClaudeAccount, directory: URL,
-        isCurrent: @Sendable (ClaudeAccount, URL) async throws -> Bool = accountIsCurrent,
+        isCurrent: @Sendable (ClaudeAccount, URL) async throws -> Bool = {
+            try await accountIsCurrent($0, directory: $1)
+        },
         resolveToken: () async throws -> String,
         send: (URLRequest) async throws -> (Data, HTTPURLResponse)
     ) async throws -> LimitsProviderSnapshot {
@@ -134,7 +136,9 @@ public enum ClaudeLimitsReader {
 
     static func resolveAccountToken(
         _ account: ClaudeAccount, directory: URL,
-        isCurrent: @Sendable (ClaudeAccount, URL) async throws -> Bool = accountIsCurrent,
+        isCurrent: @Sendable (ClaudeAccount, URL) async throws -> Bool = {
+            try await accountIsCurrent($0, directory: $1)
+        },
         savedLogin: (ClaudeAccount, URL) -> String? = { account, directory in
             ClaudeSavedLogin.scopedToken(
                 account: account, directory: directory,
