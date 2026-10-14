@@ -291,6 +291,95 @@ private actor AccountLimitsProbe {
         #expect(values.last?.limits.error != nil)
     }
 
+    @Test func failedQuotaRefreshRetainsAllWindowsAndHonorsExactRetryDeadline() async throws {
+        let collector = ClaudeAccountLimitsCollector()
+        let configured = [account()]
+        let original = LimitsProviderSnapshot(
+            provider: .claude, session: .init(percent: 23, resetsAt: now.addingTimeInterval(600)),
+            week: .init(percent: 41, resetsAt: now.addingTimeInterval(3600)),
+            fable: .init(percent: 17, resetsAt: now.addingTimeInterval(3600)))
+        _ = try await collector.refresh(accounts: configured, directory: directory, now: now) {
+            _, _ in original
+        }
+        let failed = try await collector.refresh(
+            accounts: configured, directory: directory, now: now.addingTimeInterval(60)
+        ) { _, _ in throw ClaudeLimitsReader.Failure.rateLimited(300) }
+        let stale = try #require(failed.first)
+        #expect(stale.limits.session == original.session)
+        #expect(stale.limits.week == original.week)
+        #expect(stale.limits.fable == original.fable)
+        #expect(
+            stale.limits.error == ClaudeLimitsReader.Failure.rateLimited(300).localizedDescription)
+        #expect(stale.refreshedAt == now)
+        #expect(stale.retryAt == now.addingTimeInterval(360))
+        let probe = AccountLimitsProbe()
+        let fetch: @Sendable (ClaudeAccount, URL) async throws -> LimitsProviderSnapshot = { _, _ in
+            await probe.enter(); await probe.leave()
+            return .init(provider: .claude, session: .init(percent: 7, resetsAt: nil), week: nil)
+        }
+        let held = try await collector.refresh(
+            accounts: configured, directory: directory, now: now.addingTimeInterval(359),
+            fetch: fetch)
+        #expect(held == failed)
+        #expect(await probe.calls == 0)
+        let recovered = try await collector.refresh(
+            accounts: configured, directory: directory, now: now.addingTimeInterval(360),
+            fetch: fetch)
+        #expect(await probe.calls == 1)
+        #expect(recovered.first?.limits.session?.percent == 7)
+        #expect(recovered.first?.limits.error == nil)
+        #expect(recovered.first?.retryAt == nil)
+        #expect(recovered.first?.refreshedAt == now.addingTimeInterval(360))
+        let defaultRetry = try await collector.refresh(
+            accounts: configured, directory: directory, now: now.addingTimeInterval(420)
+        ) { _, _ in throw ClaudeLimitsReader.Failure.rateLimited(nil) }
+        #expect(defaultRetry.first?.retryAt == now.addingTimeInterval(2220))
+        #expect(defaultRetry.first?.refreshedAt == now.addingTimeInterval(360))
+        #expect(defaultRetry.first?.limits.session == recovered.first?.limits.session)
+    }
+
+    @Test func linkedProfilesAndDirectoryChangesCannotReuseAnotherCredentialScopeQuota()
+        async throws
+    {
+        let collector = ClaudeAccountLimitsCollector()
+        var first = account("First linked")
+        first.limitsProfileID = UUID()
+        var second = first
+        second.id = UUID()
+        second.limitsProfileID = UUID()
+        let probe = AccountLimitsProbe()
+        let fetch: @Sendable (ClaudeAccount, URL) async throws -> LimitsProviderSnapshot = { _, _ in
+            await probe.enter(); await probe.leave()
+            return .init(provider: .claude, session: .init(percent: 23, resetsAt: nil), week: nil)
+        }
+        _ = try await collector.refresh(
+            accounts: [first, second], directory: directory, now: now, fetch: fetch)
+        #expect(await probe.calls == 2)
+        first.name = "Renamed linked"
+        _ = try await collector.refresh(
+            accounts: [first, second], directory: directory, now: now.addingTimeInterval(1),
+            fetch: fetch)
+        #expect(await probe.calls == 2)
+        first.limitsProfileID = UUID()
+        _ = try await collector.refresh(
+            accounts: [first, second], directory: directory, now: now.addingTimeInterval(2),
+            fetch: fetch)
+        #expect(await probe.calls == 3)
+        _ = try await collector.refresh(
+            accounts: [first, second], directory: directory.appendingPathComponent("other"),
+            now: now.addingTimeInterval(3), fetch: fetch)
+        #expect(await probe.calls == 5)
+        var browser = account("Scoped browser")
+        browser.authentication = .browserLogin
+        _ = try await collector.refresh(
+            accounts: [browser], directory: directory, now: now.addingTimeInterval(4), fetch: fetch)
+        #expect(await probe.calls == 6)
+        _ = try await collector.refresh(
+            accounts: [browser], directory: directory.appendingPathComponent("other"),
+            now: now.addingTimeInterval(5), fetch: fetch)
+        #expect(await probe.calls == 7)
+    }
+
     private func waitUntil(_ predicate: () async -> Bool) async throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
         while !(await predicate()) {
