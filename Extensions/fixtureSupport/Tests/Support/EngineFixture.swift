@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import WorkerFixtureSupport
 
@@ -16,8 +17,20 @@ public struct EngineFixture {
     public init(owner: String) throws {
         self.owner = owner
         identifier = "com.pulkit.edith.tests.worker-" + UUID().uuidString
-        root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
-            .appendingPathComponent("worker-fixture-" + UUID().uuidString)
+        guard let temporaryPath = ProcessInfo.processInfo.environment["TMPDIR"],
+            temporaryPath.hasPrefix("/")
+        else { throw WorkerFixtureError.invalid }
+        let temporary = URL(fileURLWithPath: temporaryPath, isDirectory: true)
+            .standardizedFileURL.resolvingSymlinksInPath()
+        guard temporary.path == temporary.standardizedFileURL.path,
+            temporary.path == temporary.resolvingSymlinksInPath().path
+        else { throw WorkerFixtureError.invalid }
+        let attributes = try FileManager.default.attributesOfItem(atPath: temporary.path)
+        guard attributes[.type] as? FileAttributeType == .typeDirectory,
+            attributes[.ownerAccountID] as? UInt32 == getuid(),
+            attributes[.posixPermissions] as? Int == 0o700
+        else { throw WorkerFixtureError.invalid }
+        root = temporary.appendingPathComponent("worker-fixture-" + UUID().uuidString)
         home = root.appendingPathComponent(owner + "-home")
         data = root.appendingPathComponent("support/Data/" + owner)
         role = root.appendingPathComponent(
