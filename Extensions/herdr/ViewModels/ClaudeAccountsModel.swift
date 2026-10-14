@@ -16,6 +16,7 @@ import Observation
     private var stopped = false
     private let eraseSecret: @Sendable (URL) throws -> Void
     private let invalidateUsage: @Sendable () async -> Void
+    private let refreshUsage: @Sendable () async -> Void
 
     var hasConfiguredStore: Bool {
         suppliedDirectory != nil
@@ -36,12 +37,15 @@ import Observation
         eraseSecret: @escaping @Sendable (URL) throws -> Void = ClaudeAccountImport
             .eraseScopedSecret,
         invalidateUsage: @escaping @Sendable () async -> Void = ClaudeAccountsModel
-            .invalidateEnabledUsage
+            .invalidateEnabledUsage,
+        refreshUsage: @escaping @Sendable () async -> Void = ClaudeAccountsModel
+            .refreshEnabledUsage
     ) {
         suppliedDirectory = directory
         self.client = client
         self.eraseSecret = eraseSecret
         self.invalidateUsage = invalidateUsage
+        self.refreshUsage = refreshUsage
     }
 
     private func ownedStorage() throws -> ClaudeAccountStorage {
@@ -77,7 +81,14 @@ import Observation
     }
 
     func save(_ next: ClaudeAccountsState) async {
-        guard ready, !saving, !stopped else { return }
+        guard ready, !stopped else {
+            if !stopped { error = "Reload accounts before making a change." }
+            return
+        }
+        guard !saving else {
+            error = "An account change is already in progress. Try again when it finishes."
+            return
+        }
         saving = true
         defer { saving = false }
         do {
@@ -207,6 +218,54 @@ import Observation
 
     func account(_ id: UUID?) -> ClaudeAccount? { state.accounts.first { $0.id == id } }
 
+    var launchAccounts: [ClaudeAccount] { state.accounts }
+
+    func launchSelection(_ selection: String) -> String {
+        if selection == "cli" { return selection }
+        if let id = UUID(uuidString: selection), account(id) != nil { return id.uuidString }
+        return (account(state.defaultID) ?? state.accounts.first)?.id.uuidString ?? "cli"
+    }
+
+    func rememberLaunchSelection(_ selection: String) async -> Bool {
+        if selection == "cli" { return true }
+        guard ready, !stopped else {
+            if !stopped { error = "Reload accounts before choosing an account." }
+            return false
+        }
+        guard !saving else {
+            error = "An account change is already in progress. Try again when it finishes."
+            return false
+        }
+        guard let id = UUID(uuidString: selection), account(id) != nil else {
+            error = "This account was removed. Choose another account."
+            return false
+        }
+        saving = true
+        defer { saving = false }
+        do {
+            let next: ClaudeAccountsState
+            if client != nil {
+                next = try await perform(
+                    "herdr.ui.accounts.select",
+                    payload: JSONSerialization.data(withJSONObject: ["id": id.uuidString]))
+            } else {
+                next = try await ownedStorage().rememberLaunchAccount(id)
+            }
+            try Task.checkCancellation()
+            guard !stopped else { throw ExtensionPeerError.unavailable }
+            state = next
+            ready = true
+            await notifyLaunchSelection()
+            try Task.checkCancellation()
+            guard !stopped else { throw ExtensionPeerError.unavailable }
+            error = nil
+            return true
+        } catch {
+            if !Task.isCancelled, !stopped { self.error = error.localizedDescription }
+            return false
+        }
+    }
+
     func performData(_ command: String, payload: Data = Data("{}".utf8)) async throws -> Data {
         guard !stopped, let client, requests.count < 8 else { throw ExtensionPeerError.unavailable }
         let id = UUID()
@@ -236,6 +295,19 @@ import Observation
         guard let endpoint = ExtensionPeerEndpoint.current(owner: "usage") else { return }
         _ = try? await endpoint.invoke(
             "usage.accounts.changed", payload: Data("{}".utf8), timeout: 5)
+    }
+
+    nonisolated static func refreshEnabledUsage() async {
+        guard let endpoint = ExtensionPeerEndpoint.current(owner: "usage") else { return }
+        _ = try? await endpoint.invoke(
+            "usage.limits.project", payload: Data("{}".utf8), timeout: 5)
+    }
+
+    private func notifyLaunchSelection() async {
+        guard client == nil else { return }
+        let refresh = refreshUsage
+        let task = Task.detached { await refresh() }
+        await task.value
     }
 
     func notifyChanged() async {
