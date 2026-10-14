@@ -30,12 +30,14 @@ import Testing
         let failed = try await collector.refresh(
             accounts: [account], directory: root, now: now.addingTimeInterval(60)
         ) { _, _ in throw ClaudeLimitsReader.Failure.rateLimited(300) }
-        let data = try #require(AccountQuotaCache.read(directory: root))
+        let cachedData = try AccountQuotaCache.read(directory: root)
+        let data = try #require(cachedData)
         let text = String(decoding: data, as: UTF8.self)
         #expect(!text.contains(account.credential))
         #expect(!text.contains(account.name))
         #expect(!text.contains(account.id.uuidString))
-        let document = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let object = try JSONSerialization.jsonObject(with: data)
+        let document = try #require(object as? [String: Any])
         #expect(document.count == 1)
         #expect(document.keys.allSatisfy { $0.count == 64 })
         account.name = "Renamed synthetic account"
@@ -72,8 +74,10 @@ import Testing
         let original = try await collector.refresh(accounts: accounts, directory: root, now: now) {
             _, _ in .init(provider: .claude, session: .init(percent: 23, resetsAt: nil), week: nil)
         }
-        let data = try #require(AccountQuotaCache.read(directory: root))
-        let document = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let cachedData = try AccountQuotaCache.read(directory: root)
+        let data = try #require(cachedData)
+        let object = try JSONSerialization.jsonObject(with: data)
+        let document = try #require(object as? [String: Any])
         #expect(document.count == 64)
         let tooMany = accounts + [ClaudeAccount(name: "Extra", credential: "synthetic-extra")]
         await #expect(throws: ClaudeAccountError.self) {
@@ -103,8 +107,10 @@ import Testing
             accounts: [account], directory: root, now: now
         ) { _, _ in .init(provider: .claude, session: .init(percent: 23, resetsAt: nil), week: nil)
         }
-        let data = try #require(AccountQuotaCache.read(directory: root))
-        var document = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let cachedData = try AccountQuotaCache.read(directory: root)
+        let data = try #require(cachedData)
+        let object = try JSONSerialization.jsonObject(with: data)
+        var document = try #require(object as? [String: Any])
         let key = try #require(document.keys.first)
         var entry = try #require(document[key] as? [String: Any])
         if kind == "over64" {
@@ -135,8 +141,10 @@ import Testing
         #expect(fresh.first?.limits.session?.percent == 7)
         #expect(fresh.first?.limits.grok == nil)
         #expect(fresh.first?.refreshedAt == now.addingTimeInterval(1))
-        let replaced = try #require(AccountQuotaCache.read(directory: root))
-        let saved = try #require(JSONSerialization.jsonObject(with: replaced) as? [String: Any])
+        let replacementData = try AccountQuotaCache.read(directory: root)
+        let replaced = try #require(replacementData)
+        let savedObject = try JSONSerialization.jsonObject(with: replaced)
+        let saved = try #require(savedObject as? [String: Any])
         #expect(saved.count == 1)
     }
 
