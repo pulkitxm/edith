@@ -26,4 +26,7 @@ let package = Package(
                 "HerdrUI", .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
             ], path: "Tests/UI",
             swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "HerdrSettingsActionTests", dependencies: ["HerdrUI"],
+            path: "Tests/SettingsAction", swiftSettings: [.swiftLanguageMode(.v5)]),
     ])
