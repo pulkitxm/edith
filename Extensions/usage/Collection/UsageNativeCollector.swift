@@ -8,7 +8,8 @@ public enum UsageNativeCollector {
     ) async throws -> Data {
         try await collect(
             home: home, dataDirectory: dataDirectory, environment: environment, now: now,
-            network: UsageNativeNetwork(), onEvent: onEvent)
+            network: UsageNativeNetwork(), accounts: await UsageNativeAccounts.load(),
+            onEvent: onEvent)
     }
 
     public static func collectRemote(
@@ -27,6 +28,7 @@ public enum UsageNativeCollector {
     static func collect(
         home: URL, dataDirectory: URL, environment: [String: String], now: Date,
         network: UsageNativeNetwork, remoteContext: UsageRemoteCollectionContext? = nil,
+        accounts: UsageNativeAccounts = .init(),
         onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void
     ) async throws -> Data {
         let started = ContinuousClock.now
@@ -112,7 +114,7 @@ public enum UsageNativeCollector {
         let zone = environment["TZ"].flatMap(TimeZone.init(identifier:)) ?? .current
         let document = try UsageNativeAssembly.document(
             events: archive.events(), archive: archive, now: now,
-            timezone: zone, cloudSources: cloud)
+            timezone: zone, cloudSources: cloud, accounts: accounts)
         let unpriced = (document["pricing"] as? [String: Any])?["unpricedModels"] as? [String] ?? []
         if !unpriced.isEmpty {
             onEvent(

@@ -38,7 +38,9 @@ private actor HerdrAccountParityLaunches {
         let root = try HerdrAccountFixture.root()
         defer { try? FileManager.default.removeItem(at: root) }
         let defaults = HerdrUIDefaults()
-        HerdrLaunchSettings.setCommand("/usr/bin/env", for: "Claude Code", in: defaults)
+        HerdrLaunchSettings.setCommand(
+            "/bin/sh -c '/usr/bin/env; printf \"LAUNCH_ARGUMENTS=%s\\n\" \"$*\"' claude",
+            for: "Claude Code", in: defaults)
         let model = ClaudeAccountsModel(directory: root.appendingPathComponent("accounts"))
         try await model.load()
         let personal = ClaudeAccount(name: "Personal", credential: "synthetic-personal-token")
@@ -73,6 +75,11 @@ private actor HerdrAccountParityLaunches {
             #expect(outputs["synthetic-1"]?["ANTHROPIC_API_KEY"] == nil)
             #expect(outputs["synthetic-2"]?["ANTHROPIC_API_KEY"] == company.credential)
             #expect(outputs["synthetic-2"]?["CLAUDE_CODE_OAUTH_TOKEN"] == nil)
+            for (pane, account) in [("synthetic-1", personal), ("synthetic-2", company)] {
+                let tagging = try ClaudeAccountSessions.launchArguments(
+                    account: account.id, directory: model.directory)
+                #expect(outputs[pane]?["LAUNCH_ARGUMENTS"] == tagging.joined(separator: " "))
+            }
             #expect(
                 Set(store.accountSessions.values)
                     == Set([personal.id.uuidString, company.id.uuidString]))

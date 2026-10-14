@@ -15,8 +15,8 @@ SPEC = importlib.util.spec_from_file_location("account_sdk_local", Path(__file__
 HELPER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(HELPER)
 INVENTORY = {
-    "Sources/EdithExtensionAccounts": ["ClaudeAccount.swift", "ClaudeAccountStorage.swift", "ClaudeSavedLogin.swift", "OwnedAccountFiles.swift"],
-    "Tests/EdithExtensionAccountsTests": ["AccountSupportModelTests.swift", "AccountSupportSavedLoginTests.swift", "AccountSupportStorageTests.swift"],
+    "Sources/EdithExtensionAccounts": ["ClaudeAccount.swift", "ClaudeAccountStorage.swift", "ClaudeAccountSessions.swift", "ClaudeSavedLogin.swift", "OwnedAccountFiles.swift"],
+    "Tests/EdithExtensionAccountsTests": ["AccountSupportModelTests.swift", "AccountSupportSavedLoginTests.swift", "AccountSupportSessionTests.swift", "AccountSupportStorageTests.swift"],
 }
 
 
@@ -88,12 +88,12 @@ class AccountSDKLocalGuardTests(unittest.TestCase):
     def source(self, group):
         return self.root / "Packages/ExtensionSupport" / group
 
-    def test_exact_seven_source_bytes_hashes_and_dependency_free_manifest(self):
+    def test_exact_source_bytes_hashes_and_dependency_free_manifest(self):
         digests, count = HELPER.prepare_package(self.root, self.package)
         files = sorted(path.relative_to(self.package).as_posix() for path in self.package.rglob("*") if path.is_file())
         self.assertEqual(files, sorted(["Package.swift", *self.bytes]))
         self.assertEqual(set(digests), set(self.bytes))
-        self.assertEqual(count, 3)
+        self.assertEqual(count, 4)
         for name, data in self.bytes.items():
             self.assertEqual((self.package / name).read_bytes(), data)
             self.assertEqual(digests[name], hashlib.sha256(data).hexdigest())

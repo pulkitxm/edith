@@ -258,9 +258,7 @@ import Testing
     @Test @MainActor func ownedBackupWhitelistNeverExportsOrRestoresSavedAccountFiles()
         async throws
     {
-        let temporaryPath = try #require(ProcessInfo.processInfo.environment["TMPDIR"])
-        let temporary = URL(fileURLWithPath: temporaryPath, isDirectory: true)
-            .resolvingSymlinksInPath()
+        let temporary = try PhysicalTemporaryDirectory.url()
         let root = temporary.appendingPathComponent(
             "usage-backup-synthetic-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(

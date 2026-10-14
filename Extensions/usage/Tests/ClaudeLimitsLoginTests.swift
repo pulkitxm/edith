@@ -40,9 +40,8 @@ private actor LinkedLoginAuthority {
     }
 
     private func fixture() async throws -> (URL, ClaudeAccountStorage, ClaudeAccount, URL) {
-        let temporary = try #require(ProcessInfo.processInfo.environment["TMPDIR"])
-        let root = URL(fileURLWithPath: temporary, isDirectory: true)
-            .resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let root = try PhysicalTemporaryDirectory.url()
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(
             at: root, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         do {

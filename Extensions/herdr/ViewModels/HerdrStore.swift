@@ -2283,8 +2283,12 @@ final class HerdrStore {
                 account.authentication == .browserLogin
                 ? accountDirectory?.appendingPathComponent(account.id.uuidString).path
                     ?? "/validated/profile" : nil
+            let sessionTagging =
+                try accountDirectory.map {
+                    try ClaudeAccountSessions.launchArguments(account: account.id, directory: $0)
+                } ?? []
             localAccountCommand = try account.launchCommand(
-                command: accountCommand, arguments: accountArguments,
+                command: accountCommand, arguments: accountArguments + sessionTagging,
                 environment: accountEnvironment,
                 configurationPath: profile)
             if let machine {
