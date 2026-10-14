@@ -3,7 +3,7 @@ import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 
-@MainActor struct CompanionHostsCommand: AsyncParsableCommand {
+struct CompanionHostsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "hosts",
         abstract: "Machines that could run the companion, and what each one needs.",
@@ -23,7 +23,7 @@ import Foundation
     @Option(name: .long, help: "Probe only this machine.")
     var machine: String?
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let hosts = await CompanionHostProbing.hosts(only: machine)
             let deployment = CompanionDeploymentStore.load()
@@ -55,7 +55,7 @@ import Foundation
         }
     }
 
-    static func hostJSON(_ host: CompanionHost) -> JSONValue {
+    @MainActor static func hostJSON(_ host: CompanionHost) -> JSONValue {
         .object([
             "id": .string(host.id.uuidString),
             "name": .string(host.name),
@@ -77,7 +77,7 @@ import Foundation
         ])
     }
 
-    static func factsJSON(_ facts: CompanionHostFacts) -> JSONValue {
+    @MainActor static func factsJSON(_ facts: CompanionHostFacts) -> JSONValue {
         .object([
             "os": .string(facts.os),
             "arch": .string(facts.arch),
@@ -99,7 +99,7 @@ import Foundation
         ])
     }
 
-    static func deploymentJSON(_ deployment: CompanionDeployment) -> JSONValue {
+    @MainActor static func deploymentJSON(_ deployment: CompanionDeployment) -> JSONValue {
         .object([
             "machineName": .string(deployment.machineName),
             "isLocal": .bool(deployment.isLocal),
@@ -112,7 +112,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionStackCommand: AsyncParsableCommand {
+struct CompanionStackCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "stack",
         abstract: "Start, stop and inspect the companion stack on its host.",
@@ -132,7 +132,7 @@ import Foundation
         defaultSubcommand: CompanionStackStatusCommand.self)
 }
 
-@MainActor struct CompanionStackStatusCommand: AsyncParsableCommand {
+struct CompanionStackStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "status", abstract: "Which host runs the stack, and which services are up.",
         discussion: """
@@ -147,7 +147,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             guard let deployment = CompanionDeploymentStore.load() else {
                 guard !json else {
@@ -189,7 +189,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionStackUpCommand: AsyncParsableCommand {
+struct CompanionStackUpCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "up", abstract: "Start the companion stack on its host.",
         discussion: """
@@ -207,7 +207,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let deployment = try CompanionStackRunner.requireDeployment()
             _ = try await CompanionMindRuntimeOperationExecution.start(
@@ -221,7 +221,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionStackDownCommand: AsyncParsableCommand {
+struct CompanionStackDownCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "down", abstract: "Stop the companion stack on its host.",
         discussion: """
@@ -242,7 +242,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let deployment = try CompanionStackRunner.requireDeployment()
             let plan =
@@ -266,7 +266,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionStackRestartCommand: AsyncParsableCommand {
+struct CompanionStackRestartCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "restart", abstract: "Restart the companion stack on its host.",
         discussion: """
@@ -281,7 +281,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let deployment = try CompanionStackRunner.requireDeployment()
             _ = try await CompanionMindRuntimeOperationExecution.restart(deployment) {
@@ -294,7 +294,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionStackLogsCommand: AsyncParsableCommand {
+struct CompanionStackLogsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "logs", abstract: "Read the stack's logs from its host.",
         discussion: """
@@ -315,7 +315,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let deployment = try CompanionStackRunner.requireDeployment()
             let output = try await CompanionStackRunner.run(
@@ -337,7 +337,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionStackEnvCommand: AsyncParsableCommand {
+struct CompanionStackEnvCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "env", abstract: "Print the environment the stack would be given.",
         discussion: """
@@ -355,7 +355,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let config = CompanionConfigStore.load()
             let secrets = reveal ? CompanionSecrets.all() : CompanionSecretValues()
@@ -378,7 +378,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionDeployCommand: AsyncParsableCommand {
+struct CompanionDeployCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "deploy",
         abstract: "Choose the machine that runs the companion, and bring it up there.",
@@ -407,7 +407,7 @@ import Foundation
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let chosenPort = try ArgumentChecks.port(port, "--port")
             let hosts = await CompanionHostProbing.hosts(only: machine)
@@ -459,7 +459,7 @@ import Foundation
         }
     }
 
-    private func pick(from hosts: [CompanionHost]) -> CompanionHost? {
+    @MainActor private func pick(from hosts: [CompanionHost]) -> CompanionHost? {
         guard let machine else { return CompanionHostList.recommended(hosts) }
         let wanted = machine.lowercased()
         return hosts.first {

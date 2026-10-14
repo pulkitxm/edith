@@ -3,7 +3,7 @@ import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 
-@MainActor struct CompanionChatCommand: AsyncParsableCommand {
+struct CompanionChatCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "chat", abstract: "Talk with the companion, streamed as it thinks.",
         discussion: """
@@ -30,7 +30,7 @@ import Foundation
     @Argument(help: "What to say.")
     var message: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let resolved = CompanionClient.endpoint(override: endpoint)
             let client = CompanionClient(baseURL: resolved)
@@ -108,7 +108,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionConversationsCommand: AsyncParsableCommand {
+struct CompanionConversationsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "conversations", abstract: "List chats, or replay one by id.",
         discussion: """
@@ -133,7 +133,7 @@ import Foundation
     @Argument(help: "A conversation id to replay in full.")
     var id: String?
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             if let id {
                 try await show(id)
@@ -178,7 +178,7 @@ import Foundation
         }
     }
 
-    private func show(_ id: String) async throws {
+    @MainActor private func show(_ id: String) async throws {
         let detail = try await CompanionBridge.request(endpoint: endpoint) { client in
             try await CompanionChatLibraryOperationExecution.conversation(id: id) { id in
                 try await client.conversation(id: id)
@@ -214,7 +214,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionForgetCommand: AsyncParsableCommand {
+struct CompanionForgetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "forget", abstract: "Delete a conversation and its messages.",
         discussion: """
@@ -238,7 +238,7 @@ import Foundation
     @Argument(help: "The conversation id to delete.")
     var id: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let plan = CLIDestructivePlan(
                 action: "forget companion conversation", targets: [id], confirmed: yes,
@@ -257,7 +257,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionEpisodeCommand: AsyncParsableCommand {
+struct CompanionEpisodeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "episode", abstract: "Read one episode in full.",
         discussion: """
@@ -285,7 +285,7 @@ import Foundation
     @Argument(help: "The episode id.")
     var id: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let episode = try await CompanionBridge.request(endpoint: endpoint) { client in
                 try await CompanionChatLibraryOperationExecution.episode(id: id) { id in
@@ -350,7 +350,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionNightlyCommand: AsyncParsableCommand {
+struct CompanionNightlyCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "nightly", abstract: "Run the nightly learning pipeline right now.",
         discussion: """
@@ -368,7 +368,7 @@ import Foundation
     @Option(name: .long, help: "Companion API base URL.")
     var endpoint: String?
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let started = try await CompanionBridge.request(endpoint: endpoint) { client in
                 try await CompanionMindRuntimeOperationExecution.nightly {
@@ -384,7 +384,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionReasonCommand: AsyncParsableCommand {
+struct CompanionReasonCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "reason", abstract: "Show or change how the companion reasons.",
         discussion: """
@@ -426,7 +426,7 @@ private func printReasonSettings(_ settings: CompanionReasonSettings) {
             ]))
 }
 
-@MainActor struct CompanionReasonShowCommand: AsyncParsableCommand {
+struct CompanionReasonShowCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "show", abstract: "Show the active reasoning provider.",
         discussion: """
@@ -444,7 +444,7 @@ private func printReasonSettings(_ settings: CompanionReasonSettings) {
     @Option(name: .long, help: "Companion API base URL.")
     var endpoint: String?
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let settings = try await CompanionBridge.request(endpoint: endpoint) { client in
                 try await client.reasonSettings()
@@ -458,7 +458,7 @@ private func printReasonSettings(_ settings: CompanionReasonSettings) {
     }
 }
 
-@MainActor struct CompanionReasonSetCommand: AsyncParsableCommand {
+struct CompanionReasonSetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "set", abstract: "Change the reasoning provider, model, URL, or API key.",
         discussion: """
@@ -488,7 +488,7 @@ private func printReasonSettings(_ settings: CompanionReasonSettings) {
     @Option(name: .long, help: "API key, stored on the companion; empty to clear.")
     var apiKey: String?
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let update = try CompanionSettingsOperationBridge.reasonUpdate(
                 provider: provider, url: url, model: model, apiKey: apiKey)
@@ -506,7 +506,7 @@ private func printReasonSettings(_ settings: CompanionReasonSettings) {
     }
 }
 
-@MainActor struct CompanionReasonTestCommand: AsyncParsableCommand {
+struct CompanionReasonTestCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "test", abstract: "Test one tiny completion through the reasoner.",
         discussion: """
@@ -524,7 +524,7 @@ private func printReasonSettings(_ settings: CompanionReasonSettings) {
     @Option(name: .long, help: "Companion API base URL.")
     var endpoint: String?
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let outcome = try await CompanionSettingsOperationBridge.request(
                 endpoint: endpoint
