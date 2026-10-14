@@ -25,15 +25,18 @@ public struct CompanionHealthJob: Sendable {
             else { return false }
             return await CompanionTunnel.ensure(deployment)
         },
-        deliverOutbox: @escaping @Sendable (URL) async -> Void = { url in
-            await CompanionOutboxDelivery.shared.enqueue(endpoint: url)
-        }
+        deliverOutbox: @escaping @Sendable (URL) async -> Void = CompanionHealthJob
+            .deliverToSharedOutbox
     ) {
         self.isConfigured = isConfigured
         self.endpoint = endpoint
         self.probe = probe
         self.repair = repair
         self.deliverOutbox = deliverOutbox
+    }
+
+    @Sendable public static func deliverToSharedOutbox(_ url: URL) async {
+        await CompanionOutboxDelivery.shared.enqueue(endpoint: url)
     }
 
     public func run() async -> CompanionHealthSnapshot {

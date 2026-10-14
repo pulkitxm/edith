@@ -46,7 +46,7 @@ final class CompanionWorker {
             SharedDefaults.store.set(
                 CompanionTab.library.rawValue, forKey: AppStorageKeys.Companion.tab)
             let library = workspace.library
-            commandTasks.launch { await library.select(id) }
+            _ = commandTasks.launch { await library.select(id) }
         }
         ExtensionPresentation.showWindow()
     }
