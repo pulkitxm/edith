@@ -134,7 +134,7 @@ def snapshot(path, expected_hashes, tracked_manifest=False):
             descriptor = os.open(file, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
             try:
                 info = os.fstat(descriptor)
-                require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_nlink == 1 and stat.S_IMODE(info.st_mode) == (0o644 if tracked_manifest and name == "Cargo.toml" else 0o600) and 0 < info.st_size <= MAXIMUM_BYTES, 'Generated PDF source file is not private and owned')
+                require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_nlink == 1 and stat.S_IMODE(info.st_mode) in ((0o600, 0o644) if tracked_manifest and name == "Cargo.toml" else (0o600,)) and 0 < info.st_size <= MAXIMUM_BYTES, 'Generated PDF source file is not private and owned')
                 with os.fdopen(os.dup(descriptor), 'rb') as stream:
                     value = stream.read(info.st_size + 1)
                 after = os.fstat(descriptor)
@@ -173,7 +173,7 @@ def immutable_manifest(path, value):
     descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
         info = os.fstat(descriptor)
-        require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_nlink == 1 and stat.S_IMODE(info.st_mode) == 0o644 and info.st_size == len(value), "PDF manifest is not owned and immutable")
+        require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_nlink == 1 and stat.S_IMODE(info.st_mode) in (0o600, 0o644) and info.st_size == len(value), "PDF manifest is not owned and immutable")
         with os.fdopen(os.dup(descriptor), "rb") as stream:
             current = stream.read(MAXIMUM_BYTES + 1)
         require(file_identity(info) == file_identity(os.fstat(descriptor)) == file_identity(path.lstat()) and current == value, "PDF manifest differs from reviewed archive adaptations")
