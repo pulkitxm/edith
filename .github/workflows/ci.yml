@@ -215,7 +215,7 @@ jobs:
             echo "no comparable base commit, running every area"
           fi
           area() {
-            if [ -z "$base" ] || printf '%s\n' "$changed" | grep -qE "$2"; then
+            if [ -z "$base" ] || printf '%s\n' "$changed" | grep -E "$2" >/dev/null; then
               echo "$1=true" >> "$GITHUB_OUTPUT"
               echo "$1: run"
             else

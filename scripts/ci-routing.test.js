@@ -26,6 +26,73 @@ const areaPatterns = new Map(
 
 const matchesArea = (area, path) => areaPatterns.get(area)?.test(path) ?? false;
 
+function runAreas(paths, { all = false } = {}) {
+  const root = mkdtempSync(join(tmpdir(), "edith-area-routing-"));
+  const output = join(root, "output");
+  const changedFile = join(root, "changed");
+  const script = ciJobs.changes.steps.find((step) => step.id === "areas").run;
+  const areas = script.slice(
+    script.indexOf("area() {"),
+    script.indexOf("test_scope=()"),
+  );
+  try {
+    writeFileSync(changedFile, paths.join("\n"));
+    execFileSync(
+      "bash",
+      [
+        "-e",
+        "-o",
+        "pipefail",
+        "-c",
+        `changed="$(cat "$1")"\n${areas}`,
+        "edith-area-fixture",
+        changedFile,
+      ],
+      {
+        stdio: "pipe",
+        env: {
+          ...process.env,
+          base: all ? "" : "synthetic-base",
+          GITHUB_OUTPUT: output,
+        },
+      },
+    );
+    return Object.fromEntries(
+      readFileSync(output, "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => line.split("=")),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test("large changed lists retain early area matches under pipefail", () => {
+  const unrelated = Array.from(
+    { length: 7500 },
+    (_, index) => `unrelated/${index}/${"x".repeat(64)}`,
+  );
+  for (const first of [
+    ["Extensions/keepAwake/Runtime.swift"],
+    [".github/workflows/ci.yml", "docs/index.md"],
+    ["apps/music-player/Cargo.lock"],
+  ]) {
+    const changed = [...first, ...unrelated];
+    expect(Buffer.byteLength(changed.join("\n"))).toBeGreaterThan(512 * 1024);
+    const expected = runAreas(first);
+    expect(Object.values(expected)).toContain("true");
+    expect(runAreas(changed)).toEqual(expected);
+  }
+});
+
+test("area routing runs every area without a comparable base", () => {
+  const areas = runAreas(["docs/index.md"], { all: true });
+  expect(Object.keys(areas)).toEqual([...areaPatterns.keys()]);
+  for (const [area, value] of Object.entries(areas))
+    expect(value, area).toBe("true");
+});
+
 test("Spotify catalog changes run native and locked Rust checks", () => {
   for (const path of [
     "apps/music-player/src/catalog.rs",
