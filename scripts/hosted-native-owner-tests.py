@@ -975,6 +975,7 @@ def run_selected_original(arguments, root, environment, output, selection=None, 
         result = run_original(arguments, root, environment, output, deadline=deadline,
                               ownership_factory=ownership_factory, selection=selection)
         driver.validate()
+        pair.validate_images()
         return result
     finally:
         pair.close()

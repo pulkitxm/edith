@@ -972,5 +972,36 @@ class OwnedProcessSDKLocalTests(unittest.TestCase):
                     run.assert_called_once_with(*expected)
 
 
+class SelectedFrontendPostJoinTests(unittest.TestCase):
+    def test_swapped_frontend_after_verified_retirement_fails_without_changing_clean_retirement(self):
+        fixture_spec = importlib.util.spec_from_file_location(
+            "sdk_join_driver_fixtures", Path(__file__).with_name("test-run-host-swift-testing.py"))
+        fixtures = importlib.util.module_from_spec(fixture_spec)
+        fixture_spec.loader.exec_module(fixtures)
+        with tempfile.TemporaryDirectory(dir=os.environ["TMPDIR"]) as temporary:
+            root = Path(temporary).resolve()
+            with fixtures.selected_pair_fixture(HELPER.DRIVERS) as (driver, _, destination):
+                frontend = destination.with_name("swift-frontend")
+                pair = HELPER.DRIVERS.SelectedPackageDriverPair(driver)
+                cleanup = {"reaped": True, "remainingOwnedProcesses": 0, "unverifiedOwnedProcesses": 0,
+                           "pendingOwnedChildren": 0, "naturalSurvivorCount": 0, "ownershipErrors": []}
+                process = SyntheticProcess([0])
+                owner = SyntheticOwnership()
+                def retired(*args):
+                    frontend.write_bytes(b"changed synthetic frontend after owned join")
+                    return cleanup
+                with patch.object(HELPER.DRIVERS, "SelectedPackageDriverPair", return_value=pair), \
+                        patch.object(HELPER.OWNERSHIP, "retire", side_effect=retired):
+                    result = HELPER.run_owned(
+                        HELPER.DRIVERS.SelectedPackageArguments(driver, [str(driver.validate())]),
+                        root, {}, root / "tests.log", process_factory=lambda *args, **kwargs: process,
+                        ownership_factory=lambda *args, **kwargs: owner)
+                self.assertEqual(result["exitCode"], 1)
+                self.assertEqual(result["failure"], "RuntimeError")
+                self.assertEqual(result["cleanup"], cleanup)
+                self.assertEqual(pair.images, [])
+                self.assertNotIn(pair, HELPER.DRIVERS.ADMITTED_PACKAGE_DRIVER_PAIRS)
+
+
 if __name__ == "__main__":
     unittest.main()

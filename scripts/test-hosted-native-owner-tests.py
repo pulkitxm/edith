@@ -2694,10 +2694,12 @@ class SelectedPackageCompoundTransitionContracts(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
-    def exercise(self, trusted=True, change=None):
+    def exercise(self, trusted=True, change=None, compiler=False):
         fixtures = self.driver_fixtures()
         with fixtures.selected_pair_fixture(runner.DRIVERS) as (driver, source, destination):
             pair = runner.DRIVERS.SelectedPackageDriverPair(driver) if trusted else None
+            if compiler:
+                source, destination = destination, destination.with_name("swift-frontend")
             kernel = Kernel()
             original = kernel.proc_pidinfo
             child_reads = 0
@@ -2733,7 +2735,7 @@ class SelectedPackageCompoundTransitionContracts(unittest.TestCase):
                 if field is not None:
                     current[field] += 1
                 if change == 'foreign_image':
-                    current[3] = str(destination.with_name('swift-frontend'))
+                    current[3] = str(destination.with_name('clang' if compiler else 'swift-frontend'))
                 if change == 'image_changed':
                     destination.write_bytes(b'changed synthetic driver image')
                 kernel.processes[234] = tuple(current)
@@ -2809,7 +2811,60 @@ class SelectedPackageCompoundTransitionContracts(unittest.TestCase):
             pair.close()
 
 
+    def test_actual_refresh_admits_captured_driver_frontend_self_group_with_retained_birth_parent_and_images(self):
+        value, source, destination = self.exercise(compiler=True)
+        self.assertEqual(value['errors'], [])
+        self.assertEqual(value['known'][234], (234, 101, 8, destination, 234))
+        self.assertEqual(value['seals'][234], (234, 101, 8, 123))
+        self.assertEqual(value['selfGroups'], {234: 234})
+        self.assertEqual(value['transitions'], [{'previous': (234, 101, 8, source, 123),
+                                                'current': (234, 101, 8, destination, 234)}])
+        for field in ['twoChildRecordsMatch', 'parentBeforeMatches', 'parentAfterMatches',
+                      'parentRecordsStable', 'transitionAdmitted']:
+            self.assertIs(value['observation'][field], True)
+        self.assertEqual(value['signals'], [])
+
+    def test_driver_frontend_foreign_reused_unstable_mutable_and_unopted_transitions_never_grant_authority(self):
+        for change in ['birth', 'microseconds', 'uid', 'ruid', 'parent', 'group', 'foreign_image',
+                       'raw_child', 'raw_parent', 'image_changed', 'inexit']:
+            with self.subTest(change=change):
+                value, _, _ = self.exercise(change=change, compiler=True)
+                self.assertTrue(value['errors'])
+                self.assertEqual(value['selfGroups'], {})
+                self.assertEqual(value['transitions'], [])
+                self.assertEqual(value['signals'], [])
+        value, _, _ = self.exercise(trusted=False, compiler=True)
+        self.assertTrue(value['errors'])
+        self.assertEqual(value['selfGroups'], {})
+        self.assertEqual(value['signals'], [])
+        value, _, _ = self.exercise(change='second_group', compiler=True)
+        self.assertEqual(value['errors'], [])
+        self.assertTrue(value['secondErrors'])
+        self.assertEqual(value['secondSelfGroups'], {234: 234})
+        self.assertEqual(value['signals'], [])
+
+
 class SelectedPackageInvocationTests(unittest.TestCase):
+    def test_swapped_frontend_after_join_cannot_publish_selected_native_result_and_closes_pair(self):
+        fixtures_spec = importlib.util.spec_from_file_location(
+            'joined_driver_fixtures', Path(__file__).with_name('test-run-host-swift-testing.py'))
+        fixtures = importlib.util.module_from_spec(fixtures_spec)
+        fixtures_spec.loader.exec_module(fixtures)
+        with fixtures.selected_pair_fixture(runner.DRIVERS) as (driver, _, destination):
+            frontend = destination.with_name('swift-frontend')
+            pair = runner.DRIVERS.SelectedPackageDriverPair(driver)
+            def joined(*args, **kwargs):
+                frontend.write_bytes(b'changed synthetic frontend after owned join')
+                return {'passed': True, 'exitCode': 0}
+            with patch.object(runner.DRIVERS, 'SelectedSwiftDriver', return_value=driver), \
+                    patch.object(runner.DRIVERS, 'SelectedPackageDriverPair', return_value=pair), \
+                    patch.object(runner, 'run_original', side_effect=joined):
+                with self.assertRaises((OSError, ValueError, RuntimeError)):
+                    runner.run_selected_original(['make', 'ci-extension-keep-awake'], Path('/synthetic'),
+                                                 {'DEVELOPER_DIR': str(driver.developer)}, Path('/synthetic'))
+            self.assertEqual(pair.images, [])
+            self.assertNotIn(pair, runner.DRIVERS.ADMITTED_PACKAGE_DRIVER_PAIRS)
+
     def test_selected_pair_remains_open_through_the_original_phase_and_join(self):
         events = []
         driver = Mock()

@@ -363,13 +363,14 @@ def selected_pair_fixture(module):
         directory.mkdir(parents=True)
         source = directory / "swift-package"
         destination = directory / "swift-driver"
-        for path in (source, destination):
+        frontend = directory / "swift-frontend"
+        for path in (source, destination, frontend):
             path.write_bytes(("synthetic-unexecuted-" + path.name).encode())
             path.chmod(0o755)
         (directory / "swift-test").symlink_to("swift-package")
         original_lstat = Path.lstat
         original_fstat = os.fstat
-        inodes = {(value.st_dev, value.st_ino) for value in [original_lstat(source), original_lstat(destination)]}
+        inodes = {(value.st_dev, value.st_ino) for value in [original_lstat(source), original_lstat(destination), original_lstat(frontend)]}
 
         def root_metadata(value):
             fields = {name: getattr(value, name) for name in dir(value) if name.startswith("st_")}
@@ -412,6 +413,63 @@ class SelectedPackageDriverPairTests(unittest.TestCase):
             for descriptor in descriptors:
                 with self.assertRaises(OSError):
                     os.fstat(descriptor)
+
+    def test_driver_to_frontend_is_the_only_new_retained_image_edge(self):
+        with selected_pair_fixture(runtime) as (driver, source, destination):
+            frontend = destination.with_name("swift-frontend")
+            pair = runtime.SelectedPackageDriverPair(driver)
+            try:
+                self.assertTrue(pair.permits(str(destination), str(frontend)))
+                self.assertFalse(pair.permits(str(frontend), str(destination)))
+                self.assertFalse(pair.permits(str(source), str(frontend)))
+                self.assertFalse(pair.permits(str(destination), str(frontend.with_name("clang"))))
+                self.assertEqual([row[0] for row in pair.images], [source, destination, frontend])
+            finally:
+                pair.close()
+            self.assertFalse(pair.permits(str(destination), str(frontend)))
+
+    def test_frontend_ownership_links_mutation_and_alias_never_grant_the_new_edge(self):
+        for change in ["bytes", "writable", "hardlink", "symlink", "foreign_owner", "replacement", "path_binding"]:
+            with self.subTest(change=change), selected_pair_fixture(runtime) as (driver, _, destination):
+                frontend = destination.with_name("swift-frontend")
+                pair = runtime.SelectedPackageDriverPair(driver)
+                try:
+                    if change == "path_binding":
+                        pair.frontend = frontend.with_name("clang")
+                        with self.assertRaisesRegex(RuntimeError, "image set changed"):
+                            pair.permits(str(destination), str(pair.frontend))
+                        continue
+                    if change == "bytes":
+                        frontend.write_bytes(b"changed synthetic frontend")
+                    elif change == "writable":
+                        frontend.chmod(0o777)
+                    elif change == "hardlink":
+                        os.link(frontend, frontend.with_name("duplicate"))
+                    elif change == "foreign_owner":
+                        original = Path.lstat
+                        def foreign(path):
+                            value = original(path)
+                            if path == frontend:
+                                fields = {name: getattr(value, name) for name in dir(value) if name.startswith("st_")}
+                                fields["st_uid"] = 9999
+                                return type("ForeignMetadata", (), fields)()
+                            return value
+                        with patch.object(Path, "lstat", foreign):
+                            with self.assertRaises((OSError, ValueError, RuntimeError)):
+                                pair.permits(str(destination), str(frontend))
+                        continue
+                    else:
+                        previous = frontend.with_name("old-frontend")
+                        frontend.rename(previous)
+                        if change == "symlink":
+                            frontend.symlink_to(previous.name)
+                        else:
+                            frontend.write_bytes(b"replaced synthetic frontend")
+                            frontend.chmod(0o755)
+                    with self.assertRaises((OSError, ValueError, RuntimeError)):
+                        pair.permits(str(destination), str(frontend))
+                finally:
+                    pair.close()
 
     def test_image_mutation_permissions_links_and_replacement_invalidate_real_held_pair(self):
         for image in ["source", "destination"]:
