@@ -12,14 +12,16 @@ public actor LimitsRefreshSession {
         case cancelled
     }
 
-    public static let shared = LimitsRefreshSession()
-    let accountCollector = ClaudeAccountLimitsCollector()
+    public static let shared = LimitsRefreshSession(persistAccountCache: true)
+    let accountCollector: ClaudeAccountLimitsCollector
     private var activeID: UUID?
     private var retryNotBefore: [LimitProvider: Date] = [:]
     private var latest: LimitsTopicSnapshot?
     private var followers: [UUID: CheckedContinuation<Decision, Never>] = [:]
 
-    public init() {}
+    public init(persistAccountCache: Bool = false) {
+        accountCollector = ClaudeAccountLimitsCollector(persistCache: persistAccountCache)
+    }
 
     var followerCount: Int { followers.count }
 
