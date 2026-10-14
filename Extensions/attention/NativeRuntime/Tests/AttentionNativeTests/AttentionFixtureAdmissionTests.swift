@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 import Testing
-import AttentionWorkerFixtureSupport
+import WorkerFixtureSupport
 import WorkerFixtureTestSupport
 import EdithExtensionSupport_attention_native
 
