@@ -46,7 +46,15 @@ import Testing
         #expect(try TimeLapseRecording.load(in: root).isEmpty)
         try FileManager.default.removeItem(at: local.appendingPathComponent("session.json"))
         try JSONEncoder().encode(session).write(to: local.appendingPathComponent("session.json"))
-        #expect(try TimeLapseRecording.load(in: root).map(\.id) == [session.id])
+        let loaded: [TimeLapseRecording]
+        do {
+            loaded = try TimeLapseRecording.load(in: root)
+        } catch {
+            try timeLapseLibraryDiagnostic(root, loaded: nil, error: error)
+            throw error
+        }
+        try timeLapseLibraryDiagnostic(root, loaded: loaded, error: nil)
+        #expect(loaded.map(\.id) == [session.id])
     }
 
     @Test func invalidStandardFrameRatesAreRejected() {
@@ -180,4 +188,59 @@ private func timeLapseFixtureRoot() throws -> URL {
     try FileManager.default.createDirectory(
         at: root, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
     return root
+}
+
+private func timeLapseLibraryDiagnostic(
+    _ root: URL, loaded: [TimeLapseRecording]?, error: (any Error)?
+) throws {
+    let physical = root.resolvingSymlinksInPath()
+    let directories = try FileManager.default.contentsOfDirectory(
+        at: root, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+        options: [.skipsHiddenFiles])
+    var children: [[String: Any]] = []
+    for directory in directories.sorted(by: { $0.path < $1.path }).prefix(2) {
+        let metadata = directory.appendingPathComponent("session.json")
+        let parent = directory.resolvingSymlinksInPath().deletingLastPathComponent()
+        var row: [String: Any] = [
+            "name": directory.lastPathComponent,
+            "parentEqualsRoot": parent == physical,
+            "parentURL": parent.absoluteString,
+            "parentIsDirectory": parent.hasDirectoryPath,
+        ]
+        do {
+            let directoryValues = try directory.resourceValues(forKeys: [
+                .isDirectoryKey, .isSymbolicLinkKey,
+            ])
+            row["directory"] = directoryValues.isDirectory
+            row["directoryLink"] = directoryValues.isSymbolicLink
+            let metadataValues = try metadata.resourceValues(forKeys: [
+                .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey,
+            ])
+            row["metadataRegular"] = metadataValues.isRegularFile
+            row["metadataLink"] = metadataValues.isSymbolicLink
+            row["metadataBytes"] = metadataValues.fileSize
+            let data = try Data(contentsOf: metadata)
+            let decoded = try JSONDecoder().decode(TimeLapseSession.self, from: data)
+            row["decodedID"] = decoded.id.uuidString
+            try decoded.validate()
+            row["validSession"] = true
+        } catch {
+            let failure = error as NSError
+            row["failureDomain"] = failure.domain
+            row["failureCode"] = failure.code
+        }
+        children.append(row)
+    }
+    var result: [String: Any] = [
+        "rootURL": physical.absoluteString,
+        "rootIsDirectory": physical.hasDirectoryPath,
+        "loadedIDs": loaded?.map { $0.id.uuidString } ?? [], "children": children,
+    ]
+    if let error {
+        let failure = error as NSError
+        result["loadFailureDomain"] = failure.domain
+        result["loadFailureCode"] = failure.code
+    }
+    let data = try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
+    print("timeLapseLibraryDiagnostic " + String(decoding: data, as: UTF8.self))
 }
