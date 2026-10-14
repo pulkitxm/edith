@@ -89,14 +89,14 @@ struct QuinjetPage: View {
                             canClose: model.tabs.count > 1,
                             select: {
                                 QuinjetWorkOwnership.start {
-                                    try? await model.performSessionOperation(
+                                    _ = try? await model.performSessionOperation(
                                         QuinjetSessionRequest(
                                             operation: .focus, session: tab.id.uuidString))
                                 }
                             },
                             close: {
                                 QuinjetWorkOwnership.start {
-                                    try? await model.performSessionOperation(
+                                    _ = try? await model.performSessionOperation(
                                         QuinjetSessionRequest(
                                             operation: .close, session: tab.id.uuidString))
                                 }
@@ -107,7 +107,7 @@ struct QuinjetPage: View {
             }
             Button {
                 QuinjetWorkOwnership.start {
-                    try? await model.performSessionOperation(
+                    _ = try? await model.performSessionOperation(
                         QuinjetSessionRequest(operation: .create))
                 }
             } label: {
@@ -414,7 +414,7 @@ private struct QuinjetTerminalWorkspace: View {
                 selectedPath: tab.worktree?.path,
                 select: { worktree in
                     QuinjetWorkOwnership.start {
-                        try? await model.performSessionOperation(
+                        _ = try? await model.performSessionOperation(
                             QuinjetSessionRequest(
                                 operation: .switchWorktree, session: tab.id.uuidString,
                                 worktreePath: worktree.path))
@@ -452,7 +452,7 @@ private struct QuinjetTerminalWorkspace: View {
                 HStack(spacing: UIScale.pt(10)) {
                     Button("Show in cmux") {
                         QuinjetWorkOwnership.start {
-                            try? await model.performSessionOperation(
+                            _ = try? await model.performSessionOperation(
                                 QuinjetSessionRequest(
                                     operation: .focus, session: tab.id.uuidString))
                         }
@@ -472,7 +472,7 @@ private struct QuinjetTerminalWorkspace: View {
 
     private func restart() {
         QuinjetWorkOwnership.start {
-            try? await model.performSessionOperation(
+            _ = try? await model.performSessionOperation(
                 QuinjetSessionRequest(operation: .restart, session: tab.id.uuidString))
         }
     }
