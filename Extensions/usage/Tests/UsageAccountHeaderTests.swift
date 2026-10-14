@@ -49,9 +49,10 @@ import Testing
         #expect(rendered[0].columns[0].valueColor == LimitsStatusItem.nsColor(hex: "123456"))
         #expect(rendered[0].columns[1].valueColor == LimitsStatusItem.nsColor(hex: "FEDCBA"))
         #expect(rendered[0].columns[2].valueColor == LimitsStatusItem.nsColor(hex: "FFFFFF"))
-        #expect(rendered.flatMap(\.columns).allSatisfy {
-            $0.labelColor == LimitsStatusItem.nsColor(hex: "FFFFFF")
-        })
+        #expect(
+            rendered.flatMap(\.columns).allSatisfy {
+                $0.labelColor == LimitsStatusItem.nsColor(hex: "FFFFFF")
+            })
         let many = MenuBarLimits.accountGroups(
             accounts() + accounts(), selectedID: nil, slots: [.session], masked: false)
         let count = LimitsStatusItem.stackedGroups(many, defaults: defaults)[0].columns.last
@@ -62,9 +63,10 @@ import Testing
             accounts(), selectedID: nil, slots: [.session, .week], masked: true)
         let masked = LimitsStatusItem.stackedGroups(hidden, defaults: defaults)
         #expect(masked.allSatisfy { $0.header == "Account" })
-        #expect(masked.flatMap(\.columns).allSatisfy {
-            $0.value == "·" && $0.valueColor == $0.labelColor
-        })
+        #expect(
+            masked.flatMap(\.columns).allSatisfy {
+                $0.value == "·" && $0.valueColor == $0.labelColor
+            })
         defaults.set("auto", forKey: AppStorageKeys.MenuBar.colorMode)
         let automatic = LimitsStatusItem.stackedGroups(groups, defaults: defaults)
         #expect(automatic[0].headerColor == .secondaryLabelColor)

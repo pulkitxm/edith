@@ -89,6 +89,20 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        commands.suspend()
+        embeddedUI.suspendCommands()
+        let ownedBackup = backup
+        ownedBackup?.suspendCommands()
+        Task { [self, ownedBackup] in
+            await commands.suspendAndWait()
+            await embeddedUI.suspendCommandsAndWait()
+            await ownedBackup?.suspendCommandsAndWait()
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         let pending = beginShutdown()

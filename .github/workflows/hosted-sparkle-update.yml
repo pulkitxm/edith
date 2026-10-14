@@ -82,7 +82,7 @@ jobs:
         run: bun scripts/hosted-sparkle-update/run-update.mjs
       - name: Retain bounded synthetic update outcomes
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: hosted-sparkle-update-outcomes
           retention-days: 3
@@ -93,7 +93,7 @@ jobs:
             local/hosted-sparkle-update/case-*/journey-outcome.json
       - name: Retain completed synthetic window evidence
         if: success()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: hosted-sparkle-update-synthetic-windows
           retention-days: 3

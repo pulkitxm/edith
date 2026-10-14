@@ -3,7 +3,9 @@ import CoreFoundation
 import EdithExtensionSupport
 #endif
 import Foundation
+#if canImport(WorkerFixtureSupport)
 import WorkerFixtureSupport
+#endif
 
 enum PluginsFixturePolicyError: Error { case invalid, unavailable }
 

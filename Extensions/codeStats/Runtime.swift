@@ -72,6 +72,18 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping () -> Void) {
+        commands.suspend()
+        let streams = cliStreams
+        streams?.stop()
+        Task { [self, streams] in
+            await commands.suspendAndWait()
+            await streams?.stopAndWait()
+            withExtendedLifetime(self) { completion() }
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         let streams = cliStreams; cliStreams = nil; streams?.stop()
