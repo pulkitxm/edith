@@ -168,7 +168,12 @@ class SwiftDriverAdmissionTests(unittest.TestCase):
         for changed in [directory, alias, target]:
             with self.subTest(unowned=changed.name):
                 def unowned(path):
-                    return path.lstat() if path == changed else inspect(path)
+                    if path != changed:
+                        return inspect(path)
+                    value = path.lstat()
+                    fields = {name: getattr(value, name) for name in dir(value) if name.startswith("st_")}
+                    fields["st_uid"] = os.getuid() + 1000
+                    return type("ForeignMetadata", (), fields)()
                 with self.assertRaises(ValueError):
                     runtime.SelectedSwiftDriver(developer, entry="swift-test", inspect=unowned).validate()
         for changed in [directory, target]:
@@ -540,7 +545,7 @@ class SelectedPackageDriverPairTests(unittest.TestCase):
                     value = original(descriptor)
                     if change == "user" and value.st_ino == destination.stat().st_ino:
                         fields = {name: getattr(value, name) for name in dir(value) if name.startswith("st_")}
-                        fields["st_uid"] = os.getuid()
+                        fields["st_uid"] = os.getuid() + 1000
                         return type("SyntheticUserMetadata", (), fields)()
                     return value
                 with patch.object(os, "fstat", metadata), self.assertRaises(ValueError):
