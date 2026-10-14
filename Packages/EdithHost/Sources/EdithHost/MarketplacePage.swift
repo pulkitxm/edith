@@ -111,6 +111,7 @@ struct MarketplacePage: View {
                     .onAppear { handleDeepLink(proxy) }
             }
         }
+        .pageTask { await marketplace.refreshCatalogIfStale() }
         .onChange(of: requestedSettings, initial: true) {
             guard let request = requestedSettings else { return }
             let id = request.delivery.extensionID

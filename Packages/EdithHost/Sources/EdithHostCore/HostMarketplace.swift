@@ -27,6 +27,8 @@ public final class HostMarketplace {
                 automaticallyUpdatesExtensions, forKey: "automaticallyUpdatesExtensions")
         }
     }
+    static let lastCatalogRefreshKey = "lastCatalogRefresh"
+    static let catalogRefreshInterval: TimeInterval = 8 * 60 * 60
     @ObservationIgnored private let preferences: UserDefaults
     @ObservationIgnored private let store: ExtensionPackageStore
     @ObservationIgnored private let catalogClient: ExtensionCatalogClient
@@ -125,16 +127,26 @@ public final class HostMarketplace {
         await sessions.restore(packages: installed)
     }
 
+    public func refreshCatalogIfStale(now: Date = Date()) async {
+        if catalog != nil,
+            let refreshed = preferences.object(forKey: Self.lastCatalogRefreshKey) as? Date,
+            now.timeIntervalSince(refreshed) < Self.catalogRefreshInterval
+        {
+            return
+        }
+        await checkForUpdates(now: now)
+    }
+
     public func updateInstalledIfDue(now: Date = Date()) async {
         guard automaticallyUpdatesExtensions, !downloadedIDs.isEmpty, operationID == nil else {
             return
         }
         if let checked = preferences.object(forKey: "lastAutomaticExtensionCheck") as? Date,
-            now.timeIntervalSince(checked) < 8 * 60 * 60
+            now.timeIntervalSince(checked) < Self.catalogRefreshInterval
         {
             return
         }
-        await checkForUpdates()
+        await checkForUpdates(now: now)
         guard error == nil, !offline else { return }
         for id in downloadedIDs.sorted() where updateAvailable(id: id) {
             await download(id: id)
@@ -184,7 +196,7 @@ public final class HostMarketplace {
         return package.version.compare(next.version, options: .numeric) == .orderedAscending
     }
 
-    public func checkForUpdates() async {
+    public func checkForUpdates(now: Date = Date()) async {
         guard operationID == nil else { return }
         operationID = "catalog"
         error = nil
@@ -193,6 +205,7 @@ public final class HostMarketplace {
             let result = try await catalogClient.refresh()
             offline = result.offline
             apply(result.catalog)
+            if !result.offline { preferences.set(now, forKey: Self.lastCatalogRefreshKey) }
         } catch {
             self.error = "Extension downloads are unavailable. Check your connection and try again."
         }

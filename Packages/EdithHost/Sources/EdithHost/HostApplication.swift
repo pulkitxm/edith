@@ -290,6 +290,7 @@ struct HostApplication: App {
             }
             await services.start()
             await loaded.loadCachedCatalog()
+            await loaded.refreshCatalogIfStale()
             await loaded.restoreEnabledExtensions()
             await loaded.updateInstalledIfDue()
         } catch { startupError = true }
