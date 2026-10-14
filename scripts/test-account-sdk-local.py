@@ -18,9 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OWNER_SPEC = importlib.util.spec_from_file_location("account_native_ownership", ROOT / "scripts/hosted-native-owner-tests.py")
 OWNERSHIP = importlib.util.module_from_spec(OWNER_SPEC)
 OWNER_SPEC.loader.exec_module(OWNERSHIP)
-DRIVER_SPEC = importlib.util.spec_from_file_location("account_selected_swift", ROOT / "scripts/run-host-swift-testing.py")
-DRIVERS = importlib.util.module_from_spec(DRIVER_SPEC)
-DRIVER_SPEC.loader.exec_module(DRIVERS)
+DRIVERS = OWNERSHIP.DRIVERS
 OUTPUT_BOUND = 16_777_216
 GROUPS = {
     "Sources/EdithExtensionAccounts": ["ClaudeAccount.swift", "ClaudeAccountStorage.swift", "ClaudeSavedLogin.swift", "OwnedAccountFiles.swift"],
@@ -40,9 +38,12 @@ let package = Package(
 
 
 class LocalOwnership(OWNERSHIP.BoundedOwnership):
-    def __init__(self, leader, uid):
+    def __init__(self, leader, uid, package_driver_pair=None):
         self.private_failure_identities = []
-        super().__init__(leader, uid)
+        if package_driver_pair is None:
+            super().__init__(leader, uid)
+        else:
+            super().__init__(leader, uid, package_driver_pair=package_driver_pair)
 
     def observe_failure(self, pid, kind, current=None, record=None):
         if len(self.private_failure_identities) < 8:
@@ -201,49 +202,63 @@ def run_owned(command, root, environment, output, process_factory=subprocess.Pop
             or not 0 < cadence <= 0.5):
         raise ValueError("Invalid owned phase deadline or cadence")
     started = clock()
-    timed_out = False
-    overflow = False
-    failure = None
-    ownership = None
-    with os.fdopen(private_file(output, os.O_RDWR), "w+b") as log:
-        process = process_factory(command, cwd=root, env=environment, stdout=log,
-                                  stderr=subprocess.STDOUT, start_new_session=True)
-        metadata_path = output.with_suffix(".process.json")
-        try:
-            write_private(metadata_path, (json.dumps(ownership_metadata(process)) + "\n").encode())
-            ownership = ownership_factory(process.pid, os.getuid())
-            write_private(metadata_path, (json.dumps(ownership_metadata(process, ownership)) + "\n").encode())
-            while True:
-                ownership.refresh()
-                if ownership.errors:
-                    raise RuntimeError("Owned process identity validation failed")
-                overflow = output.stat().st_size > OUTPUT_BOUND
-                timed_out = clock() - started >= deadline
-                if process.poll() is not None or overflow or timed_out:
-                    break
-                sleep(cadence)
-        except Exception as error:
-            failure = type(error).__name__
-        finally:
-            if ownership is None:
-                try:
-                    process.wait(timeout=5)
-                    reaped = True
-                except subprocess.TimeoutExpired:
-                    reaped = False
-                cleanup = {"reaped": reaped, "naturalSurvivorCount": 0,
-                           "remainingOwnedProcesses": 0 if reaped else 1,
-                           "unverifiedOwnedProcesses": 1, "pendingOwnedChildren": 0,
-                           "ownershipErrors": ["Owned leader admission failed"]}
-            else:
-                cleanup = OWNERSHIP.retire(process, ownership, clock, sleep)
-    overflow = bound_output(output) or overflow
-    code = 124 if timed_out else 1 if overflow or failure else process.returncode
-    safe = verified_cleanup(cleanup)
-    return {"exitCode": code if safe and code is not None else 1,
-            "failure": failure, "timedOut": timed_out, "logBoundExceeded": overflow,
-            "processMetadata": ownership_metadata(process, ownership),
-            "cleanup": cleanup}
+    package_driver_pair = None
+    if type(command) is DRIVERS.SelectedPackageArguments:
+        driver = command.driver
+        if (type(driver) is not DRIVERS.SelectedSwiftDriver or not command
+                or command[0] != str(driver.validate())):
+            raise ValueError("Authenticated selected package invocation required")
+        package_driver_pair = DRIVERS.SelectedPackageDriverPair(driver)
+        command = list(command)
+    try:
+        timed_out = False
+        overflow = False
+        failure = None
+        ownership = None
+        with os.fdopen(private_file(output, os.O_RDWR), "w+b") as log:
+            process = process_factory(command, cwd=root, env=environment, stdout=log,
+                                      stderr=subprocess.STDOUT, start_new_session=True)
+            metadata_path = output.with_suffix(".process.json")
+            try:
+                write_private(metadata_path, (json.dumps(ownership_metadata(process)) + "\n").encode())
+                ownership = (ownership_factory(process.pid, os.getuid()) if package_driver_pair is None
+                             else ownership_factory(process.pid, os.getuid(), package_driver_pair=package_driver_pair))
+                write_private(metadata_path, (json.dumps(ownership_metadata(process, ownership)) + "\n").encode())
+                while True:
+                    ownership.refresh()
+                    if ownership.errors:
+                        raise RuntimeError("Owned process identity validation failed")
+                    overflow = output.stat().st_size > OUTPUT_BOUND
+                    timed_out = clock() - started >= deadline
+                    if process.poll() is not None or overflow or timed_out:
+                        break
+                    sleep(cadence)
+            except Exception as error:
+                failure = type(error).__name__
+            finally:
+                if ownership is None:
+                    try:
+                        process.wait(timeout=5)
+                        reaped = True
+                    except subprocess.TimeoutExpired:
+                        reaped = False
+                    cleanup = {"reaped": reaped, "naturalSurvivorCount": 0,
+                               "remainingOwnedProcesses": 0 if reaped else 1,
+                               "unverifiedOwnedProcesses": 1, "pendingOwnedChildren": 0,
+                               "ownershipErrors": ["Owned leader admission failed"]}
+                else:
+                    cleanup = OWNERSHIP.retire(process, ownership, clock, sleep)
+        overflow = bound_output(output) or overflow
+        code = 124 if timed_out else 1 if overflow or failure else process.returncode
+        safe = verified_cleanup(cleanup)
+        return {"exitCode": code if safe and code is not None else 1,
+                "failure": failure, "timedOut": timed_out, "logBoundExceeded": overflow,
+                "processMetadata": ownership_metadata(process, ownership),
+                "cleanup": cleanup}
+    finally:
+        if package_driver_pair is not None:
+            package_driver_pair.close()
+
 
 
 def run():
@@ -269,6 +284,7 @@ def run():
             driver = DRIVERS.SelectedSwiftDriver(os.environ["DEVELOPER_DIR"], entry="swift-test")
             swift = driver.validate()
             command = [str(swift), "--package-path", str(package), "--scratch-path", str(build), "--cache-path", str(fixture / "cache"), "--config-path", str(fixture / "config"), "--security-path", str(fixture / "security"), "--filter", "AccountSupport", "--build-system", "swiftbuild", "--no-parallel", "--jobs", "1", "-Xswiftc", "-j1", "-Xswiftc", "-warnings-as-errors", "-Xswiftc", "-module-cache-path", "-Xswiftc", str(modules)]
+            command = DRIVERS.SelectedPackageArguments(driver, command)
             owned = run_owned(command, ROOT, environment(fixture, modules), fixture / "tests.log")
             try:
                 driver.validate()

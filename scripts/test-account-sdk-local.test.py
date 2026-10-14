@@ -691,5 +691,91 @@ class SuppliedOwnershipRecordContracts(unittest.TestCase):
         self.assertEqual(kernel.signals, [])
 
 
+class SelectedPackageLauncherBindingTests(unittest.TestCase):
+    def fixtures(self, name, filename):
+        spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name(filename))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_real_common_launcher_authenticates_before_spawn_binds_actual_guard_and_closes_after_join(self):
+        drivers = self.fixtures("launcher_pair_fixtures", "test-run-host-swift-testing.py")
+        owners = self.fixtures("launcher_owner_fixtures", "test-hosted-native-owner-tests.py")
+        self.assertIs(HELPER.DRIVERS, HELPER.OWNERSHIP.DRIVERS)
+        with drivers.selected_pair_fixture(HELPER.DRIVERS) as (driver, source, destination):
+            kernel = owners.Kernel()
+            kernel.processes[123] = (123, 100, 7, str(source), 123, 1, 501, 501)
+            kernel.processes[234] = (234, 101, 8, str(source), 123, 123, 501, 501)
+            original_info = kernel.proc_pidinfo
+            process = SyntheticProcess([None, 0])
+            original_poll = process.poll
+            captured = {}
+
+            def record(pid, flavor, argument, pointer, size):
+                result = original_info(pid, flavor, argument, pointer, size)
+                pointer._obj.status = 2
+                return result
+
+            def poll():
+                value = original_poll()
+                if value is None:
+                    kernel.processes[234] = (234, 101, 8, str(destination), 234, 123, 501, 501)
+                else:
+                    kernel.processes.clear()
+                return value
+
+            process.poll = poll
+            arguments = [str(driver.validate()), "--package-path", "/synthetic/package", "--jobs", "1", "--no-parallel"]
+            command = HELPER.DRIVERS.SelectedPackageArguments(driver, arguments)
+
+            def create(argv, **kwargs):
+                self.assertIs(type(argv), list)
+                self.assertEqual(argv, arguments)
+                self.assertEqual(len(HELPER.DRIVERS.ADMITTED_PACKAGE_DRIVER_PAIRS), 1)
+                self.assertTrue(kwargs["start_new_session"])
+                captured["spawned"] = True
+                return process
+
+            def ownership(pid, uid, package_driver_pair=None):
+                self.assertTrue(HELPER.DRIVERS.admitted_package_driver_pair(package_driver_pair))
+                captured["pair"] = package_driver_pair
+                captured["descriptors"] = [row[1] for row in package_driver_pair.images]
+                return HELPER.LocalOwnership(pid, uid, package_driver_pair=package_driver_pair)
+
+            with patch.object(HELPER.OWNERSHIP.watchdog.ctypes, "CDLL", return_value=kernel), \
+                    patch.object(kernel, "proc_pidinfo", side_effect=record), \
+                    patch.object(HELPER.OWNERSHIP.os, "kill", side_effect=kernel.kill), \
+                    patch.object(HELPER.os, "getuid", return_value=501):
+                clock = owners.Clock()
+                with tempfile.TemporaryDirectory(prefix="pure-selected-launch-", dir=os.environ["TMPDIR"]) as runtime:
+                    result = HELPER.run_owned(command, source.parent, {}, Path(runtime) / "pure-launch.log",
+                                              process_factory=create, ownership_factory=ownership,
+                                              clock=clock.now, sleep=clock.sleep)
+            self.assertTrue(captured["spawned"])
+            self.assertEqual(result["exitCode"], 0)
+            self.assertIsNone(result["failure"])
+            self.assertTrue(HELPER.verified_cleanup(result["cleanup"]))
+            self.assertEqual(result["processMetadata"]["executableTransitions"], [
+                {"previous": [234, 101, 8, str(source), 123],
+                 "current": [234, 101, 8, str(destination), 234]}])
+            self.assertEqual(kernel.signals, [])
+            self.assertFalse(HELPER.DRIVERS.admitted_package_driver_pair(captured["pair"]))
+            for descriptor in captured["descriptors"]:
+                with self.assertRaises(OSError):
+                    os.fstat(descriptor)
+            self.assertEqual(command, arguments)
+
+    def test_wrong_driver_namespace_or_changed_invocation_is_refused_before_process_creation(self):
+        fixtures = self.fixtures("wrong_namespace_driver_fixtures", "test-run-host-swift-testing.py")
+        for namespace, mismatch in [(HELPER.DRIVERS, True), (fixtures.runtime, False)]:
+            with self.subTest(namespace=namespace.__name__), fixtures.selected_pair_fixture(namespace) as (driver, source, _):
+                argv = [str(driver.validate()) + ("-foreign" if mismatch else ""), "--jobs", "1"]
+                command = HELPER.DRIVERS.SelectedPackageArguments(driver, argv)
+                with patch.object(HELPER.subprocess, "Popen") as process, self.assertRaises(ValueError):
+                    HELPER.run_owned(command, source.parent, {}, source.parent / "rejected-launch.log")
+                process.assert_not_called()
+                self.assertFalse((source.parent / "rejected-launch.log").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

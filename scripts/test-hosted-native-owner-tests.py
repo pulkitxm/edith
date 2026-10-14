@@ -2686,5 +2686,128 @@ class ExitingProcessLineageContracts(unittest.TestCase):
         self.assertEqual(self.kernel.signals, [])
 
 
+class SelectedPackageCompoundTransitionContracts(unittest.TestCase):
+    def driver_fixtures(self):
+        spec = importlib.util.spec_from_file_location(
+            'compound_driver_fixtures', Path(__file__).with_name('test-run-host-swift-testing.py'))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def exercise(self, trusted=True, change=None):
+        fixtures = self.driver_fixtures()
+        with fixtures.selected_pair_fixture(runner.DRIVERS) as (driver, source, destination):
+            pair = runner.DRIVERS.SelectedPackageDriverPair(driver) if trusted else None
+            kernel = Kernel()
+            original = kernel.proc_pidinfo
+            child_reads = 0
+            parent_reads = 0
+            changing = False
+
+            def record(pid, flavor, argument, pointer, size):
+                nonlocal child_reads, parent_reads
+                result = original(pid, flavor, argument, pointer, size)
+                pointer._obj.status = 2
+                if changing:
+                    if pid == 234:
+                        child_reads += 1
+                        if change == 'raw_child' and child_reads == 3:
+                            pointer._obj.nfiles += 1
+                        if change == 'inexit':
+                            pointer._obj.flags = 4
+                    else:
+                        parent_reads += 1
+                        if change == 'raw_parent' and parent_reads == 2:
+                            pointer._obj.nfiles += 1
+                return result
+
+            with patch.object(runner.watchdog.ctypes, 'CDLL', return_value=kernel), \
+                    patch.object(kernel, 'proc_pidinfo', side_effect=record), \
+                    patch.object(runner.os, 'kill', side_effect=kernel.kill):
+                owner = runner.BoundedOwnership(123, 501, package_driver_pair=pair)
+                kernel.processes[234] = (234, 101, 8, str(source), 123, 123, 501, 501)
+                owner.refresh()
+                original_seal = owner.seals[234]
+                current = [234, 101, 8, str(destination), 234, 123, 501, 501]
+                field = {'birth': 1, 'microseconds': 2, 'group': 4, 'parent': 5, 'uid': 6, 'ruid': 7}.get(change)
+                if field is not None:
+                    current[field] += 1
+                if change == 'foreign_image':
+                    current[3] = str(destination.with_name('swift-frontend'))
+                if change == 'image_changed':
+                    destination.write_bytes(b'changed synthetic driver image')
+                kernel.processes[234] = tuple(current)
+                changing = True
+                owner.refresh()
+                snapshot = {'known': dict(owner.known), 'seals': dict(owner.seals),
+                            'selfGroups': dict(owner.child_self_groups), 'transitions': list(owner.transitions),
+                            'errors': list(owner.errors), 'originalSeal': original_seal,
+                            'terminal': dict(owner.exiting_processes), 'signals': list(kernel.signals),
+                            'observation': dict(owner.self_group_observations.get(234, {}))}
+                if change == 'second_group':
+                    current[4] = 123
+                    kernel.processes[234] = tuple(current)
+                    owner.refresh()
+                    snapshot['secondErrors'] = list(owner.errors)
+                    snapshot['secondSelfGroups'] = dict(owner.child_self_groups)
+            if pair is not None:
+                pair.close()
+            return snapshot, str(source), str(destination)
+
+    def test_actual_refresh_admits_authenticated_package_exec_and_selfgroup_with_original_bracket(self):
+        value, source, destination = self.exercise()
+        self.assertEqual(value['errors'], [])
+        self.assertEqual(value['known'][234], (234, 101, 8, destination, 234))
+        self.assertEqual(value['originalSeal'], (234, 101, 8, 123))
+        self.assertEqual(value['seals'][234], value['originalSeal'])
+        self.assertEqual(value['selfGroups'], {234: 234})
+        self.assertEqual(value['transitions'], [{'previous': (234, 101, 8, source, 123),
+                                                'current': (234, 101, 8, destination, 234)}])
+        self.assertFalse(value['observation']['currentPathMatchesRetained'])
+        self.assertTrue(value['observation']['twoChildRecordsMatch'])
+        self.assertTrue(value['observation']['parentBeforeMatches'])
+        self.assertTrue(value['observation']['parentAfterMatches'])
+        self.assertTrue(value['observation']['parentRecordsStable'])
+        self.assertTrue(value['observation']['transitionAdmitted'])
+        self.assertEqual(value['signals'], [])
+
+    def test_same_compound_transition_without_optin_remains_original_permanent_rejection(self):
+        value, source, _ = self.exercise(trusted=False)
+        self.assertEqual(value['errors'], ['Owned process birth or group changed'])
+        self.assertEqual(value['known'][234], (234, 101, 8, source, 123))
+        self.assertEqual(value['selfGroups'], {})
+        self.assertEqual(value['transitions'], [])
+        self.assertEqual(value['signals'], [])
+
+    def test_compound_birth_uid_parent_group_path_rawrecord_and_image_mismatches_do_not_grant_authority(self):
+        for change in ['birth', 'microseconds', 'uid', 'ruid', 'parent', 'group', 'foreign_image',
+                       'raw_child', 'raw_parent', 'image_changed', 'inexit']:
+            with self.subTest(change=change):
+                value, _, _ = self.exercise(change=change)
+                self.assertTrue(value['errors'])
+                self.assertEqual(value['selfGroups'], {})
+                self.assertEqual(value['transitions'], [])
+                self.assertEqual(value['signals'], [])
+
+    def test_compound_admission_does_not_allow_a_second_group_transition(self):
+        value, _, _ = self.exercise(change='second_group')
+        self.assertEqual(value['errors'], [])
+        self.assertEqual(value['secondErrors'], ['Owned process birth or group changed'])
+        self.assertEqual(value['secondSelfGroups'], {234: 234})
+        self.assertEqual(value['signals'], [])
+
+    def test_forged_pair_or_duplicate_module_cannot_enter_guard_namespace(self):
+        fixtures = self.driver_fixtures()
+        with fixtures.selected_pair_fixture(fixtures.runtime) as (driver, _, _):
+            pair = fixtures.runtime.SelectedPackageDriverPair(driver)
+            for value in [object(), pair]:
+                with self.subTest(value=type(value).__name__), \
+                        patch.object(runner.watchdog.ctypes, 'CDLL') as library:
+                    with self.assertRaises(ValueError):
+                        runner.BoundedOwnership(123, 501, package_driver_pair=value)
+                    library.assert_not_called()
+            pair.close()
+
+
 if __name__ == '__main__':
     unittest.main()
