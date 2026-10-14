@@ -1,4 +1,13 @@
-export const shippingExtensionIDs = Object.freeze(["keepAwake"]);
+import { readFileSync } from "node:fs";
+
+export const shippingExtensionIDs = Object.freeze(
+  JSON.parse(
+    readFileSync(
+      new URL("../Extensions/manifest.json", import.meta.url),
+      "utf8",
+    ),
+  ).map(({ id }) => id),
+);
 
 export function assertShippingExtensions(entries) {
   if (
@@ -28,6 +37,8 @@ export function shippingDefinitions(definitions) {
       throw new Error(`Unreleased shipping extension dependency: ${id}`);
     return entry;
   });
+  if (selected.length !== definitions.length)
+    throw new Error("Extension is outside the shipping release scope");
   assertShippingExtensions(selected);
   return selected;
 }
