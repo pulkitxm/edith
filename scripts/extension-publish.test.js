@@ -415,6 +415,53 @@ test("extension publication verifies closed immutable assets before uploads and 
   }
 });
 
+test("immutable asset publication reads the release twice by ID for any number of files", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "extension-asset-batch-"));
+  try {
+    const files = Array.from({ length: 43 }, (_, index) => {
+      const path = join(directory, `evidence-${index}.json`);
+      writeFileSync(path, `synthetic evidence ${index}`);
+      return [path, `evidence-${index}.json`];
+    });
+    const item = { id: 9, tag_name: "fixture", draft: true, assets: [] };
+    const reads = [];
+    const remote = new Map();
+    const receipt = await publishExtensionAssets({
+      repository: "synthetic/fixture",
+      item,
+      entry: { tag: "fixture" },
+      files,
+      readRelease: (request) => {
+        reads.push(request);
+        return { ...item, assets: [...item.assets] };
+      },
+      uploadAsset: async (_, releaseID, __, file, name) => {
+        expect(releaseID).toBe(9);
+        const bytes = readFileSync(file);
+        remote.set(name, bytes);
+        item.assets.push({
+          id: item.assets.length + 1,
+          name,
+          size: bytes.length,
+        });
+      },
+      downloadAsset: async ({ asset }) => ({
+        sha256: createHash("sha256")
+          .update(remote.get(asset.name))
+          .digest("hex"),
+      }),
+    });
+    expect(receipt.assets).toHaveLength(43);
+    expect(item.assets).toHaveLength(43);
+    expect(reads).toEqual([
+      { repository: "synthetic/fixture", tag: "fixture", releaseID: 9 },
+      { repository: "synthetic/fixture", tag: "fixture", releaseID: 9 },
+    ]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("local checksum contents bind the actual archive hash and exact filename", async () => {
   const directory = mkdtempSync(join(tmpdir(), "extension-checksum-"));
   try {
