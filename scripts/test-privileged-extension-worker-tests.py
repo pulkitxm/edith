@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import json
 import plistlib
@@ -23,8 +24,16 @@ class PrivilegedWrapperTests(unittest.TestCase):
         self.bundle(self.app, {"CFBundleIdentifier": "example.synthetic.host", "CFBundleExecutable": "Edith"})
         self.extracted = self.root / "extracted"
         self.extracted.mkdir()
+        self.frozen = self.root / "carrier-tools/EdithExtensionCarrier"
+        self.frozen.parent.mkdir()
+        self.frozen.write_bytes(b"synthetic carrier")
+        self.carrier_digest = "c" * 64
+        self.carrier_source = {"path": self.frozen, "sha256": self.carrier_digest, "sourceCommit": "a" * 40}
+        source = patch.object(wrapper, "carrier_input", side_effect=lambda *_: self.carrier_source)
+        self.carrier_input = source.start()
+        self.addCleanup(source.stop)
         for relative in (wrapper.CARRIER, wrapper.WORKER):
-            self.bundle(self.extracted.joinpath(*relative.parts), {"CFBundleExecutable": "Edith", "EdithExtensionID": "lidAwake", "EdithHostABI": "edith-host-2"})
+            self.bundle(self.extracted.joinpath(*relative.parts), {"CFBundleExecutable": "Edith", "EdithExtensionID": "lidAwake", "EdithHostABI": "edith-host-2", "EdithCarrierExecutableProvenance": self.carrier_digest})
         self.role = self.extracted.joinpath(*wrapper.ROLE.parts)
         self.bundle(self.role, {"CFBundleIdentifier": "com.pulkit.edith.extensions.lidAwake.privileged", "CFBundleExecutable": "Runtime", "EdithHostABI": "edith-host-2"})
 
@@ -35,25 +44,40 @@ class PrivilegedWrapperTests(unittest.TestCase):
         with (path / "Contents/Info.plist").open("wb") as stream:
             plistlib.dump(info, stream)
 
+    def same(self):
+        return {"normalizedUnsignedSHA256": "same", "signedSHA256": self.carrier_digest}
+
     def lifetime(self):
         return {"signedWorkerCases": 6, "confirmedQuitExited": True, "forcedStopRestoredCallback": True,
             "eofRestoredCallback": True, "staleWorkerRejected": True, "forcedReasonRetentionRejected": True,
             "parentExitWithOpenInputRestoredCallback": True, "operatingSystemActions": 0, "visibleWindows": 0}
 
     def test_payload_checks_all_signatures_and_same_code_without_executing_role(self):
-        with patch.object(wrapper, "signed") as signed, patch.object(wrapper, "code_identity", return_value={"normalizedUnsignedSHA256": "same"}) as digest, patch.object(wrapper, "checked") as execute:
-            self.assertEqual(wrapper.verify_payload(self.app, self.extracted), {key: {"normalizedUnsignedSHA256": "same"} for key in ("host", "carrier", "worker")})
+        with patch.object(wrapper, "signed") as signed, patch.object(wrapper, "code_identity", return_value=self.same()) as digest, patch.object(wrapper, "checked") as execute:
+            self.assertEqual(wrapper.verify_payload(self.app, self.extracted), {key: self.same() for key in ("host", "frozenCarrier", "carrier", "worker")})
             self.assertEqual(signed.call_count, 4)
-            self.assertEqual(digest.call_count, 3)
+            self.assertEqual(digest.call_count, 4)
             execute.assert_not_called()
             self.assertNotIn(self.role / "Contents/MacOS/Runtime", [call.args[0] for call in digest.call_args_list])
+            self.carrier_input.assert_called_once_with(wrapper.ROOT, self.app)
+
+    def test_carrier_provenance_and_frozen_receipt_mismatches_fail_closed(self):
+        with patch.object(wrapper, "signed"), patch.object(wrapper, "code_identity", return_value={"normalizedUnsignedSHA256": "same", "signedSHA256": "d" * 64}):
+            with self.assertRaisesRegex(ValueError, "Frozen carrier identity"):
+                wrapper.verify_payload(self.app, self.extracted)
+        for relative in (wrapper.CARRIER, wrapper.WORKER):
+            self.bundle(self.extracted.joinpath(*relative.parts), {"CFBundleExecutable": "Edith", "EdithExtensionID": "lidAwake", "EdithHostABI": "edith-host-2", "EdithCarrierExecutableProvenance": "d" * 64})
+            with self.subTest(bundle=str(relative)), patch.object(wrapper, "signed"), patch.object(wrapper, "code_identity", return_value=self.same()):
+                with self.assertRaisesRegex(ValueError, "contained worker metadata"):
+                    wrapper.verify_payload(self.app, self.extracted)
+            self.bundle(self.extracted.joinpath(*relative.parts), {"CFBundleExecutable": "Edith", "EdithExtensionID": "lidAwake", "EdithHostABI": "edith-host-2", "EdithCarrierExecutableProvenance": self.carrier_digest})
 
     def test_mismatched_code_and_wrong_role_metadata_fail_closed(self):
-        with patch.object(wrapper, "signed"), patch.object(wrapper, "code_identity", side_effect=[{"normalizedUnsignedSHA256": "original"}, ValueError("Executable code differs from the pinned source")]):
+        with patch.object(wrapper, "signed"), patch.object(wrapper, "code_identity", side_effect=[{"normalizedUnsignedSHA256": "original"}, self.same(), ValueError("Executable code differs from the pinned source")]):
             with self.assertRaises(ValueError):
                 wrapper.verify_payload(self.app, self.extracted)
         self.bundle(self.role, {"CFBundleIdentifier": "com.pulkit.edith.tests.lifetime-runtime", "CFBundleExecutable": "Runtime", "EdithHostABI": "edith-host-2"})
-        with patch.object(wrapper, "signed"), patch.object(wrapper, "code_identity", return_value={"normalizedUnsignedSHA256": "same"}):
+        with patch.object(wrapper, "signed"), patch.object(wrapper, "code_identity", return_value=self.same()):
             with self.assertRaises(ValueError):
                 wrapper.verify_payload(self.app, self.extracted)
 
@@ -75,10 +99,10 @@ class PrivilegedWrapperTests(unittest.TestCase):
             if bundle == self.extracted.joinpath(*wrapper.WORKER.parts):
                 self.assertNotEqual(resource.read_bytes(), b"sealed synthetic resource")
                 raise ValueError("Invalid sealed resource")
-        with patch.object(wrapper, "signed", side_effect=verify), patch.object(wrapper, "code_identity", return_value={"normalizedUnsignedSHA256": "same"}) as identity, patch.object(wrapper, "prepare_synthetic") as prepare:
+        with patch.object(wrapper, "signed", side_effect=verify), patch.object(wrapper, "code_identity", return_value=self.same()) as identity, patch.object(wrapper, "prepare_synthetic") as prepare:
             with self.assertRaisesRegex(ValueError, "sealed resource"):
                 wrapper.verify_payload(self.app, self.extracted)
-            self.assertEqual(identity.call_count, 2)
+            self.assertEqual(identity.call_count, 3)
             self.assertEqual(admitted[-1], self.extracted.joinpath(*wrapper.WORKER.parts))
             prepare.assert_not_called()
 
@@ -86,10 +110,23 @@ class PrivilegedWrapperTests(unittest.TestCase):
         fixture_spec = importlib.util.spec_from_file_location("macho_fixture", Path(__file__).with_name("test-macho-code-identity.py"))
         fixture = importlib.util.module_from_spec(fixture_spec)
         fixture_spec.loader.exec_module(fixture)
-        pairs = [fixture.pair(), fixture.pair(), fixture.pair(512)]
-        binaries = [self.app / "Contents/MacOS/Edith"] + [self.extracted.joinpath(*relative.parts) / "Contents/MacOS/Edith" for relative in (wrapper.CARRIER, wrapper.WORKER)]
+        def carrier_code(signature_bytes):
+            signed, unsigned = fixture.pair(signature_bytes)
+            signed[4100] ^= 2
+            unsigned[4100] ^= 2
+            return signed, unsigned
+        pairs = [fixture.pair(), carrier_code(64), carrier_code(256), fixture.pair(512)]
+        carrier_binary, worker_binary = [self.extracted.joinpath(*relative.parts) / "Contents/MacOS/Edith" for relative in (wrapper.CARRIER, wrapper.WORKER)]
+        binaries = [self.app / "Contents/MacOS/Edith", self.frozen, carrier_binary, worker_binary]
         for binary, (signed, _) in zip(binaries, pairs):
             binary.write_bytes(signed)
+        self.carrier_source["sha256"] = hashlib.sha256(pairs[1][0]).hexdigest()
+        for relative in (wrapper.CARRIER, wrapper.WORKER):
+            path = self.extracted.joinpath(*relative.parts) / "Contents/Info.plist"
+            value = wrapper.info(path.parent.parent)
+            value["EdithCarrierExecutableProvenance"] = self.carrier_source["sha256"]
+            with path.open("wb") as stream:
+                plistlib.dump(value, stream)
         def remove(command, **options):
             target = Path(command[-1])
             data = target.read_bytes()
@@ -100,9 +137,16 @@ class PrivilegedWrapperTests(unittest.TestCase):
             self.assertEqual(identities["host"]["normalizedUnsignedSHA256"], identities["worker"]["normalizedUnsignedSHA256"])
             self.assertNotEqual(identities["host"]["rawUnsignedSHA256"], identities["worker"]["rawUnsignedSHA256"])
             self.assertNotEqual(identities["host"]["signedSHA256"], identities["worker"]["signedSHA256"])
-            pairs[2][0][4100] ^= 1
-            pairs[2][1][4100] ^= 1
-            binaries[2].write_bytes(pairs[2][0])
+            self.assertEqual(identities["frozenCarrier"]["normalizedUnsignedSHA256"], identities["carrier"]["normalizedUnsignedSHA256"])
+            self.assertNotEqual(identities["frozenCarrier"]["signedSHA256"], identities["carrier"]["signedSHA256"])
+            self.assertNotEqual(identities["host"]["normalizedUnsignedSHA256"], identities["carrier"]["normalizedUnsignedSHA256"])
+            carrier_binary.write_bytes(pairs[0][0])
+            with self.assertRaisesRegex(ValueError, "pinned source"):
+                wrapper.verify_payload(self.app, self.extracted)
+            carrier_binary.write_bytes(pairs[2][0])
+            pairs[3][0][4100] ^= 1
+            pairs[3][1][4100] ^= 1
+            worker_binary.write_bytes(pairs[3][0])
             with self.assertRaisesRegex(ValueError, "pinned source"):
                 wrapper.verify_payload(self.app, self.extracted)
 

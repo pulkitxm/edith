@@ -9,6 +9,11 @@ import Foundation
         completion(Data() as NSData, nil)
     }
 
+    @objc(suspendCommandsWithCompletion:)
+    func suspendCommands(completion: @escaping @convention(block) () -> Void) {
+        completion()
+    }
+
     @objc(prepareDisableWithCompletion:)
     func prepareDisable(completion: @escaping @convention(block) (NSError?) -> Void) {
         do {
